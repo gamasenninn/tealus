@@ -74,6 +74,15 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
 
     await client.query('COMMIT');
 
+    // Broadcast via Socket.IO
+    const { io } = require('../app');
+    const fullMessage = {
+      ...message,
+      sender_display_name: req.user.display_name,
+      media: [mediaResult.rows[0]],
+    };
+    io.to(roomId).emit('message:new', fullMessage);
+
     res.status(201).json({
       message,
       media: mediaResult.rows[0],

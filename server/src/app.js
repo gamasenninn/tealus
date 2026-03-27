@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const path = require('path');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
@@ -35,6 +36,9 @@ app.use('/api/rooms/:id/messages', messageRoutes);
 app.use('/api/rooms/:id/media', mediaRoutes);
 app.use('/api/rooms/:id/read', readRoutes);
 app.use('/api/push', pushRoutes);
+
+// Static media files
+app.use('/media', express.static(path.join(__dirname, '../../media')));
 
 // Health check
 app.get('/api/health', (req, res) => {
