@@ -26,11 +26,13 @@ const roomRoutes = require('./routes/rooms');
 const messageRoutes = require('./routes/messages');
 const mediaRoutes = require('./routes/media');
 const readRoutes = require('./routes/read');
+const pushRoutes = require('./routes/push');
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms/:id/messages', messageRoutes);
 app.use('/api/rooms/:id/media', mediaRoutes);
 app.use('/api/rooms/:id/read', readRoutes);
+app.use('/api/push', pushRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
