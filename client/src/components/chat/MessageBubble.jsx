@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { useMessageStore } from '../../stores/messageStore';
+import ImageGrid from '../media/ImageGrid';
+import ImageViewer from '../media/ImageViewer';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn }) {
   const { setReplyTo } = useMessageStore();
+  const [viewerState, setViewerState] = useState(null); // { images, index }
 
   const formatTime = (dateStr) => {
     return new Date(dateStr).toLocaleTimeString('ja-JP', {
@@ -11,31 +15,15 @@ function MessageBubble({ message, isOwn }) {
     });
   };
 
+  const handleImageClick = (images, index) => {
+    setViewerState({ images, index });
+  };
+
   const renderMedia = () => {
     if (!message.media || message.media.length === 0) return null;
-    return message.media.map((m) => {
-      if (m.mime_type.startsWith('image/')) {
-        return (
-          <img
-            key={m.id}
-            src={`/media/${m.thumbnail_path || m.file_path}`}
-            alt={m.file_name}
-            className="bubble-image"
-            onClick={() => window.open(`/media/${m.file_path}`, '_blank')}
-          />
-        );
-      }
-      if (m.mime_type.startsWith('video/')) {
-        return (
-          <video key={m.id} src={`/media/${m.file_path}`} controls className="bubble-video" />
-        );
-      }
-      return (
-        <a key={m.id} href={`/media/${m.file_path}`} target="_blank" rel="noopener noreferrer" className="bubble-file">
-          📎 {m.file_name}
-        </a>
-      );
-    });
+    return (
+      <ImageGrid media={message.media} onImageClick={handleImageClick} />
+    );
   };
 
   const renderReply = () => {
@@ -56,6 +44,9 @@ function MessageBubble({ message, isOwn }) {
     );
   }
 
+  const hasMedia = message.media && message.media.length > 0;
+  const hasText = message.content && message.content.trim();
+
   return (
     <div className={`bubble-row ${isOwn ? 'own' : ''}`}>
       {!isOwn && (
@@ -71,11 +62,11 @@ function MessageBubble({ message, isOwn }) {
           </div>
         )}
         <div
-          className={`bubble ${isOwn ? 'own' : 'other'}`}
+          className={`bubble ${isOwn ? 'own' : 'other'} ${hasMedia && !hasText ? 'media-only' : ''}`}
           onDoubleClick={() => setReplyTo(message)}
         >
           {renderReply()}
-          {message.content && <p className="bubble-text">{message.content}</p>}
+          {hasText && <p className="bubble-text">{message.content}</p>}
           {renderMedia()}
         </div>
         {!isOwn && (
@@ -84,6 +75,14 @@ function MessageBubble({ message, isOwn }) {
           </div>
         )}
       </div>
+
+      {viewerState && (
+        <ImageViewer
+          images={viewerState.images}
+          initialIndex={viewerState.index}
+          onClose={() => setViewerState(null)}
+        />
+      )}
     </div>
   );
 }

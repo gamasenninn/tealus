@@ -14,17 +14,32 @@ function RoomList() {
 
   useEffect(() => {
     fetchRooms();
-    const socket = getSocket();
-    if (socket) {
-      // Refresh room list when new message arrives
-      socket.on('message:new', () => {
-        fetchRooms();
-      });
-      return () => {
-        socket.off('message:new');
-      };
-    }
   }, [fetchRooms]);
+
+  // Join all rooms for real-time updates on room list
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || rooms.length === 0) return;
+
+    // Join all rooms so we receive message:new events
+    rooms.forEach((room) => {
+      socket.emit('room:join', room.id);
+    });
+
+    const handleNewMessage = () => {
+      fetchRooms();
+    };
+
+    socket.on('message:new', handleNewMessage);
+
+    return () => {
+      socket.off('message:new', handleNewMessage);
+      // Leave all rooms when leaving room list
+      rooms.forEach((room) => {
+        socket.emit('room:leave', room.id);
+      });
+    };
+  }, [rooms.length, fetchRooms]);
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '';

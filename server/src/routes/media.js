@@ -10,9 +10,10 @@ const router = express.Router({ mergeParams: true });
 
 /**
  * POST /api/rooms/:id/media
- * Upload a file and create a media message
+ * Upload one or more files and create a media message
+ * Supports: upload.single('file') or upload.array('files', 10)
  */
-router.post('/', authenticate, upload.single('file'), async (req, res) => {
+router.post('/', authenticate, upload.array('files', 10), async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
 
@@ -25,20 +26,20 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
     return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
   }
 
-  if (!req.file) {
+  // Support both single file (field: 'file') and multiple files (field: 'files')
+  const files = req.files || (req.file ? [req.file] : []);
+  if (files.length === 0) {
     return res.status(400).json({ error: 'ファイルが添付されていません' });
   }
 
-  const file = req.file;
-  const messageType = getMessageType(file.mimetype);
-  const subdir = getSubdir(file.mimetype);
-  const relativePath = `${subdir}/${file.filename}`;
+  // Determine message type from first file
+  const messageType = getMessageType(files[0].mimetype);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Create message
+    // Create one message for all files
     const msgResult = await client.query(
       `INSERT INTO messages (room_id, sender_id, type)
        VALUES ($1, $2, $3)
@@ -47,30 +48,37 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
     );
     const message = msgResult.rows[0];
 
-    // Generate thumbnail for images
-    const thumbnailPath = await generateThumbnail(file.path, file.mimetype);
+    const mediaRecords = [];
 
-    // Get image dimensions if image
-    let width = null;
-    let height = null;
-    if (file.mimetype.startsWith('image/')) {
-      try {
-        const sharp = require('sharp');
-        const metadata = await sharp(file.path).metadata();
-        width = metadata.width;
-        height = metadata.height;
-      } catch (e) {
-        // Ignore metadata errors
+    for (const file of files) {
+      const subdir = getSubdir(file.mimetype);
+      const relativePath = `${subdir}/${file.filename}`;
+
+      // Generate thumbnail for images
+      const thumbnailPath = await generateThumbnail(file.path, file.mimetype);
+
+      // Get image dimensions
+      let width = null;
+      let height = null;
+      if (file.mimetype.startsWith('image/')) {
+        try {
+          const sharp = require('sharp');
+          const metadata = await sharp(file.path).metadata();
+          width = metadata.width;
+          height = metadata.height;
+        } catch (e) {
+          // Ignore metadata errors
+        }
       }
-    }
 
-    // Create media record
-    const mediaResult = await client.query(
-      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [message.id, relativePath, file.originalname, file.mimetype, file.size, width, height, thumbnailPath]
-    );
+      const mediaResult = await client.query(
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [message.id, relativePath, file.originalname, file.mimetype, file.size, width, height, thumbnailPath]
+      );
+      mediaRecords.push(mediaResult.rows[0]);
+    }
 
     await client.query('COMMIT');
 
@@ -79,13 +87,13 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
     const fullMessage = {
       ...message,
       sender_display_name: req.user.display_name,
-      media: [mediaResult.rows[0]],
+      media: mediaRecords,
     };
     io.to(roomId).emit('message:new', fullMessage);
 
     res.status(201).json({
       message,
-      media: mediaResult.rows[0],
+      media: mediaRecords,
     });
   } catch (err) {
     await client.query('ROLLBACK');

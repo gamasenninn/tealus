@@ -43,12 +43,12 @@ function MessageInput({ roomId }) {
   };
 
   const handleFileSelect = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
     setIsSending(true);
     try {
-      await api.uploadMedia(roomId, file);
+      await api.uploadMedia(roomId, files);
     } catch (err) {
       console.error('Upload error:', err);
     } finally {
@@ -79,6 +79,7 @@ function MessageInput({ roomId }) {
           onChange={handleFileSelect}
           style={{ display: 'none' }}
           accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+          multiple
         />
         <textarea
           className="message-input-text"

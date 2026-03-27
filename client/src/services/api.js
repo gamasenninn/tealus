@@ -78,10 +78,13 @@ class ApiClient {
     });
   }
 
-  // Media
-  async uploadMedia(roomId, file) {
+  // Media (single file or array of files)
+  async uploadMedia(roomId, files) {
     const formData = new FormData();
-    formData.append('file', file);
+    const fileArray = Array.isArray(files) ? files : [files];
+    for (const file of fileArray) {
+      formData.append('files', file);
+    }
 
     const res = await fetch(`${API_BASE}/rooms/${roomId}/media`, {
       method: 'POST',
