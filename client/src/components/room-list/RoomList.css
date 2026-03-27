@@ -1,0 +1,155 @@
+.room-list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  background: white;
+}
+
+.room-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #06C755;
+  color: white;
+}
+
+.room-list-header h1 {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.room-list-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.icon-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.room-list-user-info {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #888;
+  background: #f9f9f9;
+  border-bottom: 1px solid #eee;
+}
+
+.room-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.room-list-empty {
+  text-align: center;
+  color: #aaa;
+  padding: 40px 16px;
+  line-height: 1.6;
+}
+
+.room-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.room-item:hover {
+  background: #f8f8f8;
+}
+
+.room-item:active {
+  background: #f0f0f0;
+}
+
+.room-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e8f5e9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.room-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.room-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-time {
+  font-size: 12px;
+  color: #aaa;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.room-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.room-preview {
+  font-size: 13px;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.room-unread {
+  background: #06C755;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}

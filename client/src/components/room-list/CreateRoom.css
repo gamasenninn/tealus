@@ -1,0 +1,131 @@
+.create-room-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.create-room-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.create-room-modal h2 {
+  margin-bottom: 16px;
+  font-size: 18px;
+  color: #333;
+}
+
+.create-room-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.create-room-options button {
+  padding: 14px;
+  background: #06C755;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.create-room-options button:hover {
+  background: #05b04c;
+}
+
+.create-room-cancel {
+  width: 100%;
+  padding: 12px;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.create-room-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  margin-bottom: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.create-room-input:focus {
+  border-color: #06C755;
+}
+
+.create-room-user-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.create-room-user {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+
+.create-room-user:hover {
+  background: #f8f8f8;
+}
+
+.create-room-user.selected {
+  background: #e8f5e9;
+}
+
+.create-room-emp-id {
+  color: #aaa;
+  font-size: 13px;
+}
+
+.check-mark {
+  color: #06C755;
+  font-weight: bold;
+}
+
+.create-room-submit {
+  width: 100%;
+  padding: 14px;
+  background: #06C755;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.create-room-error {
+  background: #fee;
+  color: #c00;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}

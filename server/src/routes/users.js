@@ -1,0 +1,29 @@
+const express = require('express');
+const pool = require('../db/pool');
+const { authenticate } = require('../middleware/auth');
+
+const router = express.Router();
+
+router.use(authenticate);
+
+/**
+ * GET /api/users
+ * List all active users (excluding current user)
+ */
+router.get('/', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, employee_id, display_name, avatar_url, status_message
+       FROM users
+       WHERE is_active = true AND id != $1
+       ORDER BY display_name`,
+      [req.user.id]
+    );
+    res.json({ users: result.rows });
+  } catch (err) {
+    console.error('List users error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+module.exports = router;

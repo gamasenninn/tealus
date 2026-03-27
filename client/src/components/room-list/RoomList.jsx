@@ -1,0 +1,109 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/authStore';
+import { useRoomStore } from '../../stores/roomStore';
+import { getSocket } from '../../services/socket';
+import CreateRoom from './CreateRoom';
+import './RoomList.css';
+
+function RoomList() {
+  const { user, logout } = useAuthStore();
+  const { rooms, fetchRooms } = useRoomStore();
+  const [showCreate, setShowCreate] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchRooms();
+    const socket = getSocket();
+    if (socket) {
+      // Refresh room list when new message arrives
+      socket.on('message:new', () => {
+        fetchRooms();
+      });
+      return () => {
+        socket.off('message:new');
+      };
+    }
+  }, [fetchRooms]);
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+  };
+
+  const getPreview = (room) => {
+    if (!room.last_message_content && room.last_message_type) {
+      const typeLabels = { image: '画像', video: '動画', file: 'ファイル' };
+      return typeLabels[room.last_message_type] || '';
+    }
+    return room.last_message_content || '';
+  };
+
+  const getRoomDisplayName = (room) => {
+    if (room.type === 'group') return room.name;
+    // For direct rooms, show the other person's name
+    return room.last_message_sender || 'ダイレクトメッセージ';
+  };
+
+  return (
+    <div className="room-list-container">
+      <header className="room-list-header">
+        <h1>トーク</h1>
+        <div className="room-list-header-actions">
+          <button className="icon-button" onClick={() => setShowCreate(true)} title="新規作成">
+            +
+          </button>
+          <button className="icon-button" onClick={logout} title="ログアウト">
+            ↩
+          </button>
+        </div>
+      </header>
+
+      <div className="room-list-user-info">
+        {user?.display_name}（{user?.employee_id}）
+      </div>
+
+      <div className="room-list">
+        {rooms.length === 0 && (
+          <div className="room-list-empty">
+            トークがありません。<br />
+            +ボタンから新しいトークを始めましょう。
+          </div>
+        )}
+        {rooms.map((room) => (
+          <div
+            key={room.id}
+            className="room-item"
+            onClick={() => navigate(`/rooms/${room.id}`)}
+          >
+            <div className="room-avatar">
+              {room.type === 'group' ? '👥' : '👤'}
+            </div>
+            <div className="room-info">
+              <div className="room-top-row">
+                <span className="room-name">{getRoomDisplayName(room)}</span>
+                <span className="room-time">{formatTime(room.last_message_at)}</span>
+              </div>
+              <div className="room-bottom-row">
+                <span className="room-preview">{getPreview(room)}</span>
+                {room.unread_count > 0 && (
+                  <span className="room-unread">{room.unread_count}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showCreate && <CreateRoom onClose={() => setShowCreate(false)} />}
+    </div>
+  );
+}
+
+export default RoomList;

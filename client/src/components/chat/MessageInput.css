@@ -1,0 +1,101 @@
+.message-input-container {
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.message-input-reply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #e8f5e9;
+  font-size: 13px;
+  color: #555;
+}
+
+.message-input-reply span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.message-input-reply button {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 8px;
+}
+
+.message-input-row {
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+  gap: 6px;
+}
+
+.message-input-attach {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: #ddd;
+  color: #555;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.message-input-attach:hover {
+  background: #ccc;
+}
+
+.message-input-text {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  font-size: 15px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  max-height: 120px;
+  font-family: inherit;
+}
+
+.message-input-text:focus {
+  border-color: #06C755;
+}
+
+.message-input-send {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: #06C755;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.message-input-send:hover {
+  background: #05b04c;
+}
+
+.message-input-send:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
