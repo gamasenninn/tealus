@@ -24,9 +24,11 @@ app.use(express.json());
 const authRoutes = require('./routes/auth');
 const roomRoutes = require('./routes/rooms');
 const messageRoutes = require('./routes/messages');
+const mediaRoutes = require('./routes/media');
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms/:id/messages', messageRoutes);
+app.use('/api/rooms/:id/media', mediaRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

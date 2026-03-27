@@ -93,7 +93,28 @@ router.get('/', async (req, res) => {
     }
 
     const result = await pool.query(query, params);
-    res.json({ messages: result.rows });
+    const messages = result.rows;
+
+    // Attach media info to messages that have media
+    if (messages.length > 0) {
+      const messageIds = messages.map(m => m.id);
+      const mediaResult = await pool.query(
+        `SELECT * FROM message_media WHERE message_id = ANY($1)`,
+        [messageIds]
+      );
+      const mediaByMessage = {};
+      for (const media of mediaResult.rows) {
+        if (!mediaByMessage[media.message_id]) {
+          mediaByMessage[media.message_id] = [];
+        }
+        mediaByMessage[media.message_id].push(media);
+      }
+      for (const msg of messages) {
+        msg.media = mediaByMessage[msg.id] || [];
+      }
+    }
+
+    res.json({ messages });
   } catch (err) {
     console.error('Get messages error:', err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
