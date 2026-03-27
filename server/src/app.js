@@ -23,22 +23,19 @@ app.use(express.json());
 // Routes
 const authRoutes = require('./routes/auth');
 const roomRoutes = require('./routes/rooms');
+const messageRoutes = require('./routes/messages');
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms/:id/messages', messageRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Socket.IO connection
-io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
-
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
-  });
-});
+// Socket.IO handlers (set up in tests or on direct run)
+const { setupSocketHandlers } = require('./socket');
+setupSocketHandlers(io);
 
 // Start server (only when run directly, not in tests)
 if (require.main === module) {
