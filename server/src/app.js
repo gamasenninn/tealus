@@ -22,7 +22,9 @@ app.use(express.json());
 
 // Routes
 const authRoutes = require('./routes/auth');
+const roomRoutes = require('./routes/rooms');
 app.use('/api/auth', authRoutes);
+app.use('/api/rooms', roomRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
