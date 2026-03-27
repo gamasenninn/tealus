@@ -71,9 +71,13 @@ router.get('/', async (req, res) => {
     if (before) {
       // Get the created_at of the cursor message
       query = `
-        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url
+        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
+               COALESCE(rc.read_count, 0)::int AS read_count
         FROM messages m
         JOIN users u ON u.id = m.sender_id
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS read_count FROM message_reads WHERE message_id = m.id
+        ) rc ON true
         WHERE m.room_id = $1
           AND m.created_at < (SELECT created_at FROM messages WHERE id = $2)
         ORDER BY m.created_at DESC
@@ -82,9 +86,13 @@ router.get('/', async (req, res) => {
       params = [roomId, before, parsedLimit];
     } else {
       query = `
-        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url
+        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
+               COALESCE(rc.read_count, 0)::int AS read_count
         FROM messages m
         JOIN users u ON u.id = m.sender_id
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS read_count FROM message_reads WHERE message_id = m.id
+        ) rc ON true
         WHERE m.room_id = $1
         ORDER BY m.created_at DESC
         LIMIT $2

@@ -164,7 +164,8 @@ router.get('/', async (req, res) => {
               m.content AS last_message_content,
               m.created_at AS last_message_at,
               m.type AS last_message_type,
-              u.display_name AS last_message_sender
+              u.display_name AS last_message_sender,
+              COALESCE(unread.count, 0)::int AS unread_count
        FROM rooms r
        JOIN room_members rm ON rm.room_id = r.id
        LEFT JOIN LATERAL (
@@ -175,6 +176,17 @@ router.get('/', async (req, res) => {
          LIMIT 1
        ) m ON true
        LEFT JOIN users u ON u.id = m.sender_id
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS count
+         FROM messages msg
+         WHERE msg.room_id = r.id
+           AND msg.is_deleted = false
+           AND msg.sender_id != $1
+           AND NOT EXISTS (
+             SELECT 1 FROM message_reads mr
+             WHERE mr.message_id = msg.id AND mr.user_id = $1
+           )
+       ) unread ON true
        WHERE rm.user_id = $1
        ORDER BY COALESCE(m.created_at, r.created_at) DESC`,
       [userId]
