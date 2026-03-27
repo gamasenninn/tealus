@@ -122,6 +122,25 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Attach reply_to message info
+    const replyIds = messages.filter(m => m.reply_to).map(m => m.reply_to);
+    if (replyIds.length > 0) {
+      const replyResult = await pool.query(
+        `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name
+         FROM messages m
+         JOIN users u ON u.id = m.sender_id
+         WHERE m.id = ANY($1)`,
+        [replyIds]
+      );
+      const replyMap = {};
+      for (const r of replyResult.rows) {
+        replyMap[r.id] = r;
+      }
+      for (const msg of messages) {
+        msg.reply_to_message = msg.reply_to ? (replyMap[msg.reply_to] || null) : null;
+      }
+    }
+
     res.json({ messages });
   } catch (err) {
     console.error('Get messages error:', err);
