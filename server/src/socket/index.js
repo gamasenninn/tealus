@@ -74,6 +74,7 @@ function setupSocketHandlers(io) {
         const message = {
           ...result.rows[0],
           sender_display_name: socket.user.display_name,
+          sender_avatar_url: socket.user.avatar_url,
         };
 
         // Broadcast to room (including sender)

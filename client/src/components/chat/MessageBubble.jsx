@@ -50,7 +50,14 @@ function MessageBubble({ message, isOwn }) {
   return (
     <div className={`bubble-row ${isOwn ? 'own' : ''}`}>
       {!isOwn && (
-        <div className="bubble-sender-name">{message.sender_display_name}</div>
+        <div className="bubble-sender-info">
+          {message.sender_avatar_url ? (
+            <img src={`/media/${message.sender_avatar_url}`} alt="" className="bubble-avatar" />
+          ) : (
+            <span className="bubble-avatar-placeholder">{message.sender_display_name?.charAt(0)}</span>
+          )}
+          <span className="bubble-sender-name">{message.sender_display_name}</span>
+        </div>
       )}
       <div className="bubble-content-row">
         {isOwn && (

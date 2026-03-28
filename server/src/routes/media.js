@@ -87,6 +87,7 @@ router.post('/', authenticate, upload.array('files', 10), async (req, res) => {
     const fullMessage = {
       ...message,
       sender_display_name: req.user.display_name,
+      sender_avatar_url: req.user.avatar_url,
       media: mediaRecords,
     };
     io.to(roomId).emit('message:new', fullMessage);
