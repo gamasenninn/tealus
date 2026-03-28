@@ -107,7 +107,11 @@ function RoomList() {
             onClick={() => navigate(`/rooms/${room.id}`)}
           >
             <div className="room-avatar">
-              {room.type === 'group' ? '👥' : '👤'}
+              {room.type === 'direct' && room.partner_avatar_url ? (
+                <img src={`/media/${room.partner_avatar_url}`} alt="" className="room-avatar-img" />
+              ) : (
+                room.type === 'group' ? '👥' : '👤'
+              )}
             </div>
             <div className="room-info">
               <div className="room-top-row">
