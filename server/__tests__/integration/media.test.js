@@ -65,27 +65,27 @@ describe('Media API', () => {
       const res = await request(app)
         .post(`/api/rooms/${roomId}/media`)
         .set('Authorization', `Bearer ${user1.token}`)
-        .attach('file', fixtures.pngPath);
+        .attach('files', fixtures.pngPath);
 
       expect(res.status).toBe(201);
       expect(res.body.message).toBeDefined();
       expect(res.body.message.type).toBe('image');
       expect(res.body.media).toBeDefined();
-      expect(res.body.media.mime_type).toBe('image/png');
-      expect(res.body.media.file_path).toBeDefined();
-      expect(res.body.media.thumbnail_path).toBeDefined();
+      expect(res.body.media[0].mime_type).toBe('image/png');
+      expect(res.body.media[0].file_path).toBeDefined();
+      expect(res.body.media[0].thumbnail_path).toBeDefined();
     });
 
     it('should upload a generic file', async () => {
       const res = await request(app)
         .post(`/api/rooms/${roomId}/media`)
         .set('Authorization', `Bearer ${user1.token}`)
-        .attach('file', fixtures.txtPath);
+        .attach('files', fixtures.txtPath);
 
       expect(res.status).toBe(201);
       expect(res.body.message.type).toBe('file');
-      expect(res.body.media.mime_type).toBe('text/plain');
-      expect(res.body.media.thumbnail_path).toBeNull();
+      expect(res.body.media[0].mime_type).toBe('text/plain');
+      expect(res.body.media[0].thumbnail_path).toBeNull();
     });
 
     it('should reject upload without file', async () => {
@@ -100,7 +100,7 @@ describe('Media API', () => {
       const res = await request(app)
         .post(`/api/rooms/${roomId}/media`)
         .set('Authorization', `Bearer ${user3.token}`)
-        .attach('file', fixtures.pngPath);
+        .attach('files', fixtures.pngPath);
 
       expect(res.status).toBe(403);
     });
@@ -116,7 +116,7 @@ describe('Media API', () => {
       await request(app)
         .post(`/api/rooms/${roomId}/media`)
         .set('Authorization', `Bearer ${user1.token}`)
-        .attach('file', fixtures.pngPath);
+        .attach('files', fixtures.pngPath);
 
       const res = await request(app)
         .get(`/api/rooms/${roomId}/messages`)

@@ -50,12 +50,17 @@ function ChatRoom() {
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (isInitialLoad.current && messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView();
+    if (messages.length === 0) return;
+
+    if (isInitialLoad.current) {
+      // Initial load or reload — always scroll to bottom
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView();
+        markVisibleAsRead();
+      }, 50);
       isInitialLoad.current = false;
-      // Mark visible messages as read
-      markVisibleAsRead();
-    } else if (messages.length > 0) {
+    } else {
+      // New message arrived — scroll only if already near bottom
       const container = messagesContainerRef.current;
       if (container) {
         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;

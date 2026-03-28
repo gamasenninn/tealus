@@ -29,7 +29,7 @@ function Login() {
   return (
     <div className="login-container">
       <div className="login-card">
-        <h1 className="login-title">Life Line</h1>
+        <h1 className="login-title">Linny</h1>
         <p className="login-subtitle">社内メッセンジャー</p>
 
         <form onSubmit={handleSubmit} className="login-form">

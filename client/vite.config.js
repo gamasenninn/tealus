@@ -8,8 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Life Line',
-        short_name: 'LifeLine',
+        name: 'Linny',
+        short_name: 'Linny',
         description: '社内メッセンジャー',
         theme_color: '#06C755',
         background_color: '#ffffff',
@@ -33,6 +33,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    allowedHosts: ['linny.hksagri.diskstation.me'],
     proxy: {
       '/api': 'http://localhost:3000',
       '/media': 'http://localhost:3000',

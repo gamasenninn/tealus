@@ -3,12 +3,12 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: lifeline_postgres
+    container_name: linny_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: lifeline
-      POSTGRES_PASSWORD: lifeline_dev
-      POSTGRES_DB: lifeline
+      POSTGRES_USER: linny
+      POSTGRES_PASSWORD: linny_dev
+      POSTGRES_DB: linny
     ports:
       - "5432:5432"
     volumes:
@@ -17,18 +17,18 @@ services:
 
   postgres_test:
     image: postgres:16-alpine
-    container_name: lifeline_postgres_test
+    container_name: linny_postgres_test
     restart: unless-stopped
     environment:
-      POSTGRES_USER: lifeline_test
-      POSTGRES_PASSWORD: lifeline_test
-      POSTGRES_DB: lifeline_test
+      POSTGRES_USER: linny_test
+      POSTGRES_PASSWORD: linny_test
+      POSTGRES_DB: linny_test
     ports:
       - "5433:5432"
 
   redis:
     image: redis:7-alpine
-    container_name: lifeline_redis
+    container_name: linny_redis
     restart: unless-stopped
     ports:
       - "6379:6379"

@@ -4,7 +4,7 @@ const pool = require('../db/pool');
 // Configure VAPID keys (set in .env)
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:admin@lifeline.local',
+    process.env.VAPID_SUBJECT || 'mailto:admin@linny.local',
     process.env.VAPID_PUBLIC_KEY,
     process.env.VAPID_PRIVATE_KEY
   );

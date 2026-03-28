@@ -1,4 +1,4 @@
-# Life Line
+# Linny
 
 社内LINE代替メッセンジャー。LINEライクなUIで、画像・動画はサーバー保存（端末容量を使わない）。
 
@@ -45,8 +45,8 @@
 ### 1. リポジトリをクローン
 
 ```bash
-git clone https://github.com/gamasenninn/life_line.git
-cd life_line
+git clone https://github.com/gamasenninn/linny.git
+cd linny
 ```
 
 ### 2. Docker起動（PostgreSQL + Redis）
@@ -147,7 +147,7 @@ npm run test:watch # ウォッチモード
 ## ディレクトリ構成
 
 ```
-life_line/
+linny/
 ├── client/                    # React PWA フロントエンド
 │   ├── src/
 │   │   ├── components/
@@ -213,11 +213,11 @@ life_line/
 ```nginx
 server {
     listen 80;
-    server_name lifeline.example.com;
+    server_name linny.example.com;
 
     # React PWA
     location / {
-        root /var/life_line/client/dist;
+        root /var/linny/client/dist;
         try_files $uri $uri/ /index.html;
     }
 
@@ -238,7 +238,7 @@ server {
 
     # メディアファイル配信
     location /media/ {
-        alias /var/life_line/media/;
+        alias /var/linny/media/;
         expires 30d;
     }
 }
