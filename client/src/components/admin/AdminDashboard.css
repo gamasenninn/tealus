@@ -1,0 +1,333 @@
+.admin-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #06C755;
+  color: white;
+  border-radius: 8px;
+}
+
+.admin-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.admin-back-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.admin-back-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.admin-create-btn {
+  background: white;
+  color: #06C755;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.admin-create-btn:hover {
+  background: #e8e8e8;
+}
+
+.admin-error {
+  background: #ffe0e0;
+  color: #c00;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.admin-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 18px;
+  color: #666;
+}
+
+/* Table */
+.admin-user-list {
+  background: white;
+  border-radius: 8px;
+  overflow-x: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.admin-user-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-user-list th {
+  background: #f8f8f8;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 13px;
+  color: #666;
+  border-bottom: 2px solid #eee;
+  white-space: nowrap;
+}
+
+.admin-user-list td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+
+.admin-user-list tr:hover {
+  background: #fafafa;
+}
+
+.inactive-row {
+  opacity: 0.5;
+}
+
+/* Badges */
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.role-badge.admin {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.role-badge.user {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.status-badge.active {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-badge.inactive {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* Action buttons */
+.admin-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.edit-btn {
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.edit-btn:hover {
+  background: #1565c0;
+}
+
+.deactivate-btn {
+  background: #e53935;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.deactivate-btn:hover {
+  background: #c62828;
+}
+
+.activate-btn {
+  background: #43a047;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.activate-btn:hover {
+  background: #2e7d32;
+}
+
+/* Modal */
+.admin-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.admin-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 440px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Form */
+.user-form h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #333;
+}
+
+.form-error {
+  background: #ffe0e0;
+  color: #c00;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.form-field {
+  margin-bottom: 14px;
+}
+
+.form-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.form-field input:focus,
+.form-field select:focus {
+  border-color: #06C755;
+  outline: none;
+}
+
+.form-field input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.form-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cancel-btn {
+  background: #e0e0e0;
+  color: #333;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.submit-btn {
+  background: #06C755;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.submit-btn:hover {
+  background: #05b34c;
+}
+
+.submit-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .admin-container {
+    padding: 8px;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .admin-header-left {
+    justify-content: space-between;
+  }
+
+  .admin-user-list td,
+  .admin-user-list th {
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .admin-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

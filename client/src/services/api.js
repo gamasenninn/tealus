@@ -117,6 +117,23 @@ class ApiClient {
   unsubscribePush(endpoint) {
     return this.request('DELETE', '/push/subscribe', { endpoint });
   }
+
+  // Admin
+  getAdminUsers() {
+    return this.request('GET', '/admin/users');
+  }
+
+  createAdminUser(data) {
+    return this.request('POST', '/admin/users', data);
+  }
+
+  updateAdminUser(id, data) {
+    return this.request('PUT', `/admin/users/${id}`, data);
+  }
+
+  updateAdminUserStatus(id, is_active) {
+    return this.request('PATCH', `/admin/users/${id}/status`, { is_active });
+  }
 }
 
 export const api = new ApiClient();

@@ -71,6 +71,11 @@ function RoomList() {
       <header className="room-list-header">
         <h1>トーク</h1>
         <div className="room-list-header-actions">
+          {user?.role === 'admin' && (
+            <button className="icon-button" onClick={() => navigate('/admin')} title="管理">
+              ⚙
+            </button>
+          )}
           <button className="icon-button" onClick={() => setShowCreate(true)} title="新規作成">
             +
           </button>
