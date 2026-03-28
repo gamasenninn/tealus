@@ -85,7 +85,12 @@ function RoomList() {
         </div>
       </header>
 
-      <div className="room-list-user-info">
+      <div className="room-list-user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
+        {user?.avatar_url ? (
+          <img src={`/media/${user.avatar_url}`} alt="" className="room-list-avatar" />
+        ) : (
+          <span className="room-list-avatar-placeholder">{user?.display_name?.charAt(0)}</span>
+        )}
         {user?.display_name}（{user?.employee_id}）
       </div>
 

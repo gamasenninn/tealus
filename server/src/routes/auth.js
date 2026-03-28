@@ -1,7 +1,20 @@
 const express = require('express');
+const path = require('path');
 const bcrypt = require('bcrypt');
+const multer = require('multer');
+const crypto = require('crypto');
 const pool = require('../db/pool');
 const { generateToken, authenticate } = require('../middleware/auth');
+
+const AVATAR_DIR = path.join(__dirname, '../../../media/avatars');
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, AVATAR_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.user.id}-${Date.now()}${ext}`);
+  },
+});
+const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -98,6 +111,99 @@ router.post('/login', async (req, res) => {
  */
 router.get('/me', authenticate, (req, res) => {
   res.json({ user: req.user });
+});
+
+/**
+ * PUT /api/auth/profile
+ * Update own display_name and/or status_message
+ */
+router.put('/profile', authenticate, async (req, res) => {
+  const { display_name, status_message } = req.body;
+  const userId = req.user.id;
+
+  const updates = [];
+  const values = [];
+  let idx = 1;
+
+  if (display_name !== undefined) {
+    updates.push(`display_name = $${idx++}`);
+    values.push(display_name);
+  }
+  if (status_message !== undefined) {
+    updates.push(`status_message = $${idx++}`);
+    values.push(status_message);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: '更新する項目がありません' });
+  }
+
+  updates.push('updated_at = now()');
+  values.push(userId);
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}
+       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+      values
+    );
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/auth/avatar
+ * Upload own avatar image
+ */
+router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: '画像ファイルが添付されていません' });
+  }
+
+  const avatarUrl = `avatars/${req.file.filename}`;
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET avatar_url = $1, updated_at = now() WHERE id = $2
+       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+      [avatarUrl, req.user.id]
+    );
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error('Avatar upload error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * PUT /api/auth/password
+ * Change own password (requires current password)
+ */
+router.put('/password', authenticate, async (req, res) => {
+  const { current_password, new_password } = req.body;
+
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: '現在のパスワードと新しいパスワードは必須です' });
+  }
+
+  try {
+    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    const isValid = await bcrypt.compare(current_password, result.rows[0].password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: '現在のパスワードが正しくありません' });
+    }
+
+    const newHash = await bcrypt.hash(new_password, SALT_ROUNDS);
+    await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [newHash, req.user.id]);
+
+    res.json({ message: 'パスワードを変更しました' });
+  } catch (err) {
+    console.error('Password change error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
 });
 
 module.exports = router;

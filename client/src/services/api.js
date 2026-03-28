@@ -118,6 +118,30 @@ class ApiClient {
     return this.request('DELETE', '/push/subscribe', { endpoint });
   }
 
+  // Profile
+  updateProfile(data) {
+    return this.request('PUT', '/auth/profile', data);
+  }
+
+  async uploadAvatar(file) {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const res = await fetch(`${API_BASE}/auth/avatar`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${this.token}` },
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました');
+    return data;
+  }
+
+  changePassword(current_password, new_password) {
+    return this.request('PUT', '/auth/password', { current_password, new_password });
+  }
+
   // Admin
   getAdminUsers() {
     return this.request('GET', '/admin/users');

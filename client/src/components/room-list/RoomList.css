@@ -46,11 +46,34 @@
 }
 
 .room-list-user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 16px;
   font-size: 12px;
   color: #888;
   background: #f9f9f9;
   border-bottom: 1px solid #eee;
+}
+
+.room-list-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.room-list-avatar-placeholder {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #06C755;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .room-list {
