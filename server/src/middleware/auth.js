@@ -29,7 +29,7 @@ async function authenticate(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const result = await pool.query(
-      'SELECT id, employee_id, display_name, avatar_url, status_message, is_active, created_at FROM users WHERE id = $1 AND is_active = true',
+      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at FROM users WHERE id = $1 AND is_active = true',
       [decoded.id]
     );
 
@@ -44,4 +44,15 @@ async function authenticate(req, res, next) {
   }
 }
 
-module.exports = { generateToken, authenticate, JWT_SECRET };
+/**
+ * Admin authorization middleware
+ * Must be used after authenticate
+ */
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: '管理者権限が必要です' });
+  }
+  next();
+}
+
+module.exports = { generateToken, authenticate, requireAdmin, JWT_SECRET };

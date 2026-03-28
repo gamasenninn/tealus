@@ -1,0 +1,106 @@
+import { useState } from 'react';
+
+function UserForm({ user, onSubmit, onCancel }) {
+  const isEdit = !!user;
+  const [formData, setFormData] = useState({
+    employee_id: user?.employee_id || '',
+    display_name: user?.display_name || '',
+    password: '',
+    role: user?.role || 'user',
+  });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+
+    try {
+      const data = {};
+      if (!isEdit) {
+        data.employee_id = formData.employee_id;
+        data.password = formData.password;
+      }
+      if (!isEdit || formData.display_name !== user.display_name) {
+        data.display_name = formData.display_name;
+      }
+      if (!isEdit || formData.role !== user.role) {
+        data.role = formData.role;
+      }
+      if (isEdit && formData.password) {
+        data.password = formData.password;
+      }
+
+      await onSubmit(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="user-form">
+      <h2>{isEdit ? 'ユーザー編集' : 'ユーザー追加'}</h2>
+
+      {error && <div className="form-error">{error}</div>}
+
+      <div className="form-field">
+        <label>社員番号</label>
+        <input
+          name="employee_id"
+          value={formData.employee_id}
+          onChange={handleChange}
+          disabled={isEdit}
+          required={!isEdit}
+          placeholder="例: EMP001"
+        />
+      </div>
+
+      <div className="form-field">
+        <label>表示名</label>
+        <input
+          name="display_name"
+          value={formData.display_name}
+          onChange={handleChange}
+          required
+          placeholder="例: 田中太郎"
+        />
+      </div>
+
+      <div className="form-field">
+        <label>{isEdit ? 'パスワード（変更する場合のみ）' : 'パスワード'}</label>
+        <input
+          name="password"
+          type="password"
+          value={formData.password}
+          onChange={handleChange}
+          required={!isEdit}
+          placeholder={isEdit ? '未入力なら変更なし' : 'パスワード'}
+        />
+      </div>
+
+      <div className="form-field">
+        <label>権限</label>
+        <select name="role" value={formData.role} onChange={handleChange}>
+          <option value="user">一般</option>
+          <option value="admin">管理者</option>
+        </select>
+      </div>
+
+      <div className="form-buttons">
+        <button type="button" className="cancel-btn" onClick={onCancel}>キャンセル</button>
+        <button type="submit" className="submit-btn" disabled={submitting}>
+          {submitting ? '処理中...' : (isEdit ? '更新' : '作成')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default UserForm;

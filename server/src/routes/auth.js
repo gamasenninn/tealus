@@ -36,7 +36,7 @@ router.post('/register', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO users (employee_id, display_name, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING id, employee_id, display_name, avatar_url, status_message, is_active, created_at`,
+       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
       [employee_id, display_name, password_hash]
     );
 
@@ -65,7 +65,7 @@ router.post('/login', async (req, res) => {
   try {
     // Find user
     const result = await pool.query(
-      'SELECT id, employee_id, display_name, avatar_url, status_message, is_active, password_hash, created_at FROM users WHERE employee_id = $1 AND is_active = true',
+      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, password_hash, created_at FROM users WHERE employee_id = $1 AND is_active = true',
       [employee_id]
     );
 
