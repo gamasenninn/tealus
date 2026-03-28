@@ -62,8 +62,7 @@ function RoomList() {
 
   const getRoomDisplayName = (room) => {
     if (room.type === 'group') return room.name;
-    // For direct rooms, show the other person's name
-    return room.last_message_sender || 'ダイレクトメッセージ';
+    return room.partner_display_name || 'ダイレクトメッセージ';
   };
 
   return (
