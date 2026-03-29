@@ -18,13 +18,15 @@ export const useMessageStore = create((set, get) => ({
   },
 
   loadMore: async (roomId) => {
-    const { messages } = get();
-    if (messages.length === 0) return;
+    const { messages, isLoading } = get();
+    if (messages.length === 0 || isLoading) return;
+    set({ isLoading: true });
     const oldestId = messages[0].id;
     const data = await api.getMessages(roomId, oldestId);
     set((state) => ({
       messages: [...data.messages.reverse(), ...state.messages],
       hasMore: data.messages.length >= 20,
+      isLoading: false,
     }));
   },
 

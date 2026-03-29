@@ -83,8 +83,15 @@ function ChatRoom() {
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
-    if (container && container.scrollTop === 0 && hasMore) {
-      loadMore(roomId);
+    if (container && container.scrollTop < 50 && hasMore) {
+      const prevScrollHeight = container.scrollHeight;
+      loadMore(roomId).then(() => {
+        // Restore scroll position after prepending older messages
+        requestAnimationFrame(() => {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = newScrollHeight - prevScrollHeight;
+        });
+      });
     }
   };
 
