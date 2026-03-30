@@ -94,7 +94,7 @@ function VoiceBubble({ media, transcription }) {
           {transcription.status === 'done' && (
             <span className="voice-trans-text">📝 {transcription.formatted_text || transcription.raw_text}</span>
           )}
-          {transcription.status === 'error' && <span className="voice-trans-error">⚠ 文字起こしに失敗しました</span>}
+          {transcription.status === 'error' && <span className="voice-trans-error">⚠ 文字起こしできませんでした</span>}
         </div>
       )}
     </div>
