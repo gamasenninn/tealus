@@ -25,8 +25,8 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     analyser.fftSize = 256;
     source.connect(analyser);
 
-    // MediaRecorder
-    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+    // MediaRecorder — prefer mp4 for Safari/iPhone compatibility
+    const mimeType = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
     recorderRef.current = recorder;
@@ -37,7 +37,8 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
       }
     };
 
-    recorder.start(250);
+    // No timeslice — collect all data at stop() for better Safari compatibility
+    recorder.start();
 
     // Timer
     const timer = setInterval(() => setDuration(d => d + 1), 1000);
