@@ -122,11 +122,19 @@ function setupSocketHandlers(io) {
           );
         }
 
-        // Broadcast to room so senders can update their read counts
+        // Get actual read counts and broadcast
+        const readCounts = await pool.query(
+          `SELECT message_id, COUNT(*)::int AS read_count
+           FROM message_reads WHERE message_id = ANY($1)
+           GROUP BY message_id`,
+          [message_ids]
+        );
+        const counts = {};
+        readCounts.rows.forEach(r => { counts[r.message_id] = r.read_count; });
+
         socket.to(room_id).emit('message:read', {
           room_id,
-          message_ids,
-          user_id: socket.user.id,
+          read_counts: counts,
         });
       } catch (err) {
         console.error('Socket message:read error:', err);

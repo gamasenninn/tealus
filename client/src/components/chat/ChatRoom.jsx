@@ -38,14 +38,10 @@ function ChatRoom() {
       });
 
       socket.on('message:read', (data) => {
-        const { message_ids } = data;
-        if (message_ids) {
-          message_ids.forEach((id) => {
-            const msgs = useMessageStore.getState().messages;
-            const msg = msgs.find((m) => m.id === id);
-            if (msg) {
-              useMessageStore.getState().updateReadCount(id, (msg.read_count || 0) + 1);
-            }
+        const { read_counts } = data;
+        if (read_counts) {
+          Object.entries(read_counts).forEach(([id, count]) => {
+            useMessageStore.getState().updateReadCount(id, count);
           });
         }
       });
@@ -84,7 +80,7 @@ function ChatRoom() {
         }
       }
     }
-  }, [messages]);
+  }, [messages.length]);
 
   const markVisibleAsRead = useCallback(() => {
     const unreadIds = messages
