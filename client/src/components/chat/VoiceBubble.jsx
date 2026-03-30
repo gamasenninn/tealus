@@ -21,14 +21,23 @@ function VoiceBubble({ media }) {
 
   const handleTimeUpdate = () => {
     const audio = audioRef.current;
-    if (audio && audio.duration) {
+    if (!audio) return;
+    if (isFinite(audio.duration) && audio.duration > 0) {
+      setDuration(audio.duration);
       setProgress((audio.currentTime / audio.duration) * 100);
     }
   };
 
   const handleLoadedMetadata = () => {
     const audio = audioRef.current;
-    if (audio) {
+    if (audio && isFinite(audio.duration)) {
+      setDuration(audio.duration);
+    }
+  };
+
+  const handleDurationChange = () => {
+    const audio = audioRef.current;
+    if (audio && isFinite(audio.duration)) {
       setDuration(audio.duration);
     }
   };
@@ -64,6 +73,7 @@ function VoiceBubble({ media }) {
         src={`/media/${filePath}`}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onDurationChange={handleDurationChange}
         onEnded={handleEnded}
         preload="metadata"
       />
