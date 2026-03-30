@@ -135,17 +135,21 @@ function VoiceBubble({ message, media, transcription, isOwn }) {
             </>
           )}
           {transcription.status === 'done' && isEditing && (
-            <div className="voice-edit-area">
-              <textarea
-                value={editText}
-                onChange={e => setEditText(e.target.value)}
-                rows={3}
-              />
-              <div className="voice-edit-buttons">
-                <button className="voice-edit-cancel" onClick={() => setIsEditing(false)}>キャンセル</button>
-                <button className="voice-edit-save" onClick={handleSaveEdit} disabled={saving}>
-                  {saving ? '保存中...' : '確定'}
-                </button>
+            <div className="voice-edit-overlay" onClick={() => setIsEditing(false)}>
+              <div className="voice-edit-modal" onClick={e => e.stopPropagation()}>
+                <h3>文字起こしを編集</h3>
+                <textarea
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  rows={6}
+                  autoFocus
+                />
+                <div className="voice-edit-buttons">
+                  <button className="voice-edit-cancel" onClick={() => setIsEditing(false)}>キャンセル</button>
+                  <button className="voice-edit-save" onClick={handleSaveEdit} disabled={saving}>
+                    {saving ? '保存中...' : '確定'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
