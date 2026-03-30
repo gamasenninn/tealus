@@ -62,6 +62,7 @@ async function formatTranscription(messageId, rawText, io, roomId) {
         status: 'done',
         raw_text: rawText,
         formatted_text: formattedText,
+        version: 1,
       });
     }
 

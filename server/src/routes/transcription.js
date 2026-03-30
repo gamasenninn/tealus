@@ -62,6 +62,7 @@ router.put('/', authenticate, async (req, res) => {
       status: 'done',
       raw_text: rawText,
       formatted_text: text.trim(),
+      version: newVersion,
     });
 
     res.json({ transcription });
