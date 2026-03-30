@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { api } from '../../services/api';
+import { useMessageStore } from '../../stores/messageStore';
 import './VoiceBubble.css';
 
 function VoiceBubble({ message, media, transcription, isOwn }) {
@@ -65,7 +66,12 @@ function VoiceBubble({ message, media, transcription, isOwn }) {
     if (!editText.trim()) return;
     setSaving(true);
     try {
-      await api.editTranscription(message.id, editText.trim());
+      const data = await api.editTranscription(message.id, editText.trim());
+      useMessageStore.getState().updateTranscription(message.id, {
+        formatted_text: data.transcription.formatted_text,
+        version: data.transcription.version,
+        status: 'done',
+      });
       setIsEditing(false);
     } catch (err) {
       console.error('Edit error:', err);
