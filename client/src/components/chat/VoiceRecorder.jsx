@@ -19,11 +19,10 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     analyser.fftSize = 256;
     source.connect(analyser);
 
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm',
-    });
+    // Choose supported mime type (Safari doesn't support webm)
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
     mediaRecorderRef.current = mediaRecorder;
     chunksRef.current = [];
 
@@ -60,9 +59,10 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     if (!recorder || recorder.state === 'inactive') return;
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      const type = recorder.mimeType || 'audio/webm';
+      const blob = new Blob(chunksRef.current, { type });
       stream.getTracks().forEach((t) => t.stop());
-      onSend(blob);
+      onSend(blob, type);
     };
     recorder.stop();
   }, [stream, onSend]);

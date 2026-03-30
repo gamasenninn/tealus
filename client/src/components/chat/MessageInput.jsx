@@ -90,7 +90,7 @@ function MessageInput({ roomId }) {
     }
   };
 
-  const handleVoiceSend = async (blob) => {
+  const handleVoiceSend = async (blob, mimeType) => {
     setRecorderStream(null);
     setIsSending(true);
     setUploadProgress(0);
