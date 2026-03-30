@@ -4,18 +4,20 @@ import './VoiceRecorder.css';
 function VoiceRecorder({ stream, onSend, onCancel }) {
   const [duration, setDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
-  const mediaRecorderRef = useRef(null);
+  const recorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const animFrameRef = useRef(null);
   const audioCtxRef = useRef(null);
-  const startedRef = useRef(false);
 
+  // Initialize on mount, cleanup on unmount
   useEffect(() => {
-    if (!stream || startedRef.current) return;
-    startedRef.current = true;
+    if (!stream) return;
 
-    // Audio level analysis
+    // Clean previous state if any
+    chunksRef.current = [];
+
+    // Audio context for level meter
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
     const source = audioCtx.createMediaStreamSource(stream);
@@ -23,30 +25,28 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     analyser.fftSize = 256;
     source.connect(analyser);
 
-    // Choose supported mime type
+    // MediaRecorder
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
-    const opts = mimeType ? { mimeType } : {};
-    const mediaRecorder = new MediaRecorder(stream, opts);
-    mediaRecorderRef.current = mediaRecorder;
-    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    recorderRef.current = recorder;
 
-    mediaRecorder.ondataavailable = (e) => {
+    recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) {
         chunksRef.current.push(e.data);
       }
     };
 
-    mediaRecorder.start(250);
+    recorder.start(250);
 
     // Timer
-    timerRef.current = setInterval(() => {
-      setDuration((d) => d + 1);
-    }, 1000);
+    const timer = setInterval(() => setDuration(d => d + 1), 1000);
+    timerRef.current = timer;
 
     // Level meter
+    let running = true;
     const updateLevel = () => {
-      if (audioCtx.state === 'closed') return;
+      if (!running) return;
       const data = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(data);
       const avg = data.reduce((a, b) => a + b, 0) / data.length;
@@ -56,42 +56,41 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     updateLevel();
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      running = false;
+      clearInterval(timer);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (recorder.state !== 'inactive') {
+        recorder.onstop = () => {};
+        recorder.stop();
+      }
+      audioCtx.close().catch(() => {});
+      recorderRef.current = null;
     };
   }, [stream]);
 
-  const cleanup = useCallback(() => {
+  const handleSend = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+
+    // Stop timer and animation immediately
     if (timerRef.current) clearInterval(timerRef.current);
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-      audioCtxRef.current.close();
-    }
-    stream.getTracks().forEach((t) => t.stop());
-  }, [stream]);
-
-  const handleSend = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === 'inactive') return;
 
     recorder.onstop = () => {
       const type = recorder.mimeType || 'audio/webm';
       const blob = new Blob(chunksRef.current, { type });
-      cleanup();
+      stream.getTracks().forEach(t => t.stop());
+      recorderRef.current = null;
       onSend(blob, type);
     };
     recorder.stop();
-  }, [cleanup, onSend]);
+  }, [onSend]);
 
   const handleCancel = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.onstop = () => {}; // prevent send
-      recorder.stop();
-    }
-    cleanup();
+    stream.getTracks().forEach(t => t.stop());
+    recorderRef.current = null;
     onCancel();
-  }, [cleanup, onCancel]);
+  }, [stream, onCancel]);
 
   const formatTime = (s) => {
     const min = Math.floor(s / 60);
