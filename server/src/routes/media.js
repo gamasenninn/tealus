@@ -13,7 +13,17 @@ const router = express.Router({ mergeParams: true });
  * Upload one or more files and create a media message
  * Supports: upload.single('file') or upload.array('files', 10)
  */
-router.post('/', authenticate, upload.array('files', 10), async (req, res) => {
+router.post('/', authenticate, (req, res, next) => {
+  upload.array('files', 10)(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'ファイルサイズが上限を超えています（最大100MB）' });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
 

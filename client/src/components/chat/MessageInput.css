@@ -4,6 +4,14 @@
   flex-shrink: 0;
 }
 
+.message-input-error {
+  padding: 8px 12px;
+  background: #ffe0e0;
+  color: #c00;
+  font-size: 13px;
+  text-align: center;
+}
+
 .message-input-progress {
   position: relative;
   height: 24px;

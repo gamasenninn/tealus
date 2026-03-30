@@ -8,6 +8,7 @@ function MessageInput({ roomId }) {
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
+  const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
 
@@ -49,12 +50,14 @@ function MessageInput({ roomId }) {
 
     setIsSending(true);
     setUploadProgress(0);
+    setUploadError('');
     try {
       await api.uploadMedia(roomId, files, (progress) => {
         setUploadProgress(progress);
       });
     } catch (err) {
-      console.error('Upload error:', err);
+      setUploadError(err.message);
+      setTimeout(() => setUploadError(''), 5000);
     } finally {
       setIsSending(false);
       setUploadProgress(null);
@@ -64,6 +67,9 @@ function MessageInput({ roomId }) {
 
   return (
     <div className="message-input-container">
+      {uploadError && (
+        <div className="message-input-error">{uploadError}</div>
+      )}
       {uploadProgress !== null && (
         <div className="message-input-progress">
           <div className="message-input-progress-bar" style={{ width: `${uploadProgress}%` }} />

@@ -6,9 +6,9 @@ const MEDIA_ROOT = path.join(__dirname, '../../../media');
 
 // File size limits (bytes)
 const SIZE_LIMITS = {
-  image: 10 * 1024 * 1024,   // 10MB
-  video: 50 * 1024 * 1024,   // 50MB
-  default: 20 * 1024 * 1024, // 20MB
+  image: 10 * 1024 * 1024,    // 10MB
+  video: 100 * 1024 * 1024,   // 100MB
+  default: 20 * 1024 * 1024,  // 20MB
 };
 
 // Determine subdirectory based on MIME type
