@@ -56,12 +56,14 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
       }
     }
 
-    // Call Whisper API with correct filename
-    const fileStream = fs.createReadStream(inputPath);
-    fileStream.path = `voice.${ext}`; // OpenAI SDK uses this for content-type detection
+    // Call Whisper API — use File object with correct name for content-type detection
+    const fileBuffer = fs.readFileSync(inputPath);
+    const file = new File([fileBuffer], `voice.${ext}`, {
+      type: ext === 'mp3' ? 'audio/mpeg' : ext === 'mp4' ? 'audio/mp4' : `audio/${ext}`,
+    });
 
     const transcription = await openai.audio.transcriptions.create({
-      file: fileStream,
+      file: file,
       model: WHISPER_MODEL,
       language: 'ja',
     });
