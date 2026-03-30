@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
+const { formatTranscription } = require('./formatting');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -70,23 +71,26 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
 
     const rawText = transcription.text;
 
-    // Update transcription record
+    // Save raw text, proceed to formatting
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'done', raw_text = $1 WHERE message_id = $2`,
+      `UPDATE voice_transcriptions SET raw_text = $1 WHERE message_id = $2`,
       [rawText, messageId]
     );
 
-    // Notify clients with result
+    // Notify clients with raw text while formatting continues
     if (io) {
       io.to(roomId).emit('voice:transcription', {
         message_id: messageId,
-        status: 'done',
+        status: 'formatting',
         raw_text: rawText,
       });
     }
 
     // Cleanup temp file
     if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+
+    // AI formatting
+    await formatTranscription(messageId, rawText, io, roomId);
 
     return rawText;
   } catch (err) {

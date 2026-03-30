@@ -62,10 +62,13 @@ describe('Voice Transcription', () => {
       .set('Authorization', `Bearer ${user1.token}`)
       .attach('voice', voicePath);
 
-    // Simulate transcription completion
+    // Wait for async transcription to settle (will fail on dummy file)
+    await new Promise(r => setTimeout(r, 500));
+
+    // Simulate transcription completion after background process settles
     const pool = getTestPool();
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'done', raw_text = 'テスト文字起こし'
+      `UPDATE voice_transcriptions SET status = 'done', raw_text = 'テスト文字起こし', formatted_text = '整形済みテスト'
        WHERE message_id = $1`,
       [uploadRes.body.message.id]
     );
@@ -77,6 +80,7 @@ describe('Voice Transcription', () => {
     expect(res.body.messages).toHaveLength(1);
     expect(res.body.messages[0].transcription).toBeDefined();
     expect(res.body.messages[0].transcription.raw_text).toBe('テスト文字起こし');
+    expect(res.body.messages[0].transcription.formatted_text).toBe('整形済みテスト');
     expect(res.body.messages[0].transcription.status).toBe('done');
   });
 });
