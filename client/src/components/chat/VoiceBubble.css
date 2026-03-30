@@ -1,0 +1,61 @@
+.voice-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.voice-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bubble.own .voice-play-btn {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.voice-progress-area {
+  flex: 1;
+  cursor: pointer;
+}
+
+.voice-progress-track {
+  height: 4px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.bubble.own .voice-progress-track {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.voice-progress-fill {
+  height: 100%;
+  background: #333;
+  border-radius: 2px;
+  transition: width 0.1s;
+}
+
+.bubble.own .voice-progress-fill {
+  background: white;
+}
+
+.voice-duration {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.bubble.own .voice-duration {
+  color: rgba(255, 255, 255, 0.7);
+}

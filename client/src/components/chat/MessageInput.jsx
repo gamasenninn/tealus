@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
+import VoiceRecorder from './VoiceRecorder';
 import './MessageInput.css';
 
 function MessageInput({ roomId }) {
@@ -9,6 +10,7 @@ function MessageInput({ roomId }) {
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadError, setUploadError] = useState('');
+  const [showRecorder, setShowRecorder] = useState(false);
   const fileInputRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
 
@@ -78,6 +80,23 @@ function MessageInput({ roomId }) {
     }
   };
 
+  const handleVoiceSend = async (blob) => {
+    setShowRecorder(false);
+    setIsSending(true);
+    setUploadProgress(0);
+    try {
+      await api.uploadVoice(roomId, blob, (progress) => {
+        setUploadProgress(progress);
+      });
+    } catch (err) {
+      setUploadError(err.message);
+      setTimeout(() => setUploadError(''), 5000);
+    } finally {
+      setIsSending(false);
+      setUploadProgress(null);
+    }
+  };
+
   return (
     <div className="message-input-container">
       {uploadError && (
@@ -121,6 +140,13 @@ function MessageInput({ roomId }) {
           disabled={isSending}
         />
         <button
+          className="message-input-mic"
+          onClick={() => setShowRecorder(true)}
+          disabled={isSending}
+        >
+          🎤
+        </button>
+        <button
           className="message-input-send"
           onClick={handleSend}
           disabled={!text.trim() || isSending}
@@ -128,6 +154,13 @@ function MessageInput({ roomId }) {
           ▶
         </button>
       </div>
+
+      {showRecorder && (
+        <VoiceRecorder
+          onSend={handleVoiceSend}
+          onCancel={() => setShowRecorder(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,105 @@
+.voice-recorder-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.voice-recorder {
+  background: white;
+  border-radius: 20px 20px 0 0;
+  padding: 30px 24px;
+  width: 100%;
+  max-width: 480px;
+  text-align: center;
+}
+
+.voice-recorder-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
+  color: #e53935;
+  margin-bottom: 20px;
+}
+
+.voice-recorder-dot {
+  width: 12px;
+  height: 12px;
+  background: #e53935;
+  border-radius: 50%;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.voice-recorder-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 40px;
+  margin-bottom: 16px;
+}
+
+.voice-bar {
+  width: 4px;
+  background: #06C755;
+  border-radius: 2px;
+  transition: height 0.1s;
+}
+
+.voice-recorder-time {
+  font-size: 28px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-recorder-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.voice-cancel-btn {
+  flex: 1;
+  padding: 14px;
+  background: #e0e0e0;
+  color: #333;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.voice-cancel-btn:hover {
+  background: #d0d0d0;
+}
+
+.voice-send-btn {
+  flex: 1;
+  padding: 14px;
+  background: #06C755;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.voice-send-btn:hover {
+  background: #05b34c;
+}

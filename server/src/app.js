@@ -30,6 +30,7 @@ const readRoutes = require('./routes/read');
 const pushRoutes = require('./routes/push');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
+const voiceRoutes = require('./routes/voice');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -38,6 +39,7 @@ app.use('/api/rooms/:id/media', mediaRoutes);
 app.use('/api/rooms/:id/read', readRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/rooms/:id/voice', voiceRoutes);
 
 // Static media files
 app.use('/media', express.static(path.join(__dirname, '../../media')));

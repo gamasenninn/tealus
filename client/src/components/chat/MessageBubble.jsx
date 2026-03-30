@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMessageStore } from '../../stores/messageStore';
 import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
+import VoiceBubble from './VoiceBubble';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn }) {
@@ -74,7 +75,8 @@ function MessageBubble({ message, isOwn }) {
         >
           {renderReply()}
           {hasText && <p className="bubble-text">{message.content}</p>}
-          {renderMedia()}
+          {message.type === 'voice' && <VoiceBubble media={message.media} />}
+          {message.type !== 'voice' && renderMedia()}
         </div>
         {!isOwn && (
           <div className="bubble-meta-right">
