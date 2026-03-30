@@ -141,6 +141,27 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Attach transcription for voice messages
+    const voiceIds = messages.filter(m => m.type === 'voice').map(m => m.id);
+    if (voiceIds.length > 0) {
+      const transResult = await pool.query(
+        `SELECT DISTINCT ON (message_id) message_id, raw_text, formatted_text, status, version
+         FROM voice_transcriptions
+         WHERE message_id = ANY($1)
+         ORDER BY message_id, version DESC`,
+        [voiceIds]
+      );
+      const transMap = {};
+      for (const t of transResult.rows) {
+        transMap[t.message_id] = t;
+      }
+      for (const msg of messages) {
+        if (msg.type === 'voice') {
+          msg.transcription = transMap[msg.id] || null;
+        }
+      }
+    }
+
     res.json({ messages });
   } catch (err) {
     console.error('Get messages error:', err);

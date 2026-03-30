@@ -45,6 +45,18 @@ function ChatRoom() {
           });
         }
       });
+
+      socket.on('voice:status', (data) => {
+        useMessageStore.getState().updateTranscription(data.message_id, { status: data.status });
+      });
+
+      socket.on('voice:transcription', (data) => {
+        useMessageStore.getState().updateTranscription(data.message_id, {
+          status: data.status,
+          raw_text: data.raw_text,
+          formatted_text: data.formatted_text,
+        });
+      });
     }
 
     return () => {
@@ -54,6 +66,8 @@ function ChatRoom() {
         socket.emit('room:leave', roomId);
         socket.off('message:new');
         socket.off('message:read');
+        socket.off('voice:status');
+        socket.off('voice:transcription');
       }
     };
   }, [roomId]);

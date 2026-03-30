@@ -4,6 +4,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { transcribeVoiceMessage } = require('../services/transcription');
 
 const router = express.Router({ mergeParams: true });
 
@@ -99,6 +100,11 @@ router.post('/', authenticate, (req, res, next) => {
     res.status(201).json({
       message,
       media: mediaResult.rows[0],
+    });
+
+    // Async transcription (don't await — run in background)
+    transcribeVoiceMessage(message.id, `voices/${req.file.filename}`, io, roomId).catch(err => {
+      console.error('Background transcription error:', err);
     });
   } catch (err) {
     await client.query('ROLLBACK');

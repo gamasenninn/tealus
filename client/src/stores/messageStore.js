@@ -46,6 +46,14 @@ export const useMessageStore = create((set, get) => ({
     }));
   },
 
+  updateTranscription: (messageId, transcription) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, transcription: { ...m.transcription, ...transcription } } : m
+      ),
+    }));
+  },
+
   setReplyTo: (message) => {
     set({ replyTo: message });
   },

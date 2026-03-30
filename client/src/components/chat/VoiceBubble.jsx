@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import './VoiceBubble.css';
 
-function VoiceBubble({ media }) {
+function VoiceBubble({ media, transcription }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -86,6 +86,17 @@ function VoiceBubble({ media }) {
         </div>
         <span className="voice-duration">{formatTime(duration)}</span>
       </div>
+      {transcription && (
+        <div className="voice-transcription">
+          {transcription.status === 'pending' && <span className="voice-trans-status">⏳ 処理中...</span>}
+          {transcription.status === 'transcribing' && <span className="voice-trans-status">⏳ 文字起こし中...</span>}
+          {transcription.status === 'formatting' && <span className="voice-trans-status">⏳ AIが文章を整えています...</span>}
+          {transcription.status === 'done' && (
+            <span className="voice-trans-text">📝 {transcription.formatted_text || transcription.raw_text}</span>
+          )}
+          {transcription.status === 'error' && <span className="voice-trans-error">⚠ 文字起こしに失敗しました</span>}
+        </div>
+      )}
     </div>
   );
 }

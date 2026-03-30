@@ -59,3 +59,30 @@
 .bubble.own .voice-duration {
   color: rgba(255, 255, 255, 0.7);
 }
+
+.voice-transcription {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.voice-trans-status {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.bubble.own .voice-trans-status {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.voice-trans-text {
+  color: inherit;
+}
+
+.voice-trans-error {
+  color: #e53935;
+}
+
+.bubble.own .voice-trans-error {
+  color: #ffcdd2;
+}
