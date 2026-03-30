@@ -30,10 +30,24 @@ function ChatRoom() {
 
       socket.on('message:new', (msg) => {
         addMessage(msg);
+        // Mark as read if the message is from someone else
+        if (msg.sender_id !== user.id) {
+          api.markRead(roomId, [msg.id]).catch(() => {});
+          socket.emit('message:read', { room_id: roomId, message_ids: [msg.id] });
+        }
       });
 
       socket.on('message:read', (data) => {
-        // Could update read counts here
+        const { message_ids } = data;
+        if (message_ids) {
+          message_ids.forEach((id) => {
+            const msgs = useMessageStore.getState().messages;
+            const msg = msgs.find((m) => m.id === id);
+            if (msg) {
+              useMessageStore.getState().updateReadCount(id, (msg.read_count || 0) + 1);
+            }
+          });
+        }
       });
     }
 
@@ -78,6 +92,10 @@ function ChatRoom() {
       .map((m) => m.id);
     if (unreadIds.length > 0) {
       api.markRead(roomId, unreadIds).catch(() => {});
+      const socket = getSocket();
+      if (socket) {
+        socket.emit('message:read', { room_id: roomId, message_ids: unreadIds });
+      }
     }
   }, [messages, roomId, user]);
 
