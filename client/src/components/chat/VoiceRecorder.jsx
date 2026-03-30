@@ -49,8 +49,8 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
       if (!running) return;
       const data = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(data);
-      const avg = data.reduce((a, b) => a + b, 0) / data.length;
-      setAudioLevel(avg / 255);
+      const max = Math.max(...data);
+      setAudioLevel(Math.min(max / 128, 1));
       animFrameRef.current = requestAnimationFrame(updateLevel);
     };
     updateLevel();
@@ -99,7 +99,7 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
   };
 
   const bars = Array.from({ length: 20 }, (_, i) => {
-    const h = Math.max(4, audioLevel * 30 * (0.5 + Math.random() * 0.5));
+    const h = Math.max(4, audioLevel * 50 * (0.3 + Math.random() * 0.7));
     return <div key={i} className="voice-bar" style={{ height: `${h}px` }} />;
   });
 
