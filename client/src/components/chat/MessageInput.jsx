@@ -48,6 +48,19 @@ function MessageInput({ roomId }) {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
+    // Client-side file size check
+    const limits = { image: 10, video: 100, default: 20 };
+    for (const file of files) {
+      const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'default';
+      const maxMB = limits[type];
+      if (file.size > maxMB * 1024 * 1024) {
+        setUploadError(`${file.name} のサイズが上限（${maxMB}MB）を超えています`);
+        setTimeout(() => setUploadError(''), 5000);
+        fileInputRef.current.value = '';
+        return;
+      }
+    }
+
     setIsSending(true);
     setUploadProgress(0);
     setUploadError('');
