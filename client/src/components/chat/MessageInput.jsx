@@ -7,6 +7,7 @@ import './MessageInput.css';
 function MessageInput({ roomId }) {
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const fileInputRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
 
@@ -47,18 +48,28 @@ function MessageInput({ roomId }) {
     if (files.length === 0) return;
 
     setIsSending(true);
+    setUploadProgress(0);
     try {
-      await api.uploadMedia(roomId, files);
+      await api.uploadMedia(roomId, files, (progress) => {
+        setUploadProgress(progress);
+      });
     } catch (err) {
       console.error('Upload error:', err);
     } finally {
       setIsSending(false);
+      setUploadProgress(null);
       fileInputRef.current.value = '';
     }
   };
 
   return (
     <div className="message-input-container">
+      {uploadProgress !== null && (
+        <div className="message-input-progress">
+          <div className="message-input-progress-bar" style={{ width: `${uploadProgress}%` }} />
+          <span className="message-input-progress-text">アップロード中... {uploadProgress}%</span>
+        </div>
+      )}
       {replyTo && (
         <div className="message-input-reply">
           <span>{replyTo.sender_display_name}: {replyTo.content || '(メディア)'}</span>

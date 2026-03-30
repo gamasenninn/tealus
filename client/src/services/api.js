@@ -79,24 +79,38 @@ class ApiClient {
   }
 
   // Media (single file or array of files)
-  async uploadMedia(roomId, files) {
-    const formData = new FormData();
-    const fileArray = Array.isArray(files) ? files : [files];
-    for (const file of fileArray) {
-      formData.append('files', file);
-    }
+  uploadMedia(roomId, files, onProgress) {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      const fileArray = Array.isArray(files) ? files : [files];
+      for (const file of fileArray) {
+        formData.append('files', file);
+      }
 
-    const res = await fetch(`${API_BASE}/rooms/${roomId}/media`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-      },
-      body: formData,
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/rooms/${roomId}/media`);
+      xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(data.error || 'アップロードに失敗しました'));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('アップロードに失敗しました'));
+      xhr.send(formData);
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました');
-    return data;
   }
 
   // Read

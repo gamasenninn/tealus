@@ -4,6 +4,29 @@
   flex-shrink: 0;
 }
 
+.message-input-progress {
+  position: relative;
+  height: 24px;
+  background: #e0e0e0;
+}
+
+.message-input-progress-bar {
+  height: 100%;
+  background: #06C755;
+  transition: width 0.2s;
+}
+
+.message-input-progress-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 24px;
+  color: #333;
+}
+
 .message-input-reply {
   display: flex;
   align-items: center;
