@@ -29,9 +29,21 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
       io.to(roomId).emit('voice:status', { message_id: messageId, status: 'transcribing' });
     }
 
-    // Call Whisper API
+    // Detect actual file type for correct extension
+    const { fileTypeFromFile } = await import('file-type');
+    const fileInfo = await fileTypeFromFile(fullPath);
+    let fileName = path.basename(fullPath);
+    if (fileInfo) {
+      // Use detected extension (e.g., .mp4, .webm, .ogg)
+      fileName = `voice.${fileInfo.ext}`;
+    }
+
+    // Call Whisper API with correct filename
+    const fileStream = fs.createReadStream(fullPath);
+    fileStream.path = fileName; // OpenAI SDK uses this for content-type detection
+
     const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(fullPath),
+      file: fileStream,
       model: WHISPER_MODEL,
       language: 'ja',
     });
