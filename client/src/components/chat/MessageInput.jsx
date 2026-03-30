@@ -10,7 +10,7 @@ function MessageInput({ roomId }) {
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadError, setUploadError] = useState('');
-  const [showRecorder, setShowRecorder] = useState(false);
+  const [recorderStream, setRecorderStream] = useState(null);
   const fileInputRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
 
@@ -80,8 +80,18 @@ function MessageInput({ roomId }) {
     }
   };
 
+  const handleMicClick = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setRecorderStream(stream);
+    } catch (err) {
+      setUploadError('マイクへのアクセスが許可されていません');
+      setTimeout(() => setUploadError(''), 5000);
+    }
+  };
+
   const handleVoiceSend = async (blob) => {
-    setShowRecorder(false);
+    setRecorderStream(null);
     setIsSending(true);
     setUploadProgress(0);
     try {
@@ -141,7 +151,7 @@ function MessageInput({ roomId }) {
         />
         <button
           className="message-input-mic"
-          onClick={() => setShowRecorder(true)}
+          onClick={handleMicClick}
           disabled={isSending}
         >
           🎤
@@ -155,10 +165,14 @@ function MessageInput({ roomId }) {
         </button>
       </div>
 
-      {showRecorder && (
+      {recorderStream && (
         <VoiceRecorder
+          stream={recorderStream}
           onSend={handleVoiceSend}
-          onCancel={() => setShowRecorder(false)}
+          onCancel={() => {
+            recorderStream.getTracks().forEach((t) => t.stop());
+            setRecorderStream(null);
+          }}
         />
       )}
     </div>
