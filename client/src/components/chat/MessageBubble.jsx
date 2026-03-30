@@ -75,7 +75,7 @@ function MessageBubble({ message, isOwn }) {
         >
           {renderReply()}
           {hasText && <p className="bubble-text">{message.content}</p>}
-          {message.type === 'voice' && <VoiceBubble media={message.media} transcription={message.transcription} />}
+          {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} />}
           {message.type !== 'voice' && renderMedia()}
         </div>
         {!isOwn && (

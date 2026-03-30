@@ -89,3 +89,142 @@
 .bubble.own .voice-trans-error {
   color: #ffcdd2;
 }
+
+/* Edit & History actions */
+.voice-trans-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.voice-edit-btn,
+.voice-history-btn {
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.bubble.own .voice-edit-btn,
+.bubble.own .voice-history-btn {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Edit area */
+.voice-edit-area {
+  margin-top: 6px;
+}
+
+.voice-edit-area textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.voice-edit-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.voice-edit-cancel {
+  background: #e0e0e0;
+  color: #333;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.voice-edit-save {
+  background: #06C755;
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.voice-edit-save:disabled {
+  background: #ccc;
+}
+
+/* History modal */
+.voice-history-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.voice-history-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.voice-history-modal h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #333;
+}
+
+.voice-history-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.voice-history-version {
+  display: inline-block;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-right: 6px;
+}
+
+.voice-history-text {
+  font-size: 13px;
+  color: #333;
+}
+
+.voice-history-editor {
+  display: block;
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.voice-history-close {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: #e0e0e0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}

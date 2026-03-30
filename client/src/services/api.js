@@ -165,6 +165,15 @@ class ApiClient {
     });
   }
 
+  // Transcription
+  editTranscription(messageId, text) {
+    return this.request('PUT', `/messages/${messageId}/transcription`, { text });
+  }
+
+  getTranscriptionHistory(messageId) {
+    return this.request('GET', `/messages/${messageId}/transcription/history`);
+  }
+
   // Profile
   updateProfile(data) {
     return this.request('PUT', '/auth/profile', data);
