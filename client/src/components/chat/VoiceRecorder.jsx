@@ -13,56 +13,69 @@ function VoiceRecorder({ onSend, onCancel }) {
   const streamRef = useRef(null);
 
   useEffect(() => {
-    startRecording();
-    return () => stopAll();
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        beginRecording(stream);
+      } catch (err) {
+        console.error('Microphone access error:', err);
+        if (!cancelled) onCancel();
+      }
+    };
+
+    init();
+    return () => {
+      cancelled = true;
+      stopAll();
+    };
   }, []);
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+  const beginRecording = (stream) => {
+    streamRef.current = stream;
 
-      // Audio level analysis
-      const audioCtx = new AudioContext();
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyserRef.current = analyser;
+    // Audio level analysis
+    const audioCtx = new AudioContext();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyserRef.current = analyser;
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : 'audio/webm',
-      });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm',
+    });
+    mediaRecorderRef.current = mediaRecorder;
+    chunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
 
-      mediaRecorder.start(100);
-      setIsRecording(true);
+    mediaRecorder.start(100);
+    setIsRecording(true);
 
-      // Timer
-      timerRef.current = setInterval(() => {
-        setDuration((d) => d + 1);
-      }, 1000);
+    // Timer
+    timerRef.current = setInterval(() => {
+      setDuration((d) => d + 1);
+    }, 1000);
 
-      // Level meter
-      const updateLevel = () => {
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(data);
-        const avg = data.reduce((a, b) => a + b, 0) / data.length;
-        setAudioLevel(avg / 255);
-        animFrameRef.current = requestAnimationFrame(updateLevel);
-      };
-      updateLevel();
-    } catch (err) {
-      console.error('Microphone access error:', err);
-      onCancel();
-    }
+    // Level meter
+    const updateLevel = () => {
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      setAudioLevel(avg / 255);
+      animFrameRef.current = requestAnimationFrame(updateLevel);
+    };
+    updateLevel();
   };
 
   const stopAll = () => {
