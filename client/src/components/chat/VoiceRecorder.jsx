@@ -8,29 +8,36 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const animFrameRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!stream) return;
+    if (!stream || startedRef.current) return;
+    startedRef.current = true;
 
     // Audio level analysis
     const audioCtx = new AudioContext();
+    audioCtxRef.current = audioCtx;
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
 
-    // Choose supported mime type (Safari doesn't support webm)
+    // Choose supported mime type
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
-    const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    const opts = mimeType ? { mimeType } : {};
+    const mediaRecorder = new MediaRecorder(stream, opts);
     mediaRecorderRef.current = mediaRecorder;
     chunksRef.current = [];
 
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data && e.data.size > 0) {
+        chunksRef.current.push(e.data);
+      }
     };
 
-    mediaRecorder.start(100);
+    mediaRecorder.start(250);
 
     // Timer
     timerRef.current = setInterval(() => {
@@ -39,6 +46,7 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
 
     // Level meter
     const updateLevel = () => {
+      if (audioCtx.state === 'closed') return;
       const data = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(data);
       const avg = data.reduce((a, b) => a + b, 0) / data.length;
@@ -50,8 +58,16 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      audioCtx.close();
     };
+  }, [stream]);
+
+  const cleanup = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      audioCtxRef.current.close();
+    }
+    stream.getTracks().forEach((t) => t.stop());
   }, [stream]);
 
   const handleSend = useCallback(() => {
@@ -61,20 +77,21 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     recorder.onstop = () => {
       const type = recorder.mimeType || 'audio/webm';
       const blob = new Blob(chunksRef.current, { type });
-      stream.getTracks().forEach((t) => t.stop());
+      cleanup();
       onSend(blob, type);
     };
     recorder.stop();
-  }, [stream, onSend]);
+  }, [cleanup, onSend]);
 
   const handleCancel = useCallback(() => {
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = () => {}; // prevent send
       recorder.stop();
     }
-    stream.getTracks().forEach((t) => t.stop());
+    cleanup();
     onCancel();
-  }, [stream, onCancel]);
+  }, [cleanup, onCancel]);
 
   const formatTime = (s) => {
     const min = Math.floor(s / 60);
