@@ -60,6 +60,9 @@
   max-width: 100%;
   word-wrap: break-word;
   position: relative;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .bubble.own {
