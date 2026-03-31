@@ -72,10 +72,12 @@ function ChatRoom() {
       });
 
       socket.on('typing:start', (data) => {
+        if (data.user_id === user.id) return;
         setTypingUsers(prev => ({ ...prev, [data.user_id]: data.display_name }));
       });
 
       socket.on('typing:stop', (data) => {
+        if (data.user_id === user.id) return;
         setTypingUsers(prev => {
           const next = { ...prev };
           delete next[data.user_id];
