@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -7,6 +7,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
+import MemberList from './MemberList';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -15,6 +16,7 @@ function ChatRoom() {
   const { user } = useAuthStore();
   const { currentRoom, members, selectRoom, clearCurrentRoom } = useRoomStore();
   const { messages, fetchMessages, addMessage, clearMessages, loadMore, hasMore } = useMessageStore();
+  const [showMembers, setShowMembers] = useState(false);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const isInitialLoad = useRef(true);
@@ -145,6 +147,9 @@ function ChatRoom() {
             <span className="chat-header-count">{getMemberCount()}人</span>
           )}
         </div>
+        {currentRoom?.type === 'group' && (
+          <button className="chat-menu" onClick={() => setShowMembers(true)}>≡</button>
+        )}
       </header>
 
       <div
@@ -163,6 +168,10 @@ function ChatRoom() {
       </div>
 
       <MessageInput roomId={roomId} />
+
+      {showMembers && (
+        <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />
+      )}
     </div>
   );
 }

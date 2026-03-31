@@ -132,6 +132,23 @@ class ApiClient {
     return this.request('DELETE', '/push/subscribe', { endpoint });
   }
 
+  // Members
+  addMember(roomId, userId) {
+    return this.request('POST', `/rooms/${roomId}/members`, { user_id: userId });
+  }
+
+  leaveRoom(roomId) {
+    return this.request('DELETE', `/rooms/${roomId}/members/me`);
+  }
+
+  kickMember(roomId, userId) {
+    return this.request('DELETE', `/rooms/${roomId}/members/${userId}`);
+  }
+
+  changeMemberRole(roomId, userId, role) {
+    return this.request('PUT', `/rooms/${roomId}/members/${userId}/role`, { role });
+  }
+
   // Voice
   uploadVoice(roomId, blob, onProgress) {
     return new Promise((resolve, reject) => {

@@ -41,6 +41,16 @@
   opacity: 0.8;
 }
 
+.chat-menu {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: auto;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
