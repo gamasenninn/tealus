@@ -167,3 +167,36 @@
   background: #ccc;
   cursor: not-allowed;
 }
+
+/* Font size settings */
+.font-size-options {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.font-size-btn {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.font-size-btn.active {
+  border-color: #06C755;
+  background: #e8f5e9;
+  color: #06C755;
+  font-weight: bold;
+}
+
+.font-size-preview {
+  color: #666;
+  padding: 10px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  line-height: 1.5;
+}

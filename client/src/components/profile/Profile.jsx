@@ -16,6 +16,7 @@ function Profile() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [chatFontSize, setChatFontSize] = useState(localStorage.getItem('chatFontSize') || 'medium');
 
   const showMessage = (msg) => {
     setMessage(msg);
@@ -75,6 +76,12 @@ function Profile() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFontSizeChange = (size) => {
+    setChatFontSize(size);
+    localStorage.setItem('chatFontSize', size);
+    document.documentElement.setAttribute('data-chat-font', size === 'medium' ? '' : size);
   };
 
   const avatarSrc = user?.avatar_url ? `/media/${user.avatar_url}` : null;
@@ -157,6 +164,28 @@ function Profile() {
         <button className="profile-save-btn" onClick={handlePasswordChange} disabled={saving}>
           {saving ? '変更中...' : 'パスワード変更'}
         </button>
+      </div>
+
+      <div className="profile-section">
+        <h2>トーク文字サイズ</h2>
+        <div className="font-size-options">
+          {[
+            { value: 'small', label: '小' },
+            { value: 'medium', label: '中' },
+            { value: 'large', label: '大' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              className={`font-size-btn ${chatFontSize === opt.value ? 'active' : ''}`}
+              onClick={() => handleFontSizeChange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="font-size-preview" style={{ fontSize: chatFontSize === 'small' ? '13px' : chatFontSize === 'large' ? '17px' : '15px' }}>
+          プレビュー: こんにちは、Linnyです。
+        </p>
       </div>
     </div>
   );

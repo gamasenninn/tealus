@@ -19,6 +19,9 @@ function App() {
 
   useEffect(() => {
     initialize();
+    // Load font size setting from localStorage
+    const fontSize = localStorage.getItem('chatFontSize') || 'medium';
+    document.documentElement.setAttribute('data-chat-font', fontSize === 'medium' ? '' : fontSize);
   }, [initialize]);
 
   if (isLoading) {
