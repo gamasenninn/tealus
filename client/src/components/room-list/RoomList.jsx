@@ -64,7 +64,7 @@ function RoomList() {
   };
 
   const getRoomDisplayName = (room) => {
-    if (room.type === 'group') return room.name;
+    if (room.type === 'group') return `${room.name}（${room.member_count}）`;
     return room.partner_display_name || 'ダイレクトメッセージ';
   };
 

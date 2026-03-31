@@ -180,7 +180,8 @@ router.get('/', async (req, res) => {
               u.display_name AS last_message_sender,
               partner.display_name AS partner_display_name,
               partner.avatar_url AS partner_avatar_url,
-              COALESCE(unread.count, 0)::int AS unread_count
+              COALESCE(unread.count, 0)::int AS unread_count,
+              (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count
        FROM rooms r
        JOIN room_members rm ON rm.room_id = r.id
        LEFT JOIN LATERAL (
