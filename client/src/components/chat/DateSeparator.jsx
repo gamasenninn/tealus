@@ -1,6 +1,6 @@
 import './DateSeparator.css';
 
-function DateSeparator({ date }) {
+function DateSeparator({ date, hidden }) {
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     const now = new Date();
@@ -19,7 +19,7 @@ function DateSeparator({ date }) {
   };
 
   return (
-    <div className="date-separator">
+    <div className={`date-separator ${hidden ? 'hidden' : ''}`}>
       <span>{formatDate(date)}</span>
     </div>
   );

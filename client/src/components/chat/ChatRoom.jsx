@@ -190,7 +190,7 @@ function ChatRoom() {
             new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
           return (
             <div key={msg.id} data-date={showDate ? msg.created_at : undefined}>
-              {showDate && <DateSeparator date={msg.created_at} />}
+              {showDate && <DateSeparator date={msg.created_at} hidden={stickyDate && new Date(msg.created_at).toDateString() === new Date(stickyDate).toDateString()} />}
               <MessageBubble message={msg} isOwn={msg.sender_id === user.id} />
             </div>
           );

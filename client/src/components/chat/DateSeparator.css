@@ -5,6 +5,10 @@
   margin: 12px 0;
 }
 
+.date-separator.hidden {
+  visibility: hidden;
+}
+
 .date-separator span {
   background: rgba(0, 0, 0, 0.15);
   color: #fff;
