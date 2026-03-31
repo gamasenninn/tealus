@@ -75,7 +75,20 @@ function setupSocketHandlers(io) {
           ...result.rows[0],
           sender_display_name: socket.user.display_name,
           sender_avatar_url: socket.user.avatar_url,
+          reply_to_message: null,
         };
+
+        // Attach reply_to message info if exists
+        if (reply_to) {
+          const replyResult = await pool.query(
+            `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name
+             FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = $1`,
+            [reply_to]
+          );
+          if (replyResult.rows.length > 0) {
+            message.reply_to_message = replyResult.rows[0];
+          }
+        }
 
         // Broadcast to room (including sender)
         io.to(room_id).emit('message:new', message);
