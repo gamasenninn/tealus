@@ -1,0 +1,14 @@
+.date-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.date-separator span {
+  background: rgba(0, 0, 0, 0.15);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 14px;
+  border-radius: 12px;
+}

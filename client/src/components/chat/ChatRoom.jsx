@@ -8,6 +8,7 @@ import { api } from '../../services/api';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
+import DateSeparator from './DateSeparator';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -162,13 +163,17 @@ function ChatRoom() {
         ref={messagesContainerRef}
         onScroll={handleScroll}
       >
-        {messages.map((msg) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            isOwn={msg.sender_id === user.id}
-          />
-        ))}
+        {messages.map((msg, i) => {
+          const prevMsg = messages[i - 1];
+          const showDate = !prevMsg ||
+            new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
+          return (
+            <div key={msg.id}>
+              {showDate && <DateSeparator date={msg.created_at} />}
+              <MessageBubble message={msg} isOwn={msg.sender_id === user.id} />
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
