@@ -164,6 +164,22 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // Typing indicator — just relay, no DB
+    socket.on('typing:start', (room_id) => {
+      socket.to(room_id).emit('typing:start', {
+        room_id,
+        user_id: socket.user.id,
+        display_name: socket.user.display_name,
+      });
+    });
+
+    socket.on('typing:stop', (room_id) => {
+      socket.to(room_id).emit('typing:stop', {
+        room_id,
+        user_id: socket.user.id,
+      });
+    });
+
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.user.display_name} (${socket.id})`);
     });

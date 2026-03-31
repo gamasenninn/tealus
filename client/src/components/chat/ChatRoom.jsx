@@ -19,6 +19,7 @@ function ChatRoom() {
   const { messages, fetchMessages, addMessage, clearMessages, loadMore, hasMore } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
   const [stickyDate, setStickyDate] = useState(null);
+  const [typingUsers, setTypingUsers] = useState({});
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const isInitialLoad = useRef(true);
@@ -69,6 +70,18 @@ function ChatRoom() {
       socket.on('message:deleted', (data) => {
         useMessageStore.getState().markDeleted(data.message_id);
       });
+
+      socket.on('typing:start', (data) => {
+        setTypingUsers(prev => ({ ...prev, [data.user_id]: data.display_name }));
+      });
+
+      socket.on('typing:stop', (data) => {
+        setTypingUsers(prev => {
+          const next = { ...prev };
+          delete next[data.user_id];
+          return next;
+        });
+      });
     }
 
     return () => {
@@ -81,6 +94,8 @@ function ChatRoom() {
         socket.off('voice:status');
         socket.off('voice:transcription');
         socket.off('message:deleted');
+        socket.off('typing:start');
+        socket.off('typing:stop');
       }
     };
   }, [roomId]);
@@ -201,6 +216,12 @@ function ChatRoom() {
         })}
         <div ref={messagesEndRef} />
       </div>
+
+      {Object.keys(typingUsers).length > 0 && (
+        <div className="typing-indicator">
+          {Object.values(typingUsers).join(', ')}が入力中...
+        </div>
+      )}
 
       <MessageInput roomId={roomId} />
 

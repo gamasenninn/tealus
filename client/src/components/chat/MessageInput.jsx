@@ -12,7 +12,18 @@ function MessageInput({ roomId }) {
   const [uploadError, setUploadError] = useState('');
   const [recorderStream, setRecorderStream] = useState(null);
   const fileInputRef = useRef(null);
+  const typingTimerRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
+
+  const emitTyping = () => {
+    const socket = getSocket();
+    if (!socket) return;
+    socket.emit('typing:start', roomId);
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      socket.emit('typing:stop', roomId);
+    }, 2000);
+  };
 
   const handleSend = async () => {
     const content = text.trim();
@@ -32,6 +43,8 @@ function MessageInput({ roomId }) {
       }
       setText('');
       clearReplyTo();
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      getSocket()?.emit('typing:stop', roomId);
     } catch (err) {
       console.error('Send error:', err);
     } finally {
@@ -143,7 +156,7 @@ function MessageInput({ roomId }) {
         <textarea
           className="message-input-text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); emitTyping(); }}
           onKeyDown={handleKeyDown}
           placeholder="メッセージを入力"
           rows={1}

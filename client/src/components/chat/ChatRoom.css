@@ -51,6 +51,14 @@
   margin-left: auto;
 }
 
+.typing-indicator {
+  padding: 4px 16px;
+  font-size: 12px;
+  color: #666;
+  background: rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
+}
+
 .sticky-date {
   position: sticky;
   top: 0;
