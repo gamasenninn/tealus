@@ -26,4 +26,13 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/users/online
+ * Get list of online user IDs
+ */
+router.get('/online', (req, res) => {
+  const { getOnlineUserIds } = require('../socket');
+  res.json({ online: getOnlineUserIds() });
+});
+
 module.exports = router;

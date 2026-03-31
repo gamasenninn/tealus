@@ -123,6 +123,10 @@ class ApiClient {
     return this.request('GET', '/users');
   }
 
+  getOnlineUsers() {
+    return this.request('GET', '/users/online');
+  }
+
   // Push
   subscribePush(subscription) {
     return this.request('POST', '/push/subscribe', subscription);

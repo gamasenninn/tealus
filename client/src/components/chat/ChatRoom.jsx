@@ -20,6 +20,7 @@ function ChatRoom() {
   const [showMembers, setShowMembers] = useState(false);
   const [stickyDate, setStickyDate] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const isInitialLoad = useRef(true);
@@ -28,6 +29,7 @@ function ChatRoom() {
     selectRoom(roomId);
     fetchMessages(roomId);
     isInitialLoad.current = true;
+    api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
 
     const socket = getSocket();
     if (socket) {
@@ -71,6 +73,13 @@ function ChatRoom() {
         useMessageStore.getState().markDeleted(data.message_id);
       });
 
+      socket.on('user:online', (data) => {
+        setOnlineUsers(prev => new Set([...prev, data.user_id]));
+      });
+      socket.on('user:offline', (data) => {
+        setOnlineUsers(prev => { const next = new Set(prev); next.delete(data.user_id); return next; });
+      });
+
       socket.on('typing:start', (data) => {
         if (data.user_id === user.id) return;
         setTypingUsers(prev => ({ ...prev, [data.user_id]: data.display_name }));
@@ -98,6 +107,8 @@ function ChatRoom() {
         socket.off('message:deleted');
         socket.off('typing:start');
         socket.off('typing:stop');
+        socket.off('user:online');
+        socket.off('user:offline');
       }
     };
   }, [roomId]);
@@ -180,6 +191,12 @@ function ChatRoom() {
     return members.length;
   };
 
+  const getPartnerOnline = () => {
+    if (!currentRoom || currentRoom.type !== 'direct') return false;
+    const partner = members.find(m => m.user_id !== user.id);
+    return partner ? onlineUsers.has(partner.user_id) : false;
+  };
+
   return (
     <div className="chat-container">
       <header className="chat-header">
@@ -188,6 +205,9 @@ function ChatRoom() {
           <span className="chat-header-title">{getRoomTitle()}</span>
           {getMemberCount() && (
             <span className="chat-header-count">{getMemberCount()}人</span>
+          )}
+          {getPartnerOnline() && (
+            <span className="chat-header-online">オンライン</span>
           )}
         </div>
         {currentRoom?.type === 'group' && (

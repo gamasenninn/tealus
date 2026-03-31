@@ -51,6 +51,11 @@
   margin-left: auto;
 }
 
+.chat-header-online {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
 .typing-indicator {
   padding: 4px 16px;
   font-size: 12px;

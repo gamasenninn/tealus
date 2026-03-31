@@ -5,6 +5,13 @@ const { JWT_SECRET } = require('../middleware/auth');
 /**
  * Set up Socket.IO handlers with JWT authentication
  */
+// Online users: userId -> Set of socketIds
+const onlineUsers = new Map();
+
+function getOnlineUserIds() {
+  return Array.from(onlineUsers.keys());
+}
+
 function setupSocketHandlers(io) {
   // Authentication middleware
   io.use(async (socket, next) => {
@@ -31,6 +38,15 @@ function setupSocketHandlers(io) {
 
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.user.display_name} (${socket.id})`);
+
+    // Track online status
+    const userId = socket.user.id;
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, new Set());
+      // First connection for this user — broadcast online
+      socket.broadcast.emit('user:online', { user_id: userId });
+    }
+    onlineUsers.get(userId).add(socket.id);
 
     // Join a room
     socket.on('room:join', async (roomId) => {
@@ -182,8 +198,19 @@ function setupSocketHandlers(io) {
 
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.user.display_name} (${socket.id})`);
+
+      // Track offline status
+      const sockets = onlineUsers.get(userId);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) {
+          onlineUsers.delete(userId);
+          // Last connection closed — broadcast offline
+          socket.broadcast.emit('user:offline', { user_id: userId });
+        }
+      }
     });
   });
 }
 
-module.exports = { setupSocketHandlers };
+module.exports = { setupSocketHandlers, getOnlineUserIds };

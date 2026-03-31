@@ -125,6 +125,21 @@
   margin-right: 12px;
 }
 
+.room-avatar {
+  position: relative;
+}
+
+.online-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  background: #4CAF50;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
 .room-avatar-img {
   width: 100%;
   height: 100%;

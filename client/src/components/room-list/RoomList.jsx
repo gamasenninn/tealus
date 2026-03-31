@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { getSocket } from '../../services/socket';
+import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import './RoomList.css';
 
@@ -10,10 +11,12 @@ function RoomList() {
   const { user, logout } = useAuthStore();
   const { rooms, fetchRooms } = useRoomStore();
   const [showCreate, setShowCreate] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchRooms();
+    api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
   }, [fetchRooms]);
 
   // Join all rooms for real-time updates on room list
@@ -35,8 +38,19 @@ function RoomList() {
 
     socket.on('message:new', handleNewMessage);
 
+    const handleOnline = (data) => {
+      setOnlineUsers(prev => new Set([...prev, data.user_id]));
+    };
+    const handleOffline = (data) => {
+      setOnlineUsers(prev => { const next = new Set(prev); next.delete(data.user_id); return next; });
+    };
+    socket.on('user:online', handleOnline);
+    socket.on('user:offline', handleOffline);
+
     return () => {
       socket.off('message:new', handleNewMessage);
+      socket.off('user:online', handleOnline);
+      socket.off('user:offline', handleOffline);
       // Leave all rooms when leaving room list
       rooms.forEach((room) => {
         socket.emit('room:leave', room.id);
@@ -117,6 +131,9 @@ function RoomList() {
                 <img src={`/media/${room.icon_url}`} alt="" className="room-avatar-img" />
               ) : (
                 room.type === 'group' ? '👥' : '👤'
+              )}
+              {room.type === 'direct' && room.partner_id && onlineUsers.has(room.partner_id) && (
+                <span className="online-dot" />
               )}
             </div>
             <div className="room-info">
