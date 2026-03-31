@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { useMessageStore } from '../../stores/messageStore';
+import { api } from '../../services/api';
 import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
 import VoiceBubble from './VoiceBubble';
+import ContextMenu from './ContextMenu';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn }) {
+  const { roomId } = useParams();
   const { setReplyTo } = useMessageStore();
-  const [viewerState, setViewerState] = useState(null); // { images, index }
+  const [viewerState, setViewerState] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const longPressTimer = useRef(null);
 
   const formatTime = (dateStr) => {
     return new Date(dateStr).toLocaleTimeString('ja-JP', {
@@ -35,6 +41,74 @@ function MessageBubble({ message, isOwn }) {
         <span className="bubble-reply-content">{message.reply_to_message.content || '(メディア)'}</span>
       </div>
     );
+  };
+
+  // Context menu
+  const showContextMenu = (x, y) => {
+    const items = [];
+
+    // Copy (text messages only)
+    if (message.content && message.type === 'text') {
+      items.push({
+        icon: '📋',
+        label: 'コピー',
+        onClick: () => navigator.clipboard.writeText(message.content),
+      });
+    }
+
+    // Reply
+    items.push({
+      icon: '↩',
+      label: 'リプライ',
+      onClick: () => setReplyTo(message),
+    });
+
+    // Delete (own messages only)
+    if (isOwn) {
+      items.push({
+        icon: '🗑',
+        label: '削除',
+        danger: true,
+        onClick: async () => {
+          if (confirm('このメッセージを削除しますか？')) {
+            try {
+              await api.deleteMessage(roomId, message.id);
+              useMessageStore.getState().markDeleted(message.id);
+            } catch (err) {
+              console.error('Delete error:', err);
+            }
+          }
+        },
+      });
+    }
+
+    setContextMenu({ x, y, items });
+  };
+
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY);
+  };
+
+  const handleTouchStart = (e) => {
+    longPressTimer.current = setTimeout(() => {
+      const touch = e.touches[0];
+      showContextMenu(touch.clientX, touch.clientY);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   };
 
   if (message.is_deleted) {
@@ -72,6 +146,10 @@ function MessageBubble({ message, isOwn }) {
         <div
           className={`bubble ${isOwn ? 'own' : 'other'} ${hasMedia && !hasText ? 'media-only' : ''}`}
           onDoubleClick={() => setReplyTo(message)}
+          onContextMenu={handleContextMenu}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchMove={handleTouchMove}
         >
           {renderReply()}
           {hasText && <p className="bubble-text">{message.content}</p>}
@@ -84,6 +162,14 @@ function MessageBubble({ message, isOwn }) {
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenu.items}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
 
       {viewerState && (
         <ImageViewer

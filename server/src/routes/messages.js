@@ -169,4 +169,40 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/rooms/:id/messages/:msgId
+ * Soft-delete a message (sender only)
+ */
+router.delete('/:msgId', checkMembership, async (req, res) => {
+  const { msgId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const msg = await pool.query(
+      'SELECT sender_id, room_id FROM messages WHERE id = $1',
+      [msgId]
+    );
+    if (msg.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+    if (msg.rows[0].sender_id !== userId) {
+      return res.status(403).json({ error: '自分のメッセージのみ削除できます' });
+    }
+
+    await pool.query(
+      'UPDATE messages SET is_deleted = true, content = null, updated_at = now() WHERE id = $1',
+      [msgId]
+    );
+
+    const { io } = require('../app');
+    const roomId = req.params.id;
+    io.to(roomId).emit('message:deleted', { message_id: msgId });
+
+    res.json({ message: '削除しました' });
+  } catch (err) {
+    console.error('Delete message error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
 module.exports = router;

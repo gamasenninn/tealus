@@ -59,6 +59,10 @@ function ChatRoom() {
           formatted_text: data.formatted_text,
         });
       });
+
+      socket.on('message:deleted', (data) => {
+        useMessageStore.getState().markDeleted(data.message_id);
+      });
     }
 
     return () => {
@@ -70,6 +74,7 @@ function ChatRoom() {
         socket.off('message:read');
         socket.off('voice:status');
         socket.off('voice:transcription');
+        socket.off('message:deleted');
       }
     };
   }, [roomId]);

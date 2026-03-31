@@ -46,6 +46,14 @@ export const useMessageStore = create((set, get) => ({
     }));
   },
 
+  markDeleted: (messageId) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, is_deleted: true, content: null } : m
+      ),
+    }));
+  },
+
   updateTranscription: (messageId, transcription) => {
     set((state) => ({
       messages: state.messages.map((m) =>

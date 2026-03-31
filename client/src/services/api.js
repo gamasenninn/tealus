@@ -132,6 +132,11 @@ class ApiClient {
     return this.request('DELETE', '/push/subscribe', { endpoint });
   }
 
+  // Messages
+  deleteMessage(roomId, messageId) {
+    return this.request('DELETE', `/rooms/${roomId}/messages/${messageId}`);
+  }
+
   // Members
   addMember(roomId, userId) {
     return this.request('POST', `/rooms/${roomId}/members`, { user_id: userId });
