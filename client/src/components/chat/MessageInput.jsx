@@ -51,7 +51,7 @@ function MessageInput({ roomId }) {
     if (files.length === 0) return;
 
     // Client-side file size check
-    const limits = { image: 10, video: 100, default: 20 };
+    const limits = { image: 10, video: 100, default: 100 };
     for (const file of files) {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'default';
       const maxMB = limits[type];
