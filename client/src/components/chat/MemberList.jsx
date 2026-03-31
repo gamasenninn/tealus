@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -7,16 +7,42 @@ import './MemberList.css';
 
 function MemberList({ roomId, onClose }) {
   const { user } = useAuthStore();
-  const { members, selectRoom } = useRoomStore();
+  const { currentRoom, members, selectRoom } = useRoomStore();
   const navigate = useNavigate();
   const [allUsers, setAllUsers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [menuTarget, setMenuTarget] = useState(null);
+  const [editingName, setEditingName] = useState(false);
+  const [groupName, setGroupName] = useState(currentRoom?.name || '');
+  const iconInputRef = useRef(null);
   const [error, setError] = useState('');
 
   const myRole = members.find(m => m.user_id === user.id)?.role;
   const isAdmin = myRole === 'admin';
+
+  const handleSaveName = async () => {
+    if (!groupName.trim()) return;
+    try {
+      await api.updateRoom(roomId, { name: groupName.trim() });
+      await selectRoom(roomId);
+      setEditingName(false);
+    } catch (err) {
+      showError(err.message);
+    }
+  };
+
+  const handleIconChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      await api.uploadRoomIcon(roomId, file);
+      await selectRoom(roomId);
+    } catch (err) {
+      showError(err.message);
+    }
+    e.target.value = '';
+  };
 
   const showError = (msg) => {
     setError(msg);
@@ -88,6 +114,32 @@ function MemberList({ roomId, onClose }) {
   return (
     <div className="member-list-overlay" onClick={onClose}>
       <div className="member-list-modal" onClick={e => e.stopPropagation()}>
+        <div className="group-settings">
+          <div className="group-icon-area" onClick={() => isAdmin && iconInputRef.current?.click()}>
+            {currentRoom?.icon_url ? (
+              <img src={`/media/${currentRoom.icon_url}`} alt="" className="group-icon-img" />
+            ) : (
+              <span className="group-icon-placeholder">👥</span>
+            )}
+            {isAdmin && <div className="group-icon-overlay">変更</div>}
+            <input ref={iconInputRef} type="file" accept="image/*" onChange={handleIconChange} hidden />
+          </div>
+          <div className="group-name-area">
+            {editingName ? (
+              <div className="group-name-edit">
+                <input value={groupName} onChange={e => setGroupName(e.target.value)} autoFocus />
+                <button className="group-name-save" onClick={handleSaveName}>✓</button>
+                <button className="group-name-cancel" onClick={() => { setEditingName(false); setGroupName(currentRoom?.name || ''); }}>✕</button>
+              </div>
+            ) : (
+              <div className="group-name-display">
+                <span>{currentRoom?.name}</span>
+                {isAdmin && <button className="group-name-edit-btn" onClick={() => setEditingName(true)}>✏</button>}
+              </div>
+            )}
+          </div>
+        </div>
+
         <h3>メンバー一覧</h3>
 
         {error && <div className="member-error">{error}</div>}

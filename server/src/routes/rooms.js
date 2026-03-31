@@ -1,6 +1,19 @@
 const express = require('express');
+const path = require('path');
+const multer = require('multer');
+const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+
+const ICON_DIR = path.join(__dirname, '../../../media/icons');
+const iconStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, ICON_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.params.id}-${Date.now()}${ext}`);
+  },
+});
+const iconUpload = multer({ storage: iconStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -244,6 +257,70 @@ router.get('/:id', async (req, res) => {
     res.json({ room: roomResult.rows[0], members: membersResult.rows });
   } catch (err) {
     console.error('Get room error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * PUT /api/rooms/:id
+ * Update group name (group admin only)
+ */
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { name } = req.body;
+
+  try {
+    const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [id]);
+    if (room.rows.length === 0) return res.status(404).json({ error: 'ルームが見つかりません' });
+    if (room.rows[0].type !== 'group') return res.status(400).json({ error: 'この操作はグループのみ対象です' });
+
+    const member = await pool.query(
+      'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', [id, userId]
+    );
+    if (member.rows.length === 0) return res.status(403).json({ error: 'メンバーではありません' });
+    if (member.rows[0].role !== 'admin') return res.status(403).json({ error: 'グループ管理者のみ変更できます' });
+
+    const result = await pool.query(
+      'UPDATE rooms SET name = $1, updated_at = now() WHERE id = $2 RETURNING *',
+      [name, id]
+    );
+    res.json({ room: result.rows[0] });
+  } catch (err) {
+    console.error('Update room error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/rooms/:id/icon
+ * Upload group icon (group admin only)
+ */
+router.post('/:id/icon', iconUpload.single('icon'), async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [id]);
+    if (room.rows.length === 0) return res.status(404).json({ error: 'ルームが見つかりません' });
+    if (room.rows[0].type !== 'group') return res.status(400).json({ error: 'この操作はグループのみ対象です' });
+
+    const member = await pool.query(
+      'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', [id, userId]
+    );
+    if (member.rows.length === 0) return res.status(403).json({ error: 'メンバーではありません' });
+    if (member.rows[0].role !== 'admin') return res.status(403).json({ error: 'グループ管理者のみ変更できます' });
+
+    if (!req.file) return res.status(400).json({ error: '画像ファイルが添付されていません' });
+
+    const iconUrl = `icons/${req.file.filename}`;
+    const result = await pool.query(
+      'UPDATE rooms SET icon_url = $1, updated_at = now() WHERE id = $2 RETURNING *',
+      [iconUrl, id]
+    );
+    res.json({ room: result.rows[0] });
+  } catch (err) {
+    console.error('Upload room icon error:', err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });

@@ -132,6 +132,24 @@ class ApiClient {
     return this.request('DELETE', '/push/subscribe', { endpoint });
   }
 
+  // Room edit
+  updateRoom(roomId, data) {
+    return this.request('PUT', `/rooms/${roomId}`, data);
+  }
+
+  async uploadRoomIcon(roomId, file) {
+    const formData = new FormData();
+    formData.append('icon', file);
+    const res = await fetch(`${API_BASE}/rooms/${roomId}/icon`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${this.token}` },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました');
+    return data;
+  }
+
   // Messages
   deleteMessage(roomId, messageId) {
     return this.request('DELETE', `/rooms/${roomId}/messages/${messageId}`);

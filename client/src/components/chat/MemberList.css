@@ -27,6 +27,118 @@
   color: #333;
 }
 
+/* Group settings */
+.group-settings {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.group-icon-area {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.group-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.group-icon-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.group-icon-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  text-align: center;
+  font-size: 10px;
+  padding: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.group-icon-area:hover .group-icon-overlay {
+  opacity: 1;
+}
+
+.group-name-area {
+  flex: 1;
+}
+
+.group-name-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: bold;
+  color: #333;
+}
+
+.group-name-edit-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #999;
+}
+
+.group-name-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-name-edit input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  font-size: 15px;
+  outline: none;
+}
+
+.group-name-save {
+  background: var(--primary);
+  color: white;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.group-name-cancel {
+  background: #e0e0e0;
+  color: #333;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+}
+
 .member-error {
   background: #ffe0e0;
   color: #c00;
