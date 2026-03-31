@@ -51,6 +51,13 @@
   margin-left: auto;
 }
 
+.sticky-date {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;

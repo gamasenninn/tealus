@@ -18,6 +18,7 @@ function ChatRoom() {
   const { currentRoom, members, selectRoom, clearCurrentRoom } = useRoomStore();
   const { messages, fetchMessages, addMessage, clearMessages, loadMore, hasMore } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
+  const [stickyDate, setStickyDate] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const isInitialLoad = useRef(true);
@@ -119,16 +120,31 @@ function ChatRoom() {
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
-    if (container && container.scrollTop < 50 && hasMore) {
+    if (!container) return;
+
+    if (container.scrollTop < 50 && hasMore) {
       const prevScrollHeight = container.scrollHeight;
       loadMore(roomId).then(() => {
-        // Restore scroll position after prepending older messages
         requestAnimationFrame(() => {
           const newScrollHeight = container.scrollHeight;
           container.scrollTop = newScrollHeight - prevScrollHeight;
         });
       });
     }
+
+    // Update sticky date based on first visible message
+    const separators = container.querySelectorAll('[data-date]');
+    let currentDate = null;
+    for (const sep of separators) {
+      const rect = sep.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      if (rect.top <= containerRect.top + 40) {
+        currentDate = sep.getAttribute('data-date');
+      } else {
+        break;
+      }
+    }
+    setStickyDate(currentDate);
   };
 
   const getRoomTitle = () => {
@@ -163,12 +179,17 @@ function ChatRoom() {
         ref={messagesContainerRef}
         onScroll={handleScroll}
       >
+        {stickyDate && (
+          <div className="sticky-date">
+            <DateSeparator date={stickyDate} />
+          </div>
+        )}
         {messages.map((msg, i) => {
           const prevMsg = messages[i - 1];
           const showDate = !prevMsg ||
             new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
           return (
-            <div key={msg.id}>
+            <div key={msg.id} data-date={showDate ? msg.created_at : undefined}>
               {showDate && <DateSeparator date={msg.created_at} />}
               <MessageBubble message={msg} isOwn={msg.sender_id === user.id} />
             </div>
