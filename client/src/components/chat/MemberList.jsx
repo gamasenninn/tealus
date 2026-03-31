@@ -71,7 +71,7 @@ function MemberList({ roomId, onClose }) {
     try {
       const data = await api.getUsers();
       const memberIds = members.map(m => m.user_id);
-      setAllUsers(data.users.filter(u => !memberIds.includes(u.id) && u.is_active));
+      setAllUsers(data.users.filter(u => !memberIds.includes(u.id)));
       setSelectedUsers([]);
       setShowAddModal(true);
     } catch (err) {
