@@ -68,6 +68,7 @@ function RoomList() {
   return (
     <div className="room-list-container">
       <header className="room-list-header">
+        <img src="/logo.png" alt="Linny" className="room-list-logo" />
         <h1>トーク</h1>
         <div className="room-list-header-actions">
           {user?.role === 'admin' && (

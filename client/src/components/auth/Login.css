@@ -17,6 +17,13 @@
   text-align: center;
 }
 
+.login-logo {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+}
+
 .login-title {
   color: #06C755;
   font-size: 28px;
