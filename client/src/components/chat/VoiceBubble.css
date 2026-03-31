@@ -154,7 +154,7 @@
 }
 
 .voice-edit-modal textarea:focus {
-  border-color: #06C755;
+  border-color: var(--primary);
   outline: none;
 }
 
@@ -176,7 +176,7 @@
 }
 
 .voice-edit-save {
-  background: #06C755;
+  background: var(--primary);
   color: white;
   border: none;
   padding: 4px 12px;

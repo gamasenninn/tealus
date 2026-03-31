@@ -20,7 +20,7 @@
 
 .message-input-progress-bar {
   height: 100%;
-  background: #06C755;
+  background: var(--primary);
   transition: width 0.2s;
 }
 
@@ -103,7 +103,7 @@
 }
 
 .message-input-text:focus {
-  border-color: #06C755;
+  border-color: var(--primary);
 }
 
 .message-input-mic {
@@ -135,7 +135,7 @@
   height: 40px;
   border-radius: 50%;
   border: none;
-  background: #06C755;
+  background: var(--primary);
   color: white;
   font-size: 16px;
   cursor: pointer;
@@ -147,7 +147,7 @@
 }
 
 .message-input-send:hover {
-  background: #05b04c;
+  background: var(--primary-hover);
 }
 
 .message-input-send:disabled {

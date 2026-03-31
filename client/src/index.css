@@ -1,4 +1,7 @@
 :root {
+  --primary: #00B4A0;
+  --primary-hover: #009E8C;
+  --primary-light: #e0f5f2;
   --chat-font-size: 15px;
   --chat-sender-font-size: 12px;
   --chat-transcription-font-size: 14.5px;

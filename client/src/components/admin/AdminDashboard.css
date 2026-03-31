@@ -12,7 +12,7 @@
   align-items: center;
   margin-bottom: 20px;
   padding: 16px;
-  background: #06C755;
+  background: var(--primary);
   color: white;
   border-radius: 8px;
 }
@@ -44,7 +44,7 @@
 
 .admin-create-btn {
   background: white;
-  color: #06C755;
+  color: var(--primary);
   border: none;
   padding: 10px 16px;
   border-radius: 6px;
@@ -258,7 +258,7 @@
 
 .form-field input:focus,
 .form-field select:focus {
-  border-color: #06C755;
+  border-color: var(--primary);
   outline: none;
 }
 
@@ -285,7 +285,7 @@
 }
 
 .submit-btn {
-  background: #06C755;
+  background: var(--primary);
   color: white;
   border: none;
   padding: 10px 20px;
@@ -296,7 +296,7 @@
 }
 
 .submit-btn:hover {
-  background: #05b34c;
+  background: var(--primary-hover);
 }
 
 .submit-btn:disabled {

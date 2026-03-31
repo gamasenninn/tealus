@@ -25,7 +25,7 @@
 }
 
 .login-title {
-  color: #06C755;
+  color: var(--primary);
   font-size: 28px;
   margin-bottom: 4px;
 }
@@ -64,12 +64,12 @@
 }
 
 .login-field input:focus {
-  border-color: #06C755;
+  border-color: var(--primary);
 }
 
 .login-button {
   padding: 14px;
-  background: #06C755;
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -81,7 +81,7 @@
 }
 
 .login-button:hover {
-  background: #05b04c;
+  background: var(--primary-hover);
 }
 
 .login-button:disabled {

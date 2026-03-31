@@ -11,7 +11,7 @@ export default defineConfig({
         name: 'Linny',
         short_name: 'Linny',
         description: '社内メッセンジャー',
-        theme_color: '#06C755',
+        theme_color: '#00B4A0',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

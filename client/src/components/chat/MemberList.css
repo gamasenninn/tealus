@@ -126,7 +126,7 @@
 .member-add-btn {
   width: 100%;
   padding: 12px;
-  background: #06C755;
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -135,7 +135,7 @@
 }
 
 .member-add-btn:hover {
-  background: #05b34c;
+  background: var(--primary-hover);
 }
 
 .member-leave-btn {
@@ -238,7 +238,7 @@
 .member-add-submit {
   flex: 1;
   padding: 10px;
-  background: #06C755;
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 6px;
