@@ -66,8 +66,8 @@
 }
 
 .bubble.own {
-  background: var(--primary);
-  color: white;
+  background: var(--primary-light);
+  color: #333;
   border-bottom-right-radius: 4px;
 }
 
@@ -131,8 +131,8 @@
 }
 
 .bubble.own .bubble-reply {
-  background: rgba(255, 255, 255, 0.15);
-  border-left-color: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.06);
+  border-left-color: rgba(0, 0, 0, 0.2);
 }
 
 .bubble-reply-sender {
