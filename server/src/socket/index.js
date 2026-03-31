@@ -81,12 +81,22 @@ function setupSocketHandlers(io) {
         // Attach reply_to message info if exists
         if (reply_to) {
           const replyResult = await pool.query(
-            `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name
-             FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = $1`,
+            `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name,
+                    vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
+             FROM messages m JOIN users u ON u.id = m.sender_id
+             LEFT JOIN LATERAL (
+               SELECT formatted_text, raw_text FROM voice_transcriptions
+               WHERE message_id = m.id ORDER BY version DESC LIMIT 1
+             ) vt ON m.type = 'voice'
+             WHERE m.id = $1`,
             [reply_to]
           );
           if (replyResult.rows.length > 0) {
-            message.reply_to_message = replyResult.rows[0];
+            const r = replyResult.rows[0];
+            if (r.type === 'voice' && !r.content) {
+              r.content = r.transcription_text || r.transcription_raw || null;
+            }
+            message.reply_to_message = r;
           }
         }
 

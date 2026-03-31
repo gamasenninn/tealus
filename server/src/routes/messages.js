@@ -126,14 +126,22 @@ router.get('/', async (req, res) => {
     const replyIds = messages.filter(m => m.reply_to).map(m => m.reply_to);
     if (replyIds.length > 0) {
       const replyResult = await pool.query(
-        `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name
+        `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name,
+                vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
          FROM messages m
          JOIN users u ON u.id = m.sender_id
+         LEFT JOIN LATERAL (
+           SELECT formatted_text, raw_text FROM voice_transcriptions
+           WHERE message_id = m.id ORDER BY version DESC LIMIT 1
+         ) vt ON m.type = 'voice'
          WHERE m.id = ANY($1)`,
         [replyIds]
       );
       const replyMap = {};
       for (const r of replyResult.rows) {
+        if (r.type === 'voice' && !r.content) {
+          r.content = r.transcription_text || r.transcription_raw || null;
+        }
         replyMap[r.id] = r;
       }
       for (const msg of messages) {

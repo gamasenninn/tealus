@@ -120,7 +120,7 @@ function MessageInput({ roomId }) {
       )}
       {replyTo && (
         <div className="message-input-reply">
-          <span>{replyTo.sender_display_name}: {replyTo.content || '(メディア)'}</span>
+          <span>{replyTo.sender_display_name}: {replyTo.content || replyTo.transcription?.formatted_text || replyTo.transcription?.raw_text || '(メディア)'}</span>
           <button onClick={clearReplyTo}>✕</button>
         </div>
       )}
