@@ -46,6 +46,14 @@ export const useMessageStore = create((set, get) => ({
     }));
   },
 
+  updateLinkPreview: (messageId, preview) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, link_preview: preview } : m
+      ),
+    }));
+  },
+
   markDeleted: (messageId) => {
     set((state) => ({
       messages: state.messages.map((m) =>

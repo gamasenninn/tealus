@@ -170,6 +170,22 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Attach link previews
+    if (messages.length > 0) {
+      const msgIds = messages.map(m => m.id);
+      const lpResult = await pool.query(
+        'SELECT * FROM link_previews WHERE message_id = ANY($1)',
+        [msgIds]
+      );
+      const lpMap = {};
+      for (const lp of lpResult.rows) {
+        lpMap[lp.message_id] = lp;
+      }
+      for (const msg of messages) {
+        msg.link_preview = lpMap[msg.id] || null;
+      }
+    }
+
     res.json({ messages });
   } catch (err) {
     console.error('Get messages error:', err);

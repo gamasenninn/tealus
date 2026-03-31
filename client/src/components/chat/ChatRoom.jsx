@@ -73,6 +73,10 @@ function ChatRoom() {
         useMessageStore.getState().markDeleted(data.message_id);
       });
 
+      socket.on('link:preview', (data) => {
+        useMessageStore.getState().updateLinkPreview(data.message_id, data.preview);
+      });
+
       socket.on('user:online', (data) => {
         setOnlineUsers(prev => new Set([...prev, data.user_id]));
       });
@@ -107,6 +111,7 @@ function ChatRoom() {
         socket.off('message:deleted');
         socket.off('typing:start');
         socket.off('typing:stop');
+        socket.off('link:preview');
         socket.off('user:online');
         socket.off('user:offline');
       }

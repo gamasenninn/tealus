@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const { JWT_SECRET } = require('../middleware/auth');
 
+const { processLinkPreviews } = require('../services/linkPreview');
+
 /**
  * Set up Socket.IO handlers with JWT authentication
  */
@@ -118,6 +120,11 @@ function setupSocketHandlers(io) {
 
         // Broadcast to room (including sender)
         io.to(room_id).emit('message:new', message);
+
+        // Async link preview
+        if (content && type === 'text') {
+          processLinkPreviews(result.rows[0].id, content, io, room_id).catch(() => {});
+        }
       } catch (err) {
         console.error('Socket message:send error:', err);
       }

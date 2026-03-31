@@ -6,6 +6,7 @@ import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
 import VoiceBubble from './VoiceBubble';
 import ContextMenu from './ContextMenu';
+import LinkPreview from './LinkPreview';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn }) {
@@ -155,6 +156,7 @@ function MessageBubble({ message, isOwn }) {
           {hasText && <p className="bubble-text">{message.content}</p>}
           {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} />}
           {message.type !== 'voice' && renderMedia()}
+          {message.link_preview && <LinkPreview preview={message.link_preview} />}
         </div>
         {!isOwn && (
           <div className="bubble-meta-right">
