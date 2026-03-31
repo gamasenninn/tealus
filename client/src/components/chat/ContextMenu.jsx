@@ -19,9 +19,13 @@ function ContextMenu({ items, position, onClose }) {
   }, [onClose]);
 
   // Adjust position to stay within viewport
+  const menuWidth = 180;
+  const menuHeight = 150;
+  const x = Math.min(position.x, window.innerWidth - menuWidth - 10);
+  const y = Math.min(position.y, window.innerHeight - menuHeight - 10);
   const style = {
-    top: position.y,
-    left: position.x,
+    top: Math.max(10, y),
+    left: Math.max(10, x),
   };
 
   return (
