@@ -17,6 +17,7 @@ function Profile() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [chatFontSize, setChatFontSize] = useState(localStorage.getItem('chatFontSize') || 'medium');
+  const [notificationSound, setNotificationSound] = useState(localStorage.getItem('notificationSound') !== 'off');
 
   const showMessage = (msg) => {
     setMessage(msg);
@@ -186,6 +187,24 @@ function Profile() {
         <p className="font-size-preview" style={{ fontSize: chatFontSize === 'small' ? '13px' : chatFontSize === 'large' ? '17px' : '15px' }}>
           プレビュー: こんにちは、Linnyです。
         </p>
+      </div>
+
+      <div className="profile-section">
+        <h2>通知音</h2>
+        <label className="notification-toggle">
+          <input
+            type="checkbox"
+            checked={notificationSound}
+            onChange={(e) => {
+              setNotificationSound(e.target.checked);
+              localStorage.setItem('notificationSound', e.target.checked ? 'on' : 'off');
+              if (e.target.checked) {
+                new Audio('/notification.wav').play().catch(() => {});
+              }
+            }}
+          />
+          <span>メッセージ受信時に通知音を鳴らす</span>
+        </label>
       </div>
     </div>
   );

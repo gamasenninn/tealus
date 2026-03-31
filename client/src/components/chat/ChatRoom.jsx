@@ -34,10 +34,14 @@ function ChatRoom() {
 
       socket.on('message:new', (msg) => {
         addMessage(msg);
-        // Mark as read if the message is from someone else
+        // Mark as read and play notification if from someone else
         if (msg.sender_id !== user.id) {
           api.markRead(roomId, [msg.id]).catch(() => {});
           socket.emit('message:read', { room_id: roomId, message_ids: [msg.id] });
+          // Notification sound
+          if (localStorage.getItem('notificationSound') !== 'off') {
+            new Audio('/notification.wav').play().catch(() => {});
+          }
         }
       });
 

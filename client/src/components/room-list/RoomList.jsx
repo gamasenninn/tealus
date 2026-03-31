@@ -26,8 +26,11 @@ function RoomList() {
       socket.emit('room:join', room.id);
     });
 
-    const handleNewMessage = () => {
+    const handleNewMessage = (msg) => {
       fetchRooms();
+      if (msg.sender_id !== user.id && localStorage.getItem('notificationSound') !== 'off') {
+        new Audio('/notification.wav').play().catch(() => {});
+      }
     };
 
     socket.on('message:new', handleNewMessage);

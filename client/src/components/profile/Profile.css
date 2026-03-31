@@ -193,6 +193,20 @@
   font-weight: bold;
 }
 
+.notification-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.notification-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+
 .font-size-preview {
   color: #666;
   padding: 10px;
