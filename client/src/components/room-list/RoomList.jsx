@@ -113,6 +113,8 @@ function RoomList() {
             <div className="room-avatar">
               {room.type === 'direct' && room.partner_avatar_url ? (
                 <img src={`/media/${room.partner_avatar_url}`} alt="" className="room-avatar-img" />
+              ) : room.type === 'group' && room.icon_url ? (
+                <img src={`/media/${room.icon_url}`} alt="" className="room-avatar-img" />
               ) : (
                 room.type === 'group' ? '👥' : '👤'
               )}
