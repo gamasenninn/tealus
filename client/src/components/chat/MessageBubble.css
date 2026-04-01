@@ -59,6 +59,8 @@
   border-radius: 18px;
   max-width: 100%;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   position: relative;
   -webkit-user-select: none;
   user-select: none;
