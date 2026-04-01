@@ -53,6 +53,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Serve built React app (production)
+const clientDistPath = path.join(__dirname, '../../client/dist');
+app.use(express.static(clientDistPath));
+// SPA fallback — all non-API routes return index.html
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/')) {
+    return next();
+  }
+  res.sendFile(path.join(clientDistPath, 'index.html'));
+});
+
 // Socket.IO handlers (set up in tests or on direct run)
 const { setupSocketHandlers } = require('./socket');
 setupSocketHandlers(io);
