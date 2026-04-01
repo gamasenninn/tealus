@@ -110,7 +110,8 @@ function MessageInput({ roomId }) {
     try {
       await api.uploadVoice(roomId, blob, (progress) => {
         setUploadProgress(progress);
-      });
+      }, replyTo?.id);
+      clearReplyTo();
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);

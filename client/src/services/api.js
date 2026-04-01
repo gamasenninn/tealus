@@ -177,11 +177,12 @@ class ApiClient {
   }
 
   // Voice
-  uploadVoice(roomId, blob, onProgress) {
+  uploadVoice(roomId, blob, onProgress, replyTo) {
     return new Promise((resolve, reject) => {
       const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
       const formData = new FormData();
       formData.append('voice', blob, `voice.${ext}`);
+      if (replyTo) formData.append('reply_to', replyTo);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `${API_BASE}/rooms/${roomId}/voice`);
