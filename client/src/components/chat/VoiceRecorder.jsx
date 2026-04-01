@@ -17,6 +17,12 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
     // Clean previous state if any
     chunksRef.current = [];
 
+    // Prevent screen sleep during recording
+    let wakeLock = null;
+    if ('wakeLock' in navigator) {
+      navigator.wakeLock.request('screen').then(lock => { wakeLock = lock; }).catch(() => {});
+    }
+
     // Audio context for level meter
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
@@ -65,6 +71,7 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
         recorder.stop();
       }
       audioCtx.close().catch(() => {});
+      if (wakeLock) wakeLock.release().catch(() => {});
       recorderRef.current = null;
     };
   }, [stream]);
