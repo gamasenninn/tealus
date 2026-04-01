@@ -105,7 +105,7 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
   });
 
   return (
-    <div className="voice-recorder-overlay" onClick={handleCancel}>
+    <div className="voice-recorder-overlay">
       <div className="voice-recorder" onClick={(e) => e.stopPropagation()}>
         <div className="voice-recorder-status">
           <span className="voice-recorder-dot" />
