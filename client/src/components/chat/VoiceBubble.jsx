@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { diffChars } from 'diff';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import './VoiceBubble.css';
@@ -185,13 +186,34 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
           <div className="voice-history-modal" onClick={e => e.stopPropagation()}>
             <h3>文字起こし編集履歴</h3>
             <div className="voice-history-list">
-              {history.map(h => (
-                <div key={h.version} className="voice-history-item">
-                  <span className="voice-history-version">v{h.version}</span>
-                  <span className="voice-history-text">{h.formatted_text || h.raw_text}</span>
-                  {h.edited_by_name && <span className="voice-history-editor">by {h.edited_by_name}</span>}
-                </div>
-              ))}
+              {history.map((h, i) => {
+                const text = h.formatted_text || h.raw_text || '';
+                const nextH = history[i + 1];
+                const prevText = nextH ? (nextH.formatted_text || nextH.raw_text || '') : null;
+
+                return (
+                  <div key={h.version} className="voice-history-item">
+                    <div className="voice-history-header">
+                      <span className="voice-history-version">v{h.version}{i === 0 ? '（最新）' : i === history.length - 1 ? '（原文）' : ''}</span>
+                      {h.edited_by_name && <span className="voice-history-editor">by {h.edited_by_name}</span>}
+                    </div>
+                    <div className="voice-history-text">{text}</div>
+                    {prevText !== null && (
+                      <div className="voice-history-diff">
+                        <span className="voice-history-diff-label">v{nextH.version} → v{h.version} の変更:</span>
+                        <div className="voice-history-diff-content">
+                          {diffChars(prevText, text).map((part, j) => (
+                            <span
+                              key={j}
+                              className={part.added ? 'diff-added' : part.removed ? 'diff-removed' : ''}
+                            >{part.value}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <button className="voice-history-close" onClick={() => setShowHistory(false)}>閉じる</button>
           </div>
