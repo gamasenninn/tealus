@@ -154,6 +154,11 @@ class ApiClient {
     return data;
   }
 
+  // Reactions
+  toggleReaction(roomId, messageId, emoji) {
+    return this.request('POST', `/rooms/${roomId}/messages/${messageId}/reactions`, { emoji });
+  }
+
   // Messages
   deleteMessage(roomId, messageId) {
     return this.request('DELETE', `/rooms/${roomId}/messages/${messageId}`);

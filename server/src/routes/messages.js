@@ -184,6 +184,23 @@ router.get('/', async (req, res) => {
       for (const msg of messages) {
         msg.link_preview = lpMap[msg.id] || null;
       }
+
+      // Attach reactions
+      const reactResult = await pool.query(
+        `SELECT message_id, emoji, COUNT(*)::int as count,
+                BOOL_OR(user_id = $2) as me
+         FROM message_reactions WHERE message_id = ANY($1)
+         GROUP BY message_id, emoji ORDER BY MIN(created_at)`,
+        [msgIds, req.user.id]
+      );
+      const reactMap = {};
+      for (const r of reactResult.rows) {
+        if (!reactMap[r.message_id]) reactMap[r.message_id] = [];
+        reactMap[r.message_id].push(r);
+      }
+      for (const msg of messages) {
+        msg.reactions = reactMap[msg.id] || [];
+      }
     }
 
     res.json({ messages });
@@ -225,6 +242,63 @@ router.delete('/:msgId', checkMembership, async (req, res) => {
     res.json({ message: '削除しました' });
   } catch (err) {
     console.error('Delete message error:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+  }
+});
+
+/**
+ * POST /api/rooms/:id/messages/:msgId/reactions
+ * Toggle a reaction (add or remove)
+ */
+router.post('/:msgId/reactions', checkMembership, async (req, res) => {
+  const { msgId } = req.params;
+  const userId = req.user.id;
+  const { emoji } = req.body;
+
+  if (!emoji) {
+    return res.status(400).json({ error: 'emoji は必須です' });
+  }
+
+  try {
+    // Check if already reacted
+    const existing = await pool.query(
+      'SELECT 1 FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
+      [msgId, userId, emoji]
+    );
+
+    if (existing.rows.length > 0) {
+      // Remove
+      await pool.query(
+        'DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
+        [msgId, userId, emoji]
+      );
+    } else {
+      // Add
+      await pool.query(
+        'INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
+        [msgId, userId, emoji]
+      );
+    }
+
+    // Get updated reactions for this message
+    const reactions = await pool.query(
+      `SELECT emoji, COUNT(*)::int as count,
+              BOOL_OR(user_id = $2) as me
+       FROM message_reactions WHERE message_id = $1
+       GROUP BY emoji ORDER BY MIN(created_at)`,
+      [msgId, userId]
+    );
+
+    const { io } = require('../app');
+    const roomId = req.params.id;
+    io.to(roomId).emit('message:reaction', {
+      message_id: msgId,
+      reactions: reactions.rows,
+    });
+
+    res.json({ reactions: reactions.rows });
+  } catch (err) {
+    console.error('Reaction error:', err);
     res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 });

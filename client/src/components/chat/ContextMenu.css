@@ -17,6 +17,35 @@
   z-index: 901;
 }
 
+.context-menu-reactions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.reaction-emoji-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reaction-emoji-btn:hover {
+  background: #f0f0f0;
+}
+
+.reaction-emoji-btn:active {
+  background: #e0e0e0;
+}
+
 .context-menu-item {
   display: flex;
   align-items: center;

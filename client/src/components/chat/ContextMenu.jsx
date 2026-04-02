@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import './ContextMenu.css';
 
-function ContextMenu({ items, position, onClose }) {
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀', '🙏'];
+
+function ContextMenu({ items, position, onClose, onReaction }) {
   const menuRef = useRef(null);
   const [adjustedPos, setAdjustedPos] = useState({ x: position.x, y: position.y });
 
@@ -31,6 +33,15 @@ function ContextMenu({ items, position, onClose }) {
   return (
     <div className="context-menu-overlay">
       <div className="context-menu" ref={menuRef} style={{ top: adjustedPos.y, left: adjustedPos.x }}>
+        {onReaction && (
+          <div className="context-menu-reactions">
+            {REACTION_EMOJIS.map(emoji => (
+              <button key={emoji} className="reaction-emoji-btn" onClick={() => onReaction(emoji)}>
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
         {items.map((item, i) => (
           <button
             key={i}

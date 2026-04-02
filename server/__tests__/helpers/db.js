@@ -64,6 +64,7 @@ async function cleanTestDb() {
   const p = getTestPool();
   await p.query(`
     TRUNCATE TABLE
+      message_reactions,
       link_previews,
       voice_transcriptions,
       push_subscriptions,

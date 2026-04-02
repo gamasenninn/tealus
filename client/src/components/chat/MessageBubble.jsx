@@ -103,7 +103,15 @@ function MessageBubble({ message, isOwn }) {
       });
     }
 
-    setContextMenu({ x, y, items });
+    const onReaction = async (emoji) => {
+      try {
+        await api.toggleReaction(roomId, message.id, emoji);
+      } catch (err) {
+        console.error('Reaction error:', err);
+      }
+    };
+
+    setContextMenu({ x, y, items, onReaction });
   };
 
   const handleContextMenu = (e) => {
@@ -185,11 +193,22 @@ function MessageBubble({ message, isOwn }) {
         )}
       </div>
 
+      {message.reactions && message.reactions.length > 0 && (
+        <div className={`bubble-reactions ${isOwn ? 'own' : ''}`}>
+          {message.reactions.map(r => (
+            <span key={r.emoji} className={`reaction-badge ${r.me ? 'me' : ''}`}>
+              {r.emoji}{r.count > 1 ? r.count : ''}
+            </span>
+          ))}
+        </div>
+      )}
+
       {contextMenu && (
         <ContextMenu
           items={contextMenu.items}
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
+          onReaction={(emoji) => { contextMenu.onReaction(emoji); setContextMenu(null); }}
         />
       )}
 

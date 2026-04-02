@@ -46,6 +46,14 @@ export const useMessageStore = create((set, get) => ({
     }));
   },
 
+  updateReactions: (messageId, reactions) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, reactions } : m
+      ),
+    }));
+  },
+
   updateLinkPreview: (messageId, preview) => {
     set((state) => ({
       messages: state.messages.map((m) =>

@@ -144,6 +144,35 @@
   margin-bottom: 1px;
 }
 
+.bubble-reactions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  margin-left: 4px;
+}
+
+.bubble-reactions.own {
+  justify-content: flex-end;
+  margin-right: 4px;
+}
+
+.reaction-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 2px 6px;
+  font-size: 13px;
+  cursor: default;
+}
+
+.reaction-badge.me {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
 .bubble-reply-content {
   display: -webkit-box;
   -webkit-line-clamp: 2;

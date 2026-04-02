@@ -73,6 +73,10 @@ function ChatRoom() {
         useMessageStore.getState().markDeleted(data.message_id);
       });
 
+      socket.on('message:reaction', (data) => {
+        useMessageStore.getState().updateReactions(data.message_id, data.reactions);
+      });
+
       socket.on('link:preview', (data) => {
         useMessageStore.getState().updateLinkPreview(data.message_id, data.preview);
       });
@@ -111,6 +115,7 @@ function ChatRoom() {
         socket.off('message:deleted');
         socket.off('typing:start');
         socket.off('typing:stop');
+        socket.off('message:reaction');
         socket.off('link:preview');
         socket.off('user:online');
         socket.off('user:offline');
