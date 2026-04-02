@@ -84,7 +84,9 @@ function MessageInput({ roomId }) {
         setUploadProgress(progress);
       });
       // Re-fetch messages to ensure upload is reflected (mobile WebSocket may drop during upload)
+      // Immediate + delayed fetch to cover slow server processing for large files
       useMessageStore.getState().fetchMessages(roomId);
+      setTimeout(() => useMessageStore.getState().fetchMessages(roomId), 2000);
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);
