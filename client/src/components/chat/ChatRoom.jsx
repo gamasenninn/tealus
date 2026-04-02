@@ -21,6 +21,7 @@ function ChatRoom() {
   const [stickyDate, setStickyDate] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const lastTapRef = useRef(0);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const isInitialLoad = useRef(true);
@@ -235,6 +236,17 @@ function ChatRoom() {
         className="chat-messages"
         ref={messagesContainerRef}
         onScroll={handleScroll}
+        onClick={(e) => {
+          // Double tap on empty area to start voice recording
+          if (e.target.closest('.bubble-row') || e.target.closest('.date-separator')) return;
+          const now = Date.now();
+          if (now - lastTapRef.current < 400) {
+            window.dispatchEvent(new CustomEvent('voice:quickstart'));
+            lastTapRef.current = 0;
+          } else {
+            lastTapRef.current = now;
+          }
+        }}
       >
         {stickyDate && (
           <div className="sticky-date">

@@ -9,6 +9,7 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
   const timerRef = useRef(null);
   const animFrameRef = useRef(null);
   const audioCtxRef = useRef(null);
+  const lastTapRef = useRef(0);
 
   // Initialize on mount, cleanup on unmount
   useEffect(() => {
@@ -112,7 +113,15 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
   });
 
   return (
-    <div className="voice-recorder-overlay">
+    <div className="voice-recorder-overlay" onClick={() => {
+      const now = Date.now();
+      if (now - lastTapRef.current < 400) {
+        handleSend();
+        lastTapRef.current = 0;
+      } else {
+        lastTapRef.current = now;
+      }
+    }}>
       <div className="voice-recorder" onClick={(e) => e.stopPropagation()}>
         <div className="voice-recorder-status">
           <span className="voice-recorder-dot" />

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
@@ -99,6 +99,13 @@ function MessageInput({ roomId }) {
       fileInputRef.current.value = '';
     }
   };
+
+  // Listen for voice quickstart from double tap
+  useEffect(() => {
+    const handler = () => { if (!recorderStream && !isSending) handleMicClick(); };
+    window.addEventListener('voice:quickstart', handler);
+    return () => window.removeEventListener('voice:quickstart', handler);
+  }, [recorderStream, isSending]);
 
   const handleMicClick = async () => {
     try {
