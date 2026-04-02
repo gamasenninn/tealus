@@ -36,10 +36,17 @@ function ChatRoom() {
     };
     window.addEventListener('scroll:bottom', handleScrollBottom);
 
-    // Re-fetch messages when app returns from background
+    // Re-fetch messages and reconnect socket when app returns from background
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         fetchMessages(roomId);
+        const s = getSocket();
+        if (s && !s.connected) {
+          s.connect();
+        }
+        if (s && s.connected) {
+          s.emit('room:join', roomId);
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
