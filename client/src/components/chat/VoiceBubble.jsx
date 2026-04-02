@@ -139,7 +139,7 @@ function VoiceBubble({ message, media, transcription, isOwn }) {
           {transcription.status === 'formatting' && <span className="voice-trans-status">⏳ AIが文章を整えています...</span>}
           {transcription.status === 'done' && !isEditing && (
             <>
-              <span className="voice-trans-text">📝 {displayText}</span>
+              <span className="voice-trans-text">{displayText}</span>
               {isOwn && (
                 <div className="voice-trans-actions">
                   <button className="voice-edit-btn" onClick={handleStartEdit}>編集</button>
