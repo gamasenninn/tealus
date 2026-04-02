@@ -83,10 +83,13 @@ function MessageInput({ roomId }) {
       await api.uploadMedia(roomId, files, (progress) => {
         setUploadProgress(progress);
       });
-      // Re-fetch messages to ensure upload is reflected (mobile WebSocket may drop during upload)
-      // Immediate + delayed fetch to cover slow server processing for large files
-      useMessageStore.getState().fetchMessages(roomId);
-      setTimeout(() => useMessageStore.getState().fetchMessages(roomId), 2000);
+      // Re-fetch messages and scroll to bottom
+      await useMessageStore.getState().fetchMessages(roomId);
+      window.dispatchEvent(new CustomEvent('scroll:bottom'));
+      setTimeout(async () => {
+        await useMessageStore.getState().fetchMessages(roomId);
+        window.dispatchEvent(new CustomEvent('scroll:bottom'));
+      }, 2000);
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);
@@ -116,8 +119,9 @@ function MessageInput({ roomId }) {
         setUploadProgress(progress);
       }, replyTo?.id);
       clearReplyTo();
-      // Re-fetch messages to ensure upload is reflected
-      useMessageStore.getState().fetchMessages(roomId);
+      // Re-fetch messages and scroll to bottom
+      await useMessageStore.getState().fetchMessages(roomId);
+      window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);

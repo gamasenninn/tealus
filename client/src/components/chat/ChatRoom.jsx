@@ -31,6 +31,11 @@ function ChatRoom() {
     isInitialLoad.current = true;
     api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
 
+    const handleScrollBottom = () => {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    };
+    window.addEventListener('scroll:bottom', handleScrollBottom);
+
     const socket = getSocket();
     if (socket) {
       socket.emit('room:join', roomId);
@@ -104,6 +109,7 @@ function ChatRoom() {
     }
 
     return () => {
+      window.removeEventListener('scroll:bottom', handleScrollBottom);
       clearCurrentRoom();
       clearMessages();
       if (socket) {
