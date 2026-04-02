@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import './VoiceBubble.css';
@@ -13,6 +13,17 @@ function VoiceBubble({ message, media, transcription, isOwn }) {
   const [history, setHistory] = useState([]);
   const [saving, setSaving] = useState(false);
   const audioRef = useRef(null);
+
+  // Listen for edit trigger from context menu
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail.messageId === message.id) {
+        handleStartEdit();
+      }
+    };
+    window.addEventListener('voice:edit', handler);
+    return () => window.removeEventListener('voice:edit', handler);
+  }, [message.id, transcription]);
 
   const handlePlayPause = () => {
     const audio = audioRef.current;

@@ -64,6 +64,18 @@ function MessageBubble({ message, isOwn }) {
       onClick: () => setReplyTo(message),
     });
 
+    // Edit transcription (own voice messages only)
+    if (isOwn && message.type === 'voice' && message.transcription?.status === 'done') {
+      items.push({
+        icon: '✏',
+        label: '文字起こしを編集',
+        onClick: () => {
+          // Dispatch custom event to trigger edit in VoiceBubble
+          window.dispatchEvent(new CustomEvent('voice:edit', { detail: { messageId: message.id } }));
+        },
+      });
+    }
+
     // Delete (own messages only)
     if (isOwn) {
       items.push({
