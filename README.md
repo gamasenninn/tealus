@@ -179,22 +179,84 @@ linny/
 
 ## API一覧
 
+### 認証
+
 | メソッド | パス | 説明 |
 |----------|------|------|
 | POST | /api/auth/register | ユーザー登録 |
 | POST | /api/auth/login | ログイン（JWT発行） |
 | GET | /api/auth/me | 現在ユーザー取得 |
+| PUT | /api/auth/profile | プロフィール更新（表示名・ステータスメッセージ） |
+| POST | /api/auth/avatar | プロフィール画像アップロード |
+| PUT | /api/auth/password | パスワード変更 |
+
+### ユーザー
+
+| メソッド | パス | 説明 |
+|----------|------|------|
 | GET | /api/users | ユーザー一覧 |
-| GET | /api/rooms | ルーム一覧（未読数付き） |
+| GET | /api/users/online | オンラインユーザーID一覧 |
+
+### ルーム
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/rooms | ルーム一覧（未読数・メンバー数付き） |
 | POST | /api/rooms | グループ作成 |
 | POST | /api/rooms/direct | 1対1ルーム作成 |
 | GET | /api/rooms/:id | ルーム詳細 |
+| PUT | /api/rooms/:id | グループ名変更 |
+| POST | /api/rooms/:id/icon | グループアイコンアップロード |
+
+### メッセージ
+
+| メソッド | パス | 説明 |
+|----------|------|------|
 | GET | /api/rooms/:id/messages | メッセージ履歴（ページネーション） |
 | POST | /api/rooms/:id/messages | メッセージ送信 |
-| POST | /api/rooms/:id/media | ファイルアップロード |
+| DELETE | /api/rooms/:id/messages/:msgId | メッセージ削除（論理削除） |
+| POST | /api/rooms/:id/messages/:msgId/reactions | 絵文字リアクション（トグル） |
+
+### メディア・音声
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| POST | /api/rooms/:id/media | ファイルアップロード（画像・動画・ファイル） |
+| POST | /api/rooms/:id/voice | 音声メッセージアップロード（自動文字起こし） |
+
+### 文字起こし
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| PUT | /api/messages/:id/transcription | 文字起こしテキスト編集 |
+| GET | /api/messages/:id/transcription/history | 編集履歴取得 |
+
+### メンバー管理
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| POST | /api/rooms/:id/members | メンバー追加 |
+| DELETE | /api/rooms/:id/members/me | 自分が退会 |
+| DELETE | /api/rooms/:id/members/:userId | メンバー除外 |
+| PUT | /api/rooms/:id/members/:userId/role | グループ管理者変更 |
+
+### その他
+
+| メソッド | パス | 説明 |
+|----------|------|------|
 | POST | /api/rooms/:id/read | 既読マーク |
 | POST | /api/push/subscribe | Push通知購読登録 |
 | DELETE | /api/push/subscribe | Push通知購読解除 |
+| GET | /api/health | ヘルスチェック |
+
+### 管理者API
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/admin/users | ユーザー一覧（管理者のみ） |
+| POST | /api/admin/users | ユーザー作成 |
+| PUT | /api/admin/users/:id | ユーザー編集 |
+| PATCH | /api/admin/users/:id/status | ユーザー有効化/無効化 |
 
 ## Socket.IO イベント
 
@@ -205,6 +267,17 @@ linny/
 | message:send | client → server | メッセージ送信 |
 | message:new | server → client | 新着メッセージ通知 |
 | message:read | 双方向 | 既読通知 |
+| message:deleted | server → client | メッセージ削除通知 |
+| message:reaction | server → client | リアクション更新 |
+| voice:status | server → client | 文字起こしステータス更新 |
+| voice:transcription | server → client | 文字起こし結果 |
+| link:preview | server → client | リンクプレビュー結果 |
+| typing:start | 双方向 | 入力中通知 |
+| typing:stop | 双方向 | 入力停止通知 |
+| user:online | server → client | ユーザーオンライン通知 |
+| user:offline | server → client | ユーザーオフライン通知 |
+| member:added | server → client | メンバー追加通知 |
+| member:removed | server → client | メンバー退会/除外通知 |
 
 ## 本番デプロイ
 
