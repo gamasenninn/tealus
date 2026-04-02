@@ -32,10 +32,6 @@ function CreateRoom({ onClose }) {
       setError('グループ名を入力してください');
       return;
     }
-    if (selectedUsers.length === 0) {
-      setError('メンバーを選択してください');
-      return;
-    }
     try {
       const data = await createGroup(groupName, selectedUsers);
       onClose();
