@@ -172,9 +172,9 @@ function MessageBubble({ message, isOwn }) {
           onTouchEnd={handleTouchEnd}
           onTouchMove={handleTouchMove}
         >
-          {renderReply()}
+          {message.type !== 'voice' && renderReply()}
           {hasText && <p className="bubble-text">{message.content}</p>}
-          {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} />}
+          {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} />}
           {message.type !== 'voice' && renderMedia()}
           {message.link_preview && <LinkPreview preview={message.link_preview} />}
         </div>

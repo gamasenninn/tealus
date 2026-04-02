@@ -3,7 +3,7 @@ import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import './VoiceBubble.css';
 
-function VoiceBubble({ message, media, transcription, isOwn }) {
+function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -131,6 +131,13 @@ function VoiceBubble({ message, media, transcription, isOwn }) {
         </div>
         <span className="voice-duration">{formatTime(duration)}</span>
       </div>
+
+      {replyMessage && (
+        <div className="bubble-reply" style={{ flexBasis: '100%' }}>
+          <span className="bubble-reply-sender">{replyMessage.sender_display_name}</span>
+          <span className="bubble-reply-content">{replyMessage.content || '(メディア)'}</span>
+        </div>
+      )}
 
       {transcription && (
         <div className="voice-transcription">
