@@ -106,12 +106,13 @@
   border-color: var(--primary);
 }
 
-.message-input-mic {
+.message-input-mic-main {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   border: none;
-  background: #ddd;
+  background: var(--primary);
+  color: white;
   font-size: 18px;
   cursor: pointer;
   display: flex;
@@ -121,12 +122,12 @@
   transition: background 0.2s;
 }
 
-.message-input-mic:hover {
-  background: #ccc;
+.message-input-mic-main:hover {
+  background: var(--primary-hover);
 }
 
-.message-input-mic:disabled {
-  opacity: 0.5;
+.message-input-mic-main:disabled {
+  background: #ccc;
   cursor: not-allowed;
 }
 

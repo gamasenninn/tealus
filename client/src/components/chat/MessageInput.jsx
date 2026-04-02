@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
@@ -100,13 +100,6 @@ function MessageInput({ roomId }) {
     }
   };
 
-  // Listen for voice quickstart from double tap
-  useEffect(() => {
-    const handler = () => { if (!recorderStream && !isSending) handleMicClick(); };
-    window.addEventListener('voice:quickstart', handler);
-    return () => window.removeEventListener('voice:quickstart', handler);
-  }, [recorderStream, isSending]);
-
   const handleMicClick = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -180,20 +173,23 @@ function MessageInput({ roomId }) {
           rows={1}
           disabled={isSending}
         />
-        <button
-          className="message-input-mic"
-          onClick={handleMicClick}
-          disabled={isSending}
-        >
-          🎤
-        </button>
-        <button
-          className="message-input-send"
-          onClick={handleSend}
-          disabled={!text.trim() || isSending}
-        >
-          ▶
-        </button>
+        {text.trim() ? (
+          <button
+            className="message-input-send"
+            onClick={handleSend}
+            disabled={isSending}
+          >
+            ▶
+          </button>
+        ) : (
+          <button
+            className="message-input-mic-main"
+            onClick={handleMicClick}
+            disabled={isSending}
+          >
+            🎤
+          </button>
+        )}
       </div>
 
       {recorderStream && (
