@@ -122,6 +122,9 @@ function MessageInput({ roomId }) {
       // Re-fetch messages and scroll to bottom
       await useMessageStore.getState().fetchMessages(roomId);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
+      // Delayed re-fetch to pick up transcription results (Whisper + AI takes several seconds)
+      setTimeout(() => useMessageStore.getState().fetchMessages(roomId), 5000);
+      setTimeout(() => useMessageStore.getState().fetchMessages(roomId), 10000);
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);
