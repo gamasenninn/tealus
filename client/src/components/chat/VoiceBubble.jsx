@@ -14,15 +14,20 @@ function VoiceBubble({ message, media, transcription, isOwn }) {
   const [saving, setSaving] = useState(false);
   const audioRef = useRef(null);
 
-  // Listen for edit trigger from context menu
+  // Listen for edit/history trigger from context menu
   useEffect(() => {
-    const handler = (e) => {
-      if (e.detail.messageId === message.id) {
-        handleStartEdit();
-      }
+    const editHandler = (e) => {
+      if (e.detail.messageId === message.id) handleStartEdit();
     };
-    window.addEventListener('voice:edit', handler);
-    return () => window.removeEventListener('voice:edit', handler);
+    const historyHandler = (e) => {
+      if (e.detail.messageId === message.id) handleShowHistory();
+    };
+    window.addEventListener('voice:edit', editHandler);
+    window.addEventListener('voice:history', historyHandler);
+    return () => {
+      window.removeEventListener('voice:edit', editHandler);
+      window.removeEventListener('voice:history', historyHandler);
+    };
   }, [message.id, transcription]);
 
   const handlePlayPause = () => {
