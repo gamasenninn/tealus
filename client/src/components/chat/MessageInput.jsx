@@ -83,6 +83,8 @@ function MessageInput({ roomId }) {
       await api.uploadMedia(roomId, files, (progress) => {
         setUploadProgress(progress);
       });
+      // Re-fetch messages to ensure upload is reflected (mobile WebSocket may drop during upload)
+      useMessageStore.getState().fetchMessages(roomId);
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);
@@ -112,6 +114,8 @@ function MessageInput({ roomId }) {
         setUploadProgress(progress);
       }, replyTo?.id);
       clearReplyTo();
+      // Re-fetch messages to ensure upload is reflected
+      useMessageStore.getState().fetchMessages(roomId);
     } catch (err) {
       setUploadError(err.message);
       setTimeout(() => setUploadError(''), 5000);
