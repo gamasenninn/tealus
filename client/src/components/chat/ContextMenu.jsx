@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './ContextMenu.css';
 
 function ContextMenu({ items, position, onClose }) {
   const menuRef = useRef(null);
+  const [adjustedPos, setAdjustedPos] = useState({ x: position.x, y: position.y });
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -18,19 +19,18 @@ function ContextMenu({ items, position, onClose }) {
     };
   }, [onClose]);
 
-  // Adjust position to stay within viewport
-  const menuWidth = 180;
-  const menuHeight = 150;
-  const x = Math.min(position.x, window.innerWidth - menuWidth - 10);
-  const y = Math.min(position.y, window.innerHeight - menuHeight - 10);
-  const style = {
-    top: Math.max(10, y),
-    left: Math.max(10, x),
-  };
+  // Adjust position after render based on actual menu size
+  useEffect(() => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const x = Math.max(10, Math.min(position.x, window.innerWidth - rect.width - 10));
+    const y = Math.max(10, Math.min(position.y, window.innerHeight - rect.height - 10));
+    setAdjustedPos({ x, y });
+  }, [position]);
 
   return (
     <div className="context-menu-overlay">
-      <div className="context-menu" ref={menuRef} style={style}>
+      <div className="context-menu" ref={menuRef} style={{ top: adjustedPos.y, left: adjustedPos.x }}>
         {items.map((item, i) => (
           <button
             key={i}
