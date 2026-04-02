@@ -236,10 +236,17 @@ function ChatRoom() {
         className="chat-messages"
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        onDoubleClick={(e) => {
-          // Double tap/click on empty area to start voice recording
+        onTouchEnd={(e) => {
+          // Double tap on empty area to start voice recording
           if (e.target.closest('.bubble-row') || e.target.closest('.date-separator') || e.target.closest('.sticky-date')) return;
-          window.dispatchEvent(new CustomEvent('voice:quickstart'));
+          const now = Date.now();
+          if (now - lastTapRef.current < 400) {
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent('voice:quickstart'));
+            lastTapRef.current = 0;
+          } else {
+            lastTapRef.current = now;
+          }
         }}
       >
         {stickyDate && (
