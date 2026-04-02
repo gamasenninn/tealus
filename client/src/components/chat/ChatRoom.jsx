@@ -66,6 +66,11 @@ function ChatRoom() {
     if (socket) {
       socket.emit('room:join', roomId);
 
+      // Re-join room on reconnect (after background recovery etc.)
+      socket.on('connect', () => {
+        socket.emit('room:join', roomId);
+      });
+
       socket.on('message:new', (msg) => {
         addMessage(msg);
         // Mark as read and play notification if from someone else
@@ -153,6 +158,7 @@ function ChatRoom() {
         socket.off('link:preview');
         socket.off('user:online');
         socket.off('user:offline');
+        socket.off('connect');
       }
     };
   }, [roomId]);
