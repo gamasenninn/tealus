@@ -37,16 +37,27 @@ function ChatRoom() {
     window.addEventListener('scroll:bottom', handleScrollBottom);
 
     // Re-fetch messages and reconnect socket when app returns from background
+    let pollTimer = null;
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        fetchMessages(roomId);
+        // Reconnect socket
         const s = getSocket();
-        if (s && !s.connected) {
-          s.connect();
-        }
-        if (s && s.connected) {
-          s.emit('room:join', roomId);
-        }
+        if (s && !s.connected) s.connect();
+        if (s) s.emit('room:join', roomId);
+
+        // Fetch immediately
+        fetchMessages(roomId);
+
+        // Poll every 3 seconds for 30 seconds to catch pending transcriptions
+        let count = 0;
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+          count++;
+          fetchMessages(roomId);
+          if (count >= 10) clearInterval(pollTimer);
+        }, 3000);
+      } else {
+        if (pollTimer) clearInterval(pollTimer);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -126,6 +137,7 @@ function ChatRoom() {
     return () => {
       window.removeEventListener('scroll:bottom', handleScrollBottom);
       document.removeEventListener('visibilitychange', handleVisibility);
+      if (pollTimer) clearInterval(pollTimer);
       clearCurrentRoom();
       clearMessages();
       if (socket) {
