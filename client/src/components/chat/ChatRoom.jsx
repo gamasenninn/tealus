@@ -235,7 +235,6 @@ function ChatRoom() {
         className="chat-messages"
         ref={messagesContainerRef}
         onScroll={handleScroll}
-}
       >
         {stickyDate && (
           <div className="sticky-date">
