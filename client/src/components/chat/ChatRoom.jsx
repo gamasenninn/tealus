@@ -73,9 +73,9 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
-        <button className="chat-search" onClick={() => navigate(`/search?room_id=${roomId}`)}>🔍</button>
+        <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}>🔍</button>
         {currentRoom?.type === 'group' && (
-          <button className="chat-menu" onClick={() => setShowMembers(true)}>≡</button>
+          <button className="chat-header-btn" onClick={() => setShowMembers(true)}>≡</button>
         )}
       </header>
 
