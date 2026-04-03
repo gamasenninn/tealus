@@ -40,22 +40,10 @@ function ImageGrid({ media, onImageClick }) {
           );
         }
         return (
-          <a key={m.id} href={`/media/${m.file_path}`} className="media-file" onClick={async (e) => {
+          <a key={m.id} href={`/media/${m.file_path}`} target="_blank" rel="noopener noreferrer" className="media-file" onClick={(e) => {
             e.preventDefault();
-            try {
-              const res = await fetch(`/media/${m.file_path}`);
-              const blob = await res.blob();
-              const url = window.URL.createObjectURL(blob);
-              const link = document.createElement('a');
-              link.href = url;
-              link.download = m.file_name;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              window.URL.revokeObjectURL(url);
-            } catch (err) {
-              window.open(`/media/${m.file_path}`, '_blank');
-            }
+            e.stopPropagation();
+            window.open(`/media/${m.file_path}`, '_blank');
           }}>
             📎 {m.file_name}
           </a>
