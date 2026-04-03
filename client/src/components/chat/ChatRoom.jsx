@@ -62,7 +62,7 @@ function ChatRoom() {
   return (
     <div className="chat-container">
       <header className="chat-header">
-        <button className="chat-back" onClick={() => navigate('/')}>←</button>
+        <button className="chat-back" onClick={() => targetMsgId ? navigate(-1) : navigate('/')}>←</button>
         <div className="chat-header-info">
           <span className="chat-header-title">{getRoomTitle()}</span>
           {getMemberCount() && (
