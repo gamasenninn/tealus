@@ -1,30 +1,11 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { requireMember } = require('../middleware/roomAccess');
 
 const router = express.Router({ mergeParams: true });
 
-// All routes require authentication
-router.use(authenticate);
-
-/**
- * Middleware: check room membership
- */
-async function checkMembership(req, res, next) {
-  const roomId = req.params.id;
-  const userId = req.user.id;
-
-  const result = await pool.query(
-    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-    [roomId, userId]
-  );
-  if (result.rows.length === 0) {
-    return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
-  }
-  next();
-}
-
-router.use(checkMembership);
+router.use(authenticate, requireMember);
 
 /**
  * POST /api/rooms/:id/messages
@@ -214,7 +195,7 @@ router.get('/', async (req, res) => {
  * DELETE /api/rooms/:id/messages/:msgId
  * Soft-delete a message (sender only)
  */
-router.delete('/:msgId', checkMembership, async (req, res) => {
+router.delete('/:msgId', async (req, res) => {
   const { msgId } = req.params;
   const userId = req.user.id;
 
@@ -250,7 +231,7 @@ router.delete('/:msgId', checkMembership, async (req, res) => {
  * POST /api/rooms/:id/messages/:msgId/reactions
  * Toggle a reaction (add or remove)
  */
-router.post('/:msgId/reactions', checkMembership, async (req, res) => {
+router.post('/:msgId/reactions', async (req, res) => {
   const { msgId } = req.params;
   const userId = req.user.id;
   const { emoji } = req.body;

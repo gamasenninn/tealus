@@ -4,6 +4,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { requireMember, requireRoomAdmin, requireGroup } = require('../middleware/roomAccess');
 
 const ICON_DIR = path.join(__dirname, '../../../media/icons');
 const iconStorage = multer.diskStorage({
@@ -227,20 +228,10 @@ router.get('/', async (req, res) => {
  * GET /api/rooms/:id
  * Get room details with members
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireMember, async (req, res) => {
   const { id } = req.params;
-  const userId = req.user.id;
 
   try {
-    // Check membership
-    const memberCheck = await pool.query(
-      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-      [id, userId]
-    );
-    if (memberCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
-    }
-
     // Get room
     const roomResult = await pool.query('SELECT * FROM rooms WHERE id = $1', [id]);
     if (roomResult.rows.length === 0) {
@@ -267,22 +258,11 @@ router.get('/:id', async (req, res) => {
  * PUT /api/rooms/:id
  * Update group name (group admin only)
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const userId = req.user.id;
   const { name } = req.body;
 
   try {
-    const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [id]);
-    if (room.rows.length === 0) return res.status(404).json({ error: 'ルームが見つかりません' });
-    if (room.rows[0].type !== 'group') return res.status(400).json({ error: 'この操作はグループのみ対象です' });
-
-    const member = await pool.query(
-      'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', [id, userId]
-    );
-    if (member.rows.length === 0) return res.status(403).json({ error: 'メンバーではありません' });
-    if (member.rows[0].role !== 'admin') return res.status(403).json({ error: 'グループ管理者のみ変更できます' });
-
     const result = await pool.query(
       'UPDATE rooms SET name = $1, updated_at = now() WHERE id = $2 RETURNING *',
       [name, id]
@@ -298,21 +278,10 @@ router.put('/:id', async (req, res) => {
  * POST /api/rooms/:id/icon
  * Upload group icon (group admin only)
  */
-router.post('/:id/icon', iconUpload.single('icon'), async (req, res) => {
+router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, iconUpload.single('icon'), async (req, res) => {
   const { id } = req.params;
-  const userId = req.user.id;
 
   try {
-    const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [id]);
-    if (room.rows.length === 0) return res.status(404).json({ error: 'ルームが見つかりません' });
-    if (room.rows[0].type !== 'group') return res.status(400).json({ error: 'この操作はグループのみ対象です' });
-
-    const member = await pool.query(
-      'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', [id, userId]
-    );
-    if (member.rows.length === 0) return res.status(403).json({ error: 'メンバーではありません' });
-    if (member.rows[0].role !== 'admin') return res.status(403).json({ error: 'グループ管理者のみ変更できます' });
-
     if (!req.file) return res.status(400).json({ error: '画像ファイルが添付されていません' });
 
     const iconUrl = `icons/${req.file.filename}`;

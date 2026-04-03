@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { requireMember } = require('../middleware/roomAccess');
 const { upload, getMessageType, getSubdir } = require('../middleware/upload');
 const { generateThumbnail } = require('../services/thumbnail');
 
@@ -13,7 +14,7 @@ const router = express.Router({ mergeParams: true });
  * Upload one or more files and create a media message
  * Supports: upload.single('file') or upload.array('files', 20)
  */
-router.post('/', authenticate, (req, res, next) => {
+router.post('/', authenticate, requireMember, (req, res, next) => {
   upload.array('files', 20)(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -26,15 +27,6 @@ router.post('/', authenticate, (req, res, next) => {
 }, async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
-
-  // Check membership
-  const memberCheck = await pool.query(
-    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-    [roomId, userId]
-  );
-  if (memberCheck.rows.length === 0) {
-    return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
-  }
 
   // Support both single file (field: 'file') and multiple files (field: 'files')
   const files = req.files || (req.file ? [req.file] : []);

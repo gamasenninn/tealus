@@ -4,6 +4,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { requireMember } = require('../middleware/roomAccess');
 const { transcribeVoiceMessage } = require('../services/transcription');
 
 const router = express.Router({ mergeParams: true });
@@ -28,7 +29,7 @@ const voiceUpload = multer({
  * POST /api/rooms/:id/voice
  * Upload a voice message
  */
-router.post('/', authenticate, (req, res, next) => {
+router.post('/', authenticate, requireMember, (req, res, next) => {
   voiceUpload.single('voice')(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -41,15 +42,6 @@ router.post('/', authenticate, (req, res, next) => {
 }, async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
-
-  // Check membership
-  const memberCheck = await pool.query(
-    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-    [roomId, userId]
-  );
-  if (memberCheck.rows.length === 0) {
-    return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
-  }
 
   if (!req.file) {
     return res.status(400).json({ error: '音声ファイルが添付されていません' });

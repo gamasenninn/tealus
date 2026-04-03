@@ -1,10 +1,11 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { requireMember } = require('../middleware/roomAccess');
 
 const router = express.Router({ mergeParams: true });
 
-router.use(authenticate);
+router.use(authenticate, requireMember);
 
 /**
  * POST /api/rooms/:id/read
@@ -14,15 +15,6 @@ router.post('/', async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
   const { message_ids } = req.body;
-
-  // Check membership
-  const memberCheck = await pool.query(
-    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-    [roomId, userId]
-  );
-  if (memberCheck.rows.length === 0) {
-    return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
-  }
 
   if (!message_ids || !Array.isArray(message_ids) || message_ids.length === 0) {
     return res.status(400).json({ error: 'message_idsは必須です' });

@@ -1,39 +1,9 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { requireMember, requireGroup } = require('../middleware/roomAccess');
 
 const router = express.Router({ mergeParams: true });
-
-/**
- * Helper: Check room is group type
- */
-async function requireGroup(req, res, next) {
-  const { id: roomId } = req.params;
-  const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
-  if (room.rows.length === 0) {
-    return res.status(404).json({ error: 'ルームが見つかりません' });
-  }
-  if (room.rows[0].type !== 'group') {
-    return res.status(400).json({ error: 'この操作はグループのみ対象です' });
-  }
-  next();
-}
-
-/**
- * Helper: Check user is member of room
- */
-async function requireMembership(req, res, next) {
-  const { id: roomId } = req.params;
-  const result = await pool.query(
-    'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2',
-    [roomId, req.user.id]
-  );
-  if (result.rows.length === 0) {
-    return res.status(403).json({ error: 'このルームのメンバーではありません' });
-  }
-  req.memberRole = result.rows[0].role;
-  next();
-}
 
 /**
  * Helper: Insert system message
@@ -58,7 +28,7 @@ async function insertSystemMessage(roomId, content, io) {
  * POST /api/rooms/:id/members
  * Add a member to the group (any member can invite)
  */
-router.post('/', authenticate, requireGroup, requireMembership, async (req, res) => {
+router.post('/', authenticate, requireGroup, requireMember, async (req, res) => {
   const roomId = req.params.id;
   const { user_id } = req.body;
 
@@ -112,7 +82,7 @@ router.post('/', authenticate, requireGroup, requireMembership, async (req, res)
  * DELETE /api/rooms/:id/members/me
  * Leave the group
  */
-router.delete('/me', authenticate, requireGroup, requireMembership, async (req, res) => {
+router.delete('/me', authenticate, requireGroup, requireMember, async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
 
@@ -157,7 +127,7 @@ router.delete('/me', authenticate, requireGroup, requireMembership, async (req, 
  * DELETE /api/rooms/:id/members/:userId
  * Kick a member (group admin only)
  */
-router.delete('/:userId', authenticate, requireGroup, requireMembership, async (req, res) => {
+router.delete('/:userId', authenticate, requireGroup, requireMember, async (req, res) => {
   const roomId = req.params.id;
   const targetUserId = req.params.userId;
 
@@ -206,7 +176,7 @@ router.delete('/:userId', authenticate, requireGroup, requireMembership, async (
  * PUT /api/rooms/:id/members/:userId/role
  * Change member role (group admin only)
  */
-router.put('/:userId/role', authenticate, requireGroup, requireMembership, async (req, res) => {
+router.put('/:userId/role', authenticate, requireGroup, requireMember, async (req, res) => {
   const roomId = req.params.id;
   const targetUserId = req.params.userId;
   const { role } = req.body;
