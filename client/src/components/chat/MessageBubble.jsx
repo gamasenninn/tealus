@@ -7,6 +7,7 @@ import ImageViewer from '../media/ImageViewer';
 import VoiceBubble from './VoiceBubble';
 import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
+import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn }) {
@@ -123,7 +124,7 @@ function MessageBubble({ message, isOwn }) {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches[0];
       showContextMenu(touch.clientX, touch.clientY);
-    }, 500);
+    }, LONG_PRESS_TIMEOUT);
   };
 
   const handleTouchEnd = () => {

@@ -3,6 +3,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
+const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config');
 
 const router = express.Router({ mergeParams: true });
 
@@ -43,8 +44,8 @@ router.post('/', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   const roomId = req.params.id;
-  const { before, limit = 20 } = req.query;
-  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
+  const { before, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || MESSAGES_DEFAULT_LIMIT, 1), MESSAGES_MAX_LIMIT);
 
   try {
     let query;

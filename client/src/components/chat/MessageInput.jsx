@@ -3,6 +3,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import VoiceRecorder from './VoiceRecorder';
+import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants/ui';
 import './MessageInput.css';
 
 function MessageInput({ roomId }) {
@@ -22,7 +23,7 @@ function MessageInput({ roomId }) {
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
       socket.emit('typing:stop', roomId);
-    }, 2000);
+    }, TYPING_DEBOUNCE);
   };
 
   const handleSend = async () => {
@@ -64,7 +65,7 @@ function MessageInput({ roomId }) {
     if (files.length === 0) return;
 
     // Client-side file size check
-    const limits = { image: 10, video: 1024, default: 100 };
+    const limits = FILE_SIZE_LIMITS;
     for (const file of files) {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'default';
       const maxMB = limits[type];

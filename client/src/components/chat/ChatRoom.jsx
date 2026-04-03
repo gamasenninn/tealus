@@ -9,6 +9,7 @@ import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
+import { SCROLL_THRESHOLD, SCROLL_NEAR_BOTTOM, SCROLL_HEADER_OFFSET, INITIAL_SCROLL_DELAY } from '../../constants/ui';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -153,13 +154,13 @@ function ChatRoom() {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView();
         markVisibleAsRead();
-      }, 50);
+      }, INITIAL_SCROLL_DELAY);
       isInitialLoad.current = false;
     } else {
       // New message arrived — scroll only if already near bottom
       const container = messagesContainerRef.current;
       if (container) {
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
         if (isNearBottom) {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           markVisibleAsRead();
@@ -185,7 +186,7 @@ function ChatRoom() {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    if (container.scrollTop < 50 && hasMore) {
+    if (container.scrollTop < SCROLL_THRESHOLD && hasMore) {
       const prevScrollHeight = container.scrollHeight;
       loadMore(roomId).then(() => {
         requestAnimationFrame(() => {
@@ -201,7 +202,7 @@ function ChatRoom() {
     for (const sep of separators) {
       const rect = sep.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
-      if (rect.top <= containerRect.top + 40) {
+      if (rect.top <= containerRect.top + SCROLL_HEADER_OFFSET) {
         currentDate = sep.getAttribute('data-date');
       } else {
         break;

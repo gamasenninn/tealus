@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
 const { upload, getMessageType, getSubdir } = require('../middleware/upload');
 const { generateThumbnail } = require('../services/thumbnail');
+const { MAX_UPLOAD_FILES } = require('../constants/config');
 
 const router = express.Router({ mergeParams: true });
 
@@ -16,7 +17,7 @@ const router = express.Router({ mergeParams: true });
  * Supports: upload.single('file') or upload.array('files', 20)
  */
 router.post('/', authenticate, requireMember, (req, res, next) => {
-  upload.array('files', 20)(req, res, (err) => {
+  upload.array('files', MAX_UPLOAD_FILES)(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'ファイルサイズが上限を超えています（最大100MB）' });
