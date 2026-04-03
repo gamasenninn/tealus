@@ -9,23 +9,21 @@ function SearchPage() {
   const roomId = searchParams.get('room_id');
   const initialQuery = searchParams.get('q') || '';
 
-  const [query, setQuery] = useState(initialQuery);
-  const [results, setResults] = useState([]);
+  // Restore from sessionStorage on mount
+  const cached = sessionStorage.getItem('searchCache');
+  const cachedData = cached ? JSON.parse(cached) : null;
+
+  const [query, setQuery] = useState(initialQuery || cachedData?.query || '');
+  const [results, setResults] = useState(cachedData?.results || []);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef(null);
-
-  // Restore search on mount (when navigating back)
-  useEffect(() => {
-    if (initialQuery) {
-      doSearch(initialQuery);
-    }
-  }, []);
 
   const doSearch = async (q) => {
     setSearching(true);
     try {
       const data = await api.search(q.trim(), roomId);
       setResults(data.results);
+      sessionStorage.setItem('searchCache', JSON.stringify({ query: q.trim(), results: data.results }));
     } catch (err) {
       console.error('Search error:', err);
     } finally {
@@ -74,7 +72,7 @@ function SearchPage() {
   return (
     <div className="search-container">
       <header className="search-header">
-        <button className="search-back" onClick={() => navigate(-1)}>←</button>
+        <button className="search-back" onClick={() => { sessionStorage.removeItem('searchCache'); navigate(-1); }}>←</button>
         <input
           className="search-input"
           type="text"
