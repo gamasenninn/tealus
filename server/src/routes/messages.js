@@ -4,6 +4,7 @@ const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
 const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config');
+const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions } = require('../services/messageAttachments');
 
 const router = express.Router({ mergeParams: true });
 
@@ -86,105 +87,12 @@ router.get('/', async (req, res) => {
     const result = await pool.query(query, params);
     const messages = result.rows;
 
-    // Attach media info to messages that have media
-    if (messages.length > 0) {
-      const messageIds = messages.map(m => m.id);
-      const mediaResult = await pool.query(
-        `SELECT * FROM message_media WHERE message_id = ANY($1)`,
-        [messageIds]
-      );
-      const mediaByMessage = {};
-      for (const media of mediaResult.rows) {
-        if (!mediaByMessage[media.message_id]) {
-          mediaByMessage[media.message_id] = [];
-        }
-        mediaByMessage[media.message_id].push(media);
-      }
-      for (const msg of messages) {
-        msg.media = mediaByMessage[msg.id] || [];
-      }
-    }
-
-    // Attach reply_to message info
-    const replyIds = messages.filter(m => m.reply_to).map(m => m.reply_to);
-    if (replyIds.length > 0) {
-      const replyResult = await pool.query(
-        `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name,
-                vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
-         FROM messages m
-         JOIN users u ON u.id = m.sender_id
-         LEFT JOIN LATERAL (
-           SELECT formatted_text, raw_text FROM voice_transcriptions
-           WHERE message_id = m.id ORDER BY version DESC LIMIT 1
-         ) vt ON m.type = 'voice'
-         WHERE m.id = ANY($1)`,
-        [replyIds]
-      );
-      const replyMap = {};
-      for (const r of replyResult.rows) {
-        if (r.type === 'voice' && !r.content) {
-          r.content = r.transcription_text || r.transcription_raw || null;
-        }
-        replyMap[r.id] = r;
-      }
-      for (const msg of messages) {
-        msg.reply_to_message = msg.reply_to ? (replyMap[msg.reply_to] || null) : null;
-      }
-    }
-
-    // Attach transcription for voice messages
-    const voiceIds = messages.filter(m => m.type === 'voice').map(m => m.id);
-    if (voiceIds.length > 0) {
-      const transResult = await pool.query(
-        `SELECT DISTINCT ON (message_id) message_id, raw_text, formatted_text, status, version
-         FROM voice_transcriptions
-         WHERE message_id = ANY($1)
-         ORDER BY message_id, version DESC`,
-        [voiceIds]
-      );
-      const transMap = {};
-      for (const t of transResult.rows) {
-        transMap[t.message_id] = t;
-      }
-      for (const msg of messages) {
-        if (msg.type === 'voice') {
-          msg.transcription = transMap[msg.id] || null;
-        }
-      }
-    }
-
-    // Attach link previews
-    if (messages.length > 0) {
-      const msgIds = messages.map(m => m.id);
-      const lpResult = await pool.query(
-        'SELECT * FROM link_previews WHERE message_id = ANY($1)',
-        [msgIds]
-      );
-      const lpMap = {};
-      for (const lp of lpResult.rows) {
-        lpMap[lp.message_id] = lp;
-      }
-      for (const msg of messages) {
-        msg.link_preview = lpMap[msg.id] || null;
-      }
-
-      // Attach reactions
-      const reactResult = await pool.query(
-        `SELECT message_id, emoji, COUNT(*)::int as count,
-                BOOL_OR(user_id = $2) as me
-         FROM message_reactions WHERE message_id = ANY($1)
-         GROUP BY message_id, emoji ORDER BY MIN(created_at)`,
-        [msgIds, req.user.id]
-      );
-      const reactMap = {};
-      for (const r of reactResult.rows) {
-        if (!reactMap[r.message_id]) reactMap[r.message_id] = [];
-        reactMap[r.message_id].push(r);
-      }
-      for (const msg of messages) {
-        msg.reactions = reactMap[msg.id] || [];
-      }
-    }
+    // Attach related data
+    await attachMedia(messages);
+    await attachReplies(messages);
+    await attachTranscriptions(messages);
+    await attachLinkPreviews(messages);
+    await attachReactions(messages, req.user.id);
 
     res.json({ messages });
   } catch (err) {
