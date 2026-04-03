@@ -155,8 +155,8 @@ class ApiClient {
   }
 
   // Search
-  search(q, roomId) {
-    let url = `/search?q=${encodeURIComponent(q)}`;
+  search(q, roomId, offset = 0) {
+    let url = `/search?q=${encodeURIComponent(q)}&offset=${offset}`;
     if (roomId) url += `&room_id=${roomId}`;
     return this.request('GET', url);
   }

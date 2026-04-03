@@ -14,7 +14,7 @@ router.use(authenticate);
  * Searches both message content and voice transcriptions
  */
 router.get('/', async (req, res) => {
-  const { q, room_id, limit = 50 } = req.query;
+  const { q, room_id, limit = 50, offset = 0 } = req.query;
   const userId = req.user.id;
 
   if (!q || !q.trim()) {
@@ -22,6 +22,7 @@ router.get('/', async (req, res) => {
   }
 
   const parsedLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+  const parsedOffset = Math.max(parseInt(offset) || 0, 0);
   const keyword = `%${q.trim()}%`;
 
   try {
@@ -50,9 +51,9 @@ router.get('/', async (req, res) => {
             OR (m.type = 'voice' AND (vt.formatted_text ILIKE $3 OR vt.raw_text ILIKE $3))
           )
         ORDER BY m.created_at DESC
-        LIMIT $4
+        LIMIT $4 OFFSET $5
       `;
-      params = [userId, room_id, keyword, parsedLimit];
+      params = [userId, room_id, keyword, parsedLimit, parsedOffset];
     } else {
       // Cross-room search
       query = `
@@ -74,9 +75,9 @@ router.get('/', async (req, res) => {
             OR (m.type = 'voice' AND (vt.formatted_text ILIKE $2 OR vt.raw_text ILIKE $2))
           )
         ORDER BY m.created_at DESC
-        LIMIT $3
+        LIMIT $3 OFFSET $4
       `;
-      params = [userId, keyword, parsedLimit];
+      params = [userId, keyword, parsedLimit, parsedOffset];
     }
 
     const result = await pool.query(query, params);

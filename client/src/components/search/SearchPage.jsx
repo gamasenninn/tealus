@@ -16,18 +16,37 @@ function SearchPage() {
   const [query, setQuery] = useState(initialQuery || cachedData?.query || '');
   const [results, setResults] = useState(cachedData?.results || []);
   const [searching, setSearching] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const debounceRef = useRef(null);
 
   const doSearch = async (q) => {
     setSearching(true);
     try {
-      const data = await api.search(q.trim(), roomId);
+      const data = await api.search(q.trim(), roomId, 0);
       setResults(data.results);
+      setHasMore(data.results.length >= 50);
       sessionStorage.setItem('searchCache', JSON.stringify({ query: q.trim(), results: data.results }));
     } catch (err) {
       console.error('Search error:', err);
     } finally {
       setSearching(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || !query.trim()) return;
+    setLoadingMore(true);
+    try {
+      const data = await api.search(query.trim(), roomId, results.length);
+      const newResults = [...results, ...data.results];
+      setResults(newResults);
+      setHasMore(data.results.length >= 50);
+      sessionStorage.setItem('searchCache', JSON.stringify({ query: query.trim(), results: newResults }));
+    } catch (err) {
+      console.error('Load more error:', err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -99,7 +118,12 @@ function SearchPage() {
         />
       </header>
 
-      <div className="search-results" ref={scrollRef}>
+      <div className="search-results" ref={scrollRef} onScroll={(e) => {
+        const el = e.target;
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+          loadMore();
+        }
+      }}>
         {searching && <div className="search-loading">検索中...</div>}
 
         {!searching && query.trim() && results.length === 0 && (
@@ -119,6 +143,7 @@ function SearchPage() {
             </div>
           </div>
         ))}
+        {loadingMore && <div className="search-loading">読み込み中...</div>}
       </div>
     </div>
   );
