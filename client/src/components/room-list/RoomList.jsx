@@ -102,7 +102,7 @@ function RoomList() {
         </div>
       </header>
 
-      {error && <div className="room-list-error">{error}</div>}
+      {error && <div className="error-bar">{error}</div>}
       <div className="room-list-user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
         {user?.avatar_url ? (
           <img src={`/media/${user.avatar_url}`} alt="" className="room-list-avatar" />

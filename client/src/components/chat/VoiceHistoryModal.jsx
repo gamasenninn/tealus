@@ -6,8 +6,8 @@ function VoiceHistoryModal({ history, onClose }) {
   const diffs = history.slice(0, -1);
 
   return (
-    <div className="voice-history-overlay" onClick={onClose}>
-      <div className="voice-history-modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box voice-history-modal" onClick={e => e.stopPropagation()}>
         <h3>文字起こし編集履歴</h3>
         <div className="voice-history-list">
           {diffs.map((h, i) => {
@@ -38,7 +38,7 @@ function VoiceHistoryModal({ history, onClose }) {
             <div className="voice-history-text">{originalText}</div>
           </div>
         </div>
-        <button className="voice-history-close" onClick={onClose}>閉じる</button>
+        <button className="btn-cancel" style={{ width: '100%', marginTop: '12px' }} onClick={onClose}>閉じる</button>
       </div>
     </div>
   );

@@ -62,7 +62,7 @@ function ChatRoom() {
       </header>
 
       {(roomError || messageError) && (
-        <div className="chat-error">{roomError || messageError}</div>
+        <div className="error-bar">{roomError || messageError}</div>
       )}
 
       <div

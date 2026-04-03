@@ -25,8 +25,8 @@ function VoiceEditModal({ messageId, initialText, onClose }) {
   };
 
   return (
-    <div className="voice-edit-overlay" onClick={onClose}>
-      <div className="voice-edit-modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box voice-edit-modal" onClick={e => e.stopPropagation()}>
         <h3>文字起こしを編集</h3>
         <textarea
           value={editText}
@@ -35,8 +35,8 @@ function VoiceEditModal({ messageId, initialText, onClose }) {
           autoFocus
         />
         <div className="voice-edit-buttons">
-          <button className="voice-edit-cancel" onClick={onClose}>キャンセル</button>
-          <button className="voice-edit-save" onClick={handleSave} disabled={saving}>
+          <button className="btn-cancel" onClick={onClose}>キャンセル</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? '保存中...' : '確定'}
           </button>
         </div>

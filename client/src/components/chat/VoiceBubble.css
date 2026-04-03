@@ -122,33 +122,6 @@
 }
 
 /* Edit modal */
-.voice-edit-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.voice-edit-modal {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  width: 90%;
-  max-width: 480px;
-}
-
-.voice-edit-modal h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-  color: #333;
-}
-
 .voice-edit-modal textarea {
   width: 100%;
   padding: 12px;
@@ -173,59 +146,7 @@
   margin-top: 12px;
 }
 
-.voice-edit-cancel {
-  background: #e0e0e0;
-  color: #333;
-  border: none;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.voice-edit-save {
-  background: var(--primary);
-  color: white;
-  border: none;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.voice-edit-save:disabled {
-  background: #ccc;
-}
-
 /* History modal */
-.voice-history-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.voice-history-modal {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  width: 90%;
-  max-width: 400px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.voice-history-modal h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-  color: #333;
-}
 
 .voice-history-item {
   padding: 8px 0;
@@ -293,13 +214,3 @@
   text-decoration: line-through;
 }
 
-.voice-history-close {
-  width: 100%;
-  margin-top: 12px;
-  padding: 10px;
-  background: #e0e0e0;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-}
