@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import './SearchPage.css';
@@ -65,14 +65,30 @@ function SearchPage() {
       ' ' + d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const scrollRef = useRef(null);
+
+  // Restore scroll position on mount
+  useEffect(() => {
+    if (cachedData && scrollRef.current) {
+      const savedScroll = sessionStorage.getItem('searchScroll');
+      if (savedScroll) {
+        scrollRef.current.scrollTop = parseInt(savedScroll);
+      }
+    }
+  }, [results.length]);
+
   const handleResultClick = (result) => {
+    // Save scroll position before navigating
+    if (scrollRef.current) {
+      sessionStorage.setItem('searchScroll', scrollRef.current.scrollTop);
+    }
     navigate(`/rooms/${result.room_id}?msg=${result.id}`);
   };
 
   return (
     <div className="search-container">
       <header className="search-header">
-        <button className="search-back" onClick={() => { sessionStorage.removeItem('searchCache'); navigate(-1); }}>←</button>
+        <button className="search-back" onClick={() => { sessionStorage.removeItem('searchCache'); sessionStorage.removeItem('searchScroll'); navigate(-1); }}>←</button>
         <input
           className="search-input"
           type="text"
@@ -83,7 +99,7 @@ function SearchPage() {
         />
       </header>
 
-      <div className="search-results">
+      <div className="search-results" ref={scrollRef}>
         {searching && <div className="search-loading">検索中...</div>}
 
         {!searching && query.trim() && results.length === 0 && (
