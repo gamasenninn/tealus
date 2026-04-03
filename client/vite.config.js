@@ -7,6 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        navigateFallbackDenylist: [/^\/media\//, /^\/api\//],
+      },
       manifest: {
         name: 'Linny',
         short_name: 'Linny',
