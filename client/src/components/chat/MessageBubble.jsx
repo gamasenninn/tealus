@@ -19,10 +19,11 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
 
   const highlightText = (text) => {
     if (!text || !searchKeyword) return text;
-    const regex = new RegExp(`(${searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
     const parts = text.split(regex);
     return parts.map((part, i) =>
-      regex.test(part) ? <mark key={i} className="search-highlight">{part}</mark> : part
+      i % 2 === 1 ? <mark key={i} className="search-highlight">{part}</mark> : part
     );
   };
 
