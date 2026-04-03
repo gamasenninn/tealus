@@ -40,7 +40,7 @@ function ImageGrid({ media, onImageClick }) {
           );
         }
         return (
-          <a key={m.id} href={`/media/${m.file_path}`} target="_blank" rel="noopener noreferrer" className="media-file">
+          <a key={m.id} href={`/media/${m.file_path}`} className="media-file" onClick={(e) => { e.preventDefault(); window.open(`/media/${m.file_path}`, '_blank'); }}>
             📎 {m.file_name}
           </a>
         );
