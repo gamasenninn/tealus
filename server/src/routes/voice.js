@@ -7,6 +7,7 @@ const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
 const { transcribeVoiceMessage } = require('../services/transcription');
+const { fetchReplyMessage } = require('../socket/handlers/message');
 
 const router = express.Router({ mergeParams: true });
 
@@ -93,24 +94,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
 
     // Attach reply_to message info
     if (replyTo) {
-      const replyResult = await pool.query(
-        `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name,
-                vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
-         FROM messages m JOIN users u ON u.id = m.sender_id
-         LEFT JOIN LATERAL (
-           SELECT formatted_text, raw_text FROM voice_transcriptions
-           WHERE message_id = m.id ORDER BY version DESC LIMIT 1
-         ) vt ON m.type = 'voice'
-         WHERE m.id = $1`,
-        [replyTo]
-      );
-      if (replyResult.rows.length > 0) {
-        const r = replyResult.rows[0];
-        if (r.type === 'voice' && !r.content) {
-          r.content = r.transcription_text || r.transcription_raw || null;
-        }
-        fullMessage.reply_to_message = r;
-      }
+      fullMessage.reply_to_message = await fetchReplyMessage(replyTo);
     }
 
     io.to(roomId).emit('message:new', fullMessage);
