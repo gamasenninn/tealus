@@ -114,7 +114,7 @@ function SearchPage() {
           value={query}
           onChange={e => handleSearch(e.target.value)}
           placeholder={roomId ? 'ルーム内検索...' : '全ルーム検索...'}
-          autoFocus
+          autoFocus={!cachedData}
         />
       </header>
 
