@@ -3,7 +3,7 @@
   margin: 0 auto;
   padding: 16px;
   min-height: 100dvh;
-  background: #f5f5f5;
+  background: var(--bg-page);
 }
 
 .admin-header {
@@ -58,8 +58,8 @@
 }
 
 .admin-error {
-  background: #ffe0e0;
-  color: #c00;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
   padding: 12px;
   border-radius: 6px;
   margin-bottom: 16px;
@@ -71,7 +71,7 @@
   align-items: center;
   height: 100dvh;
   font-size: 18px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 /* Table */
@@ -92,14 +92,14 @@
   padding: 12px 16px;
   text-align: left;
   font-size: 13px;
-  color: #666;
+  color: var(--text-secondary);
   border-bottom: 2px solid #eee;
   white-space: nowrap;
 }
 
 .admin-user-list td {
   padding: 12px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
   font-size: 14px;
 }
 
@@ -121,13 +121,13 @@
 }
 
 .role-badge.admin {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .role-badge.user {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .status-badge {
@@ -138,8 +138,8 @@
 }
 
 .status-badge.active {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
 }
 
 .status-badge.inactive {
@@ -223,12 +223,12 @@
 .user-form h2 {
   margin: 0 0 16px;
   font-size: 18px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .form-error {
-  background: #ffe0e0;
-  color: #c00;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
   padding: 8px 12px;
   border-radius: 6px;
   margin-bottom: 12px;
@@ -243,14 +243,14 @@
   display: block;
   margin-bottom: 4px;
   font-size: 13px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .form-field input,
 .form-field select {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-medium);
   border-radius: 6px;
   font-size: 14px;
   box-sizing: border-box;
@@ -263,8 +263,8 @@
 }
 
 .form-field input:disabled {
-  background: #f5f5f5;
-  color: #999;
+  background: var(--bg-page);
+  color: var(--text-placeholder);
 }
 
 .form-buttons {
@@ -275,8 +275,8 @@
 }
 
 .cancel-btn {
-  background: #e0e0e0;
-  color: #333;
+  background: var(--border-dark);
+  color: var(--text-primary);
   border: none;
   padding: 10px 20px;
   border-radius: 6px;
@@ -300,7 +300,7 @@
 }
 
 .submit-btn:disabled {
-  background: #ccc;
+  background: var(--bg-disabled);
   cursor: not-allowed;
 }
 

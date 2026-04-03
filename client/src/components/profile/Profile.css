@@ -3,7 +3,7 @@
   margin: 0 auto;
   padding: 16px;
   min-height: 100dvh;
-  background: #f5f5f5;
+  background: var(--bg-page);
 }
 
 .profile-header {
@@ -46,12 +46,12 @@
 
 .profile-message.success {
   background: var(--primary-light);
-  color: #2e7d32;
+  color: var(--color-success-text);
 }
 
 .profile-message.error {
-  background: #ffe0e0;
-  color: #c00;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 /* Avatar */
@@ -103,7 +103,7 @@
 
 .profile-employee-id {
   text-align: center;
-  color: #888;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -118,7 +118,7 @@
 
 .profile-section h2 {
   font-size: 15px;
-  color: #666;
+  color: var(--text-secondary);
   margin: 0 0 14px;
 }
 
@@ -130,13 +130,13 @@
   display: block;
   margin-bottom: 4px;
   font-size: 13px;
-  color: #888;
+  color: var(--text-muted);
 }
 
 .profile-field input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-medium);
   border-radius: 6px;
   font-size: 14px;
   box-sizing: border-box;
@@ -164,7 +164,7 @@
 }
 
 .profile-save-btn:disabled {
-  background: #ccc;
+  background: var(--bg-disabled);
   cursor: not-allowed;
 }
 
@@ -208,7 +208,7 @@
 }
 
 .font-size-preview {
-  color: #666;
+  color: var(--text-secondary);
   padding: 10px;
   background: #f9f9f9;
   border-radius: 6px;

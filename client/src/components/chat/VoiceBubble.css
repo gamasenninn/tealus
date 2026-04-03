@@ -91,11 +91,11 @@
 }
 
 .voice-trans-error {
-  color: #e53935;
+  color: var(--color-error);
 }
 
 .bubble.own .voice-trans-error {
-  color: #e53935;
+  color: var(--color-error);
 }
 
 /* Edit & History actions */
@@ -125,7 +125,7 @@
 .voice-edit-modal textarea {
   width: 100%;
   padding: 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-medium);
   border-radius: 8px;
   font-size: var(--chat-font-size);
   font-family: inherit;
@@ -150,13 +150,13 @@
 
 .voice-history-item {
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .voice-history-version {
   display: inline-block;
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
   font-size: 11px;
   font-weight: bold;
   padding: 1px 6px;
@@ -166,13 +166,13 @@
 
 .voice-history-text {
   font-size: 13px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .voice-history-editor {
   display: block;
   font-size: 11px;
-  color: #999;
+  color: var(--text-placeholder);
   margin-top: 2px;
 }
 
@@ -193,7 +193,7 @@
 .voice-history-diff-label {
   display: block;
   font-size: 11px;
-  color: #999;
+  color: var(--text-placeholder);
   margin-bottom: 4px;
 }
 
@@ -203,14 +203,14 @@
 }
 
 .diff-added {
-  background: #c8f7c5;
-  color: #1b5e20;
+  background: var(--diff-added-bg);
+  color: var(--diff-added-text);
   text-decoration: none;
 }
 
 .diff-removed {
-  background: #ffcdd2;
-  color: #b71c1c;
+  background: var(--diff-removed-bg);
+  color: var(--diff-removed-text);
   text-decoration: line-through;
 }
 

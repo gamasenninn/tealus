@@ -34,7 +34,7 @@
 .modal-box h3 {
   margin: 0 0 16px;
   font-size: 18px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 /* ============================================
@@ -56,13 +56,13 @@
 }
 
 .btn-primary:disabled {
-  background: #ccc;
+  background: var(--bg-disabled);
   cursor: not-allowed;
 }
 
 .btn-cancel {
-  background: #e0e0e0;
-  color: #333;
+  background: var(--border-dark);
+  color: var(--text-primary);
   border: none;
   padding: 10px 20px;
   border-radius: 6px;
@@ -72,8 +72,8 @@
 
 .btn-danger {
   background: none;
-  color: #e53935;
-  border: 1px solid #e53935;
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
   padding: 10px 20px;
   border-radius: 6px;
   font-size: 14px;
@@ -89,8 +89,8 @@
  * ============================================ */
 .error-bar {
   padding: 8px 16px;
-  background: #ffe0e0;
-  color: #c00;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
   font-size: 13px;
   text-align: center;
 }

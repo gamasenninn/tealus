@@ -44,7 +44,7 @@
   cursor: pointer;
   overflow: hidden;
   aspect-ratio: 1;
-  background: #e0e0e0;
+  background: var(--border-dark);
 }
 
 .grid-1 .grid-item {

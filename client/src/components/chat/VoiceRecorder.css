@@ -26,7 +26,7 @@
   justify-content: center;
   gap: 8px;
   font-size: 16px;
-  color: #e53935;
+  color: var(--color-error);
   margin-bottom: 20px;
 }
 
@@ -62,7 +62,7 @@
 .voice-recorder-time {
   font-size: 28px;
   font-weight: bold;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 24px;
   font-variant-numeric: tabular-nums;
 }
@@ -76,8 +76,8 @@
 .voice-cancel-btn {
   flex: 1;
   padding: 14px;
-  background: #e0e0e0;
-  color: #333;
+  background: var(--border-dark);
+  color: var(--text-primary);
   border: none;
   border-radius: 10px;
   font-size: 16px;

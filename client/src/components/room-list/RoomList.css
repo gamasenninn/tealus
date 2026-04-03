@@ -58,7 +58,7 @@
   gap: 8px;
   padding: 8px 16px;
   font-size: 12px;
-  color: #888;
+  color: var(--text-muted);
   background: #f9f9f9;
   border-bottom: 1px solid #eee;
 }
@@ -90,7 +90,7 @@
 
 .room-list-empty {
   text-align: center;
-  color: #aaa;
+  color: var(--text-hint);
   padding: 40px 16px;
   line-height: 1.6;
 }
@@ -99,7 +99,7 @@
   display: flex;
   align-items: center;
   padding: 14px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -116,7 +116,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #e8f5e9;
+  background: var(--color-success-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -162,7 +162,7 @@
 .room-name {
   font-size: 15px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -170,7 +170,7 @@
 
 .room-time {
   font-size: 12px;
-  color: #aaa;
+  color: var(--text-hint);
   flex-shrink: 0;
   margin-left: 8px;
 }
@@ -183,7 +183,7 @@
 
 .room-preview {
   font-size: 13px;
-  color: #888;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

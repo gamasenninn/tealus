@@ -1,12 +1,50 @@
 @import './styles/common.css';
 
 :root {
+  /* Brand */
   --primary: #00B4A0;
   --primary-hover: #009E8C;
   --primary-light: #FFFDE7;
+
+  /* Text */
+  --text-primary: #333;
+  --text-secondary: #666;
+  --text-muted: #888;
+  --text-placeholder: #999;
+  --text-hint: #aaa;
+
+  /* Borders & Dividers */
+  --border-light: #f0f0f0;
+  --border-medium: #ddd;
+  --border-dark: #e0e0e0;
+
+  /* Backgrounds */
+  --bg-page: #f5f5f5;
+  --bg-surface: #f8f8f8;
+  --bg-hover: #fafafa;
+  --bg-disabled: #ccc;
+
+  /* Status */
+  --color-error: #e53935;
+  --color-error-bg: #ffe0e0;
+  --color-error-text: #c00;
+  --color-success: #4CAF50;
+  --color-success-bg: #e8f5e9;
+  --color-success-text: #2e7d32;
+  --color-warning-bg: #fff3cd;
+  --color-warning-text: #856404;
+
+  /* Diff */
+  --diff-added-bg: #c8f7c5;
+  --diff-added-text: #1b5e20;
+  --diff-removed-bg: #ffcdd2;
+  --diff-removed-text: #b71c1c;
+
+  /* Chat */
   --chat-font-size: 15px;
   --chat-sender-font-size: 12px;
   --chat-transcription-font-size: 14.5px;
+  --chat-bg: #B2DFDB;
 }
 
 :root[data-chat-font="small"] {
