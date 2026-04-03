@@ -5,6 +5,37 @@ class ApiClient {
     this.token = localStorage.getItem('token');
   }
 
+  /**
+   * Common file upload via XHR with progress support
+   */
+  _upload(url, formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(data.error || 'アップロードに失敗しました'));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('アップロードに失敗しました'));
+      xhr.send(formData);
+    });
+  }
+
   setToken(token) {
     this.token = token;
     if (token) {
@@ -80,37 +111,12 @@ class ApiClient {
 
   // Media (single file or array of files)
   uploadMedia(roomId, files, onProgress) {
-    return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      const fileArray = Array.isArray(files) ? files : [files];
-      for (const file of fileArray) {
-        formData.append('files', file);
-      }
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API_BASE}/rooms/${roomId}/media`);
-      xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
-
-      if (onProgress) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        };
-      }
-
-      xhr.onload = () => {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(data);
-        } else {
-          reject(new Error(data.error || 'アップロードに失敗しました'));
-        }
-      };
-
-      xhr.onerror = () => reject(new Error('アップロードに失敗しました'));
-      xhr.send(formData);
-    });
+    const formData = new FormData();
+    const fileArray = Array.isArray(files) ? files : [files];
+    for (const file of fileArray) {
+      formData.append('files', file);
+    }
+    return this._upload(`${API_BASE}/rooms/${roomId}/media`, formData, onProgress);
   }
 
   // Read
@@ -141,17 +147,10 @@ class ApiClient {
     return this.request('PUT', `/rooms/${roomId}`, data);
   }
 
-  async uploadRoomIcon(roomId, file) {
+  uploadRoomIcon(roomId, file) {
     const formData = new FormData();
     formData.append('icon', file);
-    const res = await fetch(`${API_BASE}/rooms/${roomId}/icon`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${this.token}` },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました');
-    return data;
+    return this._upload(`${API_BASE}/rooms/${roomId}/icon`, formData);
   }
 
   // Reactions
@@ -183,36 +182,11 @@ class ApiClient {
 
   // Voice
   uploadVoice(roomId, blob, onProgress, replyTo) {
-    return new Promise((resolve, reject) => {
-      const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-      const formData = new FormData();
-      if (replyTo) formData.append('reply_to', replyTo);
-      formData.append('voice', blob, `voice.${ext}`);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API_BASE}/rooms/${roomId}/voice`);
-      xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
-
-      if (onProgress) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        };
-      }
-
-      xhr.onload = () => {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(data);
-        } else {
-          reject(new Error(data.error || '音声送信に失敗しました'));
-        }
-      };
-
-      xhr.onerror = () => reject(new Error('音声送信に失敗しました'));
-      xhr.send(formData);
-    });
+    const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+    const formData = new FormData();
+    if (replyTo) formData.append('reply_to', replyTo);
+    formData.append('voice', blob, `voice.${ext}`);
+    return this._upload(`${API_BASE}/rooms/${roomId}/voice`, formData, onProgress);
   }
 
   // Transcription
@@ -229,19 +203,10 @@ class ApiClient {
     return this.request('PUT', '/auth/profile', data);
   }
 
-  async uploadAvatar(file) {
+  uploadAvatar(file) {
     const formData = new FormData();
     formData.append('avatar', file);
-
-    const res = await fetch(`${API_BASE}/auth/avatar`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${this.token}` },
-      body: formData,
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'アップロードに失敗しました');
-    return data;
+    return this._upload(`${API_BASE}/auth/avatar`, formData);
   }
 
   changePassword(current_password, new_password) {
