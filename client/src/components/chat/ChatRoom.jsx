@@ -29,7 +29,7 @@ function ChatRoom() {
       setTimeout(() => {
         const el = document.querySelector(`[data-msg-id="${targetMsgId}"]`);
         if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.scrollIntoView({ block: 'center' });
           el.classList.add('highlight-msg');
           setTimeout(() => el.classList.remove('highlight-msg'), 3000);
         }
