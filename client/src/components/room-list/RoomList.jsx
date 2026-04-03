@@ -9,7 +9,7 @@ import './RoomList.css';
 
 function RoomList() {
   const { user, logout } = useAuthStore();
-  const { rooms, fetchRooms } = useRoomStore();
+  const { rooms, fetchRooms, error } = useRoomStore();
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const navigate = useNavigate();
@@ -102,6 +102,7 @@ function RoomList() {
         </div>
       </header>
 
+      {error && <div className="room-list-error">{error}</div>}
       <div className="room-list-user-info" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
         {user?.avatar_url ? (
           <img src={`/media/${user.avatar_url}`} alt="" className="room-list-avatar" />

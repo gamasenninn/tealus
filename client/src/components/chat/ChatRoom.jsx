@@ -16,8 +16,8 @@ function ChatRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { currentRoom, members } = useRoomStore();
-  const { messages } = useMessageStore();
+  const { currentRoom, members, error: roomError } = useRoomStore();
+  const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
 
   // Custom hooks
@@ -60,6 +60,10 @@ function ChatRoom() {
           <button className="chat-menu" onClick={() => setShowMembers(true)}>≡</button>
         )}
       </header>
+
+      {(roomError || messageError) && (
+        <div className="chat-error">{roomError || messageError}</div>
+      )}
 
       <div
         className="chat-messages"

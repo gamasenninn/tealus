@@ -51,6 +51,15 @@
   margin-left: auto;
 }
 
+.chat-error {
+  padding: 8px 16px;
+  background: #ffe0e0;
+  color: #c00;
+  font-size: 13px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .chat-header-online {
   font-size: 11px;
   opacity: 0.8;
