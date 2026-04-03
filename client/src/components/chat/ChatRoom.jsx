@@ -1,215 +1,29 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useMessageStore } from '../../stores/messageStore';
-import { getSocket } from '../../services/socket';
-import { api } from '../../services/api';
+import { useSocketSync } from '../../hooks/useSocketSync';
+import { useMessageScroll } from '../../hooks/useMessageScroll';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
-import { SCROLL_THRESHOLD, SCROLL_NEAR_BOTTOM, SCROLL_HEADER_OFFSET, INITIAL_SCROLL_DELAY } from '../../constants/ui';
 import './ChatRoom.css';
 
 function ChatRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { currentRoom, members, selectRoom, clearCurrentRoom } = useRoomStore();
-  const { messages, fetchMessages, addMessage, clearMessages, loadMore, hasMore } = useMessageStore();
+  const { currentRoom, members } = useRoomStore();
+  const { messages } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
-  const [stickyDate, setStickyDate] = useState(null);
-  const [typingUsers, setTypingUsers] = useState({});
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const messagesEndRef = useRef(null);
-  const messagesContainerRef = useRef(null);
-  const isInitialLoad = useRef(true);
 
-  useEffect(() => {
-    selectRoom(roomId);
-    fetchMessages(roomId);
-    isInitialLoad.current = true;
-    api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
-
-    const handleScrollBottom = () => {
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    };
-    window.addEventListener('scroll:bottom', handleScrollBottom);
-
-    // Re-fetch messages when app returns from background
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        fetchMessages(roomId);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    const socket = getSocket();
-    if (socket) {
-      socket.emit('room:join', roomId);
-
-      // Re-join room on reconnect (after background recovery etc.)
-      socket.on('connect', () => {
-        socket.emit('room:join', roomId);
-      });
-
-      socket.on('message:new', (msg) => {
-        addMessage(msg);
-        // Mark as read and play notification if from someone else
-        if (msg.sender_id !== user.id) {
-          api.markRead(roomId, [msg.id]).catch(() => {});
-          socket.emit('message:read', { room_id: roomId, message_ids: [msg.id] });
-          // Notification sound
-          if (localStorage.getItem('notificationSound') !== 'off') {
-            new Audio('/notification.wav').play().catch(() => {});
-          }
-        }
-      });
-
-      socket.on('message:read', (data) => {
-        const { read_counts } = data;
-        if (read_counts) {
-          Object.entries(read_counts).forEach(([id, count]) => {
-            useMessageStore.getState().updateReadCount(id, count);
-          });
-        }
-      });
-
-      socket.on('voice:status', (data) => {
-        useMessageStore.getState().updateTranscription(data.message_id, { status: data.status });
-      });
-
-      socket.on('voice:transcription', (data) => {
-        useMessageStore.getState().updateTranscription(data.message_id, {
-          status: data.status,
-          raw_text: data.raw_text,
-          formatted_text: data.formatted_text,
-        });
-      });
-
-      socket.on('message:deleted', (data) => {
-        useMessageStore.getState().markDeleted(data.message_id);
-      });
-
-      socket.on('message:reaction', (data) => {
-        useMessageStore.getState().updateReactions(data.message_id, data.reactions);
-      });
-
-      socket.on('link:preview', (data) => {
-        useMessageStore.getState().updateLinkPreview(data.message_id, data.preview);
-      });
-
-      socket.on('user:online', (data) => {
-        setOnlineUsers(prev => new Set([...prev, data.user_id]));
-      });
-      socket.on('user:offline', (data) => {
-        setOnlineUsers(prev => { const next = new Set(prev); next.delete(data.user_id); return next; });
-      });
-
-      socket.on('typing:start', (data) => {
-        if (data.user_id === user.id) return;
-        setTypingUsers(prev => ({ ...prev, [data.user_id]: data.display_name }));
-      });
-
-      socket.on('typing:stop', (data) => {
-        if (data.user_id === user.id) return;
-        setTypingUsers(prev => {
-          const next = { ...prev };
-          delete next[data.user_id];
-          return next;
-        });
-      });
-    }
-
-    return () => {
-      window.removeEventListener('scroll:bottom', handleScrollBottom);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      clearCurrentRoom();
-      clearMessages();
-      if (socket) {
-        socket.emit('room:leave', roomId);
-        socket.off('message:new');
-        socket.off('message:read');
-        socket.off('voice:status');
-        socket.off('voice:transcription');
-        socket.off('message:deleted');
-        socket.off('typing:start');
-        socket.off('typing:stop');
-        socket.off('message:reaction');
-        socket.off('link:preview');
-        socket.off('user:online');
-        socket.off('user:offline');
-        socket.off('connect');
-      }
-    };
-  }, [roomId]);
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    if (messages.length === 0) return;
-
-    if (isInitialLoad.current) {
-      // Initial load or reload — always scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView();
-        markVisibleAsRead();
-      }, INITIAL_SCROLL_DELAY);
-      isInitialLoad.current = false;
-    } else {
-      // New message arrived — scroll only if already near bottom
-      const container = messagesContainerRef.current;
-      if (container) {
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
-        if (isNearBottom) {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          markVisibleAsRead();
-        }
-      }
-    }
-  }, [messages.length]);
-
-  const markVisibleAsRead = useCallback(() => {
-    const unreadIds = messages
-      .filter((m) => m.sender_id !== user.id)
-      .map((m) => m.id);
-    if (unreadIds.length > 0) {
-      api.markRead(roomId, unreadIds).catch(() => {});
-      const socket = getSocket();
-      if (socket) {
-        socket.emit('message:read', { room_id: roomId, message_ids: unreadIds });
-      }
-    }
-  }, [messages, roomId, user]);
-
-  const handleScroll = () => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    if (container.scrollTop < SCROLL_THRESHOLD && hasMore) {
-      const prevScrollHeight = container.scrollHeight;
-      loadMore(roomId).then(() => {
-        requestAnimationFrame(() => {
-          const newScrollHeight = container.scrollHeight;
-          container.scrollTop = newScrollHeight - prevScrollHeight;
-        });
-      });
-    }
-
-    // Update sticky date based on first visible message
-    const separators = container.querySelectorAll('[data-date]');
-    let currentDate = null;
-    for (const sep of separators) {
-      const rect = sep.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      if (rect.top <= containerRect.top + SCROLL_HEADER_OFFSET) {
-        currentDate = sep.getAttribute('data-date');
-      } else {
-        break;
-      }
-    }
-    setStickyDate(currentDate);
-  };
+  // Custom hooks
+  const { typingUsers } = useSocketSync(roomId);
+  const { messagesEndRef, messagesContainerRef, stickyDate, handleScroll } = useMessageScroll(roomId);
+  const { onlineUsers } = useOnlineStatus();
 
   const getRoomTitle = () => {
     if (!currentRoom) return '';
