@@ -1,3 +1,4 @@
+const logger = require('../../utils/logger');
 const pool = require('../../db/pool');
 const { processLinkPreviews } = require('../../services/linkPreview');
 
@@ -62,7 +63,7 @@ function registerMessageHandler(socket, io) {
         processLinkPreviews(result.rows[0].id, content, io, room_id).catch(() => {});
       }
     } catch (err) {
-      console.error('Socket message:send error:', err);
+      logger.error('Socket message:send error:', err);
     }
   });
 }

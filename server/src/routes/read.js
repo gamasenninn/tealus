@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
@@ -65,7 +66,7 @@ router.post('/', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Mark read error:', err);
+    logger.error('Mark read error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();

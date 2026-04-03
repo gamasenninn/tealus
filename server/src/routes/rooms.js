@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const path = require('path');
@@ -80,7 +81,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({ room, members: membersResult.rows });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Create room error:', err);
+    logger.error('Create room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();
@@ -161,7 +162,7 @@ router.post('/direct', async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Create direct room error:', err);
+    logger.error('Create direct room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -220,7 +221,7 @@ router.get('/', async (req, res) => {
 
     res.json({ rooms: result.rows });
   } catch (err) {
-    console.error('List rooms error:', err);
+    logger.error('List rooms error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -250,7 +251,7 @@ router.get('/:id', requireMember, async (req, res) => {
 
     res.json({ room: roomResult.rows[0], members: membersResult.rows });
   } catch (err) {
-    console.error('Get room error:', err);
+    logger.error('Get room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -270,7 +271,7 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     );
     res.json({ room: result.rows[0] });
   } catch (err) {
-    console.error('Update room error:', err);
+    logger.error('Update room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -292,7 +293,7 @@ router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, iconUplo
     );
     res.json({ room: result.rows[0] });
   } catch (err) {
-    console.error('Upload room icon error:', err);
+    logger.error('Upload room icon error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
 
@@ -68,7 +69,7 @@ async function formatTranscription(messageId, rawText, io, roomId) {
 
     return formattedText;
   } catch (err) {
-    console.error('Formatting error:', err);
+    logger.error('Formatting error:', err);
 
     // Formatting failed — still mark as done with raw_text only
     await pool.query(

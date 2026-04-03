@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
@@ -74,7 +75,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req, res) => 
 
     res.json({ member: result.rows[0] });
   } catch (err) {
-    console.error('Add member error:', err);
+    logger.error('Add member error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -119,7 +120,7 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req, res)
 
     res.json({ message: '退会しました' });
   } catch (err) {
-    console.error('Leave group error:', err);
+    logger.error('Leave group error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -168,7 +169,7 @@ router.delete('/:userId', authenticate, requireGroup, requireMember, async (req,
 
     res.json({ message: `${targetName}を除外しました` });
   } catch (err) {
-    console.error('Kick member error:', err);
+    logger.error('Kick member error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -218,7 +219,7 @@ router.put('/:userId/role', authenticate, requireGroup, requireMember, async (re
 
     res.json({ member: result.rows[0] });
   } catch (err) {
-    console.error('Change role error:', err);
+    logger.error('Change role error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

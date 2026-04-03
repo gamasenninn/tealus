@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const bcrypt = require('bcrypt');
@@ -22,7 +23,7 @@ router.get('/users', async (req, res) => {
     );
     res.json({ users: result.rows });
   } catch (err) {
-    console.error('Admin list users error:', err);
+    logger.error('Admin list users error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -57,7 +58,7 @@ router.post('/users', async (req, res) => {
 
     res.status(201).json({ user: result.rows[0] });
   } catch (err) {
-    console.error('Admin create user error:', err);
+    logger.error('Admin create user error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -110,7 +111,7 @@ router.put('/users/:id', async (req, res) => {
 
     res.json({ user: result.rows[0] });
   } catch (err) {
-    console.error('Admin update user error:', err);
+    logger.error('Admin update user error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -140,7 +141,7 @@ router.patch('/users/:id/status', async (req, res) => {
 
     res.json({ user: result.rows[0] });
   } catch (err) {
-    console.error('Admin update status error:', err);
+    logger.error('Admin update status error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

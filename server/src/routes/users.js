@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
     );
     res.json({ users: result.rows });
   } catch (err) {
-    console.error('List users error:', err);
+    logger.error('List users error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

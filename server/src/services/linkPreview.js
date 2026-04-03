@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const pool = require('../db/pool');
 const cheerio = require('cheerio');
 
@@ -48,7 +49,7 @@ async function fetchOgp(url) {
 
     return { title, description, image_url };
   } catch (err) {
-    console.error('OGP fetch error:', url, err.message);
+    logger.error('OGP fetch error:', url, err.message);
     return null;
   }
 }
@@ -81,7 +82,7 @@ async function processLinkPreviews(messageId, text, io, roomId) {
       });
     }
   } catch (err) {
-    console.error('Link preview error:', err);
+    logger.error('Link preview error:', err);
   }
 }
 

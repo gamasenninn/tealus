@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
@@ -94,7 +95,7 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
 
     return rawText;
   } catch (err) {
-    console.error('Transcription error:', err);
+    logger.error('Transcription error:', err);
     // Cleanup temp file on error
     if (typeof tempPath !== 'undefined' && tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 

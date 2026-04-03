@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const webpush = require('web-push');
 const pool = require('../db/pool');
 
@@ -44,13 +45,13 @@ async function sendPushToUser(userId, payload) {
             [sub.id]
           );
         }
-        console.error(`Push failed for ${sub.endpoint}:`, err.statusCode || err.message);
+        logger.error(`Push failed for ${sub.endpoint}:`, err.statusCode || err.message);
       }
     });
 
     await Promise.all(notifications);
   } catch (err) {
-    console.error('sendPushToUser error:', err);
+    logger.error('sendPushToUser error:', err);
   }
 }
 
@@ -74,7 +75,7 @@ async function sendPushToOfflineMembers(roomId, senderId, payload, onlineUserIds
       }
     }
   } catch (err) {
-    console.error('sendPushToOfflineMembers error:', err);
+    logger.error('sendPushToOfflineMembers error:', err);
   }
 }
 

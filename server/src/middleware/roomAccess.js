@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const pool = require('../db/pool');
 
@@ -20,7 +21,7 @@ async function requireMember(req, res, next) {
     req.memberRole = result.rows[0].role;
     next();
   } catch (err) {
-    console.error('Room access check error:', err);
+    logger.error('Room access check error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 }
@@ -51,7 +52,7 @@ async function requireGroup(req, res, next) {
     }
     next();
   } catch (err) {
-    console.error('Room type check error:', err);
+    logger.error('Room type check error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 }

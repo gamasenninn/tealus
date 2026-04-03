@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const path = require('path');
@@ -106,11 +107,11 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
 
     // Async transcription (don't await — run in background)
     transcribeVoiceMessage(message.id, `voices/${req.file.filename}`, io, roomId).catch(err => {
-      console.error('Background transcription error:', err);
+      logger.error('Background transcription error:', err);
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Voice upload error:', err);
+    logger.error('Voice upload error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();

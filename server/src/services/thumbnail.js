@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const sharp = require('sharp');
 const path = require('path');
 const { MEDIA_ROOT } = require('../middleware/upload');
@@ -25,7 +26,7 @@ async function generateThumbnail(filePath, mimetype) {
 
     return `thumbnails/${thumbnailFilename}`;
   } catch (err) {
-    console.error('Thumbnail generation error:', err);
+    logger.error('Thumbnail generation error:', err);
     return null;
   }
 }

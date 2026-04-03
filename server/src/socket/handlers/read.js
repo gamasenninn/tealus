@@ -1,3 +1,4 @@
+const logger = require('../../utils/logger');
 const pool = require('../../db/pool');
 
 /**
@@ -56,7 +57,7 @@ function registerReadHandler(socket) {
         read_counts: counts,
       });
     } catch (err) {
-      console.error('Socket message:read error:', err);
+      logger.error('Socket message:read error:', err);
     }
   });
 }

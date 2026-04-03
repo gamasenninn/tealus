@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
@@ -37,7 +38,7 @@ router.post('/subscribe', async (req, res) => {
     const isNew = result.rows[0].created_at.getTime() === result.rows[0].updated_at.getTime();
     res.status(isNew ? 201 : 200).json({ subscription: result.rows[0] });
   } catch (err) {
-    console.error('Push subscribe error:', err);
+    logger.error('Push subscribe error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -61,7 +62,7 @@ router.delete('/subscribe', async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error('Push unsubscribe error:', err);
+    logger.error('Push unsubscribe error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

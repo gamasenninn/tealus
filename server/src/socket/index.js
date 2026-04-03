@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const { JWT_SECRET } = require('../middleware/auth');
@@ -37,7 +38,7 @@ function setupSocketHandlers(io) {
   });
 
   io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.user.display_name} (${socket.id})`);
+    logger.info(`Client connected: ${socket.user.display_name} (${socket.id})`);
 
     const userId = socket.user.id;
 
@@ -70,7 +71,7 @@ function setupSocketHandlers(io) {
 
     // Disconnect
     socket.on('disconnect', () => {
-      console.log(`Client disconnected: ${socket.user.display_name} (${socket.id})`);
+      logger.info(`Client disconnected: ${socket.user.display_name} (${socket.id})`);
 
       const sockets = onlineUsers.get(userId);
       if (sockets) {

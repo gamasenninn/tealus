@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
@@ -34,7 +35,7 @@ router.post('/', async (req, res) => {
     const message = result.rows[0];
     res.status(201).json({ message });
   } catch (err) {
-    console.error('Send message error:', err);
+    logger.error('Send message error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -96,7 +97,7 @@ router.get('/', async (req, res) => {
 
     res.json({ messages });
   } catch (err) {
-    console.error('Get messages error:', err);
+    logger.error('Get messages error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -132,7 +133,7 @@ router.delete('/:msgId', async (req, res) => {
 
     res.json({ message: '削除しました' });
   } catch (err) {
-    console.error('Delete message error:', err);
+    logger.error('Delete message error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -189,7 +190,7 @@ router.post('/:msgId/reactions', async (req, res) => {
 
     res.json({ reactions: reactions.rows });
   } catch (err) {
-    console.error('Reaction error:', err);
+    logger.error('Reaction error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

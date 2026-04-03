@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
 const path = require('path');
@@ -102,7 +103,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Media upload error:', err);
+    logger.error('Media upload error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();
