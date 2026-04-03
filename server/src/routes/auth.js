@@ -1,3 +1,4 @@
+const E = require('../constants/errors');
 const express = require('express');
 const path = require('path');
 const bcrypt = require('bcrypt');
@@ -59,7 +60,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({ token, user });
   } catch (err) {
     console.error('Register error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 
@@ -101,7 +102,7 @@ router.post('/login', async (req, res) => {
     res.json({ token, user });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 
@@ -150,7 +151,7 @@ router.put('/profile', authenticate, async (req, res) => {
     res.json({ user: result.rows[0] });
   } catch (err) {
     console.error('Profile update error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 
@@ -174,7 +175,7 @@ router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, 
     res.json({ user: result.rows[0] });
   } catch (err) {
     console.error('Avatar upload error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 
@@ -202,7 +203,7 @@ router.put('/password', authenticate, async (req, res) => {
     res.json({ message: 'パスワードを変更しました' });
   } catch (err) {
     console.error('Password change error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 

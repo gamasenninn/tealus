@@ -1,3 +1,4 @@
+const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
@@ -68,7 +69,7 @@ router.put('/', authenticate, async (req, res) => {
     res.json({ transcription });
   } catch (err) {
     console.error('Transcription edit error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 
@@ -111,7 +112,7 @@ router.get('/history', authenticate, async (req, res) => {
     res.json({ history: result.rows });
   } catch (err) {
     console.error('Transcription history error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 

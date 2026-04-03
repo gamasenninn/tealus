@@ -1,3 +1,4 @@
+const E = require('../constants/errors');
 const pool = require('../db/pool');
 
 /**
@@ -14,13 +15,13 @@ async function requireMember(req, res, next) {
       [roomId, userId]
     );
     if (result.rows.length === 0) {
-      return res.status(403).json({ error: 'このルームにアクセスする権限がありません' });
+      return res.status(403).json({ error: E.ROOM_ACCESS_DENIED });
     }
     req.memberRole = result.rows[0].role;
     next();
   } catch (err) {
     console.error('Room access check error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 }
 
@@ -30,7 +31,7 @@ async function requireMember(req, res, next) {
  */
 function requireRoomAdmin(req, res, next) {
   if (req.memberRole !== 'admin') {
-    return res.status(403).json({ error: 'グループ管理者のみが実行できます' });
+    return res.status(403).json({ error: E.GROUP_ADMIN_REQUIRED });
   }
   next();
 }
@@ -43,15 +44,15 @@ async function requireGroup(req, res, next) {
   try {
     const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
     if (room.rows.length === 0) {
-      return res.status(404).json({ error: 'ルームが見つかりません' });
+      return res.status(404).json({ error: E.ROOM_NOT_FOUND });
     }
     if (room.rows[0].type !== 'group') {
-      return res.status(400).json({ error: 'この操作はグループのみ対象です' });
+      return res.status(400).json({ error: E.ROOM_GROUP_ONLY });
     }
     next();
   } catch (err) {
     console.error('Room type check error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 }
 

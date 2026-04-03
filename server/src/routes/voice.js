@@ -1,3 +1,4 @@
+const E = require('../constants/errors');
 const express = require('express');
 const path = require('path');
 const multer = require('multer');
@@ -126,7 +127,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Voice upload error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();
   }

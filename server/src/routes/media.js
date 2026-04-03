@@ -1,3 +1,4 @@
+const E = require('../constants/errors');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -101,7 +102,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Media upload error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();
   }

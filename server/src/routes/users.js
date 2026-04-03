@@ -1,3 +1,4 @@
+const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
     res.json({ users: result.rows });
   } catch (err) {
     console.error('List users error:', err);
-    res.status(500).json({ error: 'サーバーエラーが発生しました' });
+    res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
 
