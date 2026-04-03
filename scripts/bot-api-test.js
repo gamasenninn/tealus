@@ -59,17 +59,22 @@ async function main() {
   // Select room
   let targetRoom;
   if (TARGET_ROOM) {
-    targetRoom = rooms.rooms.find(r =>
-      r.name === TARGET_ROOM || r.id === TARGET_ROOM || r.id.startsWith(TARGET_ROOM)
-    );
+    // Match by number, name, or partial ID
+    const num = parseInt(TARGET_ROOM);
+    if (num >= 1 && num <= rooms.rooms.length) {
+      targetRoom = rooms.rooms[num - 1];
+    } else {
+      targetRoom = rooms.rooms.find(r =>
+        r.name === TARGET_ROOM || r.id === TARGET_ROOM || r.id.startsWith(TARGET_ROOM)
+      );
+    }
     if (!targetRoom) {
-      console.log(`❌ ルーム「${TARGET_ROOM}」が見つかりません。`);
+      console.log(`❌ ルーム「${TARGET_ROOM}」が見つかりません。番号(1〜${rooms.rooms.length})で指定してください。`);
       return;
     }
   } else {
-    // Interactive: show rooms and let user pick
-    console.log('💡 使い方: node scripts/bot-api-test.js "ルーム名"');
-    console.log('   例: node scripts/bot-api-test.js "田中太郎"');
+    console.log('💡 使い方: node scripts/bot-api-test.js <番号>');
+    console.log('   例: node scripts/bot-api-test.js 1');
     console.log('   例: node scripts/bot-api-test.js "Web部"');
     console.log('');
     console.log('   ルーム名を指定せず全ルームにテスト送信します...\n');
