@@ -37,7 +37,7 @@ function ChatRoom() {
   }, [targetMsgId, messages.length]);
 
   // Custom hooks
-  const { typingUsers } = useSocketSync(roomId);
+  const { typingUsers } = useSocketSync(roomId, targetMsgId);
   const { messagesEndRef, messagesContainerRef, stickyDate, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
 

@@ -10,7 +10,7 @@ import { api } from '../services/api';
  * Also handles room initialization and cleanup.
  * Returns typingUsers state.
  */
-export function useSocketSync(roomId) {
+export function useSocketSync(roomId, targetMsgId = null) {
   const { user } = useAuthStore();
   const { selectRoom, clearCurrentRoom } = useRoomStore();
   const { addMessage, fetchMessages, clearMessages } = useMessageStore();
@@ -18,7 +18,7 @@ export function useSocketSync(roomId) {
 
   useEffect(() => {
     selectRoom(roomId);
-    fetchMessages(roomId);
+    fetchMessages(roomId, targetMsgId || null);
 
     // Re-fetch messages when app returns from background
     const handleVisibility = () => {

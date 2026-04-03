@@ -8,12 +8,12 @@ export const useMessageStore = create((set, get) => ({
   error: null,
   replyTo: null,
 
-  fetchMessages: async (roomId) => {
+  fetchMessages: async (roomId, around = null) => {
     try {
       set({ isLoading: true, error: null });
-      const data = await api.getMessages(roomId);
+      const data = await api.getMessages(roomId, null, 20, around);
       set({
-        messages: data.messages.reverse(),
+        messages: around ? data.messages : data.messages.reverse(),
         hasMore: data.messages.length >= 20,
         isLoading: false,
       });

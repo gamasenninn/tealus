@@ -46,14 +46,30 @@ router.post('/', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   const roomId = req.params.id;
-  const { before, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
+  const { before, around, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
   const parsedLimit = Math.min(Math.max(parseInt(limit) || MESSAGES_DEFAULT_LIMIT, 1), MESSAGES_MAX_LIMIT);
 
   try {
     let query;
     let params;
 
-    if (before) {
+    if (around) {
+      // Get messages around a specific message (for search jump)
+      query = `
+        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
+               COALESCE(rc.read_count, 0)::int AS read_count
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS read_count FROM message_reads WHERE message_id = m.id
+        ) rc ON true
+        WHERE m.room_id = $1
+          AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2) - INTERVAL '1 second'
+        ORDER BY m.created_at ASC
+        LIMIT $3
+      `;
+      params = [roomId, around, parsedLimit];
+    } else if (before) {
       // Get the created_at of the cursor message
       query = `
         SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,

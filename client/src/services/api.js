@@ -96,9 +96,10 @@ class ApiClient {
   }
 
   // Messages
-  getMessages(roomId, before = null, limit = 20) {
+  getMessages(roomId, before = null, limit = 20, around = null) {
     let url = `/rooms/${roomId}/messages?limit=${limit}`;
-    if (before) url += `&before=${before}`;
+    if (around) url += `&around=${around}`;
+    else if (before) url += `&before=${before}`;
     return this.request('GET', url);
   }
 
