@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linny カラーパレット</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f0f0; padding: 20px; }
+h1 { text-align: center; margin-bottom: 8px; color: #333; }
+p.subtitle { text-align: center; color: #888; margin-bottom: 24px; font-size: 14px; }
+h2 { margin: 24px 0 12px; color: #666; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+.swatch { height: 60px; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.swatch.dark-text { color: #333; text-shadow: none; }
+.info { padding: 8px 12px; }
+.var-name { font-size: 13px; font-weight: bold; color: #333; }
+.hex { font-size: 12px; color: #888; }
+.usage { font-size: 11px; color: #aaa; margin-top: 2px; }
+</style>
+</head>
+<body>
+<h1>Linny カラーパレット</h1>
+<p class="subtitle">CSS変数一覧 — :root で定義</p>
+
+<h2>ブランド</h2>
+<div class="grid" id="brand"></div>
+
+<h2>テキスト</h2>
+<div class="grid" id="text"></div>
+
+<h2>ボーダー・区切り線</h2>
+<div class="grid" id="border"></div>
+
+<h2>背景</h2>
+<div class="grid" id="bg"></div>
+
+<h2>ステータス</h2>
+<div class="grid" id="status"></div>
+
+<h2>Diff表示</h2>
+<div class="grid" id="diff"></div>
+
+<h2>チャット</h2>
+<div class="grid" id="chat"></div>
+
+<script>
+const colors = {
+  brand: [
+    { var: '--primary', hex: '#00B4A0', usage: 'メインカラー（ティール）' },
+    { var: '--primary-hover', hex: '#009E8C', usage: 'ホバー時' },
+    { var: '--primary-light', hex: '#FFFDE7', usage: '自分の吹き出し背景', dark: true },
+  ],
+  text: [
+    { var: '--text-primary', hex: '#333333', usage: '本文テキスト' },
+    { var: '--text-secondary', hex: '#666666', usage: 'セクション見出し' },
+    { var: '--text-muted', hex: '#888888', usage: '補助テキスト' },
+    { var: '--text-placeholder', hex: '#999999', usage: 'プレースホルダー' },
+    { var: '--text-hint', hex: '#aaaaaa', usage: 'ヒントテキスト' },
+  ],
+  border: [
+    { var: '--border-light', hex: '#f0f0f0', usage: 'リスト区切り線', dark: true },
+    { var: '--border-medium', hex: '#dddddd', usage: '入力欄ボーダー', dark: true },
+    { var: '--border-dark', hex: '#e0e0e0', usage: 'ボタン背景・区切り', dark: true },
+  ],
+  bg: [
+    { var: '--bg-page', hex: '#f5f5f5', usage: 'ページ背景', dark: true },
+    { var: '--bg-surface', hex: '#f8f8f8', usage: 'カード背景', dark: true },
+    { var: '--bg-hover', hex: '#fafafa', usage: 'ホバー時背景', dark: true },
+    { var: '--bg-disabled', hex: '#cccccc', usage: '無効ボタン', dark: true },
+  ],
+  status: [
+    { var: '--color-error', hex: '#e53935', usage: 'エラーアイコン' },
+    { var: '--color-error-bg', hex: '#ffe0e0', usage: 'エラーバー背景', dark: true },
+    { var: '--color-error-text', hex: '#cc0000', usage: 'エラーメッセージ' },
+    { var: '--color-success', hex: '#4CAF50', usage: 'オンラインドット' },
+    { var: '--color-success-bg', hex: '#e8f5e9', usage: '成功系背景', dark: true },
+    { var: '--color-success-text', hex: '#2e7d32', usage: '成功系テキスト' },
+    { var: '--color-warning-bg', hex: '#fff3cd', usage: '管理者バッジ', dark: true },
+    { var: '--color-warning-text', hex: '#856404', usage: '警告テキスト' },
+  ],
+  diff: [
+    { var: '--diff-added-bg', hex: '#c8f7c5', usage: '追加部分の背景', dark: true },
+    { var: '--diff-added-text', hex: '#1b5e20', usage: '追加部分のテキスト' },
+    { var: '--diff-removed-bg', hex: '#ffcdd2', usage: '削除部分の背景', dark: true },
+    { var: '--diff-removed-text', hex: '#b71c1c', usage: '削除部分のテキスト' },
+  ],
+  chat: [
+    { var: '--chat-bg', hex: '#B2DFDB', usage: 'トーク画面背景', dark: true },
+  ],
+};
+
+Object.entries(colors).forEach(([key, items]) => {
+  const grid = document.getElementById(key);
+  items.forEach(c => {
+    grid.innerHTML += `
+      <div class="card">
+        <div class="swatch ${c.dark ? 'dark-text' : ''}" style="background:${c.hex}">${c.hex}</div>
+        <div class="info">
+          <div class="var-name">${c.var}</div>
+          <div class="usage">${c.usage}</div>
+        </div>
+      </div>`;
+  });
+});
+</script>
+</body>
+</html>
