@@ -19,7 +19,7 @@ const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 10
 
 const router = express.Router();
 
-const SALT_ROUNDS = 10;
+const { SALT_ROUNDS } = require('../constants/config');
 
 /**
  * POST /api/auth/register

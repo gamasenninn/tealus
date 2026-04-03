@@ -4,8 +4,9 @@ const bcrypt = require('bcrypt');
 const pool = require('../db/pool');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 
+const { SALT_ROUNDS } = require('../constants/config');
+
 const router = express.Router();
-const SALT_ROUNDS = 10;
 
 // All admin routes require authentication + admin role
 router.use(authenticate, requireAdmin);
