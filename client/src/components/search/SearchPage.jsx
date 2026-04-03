@@ -1,36 +1,55 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import './SearchPage.css';
 
 function SearchPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const roomId = searchParams.get('room_id');
+  const initialQuery = searchParams.get('q') || '';
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef(null);
 
+  // Restore search on mount (when navigating back)
+  useEffect(() => {
+    if (initialQuery) {
+      doSearch(initialQuery);
+    }
+  }, []);
+
+  const doSearch = async (q) => {
+    setSearching(true);
+    try {
+      const data = await api.search(q.trim(), roomId);
+      setResults(data.results);
+    } catch (err) {
+      console.error('Search error:', err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const handleSearch = (q) => {
     setQuery(q);
+    // Update URL with query for back navigation
+    const params = new URLSearchParams(searchParams);
+    if (q.trim()) {
+      params.set('q', q.trim());
+    } else {
+      params.delete('q');
+    }
+    setSearchParams(params, { replace: true });
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!q.trim()) {
       setResults([]);
       return;
     }
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const data = await api.search(q.trim(), roomId);
-        setResults(data.results);
-      } catch (err) {
-        console.error('Search error:', err);
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
+    debounceRef.current = setTimeout(() => doSearch(q), 300);
   };
 
   const highlightText = (text, keyword) => {
