@@ -43,7 +43,7 @@ function SearchPage() {
     setSearchParams(params, { replace: true });
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!q.trim()) {
+    if (!q.trim() || q.trim().length < 2) {
       setResults([]);
       return;
     }
