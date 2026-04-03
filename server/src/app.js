@@ -34,6 +34,7 @@ const adminRoutes = require('./routes/admin');
 const voiceRoutes = require('./routes/voice');
 const memberRoutes = require('./routes/members');
 const transcriptionRoutes = require('./routes/transcription');
+const searchRoutes = require('./routes/search');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -45,6 +46,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/rooms/:id/voice', voiceRoutes);
 app.use('/api/rooms/:id/members', memberRoutes);
 app.use('/api/messages/:id/transcription', transcriptionRoutes);
+app.use('/api/search', searchRoutes);
 
 // Static media files
 app.use('/media', express.static(path.join(__dirname, '../../media')));

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useMessageStore } from '../../stores/messageStore';
@@ -15,10 +15,26 @@ import './ChatRoom.css';
 function ChatRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuthStore();
   const { currentRoom, members, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
+
+  // Scroll to specific message from search
+  const targetMsgId = searchParams.get('msg');
+  useEffect(() => {
+    if (targetMsgId && messages.length > 0) {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-msg-id="${targetMsgId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('highlight-msg');
+          setTimeout(() => el.classList.remove('highlight-msg'), 3000);
+        }
+      }, 200);
+    }
+  }, [targetMsgId, messages.length]);
 
   // Custom hooks
   const { typingUsers } = useSocketSync(roomId);
@@ -56,6 +72,7 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
+        <button className="chat-search" onClick={() => navigate(`/search?room_id=${roomId}`)}>🔍</button>
         {currentRoom?.type === 'group' && (
           <button className="chat-menu" onClick={() => setShowMembers(true)}>≡</button>
         )}
@@ -80,7 +97,7 @@ function ChatRoom() {
           const showDate = !prevMsg ||
             new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
           return (
-            <div key={msg.id} data-date={showDate ? msg.created_at : undefined}>
+            <div key={msg.id} data-date={showDate ? msg.created_at : undefined} data-msg-id={msg.id}>
               {showDate && <DateSeparator date={msg.created_at} hidden={stickyDate && new Date(msg.created_at).toDateString() === new Date(stickyDate).toDateString()} />}
               <MessageBubble message={msg} isOwn={msg.sender_id === user.id} />
             </div>

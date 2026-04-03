@@ -88,6 +88,9 @@ function RoomList() {
         <img src="/logo.png" alt="Linny" className="room-list-logo" />
         <h1>トーク</h1>
         <div className="room-list-header-actions">
+          <button className="icon-button" onClick={() => navigate('/search')} title="検索">
+            🔍
+          </button>
           {user?.role === 'admin' && (
             <button className="icon-button" onClick={() => navigate('/admin')} title="管理">
               ⚙

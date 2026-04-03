@@ -153,6 +153,13 @@ class ApiClient {
     return this._upload(`${API_BASE}/rooms/${roomId}/icon`, formData);
   }
 
+  // Search
+  search(q, roomId) {
+    let url = `/search?q=${encodeURIComponent(q)}`;
+    if (roomId) url += `&room_id=${roomId}`;
+    return this.request('GET', url);
+  }
+
   // Reactions
   toggleReaction(roomId, messageId, emoji) {
     return this.request('POST', `/rooms/${roomId}/messages/${messageId}/reactions`, { emoji });

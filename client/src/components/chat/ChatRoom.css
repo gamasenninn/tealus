@@ -41,6 +41,24 @@
   opacity: 0.8;
 }
 
+.highlight-msg {
+  animation: highlight-fade 3s ease;
+}
+
+@keyframes highlight-fade {
+  0%, 30% { background: rgba(255, 241, 118, 0.5); }
+  100% { background: transparent; }
+}
+
+.chat-search {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
 .chat-menu {
   background: none;
   border: none;
