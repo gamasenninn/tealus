@@ -25,9 +25,15 @@ function RoomList() {
     if (!socket || rooms.length === 0) return;
 
     // Join all rooms so we receive message:new events
-    rooms.forEach((room) => {
-      socket.emit('room:join', room.id);
-    });
+    const joinAllRooms = () => {
+      rooms.forEach((room) => {
+        socket.emit('room:join', room.id);
+      });
+    };
+    joinAllRooms();
+
+    // Re-join on reconnect (after background recovery)
+    socket.on('connect', joinAllRooms);
 
     const handleNewMessage = (msg) => {
       fetchRooms();
@@ -51,6 +57,7 @@ function RoomList() {
       socket.off('message:new', handleNewMessage);
       socket.off('user:online', handleOnline);
       socket.off('user:offline', handleOffline);
+      socket.off('connect', joinAllRooms);
       // Leave all rooms when leaving room list
       rooms.forEach((room) => {
         socket.emit('room:leave', room.id);
