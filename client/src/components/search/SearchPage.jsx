@@ -82,7 +82,7 @@ function SearchPage() {
     if (scrollRef.current) {
       sessionStorage.setItem('searchScroll', scrollRef.current.scrollTop);
     }
-    navigate(`/rooms/${result.room_id}?msg=${result.id}`);
+    navigate(`/rooms/${result.room_id}?msg=${result.id}&q=${encodeURIComponent(query)}`);
   };
 
   return (

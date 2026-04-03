@@ -10,12 +10,21 @@ import LinkPreview from './LinkPreview';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import './MessageBubble.css';
 
-function MessageBubble({ message, isOwn }) {
+function MessageBubble({ message, isOwn, searchKeyword }) {
   const { roomId } = useParams();
   const { setReplyTo } = useMessageStore();
   const [viewerState, setViewerState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const longPressTimer = useRef(null);
+
+  const highlightText = (text) => {
+    if (!text || !searchKeyword) return text;
+    const regex = new RegExp(`(${searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? <mark key={i} className="search-highlight">{part}</mark> : part
+    );
+  };
 
   const formatTime = (dateStr) => {
     return new Date(dateStr).toLocaleTimeString('ja-JP', {
@@ -182,7 +191,7 @@ function MessageBubble({ message, isOwn }) {
           onTouchMove={handleTouchMove}
         >
           {message.type !== 'voice' && renderReply()}
-          {hasText && <p className="bubble-text">{message.content}</p>}
+          {hasText && <p className="bubble-text">{highlightText(message.content)}</p>}
           {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} />}
           {message.type !== 'voice' && renderMedia()}
           {message.link_preview && <LinkPreview preview={message.link_preview} />}

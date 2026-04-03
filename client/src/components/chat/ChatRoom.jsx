@@ -21,8 +21,9 @@ function ChatRoom() {
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
 
-  // Scroll to specific message from search
+  // Search params
   const targetMsgId = searchParams.get('msg');
+  const searchKeyword = searchParams.get('q');
   useEffect(() => {
     if (targetMsgId && messages.length > 0) {
       setTimeout(() => {
@@ -99,7 +100,7 @@ function ChatRoom() {
           return (
             <div key={msg.id} data-date={showDate ? msg.created_at : undefined} data-msg-id={msg.id}>
               {showDate && <DateSeparator date={msg.created_at} hidden={stickyDate && new Date(msg.created_at).toDateString() === new Date(stickyDate).toDateString()} />}
-              <MessageBubble message={msg} isOwn={msg.sender_id === user.id} />
+              <MessageBubble message={msg} isOwn={msg.sender_id === user.id} searchKeyword={searchKeyword} />
             </div>
           );
         })}
