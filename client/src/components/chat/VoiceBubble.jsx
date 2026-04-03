@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { diffChars } from 'diff';
 import { api } from '../../services/api';
-import { useMessageStore } from '../../stores/messageStore';
+import VoiceEditModal from './VoiceEditModal';
+import VoiceHistoryModal from './VoiceHistoryModal';
 import './VoiceBubble.css';
 
 function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
@@ -9,10 +9,8 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
-  const [saving, setSaving] = useState(false);
   const audioRef = useRef(null);
 
   // Listen for edit/history trigger from context menu
@@ -75,26 +73,7 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
   };
 
   const handleStartEdit = () => {
-    setEditText(transcription?.formatted_text || transcription?.raw_text || '');
     setIsEditing(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editText.trim()) return;
-    setSaving(true);
-    try {
-      const data = await api.editTranscription(message.id, editText.trim());
-      useMessageStore.getState().updateTranscription(message.id, {
-        formatted_text: data.transcription.formatted_text,
-        version: data.transcription.version,
-        status: 'done',
-      });
-      setIsEditing(false);
-    } catch (err) {
-      console.error('Edit error:', err);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleShowHistory = async () => {
@@ -145,7 +124,7 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
           {transcription.status === 'pending' && <span className="voice-trans-status">⏳ 処理中...</span>}
           {transcription.status === 'transcribing' && <span className="voice-trans-status">⏳ 文字起こし中...</span>}
           {transcription.status === 'formatting' && <span className="voice-trans-status">⏳ AIが文章を整えています...</span>}
-          {transcription.status === 'done' && !isEditing && (
+          {transcription.status === 'done' && (
             <>
               <span className="voice-trans-text">{displayText}</span>
               {isOwn && (
@@ -158,75 +137,23 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
               )}
             </>
           )}
-          {transcription.status === 'done' && isEditing && (
-            <div className="voice-edit-overlay" onClick={() => setIsEditing(false)}>
-              <div className="voice-edit-modal" onClick={e => e.stopPropagation()}>
-                <h3>文字起こしを編集</h3>
-                <textarea
-                  value={editText}
-                  onChange={e => setEditText(e.target.value)}
-                  rows={6}
-                  autoFocus
-                />
-                <div className="voice-edit-buttons">
-                  <button className="voice-edit-cancel" onClick={() => setIsEditing(false)}>キャンセル</button>
-                  <button className="voice-edit-save" onClick={handleSaveEdit} disabled={saving}>
-                    {saving ? '保存中...' : '確定'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
           {transcription.status === 'error' && <span className="voice-trans-error">⚠ 文字起こしできませんでした</span>}
         </div>
       )}
 
+      {isEditing && (
+        <VoiceEditModal
+          messageId={message.id}
+          initialText={transcription?.formatted_text || transcription?.raw_text || ''}
+          onClose={() => setIsEditing(false)}
+        />
+      )}
+
       {showHistory && (
-        <div className="voice-history-overlay" onClick={() => setShowHistory(false)}>
-          <div className="voice-history-modal" onClick={e => e.stopPropagation()}>
-            <h3>文字起こし編集履歴</h3>
-            <div className="voice-history-list">
-              {(() => {
-                const original = history[history.length - 1];
-                const originalText = original ? (original.formatted_text || original.raw_text || '') : '';
-                // Show diffs (skip latest v and original)
-                const diffs = history.slice(0, -1);
-                return (
-                  <>
-                    {diffs.map((h, i) => {
-                      const text = h.formatted_text || h.raw_text || '';
-                      const prevH = history[i + 1];
-                      const prevText = prevH ? (prevH.formatted_text || prevH.raw_text || '') : '';
-                      return (
-                        <div key={h.version} className="voice-history-item">
-                          <div className="voice-history-header">
-                            <span className="voice-history-diff-label">v{prevH.version} → v{h.version}</span>
-                            {h.edited_by_name && <span className="voice-history-editor">by {h.edited_by_name}</span>}
-                          </div>
-                          <div className="voice-history-diff-content">
-                            {diffChars(prevText, text).map((part, j) => (
-                              <span
-                                key={j}
-                                className={part.added ? 'diff-added' : part.removed ? 'diff-removed' : ''}
-                              >{part.value}</span>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div className="voice-history-item">
-                      <div className="voice-history-header">
-                        <span className="voice-history-version">v1（原文）</span>
-                      </div>
-                      <div className="voice-history-text">{originalText}</div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-            <button className="voice-history-close" onClick={() => setShowHistory(false)}>閉じる</button>
-          </div>
-        </div>
+        <VoiceHistoryModal
+          history={history}
+          onClose={() => setShowHistory(false)}
+        />
       )}
     </div>
   );
