@@ -4,7 +4,7 @@ import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
 import './VoiceBubble.css';
 
-function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
+function VoiceBubble({ message, media, transcription, isOwn, replyMessage, searchKeyword }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -91,6 +91,15 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
 
   const displayText = transcription?.formatted_text || transcription?.raw_text;
 
+  const highlightText = (text) => {
+    if (!text || !searchKeyword) return text;
+    const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+    return parts.map((part, i) =>
+      i % 2 === 1 ? <mark key={i} className="search-highlight">{part}</mark> : part
+    );
+  };
+
   return (
     <div className="voice-bubble">
       <audio
@@ -126,7 +135,7 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage }) {
           {transcription.status === 'formatting' && <span className="voice-trans-status">⏳ AIが文章を整えています...</span>}
           {transcription.status === 'done' && (
             <>
-              <span className="voice-trans-text">{displayText}</span>
+              <span className="voice-trans-text">{highlightText(displayText)}</span>
               {isOwn && (
                 <div className="voice-trans-actions">
                   <button className="voice-edit-btn" onClick={handleStartEdit}>編集</button>

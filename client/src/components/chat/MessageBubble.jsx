@@ -193,7 +193,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         >
           {message.type !== 'voice' && renderReply()}
           {hasText && <p className="bubble-text">{highlightText(message.content)}</p>}
-          {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} />}
+          {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
           {message.type !== 'voice' && renderMedia()}
           {message.link_preview && <LinkPreview preview={message.link_preview} />}
         </div>
