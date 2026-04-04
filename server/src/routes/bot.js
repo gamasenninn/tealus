@@ -191,6 +191,36 @@ router.get('/unread', async (req, res) => {
 });
 
 /**
+ * POST /api/bot/mark-read
+ * Mark messages as read
+ */
+router.post('/mark-read', async (req, res) => {
+  const { message_ids } = req.body;
+  const userId = req.user.id;
+
+  if (!message_ids || !Array.isArray(message_ids) || message_ids.length === 0) {
+    return res.status(400).json({ error: 'message_ids は必須です' });
+  }
+
+  try {
+    for (const msgId of message_ids) {
+      await pool.query(
+        `INSERT INTO message_reads (message_id, user_id)
+         VALUES ($1, $2)
+         ON CONFLICT (message_id, user_id) DO NOTHING`,
+        [msgId, userId]
+      );
+    }
+
+    logger.info(`Bot mark-read: ${message_ids.length} messages`);
+    res.json({ success: true, count: message_ids.length });
+  } catch (err) {
+    logger.error('Bot mark-read error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/rooms
  * List rooms the bot belongs to
  */

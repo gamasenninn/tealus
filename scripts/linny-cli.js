@@ -194,14 +194,16 @@ async function cmdSend(args) {
 }
 
 async function cmdCheck(args) {
-  const target = args[0];
+  const filteredArgs = args.filter(a => a !== '--json' && a !== '--mark-read');
+  const target = filteredArgs[0];
   const jsonMode = args.includes('--json');
+  const markRead = args.includes('--mark-read');
   const token = await login();
 
   let url = '/api/bot/unread';
   let roomName = '全ルーム';
 
-  if (target && target !== '--json') {
+  if (target) {
     const room = await resolveRoom(token, target);
     url += '?room_id=' + room.id;
     roomName = room.name;
@@ -212,23 +214,30 @@ async function cmdCheck(args) {
 
   if (jsonMode) {
     console.log(JSON.stringify(messages, null, 2));
-    return;
-  }
-
-  if (messages.length === 0) {
+  } else if (messages.length === 0) {
     console.log(`📭 未読メッセージはありません（${roomName}）`);
-    return;
+  } else {
+    console.log(`📨 未読メッセージ（${roomName}）: ${messages.length}件`);
+    messages.forEach(m => {
+      const room = m.room_name || 'DM';
+      const ago = Math.round((Date.now() - new Date(m.created_at).getTime()) / 60000);
+      const timeStr = ago < 60 ? `${ago}分前` : `${Math.round(ago / 60)}時間前`;
+      const content = m.content || '(メディア)';
+      const preview = content.length > 40 ? content.slice(0, 40) + '...' : content;
+      console.log(`  ${room} — ${m.sender_display_name}: ${preview} (${timeStr})`);
+    });
   }
 
-  console.log(`📨 未読メッセージ（${roomName}）: ${messages.length}件`);
-  messages.forEach(m => {
-    const room = m.room_name || 'DM';
-    const ago = Math.round((Date.now() - new Date(m.created_at).getTime()) / 60000);
-    const timeStr = ago < 60 ? `${ago}分前` : `${Math.round(ago / 60)}時間前`;
-    const content = m.content || '(メディア)';
-    const preview = content.length > 40 ? content.slice(0, 40) + '...' : content;
-    console.log(`  ${room} — ${m.sender_display_name}: ${preview} (${timeStr})`);
-  });
+  // Mark as read
+  if (markRead && messages.length > 0) {
+    const ids = messages.map(m => m.id);
+    const result = await request('POST', '/api/bot/mark-read', { message_ids: ids }, token);
+    if (result.success) {
+      console.log(`✅ ${result.count}件を既読にしました`);
+    } else {
+      console.error('❌ 既読処理に失敗:', result.error);
+    }
+  }
 }
 
 async function cmdRooms() {
@@ -264,6 +273,7 @@ switch (command) {
     console.log('  node scripts/linny-cli.js send "Web部" --voice ./recording.mp4');
     console.log('  node scripts/linny-cli.js check');
     console.log('  node scripts/linny-cli.js check "Web部"');
+    console.log('  node scripts/linny-cli.js check --mark-read');
     console.log('  node scripts/linny-cli.js check --json');
     console.log('  node scripts/linny-cli.js rooms');
     console.log('');
