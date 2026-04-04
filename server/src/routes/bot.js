@@ -116,6 +116,81 @@ router.get('/messages', async (req, res) => {
 });
 
 /**
+ * GET /api/bot/unread?room_id=optional
+ * Get unread messages across all rooms or a specific room
+ */
+router.get('/unread', async (req, res) => {
+  const { room_id } = req.query;
+  const userId = req.user.id;
+
+  try {
+    let query;
+    let params;
+
+    if (room_id) {
+      // Specific room
+      query = `
+        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
+               u.display_name AS sender_display_name,
+               r.name AS room_name, r.type AS room_type
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        JOIN rooms r ON r.id = m.room_id
+        WHERE m.room_id = $1
+          AND m.sender_id != $2
+          AND m.is_deleted = false
+          AND NOT EXISTS (
+            SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.user_id = $2
+          )
+        ORDER BY m.created_at ASC
+        LIMIT 100
+      `;
+      params = [room_id, userId];
+    } else {
+      // All rooms
+      query = `
+        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
+               u.display_name AS sender_display_name,
+               r.name AS room_name, r.type AS room_type
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        JOIN rooms r ON r.id = m.room_id
+        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
+        WHERE m.sender_id != $1
+          AND m.is_deleted = false
+          AND NOT EXISTS (
+            SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.user_id = $1
+          )
+        ORDER BY m.created_at ASC
+        LIMIT 100
+      `;
+      params = [userId];
+    }
+
+    const result = await pool.query(query, params);
+
+    // For voice messages, get transcription
+    for (const msg of result.rows) {
+      if (msg.type === 'voice') {
+        const trans = await pool.query(
+          `SELECT formatted_text, raw_text FROM voice_transcriptions
+           WHERE message_id = $1 ORDER BY version DESC LIMIT 1`,
+          [msg.id]
+        );
+        if (trans.rows.length > 0) {
+          msg.content = trans.rows[0].formatted_text || trans.rows[0].raw_text || msg.content;
+        }
+      }
+    }
+
+    res.json({ messages: result.rows });
+  } catch (err) {
+    logger.error('Bot unread error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/rooms
  * List rooms the bot belongs to
  */

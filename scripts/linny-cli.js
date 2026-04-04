@@ -193,6 +193,44 @@ async function cmdSend(args) {
   }
 }
 
+async function cmdCheck(args) {
+  const target = args[0];
+  const jsonMode = args.includes('--json');
+  const token = await login();
+
+  let url = '/api/bot/unread';
+  let roomName = '全ルーム';
+
+  if (target && target !== '--json') {
+    const room = await resolveRoom(token, target);
+    url += '?room_id=' + room.id;
+    roomName = room.name;
+  }
+
+  const data = await request('GET', url, null, token);
+  const messages = data.messages || [];
+
+  if (jsonMode) {
+    console.log(JSON.stringify(messages, null, 2));
+    return;
+  }
+
+  if (messages.length === 0) {
+    console.log(`📭 未読メッセージはありません（${roomName}）`);
+    return;
+  }
+
+  console.log(`📨 未読メッセージ（${roomName}）: ${messages.length}件`);
+  messages.forEach(m => {
+    const room = m.room_name || 'DM';
+    const ago = Math.round((Date.now() - new Date(m.created_at).getTime()) / 60000);
+    const timeStr = ago < 60 ? `${ago}分前` : `${Math.round(ago / 60)}時間前`;
+    const content = m.content || '(メディア)';
+    const preview = content.length > 40 ? content.slice(0, 40) + '...' : content;
+    console.log(`  ${room} — ${m.sender_display_name}: ${preview} (${timeStr})`);
+  });
+}
+
 async function cmdRooms() {
   const token = await login();
   const rooms = await request('GET', '/api/bot/rooms', null, token);
@@ -210,6 +248,9 @@ switch (command) {
   case 'send':
     cmdSend(args).catch(err => { console.error('❌ エラー:', err.message); process.exit(1); });
     break;
+  case 'check':
+    cmdCheck(args).catch(err => { console.error('❌ エラー:', err.message); process.exit(1); });
+    break;
   case 'rooms':
     cmdRooms().catch(err => { console.error('❌ エラー:', err.message); process.exit(1); });
     break;
@@ -221,6 +262,9 @@ switch (command) {
     console.log('  node scripts/linny-cli.js send @田中太郎 --text "メッセージ"');
     console.log('  node scripts/linny-cli.js send "Web部" --image ./screenshot.png');
     console.log('  node scripts/linny-cli.js send "Web部" --voice ./recording.mp4');
+    console.log('  node scripts/linny-cli.js check');
+    console.log('  node scripts/linny-cli.js check "Web部"');
+    console.log('  node scripts/linny-cli.js check --json');
     console.log('  node scripts/linny-cli.js rooms');
     console.log('');
     console.log('設定: scripts/.env に LINNY_BOT_ID, LINNY_BOT_PASS, LINNY_SERVER を設定');
