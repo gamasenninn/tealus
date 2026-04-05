@@ -110,6 +110,25 @@ router.post('/generate', async (req, res) => {
       });
     } catch (err) {
       logger.error('Stamp generation error:', err);
+
+      // Send error system message to the room
+      if (roomId) {
+        try {
+          const errorMsg = `⚠️ スタンプパック「${packName}」の生成に失敗しました。別のプロンプトで試してみてください。`;
+          const msgRes = await pool.query(
+            `INSERT INTO messages (room_id, sender_id, content, type)
+             VALUES ($1, $2, $3, 'system') RETURNING *`,
+            [roomId, userId, errorMsg]
+          );
+          io.to(roomId).emit('message:new', {
+            ...msgRes.rows[0],
+            sender_display_name: displayName,
+          });
+        } catch (e) {
+          logger.error('Stamp error message error:', e);
+        }
+      }
+
       try {
         io.to(`user:${userId}`).emit('stamp:error', { jobId, error: err.message });
       } catch (e) {
