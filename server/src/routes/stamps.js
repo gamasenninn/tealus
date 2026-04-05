@@ -30,55 +30,66 @@ router.post('/generate', async (req, res) => {
     }
   }
 
-  try {
-    // Generate stamps via AI
-    const result = await generateStampPack(prompt.trim());
+  // Return immediately with 202 Accepted
+  const jobId = require('crypto').randomUUID();
+  const packName = name?.trim() || prompt.trim().slice(0, 50);
+  res.status(202).json({ jobId, message: 'スタンプ生成を開始しました' });
 
-    if (result.stamps.length === 0) {
-      return res.status(500).json({ error: 'スタンプの生成に失敗しました' });
-    }
+  // Run generation in background
+  const { io } = require('../app');
+  (async () => {
+    try {
+      // Generate stamps via AI
+      const result = await generateStampPack(prompt.trim());
 
-    // Create pack in DB
-    const packName = name?.trim() || prompt.trim().slice(0, 50);
-    const packRes = await pool.query(
-      `INSERT INTO stamp_packs (name, prompt, created_by)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [packName, prompt.trim(), userId]
-    );
-    const pack = packRes.rows[0];
+      if (result.stamps.length === 0) {
+        io.to(`user:${userId}`).emit('stamp:error', { jobId, error: 'スタンプの生成に失敗しました' });
+        return;
+      }
 
-    // Save files to disk
-    const savedFiles = await saveStampFiles(pack.id, result.stamps);
-
-    // Insert stamps into DB
-    for (const file of savedFiles) {
-      await pool.query(
-        `INSERT INTO stamps (pack_id, file_path, label, sort_order)
-         VALUES ($1, $2, $3, $4)`,
-        [pack.id, file.filePath, file.label, file.index]
+      // Create pack in DB
+      const packRes = await pool.query(
+        `INSERT INTO stamp_packs (name, prompt, created_by)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [packName, prompt.trim(), userId]
       );
+      const pack = packRes.rows[0];
+
+      // Save files to disk
+      const savedFiles = await saveStampFiles(pack.id, result.stamps);
+
+      // Insert stamps into DB
+      for (const file of savedFiles) {
+        await pool.query(
+          `INSERT INTO stamps (pack_id, file_path, label, sort_order)
+           VALUES ($1, $2, $3, $4)`,
+          [pack.id, file.filePath, file.label, file.index]
+        );
+      }
+
+      // Update thumbnail
+      if (savedFiles.length > 0) {
+        await pool.query(
+          'UPDATE stamp_packs SET thumbnail_path = $1 WHERE id = $2',
+          [savedFiles[0].filePath, pack.id]
+        );
+        pack.thumbnail_path = savedFiles[0].filePath;
+      }
+
+      logger.info(`Stamp pack created: "${packName}" by ${req.user.display_name} (${savedFiles.length} stamps)`);
+
+      // Notify via Socket.IO
+      io.to(`user:${userId}`).emit('stamp:generated', {
+        jobId,
+        pack,
+        stamps: savedFiles,
+        count: savedFiles.length,
+      });
+    } catch (err) {
+      logger.error('Stamp generation error:', err);
+      io.to(`user:${userId}`).emit('stamp:error', { jobId, error: err.message });
     }
-
-    // Update thumbnail
-    if (savedFiles.length > 0) {
-      await pool.query(
-        'UPDATE stamp_packs SET thumbnail_path = $1 WHERE id = $2',
-        [savedFiles[0].filePath, pack.id]
-      );
-      pack.thumbnail_path = savedFiles[0].filePath;
-    }
-
-    logger.info(`Stamp pack created: "${packName}" by ${req.user.display_name} (${savedFiles.length} stamps)`);
-
-    res.status(201).json({
-      pack,
-      stamps: savedFiles,
-      count: savedFiles.length,
-    });
-  } catch (err) {
-    logger.error('Stamp generation error:', err);
-    res.status(500).json({ error: 'スタンプ生成中にエラーが発生しました: ' + err.message });
-  }
+  })();
 });
 
 /**

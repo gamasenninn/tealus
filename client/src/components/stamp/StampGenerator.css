@@ -95,6 +95,29 @@
   border-radius: 4px;
 }
 
+.stamp-generator-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.stamp-generator-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--border-dark);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .stamp-generator-done {
   width: 100%;
   padding: 10px;

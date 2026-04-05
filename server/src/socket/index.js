@@ -42,6 +42,9 @@ function setupSocketHandlers(io) {
 
     const userId = socket.user.id;
 
+    // Join user-specific room (for targeted events like stamp generation)
+    socket.join(`user:${userId}`);
+
     // Track online status
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());

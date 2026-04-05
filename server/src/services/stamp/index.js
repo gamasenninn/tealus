@@ -96,7 +96,8 @@ async function saveStampFiles(packId, stamps) {
 
   const saved = [];
   for (const stamp of stamps) {
-    const fileName = `${String(stamp.index).padStart(2, '0')}_${stamp.label}.png`;
+    const safeLabel = stamp.label.replace(/[<>:"/\\|?!*]/g, '_');
+    const fileName = `${String(stamp.index).padStart(2, '0')}_${safeLabel}.png`;
     const filePath = path.join(packDir, fileName);
     fs.writeFileSync(filePath, stamp.buffer);
 

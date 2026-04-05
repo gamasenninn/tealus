@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { getSocket } from '../../services/socket';
 import './StampGenerator.css';
 
 function StampGenerator({ onClose }) {
@@ -9,18 +10,40 @@ function StampGenerator({ onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleGenerated = (data) => {
+      setGenerating(false);
+      setResult(data);
+    };
+
+    const handleError = (data) => {
+      setGenerating(false);
+      setError(data.error || 'スタンプ生成に失敗しました');
+    };
+
+    socket.on('stamp:generated', handleGenerated);
+    socket.on('stamp:error', handleError);
+
+    return () => {
+      socket.off('stamp:generated', handleGenerated);
+      socket.off('stamp:error', handleError);
+    };
+  }, []);
+
   const handleGenerate = async () => {
     if (!prompt.trim() || generating) return;
 
     setGenerating(true);
     setError('');
     try {
-      const res = await api.generateStampPack(prompt.trim(), name.trim() || undefined);
-      setResult(res);
+      await api.generateStampPack(prompt.trim(), name.trim() || undefined);
+      // Response is 202 — wait for Socket.IO event
     } catch (err) {
-      setError(err.message);
-    } finally {
       setGenerating(false);
+      setError(err.message);
     }
   };
 
@@ -72,12 +95,18 @@ function StampGenerator({ onClose }) {
           disabled={generating}
         />
         {error && <div className="stamp-generator-error">{error}</div>}
+        {generating && (
+          <div className="stamp-generator-progress">
+            <div className="stamp-generator-spinner" />
+            <span>AIがスタンプを生成中...</span>
+          </div>
+        )}
         <button
           className="stamp-generator-btn"
           onClick={handleGenerate}
           disabled={!prompt.trim() || generating}
         >
-          {generating ? '生成中...（数十秒かかります）' : 'スタンプを生成'}
+          {generating ? '生成中...' : 'スタンプを生成'}
         </button>
       </div>
     </div>
