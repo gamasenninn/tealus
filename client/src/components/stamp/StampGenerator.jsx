@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import './StampGenerator.css';
 
 function StampGenerator({ onClose }) {
+  const { roomId } = useParams();
   const [prompt, setPrompt] = useState('');
   const [name, setName] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -39,7 +41,7 @@ function StampGenerator({ onClose }) {
     setGenerating(true);
     setError('');
     try {
-      await api.generateStampPack(prompt.trim(), name.trim() || undefined);
+      await api.generateStampPack(prompt.trim(), name.trim() || undefined, roomId);
       // Response is 202 — wait for Socket.IO event
     } catch (err) {
       setGenerating(false);

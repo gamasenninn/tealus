@@ -16,7 +16,7 @@ const DAILY_LIMIT = 3;
  */
 router.post('/generate', async (req, res) => {
   const userId = req.user.id;
-  const { prompt, name } = req.body;
+  const { prompt, name, room_id } = req.body;
 
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({ error: 'プロンプトは必須です' });
@@ -35,6 +35,7 @@ router.post('/generate', async (req, res) => {
   const packName = name?.trim() || prompt.trim().slice(0, 50);
   const promptText = prompt.trim();
   const displayName = req.user.display_name;
+  const roomId = room_id || null;
 
   // Return immediately with 202 Accepted
   res.status(202).json({ jobId, message: 'スタンプ生成を開始しました' });
@@ -81,6 +82,24 @@ router.post('/generate', async (req, res) => {
       }
 
       logger.info(`Stamp pack created: "${packName}" by ${displayName} (${savedFiles.length} stamps)`);
+
+      // Send system message to the room where stamp was created
+      if (roomId) {
+        try {
+          const systemMsg = `🎉 スタンプパック「${packName}」が完成しました！（${savedFiles.length}枚）`;
+          const msgRes = await pool.query(
+            `INSERT INTO messages (room_id, sender_id, content, type)
+             VALUES ($1, $2, $3, 'system') RETURNING *`,
+            [roomId, userId, systemMsg]
+          );
+          io.to(roomId).emit('message:new', {
+            ...msgRes.rows[0],
+            sender_display_name: displayName,
+          });
+        } catch (e) {
+          logger.error('Stamp system message error:', e);
+        }
+      }
 
       // Notify via Socket.IO (user may have navigated away, but that's OK)
       io.to(`user:${userId}`).emit('stamp:generated', {
