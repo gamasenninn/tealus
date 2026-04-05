@@ -128,10 +128,21 @@ function MediaGallery() {
                   loading="lazy"
                 />
               ) : isVideo ? (
-                <div className="gallery-video-thumb">
-                  <span>🎬</span>
-                  <span className="gallery-file-label">{item.file_name}</span>
-                </div>
+                item.thumbnail_path ? (
+                  <div className="gallery-video-thumb has-thumb">
+                    <img
+                      src={`/media/${item.thumbnail_path}`}
+                      alt={item.file_name}
+                      loading="lazy"
+                    />
+                    <span className="gallery-play-icon">▶</span>
+                  </div>
+                ) : (
+                  <div className="gallery-video-thumb">
+                    <span>🎬</span>
+                    <span className="gallery-file-label">{item.file_name}</span>
+                  </div>
+                )
               ) : (
                 <div className="gallery-file-thumb">
                   <span>📎</span>
