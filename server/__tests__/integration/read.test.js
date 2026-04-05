@@ -135,4 +135,99 @@ describe('Read Status API', () => {
       expect(res.body.messages[0].read_count).toBe(0);
     });
   });
+
+  // ============================================
+  // POST /api/rooms/:id/read/all — Mark all as read
+  // ============================================
+  describe('POST /api/rooms/:id/read/all', () => {
+    it('should mark all unread messages as read', async () => {
+      // user1 sends 5 messages
+      for (let i = 0; i < 5; i++) {
+        await request(app)
+          .post(`/api/rooms/${roomId}/messages`)
+          .set('Authorization', `Bearer ${user1.token}`)
+          .send({ content: `msg${i}` });
+      }
+
+      // user2 has 5 unread
+      let listRes = await request(app)
+        .get('/api/rooms')
+        .set('Authorization', `Bearer ${user2.token}`);
+      let room = listRes.body.rooms.find(r => r.id === roomId);
+      expect(room.unread_count).toBe(5);
+
+      // user2 marks all as read
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/read/all`)
+        .set('Authorization', `Bearer ${user2.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.count).toBe(5);
+
+      // user2 now has 0 unread
+      listRes = await request(app)
+        .get('/api/rooms')
+        .set('Authorization', `Bearer ${user2.token}`);
+      room = listRes.body.rooms.find(r => r.id === roomId);
+      expect(room.unread_count).toBe(0);
+    });
+
+    it('should return count 0 when no unread messages', async () => {
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/read/all`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.count).toBe(0);
+    });
+
+    it('should not mark own messages as read', async () => {
+      // user1 sends messages
+      for (let i = 0; i < 3; i++) {
+        await request(app)
+          .post(`/api/rooms/${roomId}/messages`)
+          .set('Authorization', `Bearer ${user1.token}`)
+          .send({ content: `msg${i}` });
+      }
+
+      // user1 marks all as read — own messages should be skipped
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/read/all`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.count).toBe(0);
+    });
+
+    it('should update read counts on messages', async () => {
+      // user1 sends a message
+      const msgRes = await request(app)
+        .post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ content: 'hello' });
+
+      // user2 marks all as read
+      await request(app)
+        .post(`/api/rooms/${roomId}/read/all`)
+        .set('Authorization', `Bearer ${user2.token}`);
+
+      // user1 sees read_count = 1
+      const msgs = await request(app)
+        .get(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      const msg = msgs.body.messages.find(m => m.id === msgRes.body.message.id);
+      expect(msg.read_count).toBe(1);
+    });
+
+    it('should reject non-member', async () => {
+      const user3 = await createTestUser({ employee_id: 'EMP003', display_name: '佐藤次郎' });
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/read/all`)
+        .set('Authorization', `Bearer ${user3.token}`);
+
+      expect(res.status).toBe(403);
+    });
+  });
 });
