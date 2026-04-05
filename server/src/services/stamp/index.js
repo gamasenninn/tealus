@@ -82,18 +82,21 @@ async function splitGridImage(gridBuffer) {
     colVariance.push(values.reduce((a, v) => a + (v - avg) ** 2, 0) / values.length);
   }
 
-  // Find cell boundaries from low-variance bands
-  const rowBounds = findCellBoundsVariance(rowVariance, GRID_ROWS, height);
-  const colBounds = findCellBoundsVariance(colVariance, GRID_COLS, width);
+  // Find cell boundaries from low-variance bands (auto-detect grid size)
+  const rowBounds = detectCellBounds(rowVariance, height);
+  const colBounds = detectCellBounds(colVariance, width);
+  const detectedCols = colBounds.length;
 
-  logger.info(`Grid detection: rows=${JSON.stringify(rowBounds)}, cols=${JSON.stringify(colBounds)}`);
+  logger.info(`Grid detection: ${rowBounds.length} rows × ${colBounds.length} cols = ${rowBounds.length * colBounds.length} cells`);
+  logger.info(`Grid rows: ${JSON.stringify(rowBounds)}`);
+  logger.info(`Grid cols: ${JSON.stringify(colBounds)}`);
 
   const INSET = 2;
   const stamps = [];
 
   for (let row = 0; row < rowBounds.length; row++) {
     for (let col = 0; col < colBounds.length; col++) {
-      const index = row * GRID_COLS + col;
+      const index = row * detectedCols + col;
       const left = colBounds[col].start + INSET;
       const top = rowBounds[row].start + INSET;
       const cellW = colBounds[col].end - colBounds[col].start - INSET * 2;
@@ -144,13 +147,14 @@ async function splitGridImage(gridBuffer) {
  * then return the dark regions between them as cell bounds.
  */
 /**
- * Find cell bounds using variance-based grid line detection.
- * Grid lines have low variance (uniform color), cells have high variance (illustrations).
+ * Detect cell bounds using variance-based grid line detection.
+ * Auto-detects the number of cells (no fixed grid size assumption).
  */
-function findCellBoundsVariance(variance, cellCount, totalSize) {
+function detectCellBounds(variance, totalSize) {
   const VARIANCE_THRESHOLD = 100;
   const GAP_TOLERANCE = 15;
   const MIN_BAND_WIDTH = 10;
+  const MIN_CELL_SIZE = 50;
 
   // Find low-variance runs (grid lines / margins)
   const rawBands = [];
@@ -168,9 +172,8 @@ function findCellBoundsVariance(variance, cellCount, totalSize) {
   if (runStart !== -1) rawBands.push({ start: runStart, end: variance.length });
 
   if (rawBands.length === 0) {
-    logger.warn('Grid detection: no low-variance bands found, falling back to even split');
-    const size = Math.floor(totalSize / cellCount);
-    return Array.from({ length: cellCount }, (_, i) => ({ start: i * size, end: (i + 1) * size }));
+    logger.warn('Grid detection: no low-variance bands found');
+    return [{ start: 0, end: totalSize }];
   }
 
   // Merge close bands and filter narrow ones
@@ -199,15 +202,11 @@ function findCellBoundsVariance(variance, cellCount, totalSize) {
     cells.unshift({ start: 0, end: bands[0].start });
   }
 
-  if (cells.length === cellCount) {
-    logger.info(`Grid detection: ${bands.length} bands → ${cells.length} cells`);
-    return cells;
-  }
+  // Filter out cells that are too small
+  const validCells = cells.filter(c => (c.end - c.start) >= MIN_CELL_SIZE);
 
-  // Fallback: evenly divide
-  logger.warn(`Grid detection: expected ${cellCount} cells but found ${cells.length}, falling back to even split`);
-  const size = Math.floor(totalSize / cellCount);
-  return Array.from({ length: cellCount }, (_, i) => ({ start: i * size, end: (i + 1) * size }));
+  logger.info(`Grid detection: ${bands.length} bands → ${validCells.length} cells`);
+  return validCells;
 }
 
 /**
