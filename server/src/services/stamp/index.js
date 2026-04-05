@@ -35,6 +35,11 @@ async function generateStampPack(userPrompt) {
   const gridBuffer = await imageProvider.generate(detailedPrompt);
   logger.info(`Stamp generation: grid image received (${gridBuffer.length} bytes)`);
 
+  // Save grid image for debugging
+  const gridPath = path.join(STAMP_DIR, 'last_grid.png');
+  fs.writeFileSync(gridPath, gridBuffer);
+  logger.info(`Stamp generation: grid saved to ${gridPath}`);
+
   // Step 3: Split into individual stamps
   const stamps = await splitGridImage(gridBuffer);
   logger.info(`Stamp generation: split into ${stamps.length} stamps`);
@@ -43,29 +48,81 @@ async function generateStampPack(userPrompt) {
 }
 
 /**
- * Split a grid image into individual stamp images
+ * Split a grid image into individual stamp images by detecting grid lines
  */
 async function splitGridImage(gridBuffer) {
-  const metadata = await sharp(gridBuffer).metadata();
-  const cellWidth = Math.floor(metadata.width / GRID_COLS);
-  const cellHeight = Math.floor(metadata.height / GRID_ROWS);
+  const { data, info } = await sharp(gridBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
 
+  const { width, height, channels } = info;
+
+  // Calculate average brightness per row
+  const rowBrightness = [];
+  for (let y = 0; y < height; y++) {
+    let sum = 0;
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * channels;
+      sum += (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+    }
+    rowBrightness.push(sum / width);
+  }
+
+  // Calculate average brightness per column
+  const colBrightness = [];
+  for (let x = 0; x < width; x++) {
+    let sum = 0;
+    for (let y = 0; y < height; y++) {
+      const idx = (y * width + x) * channels;
+      sum += (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+    }
+    colBrightness.push(sum / height);
+  }
+
+  // Find cell boundaries from bright bands (margins + grid lines)
+  const BRIGHTNESS_THRESHOLD = 245;
+  const rowBounds = findCellBounds(rowBrightness, BRIGHTNESS_THRESHOLD, GRID_ROWS);
+  const colBounds = findCellBounds(colBrightness, BRIGHTNESS_THRESHOLD, GRID_COLS);
+
+  logger.info(`Grid detection: rows=${JSON.stringify(rowBounds)}, cols=${JSON.stringify(colBounds)}`);
+
+  const INSET = 2;
   const stamps = [];
 
-  for (let row = 0; row < GRID_ROWS; row++) {
-    for (let col = 0; col < GRID_COLS; col++) {
+  for (let row = 0; row < rowBounds.length; row++) {
+    for (let col = 0; col < colBounds.length; col++) {
       const index = row * GRID_COLS + col;
+      const left = colBounds[col].start + INSET;
+      const top = rowBounds[row].start + INSET;
+      const cellW = colBounds[col].end - colBounds[col].start - INSET * 2;
+      const cellH = rowBounds[row].end - rowBounds[row].start - INSET * 2;
+
+      if (cellW <= 0 || cellH <= 0) continue;
+
       try {
-        const buffer = await sharp(gridBuffer)
-          .extract({
-            left: col * cellWidth,
-            top: row * cellHeight,
-            width: cellWidth,
-            height: cellHeight,
+        const extracted = await sharp(gridBuffer)
+          .extract({ left, top, width: cellW, height: cellH })
+          .resize(STAMP_WIDTH, STAMP_HEIGHT, {
+            fit: 'contain',
+            background: { r: 255, g: 255, b: 255, alpha: 0 },
           })
-          .resize(STAMP_WIDTH, STAMP_HEIGHT)
-          .png()
-          .toBuffer();
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+
+        // Remove white/near-white background
+        const pixels = extracted.data;
+        const threshold = 240;
+        for (let i = 0; i < pixels.length; i += 4) {
+          if (pixels[i] >= threshold && pixels[i + 1] >= threshold && pixels[i + 2] >= threshold) {
+            pixels[i + 3] = 0;
+          }
+        }
+
+        const buffer = await sharp(pixels, {
+          raw: { width: extracted.info.width, height: extracted.info.height, channels: 4 },
+        }).png().toBuffer();
 
         stamps.push({
           buffer,
@@ -74,12 +131,55 @@ async function splitGridImage(gridBuffer) {
         });
       } catch (err) {
         logger.error(`Stamp split error at [${row},${col}]:`, err);
-        // Continue with remaining stamps (partial success)
       }
     }
   }
 
   return stamps;
+}
+
+/**
+ * Find bright bands (grid lines + margins) in brightness array,
+ * then return the dark regions between them as cell bounds.
+ */
+function findCellBounds(brightness, threshold, cellCount) {
+  // Find runs of bright pixels (grid lines and margins)
+  const brightBands = [];
+  let runStart = -1;
+
+  for (let i = 0; i < brightness.length; i++) {
+    if (brightness[i] >= threshold) {
+      if (runStart === -1) runStart = i;
+    } else {
+      if (runStart !== -1) {
+        brightBands.push({ start: runStart, end: i });
+        runStart = -1;
+      }
+    }
+  }
+  if (runStart !== -1) brightBands.push({ start: runStart, end: brightness.length });
+
+  // The cells are the gaps BETWEEN bright bands
+  const cells = [];
+  for (let i = 0; i < brightBands.length - 1; i++) {
+    cells.push({
+      start: brightBands[i].end,
+      end: brightBands[i + 1].start,
+    });
+  }
+
+  // If we got the expected count, use them
+  if (cells.length === cellCount) {
+    return cells;
+  }
+
+  // Fallback: evenly divide
+  logger.warn(`Grid detection: expected ${cellCount} cells but found ${cells.length}, falling back to even split`);
+  const size = Math.floor(brightness.length / cellCount);
+  return Array.from({ length: cellCount }, (_, i) => ({
+    start: i * size,
+    end: (i + 1) * size,
+  }));
 }
 
 /**
