@@ -247,9 +247,10 @@ class ApiClient {
   }
 
   // Media Gallery
-  getMediaGallery(roomId, { tag, offset = 0, limit = 30 } = {}) {
+  getMediaGallery(roomId, { tag, category, offset = 0, limit = 30 } = {}) {
     let url = `/rooms/${roomId}/media/gallery?offset=${offset}&limit=${limit}`;
     if (tag) url += `&tag=${tag}`;
+    if (category) url += `&category=${category}`;
     return this.request('GET', url);
   }
 

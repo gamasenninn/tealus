@@ -24,6 +24,32 @@
   text-overflow: ellipsis;
 }
 
+.gallery-category-filter {
+  display: flex;
+  gap: 0;
+  background: white;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.gallery-category-chip {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 13px;
+  border: none;
+  background: white;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.gallery-category-chip.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
 .gallery-tag-filter {
   display: flex;
   gap: 6px;

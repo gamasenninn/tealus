@@ -116,41 +116,47 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
  */
 router.get('/gallery', authenticate, requireMember, async (req, res) => {
   const roomId = req.params.id;
-  const { tag, offset = 0, limit = 30 } = req.query;
+  const { tag, category, offset = 0, limit = 30 } = req.query;
   const limitNum = Math.min(parseInt(limit) || 30, 100);
   const offsetNum = parseInt(offset) || 0;
 
+  // Category to mime_type prefix mapping
+  const categoryMap = {
+    image: 'image/%',
+    video: 'video/%',
+    audio: 'audio/%',
+  };
+
   try {
-    let query;
-    let params;
+    const conditions = ['m.room_id = $1', 'm.is_deleted = false'];
+    const params = [roomId];
+    let paramIdx = 2;
 
     if (tag) {
-      // Filter by tag
-      query = `
-        SELECT mm.*, m.sender_id, m.created_at AS message_created_at,
-               u.display_name AS sender_display_name
-        FROM message_media mm
-        JOIN messages m ON m.id = mm.message_id
-        JOIN users u ON u.id = m.sender_id
-        JOIN message_tags mt ON mt.message_id = m.id
-        WHERE m.room_id = $1 AND m.is_deleted = false AND mt.tag_id = $2
-        ORDER BY m.created_at DESC
-        LIMIT $3 OFFSET $4
-      `;
-      params = [roomId, tag, limitNum + 1, offsetNum];
-    } else {
-      query = `
-        SELECT mm.*, m.sender_id, m.created_at AS message_created_at,
-               u.display_name AS sender_display_name
-        FROM message_media mm
-        JOIN messages m ON m.id = mm.message_id
-        JOIN users u ON u.id = m.sender_id
-        WHERE m.room_id = $1 AND m.is_deleted = false
-        ORDER BY m.created_at DESC
-        LIMIT $2 OFFSET $3
-      `;
-      params = [roomId, limitNum + 1, offsetNum];
+      conditions.push(`mt.tag_id = $${paramIdx++}`);
+      params.push(tag);
     }
+
+    if (category && categoryMap[category]) {
+      conditions.push(`mm.mime_type LIKE $${paramIdx++}`);
+      params.push(categoryMap[category]);
+    }
+
+    const tagJoin = tag ? 'JOIN message_tags mt ON mt.message_id = m.id' : '';
+    const whereClause = conditions.join(' AND ');
+
+    const query = `
+      SELECT mm.*, m.sender_id, m.created_at AS message_created_at,
+             u.display_name AS sender_display_name
+      FROM message_media mm
+      JOIN messages m ON m.id = mm.message_id
+      JOIN users u ON u.id = m.sender_id
+      ${tagJoin}
+      WHERE ${whereClause}
+      ORDER BY m.created_at DESC
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    `;
+    params.push(limitNum + 1, offsetNum);
 
     const result = await pool.query(query, params);
     const hasMore = result.rows.length > limitNum;

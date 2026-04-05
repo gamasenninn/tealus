@@ -10,6 +10,7 @@ function MediaGallery() {
   const [media, setMedia] = useState([]);
   const [tags, setTags] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [viewerState, setViewerState] = useState(null);
@@ -21,6 +22,7 @@ function MediaGallery() {
       setLoading(true);
       const res = await api.getMediaGallery(roomId, {
         tag: selectedTag,
+        category: selectedCategory,
         offset,
         limit: 30,
       });
@@ -31,7 +33,7 @@ function MediaGallery() {
     } finally {
       setLoading(false);
     }
-  }, [roomId, selectedTag]);
+  }, [roomId, selectedTag, selectedCategory]);
 
   useEffect(() => {
     loadMedia();
@@ -85,12 +87,23 @@ function MediaGallery() {
         <h1>{roomName} — メディア</h1>
       </header>
 
+      <div className="gallery-category-filter">
+        {[
+          { key: null, label: 'すべて' },
+          { key: 'image', label: '画像' },
+          { key: 'video', label: '動画' },
+          { key: 'audio', label: '音声' },
+        ].map(cat => (
+          <button
+            key={cat.key || 'all'}
+            className={`gallery-category-chip ${selectedCategory === cat.key ? 'active' : ''}`}
+            onClick={() => setSelectedCategory(cat.key)}
+          >{cat.label}</button>
+        ))}
+      </div>
+
       {tags.length > 0 && (
         <div className="gallery-tag-filter">
-          <button
-            className={`gallery-tag-chip ${!selectedTag ? 'active' : ''}`}
-            onClick={() => setSelectedTag(null)}
-          >すべて</button>
           {tags.map(tag => (
             <button
               key={tag.id}
