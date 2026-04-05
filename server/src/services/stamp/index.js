@@ -91,16 +91,15 @@ async function splitGridImage(gridBuffer) {
   logger.info(`Grid rows: ${JSON.stringify(rowBounds)}`);
   logger.info(`Grid cols: ${JSON.stringify(colBounds)}`);
 
-  const INSET = 2;
   const stamps = [];
 
   for (let row = 0; row < rowBounds.length; row++) {
     for (let col = 0; col < colBounds.length; col++) {
       const index = row * detectedCols + col;
-      const left = colBounds[col].start + INSET;
-      const top = rowBounds[row].start + INSET;
-      const cellW = colBounds[col].end - colBounds[col].start - INSET * 2;
-      const cellH = rowBounds[row].end - rowBounds[row].start - INSET * 2;
+      const left = colBounds[col].cutStart || colBounds[col].start;
+      const top = rowBounds[row].cutStart || rowBounds[row].start;
+      const cellW = (colBounds[col].cutEnd || colBounds[col].end) - left;
+      const cellH = (rowBounds[row].cutEnd || rowBounds[row].end) - top;
 
       if (cellW <= 0 || cellH <= 0) continue;
 
@@ -258,11 +257,16 @@ function detectWithThreshold(variance, totalSize, threshold, gapTolerance, minCe
     }
   }
 
-  // Use band centers as dividers, split cells at midpoints between bands
+  // Build cells using band centers for size calculation, band edges for cutting
   const centers = merged.map(b => Math.floor((b.start + b.end) / 2));
   const cells = [];
   for (let i = 0; i < centers.length - 1; i++) {
-    cells.push({ start: centers[i], end: centers[i + 1] });
+    cells.push({
+      start: centers[i],           // for CV calculation
+      end: centers[i + 1],
+      cutStart: merged[i].end,     // right edge of left band (for extraction)
+      cutEnd: merged[i + 1].start, // left edge of right band
+    });
   }
 
   return cells.filter(c => (c.end - c.start) >= minCellSize);
