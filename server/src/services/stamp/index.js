@@ -151,62 +151,66 @@ async function splitGridImage(gridBuffer) {
  * Auto-detects the number of cells (no fixed grid size assumption).
  */
 function detectCellBounds(variance, totalSize) {
-  const VARIANCE_THRESHOLD = 100;
-  const GAP_TOLERANCE = 15;
-  const MIN_BAND_WIDTH = 10;
+  const GAP_TOLERANCE = 20;
   const MIN_CELL_SIZE = 50;
+  const MAX_CELLS = 6; // Reasonable max for one dimension
+  const MIN_CELLS = 2;
 
-  // Find low-variance runs (grid lines / margins)
-  const rawBands = [];
-  let runStart = -1;
-  for (let i = 0; i < variance.length; i++) {
-    if (variance[i] < VARIANCE_THRESHOLD) {
-      if (runStart === -1) runStart = i;
-    } else {
-      if (runStart !== -1) {
-        rawBands.push({ start: runStart, end: i });
-        runStart = -1;
-      }
+  // Try increasing thresholds until we get a reasonable cell count
+  for (let threshold = 50; threshold <= 3000; threshold += 50) {
+    const cells = detectWithThreshold(variance, totalSize, threshold, GAP_TOLERANCE, MIN_CELL_SIZE);
+    if (cells.length >= MIN_CELLS && cells.length <= MAX_CELLS) {
+      logger.info(`Grid detection: threshold=${threshold}, ${cells.length} cells`);
+      return cells;
     }
   }
-  if (runStart !== -1) rawBands.push({ start: runStart, end: variance.length });
 
-  if (rawBands.length === 0) {
-    logger.warn('Grid detection: no low-variance bands found');
-    return [{ start: 0, end: totalSize }];
+  // Fallback: evenly divide into 4
+  logger.warn('Grid detection: falling back to even split');
+  const size = Math.floor(totalSize / 4);
+  return Array.from({ length: 4 }, (_, i) => ({ start: i * size, end: (i + 1) * size }));
+}
+
+/**
+ * Detect cells at a given variance threshold
+ */
+function detectWithThreshold(variance, totalSize, threshold, gapTolerance, minCellSize) {
+  const rawBands = [];
+  let s = -1;
+  for (let i = 0; i < variance.length; i++) {
+    if (variance[i] < threshold) {
+      if (s === -1) s = i;
+    } else {
+      if (s !== -1) { rawBands.push({ start: s, end: i }); s = -1; }
+    }
   }
+  if (s !== -1) rawBands.push({ start: s, end: variance.length });
+  if (rawBands.length === 0) return [];
 
-  // Merge close bands and filter narrow ones
+  // Merge close bands
   const merged = [{ ...rawBands[0] }];
   for (let i = 1; i < rawBands.length; i++) {
     const prev = merged[merged.length - 1];
-    if (rawBands[i].start - prev.end < GAP_TOLERANCE) {
+    if (rawBands[i].start - prev.end < gapTolerance) {
       prev.end = rawBands[i].end;
     } else {
       merged.push({ ...rawBands[i] });
     }
   }
-  const bands = merged.filter(b => (b.end - b.start) >= MIN_BAND_WIDTH);
 
   // Build cells from gaps between bands
   const cells = [];
-  for (let i = 0; i < bands.length - 1; i++) {
-    cells.push({ start: bands[i].end, end: bands[i + 1].start });
+  for (let i = 0; i < merged.length - 1; i++) {
+    cells.push({ start: merged[i].end, end: merged[i + 1].start });
   }
-  // If last band doesn't reach the edge, add a cell after it
-  if (bands.length > 0 && bands[bands.length - 1].end < totalSize - MIN_BAND_WIDTH) {
-    cells.push({ start: bands[bands.length - 1].end, end: totalSize });
+  if (merged.length > 0 && merged[merged.length - 1].end < totalSize - 1) {
+    cells.push({ start: merged[merged.length - 1].end, end: totalSize });
   }
-  // If first band doesn't start at edge, add a cell before it
-  if (bands.length > 0 && bands[0].start > MIN_BAND_WIDTH) {
-    cells.unshift({ start: 0, end: bands[0].start });
+  if (merged.length > 0 && merged[0].start > 1) {
+    cells.unshift({ start: 0, end: merged[0].start });
   }
 
-  // Filter out cells that are too small
-  const validCells = cells.filter(c => (c.end - c.start) >= MIN_CELL_SIZE);
-
-  logger.info(`Grid detection: ${bands.length} bands → ${validCells.length} cells`);
-  return validCells;
+  return cells.filter(c => (c.end - c.start) >= minCellSize);
 }
 
 /**
