@@ -13,6 +13,7 @@ function MediaGallery() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [viewerState, setViewerState] = useState(null);
+  const [videoPlayer, setVideoPlayer] = useState(null);
   const [roomName, setRoomName] = useState('');
 
   const loadMedia = useCallback(async (offset = 0, append = false) => {
@@ -119,7 +120,10 @@ function MediaGallery() {
             <div
               key={item.id || index}
               className="gallery-item"
-              onClick={() => isImage && handleImageClick(imageIndex)}
+              onClick={() => {
+                if (isImage) handleImageClick(imageIndex);
+                else if (isVideo) setVideoPlayer(item);
+              }}
             >
               {isImage ? (
                 <img
@@ -169,6 +173,27 @@ function MediaGallery() {
           initialIndex={viewerState.index}
           onClose={() => setViewerState(null)}
         />
+      )}
+
+      {videoPlayer && (
+        <div className="gallery-video-overlay" onClick={() => setVideoPlayer(null)}>
+          <div className="gallery-video-player" onClick={e => e.stopPropagation()}>
+            <button className="gallery-video-close" onClick={() => setVideoPlayer(null)}>✕</button>
+            <video
+              src={`/media/${videoPlayer.file_path}`}
+              controls
+              autoPlay
+              style={{ maxWidth: '100%', maxHeight: '80vh' }}
+            />
+            <div className="gallery-video-actions">
+              <a
+                href={`/media/${videoPlayer.file_path}`}
+                download={videoPlayer.file_name}
+                className="gallery-download-btn"
+              >ダウンロードして再生</a>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

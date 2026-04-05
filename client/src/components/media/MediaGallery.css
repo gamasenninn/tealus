@@ -173,6 +173,51 @@
   text-align: center;
 }
 
+.gallery-video-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gallery-video-player {
+  position: relative;
+  max-width: 95vw;
+}
+
+.gallery-video-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.gallery-video-actions {
+  text-align: center;
+  padding: 12px 0;
+}
+
+.gallery-download-btn {
+  display: inline-block;
+  padding: 10px 24px;
+  background: var(--primary);
+  color: white;
+  border-radius: 20px;
+  text-decoration: none;
+  font-size: 14px;
+}
+
 .gallery-load-more button {
   padding: 8px 24px;
   border: 1px solid var(--border-dark);
