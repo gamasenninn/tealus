@@ -10,7 +10,6 @@ import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
-import { api } from '../../services/api';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -20,9 +19,7 @@ function ChatRoom() {
   const { user } = useAuthStore();
   const { currentRoom, members, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
-  const { fetchRooms } = useRoomStore();
   const [showMembers, setShowMembers] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
 
   // Search params
   const targetMsgId = searchParams.get('msg');
@@ -78,33 +75,10 @@ function ChatRoom() {
         </div>
         <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル">🖼</button>
         <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}>🔍</button>
-        <button className="chat-header-btn" onClick={() => setShowMenu(!showMenu)}>≡</button>
+        {currentRoom?.type === 'group' && (
+          <button className="chat-header-btn" onClick={() => setShowMembers(true)}>≡</button>
+        )}
       </header>
-
-      {showMenu && (
-        <div className="chat-menu-overlay" onClick={() => setShowMenu(false)}>
-          <div className="chat-menu" onClick={e => e.stopPropagation()}>
-            <button className="chat-menu-item" onClick={async () => {
-              setShowMenu(false);
-              if (confirm('このルームの未読をすべて既読にしますか？')) {
-                try {
-                  const res = await api.request('POST', `/rooms/${roomId}/read/all`);
-                  fetchRooms();
-                } catch (err) {
-                  console.error('Mark all read error:', err);
-                }
-              }
-            }}>
-              ✓ すべて既読
-            </button>
-            {currentRoom?.type === 'group' && (
-              <button className="chat-menu-item" onClick={() => { setShowMenu(false); setShowMembers(true); }}>
-                👥 メンバー管理
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {(roomError || messageError) && (
         <div className="error-bar">{roomError || messageError}</div>

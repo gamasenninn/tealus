@@ -70,7 +70,6 @@ async function cleanTestDb() {
       link_previews,
       voice_transcriptions,
       push_subscriptions,
-      message_reads,
       room_read_cursors,
       message_media,
       messages,

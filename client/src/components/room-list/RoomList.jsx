@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
+import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import './RoomList.css';
 
 function RoomList() {
@@ -12,6 +13,8 @@ function RoomList() {
   const { rooms, fetchRooms, error } = useRoomStore();
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [contextMenu, setContextMenu] = useState(null);
+  const longPressTimer = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -133,7 +136,19 @@ function RoomList() {
           <div
             key={room.id}
             className="room-item"
-            onClick={() => navigate(`/rooms/${room.id}`)}
+            onClick={() => !contextMenu && navigate(`/rooms/${room.id}`)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, roomId: room.id, roomName: getRoomDisplayName(room) });
+            }}
+            onTouchStart={(e) => {
+              longPressTimer.current = setTimeout(() => {
+                const touch = e.touches[0];
+                setContextMenu({ x: touch.clientX, y: touch.clientY, roomId: room.id, roomName: getRoomDisplayName(room) });
+              }, LONG_PRESS_TIMEOUT);
+            }}
+            onTouchEnd={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
+            onTouchMove={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
           >
             <div className="room-avatar">
               {room.type === 'direct' && room.partner_avatar_url ? (
@@ -164,6 +179,31 @@ function RoomList() {
       </div>
 
       {showCreate && <CreateRoom onClose={() => setShowCreate(false)} />}
+
+      {contextMenu && (
+        <div className="room-context-overlay" onClick={() => setContextMenu(null)}>
+          <div
+            className="room-context-menu"
+            style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button className="room-context-item" onClick={async () => {
+              const roomId = contextMenu.roomId;
+              setContextMenu(null);
+              if (confirm(`「${contextMenu.roomName}」の未読をすべて既読にしますか？`)) {
+                try {
+                  await api.request('POST', `/rooms/${roomId}/read/all`);
+                  fetchRooms();
+                } catch (err) {
+                  console.error('Mark all read error:', err);
+                }
+              }
+            }}>
+              ✓ すべて既読
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

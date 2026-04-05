@@ -209,9 +209,9 @@ router.get('/', async (req, res) => {
          WHERE msg.room_id = r.id
            AND msg.is_deleted = false
            AND msg.sender_id != $1
-           AND NOT EXISTS (
-             SELECT 1 FROM message_reads mr
-             WHERE mr.message_id = msg.id AND mr.user_id = $1
+           AND msg.created_at > COALESCE(
+             (SELECT last_read_at FROM room_read_cursors WHERE room_id = r.id AND user_id = $1),
+             '1970-01-01'
            )
        ) unread ON true
        WHERE rm.user_id = $1

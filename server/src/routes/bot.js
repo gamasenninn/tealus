@@ -139,8 +139,9 @@ router.get('/unread', async (req, res) => {
         WHERE m.room_id = $1
           AND m.sender_id != $2
           AND m.is_deleted = false
-          AND NOT EXISTS (
-            SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.user_id = $2
+          AND m.created_at > COALESCE(
+            (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
+            '1970-01-01'
           )
         ORDER BY m.created_at ASC
         LIMIT 100
@@ -158,8 +159,9 @@ router.get('/unread', async (req, res) => {
         JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
         WHERE m.sender_id != $1
           AND m.is_deleted = false
-          AND NOT EXISTS (
-            SELECT 1 FROM message_reads mr WHERE mr.message_id = m.id AND mr.user_id = $1
+          AND m.created_at > COALESCE(
+            (SELECT last_read_at FROM room_read_cursors WHERE room_id = m.room_id AND user_id = $1),
+            '1970-01-01'
           )
         ORDER BY m.created_at ASC
         LIMIT 100
@@ -203,12 +205,28 @@ router.post('/mark-read', async (req, res) => {
   }
 
   try {
-    for (const msgId of message_ids) {
+    // Find the latest message and its room
+    const latestMsg = await pool.query(
+      `SELECT m.id, m.room_id, m.created_at FROM messages m
+       WHERE m.id = ANY($1)
+       ORDER BY m.created_at DESC LIMIT 1`,
+      [message_ids]
+    );
+
+    if (latestMsg.rows.length > 0) {
+      const { id, room_id, created_at } = latestMsg.rows[0];
       await pool.query(
-        `INSERT INTO message_reads (message_id, user_id)
-         VALUES ($1, $2)
-         ON CONFLICT (message_id, user_id) DO NOTHING`,
-        [msgId, userId]
+        `INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at)
+         VALUES ($1, $2, $3, $4::timestamptz + interval '1 millisecond')
+         ON CONFLICT (room_id, user_id)
+         DO UPDATE SET
+           last_read_message_id = CASE
+             WHEN room_read_cursors.last_read_at < EXCLUDED.last_read_at
+             THEN EXCLUDED.last_read_message_id
+             ELSE room_read_cursors.last_read_message_id
+           END,
+           last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
+        [room_id, userId, id, created_at]
       );
     }
 

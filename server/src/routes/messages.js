@@ -61,7 +61,9 @@ router.get('/', async (req, res) => {
         FROM messages m
         JOIN users u ON u.id = m.sender_id
         LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count FROM message_reads WHERE message_id = m.id
+          SELECT COUNT(*)::int AS read_count
+          FROM room_read_cursors rrc
+          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
         ) rc ON true
         WHERE m.room_id = $1
           AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2) - INTERVAL '1 second'
@@ -77,7 +79,9 @@ router.get('/', async (req, res) => {
         FROM messages m
         JOIN users u ON u.id = m.sender_id
         LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count FROM message_reads WHERE message_id = m.id
+          SELECT COUNT(*)::int AS read_count
+          FROM room_read_cursors rrc
+          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
         ) rc ON true
         WHERE m.room_id = $1
           AND m.created_at < (SELECT created_at FROM messages WHERE id = $2)
@@ -92,7 +96,9 @@ router.get('/', async (req, res) => {
         FROM messages m
         JOIN users u ON u.id = m.sender_id
         LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count FROM message_reads WHERE message_id = m.id
+          SELECT COUNT(*)::int AS read_count
+          FROM room_read_cursors rrc
+          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
         ) rc ON true
         WHERE m.room_id = $1
         ORDER BY m.created_at DESC
