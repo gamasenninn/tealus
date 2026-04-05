@@ -188,6 +188,18 @@
   text-overflow: ellipsis;
 }
 
+.bubble.stamp-only {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bubble-stamp {
+  width: 150px;
+  height: auto;
+  display: block;
+}
+
 .bubble-tags {
   display: flex;
   flex-wrap: wrap;

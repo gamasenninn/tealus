@@ -1,0 +1,107 @@
+.stamp-generator {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid var(--border-light);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+.stamp-generator-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.stamp-generator-form {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stamp-generator-form label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.stamp-generator-form textarea,
+.stamp-generator-form input {
+  padding: 8px 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  resize: none;
+}
+
+.stamp-generator-form textarea:focus,
+.stamp-generator-form input:focus {
+  border-color: var(--primary);
+}
+
+.stamp-generator-btn {
+  padding: 10px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.stamp-generator-btn:disabled {
+  background: var(--border-dark);
+  cursor: default;
+}
+
+.stamp-generator-error {
+  color: var(--color-error);
+  font-size: 13px;
+}
+
+.stamp-generator-result {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.stamp-generator-success {
+  text-align: center;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-success);
+}
+
+.stamp-generator-preview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.stamp-generator-preview img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.stamp-generator-done {
+  width: 100%;
+  padding: 10px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+}

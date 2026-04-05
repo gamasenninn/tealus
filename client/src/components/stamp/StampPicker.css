@@ -1,0 +1,119 @@
+.stamp-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid var(--border-light);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+.stamp-picker-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.stamp-picker-header span {
+  flex: 1;
+}
+
+.stamp-picker-add,
+.stamp-picker-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+}
+
+.stamp-picker-add:hover,
+.stamp-picker-close:hover {
+  color: var(--text-primary);
+}
+
+.stamp-picker-loading,
+.stamp-picker-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.stamp-picker-create-btn {
+  margin-top: 12px;
+  padding: 8px 20px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.stamp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.stamp-grid-item {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  transition: background 0.15s;
+}
+
+.stamp-grid-item:hover {
+  background: var(--bg-page);
+}
+
+.stamp-grid-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.stamp-pack-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border-light);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.stamp-pack-tab {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.stamp-pack-tab.active {
+  opacity: 1;
+  background: var(--bg-page);
+}
+
+.stamp-pack-tab img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

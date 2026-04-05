@@ -170,7 +170,8 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   }
 
   const hasMedia = message.media && message.media.length > 0;
-  const hasText = message.content && message.content.trim();
+  const hasText = message.content && message.content.trim() && message.type !== 'stamp';
+  const isStamp = message.type === 'stamp' && message.stamp;
 
   return (
     <div className={`bubble-row ${isOwn ? 'own' : ''}`}>
@@ -194,17 +195,23 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           </div>
         )}
         <div
-          className={`bubble ${isOwn ? 'own' : 'other'} ${hasMedia && !hasText ? 'media-only' : ''}`}
+          className={`bubble ${isOwn ? 'own' : 'other'} ${hasMedia && !hasText ? 'media-only' : ''} ${isStamp ? 'stamp-only' : ''}`}
           onDoubleClick={() => setReplyTo(message)}
           onContextMenu={handleContextMenu}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
           onTouchMove={handleTouchMove}
         >
-          {message.type !== 'voice' && renderReply()}
-          {hasText && <p className="bubble-text">{highlightText(message.content)}</p>}
-          {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
-          {message.type !== 'voice' && renderMedia()}
+          {message.type !== 'voice' && !isStamp && renderReply()}
+          {isStamp ? (
+            <img src={`/media/${message.stamp.file_path}`} alt={message.stamp.label} className="bubble-stamp" />
+          ) : (
+            <>
+              {hasText && <p className="bubble-text">{highlightText(message.content)}</p>}
+              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
+              {message.type !== 'voice' && renderMedia()}
+            </>
+          )}
           {message.link_preview && <LinkPreview preview={message.link_preview} />}
         </div>
         {!isOwn && (

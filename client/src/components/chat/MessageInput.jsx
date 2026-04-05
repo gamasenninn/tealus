@@ -3,6 +3,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import VoiceRecorder from './VoiceRecorder';
+import StampPicker from '../stamp/StampPicker';
 import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants/ui';
 import './MessageInput.css';
 
@@ -12,6 +13,7 @@ function MessageInput({ roomId }) {
   const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadError, setUploadError] = useState('');
   const [recorderStream, setRecorderStream] = useState(null);
+  const [showStamps, setShowStamps] = useState(false);
   const fileInputRef = useRef(null);
   const typingTimerRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
@@ -132,6 +134,20 @@ function MessageInput({ roomId }) {
     }
   };
 
+  const sendStamp = async (stamp) => {
+    try {
+      await api.request('POST', `/rooms/${roomId}/messages`, {
+        content: stamp.id,
+        type: 'stamp',
+      });
+      clearReplyTo();
+      await useMessageStore.getState().fetchMessages(roomId);
+      window.dispatchEvent(new CustomEvent('scroll:bottom'));
+    } catch (err) {
+      console.error('Stamp send error:', err);
+    }
+  };
+
   return (
     <div className="message-input-container">
       {uploadError && (
@@ -156,6 +172,14 @@ function MessageInput({ roomId }) {
           disabled={isSending}
         >
           +
+        </button>
+        <button
+          className="message-input-stamp"
+          onClick={() => setShowStamps(!showStamps)}
+          disabled={isSending}
+          title="スタンプ"
+        >
+          😊
         </button>
         <input
           type="file"
@@ -192,6 +216,13 @@ function MessageInput({ roomId }) {
           </button>
         )}
       </div>
+
+      {showStamps && (
+        <StampPicker
+          onSelect={sendStamp}
+          onClose={() => setShowStamps(false)}
+        />
+      )}
 
       {recorderStream && (
         <VoiceRecorder

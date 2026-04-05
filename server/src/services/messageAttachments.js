@@ -140,4 +140,27 @@ async function attachTags(messages) {
   }
 }
 
-module.exports = { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags };
+/**
+ * Attach stamp info to stamp messages
+ */
+async function attachStamps(messages) {
+  const stampMsgs = messages.filter(m => m.type === 'stamp' && m.content);
+  if (stampMsgs.length === 0) return;
+  const stampIds = stampMsgs.map(m => m.content);
+  const result = await pool.query(
+    `SELECT s.id, s.file_path, s.label, s.pack_id, sp.name AS pack_name
+     FROM stamps s
+     JOIN stamp_packs sp ON sp.id = s.pack_id
+     WHERE s.id = ANY($1)`,
+    [stampIds]
+  );
+  const map = {};
+  for (const r of result.rows) {
+    map[r.id] = r;
+  }
+  for (const msg of stampMsgs) {
+    msg.stamp = map[msg.content] || null;
+  }
+}
+
+module.exports = { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps };

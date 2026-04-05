@@ -246,6 +246,23 @@ class ApiClient {
     return this.request('DELETE', `/messages/${messageId}/tags/${tagId}`);
   }
 
+  // Stamps
+  getStampPacks() {
+    return this.request('GET', '/stamps/packs');
+  }
+
+  getStampPack(packId) {
+    return this.request('GET', `/stamps/packs/${packId}`);
+  }
+
+  generateStampPack(prompt, name) {
+    return this.request('POST', '/stamps/generate', { prompt, name });
+  }
+
+  deleteStampPack(packId) {
+    return this.request('DELETE', `/stamps/packs/${packId}`);
+  }
+
   // Media Gallery
   getMediaGallery(roomId, { tag, category, offset = 0, limit = 30 } = {}) {
     let url = `/rooms/${roomId}/media/gallery?offset=${offset}&limit=${limit}`;
