@@ -30,17 +30,21 @@ router.post('/generate', async (req, res) => {
     }
   }
 
-  // Return immediately with 202 Accepted
+  // Capture values before response (req may be GC'd after response)
   const jobId = require('crypto').randomUUID();
   const packName = name?.trim() || prompt.trim().slice(0, 50);
+  const promptText = prompt.trim();
+  const displayName = req.user.display_name;
+
+  // Return immediately with 202 Accepted
   res.status(202).json({ jobId, message: 'スタンプ生成を開始しました' });
 
-  // Run generation in background
+  // Run generation in background (fully independent of request lifecycle)
   const { io } = require('../app');
   (async () => {
     try {
       // Generate stamps via AI
-      const result = await generateStampPack(prompt.trim());
+      const result = await generateStampPack(promptText);
 
       if (result.stamps.length === 0) {
         io.to(`user:${userId}`).emit('stamp:error', { jobId, error: 'スタンプの生成に失敗しました' });
@@ -51,7 +55,7 @@ router.post('/generate', async (req, res) => {
       const packRes = await pool.query(
         `INSERT INTO stamp_packs (name, prompt, created_by)
          VALUES ($1, $2, $3) RETURNING *`,
-        [packName, prompt.trim(), userId]
+        [packName, promptText, userId]
       );
       const pack = packRes.rows[0];
 
@@ -76,9 +80,9 @@ router.post('/generate', async (req, res) => {
         pack.thumbnail_path = savedFiles[0].filePath;
       }
 
-      logger.info(`Stamp pack created: "${packName}" by ${req.user.display_name} (${savedFiles.length} stamps)`);
+      logger.info(`Stamp pack created: "${packName}" by ${displayName} (${savedFiles.length} stamps)`);
 
-      // Notify via Socket.IO
+      // Notify via Socket.IO (user may have navigated away, but that's OK)
       io.to(`user:${userId}`).emit('stamp:generated', {
         jobId,
         pack,
@@ -87,7 +91,11 @@ router.post('/generate', async (req, res) => {
       });
     } catch (err) {
       logger.error('Stamp generation error:', err);
-      io.to(`user:${userId}`).emit('stamp:error', { jobId, error: err.message });
+      try {
+        io.to(`user:${userId}`).emit('stamp:error', { jobId, error: err.message });
+      } catch (e) {
+        // Socket may be gone, ignore
+      }
     }
   })();
 });
