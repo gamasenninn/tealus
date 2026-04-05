@@ -72,6 +72,24 @@ function MediaGallery() {
     setViewerState({ images: imageItems, index });
   };
 
+  const getDocIcon = (fileName) => {
+    const ext = (fileName || '').split('.').pop().toLowerCase();
+    const icons = {
+      pdf: '📄', doc: '📝', docx: '📝',
+      xls: '📊', xlsx: '📊', csv: '📊',
+      ppt: '📑', pptx: '📑',
+      txt: '📋', md: '📋', rtf: '📋',
+      zip: '📦', rar: '📦', '7z': '📦',
+      json: '🔧', xml: '🔧', yaml: '🔧', yml: '🔧',
+    };
+    return icons[ext] || '📎';
+  };
+
+  const getDocExt = (fileName) => {
+    const ext = (fileName || '').split('.').pop().toUpperCase();
+    return ext || '';
+  };
+
   const formatDate = (dateStr) => {
     return new Date(dateStr).toLocaleDateString('ja-JP', {
       year: 'numeric',
@@ -84,7 +102,7 @@ function MediaGallery() {
     <div className="gallery-container">
       <header className="gallery-header">
         <button className="icon-button" onClick={() => navigate(`/rooms/${roomId}`)}>←</button>
-        <h1>{roomName} — メディア</h1>
+        <h1>{roomName} — ファイル</h1>
       </header>
 
       <div className="gallery-category-filter">
@@ -93,6 +111,7 @@ function MediaGallery() {
           { key: 'image', label: '画像' },
           { key: 'video', label: '動画' },
           { key: 'audio', label: '音声' },
+          { key: 'document', label: 'ドキュメント' },
         ].map(cat => (
           <button
             key={cat.key || 'all'}
@@ -138,6 +157,7 @@ function MediaGallery() {
                 if (isImage) handleImageClick(imageIndex);
                 else if (isVideo) setVideoPlayer(item);
                 else if (isAudio) setVideoPlayer(item);
+                else window.open(`/media/${item.file_path}`, '_blank');
               }}
             >
               {isImage ? (
@@ -169,7 +189,8 @@ function MediaGallery() {
                 </div>
               ) : (
                 <div className="gallery-file-thumb">
-                  <span>📎</span>
+                  <span>{getDocIcon(item.file_name)}</span>
+                  <span className="gallery-file-ext">{getDocExt(item.file_name)}</span>
                   <span className="gallery-file-label">{item.file_name}</span>
                 </div>
               )}

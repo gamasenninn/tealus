@@ -174,6 +174,13 @@
   font-size: 28px;
 }
 
+.gallery-file-ext {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
 .gallery-file-label {
   font-size: 10px;
   color: var(--text-secondary);

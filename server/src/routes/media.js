@@ -125,6 +125,7 @@ router.get('/gallery', authenticate, requireMember, async (req, res) => {
     image: 'image/%',
     video: 'video/%',
     audio: 'audio/%',
+    document: null, // special handling below
   };
 
   try {
@@ -137,9 +138,13 @@ router.get('/gallery', authenticate, requireMember, async (req, res) => {
       params.push(tag);
     }
 
-    if (category && categoryMap[category]) {
-      conditions.push(`mm.mime_type LIKE $${paramIdx++}`);
-      params.push(categoryMap[category]);
+    if (category && category in categoryMap) {
+      if (category === 'document') {
+        conditions.push(`mm.mime_type NOT LIKE 'image/%' AND mm.mime_type NOT LIKE 'video/%' AND mm.mime_type NOT LIKE 'audio/%'`);
+      } else {
+        conditions.push(`mm.mime_type LIKE $${paramIdx++}`);
+        params.push(categoryMap[category]);
+      }
     }
 
     const tagJoin = tag ? 'JOIN message_tags mt ON mt.message_id = m.id' : '';
