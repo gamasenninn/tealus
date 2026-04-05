@@ -153,28 +153,34 @@ function detectCellBounds(variance, totalSize) {
   const MAX_CELLS = 6; // Reasonable max for one dimension
   const MIN_CELLS = 2;
 
-  // Try increasing thresholds, pick the one with most evenly-sized cells
-  let bestCells = null;
-  let bestScore = Infinity;
-
+  // Collect all candidates
+  const candidates = [];
   for (let threshold = 50; threshold <= 3000; threshold += 50) {
     const cells = detectWithThreshold(variance, totalSize, threshold, GAP_TOLERANCE, MIN_CELL_SIZE);
     if (cells.length >= MIN_CELLS && cells.length <= MAX_CELLS) {
-      // Score: coefficient of variation (lower = more even cell sizes)
       const sizes = cells.map(c => c.end - c.start);
       const avg = sizes.reduce((a, b) => a + b, 0) / sizes.length;
       const stddev = Math.sqrt(sizes.reduce((a, s) => a + (s - avg) ** 2, 0) / sizes.length);
-      const cv = stddev / avg; // 0 = perfectly even
-
-      if (cv < 0.5 && (bestCells === null || cv < bestScore)) {
-        bestCells = cells;
-        bestScore = cv;
-        logger.info(`Grid detection: threshold=${threshold}, ${cells.length} cells, cv=${cv.toFixed(3)}`);
-      }
+      const cv = stddev / avg;
+      candidates.push({ cells, cv, threshold });
     }
   }
 
-  if (bestCells) return bestCells;
+  // Priority 1: CV < 0.15 (highly uniform), pick max cell count
+  const strict = candidates.filter(c => c.cv < 0.15);
+  if (strict.length > 0) {
+    strict.sort((a, b) => b.cells.length - a.cells.length || a.cv - b.cv);
+    logger.info(`Grid detection: threshold=${strict[0].threshold}, ${strict[0].cells.length} cells, cv=${strict[0].cv.toFixed(3)}`);
+    return strict[0].cells;
+  }
+
+  // Priority 2: CV < 0.5 (tolerant), pick min CV
+  const tolerant = candidates.filter(c => c.cv < 0.5);
+  if (tolerant.length > 0) {
+    tolerant.sort((a, b) => a.cv - b.cv);
+    logger.info(`Grid detection (tolerant): threshold=${tolerant[0].threshold}, ${tolerant[0].cells.length} cells, cv=${tolerant[0].cv.toFixed(3)}`);
+    return tolerant[0].cells;
+  }
 
   // Fallback: evenly divide into 4
   logger.warn('Grid detection: falling back to even split');
