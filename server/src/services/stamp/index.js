@@ -58,32 +58,33 @@ async function splitGridImage(gridBuffer) {
 
   const { width, height, channels } = info;
 
-  // Calculate average brightness per row
-  const rowBrightness = [];
+  // Calculate row variance (low variance = uniform color = grid line)
+  const rowVariance = [];
   for (let y = 0; y < height; y++) {
-    let sum = 0;
+    const values = [];
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * channels;
-      sum += (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+      values.push((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
     }
-    rowBrightness.push(sum / width);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    rowVariance.push(values.reduce((a, v) => a + (v - avg) ** 2, 0) / values.length);
   }
 
-  // Calculate average brightness per column
-  const colBrightness = [];
+  // Calculate column variance
+  const colVariance = [];
   for (let x = 0; x < width; x++) {
-    let sum = 0;
+    const values = [];
     for (let y = 0; y < height; y++) {
       const idx = (y * width + x) * channels;
-      sum += (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+      values.push((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
     }
-    colBrightness.push(sum / height);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    colVariance.push(values.reduce((a, v) => a + (v - avg) ** 2, 0) / values.length);
   }
 
-  // Find cell boundaries from bright bands (margins + grid lines)
-  const BRIGHTNESS_THRESHOLD = 245;
-  const rowBounds = findCellBounds(rowBrightness, BRIGHTNESS_THRESHOLD, GRID_ROWS);
-  const colBounds = findCellBounds(colBrightness, BRIGHTNESS_THRESHOLD, GRID_COLS);
+  // Find cell boundaries from low-variance bands
+  const rowBounds = findCellBoundsVariance(rowVariance, GRID_ROWS, height);
+  const colBounds = findCellBoundsVariance(colVariance, GRID_COLS, width);
 
   logger.info(`Grid detection: rows=${JSON.stringify(rowBounds)}, cols=${JSON.stringify(colBounds)}`);
 
@@ -142,44 +143,71 @@ async function splitGridImage(gridBuffer) {
  * Find bright bands (grid lines + margins) in brightness array,
  * then return the dark regions between them as cell bounds.
  */
-function findCellBounds(brightness, threshold, cellCount) {
-  // Find runs of bright pixels (grid lines and margins)
-  const brightBands = [];
-  let runStart = -1;
+/**
+ * Find cell bounds using variance-based grid line detection.
+ * Grid lines have low variance (uniform color), cells have high variance (illustrations).
+ */
+function findCellBoundsVariance(variance, cellCount, totalSize) {
+  const VARIANCE_THRESHOLD = 100;
+  const GAP_TOLERANCE = 15;
+  const MIN_BAND_WIDTH = 10;
 
-  for (let i = 0; i < brightness.length; i++) {
-    if (brightness[i] >= threshold) {
+  // Find low-variance runs (grid lines / margins)
+  const rawBands = [];
+  let runStart = -1;
+  for (let i = 0; i < variance.length; i++) {
+    if (variance[i] < VARIANCE_THRESHOLD) {
       if (runStart === -1) runStart = i;
     } else {
       if (runStart !== -1) {
-        brightBands.push({ start: runStart, end: i });
+        rawBands.push({ start: runStart, end: i });
         runStart = -1;
       }
     }
   }
-  if (runStart !== -1) brightBands.push({ start: runStart, end: brightness.length });
+  if (runStart !== -1) rawBands.push({ start: runStart, end: variance.length });
 
-  // The cells are the gaps BETWEEN bright bands
-  const cells = [];
-  for (let i = 0; i < brightBands.length - 1; i++) {
-    cells.push({
-      start: brightBands[i].end,
-      end: brightBands[i + 1].start,
-    });
+  if (rawBands.length === 0) {
+    logger.warn('Grid detection: no low-variance bands found, falling back to even split');
+    const size = Math.floor(totalSize / cellCount);
+    return Array.from({ length: cellCount }, (_, i) => ({ start: i * size, end: (i + 1) * size }));
   }
 
-  // If we got the expected count, use them
+  // Merge close bands and filter narrow ones
+  const merged = [{ ...rawBands[0] }];
+  for (let i = 1; i < rawBands.length; i++) {
+    const prev = merged[merged.length - 1];
+    if (rawBands[i].start - prev.end < GAP_TOLERANCE) {
+      prev.end = rawBands[i].end;
+    } else {
+      merged.push({ ...rawBands[i] });
+    }
+  }
+  const bands = merged.filter(b => (b.end - b.start) >= MIN_BAND_WIDTH);
+
+  // Build cells from gaps between bands
+  const cells = [];
+  for (let i = 0; i < bands.length - 1; i++) {
+    cells.push({ start: bands[i].end, end: bands[i + 1].start });
+  }
+  // If last band doesn't reach the edge, add a cell after it
+  if (bands.length > 0 && bands[bands.length - 1].end < totalSize - MIN_BAND_WIDTH) {
+    cells.push({ start: bands[bands.length - 1].end, end: totalSize });
+  }
+  // If first band doesn't start at edge, add a cell before it
+  if (bands.length > 0 && bands[0].start > MIN_BAND_WIDTH) {
+    cells.unshift({ start: 0, end: bands[0].start });
+  }
+
   if (cells.length === cellCount) {
+    logger.info(`Grid detection: ${bands.length} bands → ${cells.length} cells`);
     return cells;
   }
 
   // Fallback: evenly divide
   logger.warn(`Grid detection: expected ${cellCount} cells but found ${cells.length}, falling back to even split`);
-  const size = Math.floor(brightness.length / cellCount);
-  return Array.from({ length: cellCount }, (_, i) => ({
-    start: i * size,
-    end: (i + 1) * size,
-  }));
+  const size = Math.floor(totalSize / cellCount);
+  return Array.from({ length: cellCount }, (_, i) => ({ start: i * size, end: (i + 1) * size }));
 }
 
 /**
