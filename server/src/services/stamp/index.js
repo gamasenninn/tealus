@@ -252,16 +252,11 @@ function detectWithThreshold(variance, totalSize, threshold, gapTolerance, minCe
     }
   }
 
-  // Build cells from gaps between bands
+  // Use band centers as dividers, split cells at midpoints between bands
+  const centers = merged.map(b => Math.floor((b.start + b.end) / 2));
   const cells = [];
-  for (let i = 0; i < merged.length - 1; i++) {
-    cells.push({ start: merged[i].end, end: merged[i + 1].start });
-  }
-  if (merged.length > 0 && merged[merged.length - 1].end < totalSize - 1) {
-    cells.push({ start: merged[merged.length - 1].end, end: totalSize });
-  }
-  if (merged.length > 0 && merged[0].start > 1) {
-    cells.unshift({ start: 0, end: merged[0].start });
+  for (let i = 0; i < centers.length - 1; i++) {
+    cells.push({ start: centers[i], end: centers[i + 1] });
   }
 
   return cells.filter(c => (c.end - c.start) >= minCellSize);
