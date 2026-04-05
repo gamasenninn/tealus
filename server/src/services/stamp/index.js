@@ -115,14 +115,11 @@ async function splitGridImage(gridBuffer) {
           .raw()
           .toBuffer({ resolveWithObject: true });
 
-        // Remove white/near-white background
+        // Remove background using flood fill from edges (preserves white inside characters)
         const pixels = extracted.data;
-        const threshold = 240;
-        for (let i = 0; i < pixels.length; i += 4) {
-          if (pixels[i] >= threshold && pixels[i + 1] >= threshold && pixels[i + 2] >= threshold) {
-            pixels[i + 3] = 0;
-          }
-        }
+        const w = extracted.info.width;
+        const h = extracted.info.height;
+        floodFillTransparent(pixels, w, h, 240);
 
         const buffer = await sharp(pixels, {
           raw: { width: extracted.info.width, height: extracted.info.height, channels: 4 },
@@ -169,6 +166,49 @@ function detectCellBounds(variance, totalSize) {
   logger.warn('Grid detection: falling back to even split');
   const size = Math.floor(totalSize / 4);
   return Array.from({ length: 4 }, (_, i) => ({ start: i * size, end: (i + 1) * size }));
+}
+
+/**
+ * Flood fill transparent from image edges.
+ * Only removes white/near-white pixels that are connected to the border.
+ * Preserves white areas inside characters (e.g. white face of a bird).
+ */
+function floodFillTransparent(pixels, width, height, threshold) {
+  const visited = new Uint8Array(width * height);
+
+  function isWhite(idx) {
+    return pixels[idx] >= threshold && pixels[idx + 1] >= threshold && pixels[idx + 2] >= threshold;
+  }
+
+  const queue = [];
+
+  // Seed from all edge pixels
+  for (let x = 0; x < width; x++) {
+    queue.push(x); // top row
+    queue.push((height - 1) * width + x); // bottom row
+  }
+  for (let y = 0; y < height; y++) {
+    queue.push(y * width); // left col
+    queue.push(y * width + width - 1); // right col
+  }
+
+  while (queue.length > 0) {
+    const pos = queue.pop();
+    if (pos < 0 || pos >= width * height || visited[pos]) continue;
+
+    const idx = pos * 4;
+    if (!isWhite(idx)) continue;
+
+    visited[pos] = 1;
+    pixels[idx + 3] = 0; // Make transparent
+
+    const x = pos % width;
+    const y = Math.floor(pos / width);
+    if (x > 0) queue.push(pos - 1);
+    if (x < width - 1) queue.push(pos + 1);
+    if (y > 0) queue.push(pos - width);
+    if (y < height - 1) queue.push(pos + width);
+  }
 }
 
 /**
