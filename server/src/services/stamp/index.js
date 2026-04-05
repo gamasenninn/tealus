@@ -35,8 +35,8 @@ async function generateStampPack(userPrompt) {
   const gridBuffer = await imageProvider.generate(detailedPrompt);
   logger.info(`Stamp generation: grid image received (${gridBuffer.length} bytes)`);
 
-  // Save grid image for debugging
-  const gridPath = path.join(STAMP_DIR, 'last_grid.png');
+  // Save grid image for future algorithm improvement
+  const gridPath = path.join(STAMP_DIR, `grid_${Date.now()}.png`);
   fs.writeFileSync(gridPath, gridBuffer);
   logger.info(`Stamp generation: grid saved to ${gridPath}`);
 
