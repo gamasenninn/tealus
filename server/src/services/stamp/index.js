@@ -153,14 +153,28 @@ function detectCellBounds(variance, totalSize) {
   const MAX_CELLS = 6; // Reasonable max for one dimension
   const MIN_CELLS = 2;
 
-  // Try increasing thresholds until we get a reasonable cell count
+  // Try increasing thresholds, pick the one with most evenly-sized cells
+  let bestCells = null;
+  let bestScore = Infinity;
+
   for (let threshold = 50; threshold <= 3000; threshold += 50) {
     const cells = detectWithThreshold(variance, totalSize, threshold, GAP_TOLERANCE, MIN_CELL_SIZE);
     if (cells.length >= MIN_CELLS && cells.length <= MAX_CELLS) {
-      logger.info(`Grid detection: threshold=${threshold}, ${cells.length} cells`);
-      return cells;
+      // Score: coefficient of variation (lower = more even cell sizes)
+      const sizes = cells.map(c => c.end - c.start);
+      const avg = sizes.reduce((a, b) => a + b, 0) / sizes.length;
+      const stddev = Math.sqrt(sizes.reduce((a, s) => a + (s - avg) ** 2, 0) / sizes.length);
+      const cv = stddev / avg; // 0 = perfectly even
+
+      if (cv < 0.5 && (bestCells === null || cv < bestScore)) {
+        bestCells = cells;
+        bestScore = cv;
+        logger.info(`Grid detection: threshold=${threshold}, ${cells.length} cells, cv=${cv.toFixed(3)}`);
+      }
     }
   }
+
+  if (bestCells) return bestCells;
 
   // Fallback: evenly divide into 4
   logger.warn('Grid detection: falling back to even split');
