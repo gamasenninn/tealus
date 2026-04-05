@@ -36,6 +36,7 @@ const memberRoutes = require('./routes/members');
 const transcriptionRoutes = require('./routes/transcription');
 const searchRoutes = require('./routes/search');
 const botRoutes = require('./routes/bot');
+const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes } = require('./routes/tags');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -49,6 +50,8 @@ app.use('/api/rooms/:id/members', memberRoutes);
 app.use('/api/messages/:id/transcription', transcriptionRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/bot', botRoutes);
+app.use('/api/rooms/:id/tags', tagRoomRoutes);
+app.use('/api/messages/:id/tags', tagMessageRoutes);
 
 // Static media files
 app.use('/media', express.static(path.join(__dirname, '../../media')));

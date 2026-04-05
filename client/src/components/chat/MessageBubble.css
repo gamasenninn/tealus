@@ -188,3 +188,25 @@
   text-overflow: ellipsis;
 }
 
+.bubble-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+  margin-left: 4px;
+}
+
+.bubble-tags.own {
+  justify-content: flex-end;
+  margin-right: 4px;
+}
+
+.bubble-tag {
+  font-size: 11px;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 1px 6px;
+  background: var(--primary-light);
+  border-radius: 8px;
+}
+

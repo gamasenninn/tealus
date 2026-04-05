@@ -5,7 +5,7 @@ const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
 const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config');
-const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions } = require('../services/messageAttachments');
+const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags } = require('../services/messageAttachments');
 
 const router = express.Router({ mergeParams: true });
 
@@ -110,6 +110,7 @@ router.get('/', async (req, res) => {
     await attachTranscriptions(messages);
     await attachLinkPreviews(messages);
     await attachReactions(messages, req.user.id);
+    await attachTags(messages);
 
     res.json({ messages });
   } catch (err) {

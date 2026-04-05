@@ -221,6 +221,38 @@ class ApiClient {
     return this.request('PUT', '/auth/password', { current_password, new_password });
   }
 
+  // Tags
+  getRoomTags(roomId) {
+    return this.request('GET', `/rooms/${roomId}/tags`);
+  }
+
+  suggestTags(roomId, query) {
+    return this.request('GET', `/rooms/${roomId}/tags/suggest?q=${encodeURIComponent(query)}`);
+  }
+
+  createTag(roomId, name) {
+    return this.request('POST', `/rooms/${roomId}/tags`, { name });
+  }
+
+  getMessageTags(messageId) {
+    return this.request('GET', `/messages/${messageId}/tags`);
+  }
+
+  addMessageTag(messageId, { tag_id, name }) {
+    return this.request('POST', `/messages/${messageId}/tags`, tag_id ? { tag_id } : { name });
+  }
+
+  removeMessageTag(messageId, tagId) {
+    return this.request('DELETE', `/messages/${messageId}/tags/${tagId}`);
+  }
+
+  // Media Gallery
+  getMediaGallery(roomId, { tag, offset = 0, limit = 30 } = {}) {
+    let url = `/rooms/${roomId}/media/gallery?offset=${offset}&limit=${limit}`;
+    if (tag) url += `&tag=${tag}`;
+    return this.request('GET', url);
+  }
+
   // Admin
   getAdminUsers() {
     return this.request('GET', '/admin/users');

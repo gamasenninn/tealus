@@ -7,6 +7,7 @@ import ChatRoom from './components/chat/ChatRoom';
 import AdminDashboard from './components/admin/AdminDashboard';
 import Profile from './components/profile/Profile';
 import SearchPage from './components/search/SearchPage';
+import MediaGallery from './components/media/MediaGallery';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -35,6 +36,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<PrivateRoute><RoomList /></PrivateRoute>} />
         <Route path="/rooms/:roomId" element={<PrivateRoute><ChatRoom /></PrivateRoute>} />
+        <Route path="/rooms/:roomId/gallery" element={<PrivateRoute><MediaGallery /></PrivateRoute>} />
         <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
         <Route path="/search" element={<PrivateRoute><SearchPage /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />

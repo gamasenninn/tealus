@@ -7,6 +7,7 @@ import ImageViewer from '../media/ImageViewer';
 import VoiceBubble from './VoiceBubble';
 import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
+import TagModal from '../tags/TagModal';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import './MessageBubble.css';
 
@@ -15,6 +16,8 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const { setReplyTo } = useMessageStore();
   const [viewerState, setViewerState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [tags, setTags] = useState(message.tags || []);
   const longPressTimer = useRef(null);
 
   const highlightText = (text) => {
@@ -73,6 +76,13 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       icon: '↩',
       label: 'リプライ',
       onClick: () => setReplyTo(message),
+    });
+
+    // Tag
+    items.push({
+      icon: '🏷',
+      label: 'タグを追加',
+      onClick: () => setShowTagModal(true),
     });
 
     // Voice transcription actions (own voice messages only)
@@ -204,6 +214,14 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         )}
       </div>
 
+      {tags.length > 0 && (
+        <div className={`bubble-tags ${isOwn ? 'own' : ''}`}>
+          {tags.map(tag => (
+            <span key={tag.id} className="bubble-tag">#{tag.name}</span>
+          ))}
+        </div>
+      )}
+
       {message.reactions && message.reactions.length > 0 && (
         <div className={`bubble-reactions ${isOwn ? 'own' : ''}`}>
           {message.reactions.map(r => (
@@ -228,6 +246,21 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           images={viewerState.images}
           initialIndex={viewerState.index}
           onClose={() => setViewerState(null)}
+        />
+      )}
+
+      {showTagModal && (
+        <TagModal
+          messageId={message.id}
+          onClose={() => setShowTagModal(false)}
+          onTagsChanged={async () => {
+            try {
+              const res = await api.getMessageTags(message.id);
+              setTags(res.tags);
+            } catch (err) {
+              console.error('Tag refresh error:', err);
+            }
+          }}
         />
       )}
     </div>

@@ -116,4 +116,28 @@ async function attachReactions(messages, userId) {
   }
 }
 
-module.exports = { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions };
+/**
+ * Attach tags to messages
+ */
+async function attachTags(messages) {
+  if (messages.length === 0) return;
+  const ids = messages.map(m => m.id);
+  const result = await pool.query(
+    `SELECT mt.message_id, t.id, t.name
+     FROM message_tags mt
+     JOIN tags t ON t.id = mt.tag_id
+     WHERE mt.message_id = ANY($1)
+     ORDER BY t.name`,
+    [ids]
+  );
+  const map = {};
+  for (const r of result.rows) {
+    if (!map[r.message_id]) map[r.message_id] = [];
+    map[r.message_id].push({ id: r.id, name: r.name });
+  }
+  for (const msg of messages) {
+    msg.tags = map[msg.id] || [];
+  }
+}
+
+module.exports = { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags };

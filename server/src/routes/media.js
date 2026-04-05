@@ -110,4 +110,57 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/rooms/:id/media/gallery
+ * Media gallery — list all media in a room with optional tag filter
+ */
+router.get('/gallery', authenticate, requireMember, async (req, res) => {
+  const roomId = req.params.id;
+  const { tag, offset = 0, limit = 30 } = req.query;
+  const limitNum = Math.min(parseInt(limit) || 30, 100);
+  const offsetNum = parseInt(offset) || 0;
+
+  try {
+    let query;
+    let params;
+
+    if (tag) {
+      // Filter by tag
+      query = `
+        SELECT mm.*, m.sender_id, m.created_at AS message_created_at,
+               u.display_name AS sender_display_name
+        FROM message_media mm
+        JOIN messages m ON m.id = mm.message_id
+        JOIN users u ON u.id = m.sender_id
+        JOIN message_tags mt ON mt.message_id = m.id
+        WHERE m.room_id = $1 AND m.is_deleted = false AND mt.tag_id = $2
+        ORDER BY m.created_at DESC
+        LIMIT $3 OFFSET $4
+      `;
+      params = [roomId, tag, limitNum + 1, offsetNum];
+    } else {
+      query = `
+        SELECT mm.*, m.sender_id, m.created_at AS message_created_at,
+               u.display_name AS sender_display_name
+        FROM message_media mm
+        JOIN messages m ON m.id = mm.message_id
+        JOIN users u ON u.id = m.sender_id
+        WHERE m.room_id = $1 AND m.is_deleted = false
+        ORDER BY m.created_at DESC
+        LIMIT $2 OFFSET $3
+      `;
+      params = [roomId, limitNum + 1, offsetNum];
+    }
+
+    const result = await pool.query(query, params);
+    const hasMore = result.rows.length > limitNum;
+    const media = hasMore ? result.rows.slice(0, limitNum) : result.rows;
+
+    res.json({ media, has_more: hasMore });
+  } catch (err) {
+    logger.error('Media gallery error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 module.exports = router;
