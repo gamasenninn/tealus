@@ -114,6 +114,7 @@ function MediaGallery() {
         {media.map((item, index) => {
           const isImage = item.mime_type?.startsWith('image/');
           const isVideo = item.mime_type?.startsWith('video/');
+          const isAudio = item.mime_type?.startsWith('audio/');
           const imageIndex = isImage ? images.indexOf(item) : -1;
 
           return (
@@ -123,6 +124,7 @@ function MediaGallery() {
               onClick={() => {
                 if (isImage) handleImageClick(imageIndex);
                 else if (isVideo) setVideoPlayer(item);
+                else if (isAudio) setVideoPlayer(item);
               }}
             >
               {isImage ? (
@@ -147,6 +149,11 @@ function MediaGallery() {
                     <span className="gallery-file-label">{item.file_name}</span>
                   </div>
                 )
+              ) : isAudio ? (
+                <div className="gallery-file-thumb">
+                  <span>🎵</span>
+                  <span className="gallery-file-label">{item.file_name}</span>
+                </div>
               ) : (
                 <div className="gallery-file-thumb">
                   <span>📎</span>
@@ -179,12 +186,21 @@ function MediaGallery() {
         <div className="gallery-video-overlay" onClick={() => setVideoPlayer(null)}>
           <div className="gallery-video-player" onClick={e => e.stopPropagation()}>
             <button className="gallery-video-close" onClick={() => setVideoPlayer(null)}>✕</button>
-            <video
-              src={`/media/${videoPlayer.file_path}`}
-              controls
-              autoPlay
-              style={{ maxWidth: '100%', maxHeight: '80vh' }}
-            />
+            {videoPlayer.mime_type?.startsWith('audio/') ? (
+              <audio
+                src={`/media/${videoPlayer.file_path}`}
+                controls
+                autoPlay
+                style={{ width: '100%', minWidth: '300px' }}
+              />
+            ) : (
+              <video
+                src={`/media/${videoPlayer.file_path}`}
+                controls
+                autoPlay
+                style={{ maxWidth: '100%', maxHeight: '80vh' }}
+              />
+            )}
             <div className="gallery-video-actions">
               <a
                 href={`/media/${videoPlayer.file_path}`}
