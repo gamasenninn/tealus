@@ -82,7 +82,7 @@ setupSocketHandlers(io);
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
-    logger.info(`Linny server running on port ${PORT}`);
+    logger.info(`Tealus server running on port ${PORT}`);
   });
 }
 

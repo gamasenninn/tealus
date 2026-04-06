@@ -1,4 +1,4 @@
--- Linny: Initial Schema
+-- Tealus: Initial Schema
 -- Phase 1 tables
 
 -- Enable UUID generation

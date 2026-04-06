@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tealus テーマカラー候補</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f0f0; padding: 20px; }
+h1 { text-align: center; margin-bottom: 24px; color: #333; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto; }
+.card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.card-header { padding: 14px 16px; color: white; display: flex; align-items: center; gap: 10px; }
+.card-header img { width: 28px; height: 28px; border-radius: 6px; }
+.card-header h2 { font-size: 16px; }
+.card-body { padding: 12px; }
+.bubble-row { margin-bottom: 8px; }
+.bubble { display: inline-block; padding: 8px 14px; border-radius: 16px; font-size: 14px; max-width: 80%; }
+.bubble.other { background: #f0f0f0; color: #333; border-bottom-left-radius: 4px; }
+.bubble.own { color: white; border-bottom-right-radius: 4px; }
+.bubble-row.own { text-align: right; }
+.sender { font-size: 11px; color: #888; margin-bottom: 2px; margin-left: 4px; }
+.card-footer { padding: 12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #eee; }
+.card-footer input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 20px; font-size: 13px; }
+.card-footer button { width: 32px; height: 32px; border-radius: 50%; border: none; color: white; font-size: 14px; cursor: pointer; }
+.color-code { text-align: center; padding: 8px; font-size: 13px; color: #666; background: #fafafa; }
+.label { text-align: center; padding: 6px; font-weight: bold; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Tealus テーマカラー候補</h1>
+<div class="grid" id="grid"></div>
+<script>
+const colors = [
+  { name: 'ティール', code: '#00B4A0', desc: '爽やか・差別化' },
+  { name: 'ブルーグリーン', code: '#00A98F', desc: '落ち着き・信頼' },
+  { name: 'オーシャンブルー', code: '#0097B2', desc: '清涼感・知的' },
+  { name: 'インディゴ', code: '#5C6BC0', desc: '知的・企業向き' },
+  { name: 'ディープティール', code: '#009688', desc: '安定感・プロ' },
+  { name: 'エメラルド', code: '#2ECC71', desc: '活力・LINEと微差別化' },
+  { name: 'スカイブルー', code: '#2196F3', desc: '開放的・信頼' },
+  { name: 'コーラル', code: '#FF6B6B', desc: '温かみ・親しみ' },
+  { name: 'バイオレット', code: '#7C4DFF', desc: '創造的・先進的' },
+  { name: 'サンセットオレンジ', code: '#FF8A50', desc: '活気・元気' },
+  { name: 'ローズ', code: '#E91E8C', desc: '華やか・個性的' },
+  { name: 'スレートブルー', code: '#546E7A', desc: '落ち着き・シック' },
+];
+
+const grid = document.getElementById('grid');
+colors.forEach(c => {
+  grid.innerHTML += `
+    <div class="card">
+      <div class="card-header" style="background:${c.code}">
+        <img src="/logo.png" alt="">
+        <h2>トーク</h2>
+      </div>
+      <div class="card-body">
+        <div class="sender">鈴木花子</div>
+        <div class="bubble-row"><div class="bubble other">お疲れ様です！</div></div>
+        <div class="bubble-row"><div class="bubble other">明日の会議、10時からです</div></div>
+        <div class="bubble-row own"><div class="bubble own" style="background:${c.code}">了解しました！ありがとうございます</div></div>
+        <div class="bubble-row own"><div class="bubble own" style="background:${c.code}">📝 音声文字起こしのテストです。</div></div>
+      </div>
+      <div class="card-footer">
+        <input placeholder="メッセージを入力" disabled>
+        <button style="background:${c.code}">▶</button>
+      </div>
+      <div class="label">${c.name} — ${c.desc}</div>
+      <div class="color-code">${c.code}</div>
+    </div>
+  `;
+});
+</script>
+</body>
+</html>

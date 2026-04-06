@@ -1,7 +1,7 @@
 {
-  "name": "linny-server",
+  "name": "tealus-server",
   "version": "0.1.0",
-  "description": "Linny - Server",
+  "description": "Tealus - Server",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",

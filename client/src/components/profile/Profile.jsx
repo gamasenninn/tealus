@@ -185,7 +185,7 @@ function Profile() {
           ))}
         </div>
         <p className="font-size-preview" style={{ fontSize: chatFontSize === 'small' ? '13px' : chatFontSize === 'large' ? '17px' : '15px' }}>
-          プレビュー: こんにちは、Linnyです。
+          プレビュー: こんにちは、Tealusです。
         </p>
       </div>
 

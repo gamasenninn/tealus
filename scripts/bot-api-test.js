@@ -1,5 +1,5 @@
 /**
- * Linny Bot API Test
+ * Tealus Bot API Test
  * Bot APIを使ってメッセージを送受信するテストスクリプト
  *
  * Usage: node scripts/bot-api-test.js [room_name]

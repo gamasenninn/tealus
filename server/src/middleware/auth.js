@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'linny-dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'tealus-dev-secret';
 
 /**
  * Generate JWT token for a user

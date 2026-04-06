@@ -1,8 +1,8 @@
-# Linny - プロジェクト指針
+# Tealus - プロジェクト指針
 
 ## プロジェクト概要
 
-社内LINE代替メッセンジャー「Linny」。PWA + Node.js + PostgreSQL構成。
+社内LINE代替メッセンジャー「Tealus」。PWA + Node.js + PostgreSQL構成。
 
 ## 設計書
 

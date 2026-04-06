@@ -22,7 +22,7 @@ async function fetchOgp(url) {
 
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Linny/1.0 (Link Preview)' },
+      headers: { 'User-Agent': 'Tealus/1.0 (Link Preview)' },
     });
     clearTimeout(timeout);
 

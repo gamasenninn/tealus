@@ -29,8 +29,8 @@ function Login() {
   return (
     <div className="login-container">
       <div className="login-card">
-        <img src="/logo.png" alt="Linny" className="login-logo" />
-        <h1 className="login-title">Linny</h1>
+        <img src="/logo.png" alt="Tealus" className="login-logo" />
+        <h1 className="login-title">Tealus</h1>
         <p className="login-subtitle">社内メッセンジャー</p>
 
         <form onSubmit={handleSubmit} className="login-form">

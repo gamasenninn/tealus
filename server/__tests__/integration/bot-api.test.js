@@ -16,7 +16,7 @@ describe('Bot API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    bot = await createTestUser({ employee_id: 'BOT001', display_name: 'Linny Bot' });
+    bot = await createTestUser({ employee_id: 'BOT001', display_name: 'Tealus Bot' });
     user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
 
     // Mark as bot

@@ -1,4 +1,4 @@
-# Linny
+# Tealus
 
 オープンソースの社内メッセンジャー。直感的なチャットUIで、画像・動画はサーバー保存（端末容量を使わない）。
 
@@ -45,8 +45,8 @@
 ### 1. リポジトリをクローン
 
 ```bash
-git clone https://github.com/gamasenninn/linny.git
-cd linny
+git clone https://github.com/gamasenninn/tealus.git
+cd tealus
 ```
 
 ### 2. Docker起動（PostgreSQL + Redis）
@@ -147,7 +147,7 @@ npm run test:watch # ウォッチモード
 ## ディレクトリ構成
 
 ```
-linny/
+tealus/
 ├── client/                    # React PWA フロントエンド
 │   ├── src/
 │   │   ├── components/
@@ -286,11 +286,11 @@ linny/
 ```nginx
 server {
     listen 80;
-    server_name linny.example.com;
+    server_name tealus.example.com;
 
     # React PWA
     location / {
-        root /var/linny/client/dist;
+        root /var/tealus/client/dist;
         try_files $uri $uri/ /index.html;
     }
 
@@ -311,7 +311,7 @@ server {
 
     # メディアファイル配信
     location /media/ {
-        alias /var/linny/media/;
+        alias /var/tealus/media/;
         expires 30d;
     }
 }

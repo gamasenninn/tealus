@@ -11,8 +11,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/media\//, /^\/api\//],
       },
       manifest: {
-        name: 'Linny',
-        short_name: 'Linny',
+        name: 'Tealus',
+        short_name: 'Tealus',
         description: '社内メッセンジャー',
         theme_color: '#00B4A0',
         background_color: '#ffffff',
