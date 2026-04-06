@@ -1,14 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import StampGenerator from './StampGenerator';
+import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import './StampPicker.css';
 
 function StampPicker({ onSelect, onClose }) {
+  const { user } = useAuthStore();
   const [packs, setPacks] = useState([]);
   const [selectedPack, setSelectedPack] = useState(null);
   const [stamps, setStamps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const longPressTimer = useRef(null);
 
   useEffect(() => {
     loadPacks();
@@ -39,8 +44,68 @@ function StampPicker({ onSelect, onClose }) {
   };
 
   const handleStampClick = (stamp) => {
+    if (contextMenu) return;
     onSelect(stamp);
     onClose();
+  };
+
+  const canEdit = (pack) => {
+    return pack?.created_by === user?.id || user?.role === 'admin';
+  };
+
+  const currentPack = packs.find(p => p.id === selectedPack);
+
+  // Pack context menu (long press on pack tab)
+  const showPackMenu = (e, pack) => {
+    if (!canEdit(pack)) return;
+    e.preventDefault();
+    setContextMenu({ type: 'pack', pack, x: e.clientX || e.touches?.[0]?.clientX, y: e.clientY || e.touches?.[0]?.clientY });
+  };
+
+  // Stamp context menu (long press on individual stamp)
+  const showStampMenu = (e, stamp) => {
+    if (!canEdit(currentPack)) return;
+    e.preventDefault();
+    setContextMenu({ type: 'stamp', stamp, x: e.clientX || e.touches?.[0]?.clientX, y: e.clientY || e.touches?.[0]?.clientY });
+  };
+
+  const handleDeletePack = async () => {
+    const pack = contextMenu.pack;
+    setContextMenu(null);
+    if (!confirm(`スタンプパック「${pack.name}」を削除しますか？\n過去のトークでは表示されなくなります。`)) return;
+    try {
+      await api.deleteStampPack(pack.id);
+      loadPacks();
+    } catch (err) {
+      console.error('Delete pack error:', err);
+    }
+  };
+
+  const handleRenamePack = async () => {
+    const pack = contextMenu.pack;
+    setContextMenu(null);
+    const newName = prompt('新しいパック名を入力', pack.name);
+    if (!newName || !newName.trim() || newName.trim() === pack.name) return;
+    try {
+      await api.renameStampPack(pack.id, newName.trim());
+      loadPacks();
+    } catch (err) {
+      console.error('Rename pack error:', err);
+    }
+  };
+
+  const handleDeleteStamp = async () => {
+    const stamp = contextMenu.stamp;
+    setContextMenu(null);
+    if (!confirm(`スタンプ「${stamp.label}」を削除しますか？`)) return;
+    try {
+      await api.deleteStamp(stamp.id);
+      // Reload current pack
+      const res = await api.getStampPack(selectedPack);
+      setStamps(res.stamps);
+    } catch (err) {
+      console.error('Delete stamp error:', err);
+    }
   };
 
   if (showGenerator) {
@@ -74,6 +139,12 @@ function StampPicker({ onSelect, onClose }) {
                 key={stamp.id}
                 className="stamp-grid-item"
                 onClick={() => handleStampClick(stamp)}
+                onContextMenu={(e) => showStampMenu(e, stamp)}
+                onTouchStart={(e) => {
+                  longPressTimer.current = setTimeout(() => showStampMenu(e, stamp), LONG_PRESS_TIMEOUT);
+                }}
+                onTouchEnd={() => { clearTimeout(longPressTimer.current); }}
+                onTouchMove={() => { clearTimeout(longPressTimer.current); }}
                 title={stamp.label}
               >
                 <img src={`/media/${stamp.file_path}`} alt={stamp.label} loading="lazy" />
@@ -87,6 +158,12 @@ function StampPicker({ onSelect, onClose }) {
                 key={pack.id}
                 className={`stamp-pack-tab ${selectedPack === pack.id ? 'active' : ''}`}
                 onClick={() => selectPack(pack)}
+                onContextMenu={(e) => showPackMenu(e, pack)}
+                onTouchStart={(e) => {
+                  longPressTimer.current = setTimeout(() => showPackMenu(e, pack), LONG_PRESS_TIMEOUT);
+                }}
+                onTouchEnd={() => { clearTimeout(longPressTimer.current); }}
+                onTouchMove={() => { clearTimeout(longPressTimer.current); }}
                 title={pack.name}
               >
                 {pack.thumbnail_path ? (
@@ -98,6 +175,32 @@ function StampPicker({ onSelect, onClose }) {
             ))}
           </div>
         </>
+      )}
+
+      {contextMenu && (
+        <div className="stamp-context-overlay" onClick={() => setContextMenu(null)}>
+          <div
+            className="stamp-context-menu"
+            style={{ bottom: 60, right: 10 }}
+            onClick={e => e.stopPropagation()}
+          >
+            {contextMenu.type === 'pack' && (
+              <>
+                <button className="stamp-context-item" onClick={handleRenamePack}>
+                  ✏ 名前を変更
+                </button>
+                <button className="stamp-context-item danger" onClick={handleDeletePack}>
+                  🗑 パックを削除
+                </button>
+              </>
+            )}
+            {contextMenu.type === 'stamp' && (
+              <button className="stamp-context-item danger" onClick={handleDeleteStamp}>
+                🗑 このスタンプを削除
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

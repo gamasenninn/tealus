@@ -263,6 +263,14 @@ class ApiClient {
     return this.request('DELETE', `/stamps/packs/${packId}`);
   }
 
+  renameStampPack(packId, name) {
+    return this.request('PUT', `/stamps/packs/${packId}`, { name });
+  }
+
+  deleteStamp(stampId) {
+    return this.request('DELETE', `/stamps/${stampId}`);
+  }
+
   // Media Gallery
   getMediaGallery(roomId, { tag, category, offset = 0, limit = 30 } = {}) {
     let url = `/rooms/${roomId}/media/gallery?offset=${offset}&limit=${limit}`;

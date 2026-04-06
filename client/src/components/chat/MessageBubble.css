@@ -194,6 +194,12 @@
   box-shadow: none;
 }
 
+.stamp-deleted {
+  color: var(--text-placeholder);
+  font-style: italic;
+  font-size: 13px;
+}
+
 .bubble-stamp {
   width: 150px;
   height: auto;

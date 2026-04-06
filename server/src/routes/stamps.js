@@ -225,4 +225,77 @@ router.delete('/packs/:id', async (req, res) => {
   }
 });
 
+/**
+ * PUT /api/stamps/packs/:id
+ * Update pack name (creator or admin only)
+ */
+router.put('/packs/:id', async (req, res) => {
+  const packId = req.params.id;
+  const userId = req.user.id;
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'パック名は必須です' });
+  }
+
+  try {
+    const pack = await pool.query(
+      'SELECT created_by FROM stamp_packs WHERE id = $1',
+      [packId]
+    );
+
+    if (pack.rows.length === 0) {
+      return res.status(404).json({ error: 'スタンプパックが見つかりません' });
+    }
+
+    if (pack.rows[0].created_by !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: '編集権限がありません' });
+    }
+
+    await pool.query(
+      'UPDATE stamp_packs SET name = $1 WHERE id = $2',
+      [name.trim(), packId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Stamp pack rename error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * DELETE /api/stamps/:id
+ * Delete an individual stamp (creator or admin only)
+ */
+router.delete('/:id', async (req, res) => {
+  const stampId = req.params.id;
+  const userId = req.user.id;
+
+  try {
+    const stamp = await pool.query(
+      `SELECT s.id, sp.created_by FROM stamps s
+       JOIN stamp_packs sp ON sp.id = s.pack_id
+       WHERE s.id = $1`,
+      [stampId]
+    );
+
+    if (stamp.rows.length === 0) {
+      return res.status(404).json({ error: 'スタンプが見つかりません' });
+    }
+
+    if (stamp.rows[0].created_by !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: '削除権限がありません' });
+    }
+
+    await pool.query('DELETE FROM stamps WHERE id = $1', [stampId]);
+
+    logger.info(`Stamp deleted: ${stampId} by ${req.user.display_name}`);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Stamp delete error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 module.exports = router;
