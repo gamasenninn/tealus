@@ -215,6 +215,22 @@ router.delete('/packs/:id', async (req, res) => {
       return res.status(403).json({ error: '削除権限がありません' });
     }
 
+    // Move files to deleted folder
+    const packName = (await pool.query('SELECT name FROM stamp_packs WHERE id = $1', [packId])).rows[0]?.name || '';
+    const { MEDIA_ROOT } = require('../middleware/upload');
+    const path = require('path');
+    const fs = require('fs');
+    const srcDir = path.join(MEDIA_ROOT, 'stamps', packId);
+    if (fs.existsSync(srcDir)) {
+      const deletedDir = path.join(MEDIA_ROOT, 'stamps', 'deleted');
+      if (!fs.existsSync(deletedDir)) fs.mkdirSync(deletedDir, { recursive: true });
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const safeName = packName.replace(/[<>:"/\\|?*]/g, '_').slice(0, 30);
+      const destDir = path.join(deletedDir, `${date}_${safeName}_${packId}`);
+      fs.renameSync(srcDir, destDir);
+      logger.info(`Stamp pack files moved to: ${destDir}`);
+    }
+
     await pool.query('DELETE FROM stamp_packs WHERE id = $1', [packId]);
 
     logger.info(`Stamp pack deleted: ${packId} by ${req.user.display_name}`);
