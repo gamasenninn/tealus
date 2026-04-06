@@ -3,12 +3,12 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: linny_postgres
+    container_name: tealus_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: linny
-      POSTGRES_PASSWORD: linny_dev
-      POSTGRES_DB: linny
+      POSTGRES_USER: tealus
+      POSTGRES_PASSWORD: tealus_dev
+      POSTGRES_DB: tealus
     ports:
       - "5432:5432"
     volumes:
@@ -17,18 +17,18 @@ services:
 
   postgres_test:
     image: postgres:16-alpine
-    container_name: linny_postgres_test
+    container_name: tealus_postgres_test
     restart: unless-stopped
     environment:
-      POSTGRES_USER: linny_test
-      POSTGRES_PASSWORD: linny_test
-      POSTGRES_DB: linny_test
+      POSTGRES_USER: tealus_test
+      POSTGRES_PASSWORD: tealus_test
+      POSTGRES_DB: tealus_test
     ports:
       - "5433:5432"
 
   redis:
     image: redis:7-alpine
-    container_name: linny_redis
+    container_name: tealus_redis
     restart: unless-stopped
     ports:
       - "6379:6379"

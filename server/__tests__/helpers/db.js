@@ -16,9 +16,9 @@ function getTestPool() {
     pool = new Pool({
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT || '5433'),
-      database: process.env.DB_NAME || 'linny_test',
-      user: process.env.DB_USER || 'linny_test',
-      password: process.env.DB_PASSWORD || 'linny_test',
+      database: process.env.DB_NAME || 'tealus_test',
+      user: process.env.DB_USER || 'tealus_test',
+      password: process.env.DB_PASSWORD || 'tealus_test',
     });
   }
   return pool;

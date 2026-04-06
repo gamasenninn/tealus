@@ -36,7 +36,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ['linny.hksagri.diskstation.me'],
+    allowedHosts: ['linny.hksagri.diskstation.me', 'tealus.hksagri.diskstation.me'],
     proxy: {
       '/api': 'http://localhost:3000',
       '/media': 'http://localhost:3000',
