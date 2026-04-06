@@ -65,6 +65,31 @@
   cursor: default;
 }
 
+.stamp-labels-toggle {
+  font-size: 13px;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.stamp-labels-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.stamp-label-input {
+  padding: 6px 8px;
+  border: 1px solid var(--border-dark);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+.stamp-label-input:focus {
+  border-color: var(--primary);
+}
+
 .stamp-generator-error {
   color: var(--color-error);
   font-size: 13px;

@@ -10,13 +10,16 @@ const STAMP_LABELS = [
 /**
  * Build the system prompt for stamp prompt generation
  */
-function buildSystemPrompt() {
+function buildSystemPrompt(labels) {
+  const count = labels.length;
+  const cols = 4;
+  const rows = Math.ceil(count / cols);
+
   return `あなたはLINEスタンプのプロンプトデザイナーです。
 ユーザーの入力を元に、画像生成AIに渡すための詳細なプロンプトを生成してください。
 
 要件:
-- 1536×1024pxの画像に4×4のグリッドレイアウト（4列×4行 = 16コマ）
-- 各コマは384×256pxの均等なセル
+- 1536×1024pxの画像に${cols}×${rows}のグリッドレイアウト（${cols}列×${rows}行 = ${count}コマ）
 - 各セルの間には薄いグレーの区切り線（1px）を入れる
 - LINEスタンプ風のかわいいイラスト
 - 各コマに日本語テキストを含める
@@ -25,8 +28,8 @@ function buildSystemPrompt() {
 - 白背景
 - キャラクターや文字がセルの境界をまたがないこと
 
-16コマのテキスト（左上から右に順に）:
-${STAMP_LABELS.map((l, i) => `${i + 1}. ${l}`).join('\n')}
+${count}コマのテキスト（左上から右に順に）:
+${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}
 
 出力は画像生成AIに直接渡すプロンプト（英語）のみを返してください。説明や前置きは不要です。`;
 }
@@ -40,7 +43,7 @@ class OpenAITextProvider {
     this.model = model || 'gpt-4o';
   }
 
-  async generateStampPrompt(userInput) {
+  async generateStampPrompt(userInput, labels = STAMP_LABELS) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -50,7 +53,7 @@ class OpenAITextProvider {
       body: JSON.stringify({
         model: this.model,
         messages: [
-          { role: 'system', content: buildSystemPrompt() },
+          { role: 'system', content: buildSystemPrompt(labels) },
           { role: 'user', content: userInput },
         ],
         max_tokens: 1000,

@@ -4,10 +4,19 @@ import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import './StampGenerator.css';
 
+const DEFAULT_LABELS = [
+  '了解です', 'おはよう', 'OK!', 'おやすみ',
+  'ごめんね', 'ありがとう', 'いいね！', '了解！',
+  'うるうる', 'がんばります', 'ちらっ', 'ありがとうございました',
+  'おつかれさま', 'ねむい', 'えっ!?', 'カンパーイ！',
+];
+
 function StampGenerator({ onClose }) {
   const { roomId } = useParams();
   const [prompt, setPrompt] = useState('');
   const [name, setName] = useState('');
+  const [labels, setLabels] = useState([...DEFAULT_LABELS]);
+  const [showLabels, setShowLabels] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -35,14 +44,24 @@ function StampGenerator({ onClose }) {
     };
   }, []);
 
+  const updateLabel = (index, value) => {
+    const newLabels = [...labels];
+    newLabels[index] = value;
+    setLabels(newLabels);
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim() || generating) return;
+    const activeLabels = labels.filter(l => l.trim());
+    if (activeLabels.length < 2) {
+      setError('ラベルは最低2つ必要です');
+      return;
+    }
 
     setGenerating(true);
     setError('');
     try {
-      await api.generateStampPack(prompt.trim(), name.trim() || undefined, roomId);
-      // Response is 202 — wait for Socket.IO event
+      await api.generateStampPack(prompt.trim(), name.trim() || undefined, roomId, activeLabels);
     } catch (err) {
       setGenerating(false);
       setError(err.message);
@@ -96,6 +115,27 @@ function StampGenerator({ onClose }) {
           placeholder="例：はたらく柴犬"
           disabled={generating}
         />
+
+        <div className="stamp-labels-toggle" onClick={() => setShowLabels(!showLabels)}>
+          {showLabels ? '▼' : '▶'} ラベルをカスタマイズ（{labels.filter(l => l.trim()).length}枚）
+        </div>
+
+        {showLabels && (
+          <div className="stamp-labels-grid">
+            {labels.map((label, i) => (
+              <input
+                key={i}
+                type="text"
+                value={label}
+                onChange={e => updateLabel(i, e.target.value)}
+                placeholder={`(空欄でスキップ)`}
+                disabled={generating}
+                className="stamp-label-input"
+              />
+            ))}
+          </div>
+        )}
+
         {error && <div className="stamp-generator-error">{error}</div>}
         {generating && (
           <div className="stamp-generator-progress">

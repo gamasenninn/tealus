@@ -16,7 +16,7 @@ const DAILY_LIMIT = 3;
  */
 router.post('/generate', async (req, res) => {
   const userId = req.user.id;
-  const { prompt, name, room_id } = req.body;
+  const { prompt, name, room_id, labels } = req.body;
 
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({ error: 'プロンプトは必須です' });
@@ -36,6 +36,7 @@ router.post('/generate', async (req, res) => {
   const promptText = prompt.trim();
   const displayName = req.user.display_name;
   const roomId = room_id || null;
+  const customLabels = Array.isArray(labels) ? labels.filter(l => l && l.trim()) : null;
 
   // Return immediately with 202 Accepted
   res.status(202).json({ jobId, message: 'スタンプ生成を開始しました' });
@@ -45,7 +46,7 @@ router.post('/generate', async (req, res) => {
   (async () => {
     try {
       // Generate stamps via AI
-      const result = await generateStampPack(promptText);
+      const result = await generateStampPack(promptText, customLabels);
 
       if (result.stamps.length === 0) {
         io.to(`user:${userId}`).emit('stamp:error', { jobId, error: 'スタンプの生成に失敗しました' });

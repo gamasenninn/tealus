@@ -255,8 +255,8 @@ class ApiClient {
     return this.request('GET', `/stamps/packs/${packId}`);
   }
 
-  generateStampPack(prompt, name, roomId) {
-    return this.request('POST', '/stamps/generate', { prompt, name, room_id: roomId });
+  generateStampPack(prompt, name, roomId, labels) {
+    return this.request('POST', '/stamps/generate', { prompt, name, room_id: roomId, labels });
   }
 
   deleteStampPack(packId) {

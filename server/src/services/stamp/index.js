@@ -22,11 +22,12 @@ if (!fs.existsSync(STAMP_DIR)) {
  * @param {string} userPrompt - User's stamp description
  * @returns {object} { gridImageBuffer, stamps: [{ buffer, label, index }] }
  */
-async function generateStampPack(userPrompt) {
+async function generateStampPack(userPrompt, customLabels = null) {
   // Step 1: Convert user prompt to detailed image prompt
-  logger.info(`Stamp generation: converting prompt "${userPrompt}"`);
+  const labelsToUse = customLabels || STAMP_LABELS;
+  logger.info(`Stamp generation: converting prompt "${userPrompt}" (${labelsToUse.length} labels)`);
   const textProvider = createTextProvider(process.env.STAMP_TEXT_PROVIDER);
-  const detailedPrompt = await textProvider.generateStampPrompt(userPrompt);
+  const detailedPrompt = await textProvider.generateStampPrompt(userPrompt, labelsToUse);
   logger.info(`Stamp generation: detailed prompt ready (${detailedPrompt.length} chars)`);
 
   // Step 2: Generate grid image
@@ -41,7 +42,7 @@ async function generateStampPack(userPrompt) {
   logger.info(`Stamp generation: grid saved to ${gridPath}`);
 
   // Step 3: Split into individual stamps
-  const stamps = await splitGridImage(gridBuffer);
+  const stamps = await splitGridImage(gridBuffer, labelsToUse);
   logger.info(`Stamp generation: split into ${stamps.length} stamps`);
 
   return { gridBuffer, detailedPrompt, stamps };
@@ -50,7 +51,7 @@ async function generateStampPack(userPrompt) {
 /**
  * Split a grid image into individual stamp images by detecting grid lines
  */
-async function splitGridImage(gridBuffer) {
+async function splitGridImage(gridBuffer, labels = STAMP_LABELS) {
   const { data, info } = await sharp(gridBuffer)
     .ensureAlpha()
     .raw()
@@ -126,7 +127,7 @@ async function splitGridImage(gridBuffer) {
 
         stamps.push({
           buffer,
-          label: STAMP_LABELS[index] || `stamp_${index + 1}`,
+          label: labels[index] || `stamp_${index + 1}`,
           index,
         });
       } catch (err) {
