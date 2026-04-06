@@ -143,13 +143,17 @@ router.post('/generate', async (req, res) => {
  * List all stamp packs
  */
 router.get('/packs', async (req, res) => {
+  const userId = req.user.id;
   try {
     const result = await pool.query(
       `SELECT sp.*, u.display_name AS creator_name,
-              (SELECT COUNT(*)::int FROM stamps WHERE pack_id = sp.id) AS stamp_count
+              (SELECT COUNT(*)::int FROM stamps WHERE pack_id = sp.id) AS stamp_count,
+              usu.last_used_at AS my_last_used_at
        FROM stamp_packs sp
        JOIN users u ON u.id = sp.created_by
-       ORDER BY sp.last_used_at DESC NULLS LAST, sp.created_at DESC`
+       LEFT JOIN user_stamp_usage usu ON usu.pack_id = sp.id AND usu.user_id = $1
+       ORDER BY usu.last_used_at DESC NULLS LAST, sp.created_at DESC`,
+      [userId]
     );
     res.json({ packs: result.rows });
   } catch (err) {

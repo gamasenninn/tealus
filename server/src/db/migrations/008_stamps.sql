@@ -34,6 +34,14 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- ユーザーごとのスタンプ使用履歴
+CREATE TABLE IF NOT EXISTS user_stamp_usage (
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    pack_id     UUID NOT NULL REFERENCES stamp_packs(id) ON DELETE CASCADE,
+    last_used_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, pack_id)
+);
+
 -- messagesのtype制約にstampを追加
 DO $$ BEGIN
   ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check;

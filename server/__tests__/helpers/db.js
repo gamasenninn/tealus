@@ -64,6 +64,7 @@ async function cleanTestDb() {
   const p = getTestPool();
   await p.query(`
     TRUNCATE TABLE
+      user_stamp_usage,
       stamps,
       stamp_packs,
       message_tags,

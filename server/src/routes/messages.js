@@ -34,12 +34,13 @@ router.post('/', async (req, res) => {
 
     const message = result.rows[0];
 
-    // Update stamp pack last_used_at
+    // Update per-user stamp usage
     if (type === 'stamp' && content) {
       pool.query(
-        `UPDATE stamp_packs SET last_used_at = NOW()
-         WHERE id = (SELECT pack_id FROM stamps WHERE id = $1)`,
-        [content.trim()]
+        `INSERT INTO user_stamp_usage (user_id, pack_id, last_used_at)
+         VALUES ($1, (SELECT pack_id FROM stamps WHERE id = $2), NOW())
+         ON CONFLICT (user_id, pack_id) DO UPDATE SET last_used_at = NOW()`,
+        [userId, content.trim()]
       ).catch(() => {});
     }
 
