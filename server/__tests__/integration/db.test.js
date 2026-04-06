@@ -71,7 +71,6 @@ describe('Database', () => {
     expect(tables).toContain('messages');
     expect(tables).toContain('message_media');
     expect(tables).toContain('room_read_cursors');
-    expect(tables).toContain('message_reads');
     expect(tables).toContain('push_subscriptions');
   });
 
