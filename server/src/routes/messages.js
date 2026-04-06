@@ -33,6 +33,16 @@ router.post('/', async (req, res) => {
     );
 
     const message = result.rows[0];
+
+    // Update stamp pack last_used_at
+    if (type === 'stamp' && content) {
+      pool.query(
+        `UPDATE stamp_packs SET last_used_at = NOW()
+         WHERE id = (SELECT pack_id FROM stamps WHERE id = $1)`,
+        [content.trim()]
+      ).catch(() => {});
+    }
+
     res.status(201).json({ message });
   } catch (err) {
     logger.error('Send message error:', err);

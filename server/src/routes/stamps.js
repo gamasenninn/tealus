@@ -149,7 +149,7 @@ router.get('/packs', async (req, res) => {
               (SELECT COUNT(*)::int FROM stamps WHERE pack_id = sp.id) AS stamp_count
        FROM stamp_packs sp
        JOIN users u ON u.id = sp.created_by
-       ORDER BY sp.created_at DESC`
+       ORDER BY sp.last_used_at DESC NULLS LAST, sp.created_at DESC`
     );
     res.json({ packs: result.rows });
   } catch (err) {
