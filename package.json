@@ -1,0 +1,8 @@
+{
+  "name": "tealus-cli",
+  "version": "1.0.0",
+  "description": "Tealus CLI — コマンドラインからTealusにメッセージ送信",
+  "bin": {
+    "tealus": "./scripts/tealus-cli.js"
+  }
+}
