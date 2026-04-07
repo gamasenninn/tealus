@@ -127,4 +127,15 @@ describe('parseGlobalArgs', () => {
     const result = parseGlobalArgs(['--bot-id', 'X', '--bot-pass', 'Y', 'rooms']);
     expect(result.rest).toEqual(['rooms']);
   });
+
+  test('--env でenvファイルを指定', () => {
+    const result = parseGlobalArgs(['--env', '.env.trx', 'send', 'Web部', '--text', 'hello']);
+    expect(result.envFile).toBe('.env.trx');
+    expect(result.rest).toEqual(['send', 'Web部', '--text', 'hello']);
+  });
+
+  test('--env なしは undefined', () => {
+    const result = parseGlobalArgs(['send', 'Web部', '--text', 'hello']);
+    expect(result.envFile).toBeUndefined();
+  });
 });

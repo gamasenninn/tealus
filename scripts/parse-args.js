@@ -88,7 +88,10 @@ function parseGlobalArgs(args) {
   const result = { rest: [] };
   let i = 0;
   while (i < args.length) {
-    if (args[i] === '--bot-id' && i + 1 < args.length) {
+    if (args[i] === '--env' && i + 1 < args.length) {
+      result.envFile = args[i + 1];
+      i += 2;
+    } else if (args[i] === '--bot-id' && i + 1 < args.length) {
       result.botId = args[i + 1];
       i += 2;
     } else if (args[i] === '--bot-pass' && i + 1 < args.length) {

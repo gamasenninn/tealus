@@ -18,13 +18,17 @@ const http = require('http');
 const https = require('https');
 
 // Load .env from scripts directory
-const envPath = path.join(__dirname, '.env');
-if (fs.existsSync(envPath)) {
-  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-    const [key, ...vals] = line.trim().split('=');
-    if (key && !key.startsWith('#')) process.env[key] = vals.join('=');
-  });
+function loadEnvFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    fs.readFileSync(filePath, 'utf8').split('\n').forEach(line => {
+      const [key, ...vals] = line.trim().split('=');
+      if (key && !key.startsWith('#')) process.env[key] = vals.join('=');
+    });
+  }
 }
+
+// デフォルトの .env を読み込み
+loadEnvFile(path.join(__dirname, '.env'));
 
 const SERVER = process.env.TEALUS_SERVER || 'http://localhost:3000';
 let BOT_ID = process.env.TEALUS_BOT_ID;
@@ -276,6 +280,20 @@ async function cmdRooms() {
 // --- Main ---
 
 const globalParsed = parseGlobalArgs(process.argv.slice(2));
+
+// --env で別のenvファイルを読み込み（デフォルト.envを上書き）
+if (globalParsed.envFile) {
+  const envFilePath = path.resolve(__dirname, globalParsed.envFile);
+  if (!fs.existsSync(envFilePath)) {
+    console.error(`❌ envファイルが見つかりません: ${envFilePath}`);
+    process.exit(1);
+  }
+  loadEnvFile(envFilePath);
+  BOT_ID = process.env.TEALUS_BOT_ID;
+  BOT_PASS = process.env.TEALUS_BOT_PASS;
+}
+
+// --bot-id / --bot-pass はenvより優先
 if (globalParsed.botId) BOT_ID = globalParsed.botId;
 if (globalParsed.botPass) BOT_PASS = globalParsed.botPass;
 
@@ -317,6 +335,7 @@ switch (command) {
     console.log('  --ext <拡張子>         対象拡張子をカンマ区切りで指定（デフォルト: .wav）');
     console.log('');
     console.log('グローバルオプション:');
+    console.log('  --env <file>           envファイルを指定（例: --env .env.trx）');
     console.log('  --bot-id <ID>          Bot認証ID（.envより優先）');
     console.log('  --bot-pass <PASS>      Botパスワード（.envより優先）');
     console.log('');
