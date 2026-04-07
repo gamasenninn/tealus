@@ -12,7 +12,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { parseSendArgs } = require('./parse-args');
+const { parseSendArgs, parseGlobalArgs } = require('./parse-args');
 const { waitForFileComplete, watchDirectory } = require('./watch');
 const http = require('http');
 const https = require('https');
@@ -27,13 +27,8 @@ if (fs.existsSync(envPath)) {
 }
 
 const SERVER = process.env.TEALUS_SERVER || 'http://localhost:3000';
-const BOT_ID = process.env.TEALUS_BOT_ID;
-const BOT_PASS = process.env.TEALUS_BOT_PASS;
-
-if (!BOT_ID || !BOT_PASS) {
-  console.error('❌ scripts/.env に TEALUS_BOT_ID と TEALUS_BOT_PASS を設定してください');
-  process.exit(1);
-}
+let BOT_ID = process.env.TEALUS_BOT_ID;
+let BOT_PASS = process.env.TEALUS_BOT_PASS;
 
 // --- HTTP helpers ---
 
@@ -280,7 +275,16 @@ async function cmdRooms() {
 
 // --- Main ---
 
-const [,, command, ...args] = process.argv;
+const globalParsed = parseGlobalArgs(process.argv.slice(2));
+if (globalParsed.botId) BOT_ID = globalParsed.botId;
+if (globalParsed.botPass) BOT_PASS = globalParsed.botPass;
+
+if (!BOT_ID || !BOT_PASS) {
+  console.error('❌ --bot-id / --bot-pass を指定するか、scripts/.env に TEALUS_BOT_ID と TEALUS_BOT_PASS を設定してください');
+  process.exit(1);
+}
+
+const [command, ...args] = globalParsed.rest;
 
 switch (command) {
   case 'send':
@@ -311,6 +315,10 @@ switch (command) {
     console.log('監視モード:');
     console.log('  --voice --watch <dir>  ディレクトリを監視し、新規音声ファイルを自動送信');
     console.log('  --ext <拡張子>         対象拡張子をカンマ区切りで指定（デフォルト: .wav）');
+    console.log('');
+    console.log('グローバルオプション:');
+    console.log('  --bot-id <ID>          Bot認証ID（.envより優先）');
+    console.log('  --bot-pass <PASS>      Botパスワード（.envより優先）');
     console.log('');
     console.log('設定: scripts/.env に TEALUS_BOT_ID, TEALUS_BOT_PASS, TEALUS_SERVER を設定');
     break;

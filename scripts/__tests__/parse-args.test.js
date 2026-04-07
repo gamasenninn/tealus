@@ -3,7 +3,7 @@
  * TDD Red phase: まずテストを書く
  */
 
-const { parseSendArgs } = require('../parse-args');
+const { parseSendArgs, parseGlobalArgs } = require('../parse-args');
 
 describe('parseSendArgs', () => {
   // 既存: 単発送信
@@ -99,5 +99,32 @@ describe('parseSendArgs', () => {
     test('--watch にディレクトリ指定なしはエラー', () => {
       expect(() => parseSendArgs(['Web部', '--voice', '--watch'])).toThrow();
     });
+  });
+});
+
+describe('parseGlobalArgs', () => {
+  test('--bot-id と --bot-pass を取得', () => {
+    const result = parseGlobalArgs(['send', 'Web部', '--bot-id', 'EMP9001', '--bot-pass', '1234', '--text', 'hello']);
+    expect(result.botId).toBe('EMP9001');
+    expect(result.botPass).toBe('1234');
+    expect(result.rest).toEqual(['send', 'Web部', '--text', 'hello']);
+  });
+
+  test('--bot-id のみ指定', () => {
+    const result = parseGlobalArgs(['send', 'Web部', '--bot-id', 'EMP9001', '--text', 'hello']);
+    expect(result.botId).toBe('EMP9001');
+    expect(result.botPass).toBeUndefined();
+  });
+
+  test('--bot-id / --bot-pass なしは undefined', () => {
+    const result = parseGlobalArgs(['send', 'Web部', '--text', 'hello']);
+    expect(result.botId).toBeUndefined();
+    expect(result.botPass).toBeUndefined();
+    expect(result.rest).toEqual(['send', 'Web部', '--text', 'hello']);
+  });
+
+  test('引数から --bot-id / --bot-pass が除去される', () => {
+    const result = parseGlobalArgs(['--bot-id', 'X', '--bot-pass', 'Y', 'rooms']);
+    expect(result.rest).toEqual(['rooms']);
   });
 });

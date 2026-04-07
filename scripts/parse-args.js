@@ -77,4 +77,29 @@ function parseSendArgs(args) {
   return result;
 }
 
-module.exports = { parseSendArgs };
+/**
+ * グローバルオプション（--bot-id, --bot-pass）を抽出し、残りの引数を返す
+ * 全コマンド共通で使用
+ *
+ * @param {string[]} args - process.argv.slice(2) 相当
+ * @returns {{ botId?: string, botPass?: string, rest: string[] }}
+ */
+function parseGlobalArgs(args) {
+  const result = { rest: [] };
+  let i = 0;
+  while (i < args.length) {
+    if (args[i] === '--bot-id' && i + 1 < args.length) {
+      result.botId = args[i + 1];
+      i += 2;
+    } else if (args[i] === '--bot-pass' && i + 1 < args.length) {
+      result.botPass = args[i + 1];
+      i += 2;
+    } else {
+      result.rest.push(args[i]);
+      i++;
+    }
+  }
+  return result;
+}
+
+module.exports = { parseSendArgs, parseGlobalArgs };
