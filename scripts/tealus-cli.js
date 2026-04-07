@@ -7,10 +7,13 @@
  *   node scripts/tealus-cli.js send @田中太郎 --text "メッセージ"
  *   node scripts/tealus-cli.js send "Web部" --image ./screenshot.png
  *   node scripts/tealus-cli.js send "Web部" --voice ./recording.mp4
+ *   node scripts/tealus-cli.js send "Web部" --voice --watch /path/to/dir --ext .wav,.mp4
  *   node scripts/tealus-cli.js rooms
  */
 const fs = require('fs');
 const path = require('path');
+const { parseSendArgs } = require('./parse-args');
+const { waitForFileComplete, watchDirectory } = require('./watch');
 const http = require('http');
 const https = require('https');
 
@@ -139,57 +142,83 @@ async function resolveRoom(token, target) {
 
 // --- Commands ---
 
-async function cmdSend(args) {
-  const target = args[0];
-  if (!target) {
-    console.error('❌ 送信先を指定してください');
-    console.error('   例: node scripts/tealus-cli.js send "Web部" --text "メッセージ"');
-    process.exit(1);
+async function sendVoiceFile(token, roomId, roomName, filePath) {
+  const result = await uploadFile(token, `/api/rooms/${roomId}/voice`, 'voice', filePath);
+  if (result.message) {
+    console.log(`✅ 音声送信: ${roomName} ← ${path.basename(filePath)}（文字起こし自動実行）`);
+  } else {
+    console.error('❌ 送信失敗:', result.error);
   }
+}
 
-  const textIdx = args.indexOf('--text');
-  const imageIdx = args.indexOf('--image');
-  const voiceIdx = args.indexOf('--voice');
-
-  if (textIdx === -1 && imageIdx === -1 && voiceIdx === -1) {
-    console.error('❌ --text, --image, --voice のいずれかを指定してください');
+async function cmdSend(args) {
+  let parsed;
+  try {
+    parsed = parseSendArgs(args);
+  } catch (e) {
+    console.error(`❌ ${e.message}`);
     process.exit(1);
   }
 
   const token = await login();
-  const room = await resolveRoom(token, target);
+  const room = await resolveRoom(token, parsed.target);
 
-  if (textIdx !== -1) {
-    const text = args[textIdx + 1];
-    if (!text) { console.error('❌ --text の後にメッセージを指定してください'); process.exit(1); }
-    const result = await request('POST', '/api/bot/push', { room_id: room.id, content: text }, token);
+  // 監視モード
+  if (parsed.mode === 'watch') {
+    if (!fs.existsSync(parsed.watchDir)) {
+      console.error(`❌ 監視ディレクトリが見つかりません: ${parsed.watchDir}`);
+      process.exit(1);
+    }
+
+    console.log('🔍 監視モード開始');
+    console.log(`   送信先: ${room.name}`);
+    console.log(`   監視: ${parsed.watchDir}`);
+    console.log(`   拡張子: ${parsed.extensions.join(', ')}`);
+    console.log('   Ctrl+C で終了');
+    console.log('');
+
+    const stop = watchDirectory(parsed.watchDir, parsed.extensions, async (filePath) => {
+      console.log(`📁 検知: ${path.basename(filePath)}`);
+      const complete = await waitForFileComplete(filePath);
+      if (complete) {
+        await sendVoiceFile(token, room.id, room.name, filePath);
+      } else {
+        console.error(`⚠️ ファイル書き込み未完了（スキップ）: ${path.basename(filePath)}`);
+      }
+    });
+
+    process.on('SIGINT', () => {
+      stop();
+      console.log('\n👋 監視終了');
+      process.exit(0);
+    });
+
+    return;
+  }
+
+  // 単発送信モード
+  if (parsed.text) {
+    const result = await request('POST', '/api/bot/push', { room_id: room.id, content: parsed.text }, token);
     if (result.message) {
-      console.log(`✅ テキスト送信: ${room.name} ← "${text}"`);
+      console.log(`✅ テキスト送信: ${room.name} ← "${parsed.text}"`);
     } else {
       console.error('❌ 送信失敗:', result.error);
     }
   }
 
-  if (imageIdx !== -1) {
-    const filePath = args[imageIdx + 1];
-    if (!filePath || !fs.existsSync(filePath)) { console.error('❌ 画像ファイルが見つかりません:', filePath); process.exit(1); }
-    const result = await uploadFile(token, `/api/rooms/${room.id}/media`, 'files', filePath);
+  if (parsed.image) {
+    if (!fs.existsSync(parsed.image)) { console.error('❌ 画像ファイルが見つかりません:', parsed.image); process.exit(1); }
+    const result = await uploadFile(token, `/api/rooms/${room.id}/media`, 'files', parsed.image);
     if (result.message) {
-      console.log(`✅ 画像送信: ${room.name} ← ${path.basename(filePath)}`);
+      console.log(`✅ 画像送信: ${room.name} ← ${path.basename(parsed.image)}`);
     } else {
       console.error('❌ 送信失敗:', result.error);
     }
   }
 
-  if (voiceIdx !== -1) {
-    const filePath = args[voiceIdx + 1];
-    if (!filePath || !fs.existsSync(filePath)) { console.error('❌ 音声ファイルが見つかりません:', filePath); process.exit(1); }
-    const result = await uploadFile(token, `/api/rooms/${room.id}/voice`, 'voice', filePath);
-    if (result.message) {
-      console.log(`✅ 音声送信: ${room.name} ← ${path.basename(filePath)}（文字起こし自動実行）`);
-    } else {
-      console.error('❌ 送信失敗:', result.error);
-    }
+  if (parsed.voice) {
+    if (!fs.existsSync(parsed.voice)) { console.error('❌ 音声ファイルが見つかりません:', parsed.voice); process.exit(1); }
+    await sendVoiceFile(token, room.id, room.name, parsed.voice);
   }
 }
 
@@ -271,11 +300,17 @@ switch (command) {
     console.log('  node scripts/tealus-cli.js send @田中太郎 --text "メッセージ"');
     console.log('  node scripts/tealus-cli.js send "Web部" --image ./screenshot.png');
     console.log('  node scripts/tealus-cli.js send "Web部" --voice ./recording.mp4');
+    console.log('  node scripts/tealus-cli.js send "Web部" --voice --watch /path/to/dir');
+    console.log('  node scripts/tealus-cli.js send "Web部" --voice --watch /path/to/dir --ext .wav,.mp4,.mp3');
     console.log('  node scripts/tealus-cli.js check');
     console.log('  node scripts/tealus-cli.js check "Web部"');
     console.log('  node scripts/tealus-cli.js check --mark-read');
     console.log('  node scripts/tealus-cli.js check --json');
     console.log('  node scripts/tealus-cli.js rooms');
+    console.log('');
+    console.log('監視モード:');
+    console.log('  --voice --watch <dir>  ディレクトリを監視し、新規音声ファイルを自動送信');
+    console.log('  --ext <拡張子>         対象拡張子をカンマ区切りで指定（デフォルト: .wav）');
     console.log('');
     console.log('設定: scripts/.env に TEALUS_BOT_ID, TEALUS_BOT_PASS, TEALUS_SERVER を設定');
     break;
