@@ -95,7 +95,6 @@ function RoomList() {
   return (
     <div className="room-list-container">
       <header className="room-list-header">
-        <img src="/logo.png" alt="Tealus" className="room-list-logo" />
         <h1>トーク</h1>
         <div className="room-list-header-actions">
           <button className="icon-button" onClick={() => navigate('/search')} title="検索">

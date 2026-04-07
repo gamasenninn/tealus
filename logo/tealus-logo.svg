@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#00B4A0"/>
+
+  <!-- Small duck (left, behind) -->
+  <g fill="white">
+    <!-- Body -->
+    <ellipse cx="78" cy="120" rx="35" ry="22"/>
+    <!-- Head -->
+    <circle cx="68" cy="92" r="16"/>
+    <!-- Beak -->
+    <ellipse cx="54" cy="95" rx="8" ry="4"/>
+    <!-- Tail -->
+    <path d="M 108 108 Q 120 95 115 85 Q 112 95 105 102 Z"/>
+    <!-- Eye (teal) -->
+    <circle cx="63" cy="90" r="2.5" fill="#00B4A0"/>
+  </g>
+
+  <!-- Large duck (right, front) -->
+  <g fill="white">
+    <!-- Body -->
+    <ellipse cx="115" cy="125" rx="40" ry="25"/>
+    <!-- Head -->
+    <circle cx="130" cy="92" r="19"/>
+    <!-- Beak -->
+    <path d="M 148 95 Q 158 92 156 98 Q 152 100 148 99 Z"/>
+    <!-- Neck connection -->
+    <ellipse cx="125" cy="108" rx="14" ry="12"/>
+    <!-- Eye (teal) -->
+    <circle cx="135" cy="89" r="2.5" fill="#00B4A0"/>
+  </g>
+</svg>
