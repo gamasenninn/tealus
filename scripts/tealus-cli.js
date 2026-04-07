@@ -283,7 +283,7 @@ const globalParsed = parseGlobalArgs(process.argv.slice(2));
 
 // --env で別のenvファイルを読み込み（デフォルト.envを上書き）
 if (globalParsed.envFile) {
-  const envFilePath = path.resolve(__dirname, globalParsed.envFile);
+  const envFilePath = path.resolve(process.cwd(), globalParsed.envFile);
   if (!fs.existsSync(envFilePath)) {
     console.error(`❌ envファイルが見つかりません: ${envFilePath}`);
     process.exit(1);
