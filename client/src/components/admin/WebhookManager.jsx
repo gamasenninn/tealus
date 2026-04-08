@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import ContextMenu from '../chat/ContextMenu';
 
 const EVENT_OPTIONS = [
   { value: 'message.created', label: 'メッセージ作成' },
@@ -16,6 +17,7 @@ function WebhookManager() {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
   const [testResults, setTestResults] = useState({});
+  const [contextMenu, setContextMenu] = useState(null);
 
   // Form state
   const [formUrl, setFormUrl] = useState('');
@@ -201,22 +203,22 @@ function WebhookManager() {
                     </span>
                   </td>
                   <td className="admin-actions">
-                    <button className="edit-btn" onClick={() => handleEdit(w)}>編集</button>
-                    <button className="edit-btn" onClick={() => handleTest(w)}>
-                      {testResults[w.id] === 'sending' ? '送信中...' : 'テスト'}
-                    </button>
                     {testResults[w.id] && testResults[w.id] !== 'sending' && (
                       <span className={testResults[w.id].startsWith('OK') ? 'test-ok' : 'test-ng'}>
                         {testResults[w.id]}
                       </span>
                     )}
-                    <button
-                      className={w.is_active ? 'deactivate-btn' : 'activate-btn'}
-                      onClick={() => handleToggleActive(w)}
-                    >
-                      {w.is_active ? '無効化' : '有効化'}
-                    </button>
-                    <button className="deactivate-btn" onClick={() => handleDelete(w)}>削除</button>
+                    <button className="kebab-btn" onClick={(e) => {
+                      setContextMenu({
+                        x: e.clientX, y: e.clientY,
+                        items: [
+                          { icon: '✏', label: '編集', onClick: () => handleEdit(w) },
+                          { icon: '🔔', label: testResults[w.id] === 'sending' ? '送信中...' : 'テスト送信', onClick: () => handleTest(w) },
+                          { icon: w.is_active ? '🚫' : '✅', label: w.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(w) },
+                          { icon: '🗑', label: '削除', onClick: () => handleDelete(w), danger: true },
+                        ],
+                      });
+                    }}>⋮</button>
                   </td>
                 </tr>
               ))
@@ -224,6 +226,14 @@ function WebhookManager() {
           </tbody>
         </table>
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenu.items}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

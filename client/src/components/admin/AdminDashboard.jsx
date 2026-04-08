@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
+import ContextMenu from '../chat/ContextMenu';
 import './AdminDashboard.css';
 
 function AdminDashboard() {
@@ -15,6 +16,7 @@ function AdminDashboard() {
   const [editingUser, setEditingUser] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState('');
+  const [contextMenu, setContextMenu] = useState(null);
 
   useEffect(() => {
     if (user?.role !== 'admin') {
@@ -125,13 +127,15 @@ function AdminDashboard() {
                 <td><span className={`status-badge ${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? '有効' : '無効'}</span></td>
                 <td>{new Date(u.created_at).toLocaleDateString('ja-JP')}</td>
                 <td className="admin-actions">
-                  <button className="edit-btn" onClick={() => { setEditingUser(u); setShowCreateForm(false); }}>編集</button>
-                  <button
-                    className={u.is_active ? 'deactivate-btn' : 'activate-btn'}
-                    onClick={() => handleToggleActive(u)}
-                  >
-                    {u.is_active ? '無効化' : '有効化'}
-                  </button>
+                  <button className="kebab-btn" onClick={(e) => {
+                    setContextMenu({
+                      x: e.clientX, y: e.clientY,
+                      items: [
+                        { icon: '✏', label: '編集', onClick: () => { setEditingUser(u); setShowCreateForm(false); } },
+                        { icon: u.is_active ? '🚫' : '✅', label: u.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(u), danger: u.is_active },
+                      ],
+                    });
+                  }}>⋮</button>
                 </td>
               </tr>
             ))}
@@ -139,6 +143,14 @@ function AdminDashboard() {
         </table>
       </div>
       </>
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenu.items}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );
