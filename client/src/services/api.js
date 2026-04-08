@@ -295,6 +295,27 @@ class ApiClient {
   updateAdminUserStatus(id, is_active) {
     return this.request('PATCH', `/admin/users/${id}/status`, { is_active });
   }
+
+  // Webhooks
+  getWebhooks() {
+    return this.request('GET', '/admin/webhooks');
+  }
+
+  createWebhook(data) {
+    return this.request('POST', '/admin/webhooks', data);
+  }
+
+  updateWebhook(id, data) {
+    return this.request('PUT', `/admin/webhooks/${id}`, data);
+  }
+
+  deleteWebhook(id) {
+    return this.request('DELETE', `/admin/webhooks/${id}`);
+  }
+
+  testWebhook(id) {
+    return this.request('POST', `/admin/webhooks/${id}/test`);
+  }
 }
 
 export const api = new ApiClient();

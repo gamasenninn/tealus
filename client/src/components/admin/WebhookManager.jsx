@@ -1,0 +1,211 @@
+import { useState, useEffect } from 'react';
+import { api } from '../../services/api';
+
+const EVENT_OPTIONS = [
+  { value: 'message.created', label: 'メッセージ作成' },
+  { value: 'message.deleted', label: 'メッセージ削除' },
+  { value: 'member.joined', label: 'メンバー追加' },
+  { value: 'member.left', label: 'メンバー退出' },
+  { value: 'reaction.added', label: 'リアクション追加' },
+];
+
+function WebhookManager() {
+  const [webhooks, setWebhooks] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState('');
+  const [testResults, setTestResults] = useState({});
+
+  // Form state
+  const [formUrl, setFormUrl] = useState('');
+  const [formRoomId, setFormRoomId] = useState('');
+  const [formSecret, setFormSecret] = useState('');
+  const [formEvents, setFormEvents] = useState(['message.created']);
+
+  useEffect(() => {
+    loadWebhooks();
+    loadRooms();
+  }, []);
+
+  const loadWebhooks = async () => {
+    try {
+      const data = await api.getWebhooks();
+      setWebhooks(data.webhooks);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const loadRooms = async () => {
+    try {
+      const data = await api.getRooms();
+      setRooms(data.rooms);
+    } catch (err) { /* ignore */ }
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.createWebhook({
+        url: formUrl,
+        room_id: formRoomId || null,
+        secret: formSecret || null,
+        events: formEvents,
+      });
+      setShowForm(false);
+      resetForm();
+      await loadWebhooks();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const resetForm = () => {
+    setFormUrl('');
+    setFormRoomId('');
+    setFormSecret('');
+    setFormEvents(['message.created']);
+  };
+
+  const handleToggleActive = async (webhook) => {
+    try {
+      await api.updateWebhook(webhook.id, { is_active: !webhook.is_active });
+      await loadWebhooks();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDelete = async (webhook) => {
+    if (!confirm(`Webhook「${webhook.url}」を削除しますか？`)) return;
+    try {
+      await api.deleteWebhook(webhook.id);
+      await loadWebhooks();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleTest = async (webhook) => {
+    setTestResults(prev => ({ ...prev, [webhook.id]: 'sending' }));
+    try {
+      const result = await api.testWebhook(webhook.id);
+      setTestResults(prev => ({ ...prev, [webhook.id]: result.success ? `OK (${result.status})` : `NG (${result.status})` }));
+    } catch (err) {
+      setTestResults(prev => ({ ...prev, [webhook.id]: 'NG (接続失敗)' }));
+    }
+  };
+
+  const toggleEvent = (eventValue) => {
+    setFormEvents(prev =>
+      prev.includes(eventValue)
+        ? prev.filter(e => e !== eventValue)
+        : [...prev, eventValue]
+    );
+  };
+
+  return (
+    <div>
+      <div className="admin-section-header">
+        <h2>Webhook管理</h2>
+        <button className="admin-create-btn" onClick={() => { setShowForm(true); resetForm(); }}>
+          + Webhook追加
+        </button>
+      </div>
+
+      {error && <div className="admin-error">{error}</div>}
+
+      {showForm && (
+        <div className="admin-modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="admin-modal" onClick={e => e.stopPropagation()}>
+            <h3>Webhook登録</h3>
+            <form onSubmit={handleCreate}>
+              <div className="form-group">
+                <label>URL *</label>
+                <input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://example.com/webhook" required />
+              </div>
+              <div className="form-group">
+                <label>対象ルーム（空欄=全ルーム）</label>
+                <select value={formRoomId} onChange={e => setFormRoomId(e.target.value)}>
+                  <option value="">全ルーム</option>
+                  {rooms.map(r => (
+                    <option key={r.id} value={r.id}>{r.name || 'DM'}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>シークレット（署名検証用、任意）</label>
+                <input type="text" value={formSecret} onChange={e => setFormSecret(e.target.value)} placeholder="my-secret-key" />
+              </div>
+              <div className="form-group">
+                <label>イベント種別</label>
+                <div className="event-checkboxes">
+                  {EVENT_OPTIONS.map(opt => (
+                    <label key={opt.value} className="event-checkbox">
+                      <input type="checkbox" checked={formEvents.includes(opt.value)} onChange={() => toggleEvent(opt.value)} />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="admin-create-btn">登録</button>
+                <button type="button" className="admin-cancel-btn" onClick={() => setShowForm(false)}>キャンセル</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <table>
+        <thead>
+          <tr>
+            <th>URL</th>
+            <th>ルーム</th>
+            <th>イベント</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {webhooks.length === 0 ? (
+            <tr><td colSpan="5" style={{ textAlign: 'center', color: '#999' }}>Webhookが登録されていません</td></tr>
+          ) : (
+            webhooks.map(w => (
+              <tr key={w.id} className={!w.is_active ? 'inactive-row' : ''}>
+                <td style={{ wordBreak: 'break-all', maxWidth: '200px' }}>{w.url}</td>
+                <td>{w.room_name || '全ルーム'}</td>
+                <td>{w.events?.map(e => EVENT_OPTIONS.find(o => o.value === e)?.label || e).join(', ')}</td>
+                <td>
+                  <span className={`status-badge ${w.is_active ? 'active' : 'inactive'}`}>
+                    {w.is_active ? '有効' : '無効'}
+                  </span>
+                </td>
+                <td className="admin-actions">
+                  <button className="edit-btn" onClick={() => handleTest(w)}>
+                    {testResults[w.id] === 'sending' ? '送信中...' : 'テスト'}
+                  </button>
+                  {testResults[w.id] && testResults[w.id] !== 'sending' && (
+                    <span className={testResults[w.id].startsWith('OK') ? 'test-ok' : 'test-ng'}>
+                      {testResults[w.id]}
+                    </span>
+                  )}
+                  <button
+                    className={w.is_active ? 'deactivate-btn' : 'activate-btn'}
+                    onClick={() => handleToggleActive(w)}
+                  >
+                    {w.is_active ? '無効化' : '有効化'}
+                  </button>
+                  <button className="deactivate-btn" onClick={() => handleDelete(w)}>削除</button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default WebhookManager;

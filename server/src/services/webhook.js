@@ -50,6 +50,16 @@ async function fireWebhooks(eventType, roomId, payload) {
       [eventType, roomId]
     );
 
+    if (result.rows.length === 0) return;
+
+    // ルーム名を取得してペイロードに追加
+    if (roomId && payload.room && !payload.room.name) {
+      const roomResult = await pool.query('SELECT name FROM rooms WHERE id = $1', [roomId]);
+      if (roomResult.rows.length > 0) {
+        payload.room.name = roomResult.rows[0].name;
+      }
+    }
+
     const body = JSON.stringify({
       event: eventType,
       timestamp: new Date().toISOString(),

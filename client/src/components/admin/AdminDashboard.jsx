@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import UserForm from './UserForm';
+import WebhookManager from './WebhookManager';
 import './AdminDashboard.css';
 
 function AdminDashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
@@ -71,10 +73,22 @@ function AdminDashboard() {
           <button className="admin-back-btn" onClick={() => navigate('/')}>← チャット</button>
           <h1>管理ダッシュボード</h1>
         </div>
+        <div className="admin-tabs">
+          <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>ユーザー</button>
+          <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
+        </div>
+      </header>
+
+      {activeTab === 'webhooks' ? (
+        <WebhookManager />
+      ) : (
+      <>
+      <div className="admin-section-header">
+        <h2>ユーザー管理</h2>
         <button className="admin-create-btn" onClick={() => { setShowCreateForm(true); setEditingUser(null); }}>
           + ユーザー追加
         </button>
-      </header>
+      </div>
 
       {error && <div className="admin-error">{error}</div>}
 
@@ -124,6 +138,8 @@ function AdminDashboard() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </div>
   );
 }
