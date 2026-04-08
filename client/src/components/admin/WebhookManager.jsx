@@ -175,53 +175,55 @@ function WebhookManager() {
         </div>
       )}
 
-      <table>
-        <thead>
-          <tr>
-            <th>URL</th>
-            <th>ルーム</th>
-            <th>イベント</th>
-            <th>状態</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {webhooks.length === 0 ? (
-            <tr><td colSpan="5" style={{ textAlign: 'center', color: '#999' }}>Webhookが登録されていません</td></tr>
-          ) : (
-            webhooks.map(w => (
-              <tr key={w.id} className={!w.is_active ? 'inactive-row' : ''}>
-                <td style={{ wordBreak: 'break-all', maxWidth: '200px' }}>{w.url}</td>
-                <td>{w.room_name || '全ルーム'}</td>
-                <td>{w.events?.map(e => EVENT_OPTIONS.find(o => o.value === e)?.label || e).join(', ')}</td>
-                <td>
-                  <span className={`status-badge ${w.is_active ? 'active' : 'inactive'}`}>
-                    {w.is_active ? '有効' : '無効'}
-                  </span>
-                </td>
-                <td className="admin-actions">
-                  <button className="edit-btn" onClick={() => handleEdit(w)}>編集</button>
-                  <button className="edit-btn" onClick={() => handleTest(w)}>
-                    {testResults[w.id] === 'sending' ? '送信中...' : 'テスト'}
-                  </button>
-                  {testResults[w.id] && testResults[w.id] !== 'sending' && (
-                    <span className={testResults[w.id].startsWith('OK') ? 'test-ok' : 'test-ng'}>
-                      {testResults[w.id]}
+      <div className="admin-user-list">
+        <table>
+          <thead>
+            <tr>
+              <th>URL</th>
+              <th>ルーム</th>
+              <th>イベント</th>
+              <th>状態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {webhooks.length === 0 ? (
+              <tr><td colSpan="5" style={{ textAlign: 'center', color: '#999', padding: '24px' }}>Webhookが登録されていません</td></tr>
+            ) : (
+              webhooks.map(w => (
+                <tr key={w.id} className={!w.is_active ? 'inactive-row' : ''}>
+                  <td style={{ wordBreak: 'break-all', maxWidth: '200px' }}>{w.url}</td>
+                  <td>{w.room_name || '全ルーム'}</td>
+                  <td>{w.events?.map(e => EVENT_OPTIONS.find(o => o.value === e)?.label || e).join(', ')}</td>
+                  <td>
+                    <span className={`status-badge ${w.is_active ? 'active' : 'inactive'}`}>
+                      {w.is_active ? '有効' : '無効'}
                     </span>
-                  )}
-                  <button
-                    className={w.is_active ? 'deactivate-btn' : 'activate-btn'}
-                    onClick={() => handleToggleActive(w)}
-                  >
-                    {w.is_active ? '無効化' : '有効化'}
-                  </button>
-                  <button className="deactivate-btn" onClick={() => handleDelete(w)}>削除</button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+                  </td>
+                  <td className="admin-actions">
+                    <button className="edit-btn" onClick={() => handleEdit(w)}>編集</button>
+                    <button className="edit-btn" onClick={() => handleTest(w)}>
+                      {testResults[w.id] === 'sending' ? '送信中...' : 'テスト'}
+                    </button>
+                    {testResults[w.id] && testResults[w.id] !== 'sending' && (
+                      <span className={testResults[w.id].startsWith('OK') ? 'test-ok' : 'test-ng'}>
+                        {testResults[w.id]}
+                      </span>
+                    )}
+                    <button
+                      className={w.is_active ? 'deactivate-btn' : 'activate-btn'}
+                      onClick={() => handleToggleActive(w)}
+                    >
+                      {w.is_active ? '無効化' : '有効化'}
+                    </button>
+                    <button className="deactivate-btn" onClick={() => handleDelete(w)}>削除</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

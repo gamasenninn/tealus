@@ -70,7 +70,7 @@ function AdminDashboard() {
     <div className="admin-container">
       <header className="admin-header">
         <div className="admin-header-left">
-          <button className="admin-back-btn" onClick={() => navigate('/')}>← チャット</button>
+          <button className="admin-back-btn" onClick={() => navigate('/')}>←</button>
           <h1>管理ダッシュボード</h1>
         </div>
       </header>
