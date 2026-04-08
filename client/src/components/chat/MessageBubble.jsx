@@ -85,6 +85,16 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       onClick: () => setShowTagModal(true),
     });
 
+    // Copy voice transcription text
+    const transText = message.transcription?.formatted_text || message.transcription?.raw_text;
+    if (message.type === 'voice' && message.transcription?.status === 'done' && transText) {
+      items.push({
+        icon: '📋',
+        label: '文字起こしをコピー',
+        onClick: () => navigator.clipboard.writeText(transText),
+      });
+    }
+
     // Voice transcription actions (own voice messages only)
     if (isOwn && message.type === 'voice' && message.transcription?.status === 'done') {
       items.push({
