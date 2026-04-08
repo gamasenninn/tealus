@@ -7,7 +7,17 @@ const pool = require('../db/pool');
 const logger = require('../utils/logger');
 
 /**
- * 単一のWebhookにペイロードを送信する
+ * HMAC-SHA256署名を生成する
+ * @param {string} secret - シークレットキー
+ * @param {string} body - ペイロード文字列
+ * @returns {string} 16進数の署名
+ */
+function generateSignature(secret, body) {
+  return crypto.createHmac('sha256', secret).update(body).digest('hex');
+}
+
+/**
+ * 単一のWebhookにペイロードを送信する（テスト送信用、リトライなし）
  * @param {object} webhook - webhooksテーブルの行
  * @param {string} body - JSON文字列のペイロード
  * @returns {Promise<{ok: boolean, status: number}>}
@@ -18,10 +28,8 @@ async function dispatchWebhook(webhook, body) {
     'User-Agent': 'Tealus-Webhook/1.0',
   };
 
-  // 署名検証ヘッダー
   if (webhook.secret) {
-    const signature = crypto.createHmac('sha256', webhook.secret).update(body).digest('hex');
-    headers['X-Tealus-Signature'] = `sha256=${signature}`;
+    headers['X-Tealus-Signature'] = `sha256=${generateSignature(webhook.secret, body)}`;
   }
 
   const response = await fetch(webhook.url, {
@@ -32,6 +40,68 @@ async function dispatchWebhook(webhook, body) {
   });
 
   return { ok: response.ok, status: response.status };
+}
+
+/**
+ * リトライ付きWebhook送信
+ * 5xx/ネットワークエラー時は指数バックオフでリトライ
+ * 4xxはクライアントエラーなのでリトライしない
+ *
+ * @param {object} webhook - webhooksテーブルの行
+ * @param {string} body - JSON文字列のペイロード
+ * @param {object} opts - オプション
+ * @param {number} opts.maxRetries - 最大試行回数（デフォルト3）
+ * @param {number} opts.baseDelay - 基本遅延ms（デフォルト5000）
+ * @returns {Promise<{ok: boolean, status: number, attempts: number}>}
+ */
+async function dispatchWithRetry(webhook, body, opts = {}) {
+  const maxRetries = opts.maxRetries || 3;
+  const baseDelay = opts.baseDelay || 5000;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Tealus-Webhook/1.0',
+  };
+
+  if (webhook.secret) {
+    headers['X-Tealus-Signature'] = `sha256=${generateSignature(webhook.secret, body)}`;
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (response.ok) {
+        return { ok: true, status: response.status, attempts: attempt };
+      }
+
+      // 4xx はクライアントエラー → リトライしない
+      if (response.status >= 400 && response.status < 500) {
+        return { ok: false, status: response.status, attempts: attempt };
+      }
+
+      // 5xx はリトライ対象
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(3, attempt - 1); // 5s → 15s → 45s
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        return { ok: false, status: response.status, attempts: attempt };
+      }
+    } catch (err) {
+      // ネットワークエラー → リトライ
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(3, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        return { ok: false, status: 0, attempts: attempt, error: err.message };
+      }
+    }
+  }
 }
 
 /**
@@ -67,8 +137,14 @@ async function fireWebhooks(eventType, roomId, payload) {
     });
 
     for (const webhook of result.rows) {
-      dispatchWebhook(webhook, body).catch(err => {
-        logger.error(`Webhook dispatch failed: ${webhook.url}`, err.message);
+      dispatchWithRetry(webhook, body).then(result => {
+        if (!result.ok) {
+          logger.error(`Webhook failed: ${webhook.url} (status: ${result.status}, attempts: ${result.attempts})`);
+        } else if (result.attempts > 1) {
+          logger.info(`Webhook succeeded after retry: ${webhook.url} (attempts: ${result.attempts})`);
+        }
+      }).catch(err => {
+        logger.error(`Webhook dispatch error: ${webhook.url}`, err.message);
       });
     }
   } catch (err) {
@@ -76,4 +152,4 @@ async function fireWebhooks(eventType, roomId, payload) {
   }
 }
 
-module.exports = { dispatchWebhook, fireWebhooks };
+module.exports = { dispatchWebhook, dispatchWithRetry, generateSignature, fireWebhooks };
