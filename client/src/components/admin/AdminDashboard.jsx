@@ -73,11 +73,11 @@ function AdminDashboard() {
           <button className="admin-back-btn" onClick={() => navigate('/')}>← チャット</button>
           <h1>管理ダッシュボード</h1>
         </div>
-        <div className="admin-tabs">
-          <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>ユーザー</button>
-          <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
-        </div>
       </header>
+      <div className="admin-tabs">
+        <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>ユーザー</button>
+        <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
+      </div>
 
       {activeTab === 'webhooks' ? (
         <WebhookManager />

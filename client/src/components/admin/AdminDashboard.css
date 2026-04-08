@@ -307,27 +307,42 @@
 /* Tabs */
 .admin-tabs {
   display: flex;
-  gap: 4px;
+  gap: 0;
+  background: white;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 0;
 }
 
 .admin-tab {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
+  flex: 1;
+  padding: 12px 0;
   font-size: 14px;
+  border: none;
+  background: white;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
 }
 
 .admin-tab.active {
-  background: white;
   color: var(--primary);
-  font-weight: bold;
+  border-bottom-color: var(--primary);
+  font-weight: 600;
 }
 
 .admin-tab:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+  background: #fafafa;
+}
+
+.admin-tab:first-child {
+  border-radius: 8px 0 0 0;
+}
+
+.admin-tab:last-child {
+  border-radius: 0 8px 0 0;
 }
 
 /* Section header */
