@@ -51,6 +51,13 @@ router.post('/push', async (req, res) => {
       sender_avatar_url: req.user.avatar_url,
     });
 
+    // Webhook notification
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('message.created', room_id, {
+      room: { id: room_id },
+      message: { id: message.id, type, content: content?.trim(), sender: { id: req.user.id, display_name: req.user.display_name } },
+    });
+
     logger.info(`Bot push: ${req.user.display_name} → room ${room_id}`);
 
     res.status(201).json({ message });

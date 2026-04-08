@@ -100,6 +100,13 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
 
     io.to(roomId).emit('message:new', fullMessage);
 
+    // Webhook notification
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('message.created', roomId, {
+      room: { id: roomId },
+      message: { id: message.id, type: 'voice', content: null, sender: { id: req.user.id, display_name: req.user.display_name } },
+    });
+
     res.status(201).json({
       message,
       media: mediaResult.rows[0],

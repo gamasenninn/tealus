@@ -58,6 +58,13 @@ function registerMessageHandler(socket, io) {
 
       io.to(room_id).emit('message:new', message);
 
+      // Webhook notification
+      const { fireWebhooks } = require('../../services/webhook');
+      fireWebhooks('message.created', room_id, {
+        room: { id: room_id },
+        message: { id: message.id, type, content: content?.trim(), sender: { id: socket.user.id, display_name: socket.user.display_name } },
+      });
+
       // Async link preview
       if (content && type === 'text') {
         processLinkPreviews(result.rows[0].id, content, io, room_id).catch(() => {});
