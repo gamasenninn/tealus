@@ -13,6 +13,7 @@ function WebhookManager() {
   const [webhooks, setWebhooks] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
   const [testResults, setTestResults] = useState({});
 
@@ -43,22 +44,38 @@ function WebhookManager() {
     } catch (err) { /* ignore */ }
   };
 
-  const handleCreate = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      await api.createWebhook({
+      const data = {
         url: formUrl,
         room_id: formRoomId || null,
-        secret: formSecret || null,
         events: formEvents,
-      });
+      };
+      if (formSecret) data.secret = formSecret;
+
+      if (editingId) {
+        await api.updateWebhook(editingId, data);
+      } else {
+        await api.createWebhook(data);
+      }
       setShowForm(false);
+      setEditingId(null);
       resetForm();
       await loadWebhooks();
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleEdit = (webhook) => {
+    setFormUrl(webhook.url);
+    setFormRoomId(webhook.room_id || '');
+    setFormSecret('');
+    setFormEvents(webhook.events || ['message.created']);
+    setEditingId(webhook.id);
+    setShowForm(true);
   };
 
   const resetForm = () => {
@@ -109,7 +126,7 @@ function WebhookManager() {
     <div>
       <div className="admin-section-header">
         <h2>Webhook管理</h2>
-        <button className="admin-create-btn" onClick={() => { setShowForm(true); resetForm(); }}>
+        <button className="admin-create-btn" onClick={() => { setShowForm(true); setEditingId(null); resetForm(); }}>
           + Webhook追加
         </button>
       </div>
@@ -119,8 +136,8 @@ function WebhookManager() {
       {showForm && (
         <div className="admin-modal-overlay" onClick={() => setShowForm(false)}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
-            <h3>Webhook登録</h3>
-            <form onSubmit={handleCreate}>
+            <h3>{editingId ? 'Webhook編集' : 'Webhook登録'}</h3>
+            <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>URL *</label>
                 <input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://example.com/webhook" required />
@@ -136,7 +153,7 @@ function WebhookManager() {
               </div>
               <div className="form-group">
                 <label>シークレット（署名検証用、任意）</label>
-                <input type="text" value={formSecret} onChange={e => setFormSecret(e.target.value)} placeholder="my-secret-key" />
+                <input type="text" value={formSecret} onChange={e => setFormSecret(e.target.value)} placeholder={editingId ? '変更する場合のみ入力' : 'my-secret-key'} />
               </div>
               <div className="form-group">
                 <label>イベント種別</label>
@@ -150,8 +167,8 @@ function WebhookManager() {
                 </div>
               </div>
               <div className="form-actions">
-                <button type="submit" className="admin-create-btn">登録</button>
-                <button type="button" className="admin-cancel-btn" onClick={() => setShowForm(false)}>キャンセル</button>
+                <button type="submit" className="admin-create-btn">{editingId ? '更新' : '登録'}</button>
+                <button type="button" className="admin-cancel-btn" onClick={() => { setShowForm(false); setEditingId(null); }}>キャンセル</button>
               </div>
             </form>
           </div>
@@ -183,6 +200,7 @@ function WebhookManager() {
                   </span>
                 </td>
                 <td className="admin-actions">
+                  <button className="edit-btn" onClick={() => handleEdit(w)}>編集</button>
                   <button className="edit-btn" onClick={() => handleTest(w)}>
                     {testResults[w.id] === 'sending' ? '送信中...' : 'テスト'}
                   </button>
