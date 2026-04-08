@@ -59,14 +59,30 @@ async function waitForFileComplete(filePath, opts = {}) {
  * @returns {function} 停止関数
  */
 function watchDirectory(dir, extensions, onFile) {
-  const seen = new Map(); // ファイル名 → タイムスタンプ（デバウンス用）
+  const sent = new Set();     // 送信済みファイル名（重複送信防止）
+  const seen = new Map();     // ファイル名 → タイムスタンプ（デバウンス用）
   const DEBOUNCE_MS = 2000;
+
+  // 起動時に既存ファイルを送信済みとして記録
+  try {
+    fs.readdirSync(dir).forEach(f => {
+      const ext = path.extname(f).toLowerCase();
+      if (extensions.includes(ext)) sent.add(f);
+    });
+  } catch (e) { /* ディレクトリが空の場合 */ }
 
   const watcher = fs.watch(dir, (eventType, filename) => {
     if (!filename) return;
 
+    // renameイベントのみ処理（新規ファイル作成を検知）
+    // changeイベント（ファイル再生時のatime更新等）は無視
+    if (eventType !== 'rename') return;
+
     const ext = path.extname(filename).toLowerCase();
     if (!extensions.includes(ext)) return;
+
+    // 送信済みファイルは無視（再生等による再検知防止）
+    if (sent.has(filename)) return;
 
     // デバウンス: 同一ファイルの短時間連続イベントを無視
     const now = Date.now();
@@ -78,6 +94,9 @@ function watchDirectory(dir, extensions, onFile) {
 
     // ファイルが存在するか確認（削除イベントを除外）
     if (!fs.existsSync(filePath)) return;
+
+    // 送信済みとして記録
+    sent.add(filename);
 
     onFile(filePath);
   });

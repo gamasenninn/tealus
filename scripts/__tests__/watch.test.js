@@ -120,6 +120,33 @@ describe('watchDirectory', () => {
     }, 2000);
   }, 10000);
 
+  test('起動前から存在するファイルは検知しない', (done) => {
+    // 先にファイルを作成
+    fs.writeFileSync(path.join(tmpDir, 'existing.wav'), Buffer.alloc(1024));
+
+    const detected = [];
+    const stop = watchDirectory(tmpDir, ['.wav'], (filePath) => {
+      detected.push(path.basename(filePath));
+    });
+
+    // 既存ファイルを読み取り（atime更新をシミュレート）
+    setTimeout(() => {
+      fs.readFileSync(path.join(tmpDir, 'existing.wav'));
+    }, 200);
+
+    // 新規ファイルは検知されるはず
+    setTimeout(() => {
+      fs.writeFileSync(path.join(tmpDir, 'new.wav'), Buffer.alloc(1024));
+    }, 400);
+
+    setTimeout(() => {
+      stop();
+      expect(detected).not.toContain('existing.wav');
+      expect(detected).toContain('new.wav');
+      done();
+    }, 2000);
+  }, 10000);
+
   test('同一ファイルの重複イベントはデバウンスされる', (done) => {
     const detected = [];
 
