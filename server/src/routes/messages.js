@@ -166,6 +166,13 @@ router.delete('/:msgId', async (req, res) => {
     const roomId = req.params.id;
     io.to(roomId).emit('message:deleted', { message_id: msgId });
 
+    // Webhook notification
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('message.deleted', roomId, {
+      room: { id: roomId },
+      message: { id: msgId, sender: { id: userId, display_name: req.user.display_name } },
+    });
+
     res.json({ message: '削除しました' });
   } catch (err) {
     logger.error('Delete message error:', err);
@@ -222,6 +229,16 @@ router.post('/:msgId/reactions', async (req, res) => {
       message_id: msgId,
       reactions: reactions.rows,
     });
+
+    // Webhook notification (追加時のみ)
+    if (existing.rows.length === 0) {
+      const { fireWebhooks } = require('../services/webhook');
+      fireWebhooks('reaction.added', roomId, {
+        room: { id: roomId },
+        message: { id: msgId },
+        reaction: { emoji, user: { id: userId, display_name: req.user.display_name } },
+      });
+    }
 
     res.json({ reactions: reactions.rows });
   } catch (err) {

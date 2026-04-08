@@ -73,6 +73,14 @@ router.post('/', authenticate, requireGroup, requireMember, async (req, res) => 
 
     io.to(roomId).emit('member:added', { room_id: roomId, user_id, display_name: addedName });
 
+    // Webhook notification
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('member.joined', roomId, {
+      room: { id: roomId },
+      member: { id: user_id, display_name: addedName },
+      added_by: { id: req.user.id, display_name: adderName },
+    });
+
     res.json({ member: result.rows[0] });
   } catch (err) {
     logger.error('Add member error:', err);
@@ -117,6 +125,13 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req, res)
     const { io } = require('../app');
     await insertSystemMessage(roomId, `${req.user.display_name}が退会しました`, io);
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: userId });
+
+    // Webhook notification
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('member.left', roomId, {
+      room: { id: roomId },
+      member: { id: userId, display_name: req.user.display_name },
+    });
 
     res.json({ message: '退会しました' });
   } catch (err) {
@@ -166,6 +181,14 @@ router.delete('/:userId', authenticate, requireGroup, requireMember, async (req,
     const { io } = require('../app');
     await insertSystemMessage(roomId, `${req.user.display_name}が${targetName}を退会させました`, io);
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: targetUserId });
+
+    // Webhook notification
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('member.left', roomId, {
+      room: { id: roomId },
+      member: { id: targetUserId, display_name: targetName },
+      removed_by: { id: req.user.id, display_name: req.user.display_name },
+    });
 
     res.json({ message: `${targetName}を除外しました` });
   } catch (err) {
