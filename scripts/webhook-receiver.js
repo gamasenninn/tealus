@@ -56,12 +56,21 @@ const server = http.createServer((req, res) => {
       }
       if (payload.message) {
         const msg = payload.message;
-        console.log(`  送信者: ${msg.sender?.display_name || '不明'}`);
-        console.log(`  タイプ: ${msg.type || 'text'}`);
+        if (msg.sender) console.log(`  送信者: ${msg.sender.display_name || '不明'}`);
+        if (msg.type) console.log(`  タイプ: ${msg.type}`);
         if (msg.content) {
           const preview = msg.content.length > 60 ? msg.content.slice(0, 60) + '...' : msg.content;
           console.log(`  内容: ${preview}`);
         }
+      }
+      if (payload.reaction) {
+        console.log(`  リアクション: ${payload.reaction.emoji} by ${payload.reaction.user?.display_name || '不明'}`);
+        console.log(`  対象メッセージ: ${payload.message?.id || '不明'}`);
+      }
+      if (payload.member) {
+        console.log(`  メンバー: ${payload.member.display_name || '不明'}`);
+        if (payload.added_by) console.log(`  追加者: ${payload.added_by.display_name}`);
+        if (payload.removed_by) console.log(`  除外者: ${payload.removed_by.display_name}`);
       }
       console.log('');
     } catch (e) {
