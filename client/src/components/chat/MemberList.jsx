@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { api } from '../../services/api';
+import { Pencil } from 'lucide-react';
 import './MemberList.css';
 
 function MemberList({ roomId, onClose }) {
@@ -134,7 +135,7 @@ function MemberList({ roomId, onClose }) {
             ) : (
               <div className="group-name-display">
                 <span>{currentRoom?.name}</span>
-                {isAdmin && <button className="group-name-edit-btn" onClick={() => setEditingName(true)}>✏</button>}
+                {isAdmin && <button className="group-name-edit-btn" onClick={() => setEditingName(true)}><Pencil size={14} /></button>}
               </div>
             )}
           </div>

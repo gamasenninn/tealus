@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import { ArrowLeft } from 'lucide-react';
 import './StampGenerator.css';
 
 const DEFAULT_LABELS = [
@@ -95,7 +96,7 @@ function StampGenerator({ onClose }) {
   return (
     <div className="stamp-generator">
       <div className="stamp-generator-header">
-        <button className="stamp-picker-close" onClick={onClose}>←</button>
+        <button className="stamp-picker-close" onClick={onClose}><ArrowLeft size={20} /></button>
         <span>AIでスタンプを作成</span>
       </div>
       <div className="stamp-generator-form">

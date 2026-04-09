@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import StampGenerator from './StampGenerator';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
+import { Pencil, Trash2 } from 'lucide-react';
 import './StampPicker.css';
 
 function StampPicker({ onSelect, onClose }) {
@@ -187,16 +188,16 @@ function StampPicker({ onSelect, onClose }) {
             {contextMenu.type === 'pack' && (
               <>
                 <button className="stamp-context-item" onClick={handleRenamePack}>
-                  ✏ 名前を変更
+                  <Pencil size={14} /> 名前を変更
                 </button>
                 <button className="stamp-context-item danger" onClick={handleDeletePack}>
-                  🗑 パックを削除
+                  <Trash2 size={14} /> パックを削除
                 </button>
               </>
             )}
             {contextMenu.type === 'stamp' && (
               <button className="stamp-context-item danger" onClick={handleDeleteStamp}>
-                🗑 このスタンプを削除
+                <Trash2 size={14} /> このスタンプを削除
               </button>
             )}
           </div>

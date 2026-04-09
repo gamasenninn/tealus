@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
 import ContextMenu from '../chat/ContextMenu';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
 import './AdminDashboard.css';
 
 function AdminDashboard() {
@@ -132,8 +132,8 @@ function AdminDashboard() {
                     setContextMenu({
                       x: e.clientX, y: e.clientY,
                       items: [
-                        { icon: '✏', label: '編集', onClick: () => { setEditingUser(u); setShowCreateForm(false); } },
-                        { icon: u.is_active ? '🚫' : '✅', label: u.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(u), danger: u.is_active },
+                        { icon: <Pencil size={16} />, label: '編集', onClick: () => { setEditingUser(u); setShowCreateForm(false); } },
+                        { icon: u.is_active ? <Ban size={16} /> : <CheckCircle size={16} />, label: u.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(u), danger: u.is_active },
                       ],
                     });
                   }}>⋮</button>

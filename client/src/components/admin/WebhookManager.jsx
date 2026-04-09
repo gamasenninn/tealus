@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import ContextMenu from '../chat/ContextMenu';
+import { Pencil, Bell, Ban, CheckCircle, Trash2 } from 'lucide-react';
 
 const EVENT_OPTIONS = [
   { value: 'message.created', label: 'メッセージ作成' },
@@ -212,10 +213,10 @@ function WebhookManager() {
                       setContextMenu({
                         x: e.clientX, y: e.clientY,
                         items: [
-                          { icon: '✏', label: '編集', onClick: () => handleEdit(w) },
-                          { icon: '🔔', label: testResults[w.id] === 'sending' ? '送信中...' : 'テスト送信', onClick: () => handleTest(w) },
-                          { icon: w.is_active ? '🚫' : '✅', label: w.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(w) },
-                          { icon: '🗑', label: '削除', onClick: () => handleDelete(w), danger: true },
+                          { icon: <Pencil size={16} />, label: '編集', onClick: () => handleEdit(w) },
+                          { icon: <Bell size={16} />, label: testResults[w.id] === 'sending' ? '送信中...' : 'テスト送信', onClick: () => handleTest(w) },
+                          { icon: w.is_active ? <Ban size={16} /> : <CheckCircle size={16} />, label: w.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(w) },
+                          { icon: <Trash2 size={16} />, label: '削除', onClick: () => handleDelete(w), danger: true },
                         ],
                       });
                     }}>⋮</button>

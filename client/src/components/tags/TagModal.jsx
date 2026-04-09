@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import { Tag } from 'lucide-react';
 import './TagModal.css';
 
 function TagModal({ messageId, onClose, onTagsChanged }) {
@@ -91,7 +92,7 @@ function TagModal({ messageId, onClose, onTagsChanged }) {
   return (
     <div className="modal-overlay z-high" onClick={onClose}>
       <div className="modal-box tag-modal" onClick={e => e.stopPropagation()}>
-        <h3>🏷️ タグを追加</h3>
+        <h3><Tag size={16} style={{ verticalAlign: 'middle', marginRight: 4 }} /> タグを追加</h3>
 
         <div className="tag-input-row">
           <input

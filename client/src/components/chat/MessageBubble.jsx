@@ -9,6 +9,7 @@ import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2 } from 'lucide-react';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn, searchKeyword }) {
@@ -65,7 +66,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     // Copy (text messages only)
     if (message.content && message.type === 'text') {
       items.push({
-        icon: '📋',
+        icon: <Copy size={16} />,
         label: 'コピー',
         onClick: () => navigator.clipboard.writeText(message.content),
       });
@@ -73,14 +74,14 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
 
     // Reply
     items.push({
-      icon: '↩',
+      icon: <Reply size={16} />,
       label: 'リプライ',
       onClick: () => setReplyTo(message),
     });
 
     // Tag
     items.push({
-      icon: '🏷',
+      icon: <Tag size={16} />,
       label: 'タグを追加',
       onClick: () => setShowTagModal(true),
     });
@@ -89,7 +90,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     const transText = message.transcription?.formatted_text || message.transcription?.raw_text;
     if (message.type === 'voice' && message.transcription?.status === 'done' && transText) {
       items.push({
-        icon: '📋',
+        icon: <Copy size={16} />,
         label: '文字起こしをコピー',
         onClick: () => navigator.clipboard.writeText(transText),
       });
@@ -98,7 +99,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     // Voice transcription actions (own voice messages only)
     if (isOwn && message.type === 'voice' && message.transcription?.status === 'done') {
       items.push({
-        icon: '✏',
+        icon: <Pencil size={16} />,
         label: '文字起こしを編集',
         onClick: () => {
           window.dispatchEvent(new CustomEvent('voice:edit', { detail: { messageId: message.id } }));
@@ -106,7 +107,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       });
       if (message.transcription?.version > 1) {
         items.push({
-          icon: '📋',
+          icon: <ClipboardList size={16} />,
           label: '編集履歴',
           onClick: () => {
             window.dispatchEvent(new CustomEvent('voice:history', { detail: { messageId: message.id } }));
@@ -118,7 +119,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     // Delete (own messages only)
     if (isOwn) {
       items.push({
-        icon: '🗑',
+        icon: <Trash2 size={16} />,
         label: '削除',
         danger: true,
         onClick: async () => {
