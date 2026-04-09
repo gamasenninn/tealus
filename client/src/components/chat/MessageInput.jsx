@@ -5,6 +5,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants/ui';
+import { Mic } from 'lucide-react';
 import './MessageInput.css';
 
 function MessageInput({ roomId }) {
@@ -212,7 +213,7 @@ function MessageInput({ roomId }) {
             onClick={handleMicClick}
             disabled={isSending}
           >
-            🎤
+            <Mic size={22} />
           </button>
         )}
       </div>
