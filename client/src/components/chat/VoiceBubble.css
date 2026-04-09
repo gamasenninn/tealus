@@ -36,6 +36,26 @@
   background: rgba(0, 0, 0, 0.1);
 }
 
+.voice-continuous-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-hint);
+  transition: all 0.15s;
+}
+
+.voice-continuous-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
 .voice-progress-area {
   flex: 1;
   cursor: pointer;

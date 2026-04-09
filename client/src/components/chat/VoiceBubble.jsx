@@ -13,7 +13,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
   const [history, setHistory] = useState([]);
   const audioRef = useRef(null);
 
-  // Listen for edit/history trigger from context menu
+  // Listen for edit/history/play trigger
   useEffect(() => {
     const editHandler = (e) => {
       if (e.detail.messageId === message.id) handleStartEdit();
@@ -21,18 +21,32 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     const historyHandler = (e) => {
       if (e.detail.messageId === message.id) handleShowHistory();
     };
+    const playHandler = (e) => {
+      if (e.detail.messageId === message.id) {
+        const audio = audioRef.current;
+        if (audio) { audio.play(); setIsPlaying(true); }
+      }
+    };
     window.addEventListener('voice:edit', editHandler);
     window.addEventListener('voice:history', historyHandler);
+    window.addEventListener('voice:play', playHandler);
     return () => {
       window.removeEventListener('voice:edit', editHandler);
       window.removeEventListener('voice:history', historyHandler);
+      window.removeEventListener('voice:play', playHandler);
     };
   }, [message.id, transcription]);
 
   const handlePlayPause = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) { audio.pause(); } else { audio.play(); }
+    if (isPlaying) {
+      audio.pause();
+      // 再生中に押すと連続再生も止める
+      window.dispatchEvent(new CustomEvent('voice:stop-continuous'));
+    } else {
+      audio.play();
+    }
     setIsPlaying(!isPlaying);
   };
 
@@ -55,7 +69,13 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     if (audio && isFinite(audio.duration)) setDuration(audio.duration);
   };
 
-  const handleEnded = () => { setIsPlaying(false); setProgress(0); };
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setProgress(0);
+    if (localStorage.getItem('voiceContinuousPlay') === 'true') {
+      window.dispatchEvent(new CustomEvent('voice:ended', { detail: { messageId: message.id } }));
+    }
+  };
 
   const handleSeek = (e) => {
     const audio = audioRef.current;

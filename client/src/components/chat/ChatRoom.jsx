@@ -22,6 +22,36 @@ function ChatRoom() {
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
 
+  // Voice continuous playback
+  useEffect(() => {
+    const handleVoiceEnded = (e) => {
+      const endedId = e.detail.messageId;
+      const voiceMessages = messages.filter(m => m.type === 'voice');
+      const currentIdx = voiceMessages.findIndex(m => m.id === endedId);
+      if (currentIdx >= 0 && currentIdx < voiceMessages.length - 1) {
+        const nextMsg = voiceMessages[currentIdx + 1];
+        // 次の音声メッセージを自動再生
+        window.dispatchEvent(new CustomEvent('voice:play', { detail: { messageId: nextMsg.id } }));
+        // スクロールして表示
+        setTimeout(() => {
+          const el = document.querySelector(`[data-msg-id="${nextMsg.id}"]`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    const handleStopContinuous = () => {
+      // 連続再生停止（特に追加処理は不要、voice:endedが発火しなくなるだけ）
+    };
+
+    window.addEventListener('voice:ended', handleVoiceEnded);
+    window.addEventListener('voice:stop-continuous', handleStopContinuous);
+    return () => {
+      window.removeEventListener('voice:ended', handleVoiceEnded);
+      window.removeEventListener('voice:stop-continuous', handleStopContinuous);
+    };
+  }, [messages]);
+
   // Search params
   const targetMsgId = searchParams.get('msg');
   const searchKeyword = searchParams.get('q');
