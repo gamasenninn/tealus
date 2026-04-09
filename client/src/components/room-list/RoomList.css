@@ -155,7 +155,7 @@
 }
 
 .room-name {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -164,7 +164,7 @@
 }
 
 .room-time {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-hint);
   flex-shrink: 0;
   margin-left: 8px;
@@ -177,7 +177,7 @@
 }
 
 .room-preview {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
