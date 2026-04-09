@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import { ArrowLeft } from 'lucide-react';
 import './SearchPage.css';
 
 function SearchPage() {
@@ -107,7 +108,7 @@ function SearchPage() {
   return (
     <div className="search-container">
       <header className="search-header">
-        <button className="search-back" onClick={() => { sessionStorage.removeItem('searchCache'); sessionStorage.removeItem('searchScroll'); navigate(-1); }}>←</button>
+        <button className="search-back" onClick={() => { sessionStorage.removeItem('searchCache'); sessionStorage.removeItem('searchScroll'); navigate(-1); }}><ArrowLeft size={22} /></button>
         <input
           className="search-input"
           type="text"

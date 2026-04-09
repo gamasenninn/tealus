@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import ImageViewer from './ImageViewer';
+import { ArrowLeft } from 'lucide-react';
 import './MediaGallery.css';
 
 function MediaGallery() {
@@ -101,7 +102,7 @@ function MediaGallery() {
   return (
     <div className="gallery-container">
       <header className="gallery-header">
-        <button className="icon-button" onClick={() => navigate(`/rooms/${roomId}`)}>←</button>
+        <button className="icon-button" onClick={() => navigate(-1)}><ArrowLeft size={22} /></button>
         <h1>{roomName} — ファイル</h1>
       </header>
 

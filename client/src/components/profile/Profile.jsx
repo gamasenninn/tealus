@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
+import { ArrowLeft } from 'lucide-react';
 import './Profile.css';
 
 function Profile() {
@@ -90,7 +91,7 @@ function Profile() {
   return (
     <div className="profile-container">
       <header className="profile-header">
-        <button className="profile-back-btn" onClick={() => navigate('/')}>← 戻る</button>
+        <button className="profile-back-btn" onClick={() => navigate('/')}><ArrowLeft size={22} /></button>
         <h1>プロフィール</h1>
       </header>
 

@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
 import ContextMenu from '../chat/ContextMenu';
+import { ArrowLeft } from 'lucide-react';
 import './AdminDashboard.css';
 
 function AdminDashboard() {
@@ -72,7 +73,7 @@ function AdminDashboard() {
     <div className="admin-container">
       <header className="admin-header">
         <div className="admin-header-left">
-          <button className="admin-back-btn" onClick={() => navigate('/')}>←</button>
+          <button className="admin-back-btn" onClick={() => navigate('/')}><ArrowLeft size={22} /></button>
           <h1>管理ダッシュボード</h1>
         </div>
       </header>

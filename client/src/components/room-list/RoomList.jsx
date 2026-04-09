@@ -6,6 +6,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
+import { Search, Settings, Plus, LogOut } from 'lucide-react';
 import './RoomList.css';
 
 function RoomList() {
@@ -98,18 +99,18 @@ function RoomList() {
         <h1>トーク</h1>
         <div className="room-list-header-actions">
           <button className="icon-button" onClick={() => navigate('/search')} title="検索">
-            🔍
+            <Search size={20} />
           </button>
           {user?.role === 'admin' && (
             <button className="icon-button" onClick={() => navigate('/admin')} title="管理">
-              ⚙
+              <Settings size={20} />
             </button>
           )}
           <button className="icon-button" onClick={() => setShowCreate(true)} title="新規作成">
-            +
+            <Plus size={20} />
           </button>
           <button className="icon-button" onClick={logout} title="ログアウト">
-            ↩
+            <LogOut size={20} />
           </button>
         </div>
       </header>

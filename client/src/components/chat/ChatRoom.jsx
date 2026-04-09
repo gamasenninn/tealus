@@ -10,6 +10,7 @@ import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
+import { ArrowLeft, Search, Image } from 'lucide-react';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -63,7 +64,7 @@ function ChatRoom() {
   return (
     <div className="chat-container">
       <header className="chat-header">
-        <button className="chat-back" onClick={() => navigate(-1)}>←</button>
+        <button className="chat-back" onClick={() => navigate(-1)}><ArrowLeft size={22} /></button>
         <div className="chat-header-info">
           <span className="chat-header-title">{getRoomTitle()}</span>
           {getMemberCount() && (
@@ -73,8 +74,8 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
-        <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル">🖼</button>
-        <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}>🔍</button>
+        <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル"><Image size={18} /></button>
+        <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}><Search size={18} /></button>
         {currentRoom?.type === 'group' && (
           <button className="chat-header-btn" onClick={() => setShowMembers(true)}>≡</button>
         )}
