@@ -4,7 +4,7 @@ import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
 import './VoiceBubble.css';
 
-function VoiceBubble({ message, media, transcription, isOwn, replyMessage, searchKeyword }) {
+function VoiceBubble({ message, media, transcription, isOwn, canEditTranscription, replyMessage, searchKeyword }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -136,7 +136,7 @@ function VoiceBubble({ message, media, transcription, isOwn, replyMessage, searc
           {transcription.status === 'done' && (
             <>
               <span className="voice-trans-text">{highlightText(displayText)}</span>
-              {isOwn && (
+              {canEditTranscription && (
                 <div className="voice-trans-actions">
                   <button className="voice-edit-btn" onClick={handleStartEdit}>編集</button>
                   {transcription.version > 1 && (

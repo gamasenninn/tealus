@@ -262,12 +262,26 @@ router.get('/:id', requireMember, async (req, res) => {
  */
 router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name } = req.body;
+  const { name, allow_member_transcription_edit } = req.body;
 
   try {
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) { updates.push(`name = $${paramIndex++}`); values.push(name); }
+    if (allow_member_transcription_edit !== undefined) { updates.push(`allow_member_transcription_edit = $${paramIndex++}`); values.push(allow_member_transcription_edit); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: '更新する項目がありません' });
+    }
+
+    updates.push('updated_at = now()');
+    values.push(id);
+
     const result = await pool.query(
-      'UPDATE rooms SET name = $1, updated_at = now() WHERE id = $2 RETURNING *',
-      [name, id]
+      `UPDATE rooms SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
     );
     res.json({ room: result.rows[0] });
   } catch (err) {

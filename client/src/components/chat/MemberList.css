@@ -265,6 +265,34 @@
   background: #ffebee;
 }
 
+/* Room settings */
+.room-settings-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  margin-bottom: 24px;
+  border-top: 1px solid var(--border-light);
+}
+
+.room-settings-section h3 {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
+}
+
+.room-setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.room-setting-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
 .member-close-btn {
   width: 100%;
   padding: 12px;

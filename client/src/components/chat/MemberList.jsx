@@ -18,9 +18,21 @@ function MemberList({ roomId, onClose }) {
   const [groupName, setGroupName] = useState(currentRoom?.name || '');
   const iconInputRef = useRef(null);
   const [error, setError] = useState('');
+  const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit || false);
 
   const myRole = members.find(m => m.user_id === user.id)?.role;
   const isAdmin = myRole === 'admin';
+
+  const handleToggleTranscriptionEdit = async () => {
+    try {
+      const newValue = !transcriptionEdit;
+      await api.updateRoom(roomId, { allow_member_transcription_edit: newValue });
+      setTranscriptionEdit(newValue);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   const handleSaveName = async () => {
     if (!groupName.trim()) return;
@@ -114,7 +126,7 @@ function MemberList({ roomId, onClose }) {
 
   return (
     <div className="member-list-overlay" onClick={onClose}>
-      <div className="member-list-modal" onClick={e => e.stopPropagation()}>
+      <div className="member-list-modal" onClick={e => { e.stopPropagation(); if (menuTarget) setMenuTarget(null); }}>
         <div className="group-settings">
           <div className="group-icon-area" onClick={() => isAdmin && iconInputRef.current?.click()}>
             {currentRoom?.icon_url ? (
@@ -171,6 +183,16 @@ function MemberList({ roomId, onClose }) {
             </div>
           ))}
         </div>
+
+        {isAdmin && (
+          <div className="room-settings-section">
+            <h3>ルーム設定</h3>
+            <label className="room-setting-toggle">
+              <input type="checkbox" checked={transcriptionEdit} onChange={handleToggleTranscriptionEdit} />
+              <span>メンバーの文字起こし編集を許可</span>
+            </label>
+          </div>
+        )}
 
         <div className="member-actions">
           <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>

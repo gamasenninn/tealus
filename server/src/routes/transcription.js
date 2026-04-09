@@ -20,16 +20,29 @@ router.put('/', authenticate, async (req, res) => {
   }
 
   try {
-    // Check message exists and user is sender
+    // Check message exists
     const msgResult = await pool.query(
-      'SELECT sender_id, room_id FROM messages WHERE id = $1 AND type = $2',
+      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2',
       [messageId, 'voice']
     );
     if (msgResult.rows.length === 0) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
-    if (msgResult.rows[0].sender_id !== userId) {
-      return res.status(403).json({ error: '送信者のみ編集できます' });
+
+    const { sender_id, room_id, allow_member_transcription_edit } = msgResult.rows[0];
+
+    if (sender_id !== userId) {
+      if (!allow_member_transcription_edit) {
+        return res.status(403).json({ error: '送信者のみ編集できます' });
+      }
+      // ルーム設定でメンバー編集が許可されている場合、メンバーかチェック
+      const memberCheck = await pool.query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [room_id, userId]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
+      }
     }
 
     // Get current max version

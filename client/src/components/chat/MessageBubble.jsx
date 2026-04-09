@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMessageStore } from '../../stores/messageStore';
+import { useRoomStore } from '../../stores/roomStore';
 import { api } from '../../services/api';
 import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
@@ -15,6 +16,7 @@ import './MessageBubble.css';
 function MessageBubble({ message, isOwn, searchKeyword }) {
   const { roomId } = useParams();
   const { setReplyTo } = useMessageStore();
+  const { currentRoom } = useRoomStore();
   const [viewerState, setViewerState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [showTagModal, setShowTagModal] = useState(false);
@@ -96,8 +98,9 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       });
     }
 
-    // Voice transcription actions (own voice messages only)
-    if (isOwn && message.type === 'voice' && message.transcription?.status === 'done') {
+    // Voice transcription actions
+    const canEdit = isOwn || currentRoom?.allow_member_transcription_edit;
+    if (canEdit && message.type === 'voice' && message.transcription?.status === 'done') {
       items.push({
         icon: <Pencil size={16} />,
         label: '文字起こしを編集',
@@ -222,7 +225,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           ) : (
             <>
               {hasText && <p className="bubble-text">{highlightText(message.content)}</p>}
-              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
+              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {message.type !== 'voice' && renderMedia()}
             </>
           )}
