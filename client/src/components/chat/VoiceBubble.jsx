@@ -37,14 +37,28 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     };
   }, [message.id, transcription]);
 
+  // 他の音声が再生開始したら自分を停止
+  useEffect(() => {
+    const handleOtherPlay = (e) => {
+      if (e.detail.messageId !== message.id && isPlaying) {
+        audioRef.current?.pause();
+        setIsPlaying(false);
+        setProgress(0);
+      }
+    };
+    window.addEventListener('voice:started', handleOtherPlay);
+    return () => window.removeEventListener('voice:started', handleOtherPlay);
+  }, [message.id, isPlaying]);
+
   const handlePlayPause = () => {
     const audio = audioRef.current;
     if (!audio) return;
     if (isPlaying) {
       audio.pause();
-      // 再生中に押すと連続再生も止める
       window.dispatchEvent(new CustomEvent('voice:stop-continuous'));
     } else {
+      // 他の再生を止めてから自分を再生
+      window.dispatchEvent(new CustomEvent('voice:started', { detail: { messageId: message.id } }));
       audio.play();
     }
     setIsPlaying(!isPlaying);

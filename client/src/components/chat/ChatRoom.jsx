@@ -22,33 +22,64 @@ function ChatRoom() {
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
 
-  // Voice continuous playback
+  // Voice continuous playback + Wake Lock
   useEffect(() => {
+    let wakeLock = null;
+
+    const acquireWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator && !wakeLock) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => { wakeLock = null; });
+        }
+      } catch (e) { /* Wake Lock not supported or failed */ }
+    };
+
+    const releaseWakeLock = () => {
+      if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    };
+
     const handleVoiceEnded = (e) => {
       const endedId = e.detail.messageId;
       const voiceMessages = messages.filter(m => m.type === 'voice');
       const currentIdx = voiceMessages.findIndex(m => m.id === endedId);
       if (currentIdx >= 0 && currentIdx < voiceMessages.length - 1) {
         const nextMsg = voiceMessages[currentIdx + 1];
-        // 次の音声メッセージを自動再生
+        acquireWakeLock();
         window.dispatchEvent(new CustomEvent('voice:play', { detail: { messageId: nextMsg.id } }));
-        // スクロールして表示
         setTimeout(() => {
           const el = document.querySelector(`[data-msg-id="${nextMsg.id}"]`);
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
+      } else {
+        // 最後のメッセージ → Wake Lock解除
+        releaseWakeLock();
       }
     };
 
     const handleStopContinuous = () => {
-      // 連続再生停止（特に追加処理は不要、voice:endedが発火しなくなるだけ）
+      releaseWakeLock();
     };
 
+    // タブが再表示された時にWake Lockを再取得
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && wakeLock === null) {
+        // 再生中ならWake Lock再取得（audio要素の再生状態は各VoiceBubbleが管理）
+      }
+    };
+
+    const handleVoiceStarted = () => { acquireWakeLock(); };
+
     window.addEventListener('voice:ended', handleVoiceEnded);
+    window.addEventListener('voice:started', handleVoiceStarted);
     window.addEventListener('voice:stop-continuous', handleStopContinuous);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('voice:ended', handleVoiceEnded);
+      window.removeEventListener('voice:started', handleVoiceStarted);
       window.removeEventListener('voice:stop-continuous', handleStopContinuous);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      releaseWakeLock();
     };
   }, [messages]);
 
