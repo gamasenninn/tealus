@@ -10,6 +10,7 @@ import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
+import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image } from 'lucide-react';
 import './ChatRoom.css';
 
@@ -18,7 +19,7 @@ function ChatRoom() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuthStore();
-  const { currentRoom, members, error: roomError } = useRoomStore();
+  const { currentRoom, members, lastReadMessageId, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
 
@@ -160,9 +161,11 @@ function ChatRoom() {
           const prevMsg = messages[i - 1];
           const showDate = !prevMsg ||
             new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
+          const showUnread = lastReadMessageId && prevMsg && prevMsg.id === lastReadMessageId && msg.sender_id !== user.id;
           return (
             <div key={msg.id} data-date={showDate ? msg.created_at : undefined} data-msg-id={msg.id}>
               {showDate && <DateSeparator date={msg.created_at} hidden={stickyDate && new Date(msg.created_at).toDateString() === new Date(stickyDate).toDateString()} />}
+              {showUnread && <UnreadSeparator />}
               <MessageBubble message={msg} isOwn={msg.sender_id === user.id} searchKeyword={searchKeyword} />
             </div>
           );

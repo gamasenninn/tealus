@@ -5,6 +5,7 @@ export const useRoomStore = create((set, get) => ({
   rooms: [],
   currentRoom: null,
   members: [],
+  lastReadMessageId: null,
   error: null,
 
   fetchRooms: async () => {
@@ -19,14 +20,14 @@ export const useRoomStore = create((set, get) => ({
   selectRoom: async (roomId) => {
     try {
       const data = await api.getRoom(roomId);
-      set({ currentRoom: data.room, members: data.members, error: null });
+      set({ currentRoom: data.room, members: data.members, lastReadMessageId: data.last_read_message_id, error: null });
     } catch (err) {
       set({ error: 'ルーム情報の取得に失敗しました' });
     }
   },
 
   clearCurrentRoom: () => {
-    set({ currentRoom: null, members: [] });
+    set({ currentRoom: null, members: [], lastReadMessageId: null });
   },
 
   createGroup: async (name, memberIds) => {

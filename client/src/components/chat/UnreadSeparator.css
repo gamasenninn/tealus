@@ -1,0 +1,21 @@
+.unread-separator {
+  display: flex;
+  align-items: center;
+  margin: 12px 0;
+  gap: 8px;
+}
+
+.unread-separator::before,
+.unread-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #ff8a65;
+}
+
+.unread-separator span {
+  color: #ff8a65;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}

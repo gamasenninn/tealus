@@ -249,7 +249,14 @@ router.get('/:id', requireMember, async (req, res) => {
       [id]
     );
 
-    res.json({ room: roomResult.rows[0], members: membersResult.rows });
+    // Get last read message ID for unread separator
+    const cursorResult = await pool.query(
+      'SELECT last_read_message_id FROM room_read_cursors WHERE room_id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+    const last_read_message_id = cursorResult.rows[0]?.last_read_message_id || null;
+
+    res.json({ room: roomResult.rows[0], members: membersResult.rows, last_read_message_id });
   } catch (err) {
     logger.error('Get room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
