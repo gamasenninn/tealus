@@ -29,6 +29,20 @@ function HomePage() {
     try {
       const data = await api.getAnnouncements();
       setAnnouncements(data.messages || []);
+
+      // 未読メッセージを既読にする
+      const unreadMsgs = (data.messages || []).filter(m => m.is_unread);
+      if (unreadMsgs.length > 0) {
+        // ルームごとにグループ化してmarkRead
+        const byRoom = {};
+        unreadMsgs.forEach(m => {
+          if (!byRoom[m.room_id]) byRoom[m.room_id] = [];
+          byRoom[m.room_id].push(m.id);
+        });
+        Object.entries(byRoom).forEach(([roomId, ids]) => {
+          api.markRead(roomId, ids).catch(() => {});
+        });
+      }
     } catch (err) {
       console.error('Load announcements error:', err);
     } finally {
