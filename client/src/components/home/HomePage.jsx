@@ -170,6 +170,7 @@ function HomePage() {
             className="home-iframe"
             src={tabs.find(t => t.id === activeTab)?.url}
             title={tabs.find(t => t.id === activeTab)?.label}
+            allow="microphone; camera; autoplay; fullscreen"
           />
         )}
       </div>
