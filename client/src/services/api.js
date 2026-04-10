@@ -279,6 +279,11 @@ class ApiClient {
     return this.request('GET', url);
   }
 
+  // Announcements
+  getAnnouncements(limit = 20) {
+    return this.request('GET', `/rooms/announcements?limit=${limit}`);
+  }
+
   // Admin
   getAdminUsers() {
     return this.request('GET', '/admin/users');

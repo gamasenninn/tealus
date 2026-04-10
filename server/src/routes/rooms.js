@@ -20,8 +20,68 @@ const iconUpload = multer({ storage: iconStorage, limits: { fileSize: 5 * 1024 *
 
 const router = express.Router();
 
+const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments');
+
 // All routes require authentication
 router.use(authenticate);
+
+/**
+ * GET /api/rooms/announcements
+ * Get messages from announcement rooms for home screen
+ */
+router.get('/announcements', async (req, res) => {
+  const { limit = 20 } = req.query;
+
+  try {
+    // Find announcement rooms
+    const roomResult = await pool.query(
+      "SELECT id, name FROM rooms WHERE is_announcement = true"
+    );
+
+    if (roomResult.rows.length === 0) {
+      return res.json({ messages: [] });
+    }
+
+    const roomIds = roomResult.rows.map(r => r.id);
+    const roomMap = Object.fromEntries(roomResult.rows.map(r => [r.id, r.name]));
+
+    // Get latest messages from announcement rooms
+    const msgResult = await pool.query(
+      `SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url
+       FROM messages m
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.room_id = ANY($1) AND m.is_deleted = false AND m.type != 'system'
+       ORDER BY m.created_at DESC
+       LIMIT $2`,
+      [roomIds, parseInt(limit)]
+    );
+
+    const messages = msgResult.rows.map(m => ({
+      ...m,
+      room_name: roomMap[m.room_id],
+    }));
+
+    await attachMedia(messages);
+    await attachTranscriptions(messages);
+
+    // Get read status for current user
+    const cursorResult = await pool.query(
+      `SELECT room_id, last_read_at FROM room_read_cursors WHERE room_id = ANY($1) AND user_id = $2`,
+      [roomIds, req.user.id]
+    );
+    const cursors = Object.fromEntries(cursorResult.rows.map(r => [r.room_id, r.last_read_at]));
+
+    messages.forEach(m => {
+      const lastRead = cursors[m.room_id];
+      m.is_unread = !lastRead || new Date(m.created_at) > new Date(lastRead);
+    });
+
+    res.json({ messages });
+  } catch (err) {
+    logger.error('Get announcements error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
 
 /**
  * POST /api/rooms
@@ -269,7 +329,7 @@ router.get('/:id', requireMember, async (req, res) => {
  */
 router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, allow_member_transcription_edit } = req.body;
+  const { name, allow_member_transcription_edit, is_announcement } = req.body;
 
   try {
     const updates = [];
@@ -278,6 +338,7 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
 
     if (name !== undefined) { updates.push(`name = $${paramIndex++}`); values.push(name); }
     if (allow_member_transcription_edit !== undefined) { updates.push(`allow_member_transcription_edit = $${paramIndex++}`); values.push(allow_member_transcription_edit); }
+    if (is_announcement !== undefined) { updates.push(`is_announcement = $${paramIndex++}`); values.push(is_announcement); }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: '更新する項目がありません' });

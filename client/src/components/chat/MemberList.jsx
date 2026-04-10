@@ -19,6 +19,7 @@ function MemberList({ roomId, onClose }) {
   const iconInputRef = useRef(null);
   const [error, setError] = useState('');
   const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit || false);
+  const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
 
   const myRole = members.find(m => m.user_id === user.id)?.role;
@@ -28,6 +29,19 @@ function MemberList({ roomId, onClose }) {
     const newValue = !continuousPlay;
     setContinuousPlay(newValue);
     localStorage.setItem('voiceContinuousPlay', String(newValue));
+  };
+
+  const isSysAdmin = user?.role === 'admin';
+
+  const handleToggleAnnouncement = async () => {
+    try {
+      const newValue = !isAnnouncement;
+      await api.updateRoom(roomId, { is_announcement: newValue });
+      setIsAnnouncement(newValue);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const handleToggleTranscriptionEdit = async () => {
@@ -205,6 +219,16 @@ function MemberList({ roomId, onClose }) {
             <label className="room-setting-toggle">
               <input type="checkbox" checked={transcriptionEdit} onChange={handleToggleTranscriptionEdit} />
               <span>メンバーの文字起こし編集を許可</span>
+            </label>
+          </div>
+        )}
+
+        {isSysAdmin && (
+          <div className="room-settings-section">
+            <h3>システム設定</h3>
+            <label className="room-setting-toggle">
+              <input type="checkbox" checked={isAnnouncement} onChange={handleToggleAnnouncement} />
+              <span>ホーム画面にお知らせとして表示</span>
             </label>
           </div>
         )}
