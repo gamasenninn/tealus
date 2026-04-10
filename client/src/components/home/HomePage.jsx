@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 import { api } from '../../services/api';
 import BottomNav from '../common/BottomNav';
@@ -10,6 +10,7 @@ function HomePage() {
   const [portalLinks, setPortalLinks] = useState([]);
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const iframeRef = useRef(null);
 
   useEffect(() => {
     loadAnnouncements();
@@ -91,7 +92,17 @@ function HomePage() {
           <button
             key={tab.id}
             className={`home-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              if (activeTab === tab.id && tab.url && iframeRef.current) {
+                // アクティブなポータルタブを再タップ → iframe リロード
+                try { iframeRef.current.contentWindow.location.reload(); } catch (e) {
+                  // クロスオリジンの場合はsrc再設定でリロード
+                  iframeRef.current.src = iframeRef.current.src;
+                }
+              } else {
+                setActiveTab(tab.id);
+              }
+            }}
           >
             {tab.label}
           </button>
@@ -155,6 +166,7 @@ function HomePage() {
 
         {activeTab.startsWith('portal-') && (
           <iframe
+            ref={iframeRef}
             className="home-iframe"
             src={tabs.find(t => t.id === activeTab)?.url}
             title={tabs.find(t => t.id === activeTab)?.label}
