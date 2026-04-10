@@ -26,6 +26,22 @@ const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, at
 router.use(authenticate);
 
 /**
+ * GET /api/rooms/portal-links
+ * Get active portal links for home screen
+ */
+router.get('/portal-links', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, title, url, icon FROM portal_links WHERE is_active = true ORDER BY sort_order, created_at'
+    );
+    res.json({ links: result.rows });
+  } catch (err) {
+    logger.error('Get portal links error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/rooms/announcements
  * Get messages from announcement rooms for home screen
  */

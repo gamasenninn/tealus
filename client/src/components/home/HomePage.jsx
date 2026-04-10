@@ -13,7 +13,17 @@ function HomePage() {
 
   useEffect(() => {
     loadAnnouncements();
+    loadPortalLinks();
   }, []);
+
+  const loadPortalLinks = async () => {
+    try {
+      const data = await api.getPortalLinks();
+      setPortalLinks(data.links || []);
+    } catch (err) {
+      console.error('Load portal links error:', err);
+    }
+  };
 
   const loadAnnouncements = async () => {
     try {

@@ -279,7 +279,11 @@ class ApiClient {
     return this.request('GET', url);
   }
 
-  // Announcements
+  // Home
+  getPortalLinks() {
+    return this.request('GET', '/rooms/portal-links');
+  }
+
   getAnnouncements(limit = 20) {
     return this.request('GET', `/rooms/announcements?limit=${limit}`);
   }
@@ -299,6 +303,23 @@ class ApiClient {
 
   updateAdminUserStatus(id, is_active) {
     return this.request('PATCH', `/admin/users/${id}/status`, { is_active });
+  }
+
+  // Portal Links (admin)
+  getAdminPortalLinks() {
+    return this.request('GET', '/admin/portal-links');
+  }
+
+  createPortalLink(data) {
+    return this.request('POST', '/admin/portal-links', data);
+  }
+
+  updatePortalLink(id, data) {
+    return this.request('PUT', `/admin/portal-links/${id}`, data);
+  }
+
+  deletePortalLink(id) {
+    return this.request('DELETE', `/admin/portal-links/${id}`);
   }
 
   // Webhooks

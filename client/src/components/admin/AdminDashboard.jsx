@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
+import PortalManager from './PortalManager';
 import ContextMenu from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
 import './AdminDashboard.css';
@@ -80,10 +81,13 @@ function AdminDashboard() {
       <div className="admin-tabs">
         <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>ユーザー</button>
         <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
+        <button className={`admin-tab ${activeTab === 'portal' ? 'active' : ''}`} onClick={() => setActiveTab('portal')}>ポータル</button>
       </div>
 
       {activeTab === 'webhooks' ? (
         <WebhookManager />
+      ) : activeTab === 'portal' ? (
+        <PortalManager />
       ) : (
       <>
       <div className="admin-section-header">
