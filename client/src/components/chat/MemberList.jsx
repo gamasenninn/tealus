@@ -86,7 +86,7 @@ function MemberList({ roomId, onClose }) {
     if (!confirm('このグループを退会しますか？\n退会するとこのグループのメッセージは閲覧できなくなります。')) return;
     try {
       await api.leaveRoom(roomId);
-      navigate('/');
+      navigate('/talk');
     } catch (err) {
       showError(err.message);
     }

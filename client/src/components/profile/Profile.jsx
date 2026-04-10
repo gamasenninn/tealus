@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import { ArrowLeft } from 'lucide-react';
+import BottomNav from '../common/BottomNav';
 import './Profile.css';
 
 function Profile() {
@@ -207,6 +208,7 @@ function Profile() {
           <span>メッセージ受信時に通知音を鳴らす</span>
         </label>
       </div>
+      <BottomNav />
     </div>
   );
 }

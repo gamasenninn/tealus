@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Search, Settings, Plus, LogOut } from 'lucide-react';
+import BottomNav from '../common/BottomNav';
 import './RoomList.css';
 
 function RoomList() {
@@ -204,6 +205,8 @@ function RoomList() {
           </div>
         </div>
       )}
+
+      <BottomNav />
     </div>
   );
 }
