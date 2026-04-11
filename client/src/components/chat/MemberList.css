@@ -304,10 +304,60 @@
 .app-url-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
+  align-items: flex-start;
+  padding: 10px 0;
   font-size: 14px;
   border-bottom: 1px solid var(--border-light);
+  gap: 8px;
+}
+
+.app-url-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-url-title {
+  font-weight: 600;
+  display: block;
+}
+
+.app-url-url {
+  font-size: 12px;
+  color: var(--text-hint);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-url-ratio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.app-url-ratio input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary);
+  height: 4px;
+}
+
+.app-url-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-url-edit {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
 }
 
 .app-url-remove {
@@ -316,7 +366,17 @@
   color: var(--color-error);
   cursor: pointer;
   font-size: 16px;
-  padding: 4px 8px;
+  padding: 4px 6px;
+}
+
+.app-url-cancel-btn {
+  background: var(--border-dark);
+  color: var(--text-primary);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .app-url-add {

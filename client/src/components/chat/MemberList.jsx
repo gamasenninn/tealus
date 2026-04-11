@@ -24,6 +24,7 @@ function MemberList({ roomId, onClose }) {
   const [appUrls, setAppUrls] = useState(currentRoom?.app_urls || []);
   const [newAppTitle, setNewAppTitle] = useState('');
   const [newAppUrl, setNewAppUrl] = useState('');
+  const [editingAppIndex, setEditingAppIndex] = useState(null);
 
   const myRole = members.find(m => m.user_id === user.id)?.role;
   const isAdmin = myRole === 'admin';
@@ -50,11 +51,47 @@ function MemberList({ roomId, onClose }) {
   const handleAddApp = async () => {
     if (!newAppTitle.trim() || !newAppUrl.trim()) return;
     try {
-      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim() }];
+      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50 }];
       await api.updateRoom(roomId, { app_urls: updated });
       setAppUrls(updated);
       setNewAppTitle('');
       setNewAppUrl('');
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleUpdateApp = async () => {
+    if (editingAppIndex === null || !newAppTitle.trim() || !newAppUrl.trim()) return;
+    try {
+      const updated = appUrls.map((app, i) =>
+        i === editingAppIndex ? { ...app, title: newAppTitle.trim(), url: newAppUrl.trim() } : app
+      );
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
+      setNewAppTitle('');
+      setNewAppUrl('');
+      setEditingAppIndex(null);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleEditApp = (index) => {
+    setNewAppTitle(appUrls[index].title);
+    setNewAppUrl(appUrls[index].url);
+    setEditingAppIndex(index);
+  };
+
+  const handleAppRatioChange = async (index, ratio) => {
+    try {
+      const updated = appUrls.map((app, i) =>
+        i === index ? { ...app, ratio: parseInt(ratio) } : app
+      );
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
       await selectRoom(roomId);
     } catch (err) {
       setError(err.message);
@@ -252,14 +289,31 @@ function MemberList({ roomId, onClose }) {
             <h4 className="room-settings-sub">アプリパネル</h4>
             {appUrls.map((app, i) => (
               <div key={i} className="app-url-item">
-                <span>{app.title}</span>
-                <button className="app-url-remove" onClick={() => handleRemoveApp(i)}>✕</button>
+                <div className="app-url-info">
+                  <span className="app-url-title">{app.title}</span>
+                  <span className="app-url-url">{app.url}</span>
+                  <div className="app-url-ratio">
+                    <label>分割: {app.ratio || 50}%</label>
+                    <input type="range" min="20" max="80" value={app.ratio || 50} onChange={e => handleAppRatioChange(i, e.target.value)} />
+                  </div>
+                </div>
+                <div className="app-url-actions">
+                  <button className="app-url-edit" onClick={() => handleEditApp(i)}>編集</button>
+                  <button className="app-url-remove" onClick={() => handleRemoveApp(i)}>✕</button>
+                </div>
               </div>
             ))}
             <div className="app-url-add">
               <input type="text" placeholder="タイトル" value={newAppTitle} onChange={e => setNewAppTitle(e.target.value)} />
               <input type="url" placeholder="URL" value={newAppUrl} onChange={e => setNewAppUrl(e.target.value)} />
-              <button className="app-url-add-btn" onClick={handleAddApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>追加</button>
+              {editingAppIndex !== null ? (
+                <>
+                  <button className="app-url-add-btn" onClick={handleUpdateApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>更新</button>
+                  <button className="app-url-cancel-btn" onClick={() => { setEditingAppIndex(null); setNewAppTitle(''); setNewAppUrl(''); }}>取消</button>
+                </>
+              ) : (
+                <button className="app-url-add-btn" onClick={handleAddApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>追加</button>
+              )}
             </div>
           </div>
         )}

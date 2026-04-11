@@ -157,6 +157,7 @@ function ChatRoom() {
         className="chat-messages"
         ref={messagesContainerRef}
         onScroll={handleScroll}
+        style={showAppPanel && appUrls.length > 0 ? { flex: 100 - (appUrls[activeAppIndex]?.ratio || 50) } : undefined}
       >
         {stickyDate && (
           <div className="sticky-date">
@@ -186,7 +187,7 @@ function ChatRoom() {
       )}
 
       {showAppPanel && appUrls.length > 0 && (
-        <div className="app-panel">
+        <div className="app-panel" style={{ flex: appUrls[activeAppIndex]?.ratio || 50 }}>
           {appUrls.length > 1 && (
             <div className="app-panel-tabs">
               {appUrls.map((app, i) => (
