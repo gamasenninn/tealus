@@ -18,7 +18,8 @@ function MemberList({ roomId, onClose }) {
   const [groupName, setGroupName] = useState(currentRoom?.name || '');
   const iconInputRef = useRef(null);
   const [error, setError] = useState('');
-  const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit || false);
+  const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit ? 'member' : 'sender');
+  const [messageEditPolicy, setMessageEditPolicy] = useState(currentRoom?.message_edit_policy || 'none');
   const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
   const [appUrls, setAppUrls] = useState(currentRoom?.app_urls || []);
@@ -122,11 +123,20 @@ function MemberList({ roomId, onClose }) {
     }
   };
 
-  const handleToggleTranscriptionEdit = async () => {
+  const handleTranscriptionEditChange = async (value) => {
     try {
-      const newValue = !transcriptionEdit;
-      await api.updateRoom(roomId, { allow_member_transcription_edit: newValue });
-      setTranscriptionEdit(newValue);
+      await api.updateRoom(roomId, { allow_member_transcription_edit: value === 'member' });
+      setTranscriptionEdit(value);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleMessageEditChange = async (value) => {
+    try {
+      await api.updateRoom(roomId, { message_edit_policy: value });
+      setMessageEditPolicy(value);
       await selectRoom(roomId);
     } catch (err) {
       setError(err.message);
@@ -294,10 +304,21 @@ function MemberList({ roomId, onClose }) {
         {isAdmin && (
           <div className="room-settings-section">
             <h3>ルーム設定（管理者）</h3>
-            <label className="room-setting-toggle">
-              <input type="checkbox" checked={transcriptionEdit} onChange={handleToggleTranscriptionEdit} />
-              <span>メンバーの文字起こし編集を許可</span>
-            </label>
+            <div className="room-setting-select">
+              <label>文字起こし編集</label>
+              <select value={transcriptionEdit} onChange={e => handleTranscriptionEditChange(e.target.value)}>
+                <option value="sender">送信者のみ</option>
+                <option value="member">メンバー全員</option>
+              </select>
+            </div>
+            <div className="room-setting-select">
+              <label>メッセージ編集</label>
+              <select value={messageEditPolicy} onChange={e => handleMessageEditChange(e.target.value)}>
+                <option value="none">無効</option>
+                <option value="sender">送信者のみ</option>
+                <option value="member">メンバー全員</option>
+              </select>
+            </div>
 
             <h4 className="room-settings-sub">アプリパネル</h4>
             {appUrls.map((app, i) => (

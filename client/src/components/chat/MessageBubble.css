@@ -118,6 +118,66 @@
   color: rgba(0, 0, 0, 0.4);
 }
 
+.bubble-edited {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
+  font-style: italic;
+}
+
+.message-edit-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+
+.edit-history-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.edit-history-item {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.edit-history-item:last-child {
+  border-bottom: none;
+}
+
+.edit-history-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-hint);
+  margin-bottom: 4px;
+}
+
+.edit-history-item p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.edit-history-diff {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.edit-history-diff .diff-added {
+  background: var(--diff-added-bg);
+  color: var(--diff-added-text);
+}
+
+.edit-history-diff .diff-removed {
+  background: var(--diff-removed-bg);
+  text-decoration: line-through;
+}
+
 .bubble-read {
   font-size: 11px;
   color: rgba(0, 0, 0, 0.4);

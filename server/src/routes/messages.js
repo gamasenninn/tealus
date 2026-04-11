@@ -138,6 +138,145 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * PUT /api/rooms/:id/messages/:msgId
+ * Edit message content (policy-based: none/sender/member)
+ */
+router.put('/:msgId', async (req, res) => {
+  const roomId = req.params.id;
+  const { msgId } = req.params;
+  const userId = req.user.id;
+  const { content } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'メッセージ内容は必須です' });
+  }
+
+  try {
+    // Get message and room policy
+    const msgResult = await pool.query(
+      `SELECT m.sender_id, m.content, m.type, m.is_deleted, r.message_edit_policy
+       FROM messages m JOIN rooms r ON r.id = m.room_id
+       WHERE m.id = $1 AND m.room_id = $2`,
+      [msgId, roomId]
+    );
+
+    if (msgResult.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+
+    const msg = msgResult.rows[0];
+
+    if (msg.is_deleted) {
+      return res.status(400).json({ error: '削除済みメッセージは編集できません' });
+    }
+
+    if (msg.type !== 'text') {
+      return res.status(400).json({ error: 'テキストメッセージのみ編集可能です' });
+    }
+
+    if (msg.message_edit_policy === 'none') {
+      return res.status(403).json({ error: 'このルームではメッセージ編集が許可されていません' });
+    }
+
+    if (msg.message_edit_policy === 'sender' && msg.sender_id !== userId) {
+      return res.status(403).json({ error: '送信者のみ編集できます' });
+    }
+
+    if (msg.message_edit_policy === 'member') {
+      const memberCheck = await pool.query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [roomId, userId]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
+      }
+    }
+
+    // Save current content to edit history
+    const versionResult = await pool.query(
+      'SELECT COALESCE(MAX(version), 0) + 1 as next FROM message_edits WHERE message_id = $1',
+      [msgId]
+    );
+    const newVersion = versionResult.rows[0].next;
+
+    await pool.query(
+      'INSERT INTO message_edits (message_id, version, content, edited_by) VALUES ($1, $2, $3, $4)',
+      [msgId, newVersion, msg.content, userId]
+    );
+
+    // Update message
+    const updateResult = await pool.query(
+      'UPDATE messages SET content = $1, is_edited = true, updated_at = now() WHERE id = $2 RETURNING *',
+      [content.trim(), msgId]
+    );
+
+    // Socket.IO broadcast
+    const { io } = require('../app');
+    io.to(roomId).emit('message:updated', {
+      message_id: msgId,
+      content: content.trim(),
+      is_edited: true,
+      edited_by: userId,
+      edited_by_name: req.user.display_name,
+    });
+
+    // Webhook
+    const { fireWebhooks } = require('../services/webhook');
+    fireWebhooks('message.updated', roomId, {
+      room: { id: roomId },
+      message: {
+        id: msgId,
+        content: content.trim(),
+        previous_content: msg.content,
+        version: newVersion,
+        sender: { id: msg.sender_id },
+        edited_by: { id: userId, display_name: req.user.display_name },
+      },
+    });
+
+    res.json({ message: updateResult.rows[0] });
+  } catch (err) {
+    logger.error('Edit message error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * GET /api/rooms/:id/messages/:msgId/edits
+ * Get message edit history
+ */
+router.get('/:msgId/edits', async (req, res) => {
+  const roomId = req.params.id;
+  const { msgId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // Check room member
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [roomId, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'ルームメンバーのみ閲覧できます' });
+    }
+
+    const result = await pool.query(
+      `SELECT me.version, me.content, me.edited_by, me.created_at, u.display_name AS edited_by_name
+       FROM message_edits me
+       LEFT JOIN users u ON u.id = me.edited_by
+       WHERE me.message_id = $1
+       ORDER BY me.version DESC`,
+      [msgId]
+    );
+
+    res.json({ edits: result.rows });
+  } catch (err) {
+    logger.error('Get message edits error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * DELETE /api/rooms/:id/messages/:msgId
  * Soft-delete a message (sender only)
  */

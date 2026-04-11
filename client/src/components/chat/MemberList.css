@@ -293,6 +293,23 @@
   accent-color: var(--primary);
 }
 
+.room-setting-select {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.room-setting-select select {
+  padding: 6px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  accent-color: var(--primary);
+}
+
 .room-settings-sub {
   font-size: 13px;
   color: var(--text-muted);

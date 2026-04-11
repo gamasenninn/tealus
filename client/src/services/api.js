@@ -284,6 +284,15 @@ class ApiClient {
     return this.request('GET', '/rooms/portal-links');
   }
 
+  // Message edit
+  editMessage(roomId, messageId, content) {
+    return this.request('PUT', `/rooms/${roomId}/messages/${messageId}`, { content });
+  }
+
+  getMessageEdits(roomId, messageId) {
+    return this.request('GET', `/rooms/${roomId}/messages/${messageId}/edits`);
+  }
+
   getAnnouncements(limit = 20) {
     return this.request('GET', `/rooms/announcements?limit=${limit}`);
   }

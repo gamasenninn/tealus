@@ -10,7 +10,8 @@ import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2 } from 'lucide-react';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History } from 'lucide-react';
+import { diffChars } from 'diff';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn, searchKeyword }) {
@@ -21,6 +22,10 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [showTagModal, setShowTagModal] = useState(false);
   const [tags, setTags] = useState(message.tags || []);
+  const [isEditingMessage, setIsEditingMessage] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [showEditHistory, setShowEditHistory] = useState(false);
+  const [editHistory, setEditHistory] = useState([]);
   const longPressTimer = useRef(null);
 
   const highlightText = (text) => {
@@ -71,6 +76,32 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         icon: <Copy size={16} />,
         label: 'コピー',
         onClick: () => navigator.clipboard.writeText(message.content),
+      });
+    }
+
+    // Edit message
+    const editPolicy = currentRoom?.message_edit_policy || 'none';
+    const canEditMessage = message.type === 'text' && !message.is_deleted && (
+      (editPolicy === 'sender' && isOwn) || editPolicy === 'member'
+    );
+    if (canEditMessage) {
+      items.push({
+        icon: <Pencil size={16} />,
+        label: 'メッセージを編集',
+        onClick: () => { setEditText(message.content); setIsEditingMessage(true); },
+      });
+    }
+    if (message.is_edited) {
+      items.push({
+        icon: <History size={16} />,
+        label: '編集履歴',
+        onClick: async () => {
+          try {
+            const data = await api.getMessageEdits(roomId, message.id);
+            setEditHistory(data.edits);
+            setShowEditHistory(true);
+          } catch (err) { console.error(err); }
+        },
       });
     }
 
@@ -224,7 +255,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <img src={`/media/${message.stamp.file_path}`} alt={message.stamp.label} className="bubble-stamp" />
           ) : (
             <>
-              {hasText && <p className="bubble-text">{highlightText(message.content)}</p>}
+              {hasText && <p className="bubble-text">{highlightText(message.content)}{message.is_edited && <span className="bubble-edited"> (編集済み)</span>}</p>}
               {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {message.type !== 'voice' && renderMedia()}
             </>
@@ -263,6 +294,72 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           onClose={() => setContextMenu(null)}
           onReaction={(emoji) => { contextMenu.onReaction(emoji); setContextMenu(null); }}
         />
+      )}
+
+      {isEditingMessage && (
+        <div className="modal-overlay" onClick={() => setIsEditingMessage(false)}>
+          <div className="modal-box voice-edit-modal" onClick={e => e.stopPropagation()}>
+            <h3>メッセージを編集</h3>
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              rows={6}
+              autoFocus
+            />
+            <div className="voice-edit-buttons">
+              <button className="btn-cancel" onClick={() => setIsEditingMessage(false)}>キャンセル</button>
+              <button className="btn-primary" onClick={async () => {
+                try {
+                  await api.editMessage(roomId, message.id, editText);
+                  setIsEditingMessage(false);
+                } catch (err) { console.error(err); }
+              }} disabled={!editText.trim()}>確定</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditHistory && (
+        <div className="modal-overlay" onClick={() => setShowEditHistory(false)}>
+          <div className="modal-box voice-history-modal" onClick={e => e.stopPropagation()}>
+            <h3>編集履歴</h3>
+            <div className="edit-history-list">
+              {(() => {
+                // 時系列順に並べる（ASC）
+                const sorted = [...editHistory].reverse();
+                // 各バージョン間の差分を表示
+                const diffs = sorted.map((entry, i) => {
+                  const prevText = entry.content;
+                  const nextText = i < sorted.length - 1 ? sorted[i + 1].content : message.content;
+                  const label = i < sorted.length - 1
+                    ? `v${entry.version} → v${sorted[i + 1].version}`
+                    : `v${entry.version} → 現在`;
+                  const editor = i < sorted.length - 1 ? sorted[i + 1] : null;
+                  return { entry, prevText, nextText, label, editor };
+                });
+                // 新しい変更が上にくるように逆順表示
+                return diffs.reverse().map(({ entry, prevText, nextText, label, editor }) => (
+                  <div key={entry.version} className="edit-history-item">
+                    <div className="edit-history-header">
+                      <span>{label}{editor?.edited_by_name ? ` — ${editor.edited_by_name}` : ''}</span>
+                      <span>{editor ? new Date(editor.created_at).toLocaleString('ja-JP') : ''}</span>
+                    </div>
+                    <div className="edit-history-diff">
+                      {diffChars(prevText, nextText).map((part, j) => (
+                        <span key={j} className={part.added ? 'diff-added' : part.removed ? 'diff-removed' : ''}>{part.value}</span>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+              <div className="edit-history-item">
+                <div className="edit-history-header"><span>原文</span></div>
+                <p>{editHistory.length > 0 ? editHistory[editHistory.length - 1].content : message.content}</p>
+              </div>
+            </div>
+            <button className="btn-cancel" style={{ width: '100%', marginTop: '12px' }} onClick={() => setShowEditHistory(false)}>閉じる</button>
+          </div>
+        </div>
       )}
 
       {viewerState && (

@@ -79,6 +79,14 @@ export const useMessageStore = create((set, get) => ({
     }));
   },
 
+  updateMessageContent: (messageId, content, isEdited) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, content, is_edited: isEdited } : m
+      ),
+    }));
+  },
+
   updateTranscription: (messageId, transcription) => {
     set((state) => ({
       messages: state.messages.map((m) =>

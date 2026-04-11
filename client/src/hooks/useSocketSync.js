@@ -13,7 +13,7 @@ import { api } from '../services/api';
 export function useSocketSync(roomId, targetMsgId = null) {
   const { user } = useAuthStore();
   const { selectRoom, clearCurrentRoom } = useRoomStore();
-  const { addMessage, fetchMessages, clearMessages } = useMessageStore();
+  const { addMessage, fetchMessages, clearMessages, updateMessageContent } = useMessageStore();
   const [typingUsers, setTypingUsers] = useState({});
 
   useEffect(() => {
@@ -68,6 +68,10 @@ export function useSocketSync(roomId, targetMsgId = null) {
         });
       });
 
+      socket.on('message:updated', (data) => {
+        updateMessageContent(data.message_id, data.content, data.is_edited);
+      });
+
       socket.on('message:deleted', (data) => {
         useMessageStore.getState().markDeleted(data.message_id);
       });
@@ -105,6 +109,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
         socket.off('message:read');
         socket.off('voice:status');
         socket.off('voice:transcription');
+        socket.off('message:updated');
         socket.off('message:deleted');
         socket.off('typing:start');
         socket.off('typing:stop');
