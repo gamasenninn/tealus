@@ -293,6 +293,57 @@
   accent-color: var(--primary);
 }
 
+/* App URL management */
+.app-url-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.app-url-remove {
+  background: none;
+  border: none;
+  color: var(--color-error);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+}
+
+.app-url-add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.app-url-add input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.app-url-add-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-url-add-btn:disabled {
+  background: var(--bg-disabled);
+  cursor: not-allowed;
+}
+
 .member-close-btn {
   width: 100%;
   padding: 12px;

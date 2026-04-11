@@ -21,6 +21,9 @@ function MemberList({ roomId, onClose }) {
   const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit || false);
   const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
+  const [appUrls, setAppUrls] = useState(currentRoom?.app_urls || []);
+  const [newAppTitle, setNewAppTitle] = useState('');
+  const [newAppUrl, setNewAppUrl] = useState('');
 
   const myRole = members.find(m => m.user_id === user.id)?.role;
   const isAdmin = myRole === 'admin';
@@ -38,6 +41,31 @@ function MemberList({ roomId, onClose }) {
       const newValue = !isAnnouncement;
       await api.updateRoom(roomId, { is_announcement: newValue });
       setIsAnnouncement(newValue);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAddApp = async () => {
+    if (!newAppTitle.trim() || !newAppUrl.trim()) return;
+    try {
+      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim() }];
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
+      setNewAppTitle('');
+      setNewAppUrl('');
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRemoveApp = async (index) => {
+    try {
+      const updated = appUrls.filter((_, i) => i !== index);
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
       await selectRoom(roomId);
     } catch (err) {
       setError(err.message);
@@ -230,6 +258,23 @@ function MemberList({ roomId, onClose }) {
               <input type="checkbox" checked={isAnnouncement} onChange={handleToggleAnnouncement} />
               <span>ホーム画面にお知らせとして表示</span>
             </label>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="room-settings-section">
+            <h3>アプリパネル</h3>
+            {appUrls.map((app, i) => (
+              <div key={i} className="app-url-item">
+                <span>{app.title}</span>
+                <button className="app-url-remove" onClick={() => handleRemoveApp(i)}>✕</button>
+              </div>
+            ))}
+            <div className="app-url-add">
+              <input type="text" placeholder="タイトル" value={newAppTitle} onChange={e => setNewAppTitle(e.target.value)} />
+              <input type="url" placeholder="URL" value={newAppUrl} onChange={e => setNewAppUrl(e.target.value)} />
+              <button className="app-url-add-btn" onClick={handleAddApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>追加</button>
+            </div>
           </div>
         )}
 

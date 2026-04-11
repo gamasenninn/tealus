@@ -345,7 +345,7 @@ router.get('/:id', requireMember, async (req, res) => {
  */
 router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, allow_member_transcription_edit, is_announcement } = req.body;
+  const { name, allow_member_transcription_edit, is_announcement, app_urls } = req.body;
 
   try {
     const updates = [];
@@ -355,6 +355,7 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     if (name !== undefined) { updates.push(`name = $${paramIndex++}`); values.push(name); }
     if (allow_member_transcription_edit !== undefined) { updates.push(`allow_member_transcription_edit = $${paramIndex++}`); values.push(allow_member_transcription_edit); }
     if (is_announcement !== undefined) { updates.push(`is_announcement = $${paramIndex++}`); values.push(is_announcement); }
+    if (app_urls !== undefined) { updates.push(`app_urls = $${paramIndex++}`); values.push(JSON.stringify(app_urls)); }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: '更新する項目がありません' });

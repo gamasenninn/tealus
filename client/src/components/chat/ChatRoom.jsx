@@ -11,7 +11,7 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image } from 'lucide-react';
+import { ArrowLeft, Search, Image, Smartphone } from 'lucide-react';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -22,6 +22,9 @@ function ChatRoom() {
   const { currentRoom, members, lastReadMessageId, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
+  const [showAppPanel, setShowAppPanel] = useState(false);
+  const [activeAppIndex, setActiveAppIndex] = useState(0);
+  const appUrls = currentRoom?.app_urls || [];
 
   // Voice continuous playback + Wake Lock
   useEffect(() => {
@@ -136,6 +139,9 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
+        {appUrls.length > 0 && (
+          <button className={`chat-header-btn ${showAppPanel ? 'active' : ''}`} onClick={() => setShowAppPanel(!showAppPanel)} title="アプリ"><Smartphone size={18} /></button>
+        )}
         <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル"><Image size={18} /></button>
         <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}><Search size={18} /></button>
         {currentRoom?.type === 'group' && (
@@ -176,6 +182,30 @@ function ChatRoom() {
       {Object.keys(typingUsers).length > 0 && (
         <div className="typing-indicator">
           {Object.values(typingUsers).join(', ')}が入力中...
+        </div>
+      )}
+
+      {showAppPanel && appUrls.length > 0 && (
+        <div className="app-panel">
+          {appUrls.length > 1 && (
+            <div className="app-panel-tabs">
+              {appUrls.map((app, i) => (
+                <button
+                  key={i}
+                  className={`app-panel-tab ${activeAppIndex === i ? 'active' : ''}`}
+                  onClick={() => setActiveAppIndex(i)}
+                >
+                  {app.title}
+                </button>
+              ))}
+            </div>
+          )}
+          <iframe
+            className="app-panel-iframe"
+            src={appUrls[activeAppIndex]?.url}
+            title={appUrls[activeAppIndex]?.title}
+            allow="microphone; camera; autoplay; fullscreen"
+          />
         </div>
       )}
 
