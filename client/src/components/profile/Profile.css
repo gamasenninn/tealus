@@ -208,3 +208,45 @@
   border-radius: 6px;
   line-height: 1.5;
 }
+
+/* Actions */
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.profile-admin-btn,
+.profile-logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-admin-btn {
+  background: var(--primary);
+  color: white;
+}
+
+.profile-admin-btn:hover {
+  background: var(--primary-hover);
+}
+
+.profile-logout-btn {
+  background: white;
+  color: var(--color-error);
+  border: 1px solid var(--border-medium);
+}
+
+.profile-logout-btn:hover {
+  background: var(--color-error-bg);
+}

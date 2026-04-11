@@ -2,12 +2,12 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Settings, LogOut } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import './Profile.css';
 
 function Profile() {
-  const { user, initialize } = useAuthStore();
+  const { user, initialize, logout } = useAuthStore();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -92,7 +92,7 @@ function Profile() {
   return (
     <div className="profile-container">
       <header className="profile-header">
-        <button className="profile-back-btn" onClick={() => navigate('/')}><ArrowLeft size={22} /></button>
+        <button className="profile-back-btn" onClick={() => navigate(-1)}><ArrowLeft size={22} /></button>
         <h1>プロフィール</h1>
       </header>
 
@@ -208,6 +208,20 @@ function Profile() {
           <span>メッセージ受信時に通知音を鳴らす</span>
         </label>
       </div>
+
+      <div className="profile-actions">
+        {user?.role === 'admin' && (
+          <button className="profile-admin-btn" onClick={() => navigate('/admin')}>
+            <Settings size={18} />
+            <span>管理ダッシュボード</span>
+          </button>
+        )}
+        <button className="profile-logout-btn" onClick={logout}>
+          <LogOut size={18} />
+          <span>ログアウト</span>
+        </button>
+      </div>
+
       <BottomNav />
     </div>
   );
