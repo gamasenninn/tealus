@@ -48,10 +48,23 @@ function MemberList({ roomId, onClose }) {
     }
   };
 
+  const handleToggleAutoOpen = async (index) => {
+    try {
+      const updated = appUrls.map((app, i) =>
+        i === index ? { ...app, auto_open: !app.auto_open } : app
+      );
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleAddApp = async () => {
     if (!newAppTitle.trim() || !newAppUrl.trim()) return;
     try {
-      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50 }];
+      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50, auto_open: false }];
       await api.updateRoom(roomId, { app_urls: updated });
       setAppUrls(updated);
       setNewAppTitle('');
@@ -296,6 +309,10 @@ function MemberList({ roomId, onClose }) {
                     <label>分割: {app.ratio || 50}%</label>
                     <input type="range" min="20" max="80" value={app.ratio || 50} onChange={e => handleAppRatioChange(i, e.target.value)} />
                   </div>
+                  <label className="app-url-auto-open">
+                    <input type="checkbox" checked={app.auto_open || false} onChange={() => handleToggleAutoOpen(i)} />
+                    <span>自動で開く</span>
+                  </label>
                 </div>
                 <div className="app-url-actions">
                   <button className="app-url-edit" onClick={() => handleEditApp(i)}>編集</button>

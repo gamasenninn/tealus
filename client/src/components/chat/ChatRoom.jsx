@@ -26,6 +26,17 @@ function ChatRoom() {
   const [activeAppIndex, setActiveAppIndex] = useState(0);
   const appUrls = currentRoom?.app_urls || [];
 
+  // Auto-open app panel
+  useEffect(() => {
+    if (appUrls.length > 0) {
+      const autoIdx = appUrls.findIndex(a => a.auto_open);
+      if (autoIdx >= 0) {
+        setShowAppPanel(true);
+        setActiveAppIndex(autoIdx);
+      }
+    }
+  }, [currentRoom?.id]);
+
   // Voice continuous playback + Wake Lock
   useEffect(() => {
     let wakeLock = null;

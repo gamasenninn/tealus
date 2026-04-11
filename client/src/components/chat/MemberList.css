@@ -345,6 +345,20 @@
   height: 4px;
 }
 
+.app-url-auto-open {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.app-url-auto-open input {
+  accent-color: var(--primary);
+}
+
 .app-url-actions {
   display: flex;
   gap: 4px;
