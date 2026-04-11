@@ -293,6 +293,13 @@
   accent-color: var(--primary);
 }
 
+.room-settings-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+  font-weight: 600;
+}
+
 /* App URL management */
 .app-url-item {
   display: flex;

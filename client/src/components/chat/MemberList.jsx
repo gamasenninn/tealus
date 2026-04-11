@@ -248,22 +248,8 @@ function MemberList({ roomId, onClose }) {
               <input type="checkbox" checked={transcriptionEdit} onChange={handleToggleTranscriptionEdit} />
               <span>メンバーの文字起こし編集を許可</span>
             </label>
-          </div>
-        )}
 
-        {isSysAdmin && (
-          <div className="room-settings-section">
-            <h3>システム設定</h3>
-            <label className="room-setting-toggle">
-              <input type="checkbox" checked={isAnnouncement} onChange={handleToggleAnnouncement} />
-              <span>ホーム画面にお知らせとして表示</span>
-            </label>
-          </div>
-        )}
-
-        {isAdmin && (
-          <div className="room-settings-section">
-            <h3>アプリパネル</h3>
+            <h4 className="room-settings-sub">アプリパネル</h4>
             {appUrls.map((app, i) => (
               <div key={i} className="app-url-item">
                 <span>{app.title}</span>
@@ -275,6 +261,16 @@ function MemberList({ roomId, onClose }) {
               <input type="url" placeholder="URL" value={newAppUrl} onChange={e => setNewAppUrl(e.target.value)} />
               <button className="app-url-add-btn" onClick={handleAddApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>追加</button>
             </div>
+          </div>
+        )}
+
+        {isSysAdmin && (
+          <div className="room-settings-section">
+            <h3>システム設定</h3>
+            <label className="room-setting-toggle">
+              <input type="checkbox" checked={isAnnouncement} onChange={handleToggleAnnouncement} />
+              <span>ホーム画面にお知らせとして表示</span>
+            </label>
           </div>
         )}
 
