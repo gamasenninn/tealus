@@ -170,39 +170,47 @@ router.put('/:msgId', async (req, res) => {
       return res.status(400).json({ error: '削除済みメッセージは編集できません' });
     }
 
-    if (msg.type !== 'text') {
-      return res.status(400).json({ error: 'テキストメッセージのみ編集可能です' });
+    if (msg.type === 'system' || msg.type === 'stamp') {
+      return res.status(400).json({ error: 'このメッセージは編集できません' });
     }
 
-    if (msg.message_edit_policy === 'none') {
-      return res.status(403).json({ error: 'このルームではメッセージ編集が許可されていません' });
-    }
+    // 初回キャプション追加（contentがnullかつ送信者本人）は常に許可
+    const isFirstCaption = !msg.content && msg.sender_id === userId;
 
-    if (msg.message_edit_policy === 'sender' && msg.sender_id !== userId) {
-      return res.status(403).json({ error: '送信者のみ編集できます' });
-    }
+    if (!isFirstCaption) {
+      if (msg.message_edit_policy === 'none') {
+        return res.status(403).json({ error: 'このルームではメッセージ編集が許可されていません' });
+      }
 
-    if (msg.message_edit_policy === 'member') {
-      const memberCheck = await pool.query(
-        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-        [roomId, userId]
-      );
-      if (memberCheck.rows.length === 0) {
-        return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
+      if (msg.message_edit_policy === 'sender' && msg.sender_id !== userId) {
+        return res.status(403).json({ error: '送信者のみ編集できます' });
+      }
+
+      if (msg.message_edit_policy === 'member') {
+        const memberCheck = await pool.query(
+          'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+          [roomId, userId]
+        );
+        if (memberCheck.rows.length === 0) {
+          return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
+        }
       }
     }
 
-    // Save current content to edit history
-    const versionResult = await pool.query(
-      'SELECT COALESCE(MAX(version), 0) + 1 as next FROM message_edits WHERE message_id = $1',
-      [msgId]
-    );
-    const newVersion = versionResult.rows[0].next;
+    // Save current content to edit history (skip if first caption - no previous content)
+    let newVersion = 0;
+    if (msg.content) {
+      const versionResult = await pool.query(
+        'SELECT COALESCE(MAX(version), 0) + 1 as next FROM message_edits WHERE message_id = $1',
+        [msgId]
+      );
+      newVersion = versionResult.rows[0].next;
 
-    await pool.query(
-      'INSERT INTO message_edits (message_id, version, content, edited_by) VALUES ($1, $2, $3, $4)',
-      [msgId, newVersion, msg.content, userId]
-    );
+      await pool.query(
+        'INSERT INTO message_edits (message_id, version, content, edited_by) VALUES ($1, $2, $3, $4)',
+        [msgId, newVersion, msg.content, userId]
+      );
+    }
 
     // Update message
     const updateResult = await pool.query(

@@ -79,16 +79,17 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       });
     }
 
-    // Edit message
+    // Edit message / Add caption
     const editPolicy = currentRoom?.message_edit_policy || 'none';
-    const canEditMessage = message.type === 'text' && !message.is_deleted && (
-      (editPolicy === 'sender' && isOwn) || editPolicy === 'member'
+    const isFirstCaption = !message.content && isOwn && message.type !== 'system' && message.type !== 'stamp';
+    const canEditMessage = !message.is_deleted && message.type !== 'system' && message.type !== 'stamp' && (
+      isFirstCaption || (editPolicy === 'sender' && isOwn) || editPolicy === 'member'
     );
     if (canEditMessage) {
       items.push({
         icon: <Pencil size={16} />,
-        label: 'メッセージを編集',
-        onClick: () => { setEditText(message.content); setIsEditingMessage(true); },
+        label: message.content ? 'メッセージを編集' : 'テキストを追加',
+        onClick: () => { setEditText(message.content || ''); setIsEditingMessage(true); },
       });
     }
     if (message.is_edited) {

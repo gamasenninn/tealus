@@ -126,10 +126,12 @@ function HomePage() {
 
                 return (
                   <div key={msg.id} className="announcement-card">
-                    <div className="announcement-header">
-                      {msg.is_unread && <span className="announcement-unread-dot" />}
-                      <h2 className="announcement-title">{title || '(無題)'}</h2>
-                    </div>
+                    {(title || msg.is_unread) && (
+                      <div className="announcement-header">
+                        {msg.is_unread && <span className="announcement-unread-dot" />}
+                        {title && <h2 className="announcement-title">{title}</h2>}
+                      </div>
+                    )}
 
                     {body && (
                       <div className={`announcement-body ${!isExpanded && isLong ? 'collapsed' : ''}`}>
