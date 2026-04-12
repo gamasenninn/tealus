@@ -6,6 +6,7 @@ const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { route } = require('../router/index');
 const { processLight } = require('../agents/light');
+const { processDeep } = require('../agents/deep');
 const { getOrCreateContext, updateStatus } = require('../context/sessionManager');
 
 /**
@@ -69,16 +70,16 @@ async function dispatch({ message, room, agentId, agentName }) {
       break;
 
     case 'deep':
-      // Deep Agent（Phase C で本実装）
+      // Deep Agent（claude -p）
       await botApi.pushMessage(roomId, '🔍 高度な分析を開始します。少しお時間をいただきます...');
       await updateStatus(agentId, roomId, 'processing');
       try {
-        // TODO: Phase C で processDeep を実装
-        await botApi.pushMessage(roomId, '⚠ Deep Agent は現在準備中です。Light Agent で対応します。');
-        await processLight({
+        await processDeep({
           roomId,
           prompt: result.prompt || prompt,
           workspacePath: context.workspace_path,
+          agentId,
+          sessionId: context.session_id,
         });
       } finally {
         await updateStatus(agentId, roomId, 'idle');

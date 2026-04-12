@@ -17,6 +17,10 @@ jest.mock('../../src/agents/light', () => ({
   processLight: jest.fn(),
 }));
 
+jest.mock('../../src/agents/deep', () => ({
+  processDeep: jest.fn(),
+}));
+
 jest.mock('../../src/context/sessionManager', () => ({
   getOrCreateContext: jest.fn(() => ({ workspace_path: '/tmp/workspace' })),
   updateStatus: jest.fn(),
@@ -130,8 +134,9 @@ describe('Dispatcher', () => {
         agentName: 'アシスタント',
       });
 
-      // Deep は Phase C で実装。現段階では「処理中」メッセージを送信
-      expect(botApi.pushMessage).toHaveBeenCalled();
+      const { processDeep } = require('../../src/agents/deep');
+      expect(botApi.pushMessage).toHaveBeenCalledWith('room1', expect.stringContaining('高度な分析'));
+      expect(processDeep).toHaveBeenCalled();
     });
   });
 });
