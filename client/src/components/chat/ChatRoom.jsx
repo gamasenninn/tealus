@@ -37,6 +37,28 @@ function ChatRoom() {
     }
   }, [currentRoom?.id]);
 
+  // App panel wake lock
+  useEffect(() => {
+    let appWakeLock = null;
+
+    const acquireAppWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator && !appWakeLock) {
+          appWakeLock = await navigator.wakeLock.request('screen');
+          appWakeLock.addEventListener('release', () => { appWakeLock = null; });
+        }
+      } catch (e) { /* not supported */ }
+    };
+
+    if (showAppPanel && appUrls[activeAppIndex]?.wake_lock) {
+      acquireAppWakeLock();
+    }
+
+    return () => {
+      if (appWakeLock) { appWakeLock.release(); appWakeLock = null; }
+    };
+  }, [showAppPanel, activeAppIndex, appUrls]);
+
   // Voice continuous playback + Wake Lock
   useEffect(() => {
     let wakeLock = null;

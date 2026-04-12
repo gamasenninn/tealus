@@ -49,6 +49,19 @@ function MemberList({ roomId, onClose }) {
     }
   };
 
+  const handleToggleWakeLock = async (index) => {
+    try {
+      const updated = appUrls.map((app, i) =>
+        i === index ? { ...app, wake_lock: !app.wake_lock } : app
+      );
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleToggleAutoOpen = async (index) => {
     try {
       const updated = appUrls.map((app, i) =>
@@ -65,7 +78,7 @@ function MemberList({ roomId, onClose }) {
   const handleAddApp = async () => {
     if (!newAppTitle.trim() || !newAppUrl.trim()) return;
     try {
-      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50, auto_open: false }];
+      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50, auto_open: false, wake_lock: false }];
       await api.updateRoom(roomId, { app_urls: updated });
       setAppUrls(updated);
       setNewAppTitle('');
@@ -333,6 +346,10 @@ function MemberList({ roomId, onClose }) {
                   <label className="app-url-auto-open">
                     <input type="checkbox" checked={app.auto_open || false} onChange={() => handleToggleAutoOpen(i)} />
                     <span>自動で開く</span>
+                  </label>
+                  <label className="app-url-auto-open">
+                    <input type="checkbox" checked={app.wake_lock || false} onChange={() => handleToggleWakeLock(i)} />
+                    <span>画面をONに保つ</span>
                   </label>
                 </div>
                 <div className="app-url-actions">

@@ -136,9 +136,24 @@
   margin-top: 8px;
 }
 
-.announcement-image {
+.announcement-image,
+.announcement-video {
   max-width: 100%;
   border-radius: 8px;
+}
+
+.announcement-audio {
+  width: 100%;
+}
+
+.announcement-file {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--bg-surface);
+  border-radius: 6px;
+  color: var(--primary);
+  font-size: 13px;
+  text-decoration: none;
 }
 
 .announcement-footer {

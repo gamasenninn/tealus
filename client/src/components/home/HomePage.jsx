@@ -147,11 +147,22 @@ function HomePage() {
 
                     {msg.media?.length > 0 && (
                       <div className="announcement-media">
-                        {msg.media.map(m => (
-                          m.mime_type?.startsWith('image/') && (
-                            <img key={m.id} src={`/media/${m.file_path}`} alt="" className="announcement-image" />
-                          )
-                        ))}
+                        {msg.media.map(m => {
+                          if (m.mime_type?.startsWith('image/')) {
+                            return <img key={m.id} src={`/media/${m.file_path}`} alt="" className="announcement-image" />;
+                          }
+                          if (m.mime_type?.startsWith('video/')) {
+                            return <video key={m.id} src={`/media/${m.file_path}`} controls className="announcement-video" />;
+                          }
+                          if (m.mime_type?.startsWith('audio/')) {
+                            return <audio key={m.id} src={`/media/${m.file_path}`} controls className="announcement-audio" />;
+                          }
+                          return (
+                            <a key={m.id} href={`/media/${m.file_path}`} target="_blank" rel="noopener noreferrer" className="announcement-file">
+                              {m.file_name || 'ファイル'}
+                            </a>
+                          );
+                        })}
                       </div>
                     )}
 
