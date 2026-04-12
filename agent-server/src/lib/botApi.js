@@ -7,12 +7,13 @@ const config = require('../config');
 const logger = require('./logger');
 
 let token = null;
+let botUser = null;
 
 /**
  * Bot認証してトークンを取得
  */
 async function login() {
-  if (token) return token;
+  if (token) return { token, user: botUser };
 
   const res = await fetch(`${config.TEALUS_API_URL}/api/auth/login`, {
     method: 'POST',
@@ -29,15 +30,16 @@ async function login() {
   }
 
   token = data.token;
+  botUser = data.user;
   logger.info(`Bot logged in as ${config.TEALUS_BOT_ID}`);
-  return token;
+  return { token, user: botUser };
 }
 
 /**
  * 認証付きリクエスト
  */
 async function request(method, path, body = null) {
-  const t = await login();
+  const { token: t } = await login();
   const options = {
     method,
     headers: {

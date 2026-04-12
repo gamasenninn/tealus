@@ -15,13 +15,11 @@ const { registerBotUserId } = require('../webhook/handler');
 async function initializeAgent() {
   try {
     // Bot APIにログイン
-    const token = await botApi.login();
+    const { user } = await botApi.login();
     logger.info('Agent logged in to Tealus');
 
-    // BotユーザーIDを取得してWebhookハンドラーに登録
-    // トークンからユーザー情報を取得（Bot APIのレスポンスに含まれる）
-    // 簡易的にconfig.TEALUS_BOT_IDを使用
-    registerBotUserId(config.TEALUS_BOT_ID, config.TEALUS_BOT_ID);
+    // BotユーザーIDをWebhookハンドラーに登録（UUID）
+    registerBotUserId(user.id, user.display_name);
 
     // 参加中のルーム一覧を取得
     const roomData = await botApi.getRooms();
