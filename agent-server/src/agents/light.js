@@ -72,15 +72,19 @@ function buildMessages(history, memory, prompt) {
   messages.push({ role: 'system', content: systemContent });
 
   // 会話履歴（古い順）
+  const botUserId = require('../lib/botApi').getBotUserId();
   for (const msg of history) {
-    if (!msg.content) continue;
+    // 音声メッセージは文字起こしテキストを使用
+    const text = msg.content
+      || msg.transcription?.formatted_text
+      || msg.transcription?.raw_text;
+    if (!text) continue;
     // Bot自身の発言は assistant、それ以外は user
-    const botUserId = require('../lib/botApi').getBotUserId();
     const isBot = msg.sender_id === botUserId;
     const role = isBot ? 'assistant' : 'user';
     const content = role === 'user'
-      ? `${msg.sender_display_name}: ${msg.content}`
-      : msg.content;
+      ? `${msg.sender_display_name}: ${text}`
+      : text;
     messages.push({ role, content });
   }
 

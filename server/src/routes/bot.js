@@ -115,7 +115,22 @@ router.get('/messages', async (req, res) => {
     }
 
     const result = await pool.query(query, params);
-    res.json({ messages: result.rows });
+    const messages = result.rows;
+
+    // 音声メッセージに文字起こしを付加
+    for (const msg of messages) {
+      if (msg.type === 'voice') {
+        const trans = await pool.query(
+          'SELECT raw_text, formatted_text, status FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+          [msg.id]
+        );
+        if (trans.rows.length > 0) {
+          msg.transcription = trans.rows[0];
+        }
+      }
+    }
+
+    res.json({ messages });
   } catch (err) {
     logger.error('Bot messages error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

@@ -67,6 +67,16 @@ async function formatTranscription(messageId, rawText, io, roomId) {
       });
     }
 
+    // Webhook: 文字起こし完了通知
+    const { fireWebhooks } = require('./webhook');
+    const msgResult = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+    const senderId = msgResult.rows[0]?.sender_id;
+    fireWebhooks('voice.transcription_completed', roomId, {
+      room: { id: roomId },
+      message: { id: messageId, type: 'voice', sender: { id: senderId } },
+      transcription: { raw_text: rawText, formatted_text: formattedText },
+    });
+
     return formattedText;
   } catch (err) {
     logger.error('Formatting error:', err);
@@ -87,6 +97,15 @@ async function formatTranscription(messageId, rawText, io, roomId) {
         formatted_text: null,
       });
     }
+
+    // Webhook: 文字起こし完了通知（フォーマット失敗時）
+    const { fireWebhooks: fireWh } = require('./webhook');
+    const msgRes = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+    fireWh('voice.transcription_completed', roomId, {
+      room: { id: roomId },
+      message: { id: messageId, type: 'voice', sender: { id: msgRes.rows[0]?.sender_id } },
+      transcription: { raw_text: rawText, formatted_text: null },
+    });
 
     return null;
   }

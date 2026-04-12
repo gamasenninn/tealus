@@ -6,6 +6,8 @@ import { Pencil, Bell, Ban, CheckCircle, Trash2 } from 'lucide-react';
 const EVENT_OPTIONS = [
   { value: 'message.created', label: 'メッセージ作成' },
   { value: 'message.deleted', label: 'メッセージ削除' },
+  { value: 'message.updated', label: 'メッセージ編集' },
+  { value: 'voice.transcription_completed', label: '音声文字起こし完了' },
   { value: 'member.joined', label: 'メンバー追加' },
   { value: 'member.left', label: 'メンバー退出' },
   { value: 'reaction.added', label: 'リアクション追加' },

@@ -28,6 +28,8 @@ async function handleWebhook(payload) {
 
   if (event === 'message.created') {
     await handleMessageCreated(payload);
+  } else if (event === 'voice.transcription_completed') {
+    await handleTranscriptionCompleted(payload);
   } else if (event === 'reaction.added') {
     await handleReactionAdded(payload);
   } else {
@@ -53,11 +55,47 @@ async function handleMessageCreated(payload) {
     return;
   }
 
+  // 音声メッセージは voice.transcription_completed で処理する
+  if (message.type === 'voice') {
+    logger.debug('Skipped voice message (waiting for transcription_completed)');
+    return;
+  }
+
   logger.info(`Message received: "${(message.content || '(media)').slice(0, 50)}" in room ${room.name || room.id}`);
 
   // ディスパッチ
   await dispatch({
     message,
+    room,
+    agentId: botAgentId,
+    agentName: botAgentName,
+  });
+}
+
+/**
+ * voice.transcription_completed イベント処理
+ * 音声メッセージの文字起こし完了時に呼ばれる
+ */
+async function handleTranscriptionCompleted(payload) {
+  const { message, room, transcription } = payload;
+
+  if (!message || !room) {
+    logger.warn('Invalid transcription payload');
+    return;
+  }
+
+  const senderId = message.sender?.id;
+  if (senderId && botUserIds.has(senderId)) {
+    logger.debug(`Skipped bot transcription from ${senderId}`);
+    return;
+  }
+
+  const text = transcription?.formatted_text || transcription?.raw_text;
+  logger.info(`Transcription completed: "${(text || '').slice(0, 50)}" in room ${room.id}`);
+
+  // 文字起こしテキスト付きでディスパッチ
+  await dispatch({
+    message: { ...message, content: text, transcription },
     room,
     agentId: botAgentId,
     agentName: botAgentName,
