@@ -21,6 +21,10 @@ jest.mock('../../src/agents/deep', () => ({
   processDeep: jest.fn(),
 }));
 
+jest.mock('../../src/media/messageAdapter', () => ({
+  extractPromptFromMessage: jest.fn((msg) => msg?.content || ''),
+}));
+
 jest.mock('../../src/context/sessionManager', () => ({
   getOrCreateContext: jest.fn(() => ({ workspace_path: '/tmp/workspace' })),
   updateStatus: jest.fn(),

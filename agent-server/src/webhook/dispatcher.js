@@ -8,6 +8,7 @@ const { route } = require('../router/index');
 const { processLight } = require('../agents/light');
 const { processDeep } = require('../agents/deep');
 const { getOrCreateContext, updateStatus } = require('../context/sessionManager');
+const { extractPromptFromMessage } = require('../media/messageAdapter');
 
 /**
  * @メンションを検知
@@ -31,7 +32,13 @@ function extractPrompt(content, agentName) {
 async function dispatch({ message, room, agentId, agentName }) {
   const roomId = room.id;
   const memberCount = room.member_count || 2;
-  let prompt = message.content || '';
+
+  // メッセージタイプに応じてプロンプトを抽出
+  let prompt = extractPromptFromMessage(message);
+  if (!prompt) {
+    logger.debug(`Skipped: empty prompt (type: ${message.type})`);
+    return;
+  }
 
   // グループ（3名以上）はメンション時のみ応答
   if (memberCount > 2) {
