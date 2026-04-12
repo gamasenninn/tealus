@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { api } from '../../services/api';
 import { Pencil } from 'lucide-react';
+import RoomSettings from './RoomSettings';
 import './MemberList.css';
 
 function MemberList({ roomId, onClose }) {
@@ -18,143 +19,10 @@ function MemberList({ roomId, onClose }) {
   const [groupName, setGroupName] = useState(currentRoom?.name || '');
   const iconInputRef = useRef(null);
   const [error, setError] = useState('');
-  const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit ? 'member' : 'sender');
-  const [messageEditPolicy, setMessageEditPolicy] = useState(currentRoom?.message_edit_policy || 'none');
-  const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
-  const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
-  const [appUrls, setAppUrls] = useState(currentRoom?.app_urls || []);
-  const [newAppTitle, setNewAppTitle] = useState('');
-  const [newAppUrl, setNewAppUrl] = useState('');
-  const [editingAppIndex, setEditingAppIndex] = useState(null);
 
   const myRole = members.find(m => m.user_id === user.id)?.role;
   const isAdmin = myRole === 'admin';
-
-  const handleToggleContinuousPlay = () => {
-    const newValue = !continuousPlay;
-    setContinuousPlay(newValue);
-    localStorage.setItem('voiceContinuousPlay', String(newValue));
-  };
-
   const isSysAdmin = user?.role === 'admin';
-
-  const handleToggleAnnouncement = async () => {
-    try {
-      const newValue = !isAnnouncement;
-      await api.updateRoom(roomId, { is_announcement: newValue });
-      setIsAnnouncement(newValue);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleToggleWakeLock = async (index) => {
-    try {
-      const updated = appUrls.map((app, i) =>
-        i === index ? { ...app, wake_lock: !app.wake_lock } : app
-      );
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleToggleAutoOpen = async (index) => {
-    try {
-      const updated = appUrls.map((app, i) =>
-        i === index ? { ...app, auto_open: !app.auto_open } : app
-      );
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleAddApp = async () => {
-    if (!newAppTitle.trim() || !newAppUrl.trim()) return;
-    try {
-      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50, auto_open: false, wake_lock: false }];
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      setNewAppTitle('');
-      setNewAppUrl('');
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleUpdateApp = async () => {
-    if (editingAppIndex === null || !newAppTitle.trim() || !newAppUrl.trim()) return;
-    try {
-      const updated = appUrls.map((app, i) =>
-        i === editingAppIndex ? { ...app, title: newAppTitle.trim(), url: newAppUrl.trim() } : app
-      );
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      setNewAppTitle('');
-      setNewAppUrl('');
-      setEditingAppIndex(null);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleEditApp = (index) => {
-    setNewAppTitle(appUrls[index].title);
-    setNewAppUrl(appUrls[index].url);
-    setEditingAppIndex(index);
-  };
-
-  const handleAppRatioChange = async (index, ratio) => {
-    try {
-      const updated = appUrls.map((app, i) =>
-        i === index ? { ...app, ratio: parseInt(ratio) } : app
-      );
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleRemoveApp = async (index) => {
-    try {
-      const updated = appUrls.filter((_, i) => i !== index);
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleTranscriptionEditChange = async (value) => {
-    try {
-      await api.updateRoom(roomId, { allow_member_transcription_edit: value === 'member' });
-      setTranscriptionEdit(value);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleMessageEditChange = async (value) => {
-    try {
-      await api.updateRoom(roomId, { message_edit_policy: value });
-      setMessageEditPolicy(value);
-      await selectRoom(roomId);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
 
   const handleSaveName = async () => {
     if (!groupName.trim()) return;
@@ -163,68 +31,18 @@ function MemberList({ roomId, onClose }) {
       await selectRoom(roomId);
       setEditingName(false);
     } catch (err) {
-      showError(err.message);
+      setError(err.message);
     }
   };
 
   const handleIconChange = async (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (!file) return;
     try {
       await api.uploadRoomIcon(roomId, file);
       await selectRoom(roomId);
     } catch (err) {
-      showError(err.message);
-    }
-    e.target.value = '';
-  };
-
-  const showError = (msg) => {
-    setError(msg);
-    setTimeout(() => setError(''), 5000);
-  };
-
-  const handleAddMembers = async () => {
-    try {
-      for (const userId of selectedUsers) {
-        await api.addMember(roomId, userId);
-      }
-      setShowAddModal(false);
-      setSelectedUsers([]);
-      await selectRoom(roomId);
-    } catch (err) {
-      showError(err.message);
-    }
-  };
-
-  const handleLeave = async () => {
-    if (!confirm('このグループを退会しますか？\n退会するとこのグループのメッセージは閲覧できなくなります。')) return;
-    try {
-      await api.leaveRoom(roomId);
-      navigate('/talk');
-    } catch (err) {
-      showError(err.message);
-    }
-  };
-
-  const handleKick = async (targetId, targetName) => {
-    if (!confirm(`${targetName}をグループから除外しますか？`)) return;
-    try {
-      await api.kickMember(roomId, targetId);
-      setMenuTarget(null);
-      await selectRoom(roomId);
-    } catch (err) {
-      showError(err.message);
-    }
-  };
-
-  const handleRoleChange = async (targetId, newRole) => {
-    try {
-      await api.changeMemberRole(roomId, targetId, newRole);
-      setMenuTarget(null);
-      await selectRoom(roomId);
-    } catch (err) {
-      showError(err.message);
+      setError(err.message);
     }
   };
 
@@ -236,7 +54,7 @@ function MemberList({ roomId, onClose }) {
       setSelectedUsers([]);
       setShowAddModal(true);
     } catch (err) {
-      showError(err.message);
+      setError(err.message);
     }
   };
 
@@ -244,6 +62,47 @@ function MemberList({ roomId, onClose }) {
     setSelectedUsers(prev =>
       prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
     );
+  };
+
+  const handleAddMembers = async () => {
+    try {
+      for (const userId of selectedUsers) {
+        await api.addMember(roomId, userId);
+      }
+      await selectRoom(roomId);
+      setShowAddModal(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleLeave = async () => {
+    if (!confirm('このグループを退会しますか？\n退会するとこのグループのメッセージは閲覧できなくなります。')) return;
+    try {
+      await api.leaveRoom(roomId);
+      navigate('/talk');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleKick = async (userId, displayName) => {
+    if (!confirm(`${displayName}をこのグループから除外しますか？`)) return;
+    try {
+      await api.kickMember(roomId, userId);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      await api.changeMemberRole(roomId, userId, newRole);
+      await selectRoom(roomId);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -306,82 +165,13 @@ function MemberList({ roomId, onClose }) {
           ))}
         </div>
 
-        <div className="room-settings-section">
-          <h3>個人設定</h3>
-          <label className="room-setting-toggle">
-            <input type="checkbox" checked={continuousPlay} onChange={handleToggleContinuousPlay} />
-            <span>音声の連続再生</span>
-          </label>
-        </div>
-
-        {isAdmin && (
-          <div className="room-settings-section">
-            <h3>ルーム設定（管理者）</h3>
-            <div className="room-setting-select">
-              <label>文字起こし編集</label>
-              <select value={transcriptionEdit} onChange={e => handleTranscriptionEditChange(e.target.value)}>
-                <option value="sender">送信者のみ</option>
-                <option value="member">メンバー全員</option>
-              </select>
-            </div>
-            <div className="room-setting-select">
-              <label>メッセージ編集</label>
-              <select value={messageEditPolicy} onChange={e => handleMessageEditChange(e.target.value)}>
-                <option value="none">無効</option>
-                <option value="sender">送信者のみ</option>
-                <option value="member">メンバー全員</option>
-              </select>
-            </div>
-
-            <h4 className="room-settings-sub">アプリパネル</h4>
-            {appUrls.map((app, i) => (
-              <div key={i} className="app-url-item">
-                <div className="app-url-info">
-                  <span className="app-url-title">{app.title}</span>
-                  <span className="app-url-url">{app.url}</span>
-                  <div className="app-url-ratio">
-                    <label>分割: {app.ratio || 50}%</label>
-                    <input type="range" min="20" max="80" value={app.ratio || 50} onChange={e => handleAppRatioChange(i, e.target.value)} />
-                  </div>
-                  <label className="app-url-auto-open">
-                    <input type="checkbox" checked={app.auto_open || false} onChange={() => handleToggleAutoOpen(i)} />
-                    <span>自動で開く</span>
-                  </label>
-                  <label className="app-url-auto-open">
-                    <input type="checkbox" checked={app.wake_lock || false} onChange={() => handleToggleWakeLock(i)} />
-                    <span>画面をONに保つ</span>
-                  </label>
-                </div>
-                <div className="app-url-actions">
-                  <button className="app-url-edit" onClick={() => handleEditApp(i)}>編集</button>
-                  <button className="app-url-remove" onClick={() => handleRemoveApp(i)}>✕</button>
-                </div>
-              </div>
-            ))}
-            <div className="app-url-add">
-              <input type="text" placeholder="タイトル" value={newAppTitle} onChange={e => setNewAppTitle(e.target.value)} />
-              <input type="url" placeholder="URL" value={newAppUrl} onChange={e => setNewAppUrl(e.target.value)} />
-              {editingAppIndex !== null ? (
-                <>
-                  <button className="app-url-add-btn" onClick={handleUpdateApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>更新</button>
-                  <button className="app-url-cancel-btn" onClick={() => { setEditingAppIndex(null); setNewAppTitle(''); setNewAppUrl(''); }}>取消</button>
-                </>
-              ) : (
-                <button className="app-url-add-btn" onClick={handleAddApp} disabled={!newAppTitle.trim() || !newAppUrl.trim()}>追加</button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {isSysAdmin && (
-          <div className="room-settings-section">
-            <h3>システム設定</h3>
-            <label className="room-setting-toggle">
-              <input type="checkbox" checked={isAnnouncement} onChange={handleToggleAnnouncement} />
-              <span>ホーム画面にお知らせとして表示</span>
-            </label>
-          </div>
-        )}
+        <RoomSettings
+          roomId={roomId}
+          currentRoom={currentRoom}
+          isAdmin={isAdmin}
+          isSysAdmin={isSysAdmin}
+          selectRoom={selectRoom}
+        />
 
         <div className="member-actions">
           <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>
