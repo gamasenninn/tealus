@@ -3,16 +3,21 @@
  * 無限ループ防止 + DM/グループ判定
  */
 const logger = require('../lib/logger');
+const { dispatch } = require('./dispatcher');
 
 // Bot ユーザーIDのキャッシュ（起動時に設定）
 const botUserIds = new Set();
+let botAgentId = null;
+let botAgentName = null;
 
 /**
  * BotユーザーIDを登録（起動時に呼ばれる）
  */
-function registerBotUserId(userId) {
+function registerBotUserId(userId, displayName) {
   botUserIds.add(userId);
-  logger.info(`Registered bot user: ${userId}`);
+  botAgentId = userId;
+  botAgentName = displayName || 'AI';
+  logger.info(`Registered bot user: ${userId} (${botAgentName})`);
 }
 
 /**
@@ -50,8 +55,13 @@ async function handleMessageCreated(payload) {
 
   logger.info(`Message received: "${(message.content || '(media)').slice(0, 50)}" in room ${room.name || room.id}`);
 
-  // TODO: Phase B で dispatcher.js を実装
-  // await dispatch(payload);
+  // ディスパッチ
+  await dispatch({
+    message,
+    room,
+    agentId: botAgentId,
+    agentName: botAgentName,
+  });
 }
 
 /**

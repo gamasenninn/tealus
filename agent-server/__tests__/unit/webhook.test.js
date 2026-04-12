@@ -1,6 +1,12 @@
 /**
  * Webhook ハンドラのテスト
  */
+
+// dispatcher をモック
+jest.mock('../../src/webhook/dispatcher', () => ({
+  dispatch: jest.fn(),
+}));
+
 const { handleWebhook, registerBotUserId } = require('../../src/webhook/handler');
 
 // logger をモック
