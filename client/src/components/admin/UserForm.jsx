@@ -7,6 +7,7 @@ function UserForm({ user, onSubmit, onCancel }) {
     display_name: user?.display_name || '',
     password: '',
     role: user?.role || 'user',
+    is_bot: user?.is_bot || false,
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -34,6 +35,9 @@ function UserForm({ user, onSubmit, onCancel }) {
       }
       if (isEdit && formData.password) {
         data.password = formData.password;
+      }
+      if (!isEdit || formData.is_bot !== user.is_bot) {
+        data.is_bot = formData.is_bot;
       }
 
       await onSubmit(data);
@@ -91,6 +95,19 @@ function UserForm({ user, onSubmit, onCancel }) {
           <option value="user">一般</option>
           <option value="admin">管理者</option>
         </select>
+      </div>
+
+      <div className="form-field">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            name="is_bot"
+            checked={formData.is_bot}
+            onChange={(e) => setFormData({ ...formData, is_bot: e.target.checked })}
+            style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
+          />
+          AIエージェント
+        </label>
       </div>
 
       <div className="form-buttons">

@@ -6,6 +6,7 @@ const express = require('express');
 const config = require('./config');
 const logger = require('./lib/logger');
 const webhookRoutes = require('./webhook/routes');
+const { initializeAgent } = require('./setup/register');
 
 const app = express();
 app.use(express.json());
@@ -23,10 +24,13 @@ app.get('/health', (req, res) => {
 app.use('/webhook', webhookRoutes);
 
 // Start server
-app.listen(config.PORT, () => {
+app.listen(config.PORT, async () => {
   logger.info(`Agent Server started on port ${config.PORT}`);
   logger.info(`Tealus API: ${config.TEALUS_API_URL}`);
   logger.info(`Light model: ${config.AGENT_LIGHT_MODEL}`);
+
+  // エージェント初期化（Bot APIログイン、ルーム取得）
+  await initializeAgent();
 });
 
 module.exports = { app };

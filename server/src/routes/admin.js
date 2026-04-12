@@ -33,7 +33,7 @@ router.get('/users', async (req, res) => {
  * Create a new user
  */
 router.post('/users', async (req, res) => {
-  const { employee_id, display_name, password, role = 'user' } = req.body;
+  const { employee_id, display_name, password, role = 'user', is_bot = false } = req.body;
 
   if (!employee_id || !display_name || !password) {
     return res.status(400).json({ error: '社員番号、表示名、パスワードは必須です' });
@@ -50,10 +50,10 @@ router.post('/users', async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = await pool.query(
-      `INSERT INTO users (employee_id, display_name, password_hash, role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
-      [employee_id, display_name, password_hash, role]
+      `INSERT INTO users (employee_id, display_name, password_hash, role, is_bot)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_bot, is_active, created_at`,
+      [employee_id, display_name, password_hash, role, is_bot]
     );
 
     res.status(201).json({ user: result.rows[0] });
@@ -69,7 +69,7 @@ router.post('/users', async (req, res) => {
  */
 router.put('/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { display_name, password, role } = req.body;
+  const { display_name, password, role, is_bot } = req.body;
 
   try {
     // Check user exists
@@ -94,6 +94,10 @@ router.put('/users/:id', async (req, res) => {
     if (role !== undefined) {
       updates.push(`role = $${paramIndex++}`);
       values.push(role);
+    }
+    if (is_bot !== undefined) {
+      updates.push(`is_bot = $${paramIndex++}`);
+      values.push(is_bot);
     }
 
     if (updates.length === 0) {
