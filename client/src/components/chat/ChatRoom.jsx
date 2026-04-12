@@ -6,6 +6,8 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useSocketSync } from '../../hooks/useSocketSync';
 import { useMessageScroll } from '../../hooks/useMessageScroll';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useVoiceContinuousPlay } from '../../hooks/useVoiceContinuousPlay';
+import { useAppPanel } from '../../hooks/useAppPanel';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
@@ -22,103 +24,8 @@ function ChatRoom() {
   const { currentRoom, members, lastReadMessageId, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
-  const [showAppPanel, setShowAppPanel] = useState(false);
-  const [activeAppIndex, setActiveAppIndex] = useState(0);
-  const appUrls = currentRoom?.app_urls || [];
-
-  // Auto-open app panel
-  useEffect(() => {
-    if (appUrls.length > 0) {
-      const autoIdx = appUrls.findIndex(a => a.auto_open);
-      if (autoIdx >= 0) {
-        setShowAppPanel(true);
-        setActiveAppIndex(autoIdx);
-      }
-    }
-  }, [currentRoom?.id]);
-
-  // App panel wake lock
-  useEffect(() => {
-    let appWakeLock = null;
-
-    const acquireAppWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator && !appWakeLock) {
-          appWakeLock = await navigator.wakeLock.request('screen');
-          appWakeLock.addEventListener('release', () => { appWakeLock = null; });
-        }
-      } catch (e) { /* not supported */ }
-    };
-
-    if (showAppPanel && appUrls[activeAppIndex]?.wake_lock) {
-      acquireAppWakeLock();
-    }
-
-    return () => {
-      if (appWakeLock) { appWakeLock.release(); appWakeLock = null; }
-    };
-  }, [showAppPanel, activeAppIndex, appUrls]);
-
-  // Voice continuous playback + Wake Lock
-  useEffect(() => {
-    let wakeLock = null;
-
-    const acquireWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator && !wakeLock) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          wakeLock.addEventListener('release', () => { wakeLock = null; });
-        }
-      } catch (e) { /* Wake Lock not supported or failed */ }
-    };
-
-    const releaseWakeLock = () => {
-      if (wakeLock) { wakeLock.release(); wakeLock = null; }
-    };
-
-    const handleVoiceEnded = (e) => {
-      const endedId = e.detail.messageId;
-      const voiceMessages = messages.filter(m => m.type === 'voice');
-      const currentIdx = voiceMessages.findIndex(m => m.id === endedId);
-      if (currentIdx >= 0 && currentIdx < voiceMessages.length - 1) {
-        const nextMsg = voiceMessages[currentIdx + 1];
-        acquireWakeLock();
-        window.dispatchEvent(new CustomEvent('voice:play', { detail: { messageId: nextMsg.id } }));
-        setTimeout(() => {
-          const el = document.querySelector(`[data-msg-id="${nextMsg.id}"]`);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      } else {
-        // 最後のメッセージ → Wake Lock解除
-        releaseWakeLock();
-      }
-    };
-
-    const handleStopContinuous = () => {
-      releaseWakeLock();
-    };
-
-    // タブが再表示された時にWake Lockを再取得
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && wakeLock === null) {
-        // 再生中ならWake Lock再取得（audio要素の再生状態は各VoiceBubbleが管理）
-      }
-    };
-
-    const handleVoiceStarted = () => { acquireWakeLock(); };
-
-    window.addEventListener('voice:ended', handleVoiceEnded);
-    window.addEventListener('voice:started', handleVoiceStarted);
-    window.addEventListener('voice:stop-continuous', handleStopContinuous);
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      window.removeEventListener('voice:ended', handleVoiceEnded);
-      window.removeEventListener('voice:started', handleVoiceStarted);
-      window.removeEventListener('voice:stop-continuous', handleStopContinuous);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      releaseWakeLock();
-    };
-  }, [messages]);
+  const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom);
+  useVoiceContinuousPlay(messages);
 
   // Search params
   const targetMsgId = searchParams.get('msg');
