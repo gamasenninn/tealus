@@ -9,6 +9,10 @@ const logger = require('./logger');
 let token = null;
 let botUser = null;
 
+function getBotUserId() {
+  return botUser?.id;
+}
+
 /**
  * Bot認証してトークンを取得
  */
@@ -90,6 +94,7 @@ async function markRead(messageIds) {
 
 module.exports = {
   login,
+  getBotUserId,
   pushMessage,
   getMessages,
   getRooms,

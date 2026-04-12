@@ -13,8 +13,8 @@ const { updateContext } = require('../context/sessionManager');
 /**
  * claude -p の引数を構築
  */
-function buildClaudeArgs({ prompt, workspacePath, sessionId }) {
-  const args = ['-p', prompt, '--cwd', workspacePath, '--dangerously-skip-permissions'];
+function buildClaudeArgs({ prompt, sessionId }) {
+  const args = ['-p', prompt, '--dangerously-skip-permissions'];
 
   if (sessionId) {
     args.push('--resume', sessionId);
@@ -32,8 +32,11 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     logger.info(`Deep Agent starting: claude ${args.join(' ').slice(0, 100)}...`);
 
-    const proc = spawn('claude', args, {
+    // Windows では .cmd を使う
+    const claudeCmd = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+    const proc = spawn(claudeCmd, args, {
       cwd: workspacePath,
+      shell: process.platform === 'win32',
       timeout: config.DEEP_TIMEOUT,
       env: { ...process.env, HOME: workspacePath },
     });

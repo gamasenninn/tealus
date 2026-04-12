@@ -25,9 +25,9 @@ const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
  */
 async function processLight({ roomId, prompt, workspacePath }) {
   try {
-    // 会話履歴を取得
+    // 会話履歴を取得（DESC順で返るので逆順にする）
     const historyData = await botApi.getMessages(roomId, config.LIGHT_CONTEXT_MESSAGES);
-    const history = historyData.messages || [];
+    const history = (historyData.messages || []).reverse();
 
     // メモリを読み込み
     const memory = loadMemoryForPrompt(workspacePath);
@@ -75,7 +75,9 @@ function buildMessages(history, memory, prompt) {
   for (const msg of history) {
     if (!msg.content) continue;
     // Bot自身の発言は assistant、それ以外は user
-    const role = msg.sender_display_name === 'AI' ? 'assistant' : 'user';
+    const botUserId = require('../lib/botApi').getBotUserId();
+    const isBot = msg.sender_id === botUserId;
+    const role = isBot ? 'assistant' : 'user';
     const content = role === 'user'
       ? `${msg.sender_display_name}: ${msg.content}`
       : msg.content;

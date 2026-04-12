@@ -40,20 +40,16 @@ describe('Deep Agent', () => {
     test('基本引数を構築する', () => {
       const args = buildClaudeArgs({
         prompt: 'レポートを作成して',
-        workspacePath: '/path/to/workspace',
       });
 
       expect(args).toContain('-p');
       expect(args).toContain('レポートを作成して');
-      expect(args).toContain('--cwd');
-      expect(args).toContain('/path/to/workspace');
       expect(args).toContain('--dangerously-skip-permissions');
     });
 
     test('session_id がある場合は --resume を追加', () => {
       const args = buildClaudeArgs({
         prompt: '続きをお願い',
-        workspacePath: '/path/to/workspace',
         sessionId: 'sess-123',
       });
 
@@ -64,7 +60,6 @@ describe('Deep Agent', () => {
     test('session_id がない場合は --resume なし', () => {
       const args = buildClaudeArgs({
         prompt: '新しいタスク',
-        workspacePath: '/path/to/workspace',
       });
 
       expect(args).not.toContain('--resume');
