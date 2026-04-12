@@ -1,0 +1,25 @@
+{
+  "name": "tealus-agent-server",
+  "version": "0.1.0",
+  "description": "Tealus AI Agent Server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest --runInBand --forceExit",
+    "test:watch": "jest --runInBand --watch"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.8.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-fetch": "^2.7.0",
+    "pg": "^8.13.1",
+    "winston": "^3.17.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.2.2"
+  }
+}
