@@ -66,7 +66,7 @@ router.get('/announcements', async (req, res) => {
       `SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url
        FROM messages m
        JOIN users u ON u.id = m.sender_id
-       WHERE m.room_id = ANY($1) AND m.is_deleted = false AND m.type != 'system'
+       WHERE m.room_id = ANY($1) AND m.is_deleted = false AND m.type != 'system' AND m.is_published = true
        ORDER BY m.created_at DESC
        LIMIT $2`,
       [roomIds, parseInt(limit)]

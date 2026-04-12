@@ -10,7 +10,7 @@ import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History } from 'lucide-react';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone } from 'lucide-react';
 import { diffChars } from 'diff';
 import './MessageBubble.css';
 
@@ -151,6 +151,19 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       }
     }
 
+    // Publish/Unpublish (announcement rooms only)
+    if (currentRoom?.is_announcement && !message.is_deleted && message.type !== 'system') {
+      items.push({
+        icon: <Megaphone size={16} />,
+        label: message.is_published ? 'お知らせから非公開' : 'お知らせに公開',
+        onClick: async () => {
+          try {
+            await api.togglePublish(roomId, message.id, !message.is_published);
+          } catch (err) { console.error(err); }
+        },
+      });
+    }
+
     // Delete (own messages only)
     if (isOwn) {
       items.push({
@@ -231,6 +244,9 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           )}
           <span className="bubble-sender-name">{message.sender_display_name}</span>
         </div>
+      )}
+      {currentRoom?.is_announcement && message.is_published && (
+        <div className="bubble-published"><Megaphone size={12} /> 公開中</div>
       )}
       <div className="bubble-content-row">
         {isOwn && (

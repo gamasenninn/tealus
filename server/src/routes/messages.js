@@ -138,6 +138,66 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * PATCH /api/rooms/:id/messages/:msgId/publish
+ * Toggle publish status for announcement messages
+ */
+router.patch('/:msgId/publish', async (req, res) => {
+  const roomId = req.params.id;
+  const { msgId } = req.params;
+  const userId = req.user.id;
+  const { is_published } = req.body;
+
+  try {
+    // Check room is announcement
+    const roomResult = await pool.query(
+      'SELECT is_announcement FROM rooms WHERE id = $1',
+      [roomId]
+    );
+    if (!roomResult.rows[0]?.is_announcement) {
+      return res.status(400).json({ error: 'お知らせルームのみ操作可能です' });
+    }
+
+    // Check message exists
+    const msgResult = await pool.query(
+      'SELECT sender_id, is_deleted FROM messages WHERE id = $1 AND room_id = $2',
+      [msgId, roomId]
+    );
+    if (msgResult.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+    if (msgResult.rows[0].is_deleted) {
+      return res.status(400).json({ error: '削除済みメッセージは操作できません' });
+    }
+
+    // Permission: sender or room admin
+    const isOwner = msgResult.rows[0].sender_id === userId;
+    if (!isOwner) {
+      const adminCheck = await pool.query(
+        "SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND role = 'admin'",
+        [roomId, userId]
+      );
+      if (adminCheck.rows.length === 0) {
+        return res.status(403).json({ error: '送信者またはグループ管理者のみ操作できます' });
+      }
+    }
+
+    const result = await pool.query(
+      'UPDATE messages SET is_published = $1 WHERE id = $2 RETURNING id, is_published',
+      [is_published, msgId]
+    );
+
+    // Socket.IO broadcast
+    const { io } = require('../app');
+    io.to(roomId).emit('message:published', { message_id: msgId, is_published });
+
+    res.json({ message: result.rows[0] });
+  } catch (err) {
+    logger.error('Publish toggle error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * PUT /api/rooms/:id/messages/:msgId
  * Edit message content (policy-based: none/sender/member)
  */

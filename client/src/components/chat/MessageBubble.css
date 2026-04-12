@@ -118,6 +118,16 @@
   color: rgba(0, 0, 0, 0.4);
 }
 
+.bubble-published {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--primary);
+  margin-bottom: 2px;
+  opacity: 0.7;
+}
+
 .bubble-edited {
   font-size: 11px;
   color: rgba(0, 0, 0, 0.35);

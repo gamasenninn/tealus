@@ -284,6 +284,11 @@ class ApiClient {
     return this.request('GET', '/rooms/portal-links');
   }
 
+  // Message publish
+  togglePublish(roomId, messageId, isPublished) {
+    return this.request('PATCH', `/rooms/${roomId}/messages/${messageId}/publish`, { is_published: isPublished });
+  }
+
   // Message edit
   editMessage(roomId, messageId, content) {
     return this.request('PUT', `/rooms/${roomId}/messages/${messageId}`, { content });

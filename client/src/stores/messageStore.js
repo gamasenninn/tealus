@@ -79,6 +79,14 @@ export const useMessageStore = create((set, get) => ({
     }));
   },
 
+  updatePublishStatus: (messageId, isPublished) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, is_published: isPublished } : m
+      ),
+    }));
+  },
+
   updateMessageContent: (messageId, content, isEdited) => {
     set((state) => ({
       messages: state.messages.map((m) =>

@@ -72,6 +72,10 @@ export function useSocketSync(roomId, targetMsgId = null) {
         updateMessageContent(data.message_id, data.content, data.is_edited);
       });
 
+      socket.on('message:published', (data) => {
+        useMessageStore.getState().updatePublishStatus(data.message_id, data.is_published);
+      });
+
       socket.on('message:deleted', (data) => {
         useMessageStore.getState().markDeleted(data.message_id);
       });
@@ -110,6 +114,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
         socket.off('voice:status');
         socket.off('voice:transcription');
         socket.off('message:updated');
+        socket.off('message:published');
         socket.off('message:deleted');
         socket.off('typing:start');
         socket.off('typing:stop');
