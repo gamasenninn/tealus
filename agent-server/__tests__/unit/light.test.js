@@ -14,6 +14,7 @@ jest.mock('@openai/agents', () => ({
   Agent: jest.fn().mockImplementation((opts) => ({ ...opts, _type: 'Agent' })),
   run: mockRun,
   tool: jest.fn((opts) => ({ name: opts.name, _type: 'tool' })),
+  webSearchTool: jest.fn(() => ({ name: 'web_search', _type: 'tool' })),
 }));
 
 jest.mock('zod', () => ({

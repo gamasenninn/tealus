@@ -8,7 +8,7 @@ const { route } = require('../router/index');
 const { processLight } = require('../agents/light');
 const { processDeep } = require('../agents/deep');
 const { getOrCreateContext, updateStatus } = require('../context/sessionManager');
-const { getConnectedServers } = require('../mcp/manager');
+const { getOrCreateRoomMcp } = require('../mcp/roomMcpManager');
 const { extractPromptFromMessage } = require('../media/messageAdapter');
 
 // ルームごとの処理キュー（並行実行防止）
@@ -84,11 +84,12 @@ async function _dispatch({ message, room, agentId, agentName }) {
       // Light Agent
       await updateStatus(agentId, roomId, 'processing');
       try {
+        const mcpServers = await getOrCreateRoomMcp(agentId, roomId, context.workspace_path);
         await processLight({
           roomId,
           prompt: result.prompt || prompt,
           workspacePath: context.workspace_path,
-          mcpServers: getConnectedServers(),
+          mcpServers,
         });
       } finally {
         await updateStatus(agentId, roomId, 'idle');

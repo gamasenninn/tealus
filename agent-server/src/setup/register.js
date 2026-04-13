@@ -8,7 +8,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { registerBotUserId } = require('../webhook/handler');
-const { connectMcpServers } = require('../mcp/manager');
+const { startSweeper } = require('../mcp/roomMcpManager');
 
 /**
  * エージェントの初期化
@@ -31,10 +31,10 @@ async function initializeAgent() {
       logger.debug(`  - ${room.name || 'DM'} (${room.id})`);
     }
 
-    // MCP サーバー接続
-    const mcpServers = await connectMcpServers();
+    // MCPキャッシュスイーパー開始（ルームMCPは初回アクセス時に動的接続）
+    startSweeper();
 
-    return { rooms, mcpServers };
+    return { rooms };
   } catch (err) {
     logger.error(`Agent initialization failed: ${err.message}`);
     return { rooms: [], mcpServers: [] };

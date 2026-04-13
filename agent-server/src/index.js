@@ -7,7 +7,7 @@ const config = require('./config');
 const logger = require('./lib/logger');
 const webhookRoutes = require('./webhook/routes');
 const { initializeAgent } = require('./setup/register');
-const { disconnectAll } = require('./mcp/manager');
+const { closeAllRoomMcp } = require('./mcp/roomMcpManager');
 
 const app = express();
 app.use(express.json());
@@ -37,7 +37,7 @@ app.listen(config.PORT, async () => {
 // Graceful shutdown
 const shutdown = async () => {
   logger.info('Shutting down...');
-  await disconnectAll();
+  await closeAllRoomMcp();
   process.exit(0);
 };
 process.on('SIGINT', shutdown);

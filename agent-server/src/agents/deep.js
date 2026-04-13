@@ -5,6 +5,8 @@
  * --cwd でワークスペースに閉じ込め
  */
 const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
@@ -13,8 +15,16 @@ const { updateContext } = require('../context/sessionManager');
 /**
  * claude -p の引数を構築
  */
-function buildClaudeArgs({ prompt, sessionId }) {
+function buildClaudeArgs({ prompt, workspacePath, sessionId }) {
   const args = ['-p', prompt, '--dangerously-skip-permissions'];
+
+  // ルーム固有 mcp_config.json があれば渡す
+  if (workspacePath) {
+    const mcpConfigPath = path.join(workspacePath, 'mcp_config.json');
+    if (fs.existsSync(mcpConfigPath)) {
+      args.push('--mcp-config', mcpConfigPath);
+    }
+  }
 
   if (sessionId) {
     args.push('--resume', sessionId);

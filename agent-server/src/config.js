@@ -23,6 +23,10 @@ module.exports = {
   // Webhook
   WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
 
+  // MCP Cache
+  MCP_CACHE_TTL: parseInt(process.env.MCP_CACHE_TTL || String(30 * 60 * 1000)),  // 30分
+  MCP_SWEEP_INTERVAL: parseInt(process.env.MCP_SWEEP_INTERVAL || String(5 * 60 * 1000)),  // 5分
+
   // Limits
   DEEP_TIMEOUT: parseInt(process.env.DEEP_TIMEOUT || '300000'),  // 5分
   DEEP_MAX_BUFFER: parseInt(process.env.DEEP_MAX_BUFFER || '10485760'),  // 10MB
