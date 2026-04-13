@@ -47,9 +47,9 @@ class TealusSession {
 
         const isBot = msg.sender_id === botUserId;
         if (isBot) {
-          items.push({ role: 'assistant', content: text });
+          items.push({ role: 'assistant', content: [{ type: 'output_text', text }] });
         } else {
-          items.push({ role: 'user', content: `${msg.sender_display_name}: ${text}` });
+          items.push({ role: 'user', content: [{ type: 'input_text', text: `${msg.sender_display_name}: ${text}` }] });
         }
       }
       return items;
