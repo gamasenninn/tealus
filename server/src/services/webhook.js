@@ -122,11 +122,19 @@ async function fireWebhooks(eventType, roomId, payload) {
 
     if (result.rows.length === 0) return;
 
-    // ルーム名を取得してペイロードに追加
-    if (roomId && payload.room && !payload.room.name) {
-      const roomResult = await pool.query('SELECT name FROM rooms WHERE id = $1', [roomId]);
-      if (roomResult.rows.length > 0) {
-        payload.room.name = roomResult.rows[0].name;
+    // ルーム情報を取得してペイロードに追加
+    if (roomId && payload.room) {
+      if (!payload.room.name || !payload.room.member_count) {
+        const roomResult = await pool.query(
+          `SELECT r.name, r.type, (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) as member_count
+           FROM rooms r WHERE r.id = $1`,
+          [roomId]
+        );
+        if (roomResult.rows.length > 0) {
+          payload.room.name = payload.room.name || roomResult.rows[0].name;
+          payload.room.member_count = roomResult.rows[0].member_count;
+          payload.room.type = roomResult.rows[0].type;
+        }
       }
     }
 
