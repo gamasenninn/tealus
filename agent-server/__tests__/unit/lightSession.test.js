@@ -38,7 +38,7 @@ describe('TealusSession', () => {
     const items = await session.getItems();
     expect(items).toHaveLength(3);
     expect(items[0].role).toBe('user');
-    expect(items[0].content).toContain('田中');
+    expect(items[0].content[0].text).toContain('田中');
     expect(items[1].role).toBe('assistant');
     expect(items[2].role).toBe('user');
   });
@@ -56,7 +56,7 @@ describe('TealusSession', () => {
 
     const items = await session.getItems();
     expect(items).toHaveLength(1);
-    expect(items[0].content).toContain('明日の会議について');
+    expect(items[0].content[0].text).toContain('明日の会議について');
   });
 
   test('contentもtranscriptionもないメッセージはスキップ', async () => {

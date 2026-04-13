@@ -8,6 +8,7 @@ const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
 const { TealusSession } = require('./lightSession');
+const { createTools } = require('./lightTools');
 
 const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
 社内メッセンジャー上でチームメンバーとして対等に会話します。
@@ -22,6 +23,8 @@ const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
  * Light Agent を作成
  */
 function createLightAgent(workspacePath, mcpServers = []) {
+  const tools = createTools(workspacePath);
+
   return new Agent({
     name: 'TealusAssistant',
     instructions: () => {
@@ -33,6 +36,7 @@ function createLightAgent(workspacePath, mcpServers = []) {
       return prompt;
     },
     model: config.AGENT_LIGHT_MODEL,
+    tools,
     mcpServers,
   });
 }
