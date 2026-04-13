@@ -66,9 +66,9 @@ function createTools(workspacePath) {
   // ファイル一覧
   tools.push(tool({
     name: 'list_workspace_files',
-    description: 'ワークスペース内のファイル一覧を取得する。',
+    description: 'ワークスペース内のファイル一覧を取得する。subdirでサブディレクトリ指定（空文字でルート）。',
     parameters: z.object({
-      subdir: z.string().optional().describe('サブディレクトリ（省略時はルート）'),
+      subdir: z.string().describe('サブディレクトリ（ルートの場合は空文字）'),
     }),
     execute: async ({ subdir }) => {
       const dir = subdir ? path.join(workspacePath, subdir) : workspacePath;
