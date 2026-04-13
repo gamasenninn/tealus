@@ -103,7 +103,7 @@ describe('Deep Agent', () => {
       });
 
       expect(mockSpawn).toHaveBeenCalledWith(
-        'claude',
+        expect.stringContaining('claude'),
         expect.arrayContaining(['-p', '--dangerously-skip-permissions']),
         expect.objectContaining({ cwd: '/tmp/workspace' })
       );

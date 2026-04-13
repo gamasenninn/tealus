@@ -1,15 +1,13 @@
 /**
- * Light Agent
- * GPT-5.4-mini による日常タスク処理
- * 会話履歴 + メモリ をコンテキストとして使用
+ * Light Agent（OpenAI Agents SDK版）
+ * Agent + run() パターンで MCP・ツール・セッション管理に対応
  */
-const OpenAI = require('openai');
+const { Agent, run } = require('@openai/agents');
 const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
-
-const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
+const { TealusSession } = require('./lightSession');
 
 const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
 社内メッセンジャー上でチームメンバーとして対等に会話します。
@@ -21,32 +19,49 @@ const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
 - 複雑すぎるタスクは「このタスクは高度な分析が必要です」と伝えてください`;
 
 /**
+ * Light Agent を作成
+ */
+function createLightAgent(workspacePath, mcpServers = []) {
+  return new Agent({
+    name: 'TealusAssistant',
+    instructions: () => {
+      let prompt = SYSTEM_PROMPT;
+      const memory = loadMemoryForPrompt(workspacePath);
+      if (memory) {
+        prompt += `\n\n## 記憶\n${memory}`;
+      }
+      return prompt;
+    },
+    model: config.AGENT_LIGHT_MODEL,
+    mcpServers,
+  });
+}
+
+/**
  * Light Agent でメッセージを処理
  */
-async function processLight({ roomId, prompt, workspacePath }) {
+async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
   try {
-    // 会話履歴を取得（DESC順で返るので逆順にする）
-    const historyData = await botApi.getMessages(roomId, config.LIGHT_CONTEXT_MESSAGES);
-    const history = (historyData.messages || []).reverse();
+    const agent = createLightAgent(workspacePath, mcpServers);
+    const session = new TealusSession(roomId);
 
-    // メモリを読み込み
-    const memory = loadMemoryForPrompt(workspacePath);
-
-    // メッセージ配列を構築
-    const messages = buildMessages(history, memory, prompt);
-
-    // LLM呼び出し
-    const response = await openai.chat.completions.create({
-      model: config.AGENT_LIGHT_MODEL,
-      messages,
-      max_tokens: 2000,
-      temperature: 0.7,
+    const result = await run(agent, prompt, {
+      session,
+      maxTurns: config.LIGHT_MAX_TURNS || 10,
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = result.finalOutput;
     if (content) {
-      await botApi.pushMessage(roomId, content);
-      logger.info(`Light response sent to room ${roomId}`);
+      // 長い応答は分割
+      if (content.length > 4000) {
+        const chunks = splitMessage(content, 4000);
+        for (const chunk of chunks) {
+          await botApi.pushMessage(roomId, chunk);
+        }
+      } else {
+        await botApi.pushMessage(roomId, content);
+      }
+      logger.info(`Light response sent to room ${roomId} (${content.length} chars)`);
     }
   } catch (err) {
     logger.error(`Light Agent error: ${err.message}`);
@@ -59,39 +74,16 @@ async function processLight({ roomId, prompt, workspacePath }) {
 }
 
 /**
- * LLM用のメッセージ配列を構築
+ * 長いメッセージを分割
  */
-function buildMessages(history, memory, prompt) {
-  const messages = [];
-
-  // システムプロンプト + メモリ
-  let systemContent = SYSTEM_PROMPT;
-  if (memory) {
-    systemContent += `\n\n## 記憶\n${memory}`;
+function splitMessage(text, maxLength) {
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    chunks.push(remaining.slice(0, maxLength));
+    remaining = remaining.slice(maxLength);
   }
-  messages.push({ role: 'system', content: systemContent });
-
-  // 会話履歴（古い順）
-  const botUserId = require('../lib/botApi').getBotUserId();
-  for (const msg of history) {
-    // 音声メッセージは文字起こしテキストを使用
-    const text = msg.content
-      || msg.transcription?.formatted_text
-      || msg.transcription?.raw_text;
-    if (!text) continue;
-    // Bot自身の発言は assistant、それ以外は user
-    const isBot = msg.sender_id === botUserId;
-    const role = isBot ? 'assistant' : 'user';
-    const content = role === 'user'
-      ? `${msg.sender_display_name}: ${text}`
-      : text;
-    messages.push({ role, content });
-  }
-
-  // 今回のプロンプト
-  messages.push({ role: 'user', content: prompt });
-
-  return messages;
+  return chunks;
 }
 
-module.exports = { processLight, buildMessages };
+module.exports = { processLight, createLightAgent, splitMessage };

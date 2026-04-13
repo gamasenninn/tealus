@@ -3,7 +3,7 @@
  */
 
 jest.mock('../../src/lib/botApi', () => ({
-  login: jest.fn().mockResolvedValue('test-token'),
+  login: jest.fn().mockResolvedValue({ token: 'test-token', user: { id: 'bot-uuid-123', display_name: 'アシスタント' } }),
   getRooms: jest.fn().mockResolvedValue({ rooms: [{ id: 'room1', name: 'Web部' }] }),
 }));
 
