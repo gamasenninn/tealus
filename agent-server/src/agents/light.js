@@ -2,7 +2,7 @@
  * Light Agent（OpenAI Agents SDK版）
  * Agent + run() パターンで MCP・ツール・セッション管理に対応
  */
-const { Agent, run } = require('@openai/agents');
+const { Agent, run, webSearchTool, RunHooks } = require('@openai/agents');
 const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
@@ -16,14 +16,16 @@ const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
 ## ルール
 - 簡潔で自然な日本語で応答してください
 - 質問には正確に答え、わからない場合は正直に伝えてください
-- 必要に応じてツールを使用してください
+- 天気、ニュース、最新情報などリアルタイム情報が必要な場合はWeb検索ツールを積極的に使ってください
+- ユーザーの情報は write_memory ツールで保存し、次回以降に活用してください
+- 現在の日時が必要な場合は get_current_time ツールを使ってください
 - 複雑すぎるタスクは「このタスクは高度な分析が必要です」と伝えてください`;
 
 /**
  * Light Agent を作成
  */
 function createLightAgent(workspacePath, mcpServers = []) {
-  const tools = createTools(workspacePath);
+  const tools = [webSearchTool(), ...createTools(workspacePath)];
 
   return new Agent({
     name: 'TealusAssistant',
@@ -53,6 +55,21 @@ async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
       session,
       maxTurns: config.LIGHT_MAX_TURNS || 10,
     });
+
+    // 使用されたツールをログ
+    if (result.newItems) {
+      logger.debug(`[Run] newItems: ${result.newItems.length}件`);
+      for (const item of result.newItems) {
+        const rawType = item.rawItem?.type || '';
+        const rawName = item.rawItem?.name || item.rawItem?.call_id || '';
+        logger.debug(`[Run] item.type=${item.type}, rawType=${rawType}, rawName=${rawName}`);
+        if (item.type === 'tool_call_item') {
+          logger.info(`[Tool] 使用: ${rawName || rawType || item.type}`);
+        }
+      }
+    } else {
+      logger.debug(`[Run] newItems is undefined/null`);
+    }
 
     const content = result.finalOutput;
     if (content) {

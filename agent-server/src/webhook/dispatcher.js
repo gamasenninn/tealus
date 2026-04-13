@@ -8,6 +8,7 @@ const { route } = require('../router/index');
 const { processLight } = require('../agents/light');
 const { processDeep } = require('../agents/deep');
 const { getOrCreateContext, updateStatus } = require('../context/sessionManager');
+const { getConnectedServers } = require('../mcp/manager');
 const { extractPromptFromMessage } = require('../media/messageAdapter');
 
 /**
@@ -70,6 +71,7 @@ async function dispatch({ message, room, agentId, agentName }) {
           roomId,
           prompt: result.prompt || prompt,
           workspacePath: context.workspace_path,
+          mcpServers: getConnectedServers(),
         });
       } finally {
         await updateStatus(agentId, roomId, 'idle');

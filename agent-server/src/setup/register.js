@@ -8,6 +8,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { registerBotUserId } = require('../webhook/handler');
+const { connectMcpServers } = require('../mcp/manager');
 
 /**
  * エージェントの初期化
@@ -30,10 +31,13 @@ async function initializeAgent() {
       logger.debug(`  - ${room.name || 'DM'} (${room.id})`);
     }
 
-    return { rooms };
+    // MCP サーバー接続
+    const mcpServers = await connectMcpServers();
+
+    return { rooms, mcpServers };
   } catch (err) {
     logger.error(`Agent initialization failed: ${err.message}`);
-    return { rooms: [] };
+    return { rooms: [], mcpServers: [] };
   }
 }
 
