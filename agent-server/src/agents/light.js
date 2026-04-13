@@ -53,7 +53,7 @@ async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
 
     const result = await run(agent, prompt, {
       session,
-      maxTurns: config.LIGHT_MAX_TURNS || 10,
+      maxTurns: config.LIGHT_MAX_TURNS || 3,
     });
 
     // 使用されたツールをログ

@@ -11,6 +11,16 @@ const { getOrCreateContext, updateStatus } = require('../context/sessionManager'
 const { getConnectedServers } = require('../mcp/manager');
 const { extractPromptFromMessage } = require('../media/messageAdapter');
 
+// ルームごとの処理キュー（並行実行防止）
+const roomQueues = new Map();
+
+async function enqueueForRoom(roomId, fn) {
+  const prev = roomQueues.get(roomId) || Promise.resolve();
+  const next = prev.then(fn).catch(err => logger.error(`Queue error: ${err.message}`));
+  roomQueues.set(roomId, next);
+  await next;
+}
+
 /**
  * @メンションを検知
  */
@@ -31,6 +41,13 @@ function extractPrompt(content, agentName) {
  * メッセージをディスパッチ
  */
 async function dispatch({ message, room, agentId, agentName }) {
+  const roomId = room.id;
+
+  // ルームごとにシリアライズ（並行実行防止）
+  await enqueueForRoom(roomId, () => _dispatch({ message, room, agentId, agentName }));
+}
+
+async function _dispatch({ message, room, agentId, agentName }) {
   const roomId = room.id;
   const memberCount = room.member_count || 2;
 

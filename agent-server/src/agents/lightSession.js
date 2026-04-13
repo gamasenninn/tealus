@@ -34,7 +34,7 @@ class TealusSession {
    */
   async _fetchFromDb() {
     try {
-      const historyData = await botApi.getMessages(this.roomId, config.LIGHT_CONTEXT_MESSAGES || 20);
+      const historyData = await botApi.getMessages(this.roomId, config.LIGHT_CONTEXT_MESSAGES || 5);
       const messages = (historyData.messages || []).reverse();
       const botUserId = botApi.getBotUserId();
 
