@@ -24,7 +24,7 @@ function setupSocketHandlers(io) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       const result = await pool.query(
-        'SELECT id, employee_id, display_name, avatar_url FROM users WHERE id = $1 AND is_active = true',
+        'SELECT id, employee_id, display_name, avatar_url, role FROM users WHERE id = $1 AND is_active = true',
         [decoded.id]
       );
       if (result.rows.length === 0) {
@@ -44,6 +44,16 @@ function setupSocketHandlers(io) {
 
     // Join user-specific room (for targeted events like stamp generation)
     socket.join(`user:${userId}`);
+
+    // Admin: join all rooms for dashboard monitoring
+    if (socket.user.role === 'admin') {
+      pool.query('SELECT id FROM rooms').then(result => {
+        for (const r of result.rows) {
+          socket.join(r.id);
+        }
+        logger.info(`Admin ${socket.user.display_name} joined all ${result.rows.length} rooms for monitoring`);
+      }).catch(() => {});
+    }
 
     // Track online status
     if (!onlineUsers.has(userId)) {
