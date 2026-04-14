@@ -29,6 +29,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [editText, setEditText] = useState('');
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [editHistory, setEditHistory] = useState([]);
+  const [expanded, setExpanded] = useState(false);
   const longPressTimer = useRef(null);
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
 
@@ -152,8 +153,8 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           </div>
         )}
         <div
-          className={`bubble ${isOwn ? 'own' : 'other'} ${hasMedia && !hasText ? 'media-only' : ''} ${isStamp && !isStampDeleted ? 'stamp-only' : ''}`}
-          onDoubleClick={() => setReplyTo(message)}
+          className={`bubble ${isOwn ? 'own' : 'other'} ${hasMedia && !hasText ? 'media-only' : ''} ${isStamp && !isStampDeleted ? 'stamp-only' : ''} ${expanded ? 'expanded' : ''}`}
+          onDoubleClick={() => setExpanded(prev => !prev)}
           onContextMenu={handleContextMenu}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}

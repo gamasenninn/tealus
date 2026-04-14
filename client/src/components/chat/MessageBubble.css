@@ -50,6 +50,10 @@
   max-width: 80%;
 }
 
+.bubble-content-row:has(.bubble.expanded) {
+  max-width: 100%;
+}
+
 .bubble-row.own .bubble-content-row {
   flex-direction: row;
 }
