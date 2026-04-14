@@ -167,7 +167,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <img src={`/media/${message.stamp.file_path}`} alt={message.stamp.label} className="bubble-stamp" />
           ) : (
             <>
-              {hasText && (mdPreview && !searchKeyword ? (
+              {hasText && (mdPreview ? (
                 <div className="bubble-text bubble-markdown">
                   <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
                   {message.is_edited && <span className="bubble-edited"> (編集済み)</span>}
