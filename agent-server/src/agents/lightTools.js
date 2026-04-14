@@ -9,6 +9,7 @@ const logger = require('../lib/logger');
 const config = require('../config');
 const botApi = require('../lib/botApi');
 const { writeMemory, readMemory } = require('../memory/fileMemory');
+const { getSetting } = require('../context/settingsManager');
 
 /**
  * ワークスペース用のカスタムツール一覧を作成
@@ -84,7 +85,7 @@ function createTools(workspacePath, roomId) {
   }));
 
   // 画像生成（DALL-E）
-  if (roomId) {
+  if (roomId && getSetting('tool_generate_image', true)) {
     tools.push(tool({
       name: 'generate_image',
       description: '指定されたプロンプトに基づいて画像を生成する。風景、動物、イラスト、図解など何でも生成可能。',

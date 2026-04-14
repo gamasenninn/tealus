@@ -1,0 +1,9 @@
+{
+  "tool_tavily": true,
+  "tool_code_interpreter": true,
+  "tool_generate_image": true,
+  "tool_filesystem": true,
+  "max_turns": 3,
+  "context_messages": 20,
+  "system_prompt": ""
+}

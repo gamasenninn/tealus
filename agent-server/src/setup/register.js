@@ -9,6 +9,7 @@ const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { registerBotUserId } = require('../webhook/handler');
 const { startSweeper } = require('../mcp/roomMcpManager');
+const { loadSettings } = require('../context/settingsManager');
 
 /**
  * エージェントの初期化
@@ -30,6 +31,9 @@ async function initializeAgent() {
     for (const room of rooms) {
       logger.debug(`  - ${room.name || 'DM'} (${room.id})`);
     }
+
+    // エージェント設定読み込み
+    loadSettings();
 
     // MCPキャッシュスイーパー開始（ルームMCPは初回アクセス時に動的接続）
     startSweeper();

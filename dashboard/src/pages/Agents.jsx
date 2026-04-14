@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { Settings } from 'lucide-react';
 
 function Agents() {
   const [agents, setAgents] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.getAgents().then(d => setAgents(d.agents)).catch(() => {});
@@ -10,7 +13,12 @@ function Agents() {
 
   return (
     <div className="page">
-      <h2>エージェント管理</h2>
+      <div className="page-header">
+        <h2>エージェント管理</h2>
+        <button className="header-btn" onClick={() => navigate('/agents/settings')}>
+          <Settings size={16} /> グローバル設定
+        </button>
+      </div>
       <table className="data-table">
         <thead>
           <tr>
@@ -32,7 +40,6 @@ function Agents() {
           {agents.length === 0 && <tr><td colSpan={4} className="empty">エージェントが登録されていません</td></tr>}
         </tbody>
       </table>
-      <p className="hint">詳細設定は #104 で実装予定</p>
     </div>
   );
 }

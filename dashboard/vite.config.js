@@ -7,6 +7,10 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': 'http://localhost:3000',
+      '/agent-api': {
+        target: 'http://localhost:4000',
+        rewrite: (path) => path.replace(/^\/agent-api/, ''),
+      },
       '/media': 'http://localhost:3000',
       '/socket.io': {
         target: 'http://localhost:3000',

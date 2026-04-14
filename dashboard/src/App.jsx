@@ -7,6 +7,7 @@ import Overview from './pages/Overview';
 import Agents from './pages/Agents';
 import Rooms from './pages/Rooms';
 import Monitor from './pages/Monitor';
+import AgentSettings from './pages/AgentSettings';
 
 function AdminRoute({ children }) {
   const { user, isLoading } = useAuthStore();
@@ -30,6 +31,7 @@ function App() {
         <Route path="/" element={<AdminRoute><DashboardLayout /></AdminRoute>}>
           <Route index element={<Overview />} />
           <Route path="agents" element={<Agents />} />
+          <Route path="agents/settings" element={<AgentSettings />} />
           <Route path="rooms" element={<Rooms />} />
           <Route path="monitor" element={<Monitor />} />
         </Route>

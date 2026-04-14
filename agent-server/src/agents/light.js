@@ -10,6 +10,7 @@ const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
 const { TealusSession } = require('./lightSession');
 const { createTools } = require('./lightTools');
+const { getSetting } = require('../context/settingsManager');
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
@@ -28,12 +29,15 @@ const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
  * Light Agent を作成
  */
 function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
-  const tools = [codeInterpreterTool(), ...createTools(workspacePath, roomId)];
+  const tools = [...createTools(workspacePath, roomId)];
+  if (getSetting('tool_code_interpreter', true)) {
+    tools.unshift(codeInterpreterTool());
+  }
 
   const agent = new Agent({
     name: 'TealusAssistant',
     instructions: () => {
-      let prompt = SYSTEM_PROMPT;
+      let prompt = getSetting('system_prompt', '') || SYSTEM_PROMPT;
       if (workspacePath && mcpServers.length > 0) {
         const normalizedPath = workspacePath.replace(/\\/g, '/');
         prompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のワークスペースパスを使ってください:\n${normalizedPath}\n例: ${normalizedPath}/hello.txt`;
@@ -112,7 +116,7 @@ async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
 
     const result = await run(agent, prompt, {
       session,
-      maxTurns: config.LIGHT_MAX_TURNS || 3,
+      maxTurns: getSetting('max_turns', config.LIGHT_MAX_TURNS || 3),
     });
 
     // 使用されたツールをログ
