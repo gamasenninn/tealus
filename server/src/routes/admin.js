@@ -244,12 +244,22 @@ router.delete('/portal-links/:id', async (req, res) => {
 router.get('/webhooks', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT w.id, w.room_id, r.name as room_name, w.url, w.events, w.is_active, w.created_at
+      `SELECT w.id, w.room_id, r.name as room_name, r.type as room_type, w.url, w.events, w.is_active, w.created_at,
+              (SELECT string_agg(u.display_name, ' ↔ ')
+               FROM room_members rm JOIN users u ON u.id = rm.user_id
+               WHERE rm.room_id = r.id) AS dm_member_names
        FROM webhooks w
        LEFT JOIN rooms r ON r.id = w.room_id
        ORDER BY w.created_at DESC`
     );
-    res.json({ webhooks: result.rows });
+    // DM ルームの場合、room_name をメンバー名で補完
+    const webhooks = result.rows.map(w => ({
+      ...w,
+      room_name: w.room_name || (w.room_type === 'direct' ? w.dm_member_names : null),
+      dm_member_names: undefined,
+      room_type: undefined,
+    }));
+    res.json({ webhooks });
   } catch (err) {
     logger.error('Admin list webhooks error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

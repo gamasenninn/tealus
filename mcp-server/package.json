@@ -1,0 +1,22 @@
+{
+  "name": "tealus-mcp-server",
+  "version": "1.0.0",
+  "description": "Tealus MCP Server — Tealus Bot API as MCP tools",
+  "main": "src/index.js",
+  "bin": {
+    "tealus-mcp": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "jest --no-coverage --forceExit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "node-fetch": "^2.7.0",
+    "form-data": "^4.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

@@ -58,19 +58,29 @@ describe('roomMcpManager', () => {
     expect(mockConnect.mock.calls.length).toBe(connectCount);  // 増えない
   });
 
-  test('異なるルームは別のキャッシュエントリ', async () => {
+  test('異なるルームは別のキャッシュエントリだがグローバルMCPは共有', async () => {
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
-    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
-    await getOrCreateRoomMcp('agent1', 'room2', tmpDir);
-    expect(mockConnect.mock.calls.length).toBe(2);
+    const servers1 = await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    const connectCountAfterRoom1 = mockConnect.mock.calls.length;
+
+    const servers2 = await getOrCreateRoomMcp('agent1', 'room2', tmpDir);
+    // room2 では filesystem のみ新規 connect（グローバルMCPは共有なので再connectしない）
+    const newConnects = mockConnect.mock.calls.length - connectCountAfterRoom1;
+    expect(newConnects).toBe(1); // filesystem のみ
+
+    // 両ルームとも同じグローバルサーバーを含む
+    const globalInRoom1 = servers1.filter(s => s.name.startsWith('global-'));
+    const globalInRoom2 = servers2.filter(s => s.name.startsWith('global-'));
+    expect(globalInRoom1).toEqual(globalInRoom2);
   });
 
-  test('closeAllRoomMcp は全サーバーをclose', async () => {
+  test('closeAllRoomMcp は全サーバー（共有含む）をclose', async () => {
     const { getOrCreateRoomMcp, closeAllRoomMcp } = require('../../src/mcp/roomMcpManager');
     await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
     await getOrCreateRoomMcp('agent1', 'room2', tmpDir);
 
     await closeAllRoomMcp();
+    // filesystem(room1) + filesystem(room2) + shared global servers
     expect(mockClose.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -83,7 +93,7 @@ describe('roomMcpManager', () => {
 
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     const servers = await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
-    // filesystem + custom_db = 2以上
+    // filesystem + custom_db + global servers
     expect(servers.length).toBeGreaterThanOrEqual(2);
   });
 

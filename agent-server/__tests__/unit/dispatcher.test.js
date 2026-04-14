@@ -131,9 +131,8 @@ describe('Dispatcher', () => {
       expect(processLight).not.toHaveBeenCalled();
     });
 
-    test('Deepタスクは一旦メッセージを送って処理（Phase C で本実装）', async () => {
+    test('DeepタスクはprocessDeepを呼ぶ', async () => {
       route.mockResolvedValueOnce({ tier: 'deep', prompt: 'コードをレビューして' });
-      botApi.pushMessage.mockResolvedValueOnce({ message: {} });
 
       await dispatch({
         message: { id: 'msg1', content: '/deep コードをレビューして', sender: { id: 'user1' } },
@@ -143,7 +142,6 @@ describe('Dispatcher', () => {
       });
 
       const { processDeep } = require('../../src/agents/deep');
-      expect(botApi.pushMessage).toHaveBeenCalledWith('room1', expect.stringContaining('高度な分析'));
       expect(processDeep).toHaveBeenCalled();
     });
   });

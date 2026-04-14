@@ -13,6 +13,8 @@ import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
 import { diffChars } from 'diff';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems.jsx';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn, searchKeyword }) {
@@ -28,6 +30,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [editHistory, setEditHistory] = useState([]);
   const longPressTimer = useRef(null);
+  const mdPreview = localStorage.getItem('mdPreview') !== 'off';
 
   const highlightText = (text) => {
     if (!text || !searchKeyword) return text;
@@ -163,7 +166,14 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <img src={`/media/${message.stamp.file_path}`} alt={message.stamp.label} className="bubble-stamp" />
           ) : (
             <>
-              {hasText && <p className="bubble-text">{highlightText(message.content)}{message.is_edited && <span className="bubble-edited"> (編集済み)</span>}</p>}
+              {hasText && (mdPreview && !searchKeyword ? (
+                <div className="bubble-text bubble-markdown">
+                  <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                  {message.is_edited && <span className="bubble-edited"> (編集済み)</span>}
+                </div>
+              ) : (
+                <p className="bubble-text">{highlightText(message.content)}{message.is_edited && <span className="bubble-edited"> (編集済み)</span>}</p>
+              ))}
               {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {message.type !== 'voice' && renderMedia()}
             </>

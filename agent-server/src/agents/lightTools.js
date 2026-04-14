@@ -6,12 +6,14 @@ const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../lib/logger');
+const config = require('../config');
+const botApi = require('../lib/botApi');
 const { writeMemory, readMemory } = require('../memory/fileMemory');
 
 /**
  * ワークスペース用のカスタムツール一覧を作成
  */
-function createTools(workspacePath) {
+function createTools(workspacePath, roomId) {
   const tools = [];
 
   // メモリ書き込み
@@ -80,6 +82,57 @@ function createTools(workspacePath) {
       }
     },
   }));
+
+  // 画像生成（DALL-E）
+  if (roomId) {
+    tools.push(tool({
+      name: 'generate_image',
+      description: '指定されたプロンプトに基づいて画像を生成する。風景、動物、イラスト、図解など何でも生成可能。',
+      parameters: z.object({
+        prompt: z.string().describe('画像生成のプロンプト（英語推奨。日本語でも可）'),
+      }),
+      execute: async ({ prompt }) => {
+        try {
+          await botApi.pushStatus(roomId, 'generating', '画像生成中...').catch(() => {});
+          logger.info(`[Image] Generating: ${prompt.slice(0, 80)}`);
+          const res = await fetch('https://api.openai.com/v1/images/generations', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-image-1',
+              prompt,
+              n: 1,
+              size: '1024x1024',
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error?.message || 'Image generation failed');
+
+          const image = data.data[0];
+          let buffer;
+          if (image.b64_json) {
+            buffer = Buffer.from(image.b64_json, 'base64');
+          } else if (image.url) {
+            const imgRes = await fetch(image.url);
+            buffer = Buffer.from(await imgRes.arrayBuffer());
+          } else {
+            throw new Error('No image data in response');
+          }
+
+          const filename = `generated_${Date.now()}.png`;
+          await botApi.pushImage(roomId, buffer, filename);
+          logger.info(`[Image] Generated and sent (${buffer.length} bytes)`);
+          return '画像を生成してチャットに送信しました。';
+        } catch (err) {
+          logger.error(`[Image] Generation failed: ${err.message}`);
+          return `画像生成に失敗しました: ${err.message}`;
+        }
+      },
+    }));
+  }
 
   return tools;
 }

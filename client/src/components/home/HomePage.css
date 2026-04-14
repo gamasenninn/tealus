@@ -98,7 +98,7 @@
 }
 
 .announcement-body {
-  font-size: 14px;
+  font-size: var(--chat-font-size);
   line-height: 1.6;
   color: var(--text-primary);
 }

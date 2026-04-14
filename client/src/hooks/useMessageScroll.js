@@ -26,6 +26,7 @@ export function useMessageScroll(roomId) {
     window.addEventListener('scroll:bottom', handleScrollBottom);
 
     return () => {
+      sessionStorage.removeItem(`scrollPos:${roomId}`);
       window.removeEventListener('scroll:bottom', handleScrollBottom);
     };
   }, [roomId]);
@@ -35,10 +36,25 @@ export function useMessageScroll(roomId) {
     if (messages.length === 0) return;
 
     if (isInitialLoad.current) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView();
-        markVisibleAsRead();
-      }, INITIAL_SCROLL_DELAY);
+      const savedScrollTop = sessionStorage.getItem(`scrollPos:${roomId}`);
+
+      if (savedScrollTop !== null) {
+        // Restore saved position (returning from navigation)
+        setTimeout(() => {
+          const container = messagesContainerRef.current;
+          if (container) {
+            container.scrollTop = parseInt(savedScrollTop);
+          }
+          markVisibleAsRead();
+        }, INITIAL_SCROLL_DELAY);
+        sessionStorage.removeItem(`scrollPos:${roomId}`);
+      } else {
+        // First visit: scroll to bottom
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView();
+          markVisibleAsRead();
+        }, INITIAL_SCROLL_DELAY);
+      }
       isInitialLoad.current = false;
     } else {
       const container = messagesContainerRef.current;
@@ -68,6 +84,9 @@ export function useMessageScroll(roomId) {
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
+
+    // Save scroll position on every scroll (for browser navigation restore)
+    sessionStorage.setItem(`scrollPos:${roomId}`, container.scrollTop);
 
     if (container.scrollTop < SCROLL_THRESHOLD && hasMore) {
       const prevScrollHeight = container.scrollHeight;

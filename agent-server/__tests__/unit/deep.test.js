@@ -4,6 +4,7 @@
 
 jest.mock('../../src/lib/botApi', () => ({
   pushMessage: jest.fn().mockResolvedValue({ message: {} }),
+  pushStatus: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 jest.mock('../../src/context/sessionManager', () => ({

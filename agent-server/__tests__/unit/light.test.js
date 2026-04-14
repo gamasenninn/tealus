@@ -5,17 +5,21 @@
 jest.mock('../../src/lib/botApi', () => ({
   getMessages: jest.fn().mockResolvedValue({ messages: [] }),
   pushMessage: jest.fn().mockResolvedValue({ message: {} }),
+  pushStatus: jest.fn().mockResolvedValue({ success: true }),
   getBotUserId: jest.fn(() => 'bot-uuid'),
 }));
 
 // @openai/agents をモック
 const mockRun = jest.fn();
-jest.mock('@openai/agents', () => ({
-  Agent: jest.fn().mockImplementation((opts) => ({ ...opts, _type: 'Agent' })),
-  run: mockRun,
-  tool: jest.fn((opts) => ({ name: opts.name, _type: 'tool' })),
-  webSearchTool: jest.fn(() => ({ name: 'web_search', _type: 'tool' })),
-}));
+jest.mock('@openai/agents', () => {
+  const { EventEmitter } = require('events');
+  return {
+    Agent: jest.fn().mockImplementation((opts) => ({ ...opts, _type: 'Agent', eventEmitter: new EventEmitter(), on: jest.fn() })),
+    run: mockRun,
+    tool: jest.fn((opts) => ({ name: opts.name, _type: 'tool' })),
+    codeInterpreterTool: jest.fn(() => ({ name: 'code_interpreter', _type: 'tool' })),
+  };
+});
 
 jest.mock('zod', () => ({
   z: { object: jest.fn(() => ({})), string: jest.fn(() => ({ describe: jest.fn(() => ({})), optional: jest.fn(() => ({ describe: jest.fn(() => ({})) })) })) },

@@ -98,7 +98,6 @@ async function _dispatch({ message, room, agentId, agentName }) {
 
     case 'deep':
       // Deep Agent（claude -p）
-      await botApi.pushMessage(roomId, '🔍 高度な分析を開始します。少しお時間をいただきます...');
       await updateStatus(agentId, roomId, 'processing');
       try {
         await processDeep({

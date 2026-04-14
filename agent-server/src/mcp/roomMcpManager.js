@@ -1,10 +1,10 @@
 /**
  * ルームごとの動的MCP接続キャッシュ
  *
- * 3層MCP:
+ * MCP構成:
  * 1. filesystem MCP: ルームごとに自動生成（ワークスペースがルート）
  * 2. ルーム固有MCP: workspace/mcp_config.json（任意）
- * 3. グローバルMCP: agent-server/mcp_config.json
+ * 3. グローバルMCP: agent-server/mcp_config.json（全ルーム共有、1プロセスのみ）
  */
 const { MCPServerStdio } = require('@openai/agents');
 const fs = require('fs');
@@ -12,9 +12,40 @@ const path = require('path');
 const config = require('../config');
 const logger = require('../lib/logger');
 
-// キャッシュ: key = "${agentId}:${roomId}"
+// ルーム固有キャッシュ: key = "${agentId}:${roomId}"
 const roomMcpCache = new Map();
+// グローバルMCP共有キャッシュ（全ルームで1セット）
+let sharedGlobalServers = null;
 let sweepTimer = null;
+
+/**
+ * グローバルMCPサーバーを取得（初回のみ接続）
+ */
+async function getOrCreateSharedGlobal() {
+  if (sharedGlobalServers) return sharedGlobalServers;
+
+  const globalConfigPath = path.join(__dirname, '..', '..', 'mcp_config.json');
+  if (!fs.existsSync(globalConfigPath)) return [];
+
+  try {
+    const globalConfig = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
+    if (!globalConfig.mcpServers) return [];
+
+    // filesystem はルームごとに自動生成するのでグローバルからは除外
+    const filtered = {};
+    for (const [name, def] of Object.entries(globalConfig.mcpServers)) {
+      if (name !== 'filesystem') filtered[name] = def;
+    }
+
+    sharedGlobalServers = await connectFromConfig(filtered, 'global');
+    logger.info(`[RoomMCP] Shared global: ${sharedGlobalServers.length} servers connected`);
+  } catch (err) {
+    logger.error(`[RoomMCP] Global config error: ${err.message}`);
+    sharedGlobalServers = [];
+  }
+
+  return sharedGlobalServers;
+}
 
 /**
  * ルーム用のMCPサーバー一覧を取得（キャッシュ付き）
@@ -25,7 +56,9 @@ async function getOrCreateRoomMcp(agentId, roomId, workspacePath) {
   if (roomMcpCache.has(key)) {
     const entry = roomMcpCache.get(key);
     entry.lastAccessedAt = Date.now();
-    return entry.servers;
+    // ルーム固有 + 共有グローバルをマージして返す
+    const globalServers = await getOrCreateSharedGlobal();
+    return [...entry.servers, ...globalServers];
   }
 
   logger.info(`[RoomMCP] Creating MCP connections for ${key}`);
@@ -50,7 +83,7 @@ async function getOrCreateRoomMcp(agentId, roomId, workspacePath) {
       const normalizedPath = path.resolve(workspacePath).replace(/\\/g, '/');
       const fsServer = new MCPServerStdio({
         name: 'tealus-workspace-fs',
-        fullCommand: `npx -y @modelcontextprotocol/server-filesystem ${normalizedPath}`,
+        fullCommand: `mcp-server-filesystem ${normalizedPath}`,
       });
       await fsServer.connect();
       servers.push(fsServer);
@@ -66,33 +99,18 @@ async function getOrCreateRoomMcp(agentId, roomId, workspacePath) {
     servers.push(...roomServers);
   }
 
-  // 3. グローバル mcp_config.json（filesystemは除外）
-  const globalConfigPath = path.join(__dirname, '..', '..', 'mcp_config.json');
-  if (fs.existsSync(globalConfigPath)) {
-    try {
-      const globalConfig = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
-      if (globalConfig.mcpServers) {
-        // filesystem は自動生成するのでグローバルからは除外
-        const filtered = {};
-        for (const [name, def] of Object.entries(globalConfig.mcpServers)) {
-          if (name !== 'filesystem') filtered[name] = def;
-        }
-        const globalServers = await connectFromConfig(filtered, 'global');
-        servers.push(...globalServers);
-      }
-    } catch (err) {
-      logger.error(`[RoomMCP] Global config error: ${err.message}`);
-    }
-  }
-
+  // ルーム固有サーバーのみキャッシュ（グローバルは共有）
   roomMcpCache.set(key, {
     servers,
     lastAccessedAt: Date.now(),
     workspacePath,
   });
 
-  logger.info(`[RoomMCP] ${key}: ${servers.length} servers connected`);
-  return servers;
+  // 3. グローバルMCP（共有）
+  const globalServers = await getOrCreateSharedGlobal();
+
+  logger.info(`[RoomMCP] ${key}: ${servers.length} room + ${globalServers.length} shared servers`);
+  return [...servers, ...globalServers];
 }
 
 /**
@@ -149,10 +167,20 @@ function stopSweeper() {
  */
 async function closeAllRoomMcp() {
   stopSweeper();
+  // ルーム固有サーバーを close
   for (const [key, entry] of roomMcpCache) {
     await closeEntry(entry);
   }
   roomMcpCache.clear();
+
+  // 共有グローバルサーバーを close
+  if (sharedGlobalServers) {
+    for (const server of sharedGlobalServers) {
+      try { await server.close(); } catch (e) { /* ignore */ }
+    }
+    sharedGlobalServers = null;
+  }
+
   logger.info('[RoomMCP] All room MCP connections closed');
 }
 

@@ -152,7 +152,7 @@ function WebhookManager() {
                 <select value={formRoomId} onChange={e => setFormRoomId(e.target.value)}>
                   <option value="">全ルーム</option>
                   {rooms.map(r => (
-                    <option key={r.id} value={r.id}>{r.name || 'DM'}</option>
+                    <option key={r.id} value={r.id}>{r.name || r.partner_display_name || 'DM'}</option>
                   ))}
                 </select>
               </div>

@@ -136,6 +136,16 @@ async function fireWebhooks(eventType, roomId, payload) {
           payload.room.type = roomResult.rows[0].type;
         }
       }
+      // DM ルームの場合、メンバー名をルーム名として設定
+      if (!payload.room.name && payload.room.type === 'direct') {
+        const membersResult = await pool.query(
+          `SELECT u.display_name FROM room_members rm JOIN users u ON u.id = rm.user_id WHERE rm.room_id = $1`,
+          [roomId]
+        );
+        if (membersResult.rows.length > 0) {
+          payload.room.name = membersResult.rows.map(r => r.display_name).join(' ↔ ');
+        }
+      }
     }
 
     const body = JSON.stringify({

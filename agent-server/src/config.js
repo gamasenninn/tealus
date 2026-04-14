@@ -17,6 +17,9 @@ module.exports = {
   AGENT_LIGHT_MODEL: process.env.AGENT_LIGHT_MODEL || 'gpt-5.4-mini',
   AGENT_ROUTER_MODEL: process.env.AGENT_ROUTER_MODEL || 'gpt-5.4-mini',
 
+  // Tavily
+  TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+
   // Workspace
   WORKSPACE_ROOT: process.env.AGENT_WORKSPACE_ROOT || './agent-workspaces',
 

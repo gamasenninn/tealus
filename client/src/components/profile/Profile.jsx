@@ -20,6 +20,7 @@ function Profile() {
   const [saving, setSaving] = useState(false);
   const [chatFontSize, setChatFontSize] = useState(localStorage.getItem('chatFontSize') || 'medium');
   const [notificationSound, setNotificationSound] = useState(localStorage.getItem('notificationSound') !== 'off');
+  const [mdPreview, setMdPreview] = useState(localStorage.getItem('mdPreview') !== 'off');
 
   const showMessage = (msg) => {
     setMessage(msg);
@@ -206,6 +207,21 @@ function Profile() {
             }}
           />
           <span>メッセージ受信時に通知音を鳴らす</span>
+        </label>
+      </div>
+
+      <div className="profile-section">
+        <h2>Markdownプレビュー</h2>
+        <label className="notification-toggle">
+          <input
+            type="checkbox"
+            checked={mdPreview}
+            onChange={(e) => {
+              setMdPreview(e.target.checked);
+              localStorage.setItem('mdPreview', e.target.checked ? 'on' : 'off');
+            }}
+          />
+          <span>メッセージをMarkdown形式で表示する</span>
         </label>
       </div>
 

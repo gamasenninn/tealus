@@ -1,8 +1,13 @@
 const logger = require('../utils/logger');
 const E = require('../constants/errors');
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { upload, MEDIA_ROOT } = require('../middleware/upload');
+const { generateThumbnail } = require('../services/thumbnail');
 
 const router = express.Router();
 
@@ -64,6 +69,121 @@ router.post('/push', async (req, res) => {
   } catch (err) {
     logger.error('Bot push error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * POST /api/bot/status
+ * Send a status update to a room (displayed as typing-indicator style, not a message)
+ */
+router.post('/status', async (req, res) => {
+  const { room_id, status, message } = req.body;
+  const userId = req.user.id;
+
+  if (!room_id) {
+    return res.status(400).json({ error: 'room_id は必須です' });
+  }
+  if (!status) {
+    return res.status(400).json({ error: 'status は必須です' });
+  }
+
+  try {
+    const { io } = require('../app');
+    io.to(room_id).emit('agent:status', {
+      agent_id: userId,
+      room_id,
+      status,
+      message: message || '',
+      display_name: req.user.display_name,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Bot status error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * POST /api/bot/push-image
+ * Send an image message to a room
+ */
+router.post('/push-image', upload.single('image'), async (req, res) => {
+  const { room_id, content } = req.body;
+  const userId = req.user.id;
+  const file = req.file;
+
+  if (!room_id) {
+    return res.status(400).json({ error: 'room_id は必須です' });
+  }
+  if (!file) {
+    return res.status(400).json({ error: '画像ファイルが添付されていません' });
+  }
+
+  const client = await pool.connect();
+  try {
+    // Check membership
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      client.release();
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    await client.query('BEGIN');
+
+    // Create image message
+    const msgResult = await client.query(
+      `INSERT INTO messages (room_id, sender_id, content, type)
+       VALUES ($1, $2, $3, 'image')
+       RETURNING *`,
+      [room_id, userId, content || null]
+    );
+    const message = msgResult.rows[0];
+
+    // Get image dimensions
+    const relativePath = `images/${file.filename}`;
+    let width = null;
+    let height = null;
+    try {
+      const sharp = require('sharp');
+      const metadata = await sharp(file.path).metadata();
+      width = metadata.width;
+      height = metadata.height;
+    } catch (e) { /* ignore */ }
+
+    // Generate thumbnail
+    const thumbnailPath = await generateThumbnail(file.path, file.mimetype);
+
+    // Insert media record
+    const mediaResult = await client.query(
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [message.id, relativePath, file.originalname, file.mimetype, file.size, width, height, thumbnailPath]
+    );
+
+    await client.query('COMMIT');
+
+    // Socket.IO broadcast
+    const { io } = require('../app');
+    io.to(room_id).emit('message:new', {
+      ...message,
+      sender_display_name: req.user.display_name,
+      sender_avatar_url: req.user.avatar_url,
+      media: [mediaResult.rows[0]],
+    });
+
+    logger.info(`Bot push-image: ${req.user.display_name} → room ${room_id}`);
+    res.status(201).json({ message, media: [mediaResult.rows[0]] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Bot push-image error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  } finally {
+    client.release();
   }
 });
 
@@ -270,9 +390,18 @@ router.get('/rooms', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT r.id, r.type, r.name, r.icon_url, r.created_at,
-              (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count
+              (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count,
+              partner.display_name AS partner_display_name,
+              partner.avatar_url AS partner_avatar_url
        FROM rooms r
        JOIN room_members rm ON rm.room_id = r.id
+       LEFT JOIN LATERAL (
+         SELECT u2.display_name, u2.avatar_url
+         FROM room_members rm2
+         JOIN users u2 ON u2.id = rm2.user_id
+         WHERE rm2.room_id = r.id AND rm2.user_id != $1
+         LIMIT 1
+       ) partner ON r.type = 'direct'
        WHERE rm.user_id = $1
        ORDER BY r.created_at DESC`,
       [userId]

@@ -65,6 +65,35 @@ async function pushMessage(roomId, content) {
 }
 
 /**
+ * ルームにステータスを通知（typing-indicator風の一時表示）
+ */
+async function pushStatus(roomId, status, message = '') {
+  return request('POST', '/bot/status', { room_id: roomId, status, message });
+}
+
+/**
+ * ルームに画像メッセージ送信
+ */
+async function pushImage(roomId, buffer, filename, content = '') {
+  const { token: t } = await login();
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('room_id', roomId);
+  form.append('image', buffer, { filename, contentType: 'image/png' });
+  if (content) form.append('content', content);
+
+  const res = await fetch(`${config.TEALUS_API_URL}/api/bot/push-image`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${t}`,
+      ...form.getHeaders(),
+    },
+    body: form,
+  });
+  return res.json();
+}
+
+/**
  * ルームのメッセージ履歴を取得
  */
 async function getMessages(roomId, limit = 20) {
@@ -96,6 +125,8 @@ module.exports = {
   login,
   getBotUserId,
   pushMessage,
+  pushStatus,
+  pushImage,
   getMessages,
   getRooms,
   joinRoom,

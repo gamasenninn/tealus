@@ -94,7 +94,6 @@
   display: flex;
   align-items: center;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border-light);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -155,7 +154,7 @@
 }
 
 .room-name {
-  font-size: 17px;
+  font-size: calc(var(--chat-font-size) + 2px);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -177,7 +176,7 @@
 }
 
 .room-preview {
-  font-size: 14px;
+  font-size: var(--chat-font-size);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;

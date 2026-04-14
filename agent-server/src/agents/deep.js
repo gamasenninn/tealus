@@ -42,6 +42,8 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     logger.info(`Deep Agent starting: claude ${args.join(' ').slice(0, 100)}...`);
 
+    botApi.pushStatus(roomId, 'thinking', '高度な分析中...').catch(() => {});
+
     // Windows では .cmd を使う
     const claudeCmd = process.platform === 'win32' ? 'claude.cmd' : 'claude';
     const proc = spawn(claudeCmd, args, {
@@ -66,9 +68,9 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       const chunk = data.toString();
       stdout += chunk;
 
-      // 進捗検知: 長い出力の途中でチェックポイント報告
+      // 進捗検知: 長い出力の途中でステータス更新
       if (stdout.length > 500 && stdout.length % 1000 < chunk.length) {
-        botApi.pushMessage(roomId, '📊 処理中...').catch(() => {});
+        botApi.pushStatus(roomId, 'thinking', '分析中...').catch(() => {});
       }
     });
 
@@ -78,6 +80,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     proc.on('close', async (code) => {
       clearTimeout(timer);
+      await botApi.pushStatus(roomId, 'idle').catch(() => {});
 
       if (timedOut) {
         await botApi.pushMessage(roomId, `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`);
@@ -116,6 +119,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     proc.on('error', async (err) => {
       clearTimeout(timer);
+      await botApi.pushStatus(roomId, 'idle').catch(() => {});
       logger.error(`Deep Agent spawn error: ${err.message}`);
       await botApi.pushMessage(roomId, `❌ Deep Agent の起動に失敗しました: ${err.message}`);
       resolve();

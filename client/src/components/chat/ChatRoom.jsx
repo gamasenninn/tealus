@@ -44,7 +44,7 @@ function ChatRoom() {
   }, [targetMsgId, messages.length]);
 
   // Custom hooks
-  const { typingUsers } = useSocketSync(roomId, targetMsgId);
+  const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
   const { messagesEndRef, messagesContainerRef, stickyDate, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
 
@@ -120,9 +120,11 @@ function ChatRoom() {
         <div ref={messagesEndRef} />
       </div>
 
-      {Object.keys(typingUsers).length > 0 && (
+      {(Object.keys(typingUsers).length > 0 || agentStatus) && (
         <div className="typing-indicator">
-          {Object.values(typingUsers).join(', ')}が入力中...
+          {agentStatus
+            ? `${agentStatus.display_name}: ${agentStatus.message || agentStatus.status}`
+            : `${Object.values(typingUsers).join(', ')}が入力中...`}
         </div>
       )}
 

@@ -1,19 +1,18 @@
 /**
  * ヘルスチェックのテスト
+ * app.js を使う（index.js の app.listen を回避）
  */
 const request = require('supertest');
 
-// supertest が未インストールの場合を考慮
-let app;
-try {
-  app = require('../../src/index').app;
-} catch (e) {
-  // 依存関係未インストール時はスキップ
-}
+jest.mock('../../src/webhook/routes', () => {
+  const express = require('express');
+  return express.Router();
+});
+
+const { app } = require('../../src/app');
 
 describe('Health Check', () => {
   test('GET /health が200を返す', async () => {
-    if (!app) return;
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');

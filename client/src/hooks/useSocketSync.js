@@ -15,6 +15,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
   const { selectRoom, clearCurrentRoom } = useRoomStore();
   const { addMessage, fetchMessages, clearMessages, updateMessageContent } = useMessageStore();
   const [typingUsers, setTypingUsers] = useState({});
+  const [agentStatus, setAgentStatus] = useState(null);
 
   useEffect(() => {
     selectRoom(roomId);
@@ -101,6 +102,10 @@ export function useSocketSync(roomId, targetMsgId = null) {
           return next;
         });
       });
+
+      socket.on('agent:status', (data) => {
+        setAgentStatus(data.status === 'idle' ? null : data);
+      });
     }
 
     return () => {
@@ -120,10 +125,11 @@ export function useSocketSync(roomId, targetMsgId = null) {
         socket.off('typing:stop');
         socket.off('message:reaction');
         socket.off('link:preview');
+        socket.off('agent:status');
         socket.off('connect');
       }
     };
   }, [roomId]);
 
-  return { typingUsers };
+  return { typingUsers, agentStatus };
 }

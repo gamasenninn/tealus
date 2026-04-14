@@ -298,3 +298,73 @@
   border-radius: 8px;
 }
 
+/* Markdown preview styles */
+.bubble-markdown {
+  white-space: normal;
+}
+.bubble-markdown p {
+  margin: 0 0 0.15em;
+}
+.bubble-markdown p:last-child {
+  margin-bottom: 0;
+}
+.bubble-markdown h1,
+.bubble-markdown h2,
+.bubble-markdown h3 {
+  margin: 0.5em 0 0.3em;
+  font-size: 1.05em;
+  font-weight: 600;
+}
+.bubble-markdown h1 { font-size: 1.15em; }
+.bubble-markdown ul,
+.bubble-markdown ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+.bubble-markdown li {
+  margin: 0.15em 0;
+}
+.bubble-markdown code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+}
+.bubble-markdown pre {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 8px 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.4em 0;
+}
+.bubble-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.bubble-markdown blockquote {
+  margin: 0.4em 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--primary);
+  background: rgba(0, 180, 160, 0.06);
+}
+.bubble-markdown table {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.9em;
+}
+.bubble-markdown th,
+.bubble-markdown td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+.bubble-markdown th {
+  background: rgba(0, 0, 0, 0.04);
+  font-weight: 600;
+}
+.bubble-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.5em 0;
+}
+

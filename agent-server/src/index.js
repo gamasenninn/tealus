@@ -2,27 +2,11 @@
  * Tealus Agent Server
  * AIエージェントの3層アーキテクチャ（Router + Light + Deep）
  */
-const express = require('express');
 const config = require('./config');
 const logger = require('./lib/logger');
-const webhookRoutes = require('./webhook/routes');
+const { app } = require('./app');
 const { initializeAgent } = require('./setup/register');
 const { closeAllRoomMcp } = require('./mcp/roomMcpManager');
-
-const app = express();
-app.use(express.json());
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'tealus-agent-server',
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Webhook endpoint
-app.use('/webhook', webhookRoutes);
 
 // Start server
 app.listen(config.PORT, async () => {
@@ -42,5 +26,3 @@ const shutdown = async () => {
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-
-module.exports = { app };

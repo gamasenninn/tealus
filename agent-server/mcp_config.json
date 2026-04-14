@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./agent-workspaces"]
+      "command": "mcp-server-filesystem",
+      "args": ["./agent-workspaces"]
+    },
+    "tavily": {
+      "command": "tavily-mcp"
     }
   }
 }
