@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
+import { agentApi } from '../services/agentApi';
 import { getSocket } from '../services/socket';
-import { Activity, MessageSquare, Clock, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, MessageSquare, Clock, BarChart3, ChevronLeft, ChevronRight, Terminal, RefreshCw, Search } from 'lucide-react';
 
 function Monitor() {
   const [tab, setTab] = useState('realtime');
@@ -10,7 +11,16 @@ function Monitor() {
   const [logs, setLogs] = useState({ messages: [], total: 0 });
   const [logPage, setLogPage] = useState(0);
   const [logRoomFilter, setLogRoomFilter] = useState('');
+  const [serverLogs, setServerLogs] = useState({ logs: [], total: 0, date: '' });
+  const [srvLogDate, setSrvLogDate] = useState('');
+  const [srvLogDates, setSrvLogDates] = useState([]);
+  const [srvLogLevel, setSrvLogLevel] = useState('');
+  const [srvLogQuery, setSrvLogQuery] = useState('');
+  const [srvLogPage, setSrvLogPage] = useState(0);
+  const [srvAutoRefresh, setSrvAutoRefresh] = useState(false);
+  const autoRefreshRef = useRef(null);
   const PAGE_SIZE = 20;
+  const SRV_PAGE_SIZE = 100;
 
   // リアルタイムイベント
   useEffect(() => {
@@ -56,10 +66,36 @@ function Monitor() {
     }
   }, [tab, logPage, logRoomFilter]);
 
+  // サーバーログ
+  const fetchServerLogs = () => {
+    agentApi.getLogs(srvLogDate || null, SRV_PAGE_SIZE, srvLogPage * SRV_PAGE_SIZE, srvLogLevel || null, srvLogQuery || null)
+      .then(setServerLogs).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (tab === 'serverLogs') {
+      agentApi.getLogDates().then(d => setSrvLogDates(d.dates)).catch(() => {});
+      fetchServerLogs();
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab === 'serverLogs') fetchServerLogs();
+  }, [srvLogDate, srvLogLevel, srvLogQuery, srvLogPage]);
+
+  // 自動更新
+  useEffect(() => {
+    if (srvAutoRefresh && tab === 'serverLogs') {
+      autoRefreshRef.current = setInterval(fetchServerLogs, 5000);
+    }
+    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+  }, [srvAutoRefresh, tab, srvLogDate, srvLogLevel, srvLogQuery, srvLogPage]);
+
   const tabs = [
     { id: 'realtime', label: 'リアルタイム', icon: Activity },
     { id: 'stats', label: '統計', icon: BarChart3 },
     { id: 'logs', label: '応答ログ', icon: MessageSquare },
+    { id: 'serverLogs', label: 'サーバーログ', icon: Terminal },
   ];
 
   return (
@@ -179,6 +215,62 @@ function Monitor() {
             </button>
             <span className="setting-desc">ページ {logPage + 1} / {Math.max(1, Math.ceil(logs.total / PAGE_SIZE))}</span>
             <button className="icon-btn" onClick={() => setLogPage(p => p + 1)} disabled={(logPage + 1) * PAGE_SIZE >= logs.total}>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* サーバーログ */}
+      {tab === 'serverLogs' && (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+            <select value={srvLogDate} onChange={e => { setSrvLogDate(e.target.value); setSrvLogPage(0); }} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <option value="">今日</option>
+              {srvLogDates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+
+            <div style={{ display: 'flex', gap: 4 }}>
+              {['', 'error', 'warn', 'info', 'debug'].map(lv => (
+                <button key={lv} className={`badge ${srvLogLevel === lv ? 'active' : 'info'}`}
+                  style={{ cursor: 'pointer', padding: '4px 10px', border: 'none' }}
+                  onClick={() => { setSrvLogLevel(lv); setSrvLogPage(0); }}>
+                  {lv || 'ALL'}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Search size={14} />
+              <input value={srvLogQuery} onChange={e => { setSrvLogQuery(e.target.value); setSrvLogPage(0); }}
+                placeholder="キーワード検索" style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, width: 200 }} />
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+              <input type="checkbox" checked={srvAutoRefresh} onChange={e => setSrvAutoRefresh(e.target.checked)} />
+              <RefreshCw size={14} /> 自動更新
+            </label>
+
+            <span className="setting-desc">{serverLogs.total} 件</span>
+          </div>
+
+          <div className="monitor-feed" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+            {serverLogs.logs.length === 0 && <p className="empty">ログなし</p>}
+            {serverLogs.logs.map((log, i) => (
+              <div key={i} className="monitor-event">
+                <span className="monitor-time">{log.timestamp}</span>
+                <span className={`badge log-${log.level}`} style={{ minWidth: 50, textAlign: 'center' }}>{log.level}</span>
+                <span className="monitor-detail" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{log.message}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 16 }}>
+            <button className="icon-btn" onClick={() => setSrvLogPage(p => Math.max(0, p - 1))} disabled={srvLogPage === 0}>
+              <ChevronLeft size={16} />
+            </button>
+            <span className="setting-desc">ページ {srvLogPage + 1} / {Math.max(1, Math.ceil(serverLogs.total / SRV_PAGE_SIZE))}</span>
+            <button className="icon-btn" onClick={() => setSrvLogPage(p => p + 1)} disabled={(srvLogPage + 1) * SRV_PAGE_SIZE >= serverLogs.total}>
               <ChevronRight size={16} />
             </button>
           </div>

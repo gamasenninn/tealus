@@ -207,6 +207,12 @@ body {
 .alert.success { background: #dcfce7; color: #16a34a; }
 .alert.error { background: #fef2f2; color: #dc2626; }
 
+/* Log level badges */
+.badge.log-error { background: #fef2f2; color: #dc2626; }
+.badge.log-warn { background: #fef3c7; color: #d97706; }
+.badge.log-info { background: #dbeafe; color: #2563eb; }
+.badge.log-debug { background: #f1f5f9; color: #64748b; }
+
 /* Tabs */
 .tabs {
   display: flex;

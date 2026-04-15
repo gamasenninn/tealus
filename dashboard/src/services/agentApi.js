@@ -38,6 +38,18 @@ class AgentApiClient {
   getEnv() {
     return this.request('GET', '/config/env');
   }
+
+  // ログ
+  getLogs(date = null, limit = 100, offset = 0, level = null, q = null) {
+    let url = `/logs?limit=${limit}&offset=${offset}`;
+    if (date) url += `&date=${date}`;
+    if (level) url += `&level=${level}`;
+    if (q) url += `&q=${encodeURIComponent(q)}`;
+    return this.request('GET', url);
+  }
+  getLogDates() {
+    return this.request('GET', '/logs/dates');
+  }
   getSystemPrompt() {
     return this.request('GET', '/config/system-prompt');
   }
