@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Bot, MessageSquare, Activity, LogOut } from 'lucide-react';
+import { LayoutDashboard, Bot, MessageSquare, Activity, LogOut, PanelLeftClose } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
-function Sidebar() {
+function Sidebar({ open, onToggle }) {
   const { logout } = useAuthStore();
 
   const links = [
@@ -13,14 +13,16 @@ function Sidebar() {
   ];
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? '' : 'closed'}`}>
       <div className="sidebar-header">
         <h1>Tealus</h1>
-        <span className="sidebar-subtitle">System Dashboard</span>
+        <button className="sidebar-close-btn" onClick={onToggle} title="サイドバーを閉じる">
+          <PanelLeftClose size={18} />
+        </button>
       </div>
       <nav className="sidebar-nav">
         {links.map(({ to, icon: Icon, label }) => (
-          <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={() => { if (window.innerWidth < 768) onToggle(); }}>
             <Icon size={18} />
             <span>{label}</span>
           </NavLink>
