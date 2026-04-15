@@ -49,6 +49,16 @@ class ApiClient {
   getWebhooks() {
     return this.request('GET', '/admin/webhooks');
   }
+
+  // モニタリング
+  getAgentStats() {
+    return this.request('GET', '/admin/agent-stats');
+  }
+  getAgentLogs(offset = 0, limit = 20, roomId = null) {
+    let url = `/admin/agent-logs?offset=${offset}&limit=${limit}`;
+    if (roomId) url += `&room_id=${roomId}`;
+    return this.request('GET', url);
+  }
 }
 
 export const api = new ApiClient();
