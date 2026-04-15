@@ -163,6 +163,19 @@ function stopSweeper() {
 }
 
 /**
+ * 特定ルームのMCPキャッシュを無効化（次回アクセス時に再接続）
+ */
+async function invalidateRoomMcp(agentId, roomId) {
+  const key = `${agentId}:${roomId}`;
+  if (roomMcpCache.has(key)) {
+    const entry = roomMcpCache.get(key);
+    await closeEntry(entry);
+    roomMcpCache.delete(key);
+    logger.info(`[RoomMCP] Invalidated: ${key}`);
+  }
+}
+
+/**
  * 全MCP接続を切断
  */
 async function closeAllRoomMcp() {
@@ -195,6 +208,7 @@ async function closeEntry(entry) {
 
 module.exports = {
   getOrCreateRoomMcp,
+  invalidateRoomMcp,
   closeAllRoomMcp,
   startSweeper,
   stopSweeper,

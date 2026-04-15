@@ -9,6 +9,7 @@ const logger = require('../lib/logger');
 const { getAllSettings, saveSettings, loadSettings } = require('../context/settingsManager');
 const botApi = require('../lib/botApi');
 const config = require('../config');
+const { invalidateRoomMcp } = require('../mcp/roomMcpManager');
 
 const router = express.Router();
 
@@ -234,6 +235,11 @@ router.put('/room/:roomId/mcp', (req, res) => {
   try {
     if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
     fs.writeFileSync(path.join(ws, 'mcp_config.json'), JSON.stringify(mcpConfig, null, 2) + '\n');
+    // MCP キャッシュを即時無効化（次回メッセージで新設定で再接続）
+    const agentId = botApi.getBotUserId();
+    if (agentId) {
+      invalidateRoomMcp(agentId, req.params.roomId).catch(() => {});
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
