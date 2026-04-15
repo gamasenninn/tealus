@@ -19,7 +19,7 @@ router.use(authenticate, requireAdmin);
 router.get('/users', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, last_seen_at, created_at, updated_at FROM users ORDER BY created_at'
+      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, is_bot, last_seen_at, created_at, updated_at FROM users ORDER BY created_at'
     );
     res.json({ users: result.rows });
   } catch (err) {
