@@ -51,6 +51,14 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
     name: 'TealusAssistant',
     instructions: () => {
       let prompt = loadSystemPrompt();
+      // ルーム固有 Light プロンプト
+      if (workspacePath) {
+        const lightPromptPath = path.join(workspacePath, 'light_prompt.md');
+        if (fs.existsSync(lightPromptPath)) {
+          const roomPrompt = fs.readFileSync(lightPromptPath, 'utf8').trim();
+          if (roomPrompt) prompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
+        }
+      }
       if (workspacePath && mcpServers.length > 0) {
         const normalizedPath = workspacePath.replace(/\\/g, '/');
         prompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のワークスペースパスを使ってください:\n${normalizedPath}\n例: ${normalizedPath}/hello.txt`;
@@ -59,6 +67,7 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
       if (memory) {
         prompt += `\n\n## 記憶\n${memory}`;
       }
+      logger.debug(`[Light] System prompt: ${prompt.length} chars`);
       return prompt;
     },
     model: config.AGENT_LIGHT_MODEL,

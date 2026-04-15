@@ -61,6 +61,12 @@ class AgentApiClient {
   updateRoomClaudeMd(roomId, content) {
     return this.request('PUT', `/config/room/${roomId}/claude-md`, { content });
   }
+  getRoomLightPrompt(roomId) {
+    return this.request('GET', `/config/room/${roomId}/light-prompt`);
+  }
+  updateRoomLightPrompt(roomId, content) {
+    return this.request('PUT', `/config/room/${roomId}/light-prompt`, { content });
+  }
   getRoomMcp(roomId) {
     return this.request('GET', `/config/room/${roomId}/mcp`);
   }

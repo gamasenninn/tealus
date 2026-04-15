@@ -11,6 +11,7 @@ function RoomSettings() {
   const [room, setRoom] = useState(null);
   const [settings, setSettings] = useState({ response_mode: 'auto', enabled: true });
   const [claudeMd, setClaudeMd] = useState('');
+  const [lightPrompt, setLightPrompt] = useState('');
   const [mcpText, setMcpText] = useState('');
   const [hasMcp, setHasMcp] = useState(false);
   const [message, setMessage] = useState('');
@@ -26,6 +27,7 @@ function RoomSettings() {
     // Agent Server からルーム設定を取得
     agentApi.getRoomSettings(roomId).then(d => setSettings(d.settings)).catch(() => {});
     agentApi.getRoomClaudeMd(roomId).then(d => setClaudeMd(d.content)).catch(() => {});
+    agentApi.getRoomLightPrompt(roomId).then(d => setLightPrompt(d.content)).catch(() => {});
     agentApi.getRoomMcp(roomId).then(d => {
       if (d.mcpConfig) {
         setMcpText(JSON.stringify(d.mcpConfig, null, 2));
@@ -41,6 +43,13 @@ function RoomSettings() {
     try {
       await agentApi.updateRoomSettings(roomId, settings);
       showMessage('ルーム設定を保存しました。Agent Server 再起動で反映されます。');
+    } catch (e) { showError(e.message); }
+  };
+
+  const handleLightPromptSave = async () => {
+    try {
+      await agentApi.updateRoomLightPrompt(roomId, lightPrompt);
+      showMessage('Light プロンプトを保存しました。');
     } catch (e) { showError(e.message); }
   };
 
@@ -62,7 +71,8 @@ function RoomSettings() {
   const roomName = room?.name || room?.partner_display_name || 'ルーム';
   const tabs = [
     { id: 'basic', label: '基本設定' },
-    { id: 'prompt', label: 'プロンプト' },
+    { id: 'light', label: 'Light プロンプト' },
+    { id: 'deep', label: 'Deep プロンプト' },
     { id: 'mcp', label: 'MCP設定' },
   ];
 
@@ -126,10 +136,23 @@ function RoomSettings() {
         </div>
       )}
 
-      {tab === 'prompt' && (
+      {tab === 'light' && (
         <div className="settings-panel">
           <section className="settings-section">
-            <h3>CLAUDE.md（Deep Agent プロンプト）</h3>
+            <h3>Light Agent プロンプト</h3>
+            <p className="setting-desc">Light Agent がこのルームで使用する追加指示。グローバルプロンプトに追記されます。空欄の場合はグローバルプロンプトのみ使用。</p>
+            <textarea className="setting-textarea code" value={lightPrompt} onChange={e => setLightPrompt(e.target.value)} rows={12} placeholder="例: このルームでは在庫管理の専門家として振る舞ってください。" />
+          </section>
+          <button className="save-btn" onClick={handleLightPromptSave}>
+            <Save size={16} /> 保存
+          </button>
+        </div>
+      )}
+
+      {tab === 'deep' && (
+        <div className="settings-panel">
+          <section className="settings-section">
+            <h3>Deep Agent プロンプト（CLAUDE.md）</h3>
             <p className="setting-desc">Deep Agent がこのルームで使用するシステムプロンプト</p>
             <textarea className="setting-textarea code" value={claudeMd} onChange={e => setClaudeMd(e.target.value)} rows={20} />
           </section>

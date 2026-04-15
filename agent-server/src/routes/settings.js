@@ -244,6 +244,38 @@ router.put('/room/:roomId/claude-md', (req, res) => {
 });
 
 /**
+ * GET /config/room/:roomId/light-prompt — light_prompt.md
+ */
+router.get('/room/:roomId/light-prompt', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const filePath = path.join(ws, 'light_prompt.md');
+  try {
+    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /config/room/:roomId/light-prompt — light_prompt.md 書き出し
+ */
+router.put('/room/:roomId/light-prompt', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const { content } = req.body;
+  if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
+  try {
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    fs.writeFileSync(path.join(ws, 'light_prompt.md'), content);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /config/room/:roomId/mcp — ルーム固有 mcp_config.json
  */
 router.get('/room/:roomId/mcp', (req, res) => {
