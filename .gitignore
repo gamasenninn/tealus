@@ -44,3 +44,6 @@ coverage/
 agent-server/agent-workspaces/
 agent-server/test-mcp.js
 agent-server/config/system_prompt.md
+
+# Internal reports
+report/
