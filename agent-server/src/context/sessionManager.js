@@ -23,7 +23,10 @@ async function getOrCreateContext(agentId, roomId) {
   );
 
   if (existing.rows.length > 0) {
-    return existing.rows[0];
+    // workspace_path は常に config から計算（移動に強い）
+    const row = existing.rows[0];
+    row.workspace_path = path.join(config.WORKSPACE_ROOT, agentId, roomId);
+    return row;
   }
 
   // ワークスペースパス生成
