@@ -46,6 +46,9 @@ function MessageInput({ roomId }) {
         await api.sendMessage(roomId, content, replyTo?.id);
       }
       setText('');
+      // textarea の高さをリセット
+      const textarea = document.querySelector('.message-input-text');
+      if (textarea) textarea.style.height = 'auto';
       clearReplyTo();
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       getSocket()?.emit('typing:stop', roomId);
@@ -57,10 +60,17 @@ function MessageInput({ roomId }) {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // textarea 自動拡張
+  const handleInput = (e) => {
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
   };
 
   const handleFileSelect = async (e) => {
@@ -194,8 +204,9 @@ function MessageInput({ roomId }) {
           className="message-input-text"
           value={text}
           onChange={(e) => { setText(e.target.value); emitTyping(); }}
+          onInput={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="メッセージを入力"
+          placeholder={window.innerWidth >= 768 ? 'メッセージを入力（Ctrl+Enterで送信）' : 'メッセージを入力'}
           rows={1}
           disabled={isSending}
         />
