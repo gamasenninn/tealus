@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { agentApi } from '../services/agentApi';
 import { getSocket } from '../services/socket';
-import { Activity, MessageSquare, Clock, BarChart3, ChevronLeft, ChevronRight, Terminal, RefreshCw, Search } from 'lucide-react';
+import { Activity, MessageSquare, ChevronLeft, ChevronRight, Terminal, RefreshCw, Search } from 'lucide-react';
 
 function Monitor() {
   const [tab, setTab] = useState('realtime');
   const [events, setEvents] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [agentStats, setAgentStats] = useState(null);
   const [logs, setLogs] = useState({ messages: [], total: 0 });
   const [logPage, setLogPage] = useState(0);
   const [logRoomFilter, setLogRoomFilter] = useState('');
@@ -51,10 +51,10 @@ function Monitor() {
     };
   }, []);
 
-  // 統計データ
+  // エージェント状態（リアルタイムタブ + 応答ログのルームフィルタ用）
   useEffect(() => {
-    if (tab === 'stats') {
-      api.getAgentStats().then(setStats).catch(() => {});
+    if (tab === 'realtime' || tab === 'logs') {
+      api.getAgentStats().then(setAgentStats).catch(() => {});
     }
   }, [tab]);
 
@@ -93,7 +93,6 @@ function Monitor() {
 
   const tabs = [
     { id: 'realtime', label: 'リアルタイム', icon: Activity },
-    { id: 'stats', label: '統計', icon: BarChart3 },
     { id: 'logs', label: '応答ログ', icon: MessageSquare },
     { id: 'serverLogs', label: 'サーバーログ', icon: Terminal },
   ];
@@ -114,9 +113,9 @@ function Monitor() {
       {/* リアルタイム */}
       {tab === 'realtime' && (
         <>
-          {stats?.contexts && (
+          {agentStats?.contexts && (
             <div className="stat-cards" style={{ marginBottom: 16 }}>
-              {stats.contexts.map(c => (
+              {agentStats.contexts.map(c => (
                 <div key={c.id} className="stat-card" style={{ padding: 16 }}>
                   <div className="setting-label">{c.room_name || c.partner_display_name || 'DM'}</div>
                   <span className={`badge ${c.status === 'processing' ? 'active' : 'info'}`}>{c.status}</span>
@@ -137,49 +136,6 @@ function Monitor() {
         </>
       )}
 
-      {/* 統計 */}
-      {tab === 'stats' && stats && (
-        <>
-          <div className="stat-cards">
-            <div className="stat-card">
-              <MessageSquare size={28} color="#3B82F6" />
-              <div className="stat-value">{stats.stats.today_responses}</div>
-              <div className="stat-label">今日の応答</div>
-            </div>
-            <div className="stat-card">
-              <BarChart3 size={28} color="#8B5CF6" />
-              <div className="stat-value">{stats.stats.week_responses}</div>
-              <div className="stat-label">今週の応答</div>
-            </div>
-            <div className="stat-card">
-              <MessageSquare size={28} color="#00B4A0" />
-              <div className="stat-value">{stats.stats.total_responses}</div>
-              <div className="stat-label">全応答数</div>
-            </div>
-            <div className="stat-card">
-              <Clock size={28} color="#F59E0B" />
-              <div className="stat-value">{stats.stats.avg_response_time_ms ? `${(stats.stats.avg_response_time_ms / 1000).toFixed(1)}s` : '-'}</div>
-              <div className="stat-label">平均応答時間</div>
-            </div>
-          </div>
-
-          <h3 style={{ marginTop: 24, marginBottom: 12 }}>ルーム別応答回数</h3>
-          <table className="data-table">
-            <thead><tr><th>ルーム</th><th>応答回数</th><th>最終応答</th></tr></thead>
-            <tbody>
-              {stats.room_stats.map(r => (
-                <tr key={r.room_id}>
-                  <td>{r.room_name}</td>
-                  <td>{r.count}</td>
-                  <td>{new Date(r.last_at).toLocaleString('ja-JP')}</td>
-                </tr>
-              ))}
-              {stats.room_stats.length === 0 && <tr><td colSpan={3} className="empty">データなし</td></tr>}
-            </tbody>
-          </table>
-        </>
-      )}
-
       {/* 応答ログ */}
       {tab === 'logs' && (
         <>
@@ -187,7 +143,7 @@ function Monitor() {
             <label className="setting-label">ルームフィルタ:</label>
             <select value={logRoomFilter} onChange={e => { setLogRoomFilter(e.target.value); setLogPage(0); }} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)' }}>
               <option value="">全ルーム</option>
-              {stats?.room_stats?.map(r => (
+              {agentStats?.room_stats?.map(r => (
                 <option key={r.room_id} value={r.room_id}>{r.room_name}</option>
               ))}
             </select>
