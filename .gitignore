@@ -11,10 +11,14 @@ client/dist/
 server/dist/
 
 # Media uploads
-media/images/
-media/videos/
+media/avatars/
 media/files/
+media/icons/
+media/images/
+media/stamps/
 media/thumbnails/
+media/videos/
+media/voices/
 
 # OS files
 .DS_Store
