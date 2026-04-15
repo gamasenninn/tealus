@@ -2,6 +2,8 @@
  * Light Agent（OpenAI Agents SDK版）
  * Agent + run() パターンで MCP・ツール・セッション管理に対応
  */
+const fs = require('fs');
+const path = require('path');
 const { Agent, run, codeInterpreterTool } = require('@openai/agents');
 const OpenAI = require('openai');
 const config = require('../config');
@@ -14,16 +16,27 @@ const { getSetting } = require('../context/settingsManager');
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
-const SYSTEM_PROMPT = `あなたはTealusのAIアシスタントです。
-社内メッセンジャー上でチームメンバーとして対等に会話します。
+const CONFIG_DIR = path.join(__dirname, '..', '..', 'config');
 
-## ルール
-- 簡潔で自然な日本語で応答してください
-- 質問には正確に答え、わからない場合は正直に伝えてください
-- 天気、ニュース、最新情報などリアルタイム情報が必要な場合はWeb検索ツールを積極的に使ってください
-- ユーザーの情報は write_memory ツールで保存し、次回以降に活用してください
-- 現在の日時が必要な場合は get_current_time ツールを使ってください
-- 複雑すぎるタスクは「このタスクは高度な分析が必要です」と伝えてください`;
+/**
+ * システムプロンプトを取得
+ * 1. config/system_prompt.md があればそれを使う（カスタム）
+ * 2. なければ config/default_system_prompt.md を使う（デフォルト）
+ */
+function loadSystemPrompt() {
+  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
+  const defaultPath = path.join(CONFIG_DIR, 'default_system_prompt.md');
+  try {
+    if (fs.existsSync(customPath)) {
+      const content = fs.readFileSync(customPath, 'utf8').trim();
+      if (content) return content;
+    }
+    if (fs.existsSync(defaultPath)) {
+      return fs.readFileSync(defaultPath, 'utf8').trim();
+    }
+  } catch {}
+  return 'あなたはTealusのAIアシスタントです。';
+}
 
 /**
  * Light Agent を作成
@@ -37,7 +50,7 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
   const agent = new Agent({
     name: 'TealusAssistant',
     instructions: () => {
-      let prompt = getSetting('system_prompt', '') || SYSTEM_PROMPT;
+      let prompt = loadSystemPrompt();
       if (workspacePath && mcpServers.length > 0) {
         const normalizedPath = workspacePath.replace(/\\/g, '/');
         prompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のワークスペースパスを使ってください:\n${normalizedPath}\n例: ${normalizedPath}/hello.txt`;

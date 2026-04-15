@@ -8,6 +8,9 @@ function AgentSettings() {
   const [mcpConfig, setMcpConfig] = useState({});
   const [mcpText, setMcpText] = useState('');
   const [env, setEnv] = useState({});
+  const [promptCustom, setPromptCustom] = useState('');
+  const [promptDefault, setPromptDefault] = useState('');
+  const [isCustomPrompt, setIsCustomPrompt] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -18,6 +21,11 @@ function AgentSettings() {
       setMcpText(JSON.stringify(d.mcpConfig, null, 2));
     }).catch(() => {});
     agentApi.getEnv().then(d => setEnv(d.env)).catch(() => {});
+    agentApi.getSystemPrompt().then(d => {
+      setPromptCustom(d.custom);
+      setPromptDefault(d.default);
+      setIsCustomPrompt(d.isCustom);
+    }).catch(() => {});
   }, []);
 
   const showMessage = (msg) => { setMessage(msg); setError(''); setTimeout(() => setMessage(''), 3000); };
@@ -27,6 +35,28 @@ function AgentSettings() {
     try {
       await agentApi.updateSettings(settings);
       showMessage('設定を保存しました。Agent Server を再起動すると反映されます。');
+    } catch (e) { showError(e.message); }
+  };
+
+  const handlePromptSave = async () => {
+    try {
+      await agentApi.updateSystemPrompt(promptCustom);
+      setIsCustomPrompt(!!promptCustom.trim());
+      showMessage(promptCustom.trim() ? 'カスタムプロンプトを保存しました。' : 'デフォルトプロンプトに戻しました。');
+    } catch (e) { showError(e.message); }
+  };
+
+  const handleCopyDefault = () => {
+    setPromptCustom(promptDefault);
+    setIsCustomPrompt(true);
+  };
+
+  const handleResetPrompt = async () => {
+    setPromptCustom('');
+    try {
+      await agentApi.updateSystemPrompt('');
+      setIsCustomPrompt(false);
+      showMessage('デフォルトプロンプトに戻しました。');
     } catch (e) { showError(e.message); }
   };
 
@@ -111,8 +141,25 @@ function AgentSettings() {
 
           <section className="settings-section">
             <h3>システムプロンプト</h3>
-            <p className="setting-desc">空欄の場合はデフォルトプロンプトを使用</p>
-            <textarea className="setting-textarea" value={settings.system_prompt ?? ''} onChange={e => updateSetting('system_prompt', e.target.value)} rows={8} placeholder="デフォルトプロンプトを使用..." />
+            <p className="setting-desc">
+              {isCustomPrompt ? 'カスタムプロンプトを使用中' : 'デフォルトプロンプトを使用中'}
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button className="header-btn" onClick={handleCopyDefault} style={{ fontSize: 12 }}>
+                デフォルトから作成
+              </button>
+              {isCustomPrompt && (
+                <button className="header-btn" onClick={handleResetPrompt} style={{ fontSize: 12, background: '#64748b' }}>
+                  <RotateCcw size={14} /> デフォルトに戻す
+                </button>
+              )}
+            </div>
+            <textarea className="setting-textarea" value={isCustomPrompt ? promptCustom : ''} onChange={e => { setPromptCustom(e.target.value); setIsCustomPrompt(true); }} rows={10} placeholder="デフォルトプロンプトを使用中。カスタマイズするには「デフォルトから作成」を押してください。" />
+            {isCustomPrompt && (
+              <button className="save-btn" onClick={handlePromptSave} style={{ marginTop: 8 }}>
+                <Save size={16} /> プロンプト保存
+              </button>
+            )}
           </section>
 
           <button className="save-btn" onClick={handleSettingsSave}>

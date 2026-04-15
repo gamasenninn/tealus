@@ -38,6 +38,12 @@ class AgentApiClient {
   getEnv() {
     return this.request('GET', '/config/env');
   }
+  getSystemPrompt() {
+    return this.request('GET', '/config/system-prompt');
+  }
+  updateSystemPrompt(content) {
+    return this.request('PUT', '/config/system-prompt', { content });
+  }
 
   // ルーム設定
   getRoomsList() {

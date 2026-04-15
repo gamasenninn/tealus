@@ -39,3 +39,4 @@ coverage/
 問題点01.txt
 agent-server/agent-workspaces/
 agent-server/test-mcp.js
+agent-server/config/system_prompt.md

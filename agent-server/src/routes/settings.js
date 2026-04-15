@@ -101,6 +101,43 @@ router.get('/env', (req, res) => {
   }
 });
 
+/**
+ * GET /config/system-prompt — カスタムプロンプトを返す（なければデフォルト）
+ */
+router.get('/system-prompt', (req, res) => {
+  const configDir = path.join(__dirname, '..', '..', 'config');
+  const customPath = path.join(configDir, 'system_prompt.md');
+  const defaultPath = path.join(configDir, 'default_system_prompt.md');
+  try {
+    const custom = fs.existsSync(customPath) ? fs.readFileSync(customPath, 'utf8') : '';
+    const defaultPrompt = fs.existsSync(defaultPath) ? fs.readFileSync(defaultPath, 'utf8') : '';
+    res.json({ custom, default: defaultPrompt, isCustom: !!custom.trim() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /config/system-prompt — カスタムプロンプトを保存
+ */
+router.put('/system-prompt', (req, res) => {
+  const { content } = req.body;
+  if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
+  const configDir = path.join(__dirname, '..', '..', 'config');
+  const customPath = path.join(configDir, 'system_prompt.md');
+  try {
+    if (!content.trim()) {
+      // 空 → カスタムファイル削除（デフォルトに戻す）
+      if (fs.existsSync(customPath)) fs.unlinkSync(customPath);
+    } else {
+      fs.writeFileSync(customPath, content);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // === ルーム設定 API ===
 
 /**
