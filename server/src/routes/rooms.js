@@ -8,7 +8,7 @@ const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember, requireRoomAdmin, requireGroup } = require('../middleware/roomAccess');
 
-const ICON_DIR = path.join(__dirname, '../../../media/icons');
+const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, ICON_DIR),
   filename: (req, file, cb) => {

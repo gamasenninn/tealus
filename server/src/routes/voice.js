@@ -12,7 +12,7 @@ const { fetchReplyMessage } = require('../socket/handlers/message');
 
 const router = express.Router({ mergeParams: true });
 
-const VOICE_DIR = path.join(__dirname, '../../../media/voices');
+const VOICE_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'voices');
 
 const voiceStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, VOICE_DIR),

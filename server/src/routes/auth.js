@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const { generateToken, authenticate } = require('../middleware/auth');
 
-const AVATAR_DIR = path.join(__dirname, '../../../media/avatars');
+const AVATAR_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'avatars');
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, AVATAR_DIR),
   filename: (req, file, cb) => {

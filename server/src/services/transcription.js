@@ -10,7 +10,7 @@ const openai = new OpenAI({
 });
 
 const WHISPER_MODEL = process.env.WHISPER_MODEL || 'whisper-1';
-const MEDIA_ROOT = path.join(__dirname, '../../../media');
+const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../media');
 
 /**
  * Transcribe a voice message using OpenAI Whisper API

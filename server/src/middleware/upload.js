@@ -2,7 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 
-const MEDIA_ROOT = path.join(__dirname, '../../../media');
+const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../media');
 
 // File size limits (bytes)
 const SIZE_LIMITS = {

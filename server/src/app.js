@@ -56,7 +56,7 @@ app.use('/api/messages/:id/tags', tagMessageRoutes);
 app.use('/api/stamps', stampRoutes);
 
 // Static media files
-app.use('/media', express.static(path.join(__dirname, '../../media')));
+app.use('/media', express.static(process.env.MEDIA_ROOT || path.join(__dirname, '../../media')));
 
 // Health check
 app.get('/api/health', (req, res) => {
