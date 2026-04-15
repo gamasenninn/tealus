@@ -10,6 +10,7 @@ function Monitor() {
   const [agentStats, setAgentStats] = useState(null);
   const [logs, setLogs] = useState({ messages: [], total: 0 });
   const [logPage, setLogPage] = useState(0);
+  const [logDetail, setLogDetail] = useState(null);
   const [logRoomFilter, setLogRoomFilter] = useState('');
   const [serverLogs, setServerLogs] = useState({ logs: [], total: 0, date: '' });
   const [srvLogDate, setSrvLogDate] = useState('');
@@ -66,6 +67,14 @@ function Monitor() {
     }
   }, [tab, logPage, logRoomFilter]);
 
+  // 応答ログ詳細
+  const handleLogClick = async (messageId) => {
+    try {
+      const data = await api.getAgentLogContext(messageId);
+      setLogDetail(data);
+    } catch {}
+  };
+
   // サーバーログ
   const fetchServerLogs = () => {
     agentApi.getLogs(srvLogDate || null, SRV_PAGE_SIZE, srvLogPage * SRV_PAGE_SIZE, srvLogLevel || null, srvLogQuery || null)
@@ -86,7 +95,7 @@ function Monitor() {
   // 自動更新
   useEffect(() => {
     if (srvAutoRefresh && tab === 'serverLogs') {
-      autoRefreshRef.current = setInterval(fetchServerLogs, 5000);
+      autoRefreshRef.current = setInterval(fetchServerLogs, 30000);
     }
     return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
   }, [srvAutoRefresh, tab, srvLogDate, srvLogLevel, srvLogQuery, srvLogPage]);
@@ -147,6 +156,9 @@ function Monitor() {
                 <option key={r.room_id} value={r.room_id}>{r.room_name}</option>
               ))}
             </select>
+            <button className="icon-btn" onClick={() => api.getAgentLogs(logPage * PAGE_SIZE, PAGE_SIZE, logRoomFilter || null).then(setLogs).catch(() => {})} title="更新">
+              <RefreshCw size={14} />
+            </button>
             <span className="setting-desc">{logs.total} 件</span>
           </div>
 
@@ -154,7 +166,7 @@ function Monitor() {
             <thead><tr><th>日時</th><th>ルーム</th><th>内容</th><th>タイプ</th></tr></thead>
             <tbody>
               {logs.messages.map(m => (
-                <tr key={m.id}>
+                <tr key={m.id} onClick={() => handleLogClick(m.id)} style={{ cursor: 'pointer' }}>
                   <td style={{ whiteSpace: 'nowrap' }}>{new Date(m.created_at).toLocaleString('ja-JP')}</td>
                   <td>{m.room_name}</td>
                   <td style={{ maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.content || `(${m.type})`}</td>
@@ -202,9 +214,13 @@ function Monitor() {
                 placeholder="キーワード検索" style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, width: 200 }} />
             </div>
 
+            <button className="icon-btn" onClick={fetchServerLogs} title="更新">
+              <RefreshCw size={14} />
+            </button>
+
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
               <input type="checkbox" checked={srvAutoRefresh} onChange={e => setSrvAutoRefresh(e.target.checked)} />
-              <RefreshCw size={14} /> 自動更新
+              自動更新
             </label>
 
             <span className="setting-desc">{serverLogs.total} 件</span>
@@ -231,6 +247,33 @@ function Monitor() {
             </button>
           </div>
         </>
+      )}
+      {/* 応答詳細モーダル */}
+      {logDetail && (
+        <div className="modal-overlay" onClick={() => setLogDetail(null)}>
+          <div className="log-detail-modal" onClick={e => e.stopPropagation()}>
+            <h3>応答詳細</h3>
+            <div className="log-detail-section">
+              <div className="log-detail-label">質問</div>
+              {logDetail.question ? (
+                <div className="log-detail-content question">
+                  <div className="log-detail-meta">{logDetail.question.sender_display_name} — {new Date(logDetail.question.created_at).toLocaleString('ja-JP')}</div>
+                  <div>{logDetail.question.content || `(${logDetail.question.type})`}</div>
+                </div>
+              ) : (
+                <div className="log-detail-content empty">質問が見つかりません</div>
+              )}
+            </div>
+            <div className="log-detail-section">
+              <div className="log-detail-label">応答</div>
+              <div className="log-detail-content response">
+                <div className="log-detail-meta">{logDetail.response.room_name} — {new Date(logDetail.response.created_at).toLocaleString('ja-JP')}</div>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{logDetail.response.content || `(${logDetail.response.type})`}</div>
+              </div>
+            </div>
+            <button className="save-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setLogDetail(null)}>閉じる</button>
+          </div>
+        </div>
       )}
     </div>
   );

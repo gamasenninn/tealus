@@ -518,4 +518,67 @@ router.get('/agent-logs', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/agent-logs/:id/context
+ * Bot 応答の前後コンテキスト（直前のユーザー質問）
+ */
+router.get('/agent-logs/:id/context', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Bot の応答メッセージを取得
+    const botMsg = await pool.query(
+      `SELECT m.*, COALESCE(r.name, partner.display_name, 'DM') AS room_name
+       FROM messages m
+       LEFT JOIN rooms r ON r.id = m.room_id
+       LEFT JOIN LATERAL (
+         SELECT u2.display_name FROM room_members rm2 JOIN users u2 ON u2.id = rm2.user_id
+         WHERE rm2.room_id = r.id AND rm2.user_id != m.sender_id LIMIT 1
+       ) partner ON r.type = 'direct'
+       WHERE m.id = $1`,
+      [id]
+    );
+    if (botMsg.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+
+    const bot = botMsg.rows[0];
+
+    // 直前のユーザーメッセージ（同一ルーム、Bot以外、Bot応答より前）
+    const userMsg = await pool.query(
+      `SELECT m.*, u.display_name AS sender_display_name
+       FROM messages m
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.room_id = $1
+         AND m.created_at < $2
+         AND m.sender_id NOT IN (SELECT id FROM users WHERE is_bot = true)
+         AND m.is_deleted = false
+       ORDER BY m.created_at DESC
+       LIMIT 1`,
+      [bot.room_id, bot.created_at]
+    );
+
+    const question = userMsg.rows[0] || null;
+
+    // 音声メッセージの場合、文字起こしテキストを付加
+    if (question && question.type === 'voice') {
+      const trans = await pool.query(
+        'SELECT formatted_text, raw_text FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+        [question.id]
+      );
+      if (trans.rows.length > 0) {
+        question.content = trans.rows[0].formatted_text || trans.rows[0].raw_text || question.content;
+      }
+    }
+
+    res.json({
+      response: bot,
+      question,
+    });
+  } catch (err) {
+    logger.error('Admin agent-log context error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 module.exports = router;
