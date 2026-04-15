@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { Settings } from 'lucide-react';
 
 function Rooms() {
   const [rooms, setRooms] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.getRooms().then(d => setRooms(d.rooms)).catch(() => {});
@@ -18,6 +21,7 @@ function Rooms() {
             <th>タイプ</th>
             <th>メンバー数</th>
             <th>作成日</th>
+            <th>設定</th>
           </tr>
         </thead>
         <tbody>
@@ -27,12 +31,16 @@ function Rooms() {
               <td><span className={`badge ${r.type}`}>{r.type}</span></td>
               <td>{r.member_count}</td>
               <td>{new Date(r.created_at).toLocaleDateString('ja-JP')}</td>
+              <td>
+                <button className="icon-btn" onClick={() => navigate(`/rooms/${r.id}`)} title="設定">
+                  <Settings size={16} />
+                </button>
+              </td>
             </tr>
           ))}
-          {rooms.length === 0 && <tr><td colSpan={4} className="empty">ルームがありません</td></tr>}
+          {rooms.length === 0 && <tr><td colSpan={5} className="empty">ルームがありません</td></tr>}
         </tbody>
       </table>
-      <p className="hint">エージェント設定は #105 で実装予定</p>
     </div>
   );
 }

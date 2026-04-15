@@ -115,6 +115,12 @@ function initWorkspace(workspacePath) {
 `);
     }
 
+    // room_settings.json 初期化
+    const roomSettingsPath = path.join(workspacePath, 'room_settings.json');
+    if (!fs.existsSync(roomSettingsPath)) {
+      fs.writeFileSync(roomSettingsPath, JSON.stringify({ response_mode: 'auto', enabled: true }, null, 2) + '\n');
+    }
+
     // MEMORY.md 初期化
     const memoryMdPath = path.join(workspacePath, 'memory', 'MEMORY.md');
     if (!fs.existsSync(memoryMdPath)) {

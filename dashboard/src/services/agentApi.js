@@ -38,6 +38,29 @@ class AgentApiClient {
   getEnv() {
     return this.request('GET', '/config/env');
   }
+
+  // ルーム設定
+  getRoomsList() {
+    return this.request('GET', '/config/rooms');
+  }
+  getRoomSettings(roomId) {
+    return this.request('GET', `/config/room/${roomId}/settings`);
+  }
+  updateRoomSettings(roomId, settings) {
+    return this.request('PUT', `/config/room/${roomId}/settings`, { settings });
+  }
+  getRoomClaudeMd(roomId) {
+    return this.request('GET', `/config/room/${roomId}/claude-md`);
+  }
+  updateRoomClaudeMd(roomId, content) {
+    return this.request('PUT', `/config/room/${roomId}/claude-md`, { content });
+  }
+  getRoomMcp(roomId) {
+    return this.request('GET', `/config/room/${roomId}/mcp`);
+  }
+  updateRoomMcp(roomId, mcpConfig) {
+    return this.request('PUT', `/config/room/${roomId}/mcp`, { mcpConfig });
+  }
 }
 
 export const agentApi = new AgentApiClient();

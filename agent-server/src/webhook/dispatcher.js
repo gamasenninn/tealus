@@ -10,6 +10,8 @@ const { processDeep } = require('../agents/deep');
 const { getOrCreateContext, updateStatus } = require('../context/sessionManager');
 const { getOrCreateRoomMcp } = require('../mcp/roomMcpManager');
 const { extractPromptFromMessage } = require('../media/messageAdapter');
+const fs = require('fs');
+const path = require('path');
 
 // ルームごとの処理キュー（並行実行防止）
 const roomQueues = new Map();
@@ -58,17 +60,35 @@ async function _dispatch({ message, room, agentId, agentName }) {
     return;
   }
 
-  // グループ（3名以上）はメンション時のみ応答
-  if (memberCount > 2) {
+  // コンテキスト取得/作成
+  const context = await getOrCreateContext(agentId, roomId);
+
+  // ルーム設定を読み込み（response_mode）
+  let roomSettings = { response_mode: 'auto', enabled: true };
+  const roomSettingsPath = path.join(context.workspace_path, 'room_settings.json');
+  if (fs.existsSync(roomSettingsPath)) {
+    try { roomSettings = JSON.parse(fs.readFileSync(roomSettingsPath, 'utf8')); } catch {}
+  }
+
+  // エージェント無効
+  if (!roomSettings.enabled || roomSettings.response_mode === 'off') {
+    logger.debug(`Skipped: agent disabled in room ${room.name || roomId}`);
+    return;
+  }
+
+  // 応答モードに応じたメンション判定
+  const needsMention =
+    roomSettings.response_mode === 'mention' ? true :
+    roomSettings.response_mode === 'all' ? false :
+    /* auto */ memberCount > 2;
+
+  if (needsMention) {
     if (!isMentioned(prompt, agentName)) {
-      logger.debug(`Skipped: no mention in group ${room.name || roomId}`);
+      logger.debug(`Skipped: no mention in ${room.name || roomId}`);
       return;
     }
     prompt = extractPrompt(prompt, agentName);
   }
-
-  // コンテキスト取得/作成
-  const context = await getOrCreateContext(agentId, roomId);
 
   // Router で振り分け
   const result = await route(prompt);

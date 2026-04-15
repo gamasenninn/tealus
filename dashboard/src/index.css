@@ -278,6 +278,42 @@ body {
   font-size: 13px;
 }
 
+/* Radio row */
+.radio-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+}
+.radio-row:last-child { border-bottom: none; }
+.radio-row input[type="radio"] { margin-top: 4px; accent-color: var(--primary); }
+
+/* Icon button */
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+.icon-btn:hover { background: #f1f5f9; color: var(--primary); }
+
+/* Back button */
+.back-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  display: flex;
+}
+.back-btn:hover { color: var(--primary); }
+
 /* Toggle switch */
 .toggle {
   position: relative;
