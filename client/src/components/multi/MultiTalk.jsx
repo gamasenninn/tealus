@@ -9,11 +9,27 @@ import './MultiTalk.css';
 function MultiTalk() {
   const { user } = useAuthStore();
   const [rooms, setRooms] = useState([]);
-  const [panels, setPanels] = useState([]);
+  const [panels, setPanels] = useState(() => {
+    try {
+      const saved = localStorage.getItem('multiTalkPanels');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   const [activePanel, setActivePanel] = useState(null);
   const [interacting, setInteracting] = useState(false);
   const containerRef = useRef(null);
-  const panelCounter = useRef(0);
+  const panelCounter = useRef((() => {
+    try {
+      const saved = localStorage.getItem('multiTalkPanels');
+      const p = saved ? JSON.parse(saved) : [];
+      return p.length > 0 ? Math.max(...p.map(x => x.id)) : 0;
+    } catch { return 0; }
+  })());
+
+  // panels 変更時に localStorage に保存
+  useEffect(() => {
+    localStorage.setItem('multiTalkPanels', JSON.stringify(panels));
+  }, [panels]);
 
   // ルーム一覧取得
   useEffect(() => {
@@ -68,7 +84,7 @@ function MultiTalk() {
     const cw = container ? container.clientWidth : 800;
     const ch = container ? container.clientHeight : 600;
     const width = Math.min(500, cw - 40);
-    const height = Math.min(ch - 40, 700);
+    const height = Math.min(ch - 40, 800);
     const offset = (panels.length % 5) * 30;
 
     const newPanel = {

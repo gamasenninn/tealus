@@ -156,9 +156,9 @@
 }
 
 .multi-panel-close {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.08);
   border: none;
-  color: white;
+  color: #00796b;
   border-radius: 4px;
   padding: 2px;
   cursor: pointer;
@@ -166,7 +166,8 @@
 }
 
 .multi-panel-close:hover {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.15);
+  color: #d32f2f;
 }
 
 .multi-panel-iframe {
