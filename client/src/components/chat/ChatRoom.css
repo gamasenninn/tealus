@@ -10,6 +10,7 @@
 .chat-container.embed {
   max-width: none;
   height: 100%;
+  overflow: hidden;
 }
 
 .chat-header {

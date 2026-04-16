@@ -11,6 +11,7 @@ function MultiTalk() {
   const [rooms, setRooms] = useState([]);
   const [panels, setPanels] = useState([]);
   const [activePanel, setActivePanel] = useState(null);
+  const [interacting, setInteracting] = useState(false);
   const containerRef = useRef(null);
   const panelCounter = useRef(0);
 
@@ -179,10 +180,14 @@ function MultiTalk() {
             minHeight={300}
             bounds="parent"
             dragHandleClassName="multi-panel-header"
+            onDragStart={() => setInteracting(true)}
             onDragStop={(e, d) => {
+              setInteracting(false);
               setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, x: d.x, y: d.y } : p));
             }}
+            onResizeStart={() => setInteracting(true)}
             onResizeStop={(e, dir, ref, delta, pos) => {
+              setInteracting(false);
               setPanels(prev => prev.map(p => p.id === panel.id ? {
                 ...p,
                 width: parseInt(ref.style.width),
@@ -201,11 +206,15 @@ function MultiTalk() {
                   <X size={14} />
                 </button>
               </div>
-              <iframe
-                className="multi-panel-iframe"
-                src={`/rooms/${panel.roomId}?embed=true`}
-                title={panel.roomName}
-              />
+              <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+                <iframe
+                  className="multi-panel-iframe"
+                  src={`/rooms/${panel.roomId}?embed=true`}
+                  title={panel.roomName}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: interacting ? 'none' : 'auto' }}
+                />
+                {interacting && <div style={{ position: 'absolute', inset: 0 }} />}
+              </div>
             </div>
           </Rnd>
         ))}
