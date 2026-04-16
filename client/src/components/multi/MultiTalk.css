@@ -4,6 +4,32 @@
   background: var(--bg-page);
 }
 
+/* Toolbar（常に表示） */
+.multi-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 4px;
+  background: #f1f5f9;
+  border-right: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.multi-toolbar button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+}
+
+.multi-toolbar button:hover {
+  background: rgba(0, 180, 160, 0.15);
+  color: var(--primary);
+}
+
 /* Sidebar */
 .multi-sidebar {
   width: 280px;
@@ -28,26 +54,6 @@
   margin: 0;
 }
 
-.multi-arrange-btns {
-  display: flex;
-  gap: 4px;
-}
-
-.multi-arrange-btns button {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-medium);
-  border-radius: 6px;
-  padding: 6px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  display: flex;
-}
-
-.multi-arrange-btns button:hover {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-}
 
 /* Room list */
 .multi-room-list {

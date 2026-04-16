@@ -3,7 +3,7 @@ import { Rnd } from 'react-rnd';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import { LayoutGrid, X, Columns } from 'lucide-react';
+import { LayoutGrid, X, Columns, PanelLeftClose, Menu } from 'lucide-react';
 import './MultiTalk.css';
 
 function MultiTalk() {
@@ -17,6 +17,7 @@ function MultiTalk() {
   });
   const [activePanel, setActivePanel] = useState(null);
   const [interacting, setInteracting] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const containerRef = useRef(null);
   const panelCounter = useRef((() => {
     try {
@@ -156,13 +157,20 @@ function MultiTalk() {
 
   return (
     <div className="multi-talk">
+      {/* ツールバー（常に表示） */}
+      <div className="multi-toolbar">
+        <button onClick={() => setSidebarOpen(prev => !prev)} title={sidebarOpen ? 'サイドバーを閉じる' : 'サイドバーを開く'}>
+          {sidebarOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
+        </button>
+        <button onClick={arrangeTile} title="タイル整列"><LayoutGrid size={18} /></button>
+        <button onClick={arrangeColumns} title="横並び整列"><Columns size={18} /></button>
+      </div>
+
+      {/* サイドバー（トグル） */}
+      {sidebarOpen && (
       <div className="multi-sidebar">
         <div className="multi-sidebar-header">
           <h2>トーク</h2>
-          <div className="multi-arrange-btns">
-            <button onClick={arrangeTile} title="タイル整列"><LayoutGrid size={16} /></button>
-            <button onClick={arrangeColumns} title="横並び整列"><Columns size={16} /></button>
-          </div>
         </div>
         <div className="multi-room-list">
           {rooms.map(room => {
@@ -182,6 +190,7 @@ function MultiTalk() {
           })}
         </div>
       </div>
+      )}
 
       <div className="multi-panels" ref={containerRef}>
         {panels.length === 0 && (
