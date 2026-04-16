@@ -3,7 +3,7 @@ import { Rnd } from 'react-rnd';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import { LayoutGrid, X, Columns, PanelLeftClose, Menu } from 'lucide-react';
+import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square } from 'lucide-react';
 import './MultiTalk.css';
 
 function MultiTalk() {
@@ -150,6 +150,31 @@ function MultiTalk() {
     })));
   };
 
+  // 最大化: パネルエリア全体に
+  const maximizePanel = (id) => {
+    const container = containerRef.current;
+    if (!container) return;
+    setPanels(prev => prev.map(p => p.id === id ? {
+      ...p, x: 4, y: 4, width: container.clientWidth - 8, height: container.clientHeight - 8,
+    } : p));
+  };
+
+  // 最小化: ヘッダーだけに
+  const minimizePanel = (id) => {
+    setPanels(prev => prev.map(p => p.id === id ? {
+      ...p, height: 40,
+    } : p));
+  };
+
+  // 普通サイズ: デフォルトサイズに
+  const restorePanel = (id) => {
+    const container = containerRef.current;
+    if (!container) return;
+    setPanels(prev => prev.map(p => p.id === id ? {
+      ...p, width: Math.min(500, container.clientWidth - 40), height: Math.min(container.clientHeight - 40, 800),
+    } : p));
+  };
+
   const getRoomDisplayName = (room) => {
     if (room.type === 'group') return room.name;
     return room.partner_display_name || 'DM';
@@ -162,6 +187,7 @@ function MultiTalk() {
         <button onClick={() => setSidebarOpen(prev => !prev)} title={sidebarOpen ? 'サイドバーを閉じる' : 'サイドバーを開く'}>
           {sidebarOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
         </button>
+        <div className="multi-toolbar-divider" />
         <button onClick={arrangeTile} title="タイル整列"><LayoutGrid size={18} /></button>
         <button onClick={arrangeColumns} title="横並び整列"><Columns size={18} /></button>
       </div>
@@ -227,9 +253,12 @@ function MultiTalk() {
             <div className={`multi-panel ${activePanel === panel.id ? 'active' : ''}`}>
               <div className="multi-panel-header">
                 <span className="multi-panel-title">{panel.roomName}</span>
-                <button className="multi-panel-close" onClick={(e) => { e.stopPropagation(); closePanel(panel.id); }}>
-                  <X size={14} />
-                </button>
+                <div className="multi-panel-btns">
+                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); minimizePanel(panel.id); }} title="最小化"><Minimize2 size={12} /></button>
+                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); restorePanel(panel.id); }} title="普通サイズ"><Square size={12} /></button>
+                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); maximizePanel(panel.id); }} title="最大化"><Maximize2 size={12} /></button>
+                  <button className="multi-panel-close" onClick={(e) => { e.stopPropagation(); closePanel(panel.id); }} title="閉じる"><X size={12} /></button>
+                </div>
               </div>
               <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
                 <iframe

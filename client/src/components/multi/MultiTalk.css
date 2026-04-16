@@ -25,9 +25,20 @@
   display: flex;
 }
 
-.multi-toolbar button:hover {
+.multi-toolbar button:hover:not(:disabled) {
   background: rgba(0, 180, 160, 0.15);
   color: var(--primary);
+}
+
+.multi-toolbar button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.multi-toolbar-divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 4px 2px;
 }
 
 /* Sidebar */
@@ -159,6 +170,26 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.multi-panel-btns {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.multi-panel-btn {
+  background: rgba(0, 0, 0, 0.06);
+  border: none;
+  color: #00796b;
+  border-radius: 3px;
+  padding: 3px;
+  cursor: pointer;
+  display: flex;
+}
+
+.multi-panel-btn:hover {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .multi-panel-close {
