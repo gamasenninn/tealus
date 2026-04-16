@@ -106,6 +106,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
       });
 
       socket.on('agent:status', (data) => {
+        if (data.room_id && data.room_id !== roomId) return; // 自分のルームのみ
         setAgentStatus(data.status === 'idle' ? null : data);
       });
     }
