@@ -9,6 +9,8 @@ class AgentApiClient {
 
   async request(method, path, body = null) {
     const headers = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('dashboard_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const options = { method, headers };
     if (body) options.body = JSON.stringify(body);
     const res = await fetch(`${this.baseUrl}${path}`, options);

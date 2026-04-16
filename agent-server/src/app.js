@@ -6,12 +6,13 @@ const cors = require('cors');
 const webhookRoutes = require('./webhook/routes');
 const settingsRoutes = require('./routes/settings');
 const logsRoutes = require('./routes/logs');
+const { authenticate } = require('./middleware/auth');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Health check
+// Health check（認証不要）
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -20,13 +21,13 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Webhook endpoint
+// Webhook endpoint（認証不要、HMAC署名で別途検証）
 app.use('/webhook', webhookRoutes);
 
-// Config API（ダッシュボードから設定ファイルを読み書き）
-app.use('/config', settingsRoutes);
+// Config API（認証必要）
+app.use('/config', authenticate, settingsRoutes);
 
-// Logs API（ダッシュボードからログ閲覧）
-app.use('/logs', logsRoutes);
+// Logs API（認証必要）
+app.use('/logs', authenticate, logsRoutes);
 
 module.exports = { app };
