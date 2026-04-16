@@ -7,6 +7,11 @@
   background: var(--chat-bg);
 }
 
+.chat-container.embed {
+  max-width: none;
+  height: 100%;
+}
+
 .chat-header {
   display: flex;
   align-items: center;

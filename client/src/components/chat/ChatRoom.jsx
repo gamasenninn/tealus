@@ -30,6 +30,7 @@ function ChatRoom() {
   // Search params
   const targetMsgId = searchParams.get('msg');
   const searchKeyword = searchParams.get('q');
+  const isEmbed = searchParams.get('embed') === 'true';
   useEffect(() => {
     if (targetMsgId && messages.length > 0) {
       setTimeout(() => {
@@ -67,9 +68,9 @@ function ChatRoom() {
   };
 
   return (
-    <div className="chat-container">
+    <div className={`chat-container ${isEmbed ? 'embed' : ''}`}>
       <header className="chat-header">
-        <button className="chat-back" onClick={() => navigate(-1)}><ArrowLeft size={22} /></button>
+        {!isEmbed && <button className="chat-back" onClick={() => navigate(-1)}><ArrowLeft size={22} /></button>}
         <div className="chat-header-info">
           <span className="chat-header-title">{getRoomTitle()}</span>
           {getMemberCount() && (

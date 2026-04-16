@@ -20,13 +20,13 @@ async function initializeAgent() {
     const { user } = await botApi.login();
     logger.info('Agent logged in to Tealus');
 
-    // BotユーザーIDをWebhookハンドラーに登録（UUID）
-    registerBotUserId(user.id, user.display_name);
-
     // 参加中のルーム一覧を取得
     const roomData = await botApi.getRooms();
     const rooms = roomData.rooms || [];
     logger.info(`Agent is member of ${rooms.length} rooms`);
+
+    // BotユーザーIDとルーム一覧をWebhookハンドラーに登録
+    registerBotUserId(user.id, user.display_name, rooms);
 
     for (const room of rooms) {
       logger.debug(`  - ${room.name || 'DM'} (${room.id})`);

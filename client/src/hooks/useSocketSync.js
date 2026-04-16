@@ -39,11 +39,13 @@ export function useSocketSync(roomId, targetMsgId = null) {
       });
 
       socket.on('message:new', (msg) => {
+        if (msg.room_id !== roomId) return; // 自分のルームのメッセージのみ処理
         addMessage(msg);
         if (msg.sender_id !== user.id) {
           api.markRead(roomId, [msg.id]).catch(() => {});
           socket.emit('message:read', { room_id: roomId, message_ids: [msg.id] });
-          if (localStorage.getItem('notificationSound') !== 'off') {
+          const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
+          if (!isEmbed && localStorage.getItem('notificationSound') !== 'off') {
             new Audio('/notification.wav').play().catch(() => {});
           }
         }

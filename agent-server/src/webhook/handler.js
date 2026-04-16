@@ -7,17 +7,27 @@ const { dispatch } = require('./dispatcher');
 
 // Bot ユーザーIDのキャッシュ（起動時に設定）
 const botUserIds = new Set();
+const botRoomIds = new Set(); // Bot が参加しているルームID
 let botAgentId = null;
 let botAgentName = null;
 
 /**
  * BotユーザーIDを登録（起動時に呼ばれる）
  */
-function registerBotUserId(userId, displayName) {
+function registerBotUserId(userId, displayName, rooms = []) {
   botUserIds.add(userId);
   botAgentId = userId;
   botAgentName = displayName || 'AI';
-  logger.info(`Registered bot user: ${userId} (${botAgentName})`);
+  rooms.forEach(r => botRoomIds.add(r.id));
+  logger.info(`Registered bot user: ${userId} (${botAgentName}), ${botRoomIds.size} rooms`);
+}
+
+/**
+ * Bot の参加ルーム一覧を更新
+ */
+function updateBotRooms(rooms) {
+  botRoomIds.clear();
+  rooms.forEach(r => botRoomIds.add(r.id));
 }
 
 /**
@@ -52,6 +62,12 @@ async function handleMessageCreated(payload) {
   const senderId = message.sender?.id;
   if (senderId && botUserIds.has(senderId)) {
     logger.debug(`Skipped bot message from ${senderId}`);
+    return;
+  }
+
+  // Bot が参加していないルームは無視
+  if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
+    logger.debug(`Skipped: bot not member of room ${room.name || room.id}`);
     return;
   }
 
@@ -90,6 +106,11 @@ async function handleTranscriptionCompleted(payload) {
     return;
   }
 
+  if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
+    logger.debug(`Skipped transcription: bot not member of room ${room.id}`);
+    return;
+  }
+
   const text = transcription?.formatted_text || transcription?.raw_text;
   logger.info(`Transcription completed: "${(text || '').slice(0, 50)}" in room ${room.id}`);
 
@@ -110,4 +131,4 @@ async function handleReactionAdded(payload) {
   // TODO: Phase C で承認フロー実装
 }
 
-module.exports = { handleWebhook, registerBotUserId };
+module.exports = { handleWebhook, registerBotUserId, updateBotRooms };
