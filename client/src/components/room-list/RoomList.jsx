@@ -6,7 +6,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import './RoomList.css';
 
@@ -99,6 +99,11 @@ function RoomList() {
       <header className="room-list-header">
         <h1>トーク</h1>
         <div className="room-list-header-actions">
+          {window.innerWidth >= 1024 && (
+            <button className="icon-button" onClick={() => navigate('/multi')} title="マルチトーク">
+              <Columns size={20} />
+            </button>
+          )}
           <button className="icon-button" onClick={() => navigate('/search')} title="検索">
             <Search size={20} />
           </button>

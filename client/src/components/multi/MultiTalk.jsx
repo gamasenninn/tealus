@@ -3,11 +3,13 @@ import { Rnd } from 'react-rnd';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone } from 'lucide-react';
 import './MultiTalk.css';
 
 function MultiTalk() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [rooms, setRooms] = useState([]);
   const [panels, setPanels] = useState(() => {
     try {
@@ -190,6 +192,8 @@ function MultiTalk() {
         <div className="multi-toolbar-divider" />
         <button onClick={arrangeTile} title="タイル整列"><LayoutGrid size={18} /></button>
         <button onClick={arrangeColumns} title="横並び整列"><Columns size={18} /></button>
+        <div className="multi-toolbar-divider" />
+        <button onClick={() => navigate('/talk')} title="シングルモードに戻る"><MonitorSmartphone size={18} /></button>
       </div>
 
       {/* サイドバー（トグル） */}
