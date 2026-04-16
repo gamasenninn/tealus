@@ -14,6 +14,7 @@ function parseSendArgs(args) {
   const voiceIdx = args.indexOf('--voice');
   const watchIdx = args.indexOf('--watch');
   const extIdx = args.indexOf('--ext');
+  const catchUpIdx = args.indexOf('--catch-up');
 
   const hasText = textIdx !== -1;
   const hasImage = imageIdx !== -1;
@@ -68,6 +69,7 @@ function parseSendArgs(args) {
       } else {
         result.extensions = ['.wav'];
       }
+      result.catchUp = catchUpIdx !== -1;
     } else {
       // --voice 単体でファイルも --watch もなし
       throw new Error('--voice にはファイルパスまたは --watch を指定してください');

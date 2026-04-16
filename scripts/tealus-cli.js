@@ -13,7 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parseSendArgs, parseGlobalArgs } = require('./parse-args');
-const { waitForFileComplete, watchDirectory } = require('./watch');
+const { waitForFileComplete, watchDirectory, getUnsent, writeLastSent } = require('./watch');
 const http = require('http');
 const https = require('https');
 
@@ -173,14 +173,38 @@ async function cmdSend(args) {
     console.log(`   送信先: ${room.name}`);
     console.log(`   監視: ${parsed.watchDir}`);
     console.log(`   拡張子: ${parsed.extensions.join(', ')}`);
+    if (parsed.catchUp) console.log('   🔄 catch-up: 未送信ファイルを送信します');
     console.log('   Ctrl+C で終了');
     console.log('');
+
+    // catch-up: 未送信ファイルを送信
+    if (parsed.catchUp) {
+      const unsent = getUnsent(parsed.watchDir, parsed.extensions);
+      if (unsent.length > 0) {
+        console.log(`📦 未送信ファイル: ${unsent.length}件`);
+        for (const file of unsent) {
+          console.log(`📁 catch-up: ${path.basename(file.path)}`);
+          try {
+            await sendVoiceFile(token, room.id, room.name, file.path);
+            writeLastSent(parsed.watchDir, new Date(file.mtime));
+          } catch (err) {
+            console.error(`❌ 送信失敗: ${err.message}`);
+          }
+        }
+        console.log('✅ catch-up 完了');
+        console.log('');
+      } else {
+        console.log('📭 未送信ファイルはありません');
+        console.log('');
+      }
+    }
 
     const stop = watchDirectory(parsed.watchDir, parsed.extensions, async (filePath) => {
       console.log(`📁 検知: ${path.basename(filePath)}`);
       const complete = await waitForFileComplete(filePath);
       if (complete) {
         await sendVoiceFile(token, room.id, room.name, filePath);
+        writeLastSent(parsed.watchDir, new Date());
       } else {
         console.error(`⚠️ ファイル書き込み未完了（スキップ）: ${path.basename(filePath)}`);
       }
@@ -333,6 +357,7 @@ switch (command) {
     console.log('監視モード:');
     console.log('  --voice --watch <dir>  ディレクトリを監視し、新規音声ファイルを自動送信');
     console.log('  --ext <拡張子>         対象拡張子をカンマ区切りで指定（デフォルト: .wav）');
+    console.log('  --catch-up             起動時に未送信ファイルを自動送信');
     console.log('');
     console.log('グローバルオプション:');
     console.log('  --env <file>           envファイルを指定（例: --env .env.trx）');

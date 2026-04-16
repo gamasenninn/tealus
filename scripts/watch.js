@@ -106,4 +106,50 @@ function watchDirectory(dir, extensions, onFile) {
   };
 }
 
-module.exports = { waitForFileComplete, watchDirectory };
+/**
+ * .last_sent ファイルから最終送信日時を読み取る
+ */
+function readLastSent(dir) {
+  const filePath = path.join(dir, '.last_sent');
+  try {
+    if (fs.existsSync(filePath)) {
+      return new Date(fs.readFileSync(filePath, 'utf8').trim());
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * .last_sent ファイルに最終送信日時を書き込む
+ */
+function writeLastSent(dir, date) {
+  const filePath = path.join(dir, '.last_sent');
+  fs.writeFileSync(filePath, date.toISOString());
+}
+
+/**
+ * 未送信ファイルを取得（.last_sent 以降のファイル）
+ */
+function getUnsent(dir, extensions) {
+  const lastSent = readLastSent(dir);
+  // .last_sent がない場合は catch-up 対象なし（初回は全送信しない）
+  if (!lastSent) return [];
+  const files = [];
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name === '.last_sent') continue;
+      const ext = path.extname(name).toLowerCase();
+      if (!extensions.includes(ext)) continue;
+      const filePath = path.join(dir, name);
+      const stat = fs.statSync(filePath);
+      if (stat.mtimeMs > lastSent.getTime()) {
+        files.push({ path: filePath, mtime: stat.mtimeMs });
+      }
+    }
+  } catch {}
+  // 古い順にソート
+  files.sort((a, b) => a.mtime - b.mtime);
+  return files;
+}
+
+module.exports = { waitForFileComplete, watchDirectory, readLastSent, writeLastSent, getUnsent };
