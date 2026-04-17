@@ -71,13 +71,13 @@ app.use('/agent-api', createProxyMiddleware({
   changeOrigin: true,
 }));
 
-// RTC Server proxy（mediasoup 実験サーバーに転送、WebSocket 含む）
-app.use('/rtc', createProxyMiddleware({
+// RTC Server proxy（mediasoup 実験サーバーに転送）
+const rtcProxy = createProxyMiddleware({
   target: `http://localhost:${process.env.RTC_PORT || 3100}`,
   pathRewrite: { '^/rtc': '' },
   changeOrigin: true,
-  ws: true,
-}));
+});
+app.use('/rtc', rtcProxy);
 
 // Dashboard static files（/system パス、client SPA fallback より前に配置）
 const dashboardDistPath = path.join(__dirname, '../../dashboard/dist');
@@ -100,6 +100,13 @@ app.get('*', (req, res, next) => {
 // Socket.IO handlers (set up in tests or on direct run)
 const { setupSocketHandlers } = require('./socket');
 setupSocketHandlers(io);
+
+// RTC WebSocket upgrade（/rtc/ws パスのみ、Socket.IO と競合しない）
+server.on('upgrade', (req, socket, head) => {
+  if (req.url.startsWith('/rtc/')) {
+    rtcProxy.upgrade(req, socket, head);
+  }
+});
 
 // Start server (only when run directly, not in tests)
 if (require.main === module) {
