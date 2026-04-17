@@ -4,6 +4,7 @@
  */
 const logger = require('../lib/logger');
 const { dispatch } = require('./dispatcher');
+const botApi = require('../lib/botApi');
 
 // Bot ユーザーIDのキャッシュ（起動時に設定）
 const botUserIds = new Set();
@@ -69,10 +70,22 @@ async function handleMessageCreated(payload) {
     return;
   }
 
-  // Bot が参加していないルームは無視
+  // Bot が参加していないルームは無視（ただしルーム一覧を再取得して確認）
   if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
-    logger.debug(`Skipped: bot not member of room ${room.name || room.id}`);
-    return;
+    try {
+      const roomData = await botApi.getRooms();
+      const rooms = roomData.rooms || [];
+      botRoomIds.clear();
+      rooms.forEach(r => botRoomIds.add(r.id));
+      if (!botRoomIds.has(room.id)) {
+        logger.debug(`Skipped: bot not member of room ${room.name || room.id}`);
+        return;
+      }
+      logger.info(`Bot room list refreshed, now includes ${room.name || room.id}`);
+    } catch {
+      logger.debug(`Skipped: bot not member of room ${room.name || room.id}`);
+      return;
+    }
   }
 
   // 音声メッセージは voice.transcription_completed で処理する
@@ -111,8 +124,19 @@ async function handleTranscriptionCompleted(payload) {
   }
 
   if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
-    logger.debug(`Skipped transcription: bot not member of room ${room.id}`);
-    return;
+    try {
+      const roomData = await botApi.getRooms();
+      const rooms = roomData.rooms || [];
+      botRoomIds.clear();
+      rooms.forEach(r => botRoomIds.add(r.id));
+      if (!botRoomIds.has(room.id)) {
+        logger.debug(`Skipped transcription: bot not member of room ${room.id}`);
+        return;
+      }
+    } catch {
+      logger.debug(`Skipped transcription: bot not member of room ${room.id}`);
+      return;
+    }
   }
 
   const text = transcription?.formatted_text || transcription?.raw_text;
@@ -133,7 +157,8 @@ async function handleTranscriptionCompleted(payload) {
  */
 function handleMemberJoined(payload) {
   const { room, member } = payload;
-  if (member?.user_id && botUserIds.has(member.user_id) && room?.id) {
+  const memberId = member?.user_id || member?.id;
+  if (memberId && botUserIds.has(memberId) && room?.id) {
     botRoomIds.add(room.id);
     logger.info(`Bot joined room: ${room.name || room.id}`);
   }
@@ -145,7 +170,8 @@ function handleMemberJoined(payload) {
  */
 function handleMemberLeft(payload) {
   const { room, member } = payload;
-  if (member?.user_id && botUserIds.has(member.user_id) && room?.id) {
+  const memberId = member?.user_id || member?.id;
+  if (memberId && botUserIds.has(memberId) && room?.id) {
     botRoomIds.delete(room.id);
     logger.info(`Bot left room: ${room.name || room.id}`);
   }
