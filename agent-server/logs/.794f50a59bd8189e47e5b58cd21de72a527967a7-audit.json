@@ -14,6 +14,11 @@
             "date": 1776353328597,
             "name": "C:\\app\\tealus\\agent-server\\logs\\agent-2026-04-17.log",
             "hash": "3ca33d926265b60922cbd5ef85081b18740666efa644ce6c680c71e1c9b3585d"
+        },
+        {
+            "date": 1776438653458,
+            "name": "C:\\app\\tealus\\agent-server\\logs\\agent-2026-04-18.log",
+            "hash": "89c78bd4d877b5980ffc43dc9550c8ba11ee9e088a5c5c550543a56a7890fed8"
         }
     ],
     "hashType": "sha256"

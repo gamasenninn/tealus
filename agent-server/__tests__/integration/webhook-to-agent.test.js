@@ -311,4 +311,58 @@ describe('Webhook → Agent 統合テスト', () => {
     });
     expect(processLight).not.toHaveBeenCalled();
   });
+
+  // --- 16. 未知ルーム → ルーム一覧再取得で参加確認 → 応答 ---
+  test('16. 未知ルーム → ルーム一覧再取得で参加確認 → 応答', async () => {
+    const DM_ROOM = 'new-dm-room';
+
+    // getRooms が新ルームを含むリストを返すようモック
+    botApi.getRooms.mockResolvedValueOnce({ rooms: [{ id: BOT_ROOM }, { id: DM_ROOM }] });
+
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg16', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: DM_ROOM, name: 'DM', member_count: 2 },
+    });
+
+    expect(botApi.getRooms).toHaveBeenCalled();
+    expect(processLight).toHaveBeenCalled();
+  });
+
+  // --- 17. 未知ルーム → 再取得しても未参加 → スキップ ---
+  test('17. 未知ルーム → 再取得しても未参加 → スキップ', async () => {
+    const UNKNOWN_ROOM = 'truly-unknown-room';
+
+    // getRooms が既存ルームのみ返す
+    botApi.getRooms.mockResolvedValueOnce({ rooms: [{ id: BOT_ROOM }] });
+
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg17', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: UNKNOWN_ROOM, name: '未参加ルーム', member_count: 2 },
+    });
+
+    expect(botApi.getRooms).toHaveBeenCalled();
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 18. member.joined で member.id フィールド（user_id ではない）---
+  test('18. member.joined で member.id フィールド → botRoomIds 更新', async () => {
+    const ID_ROOM = 'id-field-room';
+
+    // member.id で通知（member.user_id ではない）
+    await handleWebhook({
+      event: 'member.joined',
+      room: { id: ID_ROOM, name: 'テストルーム' },
+      member: { id: BOT_ID, display_name: BOT_NAME },
+    });
+
+    // 追加後は応答される
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg18', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: ID_ROOM, name: 'テストルーム', member_count: 2 },
+    });
+    expect(processLight).toHaveBeenCalled();
+  });
 });
