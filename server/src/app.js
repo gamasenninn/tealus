@@ -71,6 +71,14 @@ app.use('/agent-api', createProxyMiddleware({
   changeOrigin: true,
 }));
 
+// RTC Server proxy（mediasoup 実験サーバーに転送、WebSocket 含む）
+app.use('/rtc', createProxyMiddleware({
+  target: `http://localhost:${process.env.RTC_PORT || 3100}`,
+  pathRewrite: { '^/rtc': '' },
+  changeOrigin: true,
+  ws: true,
+}));
+
 // Dashboard static files（/system パス、client SPA fallback より前に配置）
 const dashboardDistPath = path.join(__dirname, '../../dashboard/dist');
 app.use('/system', express.static(dashboardDistPath));
@@ -83,7 +91,7 @@ const clientDistPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientDistPath));
 // SPA fallback — all non-API routes return index.html
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/') || req.path.startsWith('/system/') || req.path.startsWith('/agent-api/')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/') || req.path.startsWith('/system/') || req.path.startsWith('/agent-api/') || req.path.startsWith('/rtc/')) {
     return next();
   }
   res.sendFile(path.join(clientDistPath, 'index.html'));

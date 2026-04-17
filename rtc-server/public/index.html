@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mediasoup SFU Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    h1 { margin-bottom: 20px; font-size: 1.5rem; }
+    #status {
+      margin-bottom: 16px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: #16213e;
+      font-size: 0.9rem;
+    }
+    .video-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .video-box {
+      position: relative;
+      background: #0f3460;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .video-box video {
+      width: 480px;
+      height: 360px;
+      object-fit: cover;
+      display: block;
+    }
+    .video-label {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(0,0,0,0.6);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    #connectBtn {
+      margin: 20px 0;
+      padding: 12px 32px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #e94560;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #connectBtn:hover { background: #c73b52; }
+    #connectBtn:disabled { background: #555; cursor: default; }
+  </style>
+</head>
+<body>
+  <h1>mediasoup SFU Demo - 1対1ビデオ通話</h1>
+  <div id="status">未接続</div>
+  <button id="connectBtn">接続する</button>
+  <div class="video-container">
+    <div class="video-box">
+      <video id="localVideo" autoplay muted playsinline></video>
+      <div class="video-label">自分</div>
+    </div>
+    <div class="video-box">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <div class="video-label">相手</div>
+    </div>
+  </div>
+
+  <script src="bundle.js"></script>
+</body>
+</html>
