@@ -23,9 +23,20 @@ function ImageViewer({ images, initialIndex, onClose }) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, goNext, goPrev]);
 
+  const handleDownload = (e) => {
+    e.stopPropagation();
+    const a = document.createElement('a');
+    a.href = `/media/${current.file_path}`;
+    a.download = current.file_name || 'image';
+    a.click();
+  };
+
   return (
     <div className="viewer-overlay" onClick={onClose}>
-      <button className="viewer-close" onClick={onClose}>✕</button>
+      <div className="viewer-toolbar">
+        <button className="viewer-btn" onClick={handleDownload} title="ダウンロード">⬇</button>
+        <button className="viewer-btn viewer-close-btn" onClick={onClose} title="閉じる">✕</button>
+      </div>
 
       <div className="viewer-content" onClick={(e) => e.stopPropagation()}>
         {currentIndex > 0 && (

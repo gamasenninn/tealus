@@ -2,6 +2,35 @@
   margin-top: 4px;
 }
 
+.image-grid-wrapper {
+  position: relative;
+}
+
+.grid-download-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.grid-download-all {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.grid-download-all:hover {
+  background: rgba(0, 180, 160, 0.15);
+  color: var(--primary);
+}
+
 .image-grid {
   display: grid;
   gap: 2px;
@@ -45,7 +74,9 @@
   overflow: hidden;
   aspect-ratio: 1;
   background: var(--border-dark);
+  position: relative;
 }
+
 
 .grid-1 .grid-item {
   aspect-ratio: auto;

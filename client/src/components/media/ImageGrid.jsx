@@ -1,8 +1,21 @@
+import { Download } from 'lucide-react';
 import './ImageGrid.css';
 
 function ImageGrid({ media, onImageClick }) {
   const images = media.filter((m) => m.mime_type.startsWith('image/'));
   const others = media.filter((m) => !m.mime_type.startsWith('image/'));
+
+  const downloadAll = (e) => {
+    e.stopPropagation();
+    images.forEach((img, i) => {
+      setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = `/media/${img.file_path}`;
+        a.download = img.file_name || `image_${i + 1}`;
+        a.click();
+      }, i * 300); // 300ms 間隔で連続ダウンロード
+    });
+  };
 
   const getGridClass = () => {
     switch (images.length) {
@@ -17,20 +30,27 @@ function ImageGrid({ media, onImageClick }) {
   return (
     <div className="media-container">
       {images.length > 0 && (
-        <div className={getGridClass()}>
-          {images.map((img, index) => (
-            <div
-              key={img.id}
-              className="grid-item"
-              onClick={() => onImageClick(images, index)}
-            >
-              <img
-                src={`/media/${img.thumbnail_path || img.file_path}`}
-                alt={img.file_name}
-                loading="lazy"
-              />
-            </div>
-          ))}
+        <div className="image-grid-wrapper">
+          <div className={getGridClass()}>
+            {images.map((img, index) => (
+              <div
+                key={img.id}
+                className="grid-item"
+                onClick={() => onImageClick(images, index)}
+              >
+                <img
+                  src={`/media/${img.thumbnail_path || img.file_path}`}
+                  alt={img.file_name}
+                  loading="lazy"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="grid-download-row">
+            <button className="grid-download-all" onClick={downloadAll} title="全画像をダウンロード">
+              <Download size={12} /> 全{images.length}枚
+            </button>
+          </div>
         </div>
       )}
       {others.map((m) => {
