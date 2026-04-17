@@ -250,3 +250,22 @@
 .profile-logout-btn:hover {
   background: var(--color-error-bg);
 }
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.volume-control input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary);
+}
+
+.volume-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+}

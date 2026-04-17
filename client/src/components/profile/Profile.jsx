@@ -21,6 +21,7 @@ function Profile() {
   const [chatFontSize, setChatFontSize] = useState(localStorage.getItem('chatFontSize') || 'medium');
   const [notificationSound, setNotificationSound] = useState(localStorage.getItem('notificationSound') !== 'off');
   const [mdPreview, setMdPreview] = useState(localStorage.getItem('mdPreview') !== 'off');
+  const [voiceVolume, setVoiceVolume] = useState(parseInt(localStorage.getItem('voiceVolume') || '80'));
 
   const showMessage = (msg) => {
     setMessage(msg);
@@ -208,6 +209,24 @@ function Profile() {
           />
           <span>メッセージ受信時に通知音を鳴らす</span>
         </label>
+      </div>
+
+      <div className="profile-section">
+        <h2>音声再生レベル</h2>
+        <div className="volume-control">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={voiceVolume}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              setVoiceVolume(val);
+              localStorage.setItem('voiceVolume', val);
+            }}
+          />
+          <span className="volume-label">{voiceVolume}%</span>
+        </div>
       </div>
 
       <div className="profile-section">

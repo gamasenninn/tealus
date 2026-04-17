@@ -37,6 +37,13 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     };
   }, [message.id, transcription]);
 
+  // 音声レベル設定を反映
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = (parseInt(localStorage.getItem('voiceVolume') || '80')) / 100;
+    }
+  }, []);
+
   // 他の音声が再生開始したら自分を停止
   useEffect(() => {
     const handleOtherPlay = (e) => {
@@ -59,6 +66,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     } else {
       // 他の再生を止めてから自分を再生
       window.dispatchEvent(new CustomEvent('voice:started', { detail: { messageId: message.id } }));
+      audio.volume = (parseInt(localStorage.getItem('voiceVolume') || '80')) / 100;
       audio.play();
     }
     setIsPlaying(!isPlaying);
