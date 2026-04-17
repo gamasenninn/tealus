@@ -1,11 +1,3 @@
 {
-  "mcpServers": {
-    "filesystem": {
-      "command": "mcp-server-filesystem",
-      "args": ["./agent-workspaces"]
-    },
-    "tavily": {
-      "command": "tavily-mcp"
-    }
-  }
+  "mcpServers": {}
 }
