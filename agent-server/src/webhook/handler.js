@@ -40,6 +40,10 @@ async function handleWebhook(payload) {
     await handleMessageCreated(payload);
   } else if (event === 'voice.transcription_completed') {
     await handleTranscriptionCompleted(payload);
+  } else if (event === 'member.joined') {
+    handleMemberJoined(payload);
+  } else if (event === 'member.left') {
+    handleMemberLeft(payload);
   } else if (event === 'reaction.added') {
     await handleReactionAdded(payload);
   } else {
@@ -121,6 +125,30 @@ async function handleTranscriptionCompleted(payload) {
     agentId: botAgentId,
     agentName: botAgentName,
   });
+}
+
+/**
+ * member.joined イベント処理
+ * Bot 自身がルームに追加された場合、botRoomIds を更新
+ */
+function handleMemberJoined(payload) {
+  const { room, member } = payload;
+  if (member?.user_id && botUserIds.has(member.user_id) && room?.id) {
+    botRoomIds.add(room.id);
+    logger.info(`Bot joined room: ${room.name || room.id}`);
+  }
+}
+
+/**
+ * member.left イベント処理
+ * Bot 自身がルームから退出した場合、botRoomIds を更新
+ */
+function handleMemberLeft(payload) {
+  const { room, member } = payload;
+  if (member?.user_id && botUserIds.has(member.user_id) && room?.id) {
+    botRoomIds.delete(room.id);
+    logger.info(`Bot left room: ${room.name || room.id}`);
+  }
 }
 
 /**
