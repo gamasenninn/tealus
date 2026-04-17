@@ -63,12 +63,27 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Agent Server proxy（dashboard の /agent-api を Agent Server に転送）
+const { createProxyMiddleware } = require('http-proxy-middleware');
+app.use('/agent-api', createProxyMiddleware({
+  target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
+  pathRewrite: { '^/agent-api': '' },
+  changeOrigin: true,
+}));
+
+// Dashboard static files（/system パス、client SPA fallback より前に配置）
+const dashboardDistPath = path.join(__dirname, '../../dashboard/dist');
+app.use('/system', express.static(dashboardDistPath));
+app.get('/system/*', (req, res) => {
+  res.sendFile(path.join(dashboardDistPath, 'index.html'));
+});
+
 // Serve built React app (production)
 const clientDistPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientDistPath));
 // SPA fallback — all non-API routes return index.html
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/') || req.path.startsWith('/system/') || req.path.startsWith('/agent-api/')) {
     return next();
   }
   res.sendFile(path.join(clientDistPath, 'index.html'));

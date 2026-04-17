@@ -26,7 +26,7 @@ function App() {
   }, [initialize]);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/system">
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<AdminRoute><DashboardLayout /></AdminRoute>}>
