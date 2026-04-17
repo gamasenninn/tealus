@@ -11842,7 +11842,8 @@
   function connectWebSocket() {
     return new Promise((resolve, reject) => {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(`${protocol}//${location.host}`);
+      const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
+      ws = new WebSocket(`${protocol}//${location.host}${wsPath}`);
       ws.onopen = () => resolve();
       ws.onerror = (e) => reject(e);
       ws.onclose = () => setStatus("\u5207\u65AD\u3055\u308C\u307E\u3057\u305F");

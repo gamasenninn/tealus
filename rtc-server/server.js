@@ -17,6 +17,13 @@ function getListenInfos() {
       listenInfos.push({ protocol: "udp", ip: "0.0.0.0", announcedAddress: addr.address });
     }
   }
+  // グローバル IP（環境変数で指定、外部接続に必要）
+  const publicIp = process.env.ANNOUNCED_IP || process.env.PUBLIC_IP;
+  if (publicIp) {
+    listenInfos.push({ protocol: "udp", ip: "0.0.0.0", announcedAddress: publicIp });
+    listenInfos.push({ protocol: "tcp", ip: "0.0.0.0", announcedAddress: publicIp });
+  }
+
   // TCP fallback on loopback
   listenInfos.push({ protocol: "tcp", ip: "0.0.0.0", announcedAddress: "127.0.0.1" });
 
@@ -112,6 +119,10 @@ function getOtherPeers(peerId) {
 // --- WebSocket signaling ---
 function handleWebSocket(ws) {
   let peerId = null;
+
+  ws.on("error", (err) => {
+    console.error(`[WS error] ${err.message}`);
+  });
 
   ws.on("message", async (raw) => {
     let msg;
@@ -273,10 +284,14 @@ async function main() {
   await startMediasoup();
 
   const app = express();
+  app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
   app.use(express.static(path.join(__dirname, "public")));
 
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({ server, path: "/ws" });
   wss.on("connection", handleWebSocket);
 
   server.listen(config.listenPort, () => {

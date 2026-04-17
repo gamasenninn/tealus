@@ -44,7 +44,9 @@ function waitForMessage(predicate) {
 function connectWebSocket() {
   return new Promise((resolve, reject) => {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    ws = new WebSocket(`${protocol}//${location.host}`);
+    // /rtc/ 経由でアクセスされている場合はプロキシパスを使用
+    const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
+    ws = new WebSocket(`${protocol}//${location.host}${wsPath}`);
     ws.onopen = () => resolve();
     ws.onerror = (e) => reject(e);
     ws.onclose = () => setStatus("切断されました");
