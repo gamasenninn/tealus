@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
+import { useCallNotification } from './hooks/useCallNotification';
 import Login from './components/auth/Login';
 import HomePage from './components/home/HomePage';
 import RoomList from './components/room-list/RoomList';
@@ -10,6 +11,8 @@ import Profile from './components/profile/Profile';
 import SearchPage from './components/search/SearchPage';
 import MediaGallery from './components/media/MediaGallery';
 import MultiTalk from './components/multi/MultiTalk';
+import IncomingCallModal from './components/call/IncomingCallModal';
+import CallWindow from './components/call/CallWindow';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -19,7 +22,8 @@ function PrivateRoute({ children }) {
 }
 
 function App() {
-  const { initialize, isLoading } = useAuthStore();
+  const { initialize, isLoading, user } = useAuthStore();
+  const { incomingCall, activeCall, acceptCall, rejectCall, endCall, getCallUrl } = useCallNotification();
 
   useEffect(() => {
     initialize();
@@ -32,8 +36,20 @@ function App() {
     return <div className="loading">読み込み中...</div>;
   }
 
+  const callUrl = getCallUrl();
+
   return (
     <BrowserRouter>
+      {user && incomingCall && (
+        <IncomingCallModal
+          callerName={incomingCall.callerName}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+        />
+      )}
+      {user && activeCall && callUrl && (
+        <CallWindow callUrl={callUrl} onEnd={endCall} />
+      )}
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />

@@ -6,6 +6,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useSocketSync } from '../../hooks/useSocketSync';
 import { useMessageScroll } from '../../hooks/useMessageScroll';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { getSocket } from '../../services/socket';
 import { useVoiceContinuousPlay } from '../../hooks/useVoiceContinuousPlay';
 import { useAppPanel } from '../../hooks/useAppPanel';
 import MessageBubble from './MessageBubble';
@@ -13,7 +14,7 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image, Smartphone } from 'lucide-react';
+import { ArrowLeft, Search, Image, Smartphone, Phone } from 'lucide-react';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -80,6 +81,14 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
+        <button className="chat-header-btn" onClick={() => {
+          const socket = getSocket();
+          if (socket) {
+            socket.emit('call:start', { roomId });
+            // 自分も通話画面を開く — App.jsx の useCallNotification 経由
+            window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId } }));
+          }
+        }} title="通話"><Phone size={18} /></button>
         {appUrls.length > 0 && (
           <button className={`chat-header-btn ${showAppPanel ? 'active' : ''}`} onClick={() => setShowAppPanel(!showAppPanel)} title="アプリ"><Smartphone size={18} /></button>
         )}

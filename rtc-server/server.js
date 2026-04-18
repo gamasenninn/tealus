@@ -1,24 +1,93 @@
+require("dotenv").config({ path: require("path").join(__dirname, "../server/.env") });
+
 const mediasoup = require("mediasoup");
 const express = require("express");
 const { WebSocketServer } = require("ws");
 const http = require("http");
+const https = require("https");
 const path = require("path");
 const os = require("os");
+const dns = require("dns");
+const jwt = require("jsonwebtoken");
+const url = require("url");
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// --- Public IP auto-detection ---
+function httpGet(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? https : http;
+    mod.get(url, { timeout: 5000 }, (res) => {
+      let data = "";
+      res.on("data", (c) => (data += c));
+      res.on("end", () => resolve(data.trim()));
+    }).on("error", reject);
+  });
+}
+
+function dnsLookup() {
+  return new Promise((resolve, reject) => {
+    const resolver = new dns.Resolver();
+    resolver.setServers(["208.67.222.222"]); // OpenDNS
+    resolver.resolve4("myip.opendns.com", (err, addresses) => {
+      if (err) reject(err);
+      else resolve(addresses[0]);
+    });
+  });
+}
+
+async function detectPublicIp() {
+  // 環境変数が明示されていればそれを使う
+  const envIp = process.env.ANNOUNCED_IP || process.env.PUBLIC_IP;
+  if (envIp) {
+    console.log(`Public IP (env): ${envIp}`);
+    return envIp;
+  }
+
+  // 1. DNS で取得（最速・外部HTTP不要）
+  try {
+    const ip = await dnsLookup();
+    console.log(`Public IP (DNS): ${ip}`);
+    return ip;
+  } catch (e) {
+    console.warn("DNS lookup failed:", e.message);
+  }
+
+  // 2. HTTP API フォールバック
+  const apis = [
+    "https://api.ipify.org",
+    "https://ifconfig.me/ip",
+    "https://icanhazip.com",
+  ];
+  for (const url of apis) {
+    try {
+      const ip = await httpGet(url);
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+        console.log(`Public IP (${url}): ${ip}`);
+        return ip;
+      }
+    } catch (e) {
+      console.warn(`${url} failed:`, e.message);
+    }
+  }
+
+  console.warn("Could not detect public IP — external connections may fail");
+  return null;
+}
 
 // --- Auto-detect network interfaces ---
-function getListenInfos() {
+function getListenInfos(publicIp) {
   const listenInfos = [];
   const ifaces = os.networkInterfaces();
 
   for (const [name, addrs] of Object.entries(ifaces)) {
     for (const addr of addrs) {
       if (addr.family !== "IPv4") continue;
-      // UDP for all IPv4 addresses (loopback + real interfaces)
       listenInfos.push({ protocol: "udp", ip: "0.0.0.0", announcedAddress: addr.address });
     }
   }
-  // グローバル IP（環境変数で指定、外部接続に必要）
-  const publicIp = process.env.ANNOUNCED_IP || process.env.PUBLIC_IP;
+
+  // グローバル IP（自動検出 or 環境変数）
   if (publicIp) {
     listenInfos.push({ protocol: "udp", ip: "0.0.0.0", announcedAddress: publicIp });
     listenInfos.push({ protocol: "tcp", ip: "0.0.0.0", announcedAddress: publicIp });
@@ -33,7 +102,7 @@ function getListenInfos() {
   return listenInfos;
 }
 
-// --- Config ---
+// --- Config (listenInfos is set in main() after public IP detection) ---
 const config = {
   listenPort: process.env.RTC_PORT || 3100,
   mediasoup: {
@@ -59,7 +128,7 @@ const config = {
       ],
     },
     webRtcTransport: {
-      listenInfos: getListenInfos(),
+      listenInfos: [], // populated in main()
       enableUdp: true,
       enableTcp: true,
       preferUdp: true,
@@ -70,7 +139,8 @@ const config = {
 // --- State ---
 let worker;
 let router;
-const peers = new Map(); // peerId -> { transports: {}, producers: {}, consumers: {} }
+// rooms: roomId -> Map<peerId, { ws, transports, producers, consumers }>
+const rooms = new Map();
 
 // --- Mediasoup setup ---
 async function startMediasoup() {
@@ -100,25 +170,53 @@ async function createWebRtcTransport() {
   return transport;
 }
 
-// --- Peer management ---
-function createPeer(peerId, ws) {
-  peers.set(peerId, { ws, transports: {}, producers: {}, consumers: {} });
+// --- Room / Peer management ---
+function getRoom(roomId) {
+  if (!rooms.has(roomId)) rooms.set(roomId, new Map());
+  return rooms.get(roomId);
 }
 
-function removePeer(peerId) {
-  const peer = peers.get(peerId);
+function createPeer(roomId, peerId, ws) {
+  const room = getRoom(roomId);
+  room.set(peerId, { ws, transports: {}, producers: {}, consumers: {} });
+}
+
+function removePeer(roomId, peerId) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  const peer = room.get(peerId);
   if (!peer) return;
   for (const transport of Object.values(peer.transports)) transport.close();
-  peers.delete(peerId);
+  room.delete(peerId);
+  if (room.size === 0) rooms.delete(roomId);
 }
 
-function getOtherPeers(peerId) {
-  return [...peers.keys()].filter((id) => id !== peerId);
+function getRoomPeers(roomId) {
+  return rooms.get(roomId) || new Map();
+}
+
+// --- JWT authentication for WebSocket ---
+function authenticateWs(req) {
+  const parsed = url.parse(req.url, true);
+  const token = parsed.query.token;
+  if (!token || !JWT_SECRET) {
+    // 認証なし — クライアント側の peerId を使う
+    return null;
+  }
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (e) {
+    console.warn("JWT verification failed:", e.message);
+    return null;
+  }
 }
 
 // --- WebSocket signaling ---
-function handleWebSocket(ws) {
-  let peerId = null;
+function handleWebSocket(ws, req) {
+  // JWT 認証（token がなければ匿名モード — テスト用）
+  const user = authenticateWs(req);
+  let peerId = user?.id || null;
+  let roomId = null;
 
   ws.on("error", (err) => {
     console.error(`[WS error] ${err.message}`);
@@ -136,16 +234,19 @@ function handleWebSocket(ws) {
     try {
       switch (msg.type) {
         case "join": {
-          peerId = msg.peerId;
-          createPeer(peerId, ws);
-          console.log(`Peer joined: ${peerId}`);
+          // 認証済みなら userId を使用、未認証ならクライアント指定の peerId
+          peerId = peerId || msg.peerId;
+          roomId = msg.roomId || "default";
+          createPeer(roomId, peerId, ws);
+          console.log(`Peer joined: ${peerId} -> room ${roomId}`);
           send(ws, { type: "joined", routerRtpCapabilities: router.rtpCapabilities });
           break;
         }
 
         case "createTransport": {
           const transport = await createWebRtcTransport();
-          const peer = peers.get(peerId);
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
           peer.transports[transport.id] = transport;
 
           send(ws, {
@@ -162,7 +263,8 @@ function handleWebSocket(ws) {
         }
 
         case "connectTransport": {
-          const peer = peers.get(peerId);
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
           const transport = peer.transports[msg.transportId];
           await transport.connect({ dtlsParameters: msg.dtlsParameters });
           send(ws, { type: "transportConnected", transportId: msg.transportId });
@@ -170,7 +272,8 @@ function handleWebSocket(ws) {
         }
 
         case "produce": {
-          const peer = peers.get(peerId);
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
           const transport = peer.transports[msg.transportId];
           const producer = await transport.produce({
             kind: msg.kind,
@@ -180,8 +283,8 @@ function handleWebSocket(ws) {
 
           send(ws, { type: "produced", producerId: producer.id, kind: msg.kind });
 
-          // Notify other peers that a new producer is available
-          for (const [otherId, otherPeer] of peers) {
+          // Notify other peers in the same room
+          for (const [otherId, otherPeer] of room) {
             if (otherId === peerId) continue;
             if (otherPeer.ws) {
               send(otherPeer.ws, {
@@ -196,17 +299,14 @@ function handleWebSocket(ws) {
         }
 
         case "consume": {
-          const peer = peers.get(peerId);
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
           if (!router.canConsume({ producerId: msg.producerId, rtpCapabilities: msg.rtpCapabilities })) {
             send(ws, { type: "consumeFailed", producerId: msg.producerId });
             return;
           }
 
-          const recvTransport = Object.values(peer.transports).find(
-            (t) => t.appData?.direction === "recv" || t.direction === "recv"
-          );
-          // Use the transportId sent by client, or find a recv transport
-          const transport = peer.transports[msg.transportId] || recvTransport;
+          const transport = peer.transports[msg.transportId];
           if (!transport) {
             send(ws, { type: "consumeFailed", producerId: msg.producerId });
             return;
@@ -230,16 +330,17 @@ function handleWebSocket(ws) {
         }
 
         case "resumeConsumer": {
-          const peer = peers.get(peerId);
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
           const consumer = peer.consumers[msg.consumerId];
           if (consumer) await consumer.resume();
           break;
         }
 
         case "getProducers": {
-          // Return all producers from other peers
+          const room = getRoomPeers(roomId);
           const producers = [];
-          for (const [otherId, otherPeer] of peers) {
+          for (const [otherId, otherPeer] of room) {
             if (otherId === peerId) continue;
             for (const producer of Object.values(otherPeer.producers)) {
               producers.push({
@@ -259,16 +360,16 @@ function handleWebSocket(ws) {
   });
 
   ws.on("close", () => {
-    if (peerId) {
-      console.log(`Peer left: ${peerId}`);
-      // Notify others
-      for (const [otherId, otherPeer] of peers) {
+    if (peerId && roomId) {
+      console.log(`Peer left: ${peerId} from room ${roomId}`);
+      const room = getRoomPeers(roomId);
+      for (const [otherId, otherPeer] of room) {
         if (otherId === peerId) continue;
         if (otherPeer.ws) {
           send(otherPeer.ws, { type: "peerLeft", peerId });
         }
       }
-      removePeer(peerId);
+      removePeer(roomId, peerId);
     }
   });
 
@@ -281,6 +382,10 @@ function send(ws, msg) {
 
 // --- HTTP + WS Server ---
 async function main() {
+  // Public IP を自動検出してから mediasoup を起動
+  const publicIp = await detectPublicIp();
+  config.mediasoup.webRtcTransport.listenInfos = getListenInfos(publicIp);
+
   await startMediasoup();
 
   const app = express();

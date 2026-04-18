@@ -5,6 +5,7 @@ const { JWT_SECRET } = require('../middleware/auth');
 const { registerMessageHandler } = require('./handlers/message');
 const { registerReadHandler } = require('./handlers/read');
 const { registerTypingHandler } = require('./handlers/typing');
+const { registerCallHandler } = require('./handlers/call');
 
 // Online users: userId -> Set of socketIds
 const onlineUsers = new Map();
@@ -81,6 +82,7 @@ function setupSocketHandlers(io) {
     registerMessageHandler(socket, io);
     registerReadHandler(socket);
     registerTypingHandler(socket);
+    registerCallHandler(socket, io);
 
     // Disconnect
     socket.on('disconnect', () => {

@@ -1464,8 +1464,8 @@
           }
         }
       }
-      function parseSdpProfileLevelId(params = {}) {
-        const profile_level_id = params["profile-level-id"];
+      function parseSdpProfileLevelId(params2 = {}) {
+        const profile_level_id = params2["profile-level-id"];
         return profile_level_id ? parseProfileLevelId(profile_level_id) : DefaultProfileLevelId;
       }
       function isSameProfile(params1 = {}, params2 = {}) {
@@ -1529,8 +1529,8 @@
       function minLevel(a, b) {
         return isLessLevel(a, b) ? a : b;
       }
-      function isLevelAsymmetryAllowed(params = {}) {
-        const level_asymmetry_allowed = params["level-asymmetry-allowed"];
+      function isLevelAsymmetryAllowed(params2 = {}) {
+        const level_asymmetry_allowed = params2["level-asymmetry-allowed"];
         return level_asymmetry_allowed === true || level_asymmetry_allowed === 1 || level_asymmetry_allowed === "1";
       }
     }
@@ -1580,73 +1580,73 @@
           validateAndNormalizeRtpHeaderExtension(ext);
         }
       }
-      function validateAndNormalizeRtpParameters(params) {
-        if (typeof params !== "object") {
+      function validateAndNormalizeRtpParameters(params2) {
+        if (typeof params2 !== "object") {
           throw new TypeError("params is not an object");
         }
-        if (params.mid && typeof params.mid !== "string") {
+        if (params2.mid && typeof params2.mid !== "string") {
           throw new TypeError("params.mid is not a string");
         }
-        if (!Array.isArray(params.codecs)) {
+        if (!Array.isArray(params2.codecs)) {
           throw new TypeError("missing params.codecs");
         }
-        for (const codec of params.codecs) {
+        for (const codec of params2.codecs) {
           validateAndNormalizeRtpCodecParameters(codec);
         }
-        if (params.headerExtensions && !Array.isArray(params.headerExtensions)) {
+        if (params2.headerExtensions && !Array.isArray(params2.headerExtensions)) {
           throw new TypeError("params.headerExtensions is not an array");
-        } else if (!params.headerExtensions) {
-          params.headerExtensions = [];
+        } else if (!params2.headerExtensions) {
+          params2.headerExtensions = [];
         }
-        for (const ext of params.headerExtensions) {
+        for (const ext of params2.headerExtensions) {
           validateRtpHeaderExtensionParameters(ext);
         }
-        if (params.encodings && !Array.isArray(params.encodings)) {
+        if (params2.encodings && !Array.isArray(params2.encodings)) {
           throw new TypeError("params.encodings is not an array");
-        } else if (!params.encodings) {
-          params.encodings = [];
+        } else if (!params2.encodings) {
+          params2.encodings = [];
         }
-        for (const encoding of params.encodings) {
+        for (const encoding of params2.encodings) {
           validateAndNormalizeRtpEncodingParameters(encoding);
         }
-        if (params.rtcp && typeof params.rtcp !== "object") {
+        if (params2.rtcp && typeof params2.rtcp !== "object") {
           throw new TypeError("params.rtcp is not an object");
-        } else if (!params.rtcp) {
-          params.rtcp = {};
+        } else if (!params2.rtcp) {
+          params2.rtcp = {};
         }
-        validateAndNormalizeRtcpParameters(params.rtcp);
+        validateAndNormalizeRtcpParameters(params2.rtcp);
       }
-      function validateAndNormalizeSctpStreamParameters(params) {
-        if (typeof params !== "object") {
+      function validateAndNormalizeSctpStreamParameters(params2) {
+        if (typeof params2 !== "object") {
           throw new TypeError("params is not an object");
         }
-        if (typeof params.streamId !== "number") {
+        if (typeof params2.streamId !== "number") {
           throw new TypeError("missing params.streamId");
         }
         let orderedGiven = false;
-        if (typeof params.ordered === "boolean") {
+        if (typeof params2.ordered === "boolean") {
           orderedGiven = true;
         } else {
-          params.ordered = true;
+          params2.ordered = true;
         }
-        if (params.maxPacketLifeTime && typeof params.maxPacketLifeTime !== "number") {
+        if (params2.maxPacketLifeTime && typeof params2.maxPacketLifeTime !== "number") {
           throw new TypeError("invalid params.maxPacketLifeTime");
         }
-        if (params.maxRetransmits && typeof params.maxRetransmits !== "number") {
+        if (params2.maxRetransmits && typeof params2.maxRetransmits !== "number") {
           throw new TypeError("invalid params.maxRetransmits");
         }
-        if (params.maxPacketLifeTime && params.maxRetransmits) {
+        if (params2.maxPacketLifeTime && params2.maxRetransmits) {
           throw new TypeError("cannot provide both maxPacketLifeTime and maxRetransmits");
         }
-        if (orderedGiven && params.ordered && (params.maxPacketLifeTime || params.maxRetransmits)) {
+        if (orderedGiven && params2.ordered && (params2.maxPacketLifeTime || params2.maxRetransmits)) {
           throw new TypeError("cannot be ordered with maxPacketLifeTime or maxRetransmits");
-        } else if (!orderedGiven && (params.maxPacketLifeTime || params.maxRetransmits)) {
-          params.ordered = false;
+        } else if (!orderedGiven && (params2.maxPacketLifeTime || params2.maxRetransmits)) {
+          params2.ordered = false;
         }
-        if (params.label && typeof params.label !== "string") {
+        if (params2.label && typeof params2.label !== "string") {
           throw new TypeError("invalid params.label");
         }
-        if (params.protocol && typeof params.protocol !== "string") {
+        if (params2.protocol && typeof params2.protocol !== "string") {
           throw new TypeError("invalid params.protocol");
         }
       }
@@ -2745,14 +2745,14 @@
           });
           this._maxSpatialLayer = spatialLayer;
         }
-        async setRtpEncodingParameters(params) {
+        async setRtpEncodingParameters(params2) {
           if (this._closed) {
             throw new errors_1.InvalidStateError("closed");
-          } else if (typeof params !== "object") {
+          } else if (typeof params2 !== "object") {
             throw new TypeError("invalid params");
           }
           await new Promise((resolve, reject) => {
-            this.safeEmit("@setrtpencodingparameters", params, resolve, reject);
+            this.safeEmit("@setrtpencodingparameters", params2, resolve, reject);
           });
         }
         onTrackEnded() {
@@ -4033,8 +4033,8 @@
           producer.on("@setmaxspatiallayer", (spatialLayer, callback, errback) => {
             this._awaitQueue.push(async () => await this._handler.setMaxSpatialLayer(producer.localId, spatialLayer), "producer @setmaxspatiallayer event").then(callback).catch(errback);
           });
-          producer.on("@setrtpencodingparameters", (params, callback, errback) => {
-            this._awaitQueue.push(async () => await this._handler.setRtpEncodingParameters(producer.localId, params), "producer @setrtpencodingparameters event").then(callback).catch(errback);
+          producer.on("@setrtpencodingparameters", (params2, callback, errback) => {
+            this._awaitQueue.push(async () => await this._handler.setRtpEncodingParameters(producer.localId, params2), "producer @setrtpencodingparameters event").then(callback).catch(errback);
           });
           producer.on("@getstats", (callback, errback) => {
             if (this._closed) {
@@ -6294,17 +6294,17 @@
           logger.debug("setMaxSpatialLayer() | calling pc.setRemoteDescription() [answer:%o]", answer);
           await this._pc.setRemoteDescription(answer);
         }
-        async setRtpEncodingParameters(localId, params) {
+        async setRtpEncodingParameters(localId, params2) {
           this.assertNotClosed();
           this.assertSendDirection();
-          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params);
+          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params2);
           const transceiver = this._mapMidTransceiver.get(localId);
           if (!transceiver) {
             throw new Error("associated RTCRtpTransceiver not found");
           }
           const parameters = transceiver.sender.getParameters();
           parameters.encodings.forEach((encoding, idx) => {
-            parameters.encodings[idx] = { ...encoding, ...params };
+            parameters.encodings[idx] = { ...encoding, ...params2 };
           });
           await transceiver.sender.setParameters(parameters);
           this._remoteSdp.muxMediaSectionSimulcast(localId, parameters.encodings);
@@ -7059,17 +7059,17 @@
           logger.debug("setMaxSpatialLayer() | calling pc.setRemoteDescription() [answer:%o]", answer);
           await this._pc.setRemoteDescription(answer);
         }
-        async setRtpEncodingParameters(localId, params) {
+        async setRtpEncodingParameters(localId, params2) {
           this.assertNotClosed();
           this.assertSendDirection();
-          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params);
+          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params2);
           const transceiver = this._mapMidTransceiver.get(localId);
           if (!transceiver) {
             throw new Error("associated RTCRtpTransceiver not found");
           }
           const parameters = transceiver.sender.getParameters();
           parameters.encodings.forEach((encoding, idx) => {
-            parameters.encodings[idx] = { ...encoding, ...params };
+            parameters.encodings[idx] = { ...encoding, ...params2 };
           });
           await transceiver.sender.setParameters(parameters);
           this._remoteSdp.muxMediaSectionSimulcast(localId, parameters.encodings);
@@ -7782,17 +7782,17 @@
           logger.debug("setMaxSpatialLayer() | calling pc.setRemoteDescription() [answer:%o]", answer);
           await this._pc.setRemoteDescription(answer);
         }
-        async setRtpEncodingParameters(localId, params) {
+        async setRtpEncodingParameters(localId, params2) {
           this.assertNotClosed();
           this.assertSendDirection();
-          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params);
+          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params2);
           const transceiver = this._mapMidTransceiver.get(localId);
           if (!transceiver) {
             throw new Error("associated RTCRtpTransceiver not found");
           }
           const parameters = transceiver.sender.getParameters();
           parameters.encodings.forEach((encoding, idx) => {
-            parameters.encodings[idx] = { ...encoding, ...params };
+            parameters.encodings[idx] = { ...encoding, ...params2 };
           });
           await transceiver.sender.setParameters(parameters);
           this._remoteSdp.muxMediaSectionSimulcast(localId, parameters.encodings);
@@ -8530,17 +8530,17 @@
           logger.debug("setMaxSpatialLayer() | calling pc.setRemoteDescription() [answer:%o]", answer);
           await this._pc.setRemoteDescription(answer);
         }
-        async setRtpEncodingParameters(localId, params) {
+        async setRtpEncodingParameters(localId, params2) {
           this.assertNotClosed();
           this.assertSendDirection();
-          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params);
+          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params2);
           const transceiver = this._mapMidTransceiver.get(localId);
           if (!transceiver) {
             throw new Error("associated RTCRtpTransceiver not found");
           }
           const parameters = transceiver.sender.getParameters();
           parameters.encodings.forEach((encoding, idx) => {
-            parameters.encodings[idx] = { ...encoding, ...params };
+            parameters.encodings[idx] = { ...encoding, ...params2 };
           });
           await transceiver.sender.setParameters(parameters);
           this._remoteSdp.muxMediaSectionSimulcast(localId, parameters.encodings);
@@ -9308,17 +9308,17 @@
           logger.debug("setMaxSpatialLayer() | calling pc.setRemoteDescription() [answer:%o]", answer);
           await this._pc.setRemoteDescription(answer);
         }
-        async setRtpEncodingParameters(localId, params) {
+        async setRtpEncodingParameters(localId, params2) {
           this.assertNotClosed();
           this.assertSendDirection();
-          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params);
+          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params2);
           const transceiver = this._mapMidTransceiver.get(localId);
           if (!transceiver) {
             throw new Error("associated RTCRtpTransceiver not found");
           }
           const parameters = transceiver.sender.getParameters();
           parameters.encodings.forEach((encoding, idx) => {
-            parameters.encodings[idx] = { ...encoding, ...params };
+            parameters.encodings[idx] = { ...encoding, ...params2 };
           });
           await transceiver.sender.setParameters(parameters);
           this._remoteSdp.muxMediaSectionSimulcast(localId, parameters.encodings);
@@ -10791,9 +10791,9 @@
           this.assertNotClosed();
           logger.debug("setMaxSpatialLayer() [localId:%s, spatialLayer:%s]", localId, spatialLayer);
         }
-        async setRtpEncodingParameters(localId, params) {
+        async setRtpEncodingParameters(localId, params2) {
           this.assertNotClosed();
-          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params);
+          logger.debug("setRtpEncodingParameters() [localId:%s, params:%o]", localId, params2);
         }
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         async getSenderStats(localId) {
@@ -11807,6 +11807,10 @@
 
   // src/client.js
   var import_mediasoup_client = __toESM(require_lib5());
+  var params = new URLSearchParams(location.search);
+  var paramRoom = params.get("room");
+  var paramToken = params.get("token");
+  var autoConnect = !!(paramRoom && paramToken);
   var ws;
   var device;
   var sendTransport;
@@ -11815,8 +11819,12 @@
   var peerId = "peer-" + Math.random().toString(36).slice(2, 8);
   var statusEl = document.getElementById("status");
   var connectBtn = document.getElementById("connectBtn");
+  var callControls = document.getElementById("callControls");
+  var muteBtn = document.getElementById("muteBtn");
+  var endCallBtn = document.getElementById("endCallBtn");
   var localVideo = document.getElementById("localVideo");
   var remoteVideo = document.getElementById("remoteVideo");
+  var isMuted = false;
   function setStatus(text) {
     statusEl.textContent = text;
     console.log("[status]", text);
@@ -11843,7 +11851,8 @@
     return new Promise((resolve, reject) => {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
-      ws = new WebSocket(`${protocol}//${location.host}${wsPath}`);
+      const tokenQuery = paramToken ? `?token=${encodeURIComponent(paramToken)}` : "";
+      ws = new WebSocket(`${protocol}//${location.host}${wsPath}${tokenQuery}`);
       ws.onopen = () => resolve();
       ws.onerror = (e) => reject(e);
       ws.onclose = () => setStatus("\u5207\u65AD\u3055\u308C\u307E\u3057\u305F");
@@ -11873,7 +11882,47 @@
     }
     consuming = false;
   }
+  function disconnect() {
+    if (sendTransport) {
+      sendTransport.close();
+      sendTransport = null;
+    }
+    if (recvTransport) {
+      recvTransport.close();
+      recvTransport = null;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    ws = null;
+    device = null;
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+      localStream = null;
+    }
+    localVideo.srcObject = null;
+    remoteVideo.srcObject = null;
+    messageHandlers.length = 0;
+    if (connectBtn) {
+      connectBtn.textContent = "\u63A5\u7D9A\u3059\u308B";
+      connectBtn.classList.remove("connected");
+    }
+    if (callControls) callControls.classList.remove("visible");
+    isMuted = false;
+    if (muteBtn) {
+      muteBtn.textContent = "\u{1F3A4}";
+      muteBtn.classList.remove("active");
+    }
+    setStatus("\u5207\u65AD\u3057\u307E\u3057\u305F");
+    if (autoConnect && window.parent !== window) {
+      window.parent.postMessage({ type: "call:ended" }, "*");
+    }
+  }
+  var connected = false;
   connectBtn.addEventListener("click", async () => {
+    if (connected) {
+      connected = false;
+      disconnect();
+      return;
+    }
     connectBtn.disabled = true;
     try {
       setStatus("\u30AB\u30E1\u30E9\u30FB\u30DE\u30A4\u30AF\u3092\u53D6\u5F97\u4E2D...");
@@ -11893,7 +11942,7 @@
         }
         return false;
       });
-      send({ type: "join", peerId });
+      send({ type: "join", peerId, roomId: paramRoom || "default" });
       const joinResp = await waitForMessage((m) => m.type === "joined");
       setStatus("\u30C7\u30D0\u30A4\u30B9\u3092\u521D\u671F\u5316\u4E2D...");
       device = new import_mediasoup_client.Device();
@@ -11906,13 +11955,19 @@
       for (const p of prodResp.producers) {
         await consumeProducer(p.producerId);
       }
+      connected = true;
+      connectBtn.textContent = "\u5207\u65AD\u3059\u308B";
+      connectBtn.classList.add("connected");
+      connectBtn.disabled = false;
+      callControls.classList.add("visible");
       if (prodResp.producers.length === 0) {
         setStatus("\u63A5\u7D9A\u5B8C\u4E86 \u2014 \u76F8\u624B\u306E\u53C2\u52A0\u3092\u5F85\u3063\u3066\u3044\u307E\u3059...");
       }
     } catch (err) {
       console.error(err);
       setStatus("\u30A8\u30E9\u30FC: " + err.message);
-      connectBtn.disabled = false;
+      connected = false;
+      disconnect();
     }
   });
   async function createSendTransport() {
@@ -11994,5 +12049,29 @@
       (t) => `${t.kind}:${t.readyState}:muted=${t.muted}`
     ));
     setStatus("\u901A\u8A71\u4E2D");
+  }
+  muteBtn?.addEventListener("click", () => {
+    if (!localStream) return;
+    isMuted = !isMuted;
+    localStream.getAudioTracks().forEach((t) => t.enabled = !isMuted);
+    muteBtn.textContent = isMuted ? "\u{1F507}" : "\u{1F3A4}";
+    muteBtn.classList.toggle("active", isMuted);
+  });
+  var fullscreenBtn = document.getElementById("fullscreenBtn");
+  fullscreenBtn?.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  });
+  endCallBtn?.addEventListener("click", () => {
+    connected = false;
+    disconnect();
+    if (autoConnect) window.close();
+  });
+  if (autoConnect) {
+    if (connectBtn) connectBtn.style.display = "none";
+    connectBtn?.click();
   }
 })();

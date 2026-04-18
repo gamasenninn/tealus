@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mediasoup SFU Demo</title>
+  <title>Tealus Call</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -15,44 +15,108 @@
       align-items: center;
       min-height: 100vh;
       padding: 20px;
+      overflow: hidden;
+      height: 100vh;
+      height: 100dvh;
     }
-    h1 { margin-bottom: 20px; font-size: 1.5rem; }
     #status {
-      margin-bottom: 16px;
-      padding: 8px 16px;
+      margin-bottom: 8px;
+      padding: 6px 16px;
       border-radius: 8px;
       background: #16213e;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
     }
     .video-container {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .video-box {
       position: relative;
+      width: min(720px, 90vw);
+      aspect-ratio: 4 / 3;
+    }
+    /* 相手（大） */
+    .video-box.remote {
+      position: absolute;
+      inset: 0;
       background: #0f3460;
       border-radius: 12px;
       overflow: hidden;
     }
-    .video-box video {
-      width: 480px;
-      height: 360px;
-      object-fit: cover;
+    .video-box.remote video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    /* 自分（小・右下 PiP） */
+    .video-box.local {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      width: 160px;
+      aspect-ratio: 4 / 3;
+      background: #0f3460;
+      border-radius: 8px;
+      overflow: hidden;
+      z-index: 2;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .video-box.local video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
       display: block;
     }
     .video-label {
       position: absolute;
-      bottom: 8px;
-      left: 8px;
+      bottom: 6px;
+      left: 6px;
       background: rgba(0,0,0,0.6);
-      padding: 4px 10px;
+      padding: 2px 8px;
       border-radius: 4px;
-      font-size: 0.85rem;
+      font-size: 0.75rem;
+    }
+    .call-controls {
+      display: none;
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3;
+      gap: 20px;
+    }
+    .call-controls.visible { display: flex; }
+    .call-ctrl-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 1.2rem;
+      transition: transform 0.15s;
+    }
+    .call-ctrl-btn:hover { transform: scale(1.1); }
+    .call-ctrl-btn.mute { background: rgba(255,255,255,0.2); }
+    .call-ctrl-btn.mute.active { background: #ff9800; }
+    .call-ctrl-btn.fullscreen { background: rgba(255,255,255,0.2); }
+    .call-ctrl-btn.end { background: #e94560; }
+
+    /* スマホ: 映像を全画面に */
+    @media (max-width: 768px) {
+      body { padding: 0; }
+      .video-container {
+        width: 100vw;
+        height: 100dvh;
+        aspect-ratio: auto;
+        border-radius: 0;
+      }
+      .video-box.remote { border-radius: 0; }
+      .video-box.local { bottom: 80px; right: 8px; width: 120px; }
+      #connectBtn { position: fixed; bottom: 40%; left: 50%; transform: translateX(-50%); z-index: 5; }
+      #status { position: fixed; bottom: calc(40% - 40px); left: 50%; transform: translateX(-50%); z-index: 5; }
+      .call-controls { bottom: 24px; }
+      .call-ctrl-btn.fullscreen { display: none; }
     }
     #connectBtn {
-      margin: 20px 0;
+      margin: 12px 0 4px;
       padding: 12px 32px;
       font-size: 1rem;
       border: none;
@@ -64,22 +128,28 @@
     }
     #connectBtn:hover { background: #c73b52; }
     #connectBtn:disabled { background: #555; cursor: default; }
+    #connectBtn.connected { background: #e94560; }
+    #connectBtn.connected:hover { background: #ff6b81; }
   </style>
 </head>
 <body>
-  <h1>mediasoup SFU Demo - 1対1ビデオ通話</h1>
-  <div id="status">未接続</div>
-  <button id="connectBtn">接続する</button>
   <div class="video-container">
-    <div class="video-box">
-      <video id="localVideo" autoplay muted playsinline></video>
-      <div class="video-label">自分</div>
-    </div>
-    <div class="video-box">
+    <div class="video-box remote">
       <video id="remoteVideo" autoplay playsinline></video>
       <div class="video-label">相手</div>
     </div>
+    <div class="video-box local">
+      <video id="localVideo" autoplay muted playsinline></video>
+      <div class="video-label">自分</div>
+    </div>
+    <div class="call-controls" id="callControls">
+      <button class="call-ctrl-btn mute" id="muteBtn" title="ミュート">🎤</button>
+      <button class="call-ctrl-btn fullscreen" id="fullscreenBtn" title="全画面">⛶</button>
+      <button class="call-ctrl-btn end" id="endCallBtn" title="通話を終了">✕</button>
+    </div>
   </div>
+  <button id="connectBtn">接続する</button>
+  <div id="status">未接続</div>
 
   <script src="bundle.js?v=2"></script>
 </body>

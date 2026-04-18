@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../services/api';
-import { ArrowLeft, Settings, LogOut } from 'lucide-react';
+import { ArrowLeft, Settings, LogOut, RefreshCw } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import './Profile.css';
 
@@ -245,6 +245,17 @@ function Profile() {
       </div>
 
       <div className="profile-actions">
+        <button className="profile-reload-btn" onClick={async () => {
+          if (!confirm('キャッシュをクリアしてリロードします。よろしいですか？')) return;
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+          location.reload(true);
+        }}>
+          <RefreshCw size={18} />
+          <span>キャッシュクリア＆リロード</span>
+        </button>
         {user?.role === 'admin' && (
           <button className="profile-admin-btn" onClick={() => navigate('/admin')}>
             <Settings size={18} />
