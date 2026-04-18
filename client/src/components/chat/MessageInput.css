@@ -3,6 +3,7 @@
   border-top: 1px solid #e0e0e0;
   flex-shrink: 0;
   position: relative;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .message-input-error {
