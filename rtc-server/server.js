@@ -218,6 +218,10 @@ function handleWebSocket(ws, req) {
   let peerId = user?.id || null;
   let roomId = null;
 
+  // keepalive
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
+
   ws.on("error", (err) => {
     console.error(`[WS error] ${err.message}`);
   });
@@ -398,6 +402,19 @@ async function main() {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws" });
   wss.on("connection", handleWebSocket);
+
+  // WebSocket keepalive — プロキシのアイドルタイムアウトを防ぐ
+  const PING_INTERVAL = 30000; // 30秒
+  setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) {
+        console.log("[keepalive] terminating dead connection");
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, PING_INTERVAL);
 
   server.listen(config.listenPort, () => {
     console.log(`Server running at http://localhost:${config.listenPort}`);
