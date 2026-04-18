@@ -1,20 +1,21 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useMessageStore } from '../stores/messageStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
-import { SCROLL_THRESHOLD, SCROLL_NEAR_BOTTOM, SCROLL_HEADER_OFFSET, INITIAL_SCROLL_DELAY } from '../constants/ui';
+import { SCROLL_NEAR_BOTTOM, INITIAL_SCROLL_DELAY } from '../constants/ui';
 
 /**
- * Manages scroll behavior, pagination, auto-scroll, and sticky date.
+ * Manages scroll behavior, pagination, and auto-scroll.
  */
 export function useMessageScroll(roomId) {
   const { user } = useAuthStore();
   const { messages, loadMore, hasMore } = useMessageStore();
-  const [stickyDate, setStickyDate] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const loadMoreSentinelRef = useRef(null);
   const isInitialLoad = useRef(true);
+  const isLoadingMore = useRef(false);
 
   // Reset on room change
   useEffect(() => {
@@ -39,7 +40,6 @@ export function useMessageScroll(roomId) {
       const savedScrollTop = sessionStorage.getItem(`scrollPos:${roomId}`);
 
       if (savedScrollTop !== null) {
-        // Restore saved position (returning from navigation)
         setTimeout(() => {
           const container = messagesContainerRef.current;
           if (container) {
@@ -49,7 +49,6 @@ export function useMessageScroll(roomId) {
         }, INITIAL_SCROLL_DELAY);
         sessionStorage.removeItem(`scrollPos:${roomId}`);
       } else {
-        // First visit: scroll to bottom
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView();
           markVisibleAsRead();
@@ -68,6 +67,34 @@ export function useMessageScroll(roomId) {
     }
   }, [messages.length]);
 
+  // IntersectionObserver for loading older messages
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    const container = messagesContainerRef.current;
+    if (!sentinel || !container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore.current && !isInitialLoad.current) {
+          isLoadingMore.current = true;
+          const prevScrollHeight = container.scrollHeight;
+
+          loadMore(roomId).then(() => {
+            setTimeout(() => {
+              const newScrollHeight = container.scrollHeight;
+              container.scrollTop = newScrollHeight - prevScrollHeight;
+              isLoadingMore.current = false;
+            }, 150);
+          }).catch(() => { isLoadingMore.current = false; });
+        }
+      },
+      { root: container, rootMargin: '100px 0px 0px 0px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [roomId, hasMore]);
+
   const markVisibleAsRead = useCallback(() => {
     const unreadIds = messages
       .filter((m) => m.sender_id !== user.id)
@@ -84,34 +111,8 @@ export function useMessageScroll(roomId) {
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
-
-    // Save scroll position on every scroll (for browser navigation restore)
     sessionStorage.setItem(`scrollPos:${roomId}`, container.scrollTop);
-
-    if (container.scrollTop < SCROLL_THRESHOLD && hasMore) {
-      const prevScrollHeight = container.scrollHeight;
-      loadMore(roomId).then(() => {
-        requestAnimationFrame(() => {
-          const newScrollHeight = container.scrollHeight;
-          container.scrollTop = newScrollHeight - prevScrollHeight;
-        });
-      });
-    }
-
-    // Update sticky date
-    const separators = container.querySelectorAll('[data-date]');
-    let currentDate = null;
-    for (const sep of separators) {
-      const rect = sep.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      if (rect.top <= containerRect.top + SCROLL_HEADER_OFFSET) {
-        currentDate = sep.getAttribute('data-date');
-      } else {
-        break;
-      }
-    }
-    setStickyDate(currentDate);
   };
 
-  return { messagesEndRef, messagesContainerRef, stickyDate, handleScroll };
+  return { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll };
 }

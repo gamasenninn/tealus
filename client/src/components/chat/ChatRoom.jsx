@@ -47,7 +47,7 @@ function ChatRoom() {
 
   // Custom hooks
   const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
-  const { messagesEndRef, messagesContainerRef, stickyDate, handleScroll } = useMessageScroll(roomId);
+  const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
 
   const getRoomTitle = () => {
@@ -109,11 +109,7 @@ function ChatRoom() {
         onScroll={handleScroll}
         style={showAppPanel && appUrls.length > 0 ? { flex: 100 - (appUrls[activeAppIndex]?.ratio || 50) } : undefined}
       >
-        {stickyDate && (
-          <div className="sticky-date">
-            <DateSeparator date={stickyDate} />
-          </div>
-        )}
+          <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
         {messages.map((msg, i) => {
           const prevMsg = messages[i - 1];
           const showDate = !prevMsg ||
@@ -121,7 +117,7 @@ function ChatRoom() {
           const showUnread = lastReadMessageId && prevMsg && prevMsg.id === lastReadMessageId && msg.sender_id !== user.id;
           return (
             <div key={msg.id} data-date={showDate ? msg.created_at : undefined} data-msg-id={msg.id}>
-              {showDate && <DateSeparator date={msg.created_at} hidden={stickyDate && new Date(msg.created_at).toDateString() === new Date(stickyDate).toDateString()} />}
+              {showDate && <DateSeparator date={msg.created_at} />}
               {showUnread && <UnreadSeparator />}
               <MessageBubble message={msg} isOwn={msg.sender_id === user.id} searchKeyword={searchKeyword} />
             </div>
