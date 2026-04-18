@@ -46,7 +46,14 @@ export function useCallNotification() {
   useEffect(() => {
     const handleMessage = (e) => {
       if (e.data?.type === 'call:ended') {
-        setActiveCall(null);
+        // call:end を emit してから状態をクリア（通話履歴記録のため）
+        setActiveCall((prev) => {
+          if (prev) {
+            const socket = getSocket();
+            if (socket) socket.emit('call:end', { roomId: prev.roomId });
+          }
+          return null;
+        });
       }
     };
     window.addEventListener('message', handleMessage);

@@ -11912,8 +11912,8 @@
       muteBtn.classList.remove("active");
     }
     setStatus("\u5207\u65AD\u3057\u307E\u3057\u305F");
-    if (autoConnect && window.parent !== window) {
-      window.parent.postMessage({ type: "call:ended" }, "*");
+    if (autoConnect && window.opener) {
+      window.opener.postMessage({ type: "call:ended" }, "*");
     }
   }
   var connected = false;

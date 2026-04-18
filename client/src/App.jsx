@@ -13,6 +13,7 @@ import MediaGallery from './components/media/MediaGallery';
 import MultiTalk from './components/multi/MultiTalk';
 import IncomingCallModal from './components/call/IncomingCallModal';
 import CallWindow from './components/call/CallWindow';
+import CallBanner from './components/call/CallBanner';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -49,6 +50,9 @@ function App() {
       )}
       {user && activeCall && callUrl && (
         <CallWindow callUrl={callUrl} onEnd={endCall} />
+      )}
+      {user && activeCall && (
+        <CallBanner />
       )}
       <Routes>
         <Route path="/login" element={<Login />} />

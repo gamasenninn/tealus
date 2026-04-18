@@ -113,9 +113,9 @@ function disconnect() {
   isMuted = false;
   if (muteBtn) { muteBtn.textContent = "🎤"; muteBtn.classList.remove("active"); }
   setStatus("切断しました");
-  // 自動接続モードでは切断時に親ウィンドウに通知
-  if (autoConnect && window.parent !== window) {
-    window.parent.postMessage({ type: "call:ended" }, "*");
+  // 自動接続モードでは切断時に開いた元ウィンドウに通知
+  if (autoConnect && window.opener) {
+    window.opener.postMessage({ type: "call:ended" }, "*");
   }
 }
 
