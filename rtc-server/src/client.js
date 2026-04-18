@@ -51,15 +51,34 @@ function waitForMessage(predicate) {
   });
 }
 
+let intentionalClose = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 5;
+
+function getWsUrl() {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
+  const tokenQuery = paramToken ? `?token=${encodeURIComponent(paramToken)}` : "";
+  return `${protocol}//${location.host}${wsPath}${tokenQuery}`;
+}
+
 function connectWebSocket() {
   return new Promise((resolve, reject) => {
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
-    const tokenQuery = paramToken ? `?token=${encodeURIComponent(paramToken)}` : "";
-    ws = new WebSocket(`${protocol}//${location.host}${wsPath}${tokenQuery}`);
-    ws.onopen = () => resolve();
+    intentionalClose = false;
+    ws = new WebSocket(getWsUrl());
+    ws.onopen = () => {
+      reconnectAttempts = 0;
+      resolve();
+    };
     ws.onerror = (e) => reject(e);
-    ws.onclose = () => setStatus("切断されました");
+    ws.onclose = () => {
+      if (intentionalClose || !connected) {
+        setStatus("切断されました");
+        return;
+      }
+      // 意図しない切断 → 自動再接続
+      attemptReconnect();
+    };
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       console.log("[recv]", msg.type, msg);
@@ -69,6 +88,58 @@ function connectWebSocket() {
       console.warn("[unhandled]", msg.type);
     };
   });
+}
+
+function attemptReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT) {
+    setStatus("再接続に失敗しました");
+    connected = false;
+    disconnect();
+    return;
+  }
+  reconnectAttempts++;
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 8000);
+  setStatus(`再接続中... (${reconnectAttempts}/${MAX_RECONNECT})`);
+  console.log(`[reconnect] attempt ${reconnectAttempts} in ${delay}ms`);
+
+  setTimeout(() => {
+    if (!connected || intentionalClose) return;
+    const newWs = new WebSocket(getWsUrl());
+    newWs.onopen = () => {
+      console.log("[reconnect] connected, rejoining...");
+      ws = newWs;
+      reconnectAttempts = 0;
+      // 再接続ハンドラを設定
+      ws.onclose = () => {
+        if (intentionalClose || !connected) return;
+        attemptReconnect();
+      };
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        console.log("[recv]", msg.type, msg);
+        for (let i = messageHandlers.length - 1; i >= 0; i--) {
+          if (messageHandlers[i](msg)) return;
+        }
+      };
+      // rejoin
+      send({ type: "join", peerId, roomId: paramRoom || "default" });
+      waitForMessage((m) => m.type === "joined").then(() => {
+        setStatus("再接続しました");
+        // 既存の Producer を再取得
+        send({ type: "getProducers" });
+        waitForMessage((m) => m.type === "producers").then((resp) => {
+          for (const p of resp.producers) {
+            enqueueConsume(p.producerId);
+          }
+          setStatus("通話中");
+        });
+      });
+    };
+    newWs.onerror = () => {
+      console.log("[reconnect] failed");
+      attemptReconnect();
+    };
+  }, delay);
 }
 
 function send(msg) {
@@ -93,6 +164,7 @@ async function enqueueConsume(producerId) {
 
 // --- Disconnect ---
 function disconnect() {
+  intentionalClose = true;
   if (sendTransport) { sendTransport.close(); sendTransport = null; }
   if (recvTransport) { recvTransport.close(); recvTransport = null; }
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();

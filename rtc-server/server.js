@@ -238,12 +238,26 @@ function handleWebSocket(ws, req) {
     try {
       switch (msg.type) {
         case "join": {
-          // 認証済みなら userId を使用、未認証ならクライアント指定の peerId
           peerId = peerId || msg.peerId;
           roomId = msg.roomId || "default";
-          createPeer(roomId, peerId, ws);
-          console.log(`Peer joined: ${peerId} -> room ${roomId}`);
-          send(ws, { type: "joined", routerRtpCapabilities: router.rtpCapabilities });
+          const existingRoom = getRoomPeers(roomId);
+          const existingPeer = existingRoom.get(peerId);
+
+          if (existingPeer) {
+            // 再接続: 既存ピアの WebSocket を差し替え、タイマーをキャンセル
+            console.log(`Peer rejoined: ${peerId} -> room ${roomId}`);
+            if (existingPeer.reconnectTimer) {
+              clearTimeout(existingPeer.reconnectTimer);
+              existingPeer.reconnectTimer = null;
+            }
+            existingPeer.ws = ws;
+            send(ws, { type: "joined", routerRtpCapabilities: router.rtpCapabilities, rejoined: true });
+          } else {
+            // 新規参加
+            createPeer(roomId, peerId, ws);
+            console.log(`Peer joined: ${peerId} -> room ${roomId}`);
+            send(ws, { type: "joined", routerRtpCapabilities: router.rtpCapabilities });
+          }
           break;
         }
 
@@ -365,15 +379,21 @@ function handleWebSocket(ws, req) {
 
   ws.on("close", () => {
     if (peerId && roomId) {
-      console.log(`Peer left: ${peerId} from room ${roomId}`);
       const room = getRoomPeers(roomId);
-      for (const [otherId, otherPeer] of room) {
-        if (otherId === peerId) continue;
-        if (otherPeer.ws) {
-          send(otherPeer.ws, { type: "peerLeft", peerId });
+      const peer = room.get(peerId);
+      if (!peer) return;
+
+      console.log(`Peer disconnected: ${peerId} from room ${roomId} (waiting 15s for reconnect)`);
+      // 15秒間は再接続を待つ（トランスポートは維持）
+      peer.ws = null;
+      peer.reconnectTimer = setTimeout(() => {
+        console.log(`Peer timeout: ${peerId} from room ${roomId} — removing`);
+        for (const [otherId, otherPeer] of getRoomPeers(roomId)) {
+          if (otherId === peerId) continue;
+          if (otherPeer.ws) send(otherPeer.ws, { type: "peerLeft", peerId });
         }
-      }
-      removePeer(roomId, peerId);
+        removePeer(roomId, peerId);
+      }, 15000);
     }
   });
 

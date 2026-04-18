@@ -11847,15 +11847,31 @@
       messageHandlers.push(handler);
     });
   }
+  var intentionalClose = false;
+  var reconnectAttempts = 0;
+  var MAX_RECONNECT = 5;
+  function getWsUrl() {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
+    const tokenQuery = paramToken ? `?token=${encodeURIComponent(paramToken)}` : "";
+    return `${protocol}//${location.host}${wsPath}${tokenQuery}`;
+  }
   function connectWebSocket() {
     return new Promise((resolve, reject) => {
-      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      const wsPath = location.pathname.startsWith("/rtc") ? "/rtc/ws" : "/ws";
-      const tokenQuery = paramToken ? `?token=${encodeURIComponent(paramToken)}` : "";
-      ws = new WebSocket(`${protocol}//${location.host}${wsPath}${tokenQuery}`);
-      ws.onopen = () => resolve();
+      intentionalClose = false;
+      ws = new WebSocket(getWsUrl());
+      ws.onopen = () => {
+        reconnectAttempts = 0;
+        resolve();
+      };
       ws.onerror = (e) => reject(e);
-      ws.onclose = () => setStatus("\u5207\u65AD\u3055\u308C\u307E\u3057\u305F");
+      ws.onclose = () => {
+        if (intentionalClose || !connected) {
+          setStatus("\u5207\u65AD\u3055\u308C\u307E\u3057\u305F");
+          return;
+        }
+        attemptReconnect();
+      };
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         console.log("[recv]", msg.type, msg);
@@ -11865,6 +11881,53 @@
         console.warn("[unhandled]", msg.type);
       };
     });
+  }
+  function attemptReconnect() {
+    if (reconnectAttempts >= MAX_RECONNECT) {
+      setStatus("\u518D\u63A5\u7D9A\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
+      connected = false;
+      disconnect();
+      return;
+    }
+    reconnectAttempts++;
+    const delay = Math.min(1e3 * Math.pow(2, reconnectAttempts - 1), 8e3);
+    setStatus(`\u518D\u63A5\u7D9A\u4E2D... (${reconnectAttempts}/${MAX_RECONNECT})`);
+    console.log(`[reconnect] attempt ${reconnectAttempts} in ${delay}ms`);
+    setTimeout(() => {
+      if (!connected || intentionalClose) return;
+      const newWs = new WebSocket(getWsUrl());
+      newWs.onopen = () => {
+        console.log("[reconnect] connected, rejoining...");
+        ws = newWs;
+        reconnectAttempts = 0;
+        ws.onclose = () => {
+          if (intentionalClose || !connected) return;
+          attemptReconnect();
+        };
+        ws.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          console.log("[recv]", msg.type, msg);
+          for (let i = messageHandlers.length - 1; i >= 0; i--) {
+            if (messageHandlers[i](msg)) return;
+          }
+        };
+        send({ type: "join", peerId, roomId: paramRoom || "default" });
+        waitForMessage((m) => m.type === "joined").then(() => {
+          setStatus("\u518D\u63A5\u7D9A\u3057\u307E\u3057\u305F");
+          send({ type: "getProducers" });
+          waitForMessage((m) => m.type === "producers").then((resp) => {
+            for (const p of resp.producers) {
+              enqueueConsume(p.producerId);
+            }
+            setStatus("\u901A\u8A71\u4E2D");
+          });
+        });
+      };
+      newWs.onerror = () => {
+        console.log("[reconnect] failed");
+        attemptReconnect();
+      };
+    }, delay);
   }
   function send(msg) {
     console.log("[send]", msg.type);
@@ -11883,6 +11946,7 @@
     consuming = false;
   }
   function disconnect() {
+    intentionalClose = true;
     if (sendTransport) {
       sendTransport.close();
       sendTransport = null;
