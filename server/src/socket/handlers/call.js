@@ -1,12 +1,18 @@
 const pool = require('../../db/pool');
 
 /**
- * Handle call events (notification + history)
+ * Handle call events (notification + history + status)
  * mediasoup signaling is handled by rtc-server independently.
+ *
+ * 通話状態:
+ *   なし → 待機中（1人）→ 通話中（2人以上）→ なし（全員退出）
+ *
+ * メッセージ:
+ *   開始時に1通、終了時に1通のみ
  */
 
-// 通話中ルームの管理
-const activeCalls = new Set(); // Set<roomId>
+// 通話中ルームの管理: roomId -> { participants: Set<userId>, startedBy }
+const activeCalls = new Map();
 
 async function insertCallMessage(roomId, senderId, content, io) {
   try {
@@ -22,30 +28,61 @@ async function insertCallMessage(roomId, senderId, content, io) {
   }
 }
 
+function broadcastCallStatus(roomId, io) {
+  const call = activeCalls.get(roomId);
+  if (!call) {
+    io.to(roomId).emit('call:status', { roomId, active: false, count: 0 });
+  } else {
+    io.to(roomId).emit('call:status', {
+      roomId,
+      active: true,
+      count: call.participants.size,
+      // 1人=待機中、2人以上=通話中
+      state: call.participants.size >= 2 ? 'active' : 'waiting',
+    });
+  }
+}
+
 function registerCallHandler(socket, io) {
   // 通話開始 or 途中参加
   socket.on('call:start', async ({ roomId }) => {
     try {
-      if (activeCalls.has(roomId)) {
+      const existing = activeCalls.get(roomId);
+
+      if (existing) {
         // 既に通話中 → 着信通知なし、そのまま参加
-        await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話に参加しました`, io);
+        existing.participants.add(socket.user.id);
+        broadcastCallStatus(roomId, io);
         return;
       }
 
       // 新規通話開始
-      activeCalls.add(roomId);
-      const result = await pool.query(
-        'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2',
-        [roomId, socket.user.id]
-      );
-      for (const row of result.rows) {
-        io.to(`user:${row.user_id}`).emit('call:incoming', {
-          roomId,
-          callerId: socket.user.id,
-          callerName: socket.user.display_name,
-        });
+      activeCalls.set(roomId, {
+        participants: new Set([socket.user.id]),
+        startedBy: socket.user.id,
+      });
+
+      // DM の場合のみ着信モーダルを送る。グループはステータス表示のみ
+      const roomResult = await pool.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+      const roomType = roomResult.rows[0]?.type;
+
+      if (roomType === 'direct') {
+        const result = await pool.query(
+          'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2',
+          [roomId, socket.user.id]
+        );
+        for (const row of result.rows) {
+          io.to(`user:${row.user_id}`).emit('call:incoming', {
+            roomId,
+            callerId: socket.user.id,
+            callerName: socket.user.display_name,
+          });
+        }
       }
+
+      // 開始メッセージ（1通のみ）
       await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を開始しました`, io);
+      broadcastCallStatus(roomId, io);
     } catch (err) {
       console.error('call:start error:', err);
     }
@@ -63,6 +100,19 @@ function registerCallHandler(socket, io) {
   // 通話終了（個人の退出）
   socket.on('call:end', async ({ roomId }) => {
     try {
+      const call = activeCalls.get(roomId);
+      if (call) {
+        call.participants.delete(socket.user.id);
+
+        if (call.participants.size === 0) {
+          // 最後の人が退出 → 通話終了
+          activeCalls.delete(roomId);
+          await insertCallMessage(roomId, socket.user.id, `📞 通話が終了しました`, io);
+        }
+        broadcastCallStatus(roomId, io);
+      }
+
+      // 他メンバーに退出を通知（着信モーダルのクリア用）
       const result = await pool.query(
         'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2',
         [roomId, socket.user.id]
@@ -73,22 +123,20 @@ function registerCallHandler(socket, io) {
           userId: socket.user.id,
         });
       }
-      await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を終了しました`, io);
-
-      // rtc-server 側で全員退出したら activeCalls から削除される
-      // ここでは安全のため 30 秒後にチェック（rtc-server のルームが空なら削除）
-      setTimeout(() => {
-        // activeCalls のクリーンアップは rtc-server が管理するため、
-        // ここでは保守的に残す。長時間残っても実害はない。
-      }, 30000);
     } catch (err) {
       console.error('call:end error:', err);
     }
   });
 
-  // ルームの通話状態をクリア（外部から呼べるよう export）
-  socket.on('call:roomClear', ({ roomId }) => {
-    activeCalls.delete(roomId);
+  // ルームの通話状態を問い合わせ
+  socket.on('call:getStatus', ({ roomId }) => {
+    const call = activeCalls.get(roomId);
+    socket.emit('call:status', {
+      roomId,
+      active: !!call,
+      count: call ? call.participants.size : 0,
+      state: call ? (call.participants.size >= 2 ? 'active' : 'waiting') : null,
+    });
   });
 }
 

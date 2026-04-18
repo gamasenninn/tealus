@@ -79,6 +79,25 @@
   background: rgba(255, 255, 255, 0.4);
 }
 
+.call-status-btn {
+  width: auto;
+  padding: 0 10px;
+  gap: 4px;
+  border-radius: 16px;
+  background: rgba(76, 175, 80, 0.6);
+  animation: call-pulse 2s infinite;
+}
+
+.call-status-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@keyframes call-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 /* App panel */
 .app-panel {
   display: flex;

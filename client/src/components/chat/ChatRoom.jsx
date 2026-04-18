@@ -14,7 +14,7 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image, Smartphone, Phone } from 'lucide-react';
+import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall } from 'lucide-react';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -49,6 +49,23 @@ function ChatRoom() {
   const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
   const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
+  const [callStatus, setCallStatus] = useState(null); // { state: 'waiting'|'active', count }
+
+  // 通話ステータスのリスナー
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    // 初回取得
+    socket.emit('call:getStatus', { roomId });
+
+    const handleStatus = (data) => {
+      if (data.roomId !== roomId) return;
+      setCallStatus(data.active ? { state: data.state, count: data.count } : null);
+    };
+    socket.on('call:status', handleStatus);
+    return () => socket.off('call:status', handleStatus);
+  }, [roomId]);
 
   const getRoomTitle = () => {
     if (!currentRoom) return '';
@@ -81,14 +98,26 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
-        <button className="chat-header-btn" onClick={() => {
-          const socket = getSocket();
-          if (socket) {
-            socket.emit('call:start', { roomId });
-            // 自分も通話画面を開く — App.jsx の useCallNotification 経由
-            window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId } }));
-          }
-        }} title="通話"><Phone size={18} /></button>
+        {callStatus ? (
+          <button className="chat-header-btn call-status-btn" onClick={() => {
+            const socket = getSocket();
+            if (socket) {
+              socket.emit('call:start', { roomId });
+              window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId } }));
+            }
+          }} title="通話に参加">
+            <PhoneCall size={16} />
+            <span className="call-status-label">{callStatus.state === 'waiting' ? '待機中' : '通話中'}</span>
+          </button>
+        ) : (
+          <button className="chat-header-btn" onClick={() => {
+            const socket = getSocket();
+            if (socket) {
+              socket.emit('call:start', { roomId });
+              window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId } }));
+            }
+          }} title="通話"><Phone size={18} /></button>
+        )}
         {appUrls.length > 0 && (
           <button className={`chat-header-btn ${showAppPanel ? 'active' : ''}`} onClick={() => setShowAppPanel(!showAppPanel)} title="アプリ"><Smartphone size={18} /></button>
         )}
