@@ -3,6 +3,7 @@ require("dotenv").config({ path: require("path").join(__dirname, "../server/.env
 const mediasoup = require("mediasoup");
 const express = require("express");
 const { WebSocketServer } = require("ws");
+const logger = require("./logger");
 const http = require("http");
 const https = require("https");
 const path = require("path");
@@ -40,17 +41,17 @@ async function detectPublicIp() {
   // 環境変数が明示されていればそれを使う
   const envIp = process.env.ANNOUNCED_IP || process.env.PUBLIC_IP;
   if (envIp) {
-    console.log(`Public IP (env): ${envIp}`);
+    logger.info(`Public IP (env): ${envIp}`);
     return envIp;
   }
 
   // 1. DNS で取得（最速・外部HTTP不要）
   try {
     const ip = await dnsLookup();
-    console.log(`Public IP (DNS): ${ip}`);
+    logger.info(`Public IP (DNS): ${ip}`);
     return ip;
   } catch (e) {
-    console.warn("DNS lookup failed:", e.message);
+    logger.warn("DNS lookup failed:", e.message);
   }
 
   // 2. HTTP API フォールバック
@@ -63,15 +64,15 @@ async function detectPublicIp() {
     try {
       const ip = await httpGet(url);
       if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
-        console.log(`Public IP (${url}): ${ip}`);
+        logger.info(`Public IP (${url}): ${ip}`);
         return ip;
       }
     } catch (e) {
-      console.warn(`${url} failed:`, e.message);
+      logger.warn(`${url} failed:`, e.message);
     }
   }
 
-  console.warn("Could not detect public IP — external connections may fail");
+  logger.warn("Could not detect public IP — external connections may fail");
   return null;
 }
 
@@ -97,7 +98,7 @@ function getListenInfos(publicIp) {
   listenInfos.push({ protocol: "tcp", ip: "0.0.0.0", announcedAddress: "127.0.0.1" });
 
   console.log("Listen infos (auto-detected):");
-  listenInfos.forEach((l) => console.log(`  ${l.protocol.toUpperCase()} -> ${l.announcedAddress}`));
+  listenInfos.forEach((l) => logger.info(`  ${l.protocol.toUpperCase()} -> ${l.announcedAddress}`));
 
   return listenInfos;
 }
@@ -146,7 +147,7 @@ const rooms = new Map();
 async function startMediasoup() {
   worker = await mediasoup.createWorker(config.mediasoup.worker);
   worker.on("died", () => {
-    console.error("mediasoup Worker died, exiting...");
+    logger.error("mediasoup Worker died, exiting...");
     process.exit(1);
   });
   router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
@@ -158,13 +159,13 @@ async function createWebRtcTransport() {
   const transport = await router.createWebRtcTransport(config.mediasoup.webRtcTransport);
 
   transport.on("icestatechange", (iceState) => {
-    console.log(`  [transport ${transport.id.slice(0, 8)}] ICE: ${iceState}`);
+    logger.info(`  [transport ${transport.id.slice(0, 8)}] ICE: ${iceState}`);
   });
   transport.on("dtlsstatechange", (dtlsState) => {
-    console.log(`  [transport ${transport.id.slice(0, 8)}] DTLS: ${dtlsState}`);
+    logger.info(`  [transport ${transport.id.slice(0, 8)}] DTLS: ${dtlsState}`);
   });
   transport.on("iceselectedtuplechange", (tuple) => {
-    console.log(`  [transport ${transport.id.slice(0, 8)}] selected: ${tuple.protocol.toUpperCase()} ${tuple.localAddress}:${tuple.localPort} <-> ${tuple.remoteIp}:${tuple.remotePort}`);
+    logger.info(`  [transport ${transport.id.slice(0, 8)}] selected: ${tuple.protocol.toUpperCase()} ${tuple.localAddress}:${tuple.localPort} <-> ${tuple.remoteIp}:${tuple.remotePort}`);
   });
 
   return transport;
@@ -206,7 +207,7 @@ function authenticateWs(req) {
   try {
     return jwt.verify(token, JWT_SECRET);
   } catch (e) {
-    console.warn("JWT verification failed:", e.message);
+    logger.warn("JWT verification failed:", e.message);
     return null;
   }
 }
@@ -223,7 +224,7 @@ function handleWebSocket(ws, req) {
   ws.on("pong", () => { ws.isAlive = true; });
 
   ws.on("error", (err) => {
-    console.error(`[WS error] ${err.message}`);
+    logger.error(`[WS error] ${err.message}`);
   });
 
   ws.on("message", async (raw) => {
@@ -234,7 +235,7 @@ function handleWebSocket(ws, req) {
       return;
     }
 
-    console.log(`[${peerId || "?"}] <- ${msg.type}`);
+    logger.info(`[${peerId || "?"}] <- ${msg.type}`);
     try {
       switch (msg.type) {
         case "join": {
@@ -245,7 +246,7 @@ function handleWebSocket(ws, req) {
 
           if (existingPeer) {
             // 再接続: 既存ピアの WebSocket を差し替え、タイマーをキャンセル
-            console.log(`Peer rejoined: ${peerId} -> room ${roomId}`);
+            logger.info(`Peer rejoined: ${peerId} -> room ${roomId}`);
             if (existingPeer.reconnectTimer) {
               clearTimeout(existingPeer.reconnectTimer);
               existingPeer.reconnectTimer = null;
@@ -255,7 +256,7 @@ function handleWebSocket(ws, req) {
           } else {
             // 新規参加
             createPeer(roomId, peerId, ws);
-            console.log(`Peer joined: ${peerId} -> room ${roomId}`);
+            logger.info(`Peer joined: ${peerId} -> room ${roomId}`);
             send(ws, { type: "joined", routerRtpCapabilities: router.rtpCapabilities });
           }
           break;
@@ -373,7 +374,7 @@ function handleWebSocket(ws, req) {
         }
       }
     } catch (err) {
-      console.error(`Error handling message type=${msg.type}:`, err);
+      logger.error(`Error handling message type=${msg.type}:`, err);
     }
   });
 
@@ -383,11 +384,11 @@ function handleWebSocket(ws, req) {
       const peer = room.get(peerId);
       if (!peer) return;
 
-      console.log(`Peer disconnected: ${peerId} from room ${roomId} (waiting 15s for reconnect)`);
+      logger.info(`Peer disconnected: ${peerId} from room ${roomId} (waiting 15s for reconnect)`);
       // 15秒間は再接続を待つ（トランスポートは維持）
       peer.ws = null;
       peer.reconnectTimer = setTimeout(() => {
-        console.log(`Peer timeout: ${peerId} from room ${roomId} — removing`);
+        logger.info(`Peer timeout: ${peerId} from room ${roomId} — removing`);
         for (const [otherId, otherPeer] of getRoomPeers(roomId)) {
           if (otherId === peerId) continue;
           if (otherPeer.ws) send(otherPeer.ws, { type: "peerLeft", peerId });
@@ -400,7 +401,7 @@ function handleWebSocket(ws, req) {
 }
 
 function send(ws, msg) {
-  console.log(`  -> ${msg.type}`);
+  logger.info(`  -> ${msg.type}`);
   ws.send(JSON.stringify(msg));
 }
 
@@ -437,7 +438,7 @@ async function main() {
   }, PING_INTERVAL);
 
   server.listen(config.listenPort, () => {
-    console.log(`Server running at http://localhost:${config.listenPort}`);
+    logger.info(`Server running at http://localhost:${config.listenPort}`);
   });
 }
 
