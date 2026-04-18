@@ -11817,17 +11817,63 @@
   var recvTransport;
   var localStream;
   var peerId = "peer-" + Math.random().toString(36).slice(2, 8);
+  var remotePeers = /* @__PURE__ */ new Map();
   var statusEl = document.getElementById("status");
   var connectBtn = document.getElementById("connectBtn");
   var callControls = document.getElementById("callControls");
   var muteBtn = document.getElementById("muteBtn");
   var endCallBtn = document.getElementById("endCallBtn");
+  var videoGrid = document.getElementById("videoGrid");
   var localVideo = document.getElementById("localVideo");
-  var remoteVideo = document.getElementById("remoteVideo");
   var isMuted = false;
   function setStatus(text) {
     statusEl.textContent = text;
     console.log("[status]", text);
+  }
+  function getOrCreatePeerElement(peerIdRemote) {
+    if (remotePeers.has(peerIdRemote)) return remotePeers.get(peerIdRemote);
+    const item = document.createElement("div");
+    item.className = "video-grid-item";
+    item.setAttribute("data-peer-id", peerIdRemote);
+    const video = document.createElement("video");
+    video.autoplay = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    item.appendChild(video);
+    const label = document.createElement("div");
+    label.className = "video-grid-label";
+    label.textContent = peerIdRemote.slice(0, 8);
+    item.appendChild(label);
+    videoGrid.appendChild(item);
+    const stream = new MediaStream();
+    video.srcObject = stream;
+    const peerData = { stream, element: item, video, producers: /* @__PURE__ */ new Set() };
+    remotePeers.set(peerIdRemote, peerData);
+    updateGridLayout();
+    return peerData;
+  }
+  function removePeerElement(peerIdRemote) {
+    const peer = remotePeers.get(peerIdRemote);
+    if (!peer) return;
+    peer.element.remove();
+    remotePeers.delete(peerIdRemote);
+    updateGridLayout();
+  }
+  function removeAllPeerElements() {
+    for (const [, peer] of remotePeers) {
+      peer.element.remove();
+    }
+    remotePeers.clear();
+    updateGridLayout();
+  }
+  function updateGridLayout() {
+    const count = remotePeers.size;
+    videoGrid.classList.remove("cols-2", "cols-3");
+    if (count >= 3) {
+      videoGrid.classList.add("cols-3");
+    } else if (count >= 2) {
+      videoGrid.classList.add("cols-2");
+    }
   }
   var messageHandlers = [];
   function onServerMessage(handler) {
@@ -11917,7 +11963,7 @@
           send({ type: "getProducers" });
           waitForMessage((m) => m.type === "producers").then((resp) => {
             for (const p of resp.producers) {
-              enqueueConsume(p.producerId);
+              enqueueConsume(p.producerId, p.producerPeerId);
             }
             setStatus("\u901A\u8A71\u4E2D");
           });
@@ -11935,18 +11981,24 @@
   }
   var consumeQueue = [];
   var consuming = false;
-  async function enqueueConsume(producerId) {
-    consumeQueue.push(producerId);
+  async function enqueueConsume(producerId, producerPeerId) {
+    consumeQueue.push({ producerId, producerPeerId });
     if (consuming) return;
     consuming = true;
     while (consumeQueue.length > 0) {
-      const id = consumeQueue.shift();
-      await consumeProducer(id);
+      const { producerId: pid, producerPeerId: ppid } = consumeQueue.shift();
+      await consumeProducer(pid, ppid);
     }
     consuming = false;
   }
   function disconnect() {
     intentionalClose = true;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        send({ type: "leave" });
+      } catch (e) {
+      }
+    }
     if (sendTransport) {
       sendTransport.close();
       sendTransport = null;
@@ -11963,7 +12015,7 @@
       localStream = null;
     }
     localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
+    removeAllPeerElements();
     messageHandlers.length = 0;
     if (connectBtn) {
       connectBtn.textContent = "\u63A5\u7D9A\u3059\u308B";
@@ -11996,12 +12048,16 @@
       await connectWebSocket();
       onServerMessage((msg) => {
         if (msg.type === "newProducer") {
-          enqueueConsume(msg.producerId);
+          enqueueConsume(msg.producerId, msg.producerPeerId);
           return true;
         }
         if (msg.type === "peerLeft") {
-          remoteVideo.srcObject = null;
-          setStatus("\u76F8\u624B\u304C\u9000\u51FA\u3057\u307E\u3057\u305F");
+          removePeerElement(msg.peerId);
+          if (remotePeers.size === 0) {
+            setStatus("\u63A5\u7D9A\u5B8C\u4E86 \u2014 \u76F8\u624B\u306E\u53C2\u52A0\u3092\u5F85\u3063\u3066\u3044\u307E\u3059...");
+          } else {
+            setStatus(`\u901A\u8A71\u4E2D\uFF08${remotePeers.size + 1}\u4EBA\uFF09`);
+          }
           return true;
         }
         return false;
@@ -12017,7 +12073,7 @@
       send({ type: "getProducers" });
       const prodResp = await waitForMessage((m) => m.type === "producers");
       for (const p of prodResp.producers) {
-        await consumeProducer(p.producerId);
+        await consumeProducer(p.producerId, p.producerPeerId);
       }
       connected = true;
       connectBtn.textContent = "\u5207\u65AD\u3059\u308B";
@@ -12074,8 +12130,8 @@
     if (audioTrack) await sendTransport.produce({ track: audioTrack });
     if (videoTrack) await sendTransport.produce({ track: videoTrack });
   }
-  async function consumeProducer(producerId) {
-    setStatus("\u76F8\u624B\u306E\u30E1\u30C7\u30A3\u30A2\u3092\u53D7\u4FE1\u4E2D...");
+  async function consumeProducer(producerId, producerPeerId) {
+    setStatus("\u30E1\u30C7\u30A3\u30A2\u3092\u53D7\u4FE1\u4E2D...");
     send({
       type: "consume",
       producerId,
@@ -12090,29 +12146,18 @@
       rtpParameters: resp.rtpParameters
     });
     const { track } = consumer;
-    console.log(
-      "[consume] kind=%s track.readyState=%s track.muted=%s track.enabled=%s",
-      resp.kind,
-      track.readyState,
-      track.muted,
-      track.enabled
-    );
-    console.log("[consume] recvTransport.connectionState=%s", recvTransport.connectionState);
-    if (!remoteVideo.srcObject) {
-      remoteVideo.srcObject = new MediaStream();
-    }
-    remoteVideo.srcObject.addTrack(track);
+    console.log("[consume] peer=%s kind=%s", producerPeerId, resp.kind);
+    const peerData = getOrCreatePeerElement(producerPeerId);
+    peerData.stream.addTrack(track);
+    peerData.producers.add(producerId);
     send({ type: "resumeConsumer", consumerId: resp.consumerId });
     await consumer.resume();
     try {
-      await remoteVideo.play();
+      await peerData.video.play();
     } catch (e) {
       console.warn("[play] autoplay blocked:", e.message);
     }
-    console.log("[consume] remoteVideo tracks:", remoteVideo.srcObject.getTracks().map(
-      (t) => `${t.kind}:${t.readyState}:muted=${t.muted}`
-    ));
-    setStatus("\u901A\u8A71\u4E2D");
+    setStatus(`\u901A\u8A71\u4E2D\uFF08${remotePeers.size + 1}\u4EBA\uFF09`);
   }
   muteBtn?.addEventListener("click", () => {
     if (!localStream) return;

@@ -356,6 +356,20 @@ function handleWebSocket(ws, req) {
           break;
         }
 
+        case "leave": {
+          // 意図的な退出 — 即座にクリーンアップ（再接続待ちなし）
+          logger.info(`Peer leaving: ${peerId} from room ${roomId}`);
+          const room = getRoomPeers(roomId);
+          for (const [otherId, otherPeer] of room) {
+            if (otherId === peerId) continue;
+            if (otherPeer.ws) send(otherPeer.ws, { type: "peerLeft", peerId });
+          }
+          removePeer(roomId, peerId);
+          peerId = null;
+          roomId = null;
+          break;
+        }
+
         case "getProducers": {
           const room = getRoomPeers(roomId);
           const producers = [];

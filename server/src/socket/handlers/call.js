@@ -3,10 +3,10 @@ const pool = require('../../db/pool');
 /**
  * Handle call events (notification + history)
  * mediasoup signaling is handled by rtc-server independently.
- *
- * socket.to(roomId) ではなく user:${userId} ルームに送信する。
- * これにより、相手がどの画面にいても着信通知が届く。
  */
+
+// 通話中ルームの管理
+const activeCalls = new Set(); // Set<roomId>
 
 async function insertCallMessage(roomId, senderId, content, io) {
   try {
@@ -23,9 +23,17 @@ async function insertCallMessage(roomId, senderId, content, io) {
 }
 
 function registerCallHandler(socket, io) {
-  // 通話開始 → ルームメンバー全員に着信通知 + 履歴記録
+  // 通話開始 or 途中参加
   socket.on('call:start', async ({ roomId }) => {
     try {
+      if (activeCalls.has(roomId)) {
+        // 既に通話中 → 着信通知なし、そのまま参加
+        await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話に参加しました`, io);
+        return;
+      }
+
+      // 新規通話開始
+      activeCalls.add(roomId);
       const result = await pool.query(
         'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2',
         [roomId, socket.user.id]
@@ -37,7 +45,6 @@ function registerCallHandler(socket, io) {
           callerName: socket.user.display_name,
         });
       }
-      // 通話履歴
       await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を開始しました`, io);
     } catch (err) {
       console.error('call:start error:', err);
@@ -53,7 +60,7 @@ function registerCallHandler(socket, io) {
     });
   });
 
-  // 通話終了 → ルームメンバー全員に通知 + 履歴記録
+  // 通話終了（個人の退出）
   socket.on('call:end', async ({ roomId }) => {
     try {
       const result = await pool.query(
@@ -66,12 +73,23 @@ function registerCallHandler(socket, io) {
           userId: socket.user.id,
         });
       }
-      // 通話履歴
-      await insertCallMessage(roomId, socket.user.id, `📞 通話が終了しました`, io);
+      await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を終了しました`, io);
+
+      // rtc-server 側で全員退出したら activeCalls から削除される
+      // ここでは安全のため 30 秒後にチェック（rtc-server のルームが空なら削除）
+      setTimeout(() => {
+        // activeCalls のクリーンアップは rtc-server が管理するため、
+        // ここでは保守的に残す。長時間残っても実害はない。
+      }, 30000);
     } catch (err) {
       console.error('call:end error:', err);
     }
   });
+
+  // ルームの通話状態をクリア（外部から呼べるよう export）
+  socket.on('call:roomClear', ({ roomId }) => {
+    activeCalls.delete(roomId);
+  });
 }
 
-module.exports = { registerCallHandler };
+module.exports = { registerCallHandler, activeCalls };

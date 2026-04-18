@@ -14,19 +14,79 @@ let recvTransport;
 let localStream;
 const peerId = "peer-" + Math.random().toString(36).slice(2, 8);
 
+// リモートピア管理: peerId -> { stream, element, producers: Set }
+const remotePeers = new Map();
+
 // --- DOM ---
 const statusEl = document.getElementById("status");
 const connectBtn = document.getElementById("connectBtn");
 const callControls = document.getElementById("callControls");
 const muteBtn = document.getElementById("muteBtn");
 const endCallBtn = document.getElementById("endCallBtn");
+const videoGrid = document.getElementById("videoGrid");
 const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
 let isMuted = false;
 
 function setStatus(text) {
   statusEl.textContent = text;
   console.log("[status]", text);
+}
+
+// --- Remote peer video management ---
+function getOrCreatePeerElement(peerIdRemote) {
+  if (remotePeers.has(peerIdRemote)) return remotePeers.get(peerIdRemote);
+
+  const item = document.createElement("div");
+  item.className = "video-grid-item";
+  item.setAttribute("data-peer-id", peerIdRemote);
+
+  const video = document.createElement("video");
+  video.autoplay = true;
+  video.playsInline = true;
+  video.setAttribute("playsinline", "");
+  item.appendChild(video);
+
+  const label = document.createElement("div");
+  label.className = "video-grid-label";
+  label.textContent = peerIdRemote.slice(0, 8);
+  item.appendChild(label);
+
+  videoGrid.appendChild(item);
+
+  const stream = new MediaStream();
+  video.srcObject = stream;
+
+  const peerData = { stream, element: item, video, producers: new Set() };
+  remotePeers.set(peerIdRemote, peerData);
+
+  updateGridLayout();
+  return peerData;
+}
+
+function removePeerElement(peerIdRemote) {
+  const peer = remotePeers.get(peerIdRemote);
+  if (!peer) return;
+  peer.element.remove();
+  remotePeers.delete(peerIdRemote);
+  updateGridLayout();
+}
+
+function removeAllPeerElements() {
+  for (const [, peer] of remotePeers) {
+    peer.element.remove();
+  }
+  remotePeers.clear();
+  updateGridLayout();
+}
+
+function updateGridLayout() {
+  const count = remotePeers.size;
+  videoGrid.classList.remove("cols-2", "cols-3");
+  if (count >= 3) {
+    videoGrid.classList.add("cols-3");
+  } else if (count >= 2) {
+    videoGrid.classList.add("cols-2");
+  }
 }
 
 // --- WebSocket with request/response support ---
@@ -76,7 +136,6 @@ function connectWebSocket() {
         setStatus("切断されました");
         return;
       }
-      // 意図しない切断 → 自動再接続
       attemptReconnect();
     };
     ws.onmessage = (e) => {
@@ -109,7 +168,6 @@ function attemptReconnect() {
       console.log("[reconnect] connected, rejoining...");
       ws = newWs;
       reconnectAttempts = 0;
-      // 再接続ハンドラを設定
       ws.onclose = () => {
         if (intentionalClose || !connected) return;
         attemptReconnect();
@@ -121,15 +179,13 @@ function attemptReconnect() {
           if (messageHandlers[i](msg)) return;
         }
       };
-      // rejoin
       send({ type: "join", peerId, roomId: paramRoom || "default" });
       waitForMessage((m) => m.type === "joined").then(() => {
         setStatus("再接続しました");
-        // 既存の Producer を再取得
         send({ type: "getProducers" });
         waitForMessage((m) => m.type === "producers").then((resp) => {
           for (const p of resp.producers) {
-            enqueueConsume(p.producerId);
+            enqueueConsume(p.producerId, p.producerPeerId);
           }
           setStatus("通話中");
         });
@@ -151,13 +207,13 @@ function send(msg) {
 const consumeQueue = [];
 let consuming = false;
 
-async function enqueueConsume(producerId) {
-  consumeQueue.push(producerId);
+async function enqueueConsume(producerId, producerPeerId) {
+  consumeQueue.push({ producerId, producerPeerId });
   if (consuming) return;
   consuming = true;
   while (consumeQueue.length > 0) {
-    const id = consumeQueue.shift();
-    await consumeProducer(id);
+    const { producerId: pid, producerPeerId: ppid } = consumeQueue.shift();
+    await consumeProducer(pid, ppid);
   }
   consuming = false;
 }
@@ -165,6 +221,10 @@ async function enqueueConsume(producerId) {
 // --- Disconnect ---
 function disconnect() {
   intentionalClose = true;
+  // 意図的な切断を即座に通知（15秒待ちを回避）
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try { send({ type: "leave" }); } catch (e) {}
+  }
   if (sendTransport) { sendTransport.close(); sendTransport = null; }
   if (recvTransport) { recvTransport.close(); recvTransport = null; }
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
@@ -175,7 +235,7 @@ function disconnect() {
     localStream = null;
   }
   localVideo.srcObject = null;
-  remoteVideo.srcObject = null;
+  removeAllPeerElements();
   messageHandlers.length = 0;
   if (connectBtn) {
     connectBtn.textContent = "接続する";
@@ -185,7 +245,6 @@ function disconnect() {
   isMuted = false;
   if (muteBtn) { muteBtn.textContent = "🎤"; muteBtn.classList.remove("active"); }
   setStatus("切断しました");
-  // 自動接続モードでは切断時に開いた元ウィンドウに通知
   if (autoConnect && window.opener) {
     window.opener.postMessage({ type: "call:ended" }, "*");
   }
@@ -210,15 +269,19 @@ connectBtn.addEventListener("click", async () => {
     setStatus("サーバーに接続中...");
     await connectWebSocket();
 
-    // Register persistent message handlers (never removed)
+    // Register persistent message handlers
     onServerMessage((msg) => {
       if (msg.type === "newProducer") {
-        enqueueConsume(msg.producerId);
+        enqueueConsume(msg.producerId, msg.producerPeerId);
         return true;
       }
       if (msg.type === "peerLeft") {
-        remoteVideo.srcObject = null;
-        setStatus("相手が退出しました");
+        removePeerElement(msg.peerId);
+        if (remotePeers.size === 0) {
+          setStatus("接続完了 — 相手の参加を待っています...");
+        } else {
+          setStatus(`通話中（${remotePeers.size + 1}人）`);
+        }
         return true;
       }
       return false;
@@ -246,7 +309,7 @@ connectBtn.addEventListener("click", async () => {
     send({ type: "getProducers" });
     const prodResp = await waitForMessage((m) => m.type === "producers");
     for (const p of prodResp.producers) {
-      await consumeProducer(p.producerId);
+      await consumeProducer(p.producerId, p.producerPeerId);
     }
 
     connected = true;
@@ -326,9 +389,9 @@ async function startProducing() {
   if (videoTrack) await sendTransport.produce({ track: videoTrack });
 }
 
-// --- Consuming ---
-async function consumeProducer(producerId) {
-  setStatus("相手のメディアを受信中...");
+// --- Consuming (per-peer) ---
+async function consumeProducer(producerId, producerPeerId) {
+  setStatus("メディアを受信中...");
   send({
     type: "consume",
     producerId,
@@ -346,30 +409,24 @@ async function consumeProducer(producerId) {
   });
 
   const { track } = consumer;
-  console.log("[consume] kind=%s track.readyState=%s track.muted=%s track.enabled=%s",
-    resp.kind, track.readyState, track.muted, track.enabled);
-  console.log("[consume] recvTransport.connectionState=%s", recvTransport.connectionState);
+  console.log("[consume] peer=%s kind=%s", producerPeerId, resp.kind);
 
-  if (!remoteVideo.srcObject) {
-    remoteVideo.srcObject = new MediaStream();
-  }
-  remoteVideo.srcObject.addTrack(track);
+  // ピアごとに映像要素を管理
+  const peerData = getOrCreatePeerElement(producerPeerId);
+  peerData.stream.addTrack(track);
+  peerData.producers.add(producerId);
 
-  // Resume on both server and client side
+  // Resume
   send({ type: "resumeConsumer", consumerId: resp.consumerId });
   await consumer.resume();
 
-  // Ensure playback starts
   try {
-    await remoteVideo.play();
+    await peerData.video.play();
   } catch (e) {
     console.warn("[play] autoplay blocked:", e.message);
   }
 
-  console.log("[consume] remoteVideo tracks:", remoteVideo.srcObject.getTracks().map(
-    t => `${t.kind}:${t.readyState}:muted=${t.muted}`
-  ));
-  setStatus("通話中");
+  setStatus(`通話中（${remotePeers.size + 1}人）`);
 }
 
 // --- Call control buttons ---

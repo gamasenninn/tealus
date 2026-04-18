@@ -17,7 +17,8 @@ export function useCallNotification() {
     };
 
     const handleEnded = (data) => {
-      setActiveCall((prev) => prev?.roomId === data.roomId ? null : prev);
+      // 他の参加者が退出しても自分の通話は維持（グループ通話対応）
+      // activeCall は閉じない — 通話ウィンドウの close 検知で管理
       setIncomingCall((prev) => prev?.roomId === data.roomId ? null : prev);
     };
 
