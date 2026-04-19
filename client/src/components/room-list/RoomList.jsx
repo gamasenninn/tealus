@@ -99,7 +99,7 @@ function RoomList() {
       <header className="room-list-header">
         <h1>トーク</h1>
         <div className="room-list-header-actions">
-          {window.innerWidth >= 1024 && (
+          {screen.width >= 1024 && (
             <button className="icon-button" onClick={() => navigate('/multi')} title="マルチトーク">
               <Columns size={20} />
             </button>

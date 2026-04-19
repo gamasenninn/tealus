@@ -34,6 +34,36 @@ function MultiTalk() {
     localStorage.setItem('multiTalkPanels', JSON.stringify(panels));
   }, [panels]);
 
+  // PC PWA: マルチトーク画面ではウィンドウを広げ、パネルを自動整列
+  useEffect(() => {
+    if (!window.matchMedia('(display-mode: standalone)').matches) return;
+    const prevWidth = window.outerWidth;
+    const prevHeight = window.outerHeight;
+
+    // 前回のサイズを復元、なければ画面幅に合わせる
+    const savedSize = JSON.parse(localStorage.getItem('multiTalkWindowSize') || 'null');
+    const width = savedSize?.width || Math.min(screen.width, 1400);
+    const height = savedSize?.height || window.outerHeight;
+
+    window.resizeTo(width, height);
+    setTimeout(() => rearrange(), 300);
+
+    // ウィンドウサイズ変更時に保存
+    const saveSize = () => {
+      localStorage.setItem('multiTalkWindowSize', JSON.stringify({
+        width: window.outerWidth,
+        height: window.outerHeight,
+      }));
+    };
+    window.addEventListener('resize', saveSize);
+
+    return () => {
+      window.removeEventListener('resize', saveSize);
+      saveSize(); // 離脱時にも保存
+      window.resizeTo(prevWidth, prevHeight);
+    };
+  }, []);
+
   // ルーム一覧取得
   useEffect(() => {
     api.getRooms().then(d => setRooms(d.rooms || [])).catch(() => {});
@@ -115,6 +145,13 @@ function MultiTalk() {
     if (activePanel === id) setActivePanel(null);
   };
 
+  // 現在の配置モードで再整列
+  const rearrange = () => {
+    const mode = localStorage.getItem('multiTalkLayout') || 'tile';
+    if (mode === 'columns') arrangeColumns();
+    else arrangeTile();
+  };
+
   // 一括整列: タイル
   const arrangeTile = () => {
     const container = containerRef.current;
@@ -190,8 +227,8 @@ function MultiTalk() {
           {sidebarOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
         </button>
         <div className="multi-toolbar-divider" />
-        <button onClick={arrangeTile} title="タイル整列"><LayoutGrid size={18} /></button>
-        <button onClick={arrangeColumns} title="横並び整列"><Columns size={18} /></button>
+        <button onClick={() => { localStorage.setItem('multiTalkLayout', 'tile'); arrangeTile(); }} title="タイル整列"><LayoutGrid size={18} /></button>
+        <button onClick={() => { localStorage.setItem('multiTalkLayout', 'columns'); arrangeColumns(); }} title="横並び整列"><Columns size={18} /></button>
         <div className="multi-toolbar-divider" />
         <button onClick={() => navigate('/talk')} title="シングルモードに戻る"><MonitorSmartphone size={18} /></button>
       </div>
