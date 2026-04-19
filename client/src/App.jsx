@@ -11,6 +11,7 @@ import Profile from './components/profile/Profile';
 import SearchPage from './components/search/SearchPage';
 import MediaGallery from './components/media/MediaGallery';
 import MultiTalk from './components/multi/MultiTalk';
+import SharePage from './components/share/SharePage';
 import IncomingCallModal from './components/call/IncomingCallModal';
 import CallWindow from './components/call/CallWindow';
 import CallBanner from './components/call/CallBanner';
@@ -64,6 +65,7 @@ function App() {
         <Route path="/search" element={<PrivateRoute><SearchPage /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/multi" element={<PrivateRoute><MultiTalk /></PrivateRoute>} />
+        <Route path="/share" element={<PrivateRoute><SharePage /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

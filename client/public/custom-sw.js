@@ -1,5 +1,6 @@
-// Tealus カスタム Service Worker — プッシュ通知ハンドラ
+// Tealus カスタム Service Worker — プッシュ通知 + Web Share Target
 
+// --- プッシュ通知 ---
 self.addEventListener('push', (event) => {
   const data = event.data?.json() || {};
   const { title, body, data: notifData } = data;
@@ -23,7 +24,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // 既存のクライアントがあれば navigate で遷移（メッセージ再取得を強制）
       for (const client of clientList) {
         if ('navigate' in client) {
           return client.navigate(targetUrl).then((c) => c.focus());
@@ -32,4 +32,39 @@ self.addEventListener('notificationclick', (event) => {
       return clients.openWindow(targetUrl);
     })
   );
+});
+
+// --- Web Share Target ---
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (url.pathname === '/share' && event.request.method === 'POST') {
+    event.respondWith((async () => {
+      const formData = await event.request.formData();
+      const text = formData.get('text') || '';
+      const title = formData.get('title') || '';
+      const shareUrl = formData.get('url') || '';
+      const files = formData.getAll('media').filter((f) => f.size > 0);
+
+      // ファイルがあれば Cache API に一時保存
+      if (files.length > 0) {
+        const cache = await caches.open('share-target');
+        // 古いキャッシュをクリア
+        const keys = await cache.keys();
+        await Promise.all(keys.map((k) => cache.delete(k)));
+        // 新しいファイルを保存
+        for (let i = 0; i < files.length; i++) {
+          await cache.put(`/share-file-${i}`, new Response(files[i]));
+        }
+      }
+
+      // GET にリダイレクト
+      const params = new URLSearchParams();
+      if (text) params.set('text', text);
+      if (title) params.set('title', title);
+      if (shareUrl) params.set('url', shareUrl);
+      if (files.length > 0) params.set('files', files.length);
+
+      return Response.redirect(`/share?${params}`, 303);
+    })());
+  }
 });
