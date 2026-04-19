@@ -47,12 +47,20 @@
       position: relative;
       background: #0f3460;
       overflow: hidden;
+      cursor: pointer;
+      transition: opacity 0.2s;
     }
     .video-grid-item video {
       width: 100%;
       height: 100%;
       object-fit: contain;
       display: block;
+    }
+    /* タップで拡大した映像 */
+    .video-grid-item.expanded {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
     }
     .video-grid-label {
       position: absolute;
@@ -75,7 +83,20 @@
       overflow: hidden;
       z-index: 2;
       box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+      transition: all 0.3s;
     }
+    .video-box.local.swapped {
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      aspect-ratio: auto;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    .video-grid.hidden { display: none; }
     .video-box.local video {
       width: 100%;
       height: 100%;
@@ -114,7 +135,8 @@
     .call-ctrl-btn:hover { transform: scale(1.1); }
     .call-ctrl-btn.mute { background: rgba(255,255,255,0.2); }
     .call-ctrl-btn.mute.active { background: #ff9800; }
-    .call-ctrl-btn.fullscreen { background: rgba(255,255,255,0.2); }
+    .call-ctrl-btn.video-mute { background: rgba(255,255,255,0.2); }
+    .call-ctrl-btn.video-mute.active { background: #ff9800; }
     .call-ctrl-btn.end { background: #e94560; }
 
     /* スマホ: 映像を全画面に */
@@ -128,10 +150,10 @@
       }
       .video-grid { border-radius: 0; }
       .video-box.local { bottom: 80px; right: 8px; width: 100px; }
+      .video-box.local.swapped { border-radius: 0; }
       #connectBtn { position: fixed; bottom: 40%; left: 50%; transform: translateX(-50%); z-index: 5; }
       #status { position: fixed; bottom: calc(40% - 40px); left: 50%; transform: translateX(-50%); z-index: 5; }
       .call-controls { bottom: 24px; }
-      .call-ctrl-btn.fullscreen { display: none; }
     }
     #connectBtn {
       margin: 12px 0 4px;
@@ -153,15 +175,14 @@
 <body>
   <div class="video-container">
     <div class="video-grid" id="videoGrid">
-      <!-- JS で動的に参加者の video 要素を追加 -->
     </div>
-    <div class="video-box local">
+    <div class="video-box local" id="localBox">
       <video id="localVideo" autoplay muted playsinline></video>
       <div class="video-label">自分</div>
     </div>
     <div class="call-controls" id="callControls">
       <button class="call-ctrl-btn mute" id="muteBtn" title="ミュート">🎤</button>
-      <button class="call-ctrl-btn fullscreen" id="fullscreenBtn" title="全画面">⛶</button>
+      <button class="call-ctrl-btn video-mute" id="videoMuteBtn" title="カメラ">📷</button>
       <button class="call-ctrl-btn end" id="endCallBtn" title="通話を終了">✕</button>
     </div>
   </div>

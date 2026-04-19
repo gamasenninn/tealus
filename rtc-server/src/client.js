@@ -14,7 +14,7 @@ let recvTransport;
 let localStream;
 const peerId = "peer-" + Math.random().toString(36).slice(2, 8);
 
-// リモートピア管理: peerId -> { stream, element, producers: Set }
+// リモートピア管理: peerId -> { stream, element, video, producers: Set }
 const remotePeers = new Map();
 
 // --- DOM ---
@@ -22,10 +22,15 @@ const statusEl = document.getElementById("status");
 const connectBtn = document.getElementById("connectBtn");
 const callControls = document.getElementById("callControls");
 const muteBtn = document.getElementById("muteBtn");
+const videoMuteBtn = document.getElementById("videoMuteBtn");
 const endCallBtn = document.getElementById("endCallBtn");
 const videoGrid = document.getElementById("videoGrid");
+const localBox = document.getElementById("localBox");
 const localVideo = document.getElementById("localVideo");
 let isMuted = false;
+let isVideoOff = false;
+let expandedPeerId = null; // タップ拡大中のピア
+let isLocalSwapped = false; // PiP スワップ中
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -51,6 +56,23 @@ function getOrCreatePeerElement(peerIdRemote) {
   label.textContent = peerIdRemote.slice(0, 8);
   item.appendChild(label);
 
+  // タップで拡大/縮小
+  item.addEventListener("click", () => {
+    if (expandedPeerId === peerIdRemote) {
+      // 拡大中 → 元に戻す
+      item.classList.remove("expanded");
+      expandedPeerId = null;
+    } else {
+      // 他を縮小して自分を拡大
+      if (expandedPeerId) {
+        const prev = videoGrid.querySelector(".expanded");
+        if (prev) prev.classList.remove("expanded");
+      }
+      item.classList.add("expanded");
+      expandedPeerId = peerIdRemote;
+    }
+  });
+
   videoGrid.appendChild(item);
 
   const stream = new MediaStream();
@@ -66,6 +88,7 @@ function getOrCreatePeerElement(peerIdRemote) {
 function removePeerElement(peerIdRemote) {
   const peer = remotePeers.get(peerIdRemote);
   if (!peer) return;
+  if (expandedPeerId === peerIdRemote) expandedPeerId = null;
   peer.element.remove();
   remotePeers.delete(peerIdRemote);
   updateGridLayout();
@@ -76,17 +99,19 @@ function removeAllPeerElements() {
     peer.element.remove();
   }
   remotePeers.clear();
+  expandedPeerId = null;
   updateGridLayout();
 }
 
 function updateGridLayout() {
   const count = remotePeers.size;
   videoGrid.classList.remove("cols-2", "cols-3");
-  if (count >= 3) {
+  if (count >= 5) {
     videoGrid.classList.add("cols-3");
   } else if (count >= 2) {
     videoGrid.classList.add("cols-2");
   }
+  // count 0-1: 1列（1人が全面表示 or 空）
 }
 
 // --- WebSocket with request/response support ---
@@ -221,7 +246,6 @@ async function enqueueConsume(producerId, producerPeerId) {
 // --- Disconnect ---
 function disconnect() {
   intentionalClose = true;
-  // 意図的な切断を即座に通知（15秒待ちを回避）
   if (ws && ws.readyState === WebSocket.OPEN) {
     try { send({ type: "leave" }); } catch (e) {}
   }
@@ -243,7 +267,11 @@ function disconnect() {
   }
   if (callControls) callControls.classList.remove("visible");
   isMuted = false;
+  isVideoOff = false;
+  isLocalSwapped = false;
   if (muteBtn) { muteBtn.textContent = "🎤"; muteBtn.classList.remove("active"); }
+  if (videoMuteBtn) { videoMuteBtn.textContent = "📷"; videoMuteBtn.classList.remove("active"); }
+  if (localBox) localBox.classList.remove("swapped");
   setStatus("切断しました");
   if (autoConnect && window.opener) {
     window.opener.postMessage({ type: "call:ended" }, "*");
@@ -296,13 +324,8 @@ connectBtn.addEventListener("click", async () => {
     device = new Device();
     await device.load({ routerRtpCapabilities: joinResp.routerRtpCapabilities });
 
-    // Create send transport
     await createSendTransport();
-
-    // Create recv transport
     await createRecvTransport();
-
-    // Produce audio & video
     await startProducing();
 
     // Consume existing producers from other peers
@@ -411,12 +434,10 @@ async function consumeProducer(producerId, producerPeerId) {
   const { track } = consumer;
   console.log("[consume] peer=%s kind=%s", producerPeerId, resp.kind);
 
-  // ピアごとに映像要素を管理
   const peerData = getOrCreatePeerElement(producerPeerId);
   peerData.stream.addTrack(track);
   peerData.producers.add(producerId);
 
-  // Resume
   send({ type: "resumeConsumer", consumerId: resp.consumerId });
   await consumer.resume();
 
@@ -430,6 +451,8 @@ async function consumeProducer(producerId, producerPeerId) {
 }
 
 // --- Call control buttons ---
+
+// 音声ミュート
 muteBtn?.addEventListener("click", () => {
   if (!localStream) return;
   isMuted = !isMuted;
@@ -438,15 +461,24 @@ muteBtn?.addEventListener("click", () => {
   muteBtn.classList.toggle("active", isMuted);
 });
 
-const fullscreenBtn = document.getElementById("fullscreenBtn");
-fullscreenBtn?.addEventListener("click", () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
-  }
+// ビデオミュート
+videoMuteBtn?.addEventListener("click", () => {
+  if (!localStream) return;
+  isVideoOff = !isVideoOff;
+  localStream.getVideoTracks().forEach((t) => (t.enabled = !isVideoOff));
+  videoMuteBtn.textContent = isVideoOff ? "🚫" : "📷";
+  videoMuteBtn.classList.toggle("active", isVideoOff);
 });
 
+// PiP タップでスワップ（自分を全面表示、グリッドを非表示）
+localBox?.addEventListener("click", () => {
+  if (!connected || remotePeers.size === 0) return;
+  isLocalSwapped = !isLocalSwapped;
+  localBox.classList.toggle("swapped", isLocalSwapped);
+  videoGrid.classList.toggle("hidden", isLocalSwapped);
+});
+
+// 切断
 endCallBtn?.addEventListener("click", () => {
   connected = false;
   disconnect();

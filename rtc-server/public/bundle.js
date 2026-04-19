@@ -11822,10 +11822,15 @@
   var connectBtn = document.getElementById("connectBtn");
   var callControls = document.getElementById("callControls");
   var muteBtn = document.getElementById("muteBtn");
+  var videoMuteBtn = document.getElementById("videoMuteBtn");
   var endCallBtn = document.getElementById("endCallBtn");
   var videoGrid = document.getElementById("videoGrid");
+  var localBox = document.getElementById("localBox");
   var localVideo = document.getElementById("localVideo");
   var isMuted = false;
+  var isVideoOff = false;
+  var expandedPeerId = null;
+  var isLocalSwapped = false;
   function setStatus(text) {
     statusEl.textContent = text;
     console.log("[status]", text);
@@ -11844,6 +11849,19 @@
     label.className = "video-grid-label";
     label.textContent = peerIdRemote.slice(0, 8);
     item.appendChild(label);
+    item.addEventListener("click", () => {
+      if (expandedPeerId === peerIdRemote) {
+        item.classList.remove("expanded");
+        expandedPeerId = null;
+      } else {
+        if (expandedPeerId) {
+          const prev = videoGrid.querySelector(".expanded");
+          if (prev) prev.classList.remove("expanded");
+        }
+        item.classList.add("expanded");
+        expandedPeerId = peerIdRemote;
+      }
+    });
     videoGrid.appendChild(item);
     const stream = new MediaStream();
     video.srcObject = stream;
@@ -11855,6 +11873,7 @@
   function removePeerElement(peerIdRemote) {
     const peer = remotePeers.get(peerIdRemote);
     if (!peer) return;
+    if (expandedPeerId === peerIdRemote) expandedPeerId = null;
     peer.element.remove();
     remotePeers.delete(peerIdRemote);
     updateGridLayout();
@@ -11864,12 +11883,13 @@
       peer.element.remove();
     }
     remotePeers.clear();
+    expandedPeerId = null;
     updateGridLayout();
   }
   function updateGridLayout() {
     const count = remotePeers.size;
     videoGrid.classList.remove("cols-2", "cols-3");
-    if (count >= 3) {
+    if (count >= 5) {
       videoGrid.classList.add("cols-3");
     } else if (count >= 2) {
       videoGrid.classList.add("cols-2");
@@ -12023,10 +12043,17 @@
     }
     if (callControls) callControls.classList.remove("visible");
     isMuted = false;
+    isVideoOff = false;
+    isLocalSwapped = false;
     if (muteBtn) {
       muteBtn.textContent = "\u{1F3A4}";
       muteBtn.classList.remove("active");
     }
+    if (videoMuteBtn) {
+      videoMuteBtn.textContent = "\u{1F4F7}";
+      videoMuteBtn.classList.remove("active");
+    }
+    if (localBox) localBox.classList.remove("swapped");
     setStatus("\u5207\u65AD\u3057\u307E\u3057\u305F");
     if (autoConnect && window.opener) {
       window.opener.postMessage({ type: "call:ended" }, "*");
@@ -12166,13 +12193,18 @@
     muteBtn.textContent = isMuted ? "\u{1F507}" : "\u{1F3A4}";
     muteBtn.classList.toggle("active", isMuted);
   });
-  var fullscreenBtn = document.getElementById("fullscreenBtn");
-  fullscreenBtn?.addEventListener("click", () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
+  videoMuteBtn?.addEventListener("click", () => {
+    if (!localStream) return;
+    isVideoOff = !isVideoOff;
+    localStream.getVideoTracks().forEach((t) => t.enabled = !isVideoOff);
+    videoMuteBtn.textContent = isVideoOff ? "\u{1F6AB}" : "\u{1F4F7}";
+    videoMuteBtn.classList.toggle("active", isVideoOff);
+  });
+  localBox?.addEventListener("click", () => {
+    if (!connected || remotePeers.size === 0) return;
+    isLocalSwapped = !isLocalSwapped;
+    localBox.classList.toggle("swapped", isLocalSwapped);
+    videoGrid.classList.toggle("hidden", isLocalSwapped);
   });
   endCallBtn?.addEventListener("click", () => {
     connected = false;
