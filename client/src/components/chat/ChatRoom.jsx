@@ -88,7 +88,7 @@ function ChatRoom() {
   return (
     <div className={`chat-container ${isEmbed ? 'embed' : ''}`}>
       <header className="chat-header">
-        {!isEmbed && <button className="chat-back" onClick={() => navigate(-1)}><ArrowLeft size={22} /></button>}
+        {!isEmbed && <button className="chat-back" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/talk')}><ArrowLeft size={22} /></button>}
         <div className="chat-header-info">
           <span className="chat-header-title">{getRoomTitle()}</span>
           {getMemberCount() && (

@@ -1,6 +1,7 @@
 const logger = require('../../utils/logger');
 const pool = require('../../db/pool');
 const { processLinkPreviews } = require('../../services/linkPreview');
+const { sendPushToOfflineMembers } = require('../../services/push');
 
 /**
  * Fetch reply_to message info with transcription fallback
@@ -57,6 +58,15 @@ function registerMessageHandler(socket, io) {
       };
 
       io.to(room_id).emit('message:new', message);
+
+      // Push notification（オフラインユーザー向け）
+      const { getOnlineUserIds } = require('../index');
+      const onlineUserIds = new Set(getOnlineUserIds());
+      sendPushToOfflineMembers(room_id, socket.user.id, {
+        title: socket.user.display_name,
+        body: (content || '').slice(0, 100) || (type === 'voice' ? '🎤 音声メッセージ' : '📎 ファイル'),
+        data: { roomId: room_id, messageId: message.id },
+      }, onlineUserIds);
 
       // Webhook notification
       const { fireWebhooks } = require('../../services/webhook');

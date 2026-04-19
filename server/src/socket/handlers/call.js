@@ -1,4 +1,5 @@
 const pool = require('../../db/pool');
+const { sendPushToUser } = require('../../services/push');
 
 /**
  * Handle call events (notification + history + status)
@@ -71,12 +72,22 @@ function registerCallHandler(socket, io) {
           'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2',
           [roomId, socket.user.id]
         );
+        const { getOnlineUserIds } = require('../index');
+        const onlineUserIds = new Set(getOnlineUserIds());
         for (const row of result.rows) {
           io.to(`user:${row.user_id}`).emit('call:incoming', {
             roomId,
             callerId: socket.user.id,
             callerName: socket.user.display_name,
           });
+          // オフラインならプッシュ通知
+          if (!onlineUserIds.has(row.user_id)) {
+            sendPushToUser(row.user_id, {
+              title: '📞 着信',
+              body: `${socket.user.display_name} からの通話`,
+              data: { roomId, type: 'call' },
+            });
+          }
         }
       }
 

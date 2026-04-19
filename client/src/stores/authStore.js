@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import { registerPushNotification } from '../services/pushNotification';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -18,6 +19,7 @@ export const useAuthStore = create((set, get) => ({
       const data = await api.getMe();
       connectSocket(token);
       set({ user: data.user, token, isLoading: false });
+      registerPushNotification();
     } catch {
       localStorage.removeItem('token');
       api.setToken(null);
@@ -30,6 +32,7 @@ export const useAuthStore = create((set, get) => ({
     api.setToken(data.token);
     connectSocket(data.token);
     set({ user: data.user, token: data.token });
+    registerPushNotification();
     return data;
   },
 
