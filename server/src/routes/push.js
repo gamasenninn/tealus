@@ -21,6 +21,12 @@ router.post('/subscribe', async (req, res) => {
   }
 
   try {
+    // 同じ endpoint の他ユーザーの古い購読を削除（1ブラウザ = 1ユーザー）
+    await pool.query(
+      'DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id != $2',
+      [endpoint, userId]
+    );
+
     const result = await pool.query(
       `INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key, device_name)
        VALUES ($1, $2, $3, $4, $5)
@@ -34,6 +40,7 @@ router.post('/subscribe', async (req, res) => {
        RETURNING *`,
       [userId, endpoint, p256dh_key, auth_key, device_name || null]
     );
+    logger.debug(`push: subscribe user=${userId} endpoint=${endpoint.slice(-20)}`);
 
     const isNew = result.rows[0].created_at.getTime() === result.rows[0].updated_at.getTime();
     res.status(isNew ? 201 : 200).json({ subscription: result.rows[0] });
