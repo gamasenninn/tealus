@@ -123,7 +123,7 @@ async function attachTags(messages) {
   if (messages.length === 0) return;
   const ids = messages.map(m => m.id);
   const result = await pool.query(
-    `SELECT mt.message_id, t.id, t.name
+    `SELECT mt.message_id, t.id, t.name, t.is_todo, mt.is_done, mt.priority
      FROM message_tags mt
      JOIN tags t ON t.id = mt.tag_id
      WHERE mt.message_id = ANY($1)
@@ -133,7 +133,7 @@ async function attachTags(messages) {
   const map = {};
   for (const r of result.rows) {
     if (!map[r.message_id]) map[r.message_id] = [];
-    map[r.message_id].push({ id: r.id, name: r.name });
+    map[r.message_id].push({ id: r.id, name: r.name, is_todo: r.is_todo, is_done: r.is_done, priority: r.priority });
   }
   for (const msg of messages) {
     msg.tags = map[msg.id] || [];

@@ -23,8 +23,8 @@ function SearchPage() {
   // タグフィルタ
   const [allTags, setAllTags] = useState([]);
   const [selectedTags, setSelectedTags] = useState(cachedData?.selectedTags || []);
-  const [filterDone, setFilterDone] = useState('');
-  const [sortBy, setSortBy] = useState('created_at');
+  const [filterDone, setFilterDone] = useState(localStorage.getItem('todoFilterDone') || '');
+  const [sortBy, setSortBy] = useState(localStorage.getItem('todoSortBy') || 'created_at');
   const [showAllTags, setShowAllTags] = useState(false);
 
   const hasTodoSelected = selectedTags.some(name => allTags.find(t => t.name === name && t.is_todo));
@@ -162,11 +162,13 @@ function SearchPage() {
 
   const handleDoneFilter = (value) => {
     setFilterDone(value);
+    localStorage.setItem('todoFilterDone', value);
     if (selectedTags.length > 0) doTagSearch(selectedTags, value, sortBy);
   };
 
   const handleSort = (value) => {
     setSortBy(value);
+    localStorage.setItem('todoSortBy', value);
     if (selectedTags.length > 0) doTagSearch(selectedTags, filterDone, value);
   };
 
