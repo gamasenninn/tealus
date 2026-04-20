@@ -155,11 +155,12 @@ class ApiClient {
   }
 
   // Search
-  search(q, { roomId, tagId, isDone, sort, offset = 0 } = {}) {
+  search(q, { roomId, tagId, tagNames, isDone, sort, offset = 0 } = {}) {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (roomId) params.set('room_id', roomId);
     if (tagId) params.set('tag_id', tagId);
+    if (tagNames && tagNames.length > 0) params.set('tag_names', tagNames.join(','));
     if (isDone !== undefined && isDone !== '') params.set('is_done', isDone);
     if (sort) params.set('sort', sort);
     params.set('offset', offset);
@@ -257,6 +258,10 @@ class ApiClient {
 
   getTodoTags(roomId) {
     return this.request('GET', `/rooms/${roomId}/tags/todo`);
+  }
+
+  getAllTags(limit = 30) {
+    return this.request('GET', `/tags/all?limit=${limit}`);
   }
 
   // Stamps

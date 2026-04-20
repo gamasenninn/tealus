@@ -102,14 +102,83 @@
   border-radius: 2px;
 }
 
-/* TODO フィルタバー */
-.todo-filter-bar {
-  display: flex;
-  gap: 6px;
+/* タグフィルタエリア */
+.tag-filter-area {
   padding: 8px 12px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
+}
+
+.tag-filter-selected {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.tag-clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.tag-filter-section {
+  margin-bottom: 6px;
+}
+
+.tag-filter-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.tag-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-chip {
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  background: #e8e8e8;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s;
+}
+
+.tag-chip:hover {
+  background: #d0d0d0;
+}
+
+.tag-chip.selected {
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+}
+
+.tag-show-more {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.todo-sub-filters {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .todo-filter-select {

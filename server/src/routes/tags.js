@@ -311,4 +311,37 @@ messageRouter.delete('/:tagId', async (req, res) => {
   }
 });
 
-module.exports = { roomRouter, messageRouter };
+// ============================================
+// Global tag routes: /api/tags
+// ============================================
+const globalRouter = express.Router();
+globalRouter.use(authenticate);
+
+/**
+ * GET /api/tags/all
+ * Aggregate tags across all rooms the user belongs to
+ */
+globalRouter.get('/all', async (req, res) => {
+  const userId = req.user.id;
+  const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+
+  try {
+    const result = await pool.query(
+      `SELECT t.name, t.is_todo, COUNT(mt.message_id)::int AS total_usage
+       FROM tags t
+       JOIN room_members rm ON rm.room_id = t.room_id AND rm.user_id = $1
+       LEFT JOIN message_tags mt ON mt.tag_id = t.id
+       GROUP BY t.name, t.is_todo
+       ORDER BY total_usage DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+
+    res.json({ tags: result.rows });
+  } catch (err) {
+    logger.error('Global tag list error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+module.exports = { roomRouter, messageRouter, globalRouter };

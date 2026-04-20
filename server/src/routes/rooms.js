@@ -143,6 +143,12 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // デフォルト TODO タグ作成
+    await client.query(
+      `INSERT INTO tags (room_id, name, is_todo, created_by) VALUES ($1, 'TODO', true, $2)`,
+      [room.id, userId]
+    );
+
     await client.query('COMMIT');
 
     // Fetch members
@@ -218,6 +224,12 @@ router.post('/direct', async (req, res) => {
       await client.query(
         `INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member')`,
         [room.id, userId, partner_id]
+      );
+
+      // デフォルト TODO タグ作成
+      await client.query(
+        `INSERT INTO tags (room_id, name, is_todo, created_by) VALUES ($1, 'TODO', true, $2)`,
+        [room.id, userId]
       );
 
       await client.query('COMMIT');

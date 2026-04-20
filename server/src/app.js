@@ -36,7 +36,7 @@ const memberRoutes = require('./routes/members');
 const transcriptionRoutes = require('./routes/transcription');
 const searchRoutes = require('./routes/search');
 const botRoutes = require('./routes/bot');
-const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes } = require('./routes/tags');
+const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes, globalRouter: tagGlobalRoutes } = require('./routes/tags');
 const stampRoutes = require('./routes/stamps');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -53,6 +53,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/bot', botRoutes);
 app.use('/api/rooms/:id/tags', tagRoomRoutes);
 app.use('/api/messages/:id/tags', tagMessageRoutes);
+app.use('/api/tags', tagGlobalRoutes);
 app.use('/api/stamps', stampRoutes);
 
 // Static media files

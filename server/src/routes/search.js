@@ -14,11 +14,12 @@ router.use(authenticate);
  * Searches both message content and voice transcriptions
  */
 router.get('/', async (req, res) => {
-  const { q, room_id, tag_id, is_done, sort, limit = 50, offset = 0 } = req.query;
+  const { q, room_id, tag_id, tag_names, is_done, sort, limit = 50, offset = 0 } = req.query;
   const userId = req.user.id;
+  const tagNameList = tag_names ? tag_names.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-  // tag_id 指定時はキーワード不要（TODO 一覧用）
-  if (!q && !tag_id) {
+  // tag_id/tag_names 指定時はキーワード不要
+  if (!q && !tag_id && tagNameList.length === 0) {
     return res.status(400).json({ error: '検索キーワードまたはタグは必須です' });
   }
 
@@ -44,10 +45,34 @@ router.get('/', async (req, res) => {
     }
 
     // タグフィルタ
+    const hasTagFilter = !!(tag_id || tagNameList.length > 0);
+
     if (tag_id) {
+      // 単一タグ: tag_id ベース（ルーム内検索）
       params.push(tag_id);
       joins.push(`INNER JOIN message_tags mt ON mt.message_id = m.id AND mt.tag_id = $${paramIdx++}`);
+      joins.push(`INNER JOIN tags t_filter ON t_filter.id = mt.tag_id`);
+    } else if (tagNameList.length > 0) {
+      // tag_names ベース: サブクエリで AND 検索
+      const placeholders = tagNameList.map(name => {
+        params.push(name);
+        return `$${paramIdx++}`;
+      });
+      params.push(tagNameList.length);
+      wheres.push(`m.id IN (
+        SELECT mt_sub.message_id FROM message_tags mt_sub
+        JOIN tags t_sub ON t_sub.id = mt_sub.tag_id
+        WHERE t_sub.name IN (${placeholders.join(',')})
+        GROUP BY mt_sub.message_id
+        HAVING COUNT(DISTINCT t_sub.name) = $${paramIdx++}
+      )`);
+      // 最初の TODO タグの is_done/priority を取得するために JOIN
+      params.push(tagNameList[0]);
+      joins.push(`INNER JOIN message_tags mt ON mt.message_id = m.id`);
+      joins.push(`INNER JOIN tags t_filter ON t_filter.id = mt.tag_id AND t_filter.name = $${paramIdx++}`);
+    }
 
+    if (hasTagFilter) {
       // 完了状態フィルタ
       if (is_done !== undefined && is_done !== '') {
         params.push(is_done === 'true');
@@ -67,18 +92,19 @@ router.get('/', async (req, res) => {
 
     // ソート
     let orderBy = 'm.created_at DESC';
-    if (sort === 'priority' && tag_id) {
+    if (sort === 'priority' && hasTagFilter) {
       orderBy = 'mt.priority DESC, m.created_at DESC';
     }
 
     params.push(parsedLimit, parsedOffset);
+
 
     const query = `
       SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at, m.is_deleted,
              u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
              r.name AS room_name, r.type AS room_type,
              vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
-             ${tag_id ? ', mt.is_done, mt.priority' : ''}
+             ${hasTagFilter ? ', mt.is_done, mt.priority, t_filter.id AS tag_id, t_filter.name AS tag_name' : ''}
       FROM messages m
       JOIN users u ON u.id = m.sender_id
       JOIN rooms r ON r.id = m.room_id
