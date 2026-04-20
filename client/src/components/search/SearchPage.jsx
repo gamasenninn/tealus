@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
-import { ArrowLeft, CheckSquare, Square, X } from 'lucide-react';
+import { ArrowLeft, CheckSquare, Square, X, RefreshCw } from 'lucide-react';
 import './SearchPage.css';
 
 function SearchPage() {
@@ -208,6 +208,14 @@ function SearchPage() {
     return parts.map((part, i) => regex.test(part) ? <mark key={i}>{part}</mark> : part);
   };
 
+  const refreshSearch = () => {
+    if (selectedTags.length > 0) {
+      doTagSearch(selectedTags, filterDone, sortBy);
+    } else if (query.trim()) {
+      doSearch(query);
+    }
+  };
+
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' }) +
@@ -247,6 +255,7 @@ function SearchPage() {
           placeholder={roomId ? 'ルーム内検索...' : '全ルーム検索...'}
           autoFocus={!cachedData}
         />
+        <button className="search-refresh" onClick={refreshSearch} title="再検索"><RefreshCw size={18} /></button>
       </header>
 
       {/* タグフィルタ */}
