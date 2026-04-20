@@ -19,7 +19,7 @@ roomRouter.use(requireMember);
 roomRouter.post('/', async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
-  const { name } = req.body;
+  const { name, is_todo } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'タグ名は必須です' });
@@ -39,9 +39,9 @@ roomRouter.post('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO tags (room_id, name, created_by)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [roomId, trimmed, userId]
+      `INSERT INTO tags (room_id, name, is_todo, created_by)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [roomId, trimmed, is_todo || false, userId]
     );
 
     logger.info(`Tag created: "${trimmed}" in room ${roomId}`);
@@ -104,6 +104,31 @@ roomRouter.get('/suggest', async (req, res) => {
     res.json({ tags: result.rows });
   } catch (err) {
     logger.error('Tag suggest error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * GET /api/rooms/:id/tags/todo
+ * List TODO tags in a room (is_todo = true)
+ */
+roomRouter.get('/todo', async (req, res) => {
+  const roomId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      `SELECT t.*, COUNT(mt.message_id)::int AS usage_count
+       FROM tags t
+       LEFT JOIN message_tags mt ON mt.tag_id = t.id
+       WHERE t.room_id = $1 AND t.is_todo = true
+       GROUP BY t.id
+       ORDER BY t.name`,
+      [roomId]
+    );
+
+    res.json({ tags: result.rows });
+  } catch (err) {
+    logger.error('TODO tag list error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
@@ -227,7 +252,7 @@ messageRouter.get('/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT t.* FROM tags t
+      `SELECT t.*, mt.is_done, mt.priority FROM tags t
        JOIN message_tags mt ON mt.tag_id = t.id
        WHERE mt.message_id = $1
        ORDER BY t.name`,
@@ -237,6 +262,30 @@ messageRouter.get('/', async (req, res) => {
     res.json({ tags: result.rows });
   } catch (err) {
     logger.error('Message tags get error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * PATCH /api/messages/:id/tags/:tagId
+ * Update is_done / priority on a message-tag
+ */
+messageRouter.patch('/:tagId', async (req, res) => {
+  const messageId = req.params.id;
+  const tagId = req.params.tagId;
+  const { is_done, priority } = req.body;
+
+  try {
+    await pool.query(
+      `UPDATE message_tags
+       SET is_done = COALESCE($1, is_done), priority = COALESCE($2, priority)
+       WHERE message_id = $3 AND tag_id = $4`,
+      [is_done, priority, messageId, tagId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Message tag update error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

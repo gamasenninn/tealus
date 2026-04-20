@@ -302,6 +302,17 @@
   border-radius: 8px;
 }
 
+.bubble-tag.todo {
+  background: #e3f2fd;
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.bubble-tag.todo.done {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
 /* Markdown preview styles */
 .bubble-markdown {
   white-space: normal;

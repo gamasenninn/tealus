@@ -101,3 +101,72 @@
   padding: 0 2px;
   border-radius: 2px;
 }
+
+/* TODO フィルタバー */
+.todo-filter-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.todo-filter-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  outline: none;
+}
+
+.todo-filter-select:focus {
+  border-color: var(--primary);
+}
+
+/* TODO 検索結果 */
+.search-result-item {
+  display: flex;
+  align-items: flex-start;
+}
+
+.search-result-item.done .search-result-content {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.todo-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.todo-checkbox {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.todo-priority-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+}
+
+.todo-priority {
+  color: #ff9800;
+  letter-spacing: -1px;
+}
+
+.search-result-body {
+  flex: 1;
+  min-width: 0;
+}

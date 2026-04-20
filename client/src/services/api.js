@@ -155,10 +155,15 @@ class ApiClient {
   }
 
   // Search
-  search(q, roomId, offset = 0) {
-    let url = `/search?q=${encodeURIComponent(q)}&offset=${offset}`;
-    if (roomId) url += `&room_id=${roomId}`;
-    return this.request('GET', url);
+  search(q, { roomId, tagId, isDone, sort, offset = 0 } = {}) {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (roomId) params.set('room_id', roomId);
+    if (tagId) params.set('tag_id', tagId);
+    if (isDone !== undefined && isDone !== '') params.set('is_done', isDone);
+    if (sort) params.set('sort', sort);
+    params.set('offset', offset);
+    return this.request('GET', `/search?${params}`);
   }
 
   // Reactions
@@ -230,8 +235,8 @@ class ApiClient {
     return this.request('GET', `/rooms/${roomId}/tags/suggest?q=${encodeURIComponent(query)}`);
   }
 
-  createTag(roomId, name) {
-    return this.request('POST', `/rooms/${roomId}/tags`, { name });
+  createTag(roomId, name, is_todo = false) {
+    return this.request('POST', `/rooms/${roomId}/tags`, { name, is_todo });
   }
 
   getMessageTags(messageId) {
@@ -244,6 +249,14 @@ class ApiClient {
 
   removeMessageTag(messageId, tagId) {
     return this.request('DELETE', `/messages/${messageId}/tags/${tagId}`);
+  }
+
+  updateMessageTag(messageId, tagId, data) {
+    return this.request('PATCH', `/messages/${messageId}/tags/${tagId}`, data);
+  }
+
+  getTodoTags(roomId) {
+    return this.request('GET', `/rooms/${roomId}/tags/todo`);
   }
 
   // Stamps

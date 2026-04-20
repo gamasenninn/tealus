@@ -66,6 +66,20 @@ client/
     └── hooks/          # カスタムフックテスト
 ```
 
+### テスト実行方法
+
+```bash
+# サーバーテスト（必ず npm test を使う）
+cd server
+npm test              # 全テスト（--runInBand --forceExit 付き）
+
+# 特定テストのみ
+npm test -- --testPathPattern="tags"
+npm test -- --testPathPattern="search"
+```
+
+**重要: `npx jest` を直接実行しない。** テストスイートが並列実行されると DB セットアップが競合し `pg_type_typname_nsp_index` エラーが発生する。`npm test` は `--runInBand`（逐次実行）が設定されており、この問題を回避する。
+
 ### ルール
 
 - 新機能は必ずテストを先に書いてから実装する

@@ -9,6 +9,7 @@ import VoiceBubble from './VoiceBubble';
 import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
+import TodoMenu from '../todo/TodoMenu';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
 import { diffChars } from 'diff';
@@ -24,6 +25,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [viewerState, setViewerState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showTodoMenu, setShowTodoMenu] = useState(false);
   const [tags, setTags] = useState(message.tags || []);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
   const [editText, setEditText] = useState('');
@@ -85,6 +87,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       },
       onReply: () => setReplyTo(message),
       onShowTagModal: () => setShowTagModal(true),
+      onShowTodoMenu: () => setShowTodoMenu(true),
     });
     setContextMenu({ x, y, items, onReaction });
   };
@@ -191,7 +194,25 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       {tags.length > 0 && (
         <div className={`bubble-tags ${isOwn ? 'own' : ''}`}>
           {tags.map(tag => (
-            <span key={tag.id} className="bubble-tag">#{tag.name}</span>
+            tag.is_todo ? (
+              <span
+                key={tag.id}
+                className={`bubble-tag todo ${tag.is_done ? 'done' : ''}`}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const newDone = !tag.is_done;
+                  try {
+                    await api.updateMessageTag(message.id, tag.id, { is_done: newDone });
+                    const res = await api.getMessageTags(message.id);
+                    setTags(res.tags);
+                  } catch (err) { console.error(err); }
+                }}
+              >
+                {tag.is_done ? '☑' : '☐'} {tag.name}
+              </span>
+            ) : (
+              <span key={tag.id} className="bubble-tag">#{tag.name}</span>
+            )
           ))}
         </div>
       )}
@@ -293,6 +314,21 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         <TagModal
           messageId={message.id}
           onClose={() => setShowTagModal(false)}
+          onTagsChanged={async () => {
+            try {
+              const res = await api.getMessageTags(message.id);
+              setTags(res.tags);
+            } catch (err) {
+              console.error('Tag refresh error:', err);
+            }
+          }}
+        />
+      )}
+      {showTodoMenu && (
+        <TodoMenu
+          messageId={message.id}
+          roomId={roomId}
+          onClose={() => setShowTodoMenu(false)}
           onTagsChanged={async () => {
             try {
               const res = await api.getMessageTags(message.id);

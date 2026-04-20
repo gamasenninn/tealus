@@ -1,4 +1,4 @@
-import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone } from 'lucide-react';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare } from 'lucide-react';
 import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
 
@@ -8,7 +8,7 @@ import { useMessageStore } from '../stores/messageStore';
 export function buildContextMenuItems({
   message, isOwn, roomId, currentRoom,
   onEdit, onShowEditHistory,
-  onReply, onShowTagModal,
+  onReply, onShowTagModal, onShowTodoMenu,
 }) {
   const items = [];
 
@@ -54,6 +54,13 @@ export function buildContextMenuItems({
     icon: <Tag size={16} />,
     label: 'タグを追加',
     onClick: onShowTagModal,
+  });
+
+  // TODO
+  items.push({
+    icon: <CheckSquare size={16} />,
+    label: 'TODO',
+    onClick: onShowTodoMenu,
   });
 
   // Copy voice transcription text

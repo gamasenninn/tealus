@@ -14,71 +14,83 @@ router.use(authenticate);
  * Searches both message content and voice transcriptions
  */
 router.get('/', async (req, res) => {
-  const { q, room_id, limit = 50, offset = 0 } = req.query;
+  const { q, room_id, tag_id, is_done, sort, limit = 50, offset = 0 } = req.query;
   const userId = req.user.id;
 
-  if (!q || !q.trim()) {
-    return res.status(400).json({ error: '検索キーワードは必須です' });
+  // tag_id 指定時はキーワード不要（TODO 一覧用）
+  if (!q && !tag_id) {
+    return res.status(400).json({ error: '検索キーワードまたはタグは必須です' });
   }
 
   const parsedLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
   const parsedOffset = Math.max(parseInt(offset) || 0, 0);
-  const keyword = `%${q.trim()}%`;
+  const keyword = q ? `%${q.trim()}%` : null;
 
   try {
-    let query;
-    let params;
+    // 動的クエリ構築
+    let paramIdx = 1;
+    const params = [];
+    const joins = [];
+    const wheres = ['m.is_deleted = false'];
 
+    // ユーザーのルームアクセス制限
+    params.push(userId);
+    joins.push(`JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${paramIdx++}`);
+
+    // ルーム指定
     if (room_id) {
-      // Room-specific search
-      query = `
-        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at, m.is_deleted,
-               u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
-               r.name AS room_name, r.type AS room_type,
-               vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
-        LEFT JOIN LATERAL (
-          SELECT formatted_text, raw_text FROM voice_transcriptions
-          WHERE message_id = m.id ORDER BY version DESC LIMIT 1
-        ) vt ON m.type = 'voice'
-        WHERE m.room_id = $2
-          AND m.is_deleted = false
-          AND (
-            m.content ILIKE $3
-            OR (m.type = 'voice' AND (vt.formatted_text ILIKE $3 OR vt.raw_text ILIKE $3))
-          )
-        ORDER BY m.created_at DESC
-        LIMIT $4 OFFSET $5
-      `;
-      params = [userId, room_id, keyword, parsedLimit, parsedOffset];
-    } else {
-      // Cross-room search
-      query = `
-        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at, m.is_deleted,
-               u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
-               r.name AS room_name, r.type AS room_type,
-               vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
-        LEFT JOIN LATERAL (
-          SELECT formatted_text, raw_text FROM voice_transcriptions
-          WHERE message_id = m.id ORDER BY version DESC LIMIT 1
-        ) vt ON m.type = 'voice'
-        WHERE m.is_deleted = false
-          AND (
-            m.content ILIKE $2
-            OR (m.type = 'voice' AND (vt.formatted_text ILIKE $2 OR vt.raw_text ILIKE $2))
-          )
-        ORDER BY m.created_at DESC
-        LIMIT $3 OFFSET $4
-      `;
-      params = [userId, keyword, parsedLimit, parsedOffset];
+      params.push(room_id);
+      wheres.push(`m.room_id = $${paramIdx++}`);
     }
+
+    // タグフィルタ
+    if (tag_id) {
+      params.push(tag_id);
+      joins.push(`INNER JOIN message_tags mt ON mt.message_id = m.id AND mt.tag_id = $${paramIdx++}`);
+
+      // 完了状態フィルタ
+      if (is_done !== undefined && is_done !== '') {
+        params.push(is_done === 'true');
+        wheres.push(`mt.is_done = $${paramIdx++}`);
+      }
+    }
+
+    // キーワード検索
+    if (keyword) {
+      params.push(keyword);
+      const kwIdx = paramIdx++;
+      wheres.push(`(
+        m.content ILIKE $${kwIdx}
+        OR (m.type = 'voice' AND (vt.formatted_text ILIKE $${kwIdx} OR vt.raw_text ILIKE $${kwIdx}))
+      )`);
+    }
+
+    // ソート
+    let orderBy = 'm.created_at DESC';
+    if (sort === 'priority' && tag_id) {
+      orderBy = 'mt.priority DESC, m.created_at DESC';
+    }
+
+    params.push(parsedLimit, parsedOffset);
+
+    const query = `
+      SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at, m.is_deleted,
+             u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
+             r.name AS room_name, r.type AS room_type,
+             vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
+             ${tag_id ? ', mt.is_done, mt.priority' : ''}
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      JOIN rooms r ON r.id = m.room_id
+      ${joins.join('\n      ')}
+      LEFT JOIN LATERAL (
+        SELECT formatted_text, raw_text FROM voice_transcriptions
+        WHERE message_id = m.id ORDER BY version DESC LIMIT 1
+      ) vt ON m.type = 'voice'
+      WHERE ${wheres.join(' AND ')}
+      ORDER BY ${orderBy}
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    `;
 
     const result = await pool.query(query, params);
 
