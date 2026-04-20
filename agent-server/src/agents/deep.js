@@ -100,10 +100,17 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
     let timedOut = false;
 
     // タイムアウト管理
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       timedOut = true;
-      proc.kill('SIGTERM');
       logger.warn(`Deep Agent timeout (${config.DEEP_TIMEOUT}ms)`);
+      // Windows では SIGTERM が効かない場合があるので、先にメッセージを送る
+      await botApi.pushStatus(roomId, 'idle').catch(() => {});
+      await botApi.pushMessage(roomId, `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`).catch(() => {});
+      try { proc.kill('SIGTERM'); } catch {}
+      // Windows のシェルプロセスを強制終了
+      if (process.platform === 'win32' && proc.pid) {
+        try { spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { shell: true }); } catch {}
+      }
     }, config.DEEP_TIMEOUT);
 
     proc.stdout.on('data', (data) => {
