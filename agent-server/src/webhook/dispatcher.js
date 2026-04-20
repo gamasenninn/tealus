@@ -116,13 +116,29 @@ async function _dispatch({ message, room, agentId, agentName }) {
       }
       break;
 
-    case 'deep':
-      // Deep Agent（claude -p）
+    case 'deep': {
+      // Deep Agent（claude -p）— 会話コンテキスト付き
       await updateStatus(agentId, roomId, 'processing');
       try {
+        // 直近メッセージ履歴を取得してプロンプトに含める
+        let deepPrompt = result.prompt || prompt;
+        try {
+          const history = await botApi.getMessages(roomId, 15);
+          const messages = (history.messages || []).reverse(); // 古い順
+          if (messages.length > 1) {
+            const contextLines = messages
+              .filter(m => m.id !== message.id) // 今のメッセージは除く
+              .map(m => `${m.sender_display_name || '???'}: ${m.content || '(メディア)'}`)
+              .join('\n');
+            deepPrompt = `以下はユーザーとの直近の会話履歴です。この内容を踏まえて最後の質問に回答してください。\n\n---会話履歴---\n${contextLines}\n---ここまで---\n\n質問: ${deepPrompt}`;
+          }
+        } catch (err) {
+          logger.warn(`Failed to fetch context for deep: ${err.message}`);
+        }
+
         await processDeep({
           roomId,
-          prompt: result.prompt || prompt,
+          prompt: deepPrompt,
           workspacePath: context.workspace_path,
           agentId,
           sessionId: context.session_id,
@@ -131,6 +147,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
         await updateStatus(agentId, roomId, 'idle');
       }
       break;
+    }
 
     default:
       logger.warn(`Unknown tier: ${result.tier}`);

@@ -16,7 +16,7 @@ const { updateContext } = require('../context/sessionManager');
  * claude -p の引数を構築
  */
 function buildClaudeArgs({ prompt, workspacePath, sessionId }) {
-  const args = ['-p', prompt, '--dangerously-skip-permissions'];
+  const args = ['-p', '-', '--dangerously-skip-permissions'];
 
   // ルーム固有 mcp_config.json があれば渡す
   if (workspacePath) {
@@ -41,6 +41,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
     const args = buildClaudeArgs({ prompt, workspacePath, sessionId });
 
     logger.info(`Deep Agent starting: claude ${args.join(' ').slice(0, 100)}...`);
+    logger.debug(`Deep Agent full prompt:\n${prompt}`);
 
     botApi.pushStatus(roomId, 'thinking', '高度な分析中...').catch(() => {});
 
@@ -52,6 +53,10 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       timeout: config.DEEP_TIMEOUT,
       env: { ...process.env, HOME: workspacePath },
     });
+
+    // stdin からプロンプトを渡す（シェル引数の長さ制限・特殊文字を回避）
+    proc.stdin.write(prompt);
+    proc.stdin.end();
 
     let stdout = '';
     let stderr = '';
