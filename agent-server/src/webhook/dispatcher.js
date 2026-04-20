@@ -117,24 +117,18 @@ async function _dispatch({ message, room, agentId, agentName }) {
       break;
 
     case 'deep': {
-      // Deep Agent（claude -p）— 会話コンテキスト付き
+      // Deep Agent（claude -p + Tealus MCP）
+      // AI が自律的に MCP ツールで会話履歴を取得して回答
       await updateStatus(agentId, roomId, 'processing');
       try {
-        // 直近メッセージ履歴を取得してプロンプトに含める
-        let deepPrompt = result.prompt || prompt;
-        try {
-          const history = await botApi.getMessages(roomId, 15);
-          const messages = (history.messages || []).reverse(); // 古い順
-          if (messages.length > 1) {
-            const contextLines = messages
-              .filter(m => m.id !== message.id) // 今のメッセージは除く
-              .map(m => `${m.sender_display_name || '???'}: ${m.content || '(メディア)'}`)
-              .join('\n');
-            deepPrompt = `以下はユーザーとの直近の会話履歴です。この内容を踏まえて最後の質問に回答してください。\n\n---会話履歴---\n${contextLines}\n---ここまで---\n\n質問: ${deepPrompt}`;
-          }
-        } catch (err) {
-          logger.warn(`Failed to fetch context for deep: ${err.message}`);
-        }
+        const userPrompt = result.prompt || prompt;
+        const deepPrompt = `あなたは Tealus メッセンジャーの AI アシスタントです。
+Tealus MCP ツール（tealus サーバー）を使って情報を取得し、ユーザーの質問に回答してください。
+
+現在のルーム ID: ${roomId}
+まず get_messages ツールでこのルームの直近の会話を確認してから回答してください。
+
+ユーザーの質問: ${userPrompt}`;
 
         await processDeep({
           roomId,

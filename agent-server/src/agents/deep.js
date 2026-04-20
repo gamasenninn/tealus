@@ -2,7 +2,7 @@
  * Deep Agent
  * claude -p でMAXプランのClaude Codeを実行
  * --dangerously-skip-permissions で全パーミッション許可
- * --cwd でワークスペースに閉じ込め
+ * --mcp-config で Tealus MCP を接続（自律的コンテキスト取得）
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -13,17 +13,51 @@ const botApi = require('../lib/botApi');
 const { updateContext } = require('../context/sessionManager');
 
 /**
+ * Deep Agent 用の MCP 設定を動的生成
+ * Tealus MCP + ルーム固有 MCP を統合
+ */
+function createDeepMcpConfig(workspacePath, roomId) {
+  const mcpConfig = {
+    mcpServers: {
+      tealus: {
+        command: 'node',
+        args: [path.resolve(__dirname, '../../../mcp-server/src/index.js')],
+        env: {
+          TEALUS_API_URL: config.TEALUS_API_URL,
+          TEALUS_USER_ID: config.TEALUS_BOT_ID,
+          TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
+        },
+      },
+    },
+  };
+
+  // ルーム固有 MCP があればマージ
+  const roomMcpPath = path.join(workspacePath, 'mcp_config.json');
+  if (fs.existsSync(roomMcpPath)) {
+    try {
+      const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8'));
+      Object.assign(mcpConfig.mcpServers, roomMcp.mcpServers || {});
+    } catch (err) {
+      logger.warn(`Failed to load room MCP config: ${err.message}`);
+    }
+  }
+
+  const configPath = path.join(workspacePath, '.deep_mcp_config.json');
+  fs.writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2));
+  logger.debug(`Deep MCP config created: ${configPath} (${Object.keys(mcpConfig.mcpServers).length} servers)`);
+  return configPath;
+}
+
+/**
  * claude -p の引数を構築
  */
-function buildClaudeArgs({ prompt, workspacePath, sessionId }) {
+function buildClaudeArgs({ workspacePath, sessionId }) {
   const args = ['-p', '-', '--dangerously-skip-permissions'];
 
-  // ルーム固有 mcp_config.json があれば渡す
-  if (workspacePath) {
-    const mcpConfigPath = path.join(workspacePath, 'mcp_config.json');
-    if (fs.existsSync(mcpConfigPath)) {
-      args.push('--mcp-config', mcpConfigPath);
-    }
+  // 動的生成された MCP 設定
+  const mcpConfigPath = path.join(workspacePath, '.deep_mcp_config.json');
+  if (fs.existsSync(mcpConfigPath)) {
+    args.push('--mcp-config', mcpConfigPath);
   }
 
   if (sessionId) {
@@ -38,7 +72,10 @@ function buildClaudeArgs({ prompt, workspacePath, sessionId }) {
  */
 async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }) {
   return new Promise((resolve) => {
-    const args = buildClaudeArgs({ prompt, workspacePath, sessionId });
+    // MCP 設定を動的生成（Tealus MCP + ルーム固有 MCP）
+    createDeepMcpConfig(workspacePath, roomId);
+
+    const args = buildClaudeArgs({ workspacePath, sessionId });
 
     logger.info(`Deep Agent starting: claude ${args.join(' ').slice(0, 100)}...`);
     logger.debug(`Deep Agent full prompt:\n${prompt}`);
@@ -54,7 +91,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       env: { ...process.env, HOME: workspacePath },
     });
 
-    // stdin からプロンプトを渡す（シェル引数の長さ制限・特殊文字を回避）
+    // stdin からプロンプトを渡す
     proc.stdin.write(prompt);
     proc.stdin.end();
 
@@ -115,10 +152,6 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
         logger.info(`Deep Agent response sent (${response.length} chars)`);
       }
 
-      // セッションID抽出・保存（stdout からパース）
-      // claude -p は session_id を出力する場合がある
-      // TODO: stream-json モードで正確に抽出
-
       resolve();
     });
 
@@ -145,4 +178,4 @@ function splitMessage(text, maxLength) {
   return chunks;
 }
 
-module.exports = { processDeep, buildClaudeArgs, splitMessage };
+module.exports = { processDeep, buildClaudeArgs, splitMessage, createDeepMcpConfig };
