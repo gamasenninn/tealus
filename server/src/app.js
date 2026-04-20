@@ -22,6 +22,18 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+// API リクエストログ
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    if (req.originalUrl.startsWith('/api/')) {
+      logger.debug(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+    }
+  });
+  next();
+});
+
 // Routes
 const authRoutes = require('./routes/auth');
 const roomRoutes = require('./routes/rooms');

@@ -22,6 +22,7 @@ async function sendPushToUser(userId, payload) {
       'SELECT * FROM push_subscriptions WHERE user_id = $1 AND is_active = true',
       [userId]
     );
+    logger.debug(`push: user=${userId} subscriptions=${result.rows.length} title=${payload.title}`);
 
     const notifications = result.rows.map(async (sub) => {
       const pushSubscription = {

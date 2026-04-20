@@ -1,3 +1,4 @@
+const logger = require('../../utils/logger');
 const pool = require('../../db/pool');
 const { sendPushToUser } = require('../../services/push');
 
@@ -47,6 +48,7 @@ function broadcastCallStatus(roomId, io) {
 function registerCallHandler(socket, io) {
   // 通話開始 or 途中参加
   socket.on('call:start', async ({ roomId }) => {
+    logger.debug(`call:start user=${socket.user.id} room=${roomId}`);
     try {
       const existing = activeCalls.get(roomId);
 
@@ -101,6 +103,7 @@ function registerCallHandler(socket, io) {
 
   // 通話拒否 → 発信者に通知
   socket.on('call:reject', ({ roomId, callerId }) => {
+    logger.debug(`call:reject user=${socket.user.id} room=${roomId} caller=${callerId}`);
     io.to(`user:${callerId}`).emit('call:rejected', {
       roomId,
       userId: socket.user.id,
@@ -110,6 +113,7 @@ function registerCallHandler(socket, io) {
 
   // 通話終了（個人の退出）
   socket.on('call:end', async ({ roomId }) => {
+    logger.debug(`call:end user=${socket.user.id} room=${roomId}`);
     try {
       const call = activeCalls.get(roomId);
       if (call) {

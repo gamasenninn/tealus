@@ -71,6 +71,7 @@ function setupSocketHandlers(io) {
       );
       if (result.rows.length > 0) {
         socket.join(roomId);
+        logger.debug(`room:join user=${socket.user.display_name} room=${roomId}`);
       }
     });
 

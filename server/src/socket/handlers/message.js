@@ -32,6 +32,7 @@ async function fetchReplyMessage(replyToId) {
 function registerMessageHandler(socket, io) {
   socket.on('message:send', async (data) => {
     const { room_id, content, type = 'text', reply_to } = data;
+    logger.debug(`message:send user=${socket.user.id} room=${room_id} type=${type}`);
 
     if (!room_id || !content || content.trim() === '') return;
 

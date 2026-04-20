@@ -85,6 +85,7 @@ router.post('/login', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      logger.debug(`login: fail employee_id=${employee_id} reason=not_found`);
       return res.status(401).json({ error: '社員番号またはパスワードが正しくありません' });
     }
 
@@ -100,6 +101,7 @@ router.post('/login', async (req, res) => {
     delete user.password_hash;
 
     const token = generateToken(user);
+    logger.debug(`login: success employee_id=${employee_id} user=${user.display_name}`);
     res.json({ token, user });
   } catch (err) {
     logger.error('Login error:', err);

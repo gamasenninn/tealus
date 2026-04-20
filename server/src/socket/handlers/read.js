@@ -7,6 +7,7 @@ const pool = require('../../db/pool');
 function registerReadHandler(socket) {
   socket.on('message:read', async (data) => {
     const { room_id, message_ids } = data;
+    logger.debug(`message:read user=${socket.user.id} room=${room_id} count=${message_ids?.length || 0}`);
     if (!room_id || !message_ids || message_ids.length === 0) return;
 
     try {

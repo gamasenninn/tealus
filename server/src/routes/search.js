@@ -119,6 +119,7 @@ router.get('/', async (req, res) => {
     `;
 
     const result = await pool.query(query, params);
+    logger.debug(`search: q=${q || ''} room=${room_id || 'all'} tags=${tag_names || tag_id || ''} results=${result.rows.length}`);
 
     // For voice messages, use transcription as display content
     const results = result.rows.map(r => {
