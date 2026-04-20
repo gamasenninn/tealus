@@ -294,10 +294,10 @@
 }
 
 .bubble-tag {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--primary);
   cursor: pointer;
-  padding: 1px 6px;
+  padding: 3px 8px;
   background: var(--primary-light);
   border-radius: 8px;
 }
