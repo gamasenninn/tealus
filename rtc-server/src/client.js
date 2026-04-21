@@ -344,6 +344,16 @@ connectBtn.addEventListener("click", async () => {
     connectBtn.disabled = false;
     callControls.classList.add("visible");
 
+    // 初期状態をURLパラメータに合わせる
+    if (!paramAudio) {
+      isMuted = true;
+      if (muteBtn) { muteBtn.textContent = "🔇"; muteBtn.classList.add("active"); }
+    }
+    if (!paramVideo) {
+      isVideoOff = true;
+      if (videoMuteBtn) { videoMuteBtn.textContent = "🚫"; videoMuteBtn.classList.add("active"); }
+    }
+
     if (prodResp.producers.length === 0) {
       setStatus("接続完了 — 相手の参加を待っています...");
     }

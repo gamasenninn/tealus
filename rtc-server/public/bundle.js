@@ -12109,6 +12109,20 @@
       connectBtn.classList.add("connected");
       connectBtn.disabled = false;
       callControls.classList.add("visible");
+      if (!paramAudio) {
+        isMuted = true;
+        if (muteBtn) {
+          muteBtn.textContent = "\u{1F507}";
+          muteBtn.classList.add("active");
+        }
+      }
+      if (!paramVideo) {
+        isVideoOff = true;
+        if (videoMuteBtn) {
+          videoMuteBtn.textContent = "\u{1F6AB}";
+          videoMuteBtn.classList.add("active");
+        }
+      }
       if (prodResp.producers.length === 0) {
         setStatus("\u63A5\u7D9A\u5B8C\u4E86 \u2014 \u76F8\u624B\u306E\u53C2\u52A0\u3092\u5F85\u3063\u3066\u3044\u307E\u3059...");
       }
