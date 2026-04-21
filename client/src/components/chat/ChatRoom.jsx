@@ -17,6 +17,7 @@ import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall, Radio } from 'lucide-react';
 import CallConfirmModal from '../call/CallConfirmModal';
 import { useTransceiver } from '../../hooks/useTransceiver';
+import TransceiverErrorBoundary from './TransceiverErrorBoundary';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -156,11 +157,13 @@ function ChatRoom() {
         <div ref={messagesEndRef} />
       </div>
 
-      {transceiver.isConnected && transceiver.remoteSpeaker && (
-        <div className="transceiver-indicator">
-          🔊 {'█'.repeat(Math.round(transceiver.remoteAudioLevel * 10))}{'░'.repeat(10 - Math.round(transceiver.remoteAudioLevel * 10))} {transceiver.remoteSpeaker}
-        </div>
-      )}
+      <TransceiverErrorBoundary>
+        {transceiver.isConnected && transceiver.remoteSpeaker && (
+          <div className="transceiver-indicator">
+            🔊 {'█'.repeat(Math.round(transceiver.remoteAudioLevel * 10))}{'░'.repeat(10 - Math.round(transceiver.remoteAudioLevel * 10))} {transceiver.remoteSpeaker}
+          </div>
+        )}
+      </TransceiverErrorBoundary>
 
       {(Object.keys(typingUsers).length > 0 || agentStatus) && (
         <div className="typing-indicator">
