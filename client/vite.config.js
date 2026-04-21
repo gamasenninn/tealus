@@ -48,7 +48,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ['linny.hksagri.diskstation.me', 'tealus.hksagri.diskstation.me', 'tealus.dev'],
+    allowedHosts: ['linny.hksagri.diskstation.me', 'tealus.hksagri.diskstation.me', 'tealus.dev', 'app.tealus.dev'],
     proxy: {
       '/api': 'http://localhost:3000',
       '/media': 'http://localhost:3000',
