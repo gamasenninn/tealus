@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Device } from 'mediasoup-client';
 import { useAuthStore } from '../stores/authStore';
+import { useRoomStore } from '../stores/roomStore';
 
 /**
  * トランシーバー（PTT）フック
@@ -8,6 +9,7 @@ import { useAuthStore } from '../stores/authStore';
  */
 export function useTransceiver(roomId) {
   const { token } = useAuthStore();
+  const { members } = useRoomStore();
   const [state, setState] = useState('idle'); // idle | connecting | connected | producing | error
   const [remoteAudioLevel, setRemoteAudioLevel] = useState(0);
   const [remoteSpeaker, setRemoteSpeaker] = useState(null);
@@ -46,6 +48,12 @@ export function useTransceiver(roomId) {
     });
   }, []);
 
+  // peerId → 表示名に変換
+  const getPeerName = useCallback((peerId) => {
+    const member = members.find(m => m.user_id === peerId);
+    return member?.display_name || peerId.slice(0, 8);
+  }, [members]);
+
   // --- 受信音声レベル計測 ---
   const startAudioLevelMonitor = useCallback((stream, peerId) => {
     try {
@@ -64,7 +72,7 @@ export function useTransceiver(roomId) {
         const max = Math.max(...dataArray) / 255;
         setRemoteAudioLevel(max);
         if (max > 0.05) {
-          setRemoteSpeaker(peerId.slice(0, 8));
+          setRemoteSpeaker(getPeerName(peerId));
         } else {
           setRemoteSpeaker(null);
         }
@@ -74,7 +82,7 @@ export function useTransceiver(roomId) {
     } catch (err) {
       console.error('[transceiver] audio level monitor error:', err);
     }
-  }, []);
+  }, [getPeerName]);
 
   const stopAudioLevelMonitor = useCallback(() => {
     if (animFrameRef.current) {

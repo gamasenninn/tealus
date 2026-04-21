@@ -102,7 +102,7 @@
 
 /* Transceiver */
 .transceiver-active {
-  background: rgba(76, 175, 80, 0.6) !important;
+  background: #ff9800 !important;
   animation: call-pulse 2s infinite;
 }
 
