@@ -36,13 +36,26 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
 
   const highlightText = (text) => {
-    if (!text || !searchKeyword) return text;
-    const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escaped})`, 'gi');
-    const parts = text.split(regex);
-    return parts.map((part, i) =>
-      i % 2 === 1 ? <mark key={i} className="search-highlight">{part}</mark> : part
-    );
+    if (!text) return text;
+    // @メンション + 検索キーワードのハイライト
+    const mentionRegex = /@([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u30fc\u30fb]+)/g;
+    const parts = text.split(mentionRegex);
+    return parts.map((part, i) => {
+      if (i % 2 === 1) {
+        // メンション部分
+        return <span key={`m${i}`} className="mention-highlight">@{part}</span>;
+      }
+      // 検索キーワードハイライト
+      if (searchKeyword) {
+        const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const kwRegex = new RegExp(`(${escaped})`, 'gi');
+        const kwParts = part.split(kwRegex);
+        return kwParts.map((kw, j) =>
+          j % 2 === 1 ? <mark key={`s${i}_${j}`} className="search-highlight">{kw}</mark> : kw
+        );
+      }
+      return part;
+    });
   };
 
   const formatTime = (dateStr) => {

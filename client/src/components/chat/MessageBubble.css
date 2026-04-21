@@ -313,6 +313,12 @@
   opacity: 0.5;
 }
 
+/* Mention highlight */
+.mention-highlight {
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* Markdown preview styles */
 .bubble-markdown {
   white-space: normal;

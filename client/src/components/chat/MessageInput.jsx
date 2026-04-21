@@ -2,8 +2,10 @@ import { useState, useRef } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
+import { useRoomStore } from '../../stores/roomStore';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
+import MentionPicker from './MentionPicker';
 import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants/ui';
 import { Mic } from 'lucide-react';
 import './MessageInput.css';
@@ -15,9 +17,13 @@ function MessageInput({ roomId }) {
   const [uploadError, setUploadError] = useState('');
   const [recorderStream, setRecorderStream] = useState(null);
   const [showStamps, setShowStamps] = useState(false);
+  const [showMention, setShowMention] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const typingTimerRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
+  const { members } = useRoomStore();
 
   const emitTyping = () => {
     const socket = getSocket();
@@ -176,6 +182,32 @@ function MessageInput({ roomId }) {
           <button onClick={clearReplyTo}>✕</button>
         </div>
       )}
+      {showMention && (
+        <MentionPicker
+          members={members}
+          query={mentionQuery}
+          onSelect={(name) => {
+            const textarea = textareaRef.current;
+            if (!textarea) return;
+            const cursorPos = textarea.selectionStart;
+            const textBefore = text.slice(0, cursorPos);
+            const textAfter = text.slice(cursorPos);
+            const atIdx = textBefore.lastIndexOf('@');
+            if (atIdx >= 0) {
+              const newText = textBefore.slice(0, atIdx) + `@${name} ` + textAfter;
+              setText(newText);
+              setShowMention(false);
+              // カーソルを挿入位置の後に移動
+              setTimeout(() => {
+                const newPos = atIdx + name.length + 2; // @ + name + space
+                textarea.selectionStart = textarea.selectionEnd = newPos;
+                textarea.focus();
+              }, 0);
+            }
+          }}
+          onClose={() => setShowMention(false)}
+        />
+      )}
       <div className="message-input-row">
         <button
           className="message-input-attach"
@@ -201,9 +233,24 @@ function MessageInput({ roomId }) {
           multiple
         />
         <textarea
+          ref={textareaRef}
           className="message-input-text"
           value={text}
-          onChange={(e) => { setText(e.target.value); emitTyping(); }}
+          onChange={(e) => {
+            const value = e.target.value;
+            setText(value);
+            emitTyping();
+            // @メンション検知
+            const cursorPos = e.target.selectionStart;
+            const textBefore = value.slice(0, cursorPos);
+            const atMatch = textBefore.match(/@([^\s@]*)$/);
+            if (atMatch) {
+              setMentionQuery(atMatch[1]);
+              setShowMention(true);
+            } else {
+              setShowMention(false);
+            }
+          }}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           placeholder={window.innerWidth >= 768 ? 'メッセージを入力（Ctrl+Enterで送信）' : 'メッセージを入力'}
