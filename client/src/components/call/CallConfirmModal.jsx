@@ -32,7 +32,11 @@ function CallConfirmModal({ onConfirm, onCancel }) {
           <button className="call-confirm-cancel" onClick={onCancel}>
             キャンセル
           </button>
-          <button className="call-confirm-start" onClick={() => onConfirm({ video: videoEnabled, audio: audioEnabled })}>
+          <button
+            className="call-confirm-start"
+            disabled={!videoEnabled && !audioEnabled}
+            onClick={() => onConfirm({ video: videoEnabled, audio: audioEnabled })}
+          >
             <Phone size={18} />
             開始
           </button>

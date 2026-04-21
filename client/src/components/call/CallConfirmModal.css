@@ -90,3 +90,8 @@
 .call-confirm-start:hover {
   background: #43a047;
 }
+
+.call-confirm-start:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}

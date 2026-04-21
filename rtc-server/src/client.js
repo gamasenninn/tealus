@@ -294,10 +294,7 @@ connectBtn.addEventListener("click", async () => {
   try {
     setStatus("カメラ・マイクを取得中...");
     // video/audio は URL パラメータで制御（確認ダイアログで選択）
-    // 最低限 audio は ON にする（video だけ OFF は許容、両方 OFF は音声 ON に強制）
-    const mediaVideo = paramVideo;
-    const mediaAudio = !paramVideo && !paramAudio ? true : paramAudio;
-    localStream = await navigator.mediaDevices.getUserMedia({ video: mediaVideo, audio: mediaAudio });
+    localStream = await navigator.mediaDevices.getUserMedia({ video: paramVideo, audio: paramAudio });
     localVideo.srcObject = localStream;
 
     setStatus("サーバーに接続中...");
