@@ -14,8 +14,9 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall } from 'lucide-react';
+import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall, Radio } from 'lucide-react';
 import CallConfirmModal from '../call/CallConfirmModal';
+import { useTransceiver } from '../../hooks/useTransceiver';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -51,6 +52,7 @@ function ChatRoom() {
   const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
   const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
+  const transceiver = useTransceiver(roomId);
   const [callStatus, setCallStatus] = useState(null); // { state: 'waiting'|'active', count }
 
   // 通話ステータスのリスナー
@@ -100,6 +102,15 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
+        {!callStatus && (
+          <button
+            className={`chat-header-btn ${transceiver.isConnected ? 'transceiver-active' : ''}`}
+            onClick={() => transceiver.isConnected ? transceiver.disconnect() : transceiver.connect()}
+            title={transceiver.isConnected ? 'トランシーバー切断' : 'トランシーバー接続'}
+          >
+            <Radio size={16} />
+          </button>
+        )}
         {callStatus ? (
           <button className="chat-header-btn call-status-btn" onClick={() => setShowCallConfirm(true)} title="通話に参加">
             <PhoneCall size={16} />
@@ -145,6 +156,12 @@ function ChatRoom() {
         <div ref={messagesEndRef} />
       </div>
 
+      {transceiver.isConnected && transceiver.remoteSpeaker && (
+        <div className="transceiver-indicator">
+          🔊 {'█'.repeat(Math.round(transceiver.remoteAudioLevel * 10))}{'░'.repeat(10 - Math.round(transceiver.remoteAudioLevel * 10))} {transceiver.remoteSpeaker}
+        </div>
+      )}
+
       {(Object.keys(typingUsers).length > 0 || agentStatus) && (
         <div className="typing-indicator">
           {agentStatus
@@ -177,7 +194,7 @@ function ChatRoom() {
         </div>
       )}
 
-      <MessageInput roomId={roomId} />
+      <MessageInput roomId={roomId} transceiver={transceiver} />
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />

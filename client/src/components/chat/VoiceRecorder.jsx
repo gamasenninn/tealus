@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import './VoiceRecorder.css';
 
-function VoiceRecorder({ stream, onSend, onCancel }) {
+function VoiceRecorder({ stream, onSend, onCancel, isTransceiverActive }) {
   const [duration, setDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const recorderRef = useRef(null);
@@ -119,6 +119,9 @@ function VoiceRecorder({ stream, onSend, onCancel }) {
           録音中...
         </div>
         <div className="voice-recorder-bars">{bars}</div>
+        {isTransceiverActive && (
+          <div className="transceiver-live">🔴 リアルタイム送信中</div>
+        )}
         <div className="voice-recorder-time">{formatTime(duration)}</div>
         <div className="voice-recorder-actions">
           <button className="voice-cancel-btn" onClick={handleCancel}>キャンセル</button>
