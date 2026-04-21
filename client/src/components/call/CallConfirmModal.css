@@ -1,0 +1,92 @@
+.call-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+}
+
+.call-confirm-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.call-confirm-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.call-confirm-options {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.call-confirm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 2px solid var(--border-medium);
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.call-confirm-toggle.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+.call-confirm-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.call-confirm-cancel {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.call-confirm-cancel:hover {
+  background: var(--bg-hover);
+}
+
+.call-confirm-start {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #4caf50;
+  color: white;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.call-confirm-start:hover {
+  background: #43a047;
+}

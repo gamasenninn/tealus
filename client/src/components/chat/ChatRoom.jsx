@@ -15,6 +15,7 @@ import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall } from 'lucide-react';
+import CallConfirmModal from '../call/CallConfirmModal';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -25,6 +26,7 @@ function ChatRoom() {
   const { currentRoom, members, lastReadMessageId, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
+  const [showCallConfirm, setShowCallConfirm] = useState(false);
   const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom);
   useVoiceContinuousPlay(messages);
 
@@ -99,24 +101,12 @@ function ChatRoom() {
           )}
         </div>
         {callStatus ? (
-          <button className="chat-header-btn call-status-btn" onClick={() => {
-            const socket = getSocket();
-            if (socket) {
-              socket.emit('call:start', { roomId });
-              window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId } }));
-            }
-          }} title="通話に参加">
+          <button className="chat-header-btn call-status-btn" onClick={() => setShowCallConfirm(true)} title="通話に参加">
             <PhoneCall size={16} />
             <span className="call-status-label">{callStatus.state === 'waiting' ? '待機中' : '通話中'}</span>
           </button>
         ) : (
-          <button className="chat-header-btn" onClick={() => {
-            const socket = getSocket();
-            if (socket) {
-              socket.emit('call:start', { roomId });
-              window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId } }));
-            }
-          }} title="通話"><Phone size={18} /></button>
+          <button className="chat-header-btn" onClick={() => setShowCallConfirm(true)} title="通話"><Phone size={18} /></button>
         )}
         {appUrls.length > 0 && (
           <button className={`chat-header-btn ${showAppPanel ? 'active' : ''}`} onClick={() => setShowAppPanel(!showAppPanel)} title="アプリ"><Smartphone size={18} /></button>
@@ -191,6 +181,19 @@ function ChatRoom() {
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />
+      )}
+      {showCallConfirm && (
+        <CallConfirmModal
+          onConfirm={({ video, audio }) => {
+            setShowCallConfirm(false);
+            const socket = getSocket();
+            if (socket) {
+              socket.emit('call:start', { roomId });
+              window.dispatchEvent(new CustomEvent('call:start', { detail: { roomId, video, audio } }));
+            }
+          }}
+          onCancel={() => setShowCallConfirm(false)}
+        />
       )}
     </div>
   );

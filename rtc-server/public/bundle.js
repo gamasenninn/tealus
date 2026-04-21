@@ -11810,6 +11810,8 @@
   var params = new URLSearchParams(location.search);
   var paramRoom = params.get("room");
   var paramToken = params.get("token");
+  var paramVideo = params.get("video") !== "false";
+  var paramAudio = params.get("audio") !== "false";
   var autoConnect = !!(paramRoom && paramToken);
   var ws;
   var device;
@@ -12069,7 +12071,9 @@
     connectBtn.disabled = true;
     try {
       setStatus("\u30AB\u30E1\u30E9\u30FB\u30DE\u30A4\u30AF\u3092\u53D6\u5F97\u4E2D...");
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const mediaVideo = paramVideo;
+      const mediaAudio = !paramVideo && !paramAudio ? true : paramAudio;
+      localStream = await navigator.mediaDevices.getUserMedia({ video: mediaVideo, audio: mediaAudio });
       localVideo.srcObject = localStream;
       setStatus("\u30B5\u30FC\u30D0\u30FC\u306B\u63A5\u7D9A\u4E2D...");
       await connectWebSocket();

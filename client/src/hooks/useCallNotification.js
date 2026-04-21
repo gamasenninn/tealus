@@ -64,8 +64,8 @@ export function useCallNotification() {
   // ChatRoom からの通話開始イベントを受け取る
   useEffect(() => {
     const handleCallStart = (e) => {
-      const { roomId } = e.detail;
-      if (roomId) setActiveCall({ roomId });
+      const { roomId, video = true, audio = true } = e.detail;
+      if (roomId) setActiveCall({ roomId, video, audio });
     };
     window.addEventListener('call:start', handleCallStart);
     return () => window.removeEventListener('call:start', handleCallStart);
@@ -104,7 +104,10 @@ export function useCallNotification() {
 
   const getCallUrl = useCallback(() => {
     if (!activeCall || !token) return null;
-    return `/rtc/?room=${activeCall.roomId}&token=${encodeURIComponent(token)}`;
+    let url = `/rtc/?room=${activeCall.roomId}&token=${encodeURIComponent(token)}`;
+    if (activeCall.video === false) url += '&video=false';
+    if (activeCall.audio === false) url += '&audio=false';
+    return url;
   }, [activeCall, token]);
 
   return {

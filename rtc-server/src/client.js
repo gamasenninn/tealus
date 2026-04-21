@@ -4,6 +4,8 @@ import { Device } from "mediasoup-client";
 const params = new URLSearchParams(location.search);
 const paramRoom = params.get("room");
 const paramToken = params.get("token");
+const paramVideo = params.get("video") !== "false";
+const paramAudio = params.get("audio") !== "false";
 const autoConnect = !!(paramRoom && paramToken);
 
 // --- State ---
@@ -291,7 +293,11 @@ connectBtn.addEventListener("click", async () => {
   connectBtn.disabled = true;
   try {
     setStatus("カメラ・マイクを取得中...");
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    // video/audio は URL パラメータで制御（確認ダイアログで選択）
+    // 最低限 audio は ON にする（video だけ OFF は許容、両方 OFF は音声 ON に強制）
+    const mediaVideo = paramVideo;
+    const mediaAudio = !paramVideo && !paramAudio ? true : paramAudio;
+    localStream = await navigator.mediaDevices.getUserMedia({ video: mediaVideo, audio: mediaAudio });
     localVideo.srcObject = localStream;
 
     setStatus("サーバーに接続中...");
