@@ -35,6 +35,26 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const longPressTimer = useRef(null);
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
 
+  // Markdown 内のテキストノードからメンションをハイライト
+  const processMentions = (children) => {
+    if (!children) return children;
+    return Array.isArray(children)
+      ? children.map((child, i) => {
+          if (typeof child === 'string') {
+            const mentionRegex = /@([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u30fc\u30fb]+)/g;
+            const parts = child.split(mentionRegex);
+            if (parts.length <= 1) return child;
+            return parts.map((part, j) =>
+              j % 2 === 1 ? <span key={`${i}_${j}`} className="mention-highlight">@{part}</span> : part
+            );
+          }
+          return child;
+        })
+      : typeof children === 'string'
+        ? processMentions([children])
+        : children;
+  };
+
   const highlightText = (text) => {
     if (!text) return text;
     // @メンション + 検索キーワードのハイライト
@@ -185,7 +205,10 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <>
               {hasText && (mdPreview ? (
                 <div className="bubble-text bubble-markdown">
-                  <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                  <Markdown remarkPlugins={[remarkGfm]} components={{
+                    p: ({ children }) => <p>{processMentions(children)}</p>,
+                    li: ({ children }) => <li>{processMentions(children)}</li>,
+                  }}>{message.content}</Markdown>
                   {message.is_edited && <span className="bubble-edited"> (編集済み)</span>}
                 </div>
               ) : (
