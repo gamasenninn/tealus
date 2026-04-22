@@ -201,6 +201,13 @@
   accent-color: var(--primary);
 }
 
+.profile-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
 .font-size-preview {
   color: var(--text-secondary);
   padding: 10px;

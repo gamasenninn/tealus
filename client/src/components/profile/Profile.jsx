@@ -22,6 +22,7 @@ function Profile() {
   const [notificationSound, setNotificationSound] = useState(localStorage.getItem('notificationSound') !== 'off');
   const [mdPreview, setMdPreview] = useState(localStorage.getItem('mdPreview') !== 'off');
   const [voiceVolume, setVoiceVolume] = useState(parseInt(localStorage.getItem('voiceVolume') || '80'));
+  const [ttsReadAloud, setTtsReadAloud] = useState(localStorage.getItem('ttsReadAloud') === 'on');
 
   const showMessage = (msg) => {
     setMessage(msg);
@@ -227,6 +228,22 @@ function Profile() {
           />
           <span className="volume-label">{voiceVolume}%</span>
         </div>
+      </div>
+
+      <div className="profile-section">
+        <h2>AI回答の読み上げ</h2>
+        <label className="notification-toggle">
+          <input
+            type="checkbox"
+            checked={ttsReadAloud}
+            onChange={(e) => {
+              setTtsReadAloud(e.target.checked);
+              localStorage.setItem('ttsReadAloud', e.target.checked ? 'on' : 'off');
+            }}
+          />
+          <span>AIの回答をトランシーバーで自動読み上げする</span>
+        </label>
+        <p className="profile-hint">ONにすると、メッセージ送信時にトランシーバーが自動接続され、AI回答後に自動切断されます</p>
       </div>
 
       <div className="profile-section">

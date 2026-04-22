@@ -10,7 +10,7 @@ import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants
 import { Mic } from 'lucide-react';
 import './MessageInput.css';
 
-function MessageInput({ roomId, transceiver }) {
+function MessageInput({ roomId, transceiver, setAutoConnected }) {
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
@@ -38,6 +38,12 @@ function MessageInput({ roomId, transceiver }) {
   const handleSend = async () => {
     const content = text.trim();
     if (!content || isSending) return;
+
+    // 読み上げ ON かつトランシーバー未接続 → 自動接続
+    if (localStorage.getItem('ttsReadAloud') === 'on' && transceiver && !transceiver.isConnected) {
+      transceiver.connect();
+      setAutoConnected?.(true);
+    }
 
     setIsSending(true);
     try {

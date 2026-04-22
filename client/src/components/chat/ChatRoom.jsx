@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -55,6 +55,35 @@ function ChatRoom() {
   const { onlineUsers } = useOnlineStatus();
   const transceiver = useTransceiver(roomId);
   const [callStatus, setCallStatus] = useState(null); // { state: 'waiting'|'active', count }
+  const [autoConnected, setAutoConnected] = useState(false);
+  const disconnectTimerRef = useRef(null);
+
+  // TTS 自動切断: AI メッセージ受信後30秒で自動切断
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !autoConnected) return;
+
+    const handleNewMessage = (msg) => {
+      if (msg.room_id !== roomId) return;
+      const isBot = /AI|bot|Bot|Agent|アシスタント|Claude/i.test(msg.sender_display_name || '');
+      if (!isBot) return;
+
+      // タイマーリセット
+      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = setTimeout(() => {
+        if (transceiver.isConnected) {
+          transceiver.disconnect();
+        }
+        setAutoConnected(false);
+      }, 30000);
+    };
+
+    socket.on('message:new', handleNewMessage);
+    return () => {
+      socket.off('message:new', handleNewMessage);
+      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
+    };
+  }, [roomId, autoConnected, transceiver]);
 
   // 通話ステータスのリスナー
   useEffect(() => {
@@ -197,7 +226,7 @@ function ChatRoom() {
         </div>
       )}
 
-      <MessageInput roomId={roomId} transceiver={transceiver} />
+      <MessageInput roomId={roomId} transceiver={transceiver} setAutoConnected={setAutoConnected} />
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />
