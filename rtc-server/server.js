@@ -370,6 +370,69 @@ function handleWebSocket(ws, req) {
           break;
         }
 
+        case "createPlainTransport": {
+          const transport = await router.createPlainTransport({
+            listenIp: { ip: "0.0.0.0", announcedIp: "127.0.0.1" },
+            rtcpMux: true,
+            comedia: true, // 送信元 IP:port を自動検知
+          });
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
+          peer.transports[transport.id] = transport;
+
+          logger.info(`PlainTransport created: ${transport.id} -> ${transport.tuple.localIp}:${transport.tuple.localPort}`);
+          send(ws, {
+            type: "plainTransportCreated",
+            id: transport.id,
+            ip: transport.tuple.localIp,
+            port: transport.tuple.localPort,
+          });
+          break;
+        }
+
+        case "plainProduce": {
+          // PlainTransport 用の produce — RTP パラメータを直接指定
+          const room = getRoomPeers(roomId);
+          const peer = room.get(peerId);
+          const transport = peer.transports[msg.transportId];
+          if (!transport) {
+            send(ws, { type: "error", message: "transport not found" });
+            break;
+          }
+
+          const producer = await transport.produce({
+            kind: "audio",
+            rtpParameters: {
+              codecs: [{
+                mimeType: "audio/opus",
+                payloadType: 100,
+                clockRate: 48000,
+                channels: 2,
+                parameters: { minptime: 10, useinbandfec: 1 },
+              }],
+              encodings: [{ ssrc: msg.ssrc || 1111 }],
+            },
+          });
+          peer.producers[producer.id] = producer;
+
+          logger.info(`PlainTransport producer created: ${producer.id} (ssrc=${msg.ssrc || 1111})`);
+          send(ws, { type: "produced", producerId: producer.id, kind: "audio" });
+
+          // Notify other peers
+          for (const [otherId, otherPeer] of room) {
+            if (otherId === peerId) continue;
+            if (otherPeer.ws) {
+              send(otherPeer.ws, {
+                type: "newProducer",
+                producerId: producer.id,
+                producerPeerId: peerId,
+                kind: "audio",
+              });
+            }
+          }
+          break;
+        }
+
         case "getProducers": {
           const room = getRoomPeers(roomId);
           const producers = [];
