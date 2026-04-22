@@ -14,16 +14,16 @@ function Rooms() {
       api.getRooms().then(d => d.rooms).catch(() => []),
       agentApi.getRoomsList().then(d => d.rooms || []).catch(() => []),
     ]).then(([apiRooms, agentRooms]) => {
-      // API ルーム情報をマップ化
+      // API ルーム情報をマップ化（admin のルーム — 作成日等の補完用）
       const roomMap = new Map(apiRooms.map(r => [r.id, r]));
-      // エージェントのルームを基準に、API 情報で補完
+      // エージェントのルームを基準に表示（名前は agentRooms から取得）
       const merged = agentRooms.map(ar => {
         const info = roomMap.get(ar.room_id);
         return {
           id: ar.room_id,
-          name: info?.name || info?.partner_display_name || ar.room_id.slice(0, 8),
-          type: info?.type || 'unknown',
-          member_count: info?.member_count || '?',
+          name: ar.name || info?.name || info?.partner_display_name || ar.room_id.slice(0, 8),
+          type: ar.type || info?.type || 'unknown',
+          member_count: ar.member_count || info?.member_count || '?',
           created_at: info?.created_at || '',
           response_mode: ar.response_mode,
           enabled: ar.enabled,
