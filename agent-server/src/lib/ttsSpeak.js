@@ -148,6 +148,17 @@ function sendViaPlainTransport(wavPath, roomId) {
   });
 }
 
+// --- ルーム設定から TTS モデルを取得 ---
+function getRoomTtsModel(roomId) {
+  try {
+    const agentId = require('./botApi').getBotUserId();
+    if (!agentId) return null;
+    const settingsPath = path.join(__dirname, '../../agent-workspaces', agentId, roomId, 'room_settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    return settings.tts_model_uuid || null;
+  } catch { return null; }
+}
+
 // --- キュー管理（同時読み上げ防止）---
 const queue = [];
 let isProcessing = false;
@@ -157,10 +168,10 @@ async function processQueue() {
   isProcessing = true;
 
   while (queue.length > 0) {
-    const { roomId, text } = queue.shift();
+    const { roomId, text, modelUuid } = queue.shift();
     try {
       const startTime = Date.now();
-      const wavBuf = await synthesize(text);
+      const wavBuf = await synthesize(text, modelUuid);
       const tmpFile = path.join(__dirname, `../../.tts-tmp-${Date.now()}.wav`);
       fs.writeFileSync(tmpFile, wavBuf);
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -193,7 +204,8 @@ function speakMessage(roomId, content) {
   const text = preprocessText(content);
   if (!text) return;
 
-  queue.push({ roomId, text });
+  const modelUuid = getRoomTtsModel(roomId) || MODEL_UUID;
+  queue.push({ roomId, text, modelUuid });
   processQueue();
 }
 

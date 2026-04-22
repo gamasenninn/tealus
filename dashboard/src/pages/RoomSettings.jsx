@@ -4,6 +4,20 @@ import { api } from '../services/api';
 import { agentApi } from '../services/agentApi';
 import { ArrowLeft, Save } from 'lucide-react';
 
+const TTS_MODELS = [
+  { uuid: '', name: 'デフォルト（環境変数）' },
+  { uuid: 'f5017410-fbb5-49e1-97cb-e785f42e15f5', name: '凛音エル（青年女性）' },
+  { uuid: 'a59cb814-0083-4369-8542-f51a29e72af7', name: 'まお（青年女性）' },
+  { uuid: '6d11c6c2-f4a4-4435-887e-23dd60f8b8dd', name: 'にせ（青年男性）' },
+  { uuid: 'e9339137-2ae3-4d41-9394-fb757a7e61e6', name: 'まい（青年女性）' },
+  { uuid: '47e53151-a378-46f3-abee-ce13aa07feb1', name: '阿井田 茂（中年男性）' },
+  { uuid: '71e72188-2726-4739-9aa9-39567396fb2a', name: 'fumifumi（成人男性）' },
+  { uuid: 'baaae3c0-7b22-4605-8ba5-80c959b41a48', name: 'morioki（成人女性）' },
+  { uuid: '696c98a2-c0b7-4fe7-8cf2-c7e9b8a9bd82', name: 'ろてじん/長老ボイス（老年男性）' },
+  { uuid: 'a670e6b8-0852-45b2-8704-1bc9862f2fe6', name: '花音（青年女性）' },
+  { uuid: '22e8ed77-94fe-4ef2-871f-a86f94e9a579', name: 'コハク（青年女性）' },
+];
+
 function RoomSettings() {
   const { roomId } = useParams();
   const navigate = useNavigate();
@@ -128,6 +142,19 @@ function RoomSettings() {
                 </div>
               </label>
             ))}
+          </section>
+
+          <section className="settings-section">
+            <h3>読み上げ音声モデル</h3>
+            <div className="setting-row">
+              <div>
+                <div className="setting-label">TTS モデル</div>
+                <div className="setting-desc">AIの回答を読み上げる声を選択</div>
+              </div>
+              <select value={settings.tts_model_uuid || ''} onChange={e => setSettings(prev => ({ ...prev, tts_model_uuid: e.target.value || undefined }))} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 14 }}>
+                {TTS_MODELS.map(m => <option key={m.uuid} value={m.uuid}>{m.name}</option>)}
+              </select>
+            </div>
           </section>
 
           <button className="save-btn" onClick={handleSettingsSave}>
