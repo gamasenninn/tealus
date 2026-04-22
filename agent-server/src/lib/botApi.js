@@ -61,7 +61,18 @@ async function request(method, path, body = null) {
  * ルームにメッセージ送信
  */
 async function pushMessage(roomId, content) {
-  return request('POST', '/bot/push', { room_id: roomId, content });
+  const result = await request('POST', '/bot/push', { room_id: roomId, content });
+
+  // TTS 読み上げ（fire-and-forget — メッセージ送信をブロックしない）
+  try {
+    const { speakMessage } = require('./ttsSpeak');
+    speakMessage(roomId, content);
+  } catch (err) {
+    // TTS エラーはメッセージ送信に影響させない
+    logger.debug(`[TTS] skip: ${err.message}`);
+  }
+
+  return result;
 }
 
 /**

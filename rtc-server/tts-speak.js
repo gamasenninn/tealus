@@ -28,20 +28,10 @@ const DEFAULT_MODEL = process.env.AIVIS_MODEL_UUID || "f5017410-fbb5-49e1-97cb-e
 const RTC_PORT = process.env.RTC_PORT || 3100;
 const SSRC = 1111;
 
-const ROOM_ID = process.argv[2];
-const TEXT = process.argv[3] || null;
-const MODEL_UUID = process.argv[4] || DEFAULT_MODEL;
-
-if (!ROOM_ID) {
-  console.error("Usage: node tts-speak.js <roomId> \"テキスト\" [modelUuid]");
-  console.error("       echo \"テキスト\" | node tts-speak.js <roomId>");
-  process.exit(1);
-}
-
-if (!AIVIS_API_KEY) {
-  console.error("Error: AIVIS_API_KEY is not set in .env");
-  process.exit(1);
-}
+// CLI 引数（モジュール利用時は無視）
+const ROOM_ID = require.main === module ? process.argv[2] : null;
+const TEXT = require.main === module ? (process.argv[3] || null) : null;
+const MODEL_UUID = require.main === module ? (process.argv[4] || DEFAULT_MODEL) : DEFAULT_MODEL;
 
 // --- Aivis TTS ---
 function synthesize(text, modelUuid) {
@@ -161,8 +151,18 @@ function readStdin() {
   });
 }
 
-// --- Main ---
+// --- Main (CLI only) ---
 async function main() {
+  if (!ROOM_ID) {
+    console.error("Usage: node tts-speak.js <roomId> \"テキスト\" [modelUuid]");
+    console.error("       echo \"テキスト\" | node tts-speak.js <roomId>");
+    process.exit(1);
+  }
+  if (!AIVIS_API_KEY) {
+    console.error("Error: AIVIS_API_KEY is not set in .env");
+    process.exit(1);
+  }
+
   // テキスト取得（引数 or stdin）
   let text = TEXT || (await readStdin());
   if (!text) {
@@ -201,7 +201,13 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Error:", err.message);
-  process.exit(1);
-});
+// --- モジュール export ---
+module.exports = { synthesize, sendViaPlainTransport };
+
+// CLI 実行時のみ main() を呼ぶ
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("Error:", err.message);
+    process.exit(1);
+  });
+}
