@@ -152,12 +152,22 @@ function resolveRoomWorkspace(roomId) {
 /**
  * GET /config/rooms — 全ルームのワークスペース一覧 + 設定サマリ
  */
-router.get('/rooms', (req, res) => {
+router.get('/rooms', async (req, res) => {
   try {
     const agentId = botApi.getBotUserId();
     if (!agentId) return res.json({ rooms: [] });
     const agentDir = path.join(WORKSPACE_ROOT, agentId);
     if (!fs.existsSync(agentDir)) return res.json({ rooms: [] });
+
+    // Bot API でルーム名を取得
+    let roomInfoMap = new Map();
+    try {
+      const apiRooms = await botApi.getRooms();
+      const roomList = apiRooms.rooms || apiRooms || [];
+      for (const r of roomList) {
+        roomInfoMap.set(r.id, { name: r.name || r.partner_display_name || 'DM', type: r.type, member_count: r.member_count });
+      }
+    } catch {}
 
     const rooms = [];
     for (const roomId of fs.readdirSync(agentDir)) {
@@ -168,7 +178,8 @@ router.get('/rooms', (req, res) => {
       if (fs.existsSync(settingsPath)) {
         try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {}
       }
-      rooms.push({ room_id: roomId, ...settings });
+      const info = roomInfoMap.get(roomId) || {};
+      rooms.push({ room_id: roomId, name: info.name || roomId.slice(0, 8), type: info.type || 'unknown', member_count: info.member_count, ...settings });
     }
     res.json({ rooms });
   } catch (err) {
