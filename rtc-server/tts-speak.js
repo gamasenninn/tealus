@@ -94,6 +94,7 @@ function sendViaPlainTransport(wavPath, roomId) {
         // ffmpeg で RTP 送信
         const ffmpeg = spawn("ffmpeg", [
           "-re", "-i", wavPath,
+          "-af", "adelay=300|300,apad=pad_dur=500ms",
           "-c:a", "libopus", "-ac", "2", "-ar", "48000", "-b:a", "32k",
           "-f", "rtp", "-ssrc", String(SSRC), "-payload_type", "100",
           `rtp://127.0.0.1:${pt.port}`,
@@ -109,9 +110,12 @@ function sendViaPlainTransport(wavPath, roomId) {
 
         ffmpeg.on("close", (code) => {
           process.stdout.write("\n");
-          send({ type: "leave" });
-          ws.close();
-          resolve(code);
+          // 最後の RTP パケットが mediasoup で処理されるのを待つ
+          setTimeout(() => {
+            send({ type: "leave" });
+            ws.close();
+            resolve(code);
+          }, 1500);
         });
 
         ffmpeg.on("error", (err) => {
