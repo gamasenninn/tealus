@@ -56,14 +56,21 @@ function ChatRoom() {
   const transceiver = useTransceiver(roomId);
   const [callStatus, setCallStatus] = useState(null); // { state: 'waiting'|'active', count }
   const [autoConnected, setAutoConnected] = useState(false);
+  const autoConnectedRef = useRef(false);
+  const transceiverRef = useRef(transceiver);
   const disconnectTimerRef = useRef(null);
+
+  // ref を同期（useEffect 内で最新値を参照するため）
+  useEffect(() => { autoConnectedRef.current = autoConnected; }, [autoConnected]);
+  useEffect(() => { transceiverRef.current = transceiver; }, [transceiver]);
 
   // TTS 自動切断: AI メッセージ受信後30秒で自動切断
   useEffect(() => {
     const socket = getSocket();
-    if (!socket || !autoConnected) return;
+    if (!socket) return;
 
     const handleNewMessage = (msg) => {
+      if (!autoConnectedRef.current) return;
       if (msg.room_id !== roomId) return;
       const isBot = /AI|bot|Bot|Agent|アシスタント|Claude/i.test(msg.sender_display_name || '');
       if (!isBot) return;
@@ -71,8 +78,8 @@ function ChatRoom() {
       // タイマーリセット
       if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
       disconnectTimerRef.current = setTimeout(() => {
-        if (transceiver.isConnected) {
-          transceiver.disconnect();
+        if (autoConnectedRef.current && transceiverRef.current.isConnected) {
+          transceiverRef.current.disconnect();
         }
         setAutoConnected(false);
       }, 30000);
@@ -83,7 +90,7 @@ function ChatRoom() {
       socket.off('message:new', handleNewMessage);
       if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
     };
-  }, [roomId, autoConnected, transceiver]);
+  }, [roomId]); // transceiver を依存配列から除外 — ref で参照
 
   // 通話ステータスのリスナー
   useEffect(() => {
