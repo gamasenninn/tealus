@@ -120,9 +120,11 @@ async function main() {
     ffmpeg.stdout.on("data", (d) => process.stdout.write(d));
     ffmpeg.stderr.on("data", (d) => {
       const line = d.toString();
-      // ffmpeg のプログレス行だけ表示
-      if (line.includes("size=") || line.includes("time=")) {
-        process.stdout.write(`  ${line}`);
+      // ffmpeg の出力を表示（SDP、プログレス、エラー）
+      if (line.includes("size=") || line.includes("time=") || line.includes("SDP:") || line.includes("v=0") || line.includes("m=audio") || line.includes("a=")) {
+        process.stdout.write(`${line}`);
+      } else if (line.includes("Error") || line.includes("error") || line.includes("Invalid") || line.includes("No such") || line.includes("not found")) {
+        process.stderr.write(`  [ERROR] ${line}`);
       }
     });
 
