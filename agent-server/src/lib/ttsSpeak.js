@@ -153,7 +153,8 @@ function getRoomTtsModel(roomId) {
   try {
     const agentId = require('./botApi').getBotUserId();
     if (!agentId) return null;
-    const settingsPath = path.join(__dirname, '../../agent-workspaces', agentId, roomId, 'room_settings.json');
+    const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT || path.join(__dirname, '../../agent-workspaces');
+    const settingsPath = path.join(workspaceRoot, agentId, roomId, 'room_settings.json');
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     return settings.tts_model_uuid || null;
   } catch { return null; }
@@ -205,6 +206,7 @@ function speakMessage(roomId, content) {
   if (!text) return;
 
   const modelUuid = getRoomTtsModel(roomId) || MODEL_UUID;
+  logger.info(`[TTS] model: ${modelUuid} (room: ${roomId}, default: ${MODEL_UUID})`);
   queue.push({ roomId, text, modelUuid });
   processQueue();
 }
