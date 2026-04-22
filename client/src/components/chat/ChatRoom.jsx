@@ -77,7 +77,12 @@ function ChatRoom() {
 
       // タイマーリセット
       if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
-      disconnectTimerRef.current = setTimeout(() => {
+      disconnectTimerRef.current = setTimeout(function tryDisconnect() {
+        // 読み上げ中なら延長
+        if (transceiverRef.current.remoteSpeaker) {
+          disconnectTimerRef.current = setTimeout(tryDisconnect, 10000);
+          return;
+        }
         if (autoConnectedRef.current && transceiverRef.current.isConnected) {
           transceiverRef.current.disconnect();
         }
