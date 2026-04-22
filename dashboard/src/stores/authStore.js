@@ -33,12 +33,14 @@ export const useAuthStore = create((set) => ({
     if (data.user.role !== 'admin') {
       throw new Error('管理者権限が必要です');
     }
+    localStorage.setItem('dashboard_token', data.token);
     api.setToken(data.token);
     connectSocket(data.token);
     set({ user: data.user });
   },
 
   logout: () => {
+    localStorage.removeItem('dashboard_token');
     api.setToken(null);
     disconnectSocket();
     set({ user: null });

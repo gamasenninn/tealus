@@ -20,6 +20,15 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors());
+
+// Agent Server proxy（express.json() より前に配置 — body をパースせずに転送するため）
+const { createProxyMiddleware } = require('http-proxy-middleware');
+app.use('/agent-api', createProxyMiddleware({
+  target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
+  pathRewrite: { '^/agent-api': '' },
+  changeOrigin: true,
+}));
+
 app.use(express.json());
 
 // API リクエストログ
@@ -75,14 +84,6 @@ app.use('/media', express.static(process.env.MEDIA_ROOT || path.join(__dirname, 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-// Agent Server proxy（dashboard の /agent-api を Agent Server に転送）
-const { createProxyMiddleware } = require('http-proxy-middleware');
-app.use('/agent-api', createProxyMiddleware({
-  target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
-  pathRewrite: { '^/agent-api': '' },
-  changeOrigin: true,
-}));
 
 // RTC Server proxy（mediasoup 実験サーバーに転送）
 const rtcProxy = createProxyMiddleware({
