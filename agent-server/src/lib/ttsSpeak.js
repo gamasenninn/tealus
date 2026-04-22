@@ -102,6 +102,9 @@ function sendViaPlainTransport(wavPath, roomId) {
         send({ type: "plainProduce", transportId: pt.id, ssrc: SSRC });
         await waitFor((m) => m.type === "produced");
 
+        // ブラウザ側の Consumer セットアップを待つ
+        await new Promise((r) => setTimeout(r, 2000));
+
         const ffmpeg = spawn("ffmpeg", [
           "-re", "-i", wavPath,
           "-af", "adelay=300|300,apad=pad_dur=500ms",
