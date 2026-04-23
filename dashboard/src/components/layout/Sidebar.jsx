@@ -8,7 +8,6 @@ function Sidebar({ open, onToggle }) {
   const links = [
     { to: '/', icon: LayoutDashboard, label: '概要' },
     { to: '/agents', icon: Bot, label: 'エージェント' },
-    { to: '/rooms', icon: MessageSquare, label: 'ルーム' },
     { to: '/monitor', icon: Activity, label: 'モニタリング' },
   ];
 

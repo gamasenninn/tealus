@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Settings } from 'lucide-react';
+import { Settings, MessageSquare } from 'lucide-react';
 
 function Agents() {
   const [agents, setAgents] = useState([]);
@@ -26,6 +26,7 @@ function Agents() {
             <th>Employee ID</th>
             <th>状態</th>
             <th>作成日</th>
+            <th>ルーム設定</th>
           </tr>
         </thead>
         <tbody>
@@ -35,9 +36,14 @@ function Agents() {
               <td>{a.employee_id}</td>
               <td><span className={`badge ${a.is_active ? 'active' : 'inactive'}`}>{a.is_active ? '有効' : '無効'}</span></td>
               <td>{new Date(a.created_at).toLocaleDateString('ja-JP')}</td>
+              <td>
+                <button className="icon-btn" onClick={() => navigate(`/agents/${a.id}/rooms`)} title="ルーム設定">
+                  <MessageSquare size={16} />
+                </button>
+              </td>
             </tr>
           ))}
-          {agents.length === 0 && <tr><td colSpan={4} className="empty">エージェントが登録されていません</td></tr>}
+          {agents.length === 0 && <tr><td colSpan={5} className="empty">エージェントが登録されていません</td></tr>}
         </tbody>
       </table>
     </div>

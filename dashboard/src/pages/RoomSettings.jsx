@@ -19,7 +19,7 @@ const TTS_MODELS = [
 ];
 
 function RoomSettings() {
-  const { roomId } = useParams();
+  const { roomId, agentId } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState('basic');
   const [room, setRoom] = useState(null);
@@ -94,7 +94,7 @@ function RoomSettings() {
     <div className="page">
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="back-btn" onClick={() => navigate('/rooms')}><ArrowLeft size={18} /></button>
+          <button className="back-btn" onClick={() => navigate(agentId ? `/agents/${agentId}/rooms` : '/rooms')}><ArrowLeft size={18} /></button>
           <h2>{roomName} の設定</h2>
         </div>
       </div>

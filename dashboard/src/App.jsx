@@ -8,6 +8,7 @@ import Agents from './pages/Agents';
 import Rooms from './pages/Rooms';
 import Monitor from './pages/Monitor';
 import AgentSettings from './pages/AgentSettings';
+import AgentRooms from './pages/AgentRooms';
 import RoomSettings from './pages/RoomSettings';
 
 function AdminRoute({ children }) {
@@ -33,6 +34,8 @@ function App() {
           <Route index element={<Overview />} />
           <Route path="agents" element={<Agents />} />
           <Route path="agents/settings" element={<AgentSettings />} />
+          <Route path="agents/:agentId/rooms" element={<AgentRooms />} />
+          <Route path="agents/:agentId/rooms/:roomId" element={<RoomSettings />} />
           <Route path="rooms" element={<Rooms />} />
           <Route path="rooms/:roomId" element={<RoomSettings />} />
           <Route path="monitor" element={<Monitor />} />

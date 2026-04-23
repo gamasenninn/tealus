@@ -152,15 +152,27 @@ function resolveRoomWorkspace(roomId) {
 /**
  * GET /config/rooms — 全ルームのワークスペース一覧 + 設定サマリ
  */
-router.get('/rooms', async (req, res) => {
-  try {
-    const agentId = botApi.getBotUserId();
-    if (!agentId) return res.json({ rooms: [] });
-    const agentDir = path.join(WORKSPACE_ROOT, agentId);
-    if (!fs.existsSync(agentDir)) return res.json({ rooms: [] });
+// ワークスペースをスキャンしてルーム一覧を返す共通関数
+async function listAgentRooms(agentId) {
+  const agentDir = path.join(WORKSPACE_ROOT, agentId);
+  if (!fs.existsSync(agentDir)) return [];
 
-    // Bot API でルーム名を取得
-    let roomInfoMap = new Map();
+  // admin API で全ルーム情報を取得（エージェントに関係なくルーム名を解決）
+  let roomInfoMap = new Map();
+  try {
+    const allRooms = await botApi.request('GET', '/admin/rooms');
+    const roomList = allRooms.rooms || [];
+    for (const r of roomList) {
+      let name = r.name;
+      if (r.type === 'direct' && r.members) {
+        // DM: エージェント以外のメンバー名を表示
+        const other = r.members.find(m => m.id !== agentId);
+        name = other?.display_name || 'DM';
+      }
+      roomInfoMap.set(r.id, { name, type: r.type, member_count: r.member_count });
+    }
+  } catch {
+    // フォールバック: Bot API
     try {
       const apiRooms = await botApi.getRooms();
       const roomList = apiRooms.rooms || apiRooms || [];
@@ -168,20 +180,44 @@ router.get('/rooms', async (req, res) => {
         roomInfoMap.set(r.id, { name: r.name || r.partner_display_name || 'DM', type: r.type, member_count: r.member_count });
       }
     } catch {}
+  }
 
-    const rooms = [];
-    for (const roomId of fs.readdirSync(agentDir)) {
-      const roomDir = path.join(agentDir, roomId);
-      if (!fs.statSync(roomDir).isDirectory()) continue;
-      const settingsPath = path.join(roomDir, 'room_settings.json');
-      let settings = { response_mode: 'auto', enabled: true };
-      if (fs.existsSync(settingsPath)) {
-        try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {}
-      }
-      const info = roomInfoMap.get(roomId);
-      if (!info) continue; // 退出済みルームはスキップ
-      rooms.push({ room_id: roomId, name: info.name, type: info.type, member_count: info.member_count, ...settings });
+  const rooms = [];
+  for (const roomId of fs.readdirSync(agentDir)) {
+    const roomDir = path.join(agentDir, roomId);
+    if (!fs.statSync(roomDir).isDirectory()) continue;
+    const settingsPath = path.join(roomDir, 'room_settings.json');
+    let settings = { response_mode: 'auto', enabled: true };
+    if (fs.existsSync(settingsPath)) {
+      try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {}
     }
+    const info = roomInfoMap.get(roomId);
+    if (!info) continue; // 退出済みルームはスキップ
+    rooms.push({ room_id: roomId, name: info.name, type: info.type, member_count: info.member_count, ...settings });
+  }
+  return rooms;
+}
+
+/**
+ * GET /config/rooms — デフォルトエージェントのルーム一覧（後方互換）
+ */
+router.get('/rooms', async (req, res) => {
+  try {
+    const agentId = botApi.getBotUserId();
+    if (!agentId) return res.json({ rooms: [] });
+    const rooms = await listAgentRooms(agentId);
+    res.json({ rooms });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /config/rooms/:agentId — 指定エージェントのルーム一覧
+ */
+router.get('/rooms/:agentId', async (req, res) => {
+  try {
+    const rooms = await listAgentRooms(req.params.agentId);
     res.json({ rooms });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -63,6 +63,9 @@ class AgentApiClient {
   getRoomsList() {
     return this.request('GET', '/config/rooms');
   }
+  getAgentRooms(agentId) {
+    return this.request('GET', `/config/rooms/${agentId}`);
+  }
   getRoomSettings(roomId) {
     return this.request('GET', `/config/room/${roomId}/settings`);
   }
