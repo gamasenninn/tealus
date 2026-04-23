@@ -178,8 +178,9 @@ router.get('/rooms', async (req, res) => {
       if (fs.existsSync(settingsPath)) {
         try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch {}
       }
-      const info = roomInfoMap.get(roomId) || {};
-      rooms.push({ room_id: roomId, name: info.name || roomId.slice(0, 8), type: info.type || 'unknown', member_count: info.member_count, ...settings });
+      const info = roomInfoMap.get(roomId);
+      if (!info) continue; // 退出済みルームはスキップ
+      rooms.push({ room_id: roomId, name: info.name, type: info.type, member_count: info.member_count, ...settings });
     }
     res.json({ rooms });
   } catch (err) {
