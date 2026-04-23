@@ -108,6 +108,16 @@
   white-space: pre-wrap;
 }
 
+.bubble-more-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 12px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .bubble-meta-left,
 .bubble-meta-right {
   display: flex;

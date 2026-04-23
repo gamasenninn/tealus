@@ -32,6 +32,8 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [editHistory, setEditHistory] = useState([]);
   const [expanded, setExpanded] = useState(false);
+  const [textExpanded, setTextExpanded] = useState(false);
+  const TEXT_COLLAPSE_LENGTH = 300;
   const longPressTimer = useRef(null);
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
 
@@ -203,17 +205,31 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <img src={`/media/${message.stamp.file_path}`} alt={message.stamp.label} className="bubble-stamp" />
           ) : (
             <>
-              {hasText && (mdPreview ? (
-                <div className="bubble-text bubble-markdown">
-                  <Markdown remarkPlugins={[remarkGfm]} components={{
-                    p: ({ children }) => <p>{processMentions(children)}</p>,
-                    li: ({ children }) => <li>{processMentions(children)}</li>,
-                  }}>{message.content}</Markdown>
-                  {message.is_edited && <span className="bubble-edited"> (編集済み)</span>}
-                </div>
-              ) : (
-                <p className="bubble-text">{highlightText(message.content)}{message.is_edited && <span className="bubble-edited"> (編集済み)</span>}</p>
-              ))}
+              {hasText && (() => {
+                const isLong = message.content && message.content.length > TEXT_COLLAPSE_LENGTH;
+                const showFull = textExpanded || !isLong;
+                const displayContent = showFull ? message.content : message.content.slice(0, TEXT_COLLAPSE_LENGTH) + '…';
+                return (
+                  <>
+                    {mdPreview ? (
+                      <div className={`bubble-text bubble-markdown ${!showFull ? 'collapsed' : ''}`}>
+                        <Markdown remarkPlugins={[remarkGfm]} components={{
+                          p: ({ children }) => <p>{processMentions(children)}</p>,
+                          li: ({ children }) => <li>{processMentions(children)}</li>,
+                        }}>{displayContent}</Markdown>
+                        {message.is_edited && <span className="bubble-edited"> (編集済み)</span>}
+                      </div>
+                    ) : (
+                      <p className={`bubble-text ${!showFull ? 'collapsed' : ''}`}>{highlightText(displayContent)}{message.is_edited && <span className="bubble-edited"> (編集済み)</span>}</p>
+                    )}
+                    {isLong && (
+                      <button className="bubble-more-btn" onClick={(e) => { e.stopPropagation(); setTextExpanded(!textExpanded); }}>
+                        {textExpanded ? '閉じる' : 'もっとみる'}
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
               {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {message.type !== 'voice' && renderMedia()}
             </>
