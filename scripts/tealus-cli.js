@@ -141,8 +141,29 @@ async function resolveRoom(token, target) {
 
 // --- Commands ---
 
-async function sendVoiceFile(token, roomId, roomName, filePath) {
-  const result = await uploadFile(token, `/api/rooms/${roomId}/voice`, 'voice', filePath);
+let currentToken = null;
+
+async function getToken() {
+  if (!currentToken) currentToken = await login();
+  return currentToken;
+}
+
+async function refreshToken() {
+  currentToken = null;
+  return getToken();
+}
+
+async function sendVoiceFile(roomId, roomName, filePath) {
+  let token = await getToken();
+  let result = await uploadFile(token, `/api/rooms/${roomId}/voice`, 'voice', filePath);
+
+  // トークン無効 → 再ログインしてリトライ
+  if (result.error && /トークン|認証|401|Unauthorized/i.test(result.error)) {
+    console.log('🔄 トークン再取得...');
+    token = await refreshToken();
+    result = await uploadFile(token, `/api/rooms/${roomId}/voice`, 'voice', filePath);
+  }
+
   if (result.message) {
     console.log(`✅ 音声送信: ${roomName} ← ${path.basename(filePath)}（文字起こし自動実行）`);
   } else {
@@ -159,7 +180,7 @@ async function cmdSend(args) {
     process.exit(1);
   }
 
-  const token = await login();
+  const token = await getToken();
   const room = await resolveRoom(token, parsed.target);
 
   // 監視モード
@@ -185,7 +206,7 @@ async function cmdSend(args) {
         for (const file of unsent) {
           console.log(`📁 catch-up: ${path.basename(file.path)}`);
           try {
-            await sendVoiceFile(token, room.id, room.name, file.path);
+            await sendVoiceFile(room.id, room.name, file.path);
             writeLastSent(parsed.watchDir, new Date(file.mtime));
           } catch (err) {
             console.error(`❌ 送信失敗: ${err.message}`);
@@ -241,7 +262,7 @@ async function cmdSend(args) {
 
   if (parsed.voice) {
     if (!fs.existsSync(parsed.voice)) { console.error('❌ 音声ファイルが見つかりません:', parsed.voice); process.exit(1); }
-    await sendVoiceFile(token, room.id, room.name, parsed.voice);
+    await sendVoiceFile(room.id, room.name, parsed.voice);
   }
 }
 
