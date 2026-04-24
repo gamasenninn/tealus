@@ -99,10 +99,19 @@ cp .env.example .env
 
 | 変数 | 説明 |
 |------|------|
-| `JWT_SECRET` | JWT署名キー。`openssl rand -hex 32` で生成。**本番では必須**（未設定で起動失敗） |
+| `JWT_SECRET` | JWT署名キー。下のコマンドで生成。**本番では必須**（未設定で起動失敗） |
 | `VAPID_PUBLIC_KEY` | Web Push公開鍵 |
 | `VAPID_PRIVATE_KEY` | Web Push秘密鍵 |
 | `OPENAI_API_KEY` | 音声文字起こし・AI整形用（任意） |
+
+JWT_SECRET の生成（クロスプラットフォーム）:
+```bash
+# macOS / Linux (openssl 必須)
+openssl rand -hex 32
+
+# Windows PowerShell / クロスプラットフォーム（Node.js で生成）
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 VAPID鍵の生成:
 ```bash
