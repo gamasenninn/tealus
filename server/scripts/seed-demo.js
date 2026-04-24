@@ -140,17 +140,15 @@ const USERS = [
 const DEMO_PASSWORD = 'demo1234';
 
 async function wipe(client) {
-  // 設計上メッセージ・ルーム・ユーザーがほぼ全ての FK の起点なので
-  // これだけ TRUNCATE CASCADE すれば周辺テーブルも飛ぶ
+  // public スキーマの全テーブルを動的に TRUNCATE CASCADE する
+  // （マイグレーションでテーブル構成が変わっても追随できる）
   await client.query(`
-    TRUNCATE TABLE
-      message_reactions, message_reads, link_previews,
-      voice_transcriptions, message_media, message_tags,
-      tags, messages,
-      room_read_cursors, room_members, rooms,
-      push_subscriptions, user_stamp_usage, agent_contexts,
-      users
-    CASCADE
+    DO $$ DECLARE r RECORD;
+    BEGIN
+      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
+      END LOOP;
+    END $$;
   `);
   console.log('[seed-demo] 既存データをクリアしました');
 }
@@ -218,7 +216,7 @@ async function seedRoomsAndMessages(client, users) {
   const dmId = dm.rows[0].id;
 
   await client.query(
-    `INSERT INTO room_members (room_id, user_id, is_group_admin) VALUES ($1, $2, false), ($1, $3, false)`,
+    `INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member')`,
     [dmId, users.alice, users.assistant],
   );
 
@@ -239,15 +237,16 @@ async function seedRoomsAndMessages(client, users) {
   const grpId = grp.rows[0].id;
 
   await client.query(
-    `INSERT INTO room_members (room_id, user_id, is_group_admin) VALUES
-       ($1, $2, true),
-       ($1, $3, false),
-       ($1, $4, false)`,
+    `INSERT INTO room_members (room_id, user_id, role) VALUES
+       ($1, $2, 'admin'),
+       ($1, $3, 'member'),
+       ($1, $4, 'member')`,
     [grpId, users.alice, users.bob, users.charlie],
   );
 
   // 画像付きメッセージ用のデモ画像を生成
   const demoImage = await generateDemoImage();
+  const imageStat = fs.statSync(path.join(MEDIA_ROOT, demoImage.file_path));
 
   // 1. alice: 挨拶
   const m1 = await client.query(
@@ -272,9 +271,9 @@ async function seedRoomsAndMessages(client, users) {
     [grpId, users.charlie],
   );
   await client.query(
-    `INSERT INTO message_media (message_id, mime_type, file_path, thumbnail_path, original_name, sort_order)
-     VALUES ($1, 'image/png', $2, $3, 'demo.png', 0)`,
-    [m3.rows[0].id, demoImage.file_path, demoImage.thumbnail_path],
+    `INSERT INTO message_media (message_id, mime_type, file_path, file_name, file_size, thumbnail_path, width, height)
+     VALUES ($1, 'image/png', $2, 'demo.png', $3, $4, 800, 450)`,
+    [m3.rows[0].id, demoImage.file_path, imageStat.size, demoImage.thumbnail_path],
   );
 
   // 4. alice: charlie の画像にリアクション
