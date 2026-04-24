@@ -118,7 +118,10 @@
   font-weight: 600;
 }
 
-/* TTS read-aloud icon button */
+/* TTS 読み上げボタン（個人再生）。
+   ローディング表示は一切なし — クラス変更や opacity 変化自体がちらつきの
+   原因になるため（#169 で判明）。TTS は 0.3〜0.5 秒で完了するため視覚
+   フィードバック不要。 */
 .bubble-tts-btn {
   background: none;
   border: none;
@@ -133,13 +136,11 @@
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  /* ブラウザ由来のフラッシュを完全抑止 */
   -webkit-tap-highlight-color: transparent;
   outline: none;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
-  /* transition も削除（即時反映・ちらつき防止） */
 }
 
 .bubble-tts-btn:focus,
@@ -147,15 +148,8 @@
   outline: none;
 }
 
-.bubble-tts-btn:hover:not(.loading) {
+.bubble-tts-btn:hover {
   opacity: 1;
-}
-
-/* ローディング中の視覚インジケータは一切なし。
-   classList の変更自体がちらつきを引き起こすため、TTS 中の視覚フィードバックは廃止。
-   TTS は 0.3〜0.5 秒で完了するため UX 上問題なし。*/
-
-.bubble-tts-btn:hover:not(.loading) {
   background: rgba(0, 180, 160, 0.1);
   color: var(--primary);
 }

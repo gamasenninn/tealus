@@ -12,9 +12,10 @@ function stopCurrentTts() {
 }
 
 /**
- * メッセージの読み上げボタン。
- * ちらつき防止のため React state を一切使わず、DOM を直接操作して
- * ローディング表示を制御する。再レンダー自体を発生させない。
+ * メッセージの読み上げボタン（個人再生）。
+ * React state を持たず、busyRef で多重クリック防止のみ行う。
+ * 視覚フィードバックは一切なし（TTS 0.3〜0.5 秒で完了するため）。
+ * classList 変更すら視覚ちらつきの原因になったため、DOM 変更も避ける。
  */
 function TtsButton({ text, roomId }) {
   const audioRef = useRef(null);
@@ -77,5 +78,4 @@ function TtsButton({ text, roomId }) {
   );
 }
 
-// props が同じなら再レンダーしない（useState を除去したため、実質 props 変化でのみ再レンダー）
 export default memo(TtsButton);

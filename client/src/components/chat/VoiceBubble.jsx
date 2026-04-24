@@ -210,8 +210,8 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
   );
 }
 
-// 親コンポーネント（MessageBubble）の TTS state 変化で不要に再レンダーされないよう memo 化
-// message.id, transcription.version（編集時）, isOwn が同じなら re-render しない
+// MessageBubble の state 変化（textExpanded, contextMenu 等）での
+// 不要な再レンダーを防止。message 関連の実質的な変化でのみ re-render。
 export default memo(VoiceBubble, (prev, next) => {
   return (
     prev.message.id === next.message.id &&
