@@ -19,6 +19,15 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './MessageBubble.css';
 
+// 個人 TTS 再生のシングルトン: 同時再生を防ぎ、最後に押したものが優先される
+let currentTtsAudio = null;
+function stopCurrentTts() {
+  if (currentTtsAudio) {
+    try { currentTtsAudio.pause(); } catch {}
+    currentTtsAudio = null;
+  }
+}
+
 function MessageBubble({ message, isOwn, searchKeyword }) {
   const { roomId } = useParams();
   const { setReplyTo } = useMessageStore();
@@ -117,12 +126,15 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     const text = getTtsText();
     if (!text || ttsLoading) return;
 
-    // 既に再生中なら停止
-    if (ttsAudioRef.current && !ttsAudioRef.current.paused) {
-      ttsAudioRef.current.pause();
+    // 同じバブルの音声が再生中ならトグル停止
+    if (ttsAudioRef.current && ttsAudioRef.current === currentTtsAudio && !ttsAudioRef.current.paused) {
+      stopCurrentTts();
       ttsAudioRef.current = null;
       return;
     }
+
+    // 別のバブルが再生中なら停止（最後に押したものを優先）
+    stopCurrentTts();
 
     setTtsLoading(true);
     try {
@@ -131,8 +143,17 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       const audio = new Audio(url);
       const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
       audio.volume = Math.max(0, Math.min(1, volumePct / 100));
-      audio.onended = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; };
-      audio.onerror = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; };
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (currentTtsAudio === audio) currentTtsAudio = null;
+        ttsAudioRef.current = null;
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (currentTtsAudio === audio) currentTtsAudio = null;
+        ttsAudioRef.current = null;
+      };
+      currentTtsAudio = audio;
       ttsAudioRef.current = audio;
       await audio.play();
     } catch (err) {
