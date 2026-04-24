@@ -3,12 +3,11 @@
  *
  * Aivis Cloud API で音声合成し、PlainTransport でトランシーバーに送信する。
  * agent-server から直接呼べるライブラリ。
+ * 合成・送信の実装は tts-core.js に集約（rtc-server の CLI と共有）。
  */
-const https = require("https");
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
-const WebSocket = require("ws");
+const ttsCore = require("./tts-core");
 const logger = require("./logger");
 
 const AIVIS_API_KEY = process.env.AIVIS_API_KEY;
@@ -71,109 +70,23 @@ function preprocessText(content) {
 }
 
 /**
- * Aivis Cloud API で音声合成
+ * Aivis Cloud API で音声合成（tts-core の薄いラッパー）
+ * 既存呼び出し元 (routes/tts.js) との互換性のため (text, modelUuid) を受ける。
  */
 function synthesize(text, modelUuid) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({
-      model_uuid: modelUuid || MODEL_UUID,
-      text,
-      output_format: "wav",
-    });
-    const req = https.request("https://api.aivis-project.com/v1/tts/synthesize", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${AIVIS_API_KEY}`,
-        "Content-Length": Buffer.byteLength(data),
-      },
-      timeout: 30000,
-    }, (res) => {
-      const chunks = [];
-      res.on("data", (c) => chunks.push(c));
-      res.on("end", () => {
-        const buf = Buffer.concat(chunks);
-        if (res.statusCode === 200) resolve(buf);
-        else reject(new Error(`TTS error ${res.statusCode}: ${buf.toString().substring(0, 200)}`));
-      });
-    });
-    req.on("timeout", () => { req.destroy(); reject(new Error("TTS request timeout")); });
-    req.on("error", reject);
-    req.write(data);
-    req.end();
+  return ttsCore.synthesize(text, {
+    modelUuid: modelUuid || MODEL_UUID,
+    apiKey: AIVIS_API_KEY,
   });
 }
 
 /**
- * PlainTransport で RTP 送信
+ * PlainTransport で RTP 送信（tts-core の薄いラッパー）
  */
 function sendViaPlainTransport(wavPath, roomId) {
-  return new Promise((resolve, reject) => {
-    const peerId = "tts-" + Math.random().toString(36).slice(2, 8);
-    const pendingResolvers = [];
-    let ws;
-
-    function send(msg) { ws.send(JSON.stringify(msg)); }
-    function waitFor(pred) {
-      return new Promise((res) => pendingResolvers.push({ predicate: pred, resolve: res }));
-    }
-
-    ws = new WebSocket(`ws://localhost:${RTC_PORT}/ws`);
-
-    ws.on("open", async () => {
-      try {
-        send({ type: "join", peerId, roomId });
-        await waitFor((m) => m.type === "joined");
-
-        send({ type: "createPlainTransport" });
-        const pt = await waitFor((m) => m.type === "plainTransportCreated");
-
-        send({ type: "plainProduce", transportId: pt.id, ssrc: SSRC });
-        await waitFor((m) => m.type === "produced");
-
-        // ブラウザ側の Consumer セットアップを待つ
-        await new Promise((r) => setTimeout(r, 2000));
-
-        const ffmpeg = spawn("ffmpeg", [
-          "-re", "-i", wavPath,
-          "-af", "adelay=300|300,apad=pad_dur=500ms",
-          "-c:a", "libopus", "-ac", "2", "-ar", "48000", "-b:a", "32k",
-          "-f", "rtp", "-ssrc", String(SSRC), "-payload_type", "100",
-          `rtp://127.0.0.1:${pt.port}`,
-        ], { stdio: ["ignore", "pipe", "pipe"] });
-
-        ffmpeg.on("close", (code) => {
-          // 最後の RTP パケットが mediasoup で処理されるのを待つ
-          setTimeout(() => {
-            send({ type: "leave" });
-            ws.close();
-            resolve(code);
-          }, 1500);
-        });
-
-        ffmpeg.on("error", (err) => {
-          send({ type: "leave" });
-          ws.close();
-          reject(err);
-        });
-      } catch (err) {
-        ws.close();
-        reject(err);
-      }
-    });
-
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw);
-      for (let i = pendingResolvers.length - 1; i >= 0; i--) {
-        if (pendingResolvers[i].predicate(msg)) {
-          const { resolve } = pendingResolvers.splice(i, 1)[0];
-          resolve(msg);
-          return;
-        }
-      }
-    });
-
-    ws.on("error", reject);
+  return ttsCore.sendViaPlainTransport(wavPath, roomId, {
+    rtcPort: RTC_PORT,
+    ssrc: SSRC,
   });
 }
 
