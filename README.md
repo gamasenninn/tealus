@@ -55,9 +55,12 @@
 
 ### 前提条件
 
-- Node.js 18+
-- Docker / Docker Compose
-- Git
+- **Node.js 20+**（`--env-file` を使うため）
+- **Docker** + Docker Compose
+  - Windows / macOS: **Docker Desktop を起動した状態にしておく**（起動前に `docker-compose` を叩くとデーモンエラー）
+  - Linux: Docker daemon が起動していること
+- **Git**
+- **ffmpeg**（音声通話・TTS のみ必要。[公式サイト](https://ffmpeg.org/download.html) または Chocolatey / Homebrew）
 
 ### 1. リポジトリをクローン
 
@@ -66,7 +69,7 @@ git clone https://github.com/gamasenninn/tealus.git
 cd tealus
 ```
 
-### 2. Docker起動（PostgreSQL + Redis）
+### 2. Docker 起動（PostgreSQL + Redis）
 
 ```bash
 docker-compose up -d
@@ -79,6 +82,8 @@ docker-compose up -d
 | PostgreSQL | 5432 | 開発用DB |
 | PostgreSQL | 5433 | テスト用DB |
 | Redis | 6379 | セッション・在席状態管理 |
+
+> **トラブルシューティング**: `error during connect: ... docker daemon is not running` と出たら Docker Desktop が起動していない。起動してから再実行してください。
 
 ### 3. サーバーセットアップ
 
