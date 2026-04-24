@@ -11,22 +11,14 @@ import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
 import TodoMenu from '../todo/TodoMenu';
 import ForwardModal from './ForwardModal';
+import TtsButton from './TtsButton';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { Megaphone, Volume2, Loader2 } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
 import { diffChars } from 'diff';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems.jsx';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './MessageBubble.css';
-
-// 個人 TTS 再生のシングルトン: 同時再生を防ぎ、最後に押したものが優先される
-let currentTtsAudio = null;
-function stopCurrentTts() {
-  if (currentTtsAudio) {
-    try { currentTtsAudio.pause(); } catch {}
-    currentTtsAudio = null;
-  }
-}
 
 function MessageBubble({ message, isOwn, searchKeyword }) {
   const { roomId } = useParams();
@@ -44,8 +36,6 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [editHistory, setEditHistory] = useState([]);
   const [expanded, setExpanded] = useState(false);
   const [textExpanded, setTextExpanded] = useState(false);
-  const [ttsLoading, setTtsLoading] = useState(false);
-  const ttsAudioRef = useRef(null);
   const TEXT_COLLAPSE_LENGTH = 300;
   const longPressTimer = useRef(null);
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
@@ -120,52 +110,6 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       return t ? (t.formatted_text || t.raw_text || null) : null;
     }
     return null;
-  };
-
-  const handleTts = async (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    const text = getTtsText();
-    if (!text || ttsLoading) return;
-
-    // 同じバブルの音声が再生中ならトグル停止
-    if (ttsAudioRef.current && ttsAudioRef.current === currentTtsAudio && !ttsAudioRef.current.paused) {
-      stopCurrentTts();
-      ttsAudioRef.current = null;
-      return;
-    }
-
-    // 別のバブルが再生中なら停止（最後に押したものを優先）
-    stopCurrentTts();
-
-    setTtsLoading(true);
-    try {
-      const blob = await api.synthesizeTts(text, roomId);
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
-      audio.volume = Math.max(0, Math.min(1, volumePct / 100));
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        if (currentTtsAudio === audio) currentTtsAudio = null;
-        ttsAudioRef.current = null;
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        if (currentTtsAudio === audio) currentTtsAudio = null;
-        ttsAudioRef.current = null;
-      };
-      currentTtsAudio = audio;
-      ttsAudioRef.current = audio;
-      await audio.play();
-    } catch (err) {
-      console.error('TTS error:', err);
-      alert('読み上げに失敗しました: ' + (err.message || ''));
-    } finally {
-      setTtsLoading(false);
-    }
   };
 
   const renderReply = () => {
@@ -280,18 +224,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
               <span className="bubble-read">既読{message.read_count}</span>
             )}
             <span className="bubble-time">{formatTime(message.created_at)}</span>
-            {getTtsText() && (
-              <button
-                type="button"
-                className={`bubble-tts-btn ${ttsLoading ? 'loading' : ''}`}
-                onClick={handleTts}
-                onMouseDown={(e) => e.preventDefault()}
-                onTouchStart={(e) => e.stopPropagation()}
-                title="読み上げ"
-              >
-                {ttsLoading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
-              </button>
-            )}
+            {getTtsText() && <TtsButton text={getTtsText()} roomId={roomId} />}
           </div>
         )}
         <div
@@ -344,18 +277,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         {!isOwn && (
           <div className="bubble-meta-right">
             <span className="bubble-time">{formatTime(message.created_at)}</span>
-            {getTtsText() && (
-              <button
-                type="button"
-                className={`bubble-tts-btn ${ttsLoading ? 'loading' : ''}`}
-                onClick={handleTts}
-                onMouseDown={(e) => e.preventDefault()}
-                onTouchStart={(e) => e.stopPropagation()}
-                title="読み上げ"
-              >
-                {ttsLoading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
-              </button>
-            )}
+            {getTtsText() && <TtsButton text={getTtsText()} roomId={roomId} />}
           </div>
         )}
       </div>
