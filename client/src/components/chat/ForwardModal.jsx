@@ -8,6 +8,7 @@ import './ForwardModal.css';
 /**
  * #166 メッセージ転送モーダル
  * 現在のルームを除外し、他ルームを検索・選択して転送する（MVP: テキスト・単一ルーム・コメント無し）
+ * 転送後はその場に留まり、トーストで通知（転送先へのリンク付き）
  */
 function ForwardModal({ message, onClose }) {
   const navigate = useNavigate();
@@ -21,6 +22,24 @@ function ForwardModal({ message, onClose }) {
     if (rooms.length === 0) fetchRooms();
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
+
+  // トーストを表示するヘルパー（body 直下に3秒表示）
+  const showToast = (targetRoom) => {
+    const name = targetRoom.name || targetRoom.partner_display_name || 'DM';
+    const toast = document.createElement('div');
+    toast.className = 'forward-toast';
+    toast.innerHTML = `<span>📤 「${name}」に転送しました</span><button class="forward-toast-open">開く</button>`;
+    document.body.appendChild(toast);
+    toast.querySelector('.forward-toast-open').addEventListener('click', () => {
+      navigate(`/rooms/${targetRoom.id}`);
+      toast.remove();
+    });
+    setTimeout(() => toast.classList.add('forward-toast-show'), 10);
+    setTimeout(() => {
+      toast.classList.remove('forward-toast-show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  };
 
   const filteredRooms = rooms
     .filter(r => r.id !== message.room_id) // 現在のルームを除外
@@ -45,7 +64,7 @@ function ForwardModal({ message, onClose }) {
         message.id, // forwarded_from
       );
       onClose();
-      navigate(`/rooms/${targetRoom.id}`);
+      showToast(targetRoom);
     } catch (err) {
       setError('転送に失敗しました: ' + (err.message || ''));
     } finally {
