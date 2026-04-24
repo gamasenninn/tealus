@@ -151,15 +151,11 @@
   opacity: 1;
 }
 
+/* ローディング中は cursor のみ変更。opacity 変化や animation は
+   ちらつきの原因になるため廃止。TTS は 0.3〜0.5 秒で完了するため
+   視覚的なインジケータなしでも UX 上問題なし。*/
 .bubble-tts-btn.loading {
-  cursor: default;
-  opacity: 0.8;
-}
-
-/* Volume2 アイコンは左右非対称のため rotate すると重心ズレで
-   「別位置に移動したように」見える。pulse（点滅）で代替。*/
-.bubble-tts-btn.loading svg {
-  animation: bubble-tts-pulse 1s ease-in-out infinite;
+  cursor: wait;
 }
 
 .bubble-tts-btn:hover:not(.loading) {
@@ -167,10 +163,6 @@
   color: var(--primary);
 }
 
-@keyframes bubble-tts-pulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
-}
 
 .bubble-meta-left,
 .bubble-meta-right {
