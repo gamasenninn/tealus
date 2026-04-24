@@ -176,6 +176,40 @@ Invoke-RestMethod -Uri http://localhost:3000/api/auth/register -Method Post -Con
 
 以降はログイン画面からユーザーIDとパスワードでログインできます。
 
+### 6. 仲間を追加 / デモ環境でフル体験（任意）
+
+管理者ユーザー 1 人だけでは UI が寂しいので、以下のいずれかで複数人のチャットを試せます。
+
+**A. 追加ユーザーを登録**（現在の dev 環境で継続）
+
+上の curl コマンドの `login_id` / `display_name` を変えて叩くだけ。別ブラウザのプライベートウィンドウで別ユーザーとしてログインすれば、DM・グループチャットをすぐ試せます。
+
+**B. デモ環境でフル体験**（alice / bob / charlie / AI アシスタント + サンプルメッセージ入り）
+
+dev 環境を停めずに並行で別 DB / 別ポートに立てます:
+
+```bash
+# 1. デモ用 DB 作成（1 回だけ）
+docker exec -it tealus_postgres psql -U tealus -d postgres -c "CREATE DATABASE tealus_demo OWNER tealus;"
+
+# 2. デモ DB にマイグレーション + シード投入
+cd server
+npm run migrate:demo
+npm run seed:demo
+
+# 3. デモサーバー起動（別ターミナル、port 3001）
+npm run dev:demo
+
+# 4. デモクライアント起動（別ターミナル、port 5174）
+cd ../client
+npm run dev:demo
+```
+
+ブラウザで `http://localhost:5174` → ユーザー ID: `alice` / パスワード: `demo1234` でログイン。
+README 冒頭のスクリーンショットと同じ画面がそのまま再現されます。
+
+詳細は [`server/scripts/seed-demo.js`](./server/scripts/seed-demo.js) のヘッダーコメントを参照。
+
 ## テスト
 
 ### サーバーテスト（Jest）
