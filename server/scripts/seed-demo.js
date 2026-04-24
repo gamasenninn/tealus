@@ -286,24 +286,55 @@ async function seedRoomsAndMessages(client, users) {
     [m3.rows[0].id, users.bob],
   );
 
-  // 5. alice: markdown 風のテキスト
-  await client.query(
-    `INSERT INTO messages (room_id, sender_id, content, type, created_at)
-     VALUES ($1, $2, 'ToDo:
-- [x] 仕様書レビュー
-- [ ] API 実装
-- [ ] テスト追加', 'text', now() - interval '1 hour')`,
+  // 5. グループルームに TODO タグを作成（Tealus 固有機能のデモ）
+  const todoTag = await client.query(
+    `INSERT INTO tags (room_id, name, is_todo, created_by)
+     VALUES ($1, 'TODO', true, $2)
+     RETURNING id`,
     [grpId, users.alice],
   );
+  const todoTagId = todoTag.rows[0].id;
 
-  // 6. bob: 最新の進捗
-  await client.query(
+  // 6. alice: TODO タグ付きメッセージ（完了済み）
+  const m5 = await client.query(
     `INSERT INTO messages (room_id, sender_id, content, type, created_at)
-     VALUES ($1, $2, 'API 実装を開始します。完了予定は明日の午前中です。', 'text', now() - interval '30 minutes')`,
-    [grpId, users.bob],
+     VALUES ($1, $2, '仕様書レビュー', 'text', now() - interval '1 hour')
+     RETURNING id`,
+    [grpId, users.alice],
+  );
+  await client.query(
+    `INSERT INTO message_tags (message_id, tag_id, is_done, created_by)
+     VALUES ($1, $2, true, $3)`,
+    [m5.rows[0].id, todoTagId, users.alice],
   );
 
-  console.log('[seed-demo] ルーム 2 件（DM + グループ）とメッセージ・リアクションを作成しました');
+  // 7. bob: TODO タグ付きメッセージ（未完了）
+  const m6 = await client.query(
+    `INSERT INTO messages (room_id, sender_id, content, type, created_at)
+     VALUES ($1, $2, 'API 実装（完了予定: 明日午前中）', 'text', now() - interval '30 minutes')
+     RETURNING id`,
+    [grpId, users.bob],
+  );
+  await client.query(
+    `INSERT INTO message_tags (message_id, tag_id, is_done, created_by)
+     VALUES ($1, $2, false, $3)`,
+    [m6.rows[0].id, todoTagId, users.alice],
+  );
+
+  // 8. charlie: TODO タグ付きメッセージ（未完了）
+  const m7 = await client.query(
+    `INSERT INTO messages (room_id, sender_id, content, type, created_at)
+     VALUES ($1, $2, 'デザインモックアップ調整', 'text', now() - interval '15 minutes')
+     RETURNING id`,
+    [grpId, users.charlie],
+  );
+  await client.query(
+    `INSERT INTO message_tags (message_id, tag_id, is_done, created_by)
+     VALUES ($1, $2, false, $3)`,
+    [m7.rows[0].id, todoTagId, users.alice],
+  );
+
+  console.log('[seed-demo] ルーム 2 件（DM + グループ）とメッセージ・リアクション・TODO タグを作成しました');
 }
 
 async function main() {
