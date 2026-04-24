@@ -36,8 +36,8 @@ function TtsButton({ text, roomId }) {
     // 別の再生を停止
     stopCurrentTts();
 
+    // ローディング表示は一旦完全に無効化（診断のため）
     busyRef.current = true;
-    btnRef.current?.classList.add('loading');
     try {
       const blob = await api.synthesizeTts(text, roomId);
       const url = URL.createObjectURL(blob);
@@ -62,7 +62,6 @@ function TtsButton({ text, roomId }) {
       alert('読み上げに失敗しました: ' + (err.message || ''));
     } finally {
       busyRef.current = false;
-      btnRef.current?.classList.remove('loading');
     }
   };
 
