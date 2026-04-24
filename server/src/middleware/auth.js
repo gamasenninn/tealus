@@ -1,7 +1,15 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tealus-dev-secret';
+const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable must be set in production');
+  }
+  console.warn('[auth] JWT_SECRET not set; using insecure dev fallback. Never run like this in production.');
+  return 'tealus-dev-secret-not-for-production';
+})();
 
 /**
  * Generate JWT token for a user

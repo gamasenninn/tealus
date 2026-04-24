@@ -68,22 +68,26 @@ docker-compose up -d
 ```bash
 cd server
 npm install
+cp .env.example .env
 ```
 
 #### 環境変数
 
-`server/.env` はデフォルト値が設定済みですが、本番環境では以下を変更してください:
+`.env.example` をコピーして `.env` を作成し、以下を設定してください:
 
 | 変数 | 説明 |
 |------|------|
-| `JWT_SECRET` | JWT署名キー（必ず変更） |
+| `JWT_SECRET` | JWT署名キー。`openssl rand -hex 32` で生成。**本番では必須**（未設定で起動失敗） |
 | `VAPID_PUBLIC_KEY` | Web Push公開鍵 |
 | `VAPID_PRIVATE_KEY` | Web Push秘密鍵 |
+| `OPENAI_API_KEY` | 音声文字起こし・AI整形用（任意） |
 
 VAPID鍵の生成:
 ```bash
 npx web-push generate-vapid-keys
 ```
+
+各変数の詳細は `server/.env.example` 参照。
 
 #### DBマイグレーション
 
@@ -105,6 +109,8 @@ npm start      # 本番
 ```bash
 cd client
 npm install
+cp .env.example .env
+# VITE_VAPID_PUBLIC_KEY を server の VAPID_PUBLIC_KEY と同じ値に設定
 npm run dev
 ```
 

@@ -5,7 +5,15 @@
  */
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tealus-dev-secret';
+const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable must be set in production');
+  }
+  console.warn('[agent-auth] JWT_SECRET not set; using insecure dev fallback. Never run like this in production.');
+  return 'tealus-dev-secret-not-for-production';
+})();
 
 /**
  * JWT トークンを検証し req.user にペイロードをセット
