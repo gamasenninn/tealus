@@ -50,6 +50,9 @@ jobs:
         working-directory: server
         run: npm ci
 
+      - name: Prepare media directories
+        run: mkdir -p media/images media/videos media/files media/avatars media/icons media/stamps media/voices media/thumbnails
+
       - name: Run server tests
         working-directory: server
         env:
