@@ -126,6 +126,10 @@ npx web-push generate-vapid-keys
 npm run migrate
 ```
 
+> **初回 Docker 起動時は自動実行される**: `docker-compose.yml` が migrations ディレクトリを PostgreSQL の `/docker-entrypoint-initdb.d` にマウントしているため、**Postgres コンテナの初回起動時にすべての migration が自動適用** されます。したがって初回は `npm run migrate` を省略して直接サーバーを起動しても OK です。
+>
+> 2 回目以降（新しい migration が追加された時）は `npm run migrate` を手動実行してください。migrations は冪等に設計されているため、再実行しても問題は起きません。
+
 #### サーバー起動
 
 ```bash
