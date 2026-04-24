@@ -14,18 +14,19 @@
  * 環境変数(.env):
  *   AIVIS_API_KEY     — Aivis Cloud API キー（必須）
  *   AIVIS_MODEL_UUID  — デフォルトモデル（省略時: 凛音エル）
+ *
+ * 合成・送信のロジックは agent-server/src/lib/tts-core.js に集約。
+ * 本スクリプトは CLI 引数処理と stdout 進捗表示のラッパー。
  */
 require("dotenv").config({ path: require("path").join(__dirname, "../server/.env") });
 
-const https = require("https");
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
-const WebSocket = require("ws");
+const ttsCore = require("../agent-server/src/lib/tts-core");
 
 const AIVIS_API_KEY = process.env.AIVIS_API_KEY;
 const DEFAULT_MODEL = process.env.AIVIS_MODEL_UUID || "f5017410-fbb5-49e1-97cb-e785f42e15f5";
-const RTC_PORT = process.env.RTC_PORT || 3100;
+const RTC_PORT = parseInt(process.env.RTC_PORT || "3100", 10);
 const SSRC = 1111;
 
 // CLI 引数（モジュール利用時は無視）
@@ -33,117 +34,19 @@ const ROOM_ID = require.main === module ? process.argv[2] : null;
 const TEXT = require.main === module ? (process.argv[3] || null) : null;
 const MODEL_UUID = require.main === module ? (process.argv[4] || DEFAULT_MODEL) : DEFAULT_MODEL;
 
-// --- Aivis TTS ---
+// --- 公開 API: tts-core の薄いラッパー（互換性維持） ---
 function synthesize(text, modelUuid) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({
-      model_uuid: modelUuid,
-      text,
-      output_format: "wav",
-    });
-    const req = https.request("https://api.aivis-project.com/v1/tts/synthesize", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${AIVIS_API_KEY}`,
-        "Content-Length": Buffer.byteLength(data),
-      },
-    }, (res) => {
-      const chunks = [];
-      res.on("data", (c) => chunks.push(c));
-      res.on("end", () => {
-        const buf = Buffer.concat(chunks);
-        if (res.statusCode === 200) resolve(buf);
-        else reject(new Error(`TTS error ${res.statusCode}: ${buf.toString().substring(0, 200)}`));
-      });
-    });
-    req.on("error", reject);
-    req.write(data);
-    req.end();
+  return ttsCore.synthesize(text, {
+    modelUuid: modelUuid || DEFAULT_MODEL,
+    apiKey: AIVIS_API_KEY,
   });
 }
 
-// --- PlainTransport RTP 送信 ---
 function sendViaPlainTransport(wavPath, roomId) {
-  return new Promise((resolve, reject) => {
-    const peerId = "tts-" + Math.random().toString(36).slice(2, 8);
-    const pendingResolvers = [];
-    let ws;
-
-    function send(msg) { ws.send(JSON.stringify(msg)); }
-    function waitFor(pred) {
-      return new Promise((res) => pendingResolvers.push({ predicate: pred, resolve: res }));
-    }
-
-    ws = new WebSocket(`ws://localhost:${RTC_PORT}/ws`);
-
-    ws.on("open", async () => {
-      try {
-        // Join
-        send({ type: "join", peerId, roomId });
-        await waitFor((m) => m.type === "joined");
-
-        // PlainTransport
-        send({ type: "createPlainTransport" });
-        const pt = await waitFor((m) => m.type === "plainTransportCreated");
-
-        // Produce
-        send({ type: "plainProduce", transportId: pt.id, ssrc: SSRC });
-        await waitFor((m) => m.type === "produced");
-
-        // ブラウザ側の Consumer セットアップを待つ
-        await new Promise((r) => setTimeout(r, 2000));
-
-        // ffmpeg で RTP 送信
-        const ffmpeg = spawn("ffmpeg", [
-          "-re", "-i", wavPath,
-          "-af", "adelay=300|300,apad=pad_dur=500ms",
-          "-c:a", "libopus", "-ac", "2", "-ar", "48000", "-b:a", "32k",
-          "-f", "rtp", "-ssrc", String(SSRC), "-payload_type", "100",
-          `rtp://127.0.0.1:${pt.port}`,
-        ], { stdio: ["ignore", "pipe", "pipe"] });
-
-        ffmpeg.stderr.on("data", (d) => {
-          const line = d.toString();
-          if (line.includes("time=")) {
-            const match = line.match(/time=(\S+)/);
-            if (match) process.stdout.write(`\r  🔊 ${match[1]}`);
-          }
-        });
-
-        ffmpeg.on("close", (code) => {
-          process.stdout.write("\n");
-          // 最後の RTP パケットが mediasoup で処理されるのを待つ
-          setTimeout(() => {
-            send({ type: "leave" });
-            ws.close();
-            resolve(code);
-          }, 1500);
-        });
-
-        ffmpeg.on("error", (err) => {
-          send({ type: "leave" });
-          ws.close();
-          reject(err);
-        });
-      } catch (err) {
-        ws.close();
-        reject(err);
-      }
-    });
-
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw);
-      for (let i = pendingResolvers.length - 1; i >= 0; i--) {
-        if (pendingResolvers[i].predicate(msg)) {
-          const { resolve } = pendingResolvers.splice(i, 1)[0];
-          resolve(msg);
-          return;
-        }
-      }
-    });
-
-    ws.on("error", reject);
+  return ttsCore.sendViaPlainTransport(wavPath, roomId, {
+    rtcPort: RTC_PORT,
+    ssrc: SSRC,
+    onProgress: (time) => process.stdout.write(`\r  🔊 ${time}`),
   });
 }
 
@@ -197,10 +100,11 @@ async function main() {
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(` OK (${(wavBuf.length / 1024).toFixed(0)} KB, ${elapsed}s)`);
 
-  // 2. PlainTransport で送信
+  // 2. PlainTransport で送信（onProgress で stdout に time= 表示）
   process.stdout.write("  [2/2] トランシーバー送信中...\n");
   try {
     await sendViaPlainTransport(tmpFile, ROOM_ID);
+    process.stdout.write("\n");
     console.log("  ✅ 完了");
   } finally {
     // 一時ファイル削除

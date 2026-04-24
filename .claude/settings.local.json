@@ -12,7 +12,6 @@
       "Bash(npm create:*)",
       "Bash(npx vitest:*)",
       "WebSearch",
-      "Bash(grep -r \"life_line\\\\|Life Line\\\\|LifeLine\\\\|life-line\\\\|LIFE_LINE\\\\|Life_Line\" /c/app/life_line --include=*.env* --include=*.conf --include=Dockerfile)",
       "Bash(xargs grep:*)",
       "Bash(docker compose:*)",
       "Bash(npm test:*)",
@@ -24,7 +23,6 @@
       "Bash(docker exec:*)",
       "Bash(node -e \"require\\(''dotenv''\\).config\\(\\); console.log\\(''API Key set:'', process.env.OPENAI_API_KEY ? ''yes'' : ''no''\\); console.log\\(''Model:'', process.env.WHISPER_MODEL\\);\")",
       "Bash(ffmpeg -version)",
-      "Bash(ffmpeg -i /c/app/linny/media/voices/1774856366322-721b13b76b54452b.webm -y /tmp/test_convert.mp3)",
       "Bash(node:*)",
       "Bash(docker stop:*)",
       "Bash(docker rm:*)",
@@ -69,7 +67,13 @@
       "WebFetch(domain:www.trademarkia.com)",
       "WebFetch(domain:search.toreru.jp)",
       "WebFetch(domain:www.tealus.com)",
-      "WebFetch(domain:www.hugedomains.com)"
+      "WebFetch(domain:www.hugedomains.com)",
+      "Bash(mkdir -p /c/app/tealus-site/assets/images)",
+      "Bash(cp \"/c/Users/user/Downloads/ChatGPT Image 2026年4月24日 03_36_50.png\" /c/app/tealus-site/assets/images/hero-chat.png)",
+      "Bash(cp \"/c/Users/user/Downloads/ChatGPT Image 2026年4月24日 04_20_04.png\" /c/app/tealus-site/assets/images/chat-group.png)",
+      "Bash(cp \"/c/Users/user/Downloads/ChatGPT Image 2026年4月24日 04_20_15.png\" /c/app/tealus-site/assets/images/og-image.png)",
+      "Bash(cp \"/c/Users/user/Downloads/ChatGPT Image 2026年4月24日 04_20_33.png\" /c/app/tealus-site/assets/images/uc-construction.png)",
+      "mcp__tealus__get_messages"
     ]
   },
   "hooks": {

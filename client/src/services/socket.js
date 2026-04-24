@@ -10,10 +10,6 @@ export function connectSocket(token) {
     transports: ['websocket', 'polling'],
   });
 
-  socket.on('connect', () => {
-    console.log('Socket connected:', socket.id);
-  });
-
   socket.on('connect_error', (err) => {
     console.error('Socket connection error:', err.message);
   });
