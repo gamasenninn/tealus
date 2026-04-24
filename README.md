@@ -5,6 +5,20 @@
 
 オープンソースの社内メッセンジャー。直感的なチャットUIで、画像・動画はサーバー保存（端末容量を使わない）。
 
+## スクリーンショット
+
+<p align="center">
+  <img src="./screenshot/readme/chat-room.png" alt="グループチャット: リプライ・画像・リアクション・Markdown ToDo" width="720" />
+</p>
+
+<p align="center">
+  <img src="./screenshot/readme/room-list.png" alt="ルーム一覧" width="320" />
+  &nbsp;&nbsp;
+  <img src="./screenshot/readme/ai-assistant.png" alt="AI アシスタント DM" width="320" />
+</p>
+
+> デモ環境をローカルで立ち上げて触ってみる方法は [demo データ投入スクリプト](./server/scripts/seed-demo.js) 参照。
+
 ## 背景
 
 - 既存メッセンジャーの画像・動画が個人スマホの容量を圧迫
