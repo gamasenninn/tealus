@@ -5,15 +5,29 @@
  * 採用者が「触ってみる」ためのデモデータを投入する。
  *
  * 既存データを ALL DELETE したうえで投入するため、
- * **本番・開発環境では絶対に実行しないこと**。
+ * **必ず専用の DB（tealus_demo）に対して実行すること**。
  *
- * 使い方:
+ * セーフティ:
+ *   - DB_NAME が "tealus"（dev）や "tealus_test"（CI）では強制停止
+ *   - --confirm フラグ必須
+ *   - デフォルトの接続先は tealus_demo
+ *
+ * 準備:
+ *   # 別 DB を作成（初回のみ）
+ *   docker exec -it tealus_postgres psql -U tealus -d postgres \
+ *     -c "CREATE DATABASE tealus_demo OWNER tealus;"
+ *
+ *   # マイグレーションを demo DB に適用
+ *   cd server && DB_NAME=tealus_demo npm run migrate
+ *
+ * 実行:
  *   cd server
- *   node scripts/seed-demo.js --confirm
- *
- * 接続先は .env もしくは環境変数から読む（通常の server と同じ）。
- * デモ用に別 DB を立てる場合は DB_NAME 等を上書きして実行する:
  *   DB_NAME=tealus_demo node scripts/seed-demo.js --confirm
+ *
+ * デモサーバー起動（別ターミナル）:
+ *   cd server && DB_NAME=tealus_demo npm run dev
+ *
+ * 終わったら: デモ DB は DROP しても OK、dev DB は無傷。
  */
 require('dotenv').config();
 const { Pool } = require('pg');
@@ -22,21 +36,36 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 
-const CONFIRM = process.argv.includes('--confirm');
+const DB_NAME = process.env.DB_NAME || 'tealus_demo';
 
-if (!CONFIRM) {
-  console.error('[seed-demo] このスクリプトは既存データを全削除します。');
-  console.error('[seed-demo] 実行するには --confirm フラグを付けてください:');
-  console.error('[seed-demo]   node scripts/seed-demo.js --confirm');
+// --- セーフティチェック ---
+const BANNED_DB_NAMES = ['tealus', 'tealus_test'];
+if (BANNED_DB_NAMES.includes(DB_NAME)) {
+  console.error(`[seed-demo] ❌ DB_NAME="${DB_NAME}" に対しては実行できません（既存データを全削除するため）`);
+  console.error('[seed-demo]    専用 DB を作成してください:');
+  console.error('[seed-demo]      docker exec -it tealus_postgres psql -U tealus -d postgres \\');
+  console.error('[seed-demo]        -c "CREATE DATABASE tealus_demo OWNER tealus;"');
+  console.error('[seed-demo]      cd server && DB_NAME=tealus_demo npm run migrate');
+  console.error('[seed-demo]      cd server && DB_NAME=tealus_demo node scripts/seed-demo.js --confirm');
   process.exit(1);
 }
+
+const CONFIRM = process.argv.includes('--confirm');
+if (!CONFIRM) {
+  console.error(`[seed-demo] このスクリプトは DB="${DB_NAME}" の既存データを全削除します。`);
+  console.error('[seed-demo] 実行するには --confirm フラグを付けてください:');
+  console.error(`[seed-demo]   DB_NAME=${DB_NAME} node scripts/seed-demo.js --confirm`);
+  process.exit(1);
+}
+
+console.log(`[seed-demo] 接続先 DB: ${DB_NAME}`);
 
 const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../media');
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'tealus',
+  database: DB_NAME,
   user: process.env.DB_USER || 'tealus',
   password: process.env.DB_PASSWORD || 'tealus_dev',
 });
