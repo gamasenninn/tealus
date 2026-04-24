@@ -40,8 +40,18 @@ function MessageInput({ roomId, transceiver, setAutoConnected }) {
     if (!content || isSending) return;
 
     // 読み上げ ON かつトランシーバー未接続 → 自動接続
-    if (localStorage.getItem('ttsReadAloud') === 'on' && transceiver && !transceiver.isConnected) {
-      transceiver.connect();
+    const ttsFlag = localStorage.getItem('ttsReadAloud');
+    if (ttsFlag === 'on' && transceiver && !transceiver.isConnected) {
+      console.debug('[tts-auto] triggering transceiver.connect()', {
+        state: transceiver.state,
+        isConnected: transceiver.isConnected,
+      });
+      Promise.resolve(transceiver.connect()).catch((err) => {
+        console.error('[tts-auto] transceiver.connect() failed:', err);
+      });
+      setAutoConnected?.(true);
+    } else if (ttsFlag === 'on' && transceiver?.isConnected) {
+      // 既接続なら auto-connect フラグだけ立てて自動切断を有効化
       setAutoConnected?.(true);
     }
 

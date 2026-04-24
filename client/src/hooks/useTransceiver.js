@@ -136,7 +136,15 @@ export function useTransceiver(roomId) {
 
   // --- 接続 ---
   const connect = useCallback(async () => {
-    if (!roomId || !token || state !== 'idle') return;
+    if (!roomId || !token) {
+      console.debug('[transceiver] connect: skip (roomId/token missing)', { roomId: !!roomId, token: !!token });
+      return;
+    }
+    // 'idle' と 'error' からは接続可（'error' は前回失敗からのリトライを許容）
+    if (state !== 'idle' && state !== 'error') {
+      console.debug('[transceiver] connect: skip (state not idle/error)', { state });
+      return;
+    }
 
     setState('connecting');
     intentionalCloseRef.current = false;
