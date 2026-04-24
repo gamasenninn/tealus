@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Share2, Search } from 'lucide-react';
 import { api } from '../../services/api';
+import { getSocket } from '../../services/socket';
 import { useRoomStore } from '../../stores/roomStore';
 import './ForwardModal.css';
 
@@ -57,12 +58,18 @@ function ForwardModal({ message, onClose }) {
     setSending(true);
     setError('');
     try {
-      await api.sendMessage(
-        targetRoom.id,
-        message.content,
-        null, // reply_to
-        message.id, // forwarded_from
-      );
+      // Socket.IO 経由で送信（リアルタイム配信のため）
+      const socket = getSocket();
+      if (socket?.connected) {
+        socket.emit('message:send', {
+          room_id: targetRoom.id,
+          content: message.content,
+          forwarded_from: message.id,
+        });
+      } else {
+        // フォールバック: REST API
+        await api.sendMessage(targetRoom.id, message.content, null, message.id);
+      }
       onClose();
       showToast(targetRoom);
     } catch (err) {
