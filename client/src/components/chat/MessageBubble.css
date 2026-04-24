@@ -118,6 +118,41 @@
   font-weight: 600;
 }
 
+/* TTS read-aloud icon button */
+.bubble-tts-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.bubble-tts-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(0, 180, 160, 0.1);
+  color: var(--primary);
+}
+
+.bubble-tts-btn.loading {
+  opacity: 0.8;
+  cursor: default;
+}
+
+.bubble-tts-btn .spin {
+  animation: bubble-tts-spin 0.8s linear infinite;
+}
+
+@keyframes bubble-tts-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .bubble-meta-left,
 .bubble-meta-right {
   display: flex;

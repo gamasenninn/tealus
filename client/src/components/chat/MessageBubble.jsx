@@ -12,7 +12,7 @@ import TagModal from '../tags/TagModal';
 import TodoMenu from '../todo/TodoMenu';
 import ForwardModal from './ForwardModal';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { Megaphone } from 'lucide-react';
+import { Megaphone, Volume2, Loader2 } from 'lucide-react';
 import { diffChars } from 'diff';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems.jsx';
 import Markdown from 'react-markdown';
@@ -35,6 +35,8 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [editHistory, setEditHistory] = useState([]);
   const [expanded, setExpanded] = useState(false);
   const [textExpanded, setTextExpanded] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState(false);
+  const ttsAudioRef = useRef(null);
   const TEXT_COLLAPSE_LENGTH = 300;
   const longPressTimer = useRef(null);
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
@@ -98,6 +100,47 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     return (
       <ImageGrid media={message.media} onImageClick={handleImageClick} />
     );
+  };
+
+  // #155-personal: 読み上げ対象テキスト取得（text/voice 以外は null）
+  const getTtsText = () => {
+    if (message.is_deleted) return null;
+    if (message.type === 'text') return message.content || null;
+    if (message.type === 'voice') {
+      const t = message.transcription;
+      return t ? (t.formatted_text || t.raw_text || null) : null;
+    }
+    return null;
+  };
+
+  const handleTts = async () => {
+    const text = getTtsText();
+    if (!text || ttsLoading) return;
+
+    // 既に再生中なら停止
+    if (ttsAudioRef.current && !ttsAudioRef.current.paused) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current = null;
+      return;
+    }
+
+    setTtsLoading(true);
+    try {
+      const blob = await api.synthesizeTts(text, roomId);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
+      audio.volume = Math.max(0, Math.min(1, volumePct / 100));
+      audio.onended = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; };
+      audio.onerror = () => { URL.revokeObjectURL(url); ttsAudioRef.current = null; };
+      ttsAudioRef.current = audio;
+      await audio.play();
+    } catch (err) {
+      console.error('TTS error:', err);
+      alert('読み上げに失敗しました: ' + (err.message || ''));
+    } finally {
+      setTtsLoading(false);
+    }
   };
 
   const renderReply = () => {
@@ -212,6 +255,16 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
               <span className="bubble-read">既読{message.read_count}</span>
             )}
             <span className="bubble-time">{formatTime(message.created_at)}</span>
+            {getTtsText() && (
+              <button
+                className={`bubble-tts-btn ${ttsLoading ? 'loading' : ''}`}
+                onClick={handleTts}
+                title="読み上げ"
+                disabled={ttsLoading}
+              >
+                {ttsLoading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
+              </button>
+            )}
           </div>
         )}
         <div
@@ -264,6 +317,16 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         {!isOwn && (
           <div className="bubble-meta-right">
             <span className="bubble-time">{formatTime(message.created_at)}</span>
+            {getTtsText() && (
+              <button
+                className={`bubble-tts-btn ${ttsLoading ? 'loading' : ''}`}
+                onClick={handleTts}
+                title="読み上げ"
+                disabled={ttsLoading}
+              >
+                {ttsLoading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
+              </button>
+            )}
           </div>
         )}
       </div>

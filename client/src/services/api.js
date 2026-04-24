@@ -111,6 +111,27 @@ class ApiClient {
     });
   }
 
+  /**
+   * TTS synthesis (personal read-aloud) — returns Blob (audio/wav)
+   * Uses room's TTS model setting. Safe to call from any component.
+   */
+  async synthesizeTts(text, roomId) {
+    const res = await fetch('/agent-api/tts/synthesize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({ text, room_id: roomId }),
+    });
+    if (!res.ok) {
+      let err = 'TTS に失敗しました';
+      try { const j = await res.json(); err = j.error || err; } catch {}
+      throw new Error(err);
+    }
+    return await res.blob();
+  }
+
   // Media (single file or array of files)
   uploadMedia(roomId, files, onProgress) {
     const formData = new FormData();

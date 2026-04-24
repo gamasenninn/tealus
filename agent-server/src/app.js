@@ -6,6 +6,7 @@ const cors = require('cors');
 const webhookRoutes = require('./webhook/routes');
 const settingsRoutes = require('./routes/settings');
 const logsRoutes = require('./routes/logs');
+const ttsRoutes = require('./routes/tts');
 const { authenticate } = require('./middleware/auth');
 
 const app = express();
@@ -29,5 +30,8 @@ app.use('/config', authenticate, settingsRoutes);
 
 // Logs API（認証必要）
 app.use('/logs', authenticate, logsRoutes);
+
+// TTS API（認証必要）— #155 個人読み上げ用
+app.use('/tts', authenticate, ttsRoutes);
 
 module.exports = { app };
