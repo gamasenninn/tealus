@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "dev:demo": "node --env-file=.env.demo src/app.js",
+    "migrate:demo": "node --env-file=.env.demo src/db/migrate.js",
+    "seed:demo": "node --env-file=.env.demo scripts/seed-demo.js --confirm",
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --runInBand --watch",
     "migrate": "node src/db/migrate.js"
