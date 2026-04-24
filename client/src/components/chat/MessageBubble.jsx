@@ -122,7 +122,11 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     return null;
   };
 
-  const handleTts = async () => {
+  const handleTts = async (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const text = getTtsText();
     if (!text || ttsLoading) return;
 
@@ -278,10 +282,12 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <span className="bubble-time">{formatTime(message.created_at)}</span>
             {getTtsText() && (
               <button
+                type="button"
                 className={`bubble-tts-btn ${ttsLoading ? 'loading' : ''}`}
                 onClick={handleTts}
+                onMouseDown={(e) => e.preventDefault()}
+                onTouchStart={(e) => e.stopPropagation()}
                 title="読み上げ"
-                disabled={ttsLoading}
               >
                 {ttsLoading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
               </button>
@@ -340,10 +346,12 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
             <span className="bubble-time">{formatTime(message.created_at)}</span>
             {getTtsText() && (
               <button
+                type="button"
                 className={`bubble-tts-btn ${ttsLoading ? 'loading' : ''}`}
                 onClick={handleTts}
+                onMouseDown={(e) => e.preventDefault()}
+                onTouchStart={(e) => e.stopPropagation()}
                 title="読み上げ"
-                disabled={ttsLoading}
               >
                 {ttsLoading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
               </button>
