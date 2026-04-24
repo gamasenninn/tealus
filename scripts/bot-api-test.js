@@ -35,7 +35,7 @@ async function main() {
   console.log('🤖 Bot API テスト\n');
 
   // Login
-  const login = await apiCall('POST', '/api/auth/login', { employee_id: BOT_ID, password: BOT_PASS });
+  const login = await apiCall('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
   if (!login.token) {
     console.log('❌ ログイン失敗。BOT_IDとBOT_PASSを確認してください。');
     return;

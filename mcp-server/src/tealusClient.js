@@ -20,7 +20,7 @@ class TealusClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        employee_id: this.userId,
+        login_id: this.userId,
         password: this.password,
       }),
     });

@@ -7,7 +7,8 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tealus-dev-secret';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 jest.mock('../../src/lib/logger', () => ({
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
@@ -39,7 +40,7 @@ const { authenticate } = require('../../src/middleware/auth');
 const settingsRoutes = require('../../src/routes/settings');
 
 let app;
-const token = jwt.sign({ id: 'admin1', employee_id: 'ADMIN' }, JWT_SECRET, { expiresIn: '1h' });
+const token = jwt.sign({ id: 'admin1', login_id: 'ADMIN' }, JWT_SECRET, { expiresIn: '1h' });
 
 beforeEach(() => {
   jest.clearAllMocks();

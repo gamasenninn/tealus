@@ -3,7 +3,9 @@
  */
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tealus-dev-secret';
+// ミドルウェア load 前に JWT_SECRET を固定（dev fallback と同期を取るため）
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Express app を使ってテスト
 const request = require('supertest');
@@ -35,11 +37,11 @@ describe('JWT 認証ミドルウェア', () => {
 
   // --- 2. 有効トークン → next + req.user ---
   test('2. Bearer + 有効トークン → 200 + req.user 設定', async () => {
-    const token = makeToken({ id: 'user1', employee_id: 'EMP001' });
+    const token = makeToken({ id: 'user1', login_id: 'EMP001' });
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.user.id).toBe('user1');
-    expect(res.body.user.employee_id).toBe('EMP001');
+    expect(res.body.user.login_id).toBe('EMP001');
   });
 
   // --- 3. 無効トークン → 401 ---
@@ -77,11 +79,11 @@ describe('JWT 認証ミドルウェア', () => {
   });
 
   // --- 8. req.user にペイロードが設定される ---
-  test('8. req.user に id, employee_id が含まれる', async () => {
-    const token = makeToken({ id: 'uuid-123', employee_id: 'EMP999' });
+  test('8. req.user に id, login_id が含まれる', async () => {
+    const token = makeToken({ id: 'uuid-123', login_id: 'EMP999' });
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
     expect(res.body.user).toHaveProperty('id', 'uuid-123');
-    expect(res.body.user).toHaveProperty('employee_id', 'EMP999');
+    expect(res.body.user).toHaveProperty('login_id', 'EMP999');
   });
 
   // --- 9. 別の JWT_SECRET → 401 ---
