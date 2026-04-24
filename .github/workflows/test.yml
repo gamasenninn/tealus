@@ -120,3 +120,31 @@ jobs:
       - name: Build dashboard
         working-directory: dashboard
         run: npm run build
+
+  agent-server-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: agent-server/package-lock.json
+
+      - name: Install agent-server dependencies
+        working-directory: agent-server
+        run: npm ci
+
+      - name: Run agent-server tests
+        working-directory: agent-server
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-test-secret
+          OPENAI_API_KEY: dummy-key-for-ci
+        run: npm test
