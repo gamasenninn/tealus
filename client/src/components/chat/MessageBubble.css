@@ -216,6 +216,33 @@
   font-size: 12px;
 }
 
+/* #166 Forward header — subtle, distinct from reply */
+.bubble-forward-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(0, 180, 160, 0.08);
+  border-left: 3px solid rgba(0, 180, 160, 0.5);
+  color: var(--text-secondary);
+}
+
+.bubble-forward-label {
+  font-weight: 600;
+}
+
+.bubble-forward-sender {
+  opacity: 0.75;
+}
+
+.bubble-forward-deleted {
+  font-style: italic;
+  opacity: 0.6;
+}
+
 .bubble.own .bubble-reply {
   background: rgba(0, 0, 0, 0.06);
   border-left-color: rgba(0, 0, 0, 0.2);

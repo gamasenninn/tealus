@@ -1,4 +1,4 @@
-import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare } from 'lucide-react';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2 } from 'lucide-react';
 import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
 
@@ -8,7 +8,7 @@ import { useMessageStore } from '../stores/messageStore';
 export function buildContextMenuItems({
   message, isOwn, roomId, currentRoom,
   onEdit, onShowEditHistory,
-  onReply, onShowTagModal, onShowTodoMenu,
+  onReply, onShowTagModal, onShowTodoMenu, onForward,
 }) {
   const items = [];
 
@@ -48,6 +48,15 @@ export function buildContextMenuItems({
     label: 'リプライ',
     onClick: onReply,
   });
+
+  // Forward (text messages only for MVP #166)
+  if (onForward && message.type === 'text' && !message.is_deleted) {
+    items.push({
+      icon: <Share2 size={16} />,
+      label: '転送',
+      onClick: onForward,
+    });
+  }
 
   // Tag
   items.push({

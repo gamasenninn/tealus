@@ -1,0 +1,114 @@
+.forward-modal {
+  max-width: 420px;
+  width: 92vw;
+}
+
+.forward-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.forward-search-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.forward-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  background: transparent;
+}
+
+.forward-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.forward-room-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.forward-room-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: white;
+  border: none;
+  border-bottom: 1px solid var(--border-light, #eee);
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.forward-room-item:last-child {
+  border-bottom: none;
+}
+
+.forward-room-item:hover:not(:disabled) {
+  background: var(--bg-page);
+}
+
+.forward-room-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.forward-room-name {
+  font-weight: 500;
+}
+
+.forward-room-type {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-page);
+  color: var(--text-secondary);
+}
+
+.forward-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.forward-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.forward-cancel-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border-dark);
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.forward-cancel-btn:hover:not(:disabled) {
+  background: var(--bg-page);
+}
+
+.forward-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

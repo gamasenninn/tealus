@@ -5,7 +5,7 @@ const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
 const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config');
-const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments');
+const { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments');
 
 const router = express.Router({ mergeParams: true });
 
@@ -18,7 +18,7 @@ router.use(authenticate, requireMember);
 router.post('/', async (req, res) => {
   const roomId = req.params.id;
   const userId = req.user.id;
-  const { content, type = 'text', reply_to } = req.body;
+  const { content, type = 'text', reply_to, forwarded_from } = req.body;
 
   if (!content || content.trim() === '') {
     return res.status(400).json({ error: 'メッセージ内容は必須です' });
@@ -26,10 +26,10 @@ router.post('/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO messages (room_id, sender_id, content, type, reply_to, forwarded_from)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [roomId, userId, content.trim(), type, reply_to || null]
+      [roomId, userId, content.trim(), type, reply_to || null, forwarded_from || null]
     );
 
     const message = result.rows[0];
@@ -124,6 +124,7 @@ router.get('/', async (req, res) => {
     // Attach related data
     await attachMedia(messages);
     await attachReplies(messages);
+    await attachForwards(messages);
     await attachTranscriptions(messages);
     await attachLinkPreviews(messages);
     await attachReactions(messages, req.user.id);

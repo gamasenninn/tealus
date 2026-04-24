@@ -10,6 +10,7 @@ import ContextMenu from './ContextMenu';
 import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
 import TodoMenu from '../todo/TodoMenu';
+import ForwardModal from './ForwardModal';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
 import { diffChars } from 'diff';
@@ -26,6 +27,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [showTagModal, setShowTagModal] = useState(false);
   const [showTodoMenu, setShowTodoMenu] = useState(false);
+  const [showForwardModal, setShowForwardModal] = useState(false);
   const [tags, setTags] = useState(message.tags || []);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
   const [editText, setEditText] = useState('');
@@ -108,6 +110,27 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
     );
   };
 
+  // #166 Forward: 転送元の表示
+  const renderForwardHeader = () => {
+    if (!message.forwarded_from) return null;
+    const fm = message.forwarded_from_message;
+    if (!fm) {
+      // 元メッセージが削除されている場合
+      return (
+        <div className="bubble-forward-header">
+          <span className="bubble-forward-label">📤 転送メッセージ</span>
+          <span className="bubble-forward-deleted">（元メッセージは削除されました）</span>
+        </div>
+      );
+    }
+    return (
+      <div className="bubble-forward-header">
+        <span className="bubble-forward-label">📤 {fm.room_name} より転送</span>
+        <span className="bubble-forward-sender">{fm.sender_display_name}</span>
+      </div>
+    );
+  };
+
   // Context menu
   const showContextMenu = (x, y) => {
     const { items, onReaction } = buildContextMenuItems({
@@ -123,6 +146,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       onReply: () => setReplyTo(message),
       onShowTagModal: () => setShowTagModal(true),
       onShowTodoMenu: () => setShowTodoMenu(true),
+      onForward: () => setShowForwardModal(true),
     });
     setContextMenu({ x, y, items, onReaction });
   };
@@ -198,6 +222,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
           onTouchEnd={handleTouchEnd}
           onTouchMove={handleTouchMove}
         >
+          {renderForwardHeader()}
           {message.type !== 'voice' && !isStamp && renderReply()}
           {isStampDeleted ? (
             <p className="bubble-text stamp-deleted">このスタンプは削除されました</p>
@@ -362,6 +387,12 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         />
       )}
 
+      {showForwardModal && (
+        <ForwardModal
+          message={message}
+          onClose={() => setShowForwardModal(false)}
+        />
+      )}
       {showTagModal && (
         <TagModal
           messageId={message.id}

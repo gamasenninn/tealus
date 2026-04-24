@@ -103,10 +103,11 @@ class ApiClient {
     return this.request('GET', url);
   }
 
-  sendMessage(roomId, content, replyTo = null) {
+  sendMessage(roomId, content, replyTo = null, forwardedFrom = null) {
     return this.request('POST', `/rooms/${roomId}/messages`, {
       content,
       reply_to: replyTo,
+      forwarded_from: forwardedFrom,
     });
   }
 

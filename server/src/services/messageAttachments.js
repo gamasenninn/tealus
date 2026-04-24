@@ -51,6 +51,47 @@ async function attachReplies(messages) {
 }
 
 /**
+ * Attach forwarded_from_message info (with voice transcription fallback)
+ * For #166 message forward feature.
+ * Excludes deleted messages (forwarded_from_message will be null).
+ */
+async function attachForwards(messages) {
+  // Always initialize forwarded_from_message to null
+  for (const msg of messages) {
+    msg.forwarded_from_message = null;
+  }
+  const forwardIds = messages.filter(m => m.forwarded_from).map(m => m.forwarded_from);
+  if (forwardIds.length === 0) return;
+  const result = await pool.query(
+    `SELECT m.id, m.content, m.type, m.sender_id, m.is_deleted,
+            u.display_name AS sender_display_name,
+            r.name AS room_name, r.type AS room_type,
+            vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     JOIN rooms r ON r.id = m.room_id
+     LEFT JOIN LATERAL (
+       SELECT formatted_text, raw_text FROM voice_transcriptions
+       WHERE message_id = m.id ORDER BY version DESC LIMIT 1
+     ) vt ON m.type = 'voice'
+     WHERE m.id = ANY($1) AND m.is_deleted = false`,
+    [forwardIds]
+  );
+  const map = {};
+  for (const r of result.rows) {
+    if (r.type === 'voice' && !r.content) {
+      r.content = r.transcription_text || r.transcription_raw || null;
+    }
+    map[r.id] = r;
+  }
+  for (const msg of messages) {
+    if (msg.forwarded_from) {
+      msg.forwarded_from_message = map[msg.forwarded_from] || null;
+    }
+  }
+}
+
+/**
  * Attach transcription for voice messages
  */
 async function attachTranscriptions(messages) {
@@ -163,4 +204,4 @@ async function attachStamps(messages) {
   }
 }
 
-module.exports = { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps };
+module.exports = { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps };
