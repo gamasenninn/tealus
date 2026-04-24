@@ -211,4 +211,4 @@ function speakMessage(roomId, content) {
   processQueue();
 }
 
-module.exports = { speakMessage };
+module.exports = { speakMessage, synthesize };
