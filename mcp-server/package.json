@@ -1,6 +1,6 @@
 {
   "name": "tealus-mcp-server",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "description": "Tealus MCP Server — Tealus Bot API as MCP tools",
   "main": "src/index.js",

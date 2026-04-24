@@ -1,16 +1,14 @@
 {
-  "name": "mediasoup-test",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "tealus-rtc-server",
+  "version": "0.1.0",
+  "description": "Tealus RTC Server — mediasoup SFU for voice/video calls and transceiver",
+  "license": "MIT",
+  "main": "server.js",
   "scripts": {
     "build": "esbuild src/client.js --bundle --outfile=public/bundle.js --format=iife --platform=browser",
     "start": "node server.js",
     "dev": "npm run build && node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
-  "description": "",
   "dependencies": {
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.0",
