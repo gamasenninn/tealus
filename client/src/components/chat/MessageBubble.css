@@ -156,8 +156,17 @@
   opacity: 0.8;
 }
 
+/* SVG 回転アニメーションを独立レイヤーに isolate
+   right-aligned な own 側 flex 計算への影響を遮断 */
 .bubble-tts-btn.loading svg {
   animation: bubble-tts-spin 0.8s linear infinite;
+  will-change: transform;
+  transform-origin: center center;
+  transform: translateZ(0);
+}
+
+.bubble-tts-btn {
+  contain: layout paint style;
 }
 
 .bubble-tts-btn:hover:not(.loading) {
