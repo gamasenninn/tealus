@@ -3,7 +3,7 @@ import { useState } from 'react';
 function UserForm({ user, onSubmit, onCancel }) {
   const isEdit = !!user;
   const [formData, setFormData] = useState({
-    employee_id: user?.employee_id || '',
+    login_id: user?.login_id || '',
     display_name: user?.display_name || '',
     password: '',
     role: user?.role || 'user',
@@ -24,7 +24,7 @@ function UserForm({ user, onSubmit, onCancel }) {
     try {
       const data = {};
       if (!isEdit) {
-        data.employee_id = formData.employee_id;
+        data.login_id = formData.login_id;
         data.password = formData.password;
       }
       if (!isEdit || formData.display_name !== user.display_name) {
@@ -55,10 +55,10 @@ function UserForm({ user, onSubmit, onCancel }) {
       {error && <div className="form-error">{error}</div>}
 
       <div className="form-field">
-        <label>社員番号</label>
+        <label>ユーザーID</label>
         <input
-          name="employee_id"
-          value={formData.employee_id}
+          name="login_id"
+          value={formData.login_id}
           onChange={handleChange}
           disabled={isEdit}
           required={!isEdit}

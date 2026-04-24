@@ -120,7 +120,7 @@ function RoomList() {
         ) : (
           <span className="room-list-avatar-placeholder">{user?.display_name?.charAt(0)}</span>
         )}
-        {user?.display_name}（{user?.employee_id}）
+        {user?.display_name}（{user?.login_id}）
       </div>
 
       <div className="room-list">

@@ -66,12 +66,12 @@ class ApiClient {
   }
 
   // Auth
-  login(employee_id, password) {
-    return this.request('POST', '/auth/login', { employee_id, password });
+  login(login_id, password) {
+    return this.request('POST', '/auth/login', { login_id, password });
   }
 
-  register(employee_id, display_name, password) {
-    return this.request('POST', '/auth/register', { employee_id, display_name, password });
+  register(login_id, display_name, password) {
+    return this.request('POST', '/auth/register', { login_id, display_name, password });
   }
 
   getMe() {

@@ -115,7 +115,7 @@ function AdminDashboard() {
         <table>
           <thead>
             <tr>
-              <th>社員番号</th>
+              <th>ユーザーID</th>
               <th>表示名</th>
               <th>権限</th>
               <th>状態</th>
@@ -126,7 +126,7 @@ function AdminDashboard() {
           <tbody>
             {users.map(u => (
               <tr key={u.id} className={!u.is_active ? 'inactive-row' : ''}>
-                <td>{u.employee_id}</td>
+                <td>{u.login_id}</td>
                 <td>{u.display_name}</td>
                 <td><span className={`role-badge ${u.role}`}>{u.role === 'admin' ? '管理者' : '一般'}</span></td>
                 <td><span className={`status-badge ${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? '有効' : '無効'}</span></td>

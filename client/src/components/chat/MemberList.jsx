@@ -194,7 +194,7 @@ function MemberList({ roomId, onClose }) {
                     checked={selectedUsers.includes(u.id)}
                     onChange={() => toggleUserSelection(u.id)}
                   />
-                  <span>{u.display_name}（{u.employee_id}）</span>
+                  <span>{u.display_name}（{u.login_id}）</span>
                 </label>
               ))}
             </div>

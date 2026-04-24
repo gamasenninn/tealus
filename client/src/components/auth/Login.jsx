@@ -4,7 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import './Login.css';
 
 function Login() {
-  const [employeeId, setEmployeeId] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,7 +17,7 @@ function Login() {
     setIsSubmitting(true);
 
     try {
-      await login(employeeId, password);
+      await login(loginId, password);
       navigate('/');
     } catch (err) {
       setError(err.message);
@@ -37,13 +37,13 @@ function Login() {
           {error && <div className="login-error">{error}</div>}
 
           <div className="login-field">
-            <label htmlFor="employee_id">社員番号</label>
+            <label htmlFor="login_id">ユーザーID</label>
             <input
-              id="employee_id"
+              id="login_id"
               type="text"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              placeholder="例: EMP001"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              placeholder="例: user001"
               required
               autoComplete="username"
             />
