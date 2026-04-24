@@ -26,7 +26,6 @@ export async function registerPushNotification() {
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      console.log('[push] Notification permission denied');
       return;
     }
 
@@ -48,8 +47,6 @@ export async function registerPushNotification() {
       p256dh_key: p256dh,
       auth_key: auth,
     });
-
-    console.log('[push] Registered successfully');
   } catch (err) {
     console.error('[push] Registration failed:', err);
   }
