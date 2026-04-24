@@ -130,30 +130,39 @@
   justify-content: center;
   border-radius: 4px;
   opacity: 0.6;
-  /* width/height を固定してアイコン切替時の layout shift を防ぐ */
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  /* transition は hover のみに限定（loading 切替時のちらつき防止） */
-  transition: background-color 0.15s;
+  /* ブラウザ由来のフラッシュを完全抑止 */
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  /* transition も削除（即時反映・ちらつき防止） */
 }
 
-.bubble-tts-btn:hover:not(.loading):not(:disabled) {
+.bubble-tts-btn:focus,
+.bubble-tts-btn:focus-visible {
+  outline: none;
+}
+
+.bubble-tts-btn:hover:not(.loading) {
   opacity: 1;
 }
 
-.bubble-tts-btn:hover:not(.loading):not(:disabled) {
+.bubble-tts-btn.loading {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.bubble-tts-btn.loading svg {
+  animation: bubble-tts-spin 0.8s linear infinite;
+}
+
+.bubble-tts-btn:hover:not(.loading) {
   background: rgba(0, 180, 160, 0.1);
   color: var(--primary);
-}
-
-.bubble-tts-btn.loading {
-  opacity: 0.8;
-  cursor: default;
-}
-
-.bubble-tts-btn .spin {
-  animation: bubble-tts-spin 0.8s linear infinite;
 }
 
 @keyframes bubble-tts-spin {

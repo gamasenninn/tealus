@@ -1,5 +1,5 @@
-import { useState, useRef, memo } from 'react';
-import { Volume2, Loader2 } from 'lucide-react';
+import { useRef, memo } from 'react';
+import { Volume2 } from 'lucide-react';
 import { api } from '../../services/api';
 
 // 個人TTS再生のシングルトン（同時再生防止、最後に押したものが優先）
@@ -13,17 +13,18 @@ function stopCurrentTts() {
 
 /**
  * メッセージの読み上げボタン。
- * state を本コンポーネントに閉じ込めることで、クリック時に
- * 親（MessageBubble）を再レンダーさせず、ちらつきを防ぐ。
+ * ちらつき防止のため React state を一切使わず、DOM を直接操作して
+ * ローディング表示を制御する。再レンダー自体を発生させない。
  */
 function TtsButton({ text, roomId }) {
-  const [loading, setLoading] = useState(false);
   const audioRef = useRef(null);
+  const btnRef = useRef(null);
+  const busyRef = useRef(false);
 
   const handleClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!text || loading) return;
+    if (!text || busyRef.current) return;
 
     // 同じボタン再タップ → トグル停止
     if (audioRef.current && audioRef.current === currentTtsAudio && !audioRef.current.paused) {
@@ -32,10 +33,11 @@ function TtsButton({ text, roomId }) {
       return;
     }
 
-    // 別の再生を停止（最後に押したものを優先）
+    // 別の再生を停止
     stopCurrentTts();
 
-    setLoading(true);
+    busyRef.current = true;
+    btnRef.current?.classList.add('loading');
     try {
       const blob = await api.synthesizeTts(text, roomId);
       const url = URL.createObjectURL(blob);
@@ -59,23 +61,25 @@ function TtsButton({ text, roomId }) {
       console.error('TTS error:', err);
       alert('読み上げに失敗しました: ' + (err.message || ''));
     } finally {
-      setLoading(false);
+      busyRef.current = false;
+      btnRef.current?.classList.remove('loading');
     }
   };
 
   return (
     <button
+      ref={btnRef}
       type="button"
-      className={`bubble-tts-btn ${loading ? 'loading' : ''}`}
+      className="bubble-tts-btn"
       onClick={handleClick}
       onMouseDown={(e) => e.preventDefault()}
       onTouchStart={(e) => e.stopPropagation()}
       title="読み上げ"
     >
-      {loading ? <Loader2 size={14} className="spin" /> : <Volume2 size={14} />}
+      <Volume2 size={14} />
     </button>
   );
 }
 
-// text と roomId が同じなら再レンダーしない（props 同一チェック）
+// props が同じなら再レンダーしない（useState を除去したため、実質 props 変化でのみ再レンダー）
 export default memo(TtsButton);
