@@ -104,11 +104,22 @@ app.get('/system/*', (req, res) => {
 const clientDistPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientDistPath));
 // SPA fallback — all non-API routes return index.html
+const clientIndexPath = path.join(clientDistPath, 'index.html');
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/') || req.path.startsWith('/system/') || req.path.startsWith('/agent-api/') || req.path.startsWith('/rtc/')) {
     return next();
   }
-  res.sendFile(path.join(clientDistPath, 'index.html'));
+  // Dev mode では client 未ビルドなので分かりやすいメッセージを返す（通常は Vite dev server 経由でアクセス）
+  if (!require('fs').existsSync(clientIndexPath)) {
+    return res.status(503).type('html').send(
+      '<html><body style="font-family:sans-serif;padding:2em;max-width:640px">'
+      + '<h1>Tealus server is running, but the client is not built</h1>'
+      + '<p>Access the Vite dev server for development: <a href="http://localhost:5173">http://localhost:5173</a></p>'
+      + '<p>For production, build the client first: <code>cd client &amp;&amp; npm run build</code></p>'
+      + '</body></html>'
+    );
+  }
+  res.sendFile(clientIndexPath);
 });
 
 // Socket.IO handlers (set up in tests or on direct run)
