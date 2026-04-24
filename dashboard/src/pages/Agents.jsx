@@ -23,7 +23,7 @@ function Agents() {
         <thead>
           <tr>
             <th>表示名</th>
-            <th>Employee ID</th>
+            <th>ユーザーID</th>
             <th>状態</th>
             <th>作成日</th>
             <th>ルーム設定</th>
@@ -33,7 +33,7 @@ function Agents() {
           {agents.map(a => (
             <tr key={a.id}>
               <td>{a.display_name}</td>
-              <td>{a.employee_id}</td>
+              <td>{a.login_id}</td>
               <td><span className={`badge ${a.is_active ? 'active' : 'inactive'}`}>{a.is_active ? '有効' : '無効'}</span></td>
               <td>{new Date(a.created_at).toLocaleDateString('ja-JP')}</td>
               <td>

@@ -16,10 +16,10 @@ describe('Group Member Management', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    admin = await createTestUser({ employee_id: 'ADMIN01', display_name: '田中太郎' });
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '鈴木花子' });
-    user2 = await createTestUser({ employee_id: 'EMP002', display_name: '五条悟' });
-    user3 = await createTestUser({ employee_id: 'EMP003', display_name: '佐藤次郎' });
+    admin = await createTestUser({ login_id: 'ADMIN01', display_name: '田中太郎' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '鈴木花子' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '五条悟' });
+    user3 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎' });
 
     // Create group (admin is group admin, user1 is member)
     const res = await request(app)

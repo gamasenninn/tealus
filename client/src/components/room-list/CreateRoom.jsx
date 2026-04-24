@@ -71,7 +71,7 @@ function CreateRoom({ onClose }) {
               {users.map((u) => (
                 <div key={u.id} className="create-room-user" onClick={() => handleCreateDirect(u.id)}>
                   <span>{u.display_name}</span>
-                  <span className="create-room-emp-id">{u.employee_id}</span>
+                  <span className="create-room-emp-id">{u.login_id}</span>
                 </div>
               ))}
             </div>

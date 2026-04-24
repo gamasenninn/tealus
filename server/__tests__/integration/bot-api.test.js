@@ -16,8 +16,8 @@ describe('Bot API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    bot = await createTestUser({ employee_id: 'BOT001', display_name: 'Tealus Bot' });
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
+    bot = await createTestUser({ login_id: 'BOT001', display_name: 'Tealus Bot' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
 
     // Mark as bot
     const pool = getTestPool();
@@ -65,7 +65,7 @@ describe('Bot API', () => {
     });
 
     it('should reject non-member', async () => {
-      const user2 = await createTestUser({ employee_id: 'EMP002', display_name: '鈴木花子' });
+      const user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
       const room2Res = await request(app)
         .post('/api/rooms')
         .set('Authorization', `Bearer ${user2.token}`)
@@ -155,7 +155,7 @@ describe('Bot API', () => {
   describe('POST /api/bot/rooms/:id/join', () => {
     it('should join a room', async () => {
       // Create a room without bot
-      const user2 = await createTestUser({ employee_id: 'EMP003', display_name: '佐藤次郎' });
+      const user2 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎' });
       const room2Res = await request(app)
         .post('/api/rooms')
         .set('Authorization', `Bearer ${user2.token}`)

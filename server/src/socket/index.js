@@ -25,7 +25,7 @@ function setupSocketHandlers(io) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       const result = await pool.query(
-        'SELECT id, employee_id, display_name, avatar_url, role FROM users WHERE id = $1 AND is_active = true',
+        'SELECT id, login_id, display_name, avatar_url, role FROM users WHERE id = $1 AND is_active = true',
         [decoded.id]
       );
       if (result.rows.length === 0) {

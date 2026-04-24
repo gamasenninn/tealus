@@ -120,7 +120,7 @@ function Profile() {
             hidden
           />
         </div>
-        <div className="profile-employee-id">{user?.employee_id}</div>
+        <div className="profile-employee-id">{user?.login_id}</div>
       </div>
 
       <div className="profile-section">

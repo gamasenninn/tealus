@@ -32,7 +32,7 @@ function apiCall(method, path, body, token) {
 async function main() {
   // 1. Login
   console.log('🤖 Logging in as', BOT_ID, '...');
-  const login = await apiCall('POST', '/api/auth/login', { employee_id: BOT_ID, password: BOT_PASS });
+  const login = await apiCall('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
   const token = login.token;
   const botUserId = login.user.id;
   console.log('✅ Logged in as', login.user.display_name);

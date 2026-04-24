@@ -19,7 +19,7 @@ router.use(authenticate, requireAdmin);
 router.get('/users', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, is_bot, last_seen_at, created_at, updated_at FROM users ORDER BY created_at'
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, last_seen_at, created_at, updated_at FROM users ORDER BY created_at'
     );
     res.json({ users: result.rows });
   } catch (err) {
@@ -33,27 +33,27 @@ router.get('/users', async (req, res) => {
  * Create a new user
  */
 router.post('/users', async (req, res) => {
-  const { employee_id, display_name, password, role = 'user', is_bot = false } = req.body;
+  const { login_id, display_name, password, role = 'user', is_bot = false } = req.body;
 
-  if (!employee_id || !display_name || !password) {
-    return res.status(400).json({ error: '社員番号、表示名、パスワードは必須です' });
+  if (!login_id || !display_name || !password) {
+    return res.status(400).json({ error: E.AUTH_REGISTER_REQUIRED });
   }
 
   try {
     const existing = await pool.query(
-      'SELECT id FROM users WHERE employee_id = $1',
-      [employee_id]
+      'SELECT id FROM users WHERE login_id = $1',
+      [login_id]
     );
     if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'この社員番号は既に登録されています' });
+      return res.status(409).json({ error: E.AUTH_DUPLICATE_LOGIN_ID });
     }
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = await pool.query(
-      `INSERT INTO users (employee_id, display_name, password_hash, role, is_bot)
+      `INSERT INTO users (login_id, display_name, password_hash, role, is_bot)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_bot, is_active, created_at`,
-      [employee_id, display_name, password_hash, role, is_bot]
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_bot, is_active, created_at`,
+      [login_id, display_name, password_hash, role, is_bot]
     );
 
     res.status(201).json({ user: result.rows[0] });
@@ -109,7 +109,7 @@ router.put('/users/:id', async (req, res) => {
 
     const result = await pool.query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,
       values
     );
 
@@ -135,7 +135,7 @@ router.patch('/users/:id/status', async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,
       [is_active, id]
     );
 

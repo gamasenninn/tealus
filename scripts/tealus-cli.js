@@ -102,7 +102,7 @@ function uploadFile(token, endpoint, fieldName, filePath) {
 // --- Auth ---
 
 async function login() {
-  const data = await request('POST', '/api/auth/login', { employee_id: BOT_ID, password: BOT_PASS });
+  const data = await request('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
   if (!data.token) {
     console.error('❌ ログイン失敗:', data.error || 'Unknown error');
     process.exit(1);

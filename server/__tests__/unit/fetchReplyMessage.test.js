@@ -22,7 +22,7 @@ describe('fetchReplyMessage', () => {
 
   async function createUser(employeeId, displayName) {
     const result = await pool.query(
-      `INSERT INTO users (employee_id, display_name, password_hash)
+      `INSERT INTO users (login_id, display_name, password_hash)
        VALUES ($1, $2, 'dummy') RETURNING id, display_name`,
       [employeeId, displayName]
     );

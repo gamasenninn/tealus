@@ -27,8 +27,8 @@ class ApiClient {
   }
 
   // Auth
-  login(employeeId, password) {
-    return this.request('POST', '/auth/login', { employee_id: employeeId, password });
+  login(loginId, password) {
+    return this.request('POST', '/auth/login', { login_id: loginId, password });
   }
   getMe() {
     return this.request('GET', '/auth/me');

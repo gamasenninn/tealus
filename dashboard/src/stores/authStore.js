@@ -28,8 +28,8 @@ export const useAuthStore = create((set) => ({
     }
   },
 
-  login: async (employeeId, password) => {
-    const data = await api.login(employeeId, password);
+  login: async (loginId, password) => {
+    const data = await api.login(loginId, password);
     if (data.user.role !== 'admin') {
       throw new Error('管理者権限が必要です');
     }

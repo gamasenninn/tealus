@@ -27,8 +27,8 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  login: async (employee_id, password) => {
-    const data = await api.login(employee_id, password);
+  login: async (login_id, password) => {
+    const data = await api.login(login_id, password);
     api.setToken(data.token);
     connectSocket(data.token);
     set({ user: data.user, token: data.token });

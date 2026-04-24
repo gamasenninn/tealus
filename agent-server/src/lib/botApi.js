@@ -23,7 +23,7 @@ async function login() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      employee_id: config.TEALUS_BOT_ID,
+      login_id: config.TEALUS_BOT_ID,
       password: config.TEALUS_BOT_PASS,
     }),
   });

@@ -16,8 +16,8 @@ describe('Message Forward (#166)', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
-    user2 = await createTestUser({ employee_id: 'EMP002', display_name: '鈴木花子' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
 
     // Create two rooms, both with user1 and user2
     const roomARes = await request(app)

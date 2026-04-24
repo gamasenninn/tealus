@@ -16,9 +16,9 @@ describe('Stamps API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
-    user2 = await createTestUser({ employee_id: 'EMP002', display_name: '鈴木花子' });
-    admin = await createTestUser({ employee_id: 'ADM001', display_name: '管理者' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
+    admin = await createTestUser({ login_id: 'ADM001', display_name: '管理者' });
 
     const pool = getTestPool();
     await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [admin.user.id]);

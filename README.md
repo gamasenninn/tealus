@@ -16,7 +16,7 @@
 - 既読表示（トーク一覧: 未読数、トーク画面: 既読数）
 - リプライ（引用返信）
 - Push通知（PWA Service Worker）
-- 社員番号ログイン（JWT認証）
+- ユーザーIDログイン（JWT認証）
 - 直感的な吹き出しUI
 - PWA対応（スマホ・PCのブラウザから利用、ホーム画面に追加可能）
 
@@ -125,10 +125,10 @@ APIで初回ユーザーを登録します:
 ```bash
 curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"employee_id":"EMP001","display_name":"管理者","password":"password123"}'
+  -d '{"login_id":"admin","display_name":"管理者","password":"password123"}'
 ```
 
-以降はログイン画面から社員番号とパスワードでログインできます。
+以降はログイン画面からユーザーIDとパスワードでログインできます。
 
 ## テスト
 

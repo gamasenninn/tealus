@@ -56,7 +56,7 @@ function httpRequest(url, options, body) {
 }
 
 async function login() {
-  const body = JSON.stringify({ employee_id: BOT_EMPLOYEE_ID, password: BOT_PASSWORD });
+  const body = JSON.stringify({ login_id: BOT_EMPLOYEE_ID, password: BOT_PASSWORD });
   const res = await httpRequest(`${TEALUS_API}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },

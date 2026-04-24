@@ -10,7 +10,7 @@ const { app } = require('../../src/app');
  */
 async function createTestUser(overrides = {}) {
   const data = {
-    employee_id: overrides.employee_id || 'EMP' + Math.random().toString(36).slice(2, 8).toUpperCase(),
+    login_id: overrides.login_id || 'EMP' + Math.random().toString(36).slice(2, 8).toUpperCase(),
     display_name: overrides.display_name || 'テストユーザー',
     password: overrides.password || 'password123',
   };

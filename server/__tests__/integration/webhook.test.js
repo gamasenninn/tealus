@@ -16,8 +16,8 @@ describe('Webhook API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    admin = await createTestUser({ employee_id: 'ADMIN01', display_name: '管理者' });
-    user = await createTestUser({ employee_id: 'EMP001', display_name: '一般ユーザー' });
+    admin = await createTestUser({ login_id: 'ADMIN01', display_name: '管理者' });
+    user = await createTestUser({ login_id: 'EMP001', display_name: '一般ユーザー' });
 
     // adminにadmin権限を付与
     const pool = getTestPool();

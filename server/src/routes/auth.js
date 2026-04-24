@@ -27,21 +27,21 @@ const { SALT_ROUNDS } = require('../constants/config');
  * Register a new user
  */
 router.post('/register', async (req, res) => {
-  const { employee_id, display_name, password } = req.body;
+  const { login_id, display_name, password } = req.body;
 
   // Validation
-  if (!employee_id || !display_name || !password) {
-    return res.status(400).json({ error: '社員番号、表示名、パスワードは必須です' });
+  if (!login_id || !display_name || !password) {
+    return res.status(400).json({ error: E.AUTH_REGISTER_REQUIRED });
   }
 
   try {
     // Check duplicate
     const existing = await pool.query(
-      'SELECT id FROM users WHERE employee_id = $1',
-      [employee_id]
+      'SELECT id FROM users WHERE login_id = $1',
+      [login_id]
     );
     if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'この社員番号は既に登録されています' });
+      return res.status(409).json({ error: E.AUTH_DUPLICATE_LOGIN_ID });
     }
 
     // Hash password
@@ -49,10 +49,10 @@ router.post('/register', async (req, res) => {
 
     // Insert user
     const result = await pool.query(
-      `INSERT INTO users (employee_id, display_name, password_hash)
+      `INSERT INTO users (login_id, display_name, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
-      [employee_id, display_name, password_hash]
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+      [login_id, display_name, password_hash]
     );
 
     const user = result.rows[0];
@@ -67,26 +67,26 @@ router.post('/register', async (req, res) => {
 
 /**
  * POST /api/auth/login
- * Login with employee_id and password
+ * Login with login_id and password
  */
 router.post('/login', async (req, res) => {
-  const { employee_id, password } = req.body;
+  const { login_id, password } = req.body;
 
   // Validation
-  if (!employee_id || !password) {
-    return res.status(400).json({ error: '社員番号とパスワードは必須です' });
+  if (!login_id || !password) {
+    return res.status(400).json({ error: E.AUTH_LOGIN_REQUIRED });
   }
 
   try {
     // Find user
     const result = await pool.query(
-      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, password_hash, created_at FROM users WHERE employee_id = $1 AND is_active = true',
-      [employee_id]
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, password_hash, created_at FROM users WHERE login_id = $1 AND is_active = true',
+      [login_id]
     );
 
     if (result.rows.length === 0) {
-      logger.debug(`login: fail employee_id=${employee_id} reason=not_found`);
-      return res.status(401).json({ error: '社員番号またはパスワードが正しくありません' });
+      logger.debug(`login: fail login_id=${login_id} reason=not_found`);
+      return res.status(401).json({ error: E.AUTH_INVALID_CREDENTIALS });
     }
 
     const user = result.rows[0];
@@ -94,14 +94,14 @@ router.post('/login', async (req, res) => {
     // Verify password
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
-      return res.status(401).json({ error: '社員番号またはパスワードが正しくありません' });
+      return res.status(401).json({ error: E.AUTH_INVALID_CREDENTIALS });
     }
 
     // Remove password_hash from response
     delete user.password_hash;
 
     const token = generateToken(user);
-    logger.debug(`login: success employee_id=${employee_id} user=${user.display_name}`);
+    logger.debug(`login: success login_id=${login_id} user=${user.display_name}`);
     res.json({ token, user });
   } catch (err) {
     logger.error('Login error:', err);
@@ -148,7 +148,7 @@ router.put('/profile', authenticate, async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
       values
     );
     res.json({ user: result.rows[0] });
@@ -172,7 +172,7 @@ router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, 
   try {
     const result = await pool.query(
       `UPDATE users SET avatar_url = $1, updated_at = now() WHERE id = $2
-       RETURNING id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
       [avatarUrl, req.user.id]
     );
     res.json({ user: result.rows[0] });
