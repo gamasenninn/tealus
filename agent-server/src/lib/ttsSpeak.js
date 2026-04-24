@@ -19,18 +19,47 @@ const MAX_LENGTH = parseInt(process.env.TTS_MAX_LENGTH || "500", 10);
 const SSRC = 1111;
 
 /**
- * テキスト前処理（Markdown除去、URL省略、長文切り詰め）
+ * テキスト前処理（Markdown除去、URL変換、長文切り詰め）
+ *
+ * 変換ルール:
+ *  - コードブロック → 「コード省略」
+ *  - 見出し（#） → 除去
+ *  - 太字・斜体（*/_） → 文字のみ残す
+ *  - 画像 ![alt](url) → 「画像」
+ *  - リンク [text](url) → text のみ（タイトルを読む）
+ *  - 裸の URL → 「こちらのリンク」
+ *  - インラインコード → 文字のみ残す
+ *  - 引用 > → 除去
+ *  - リスト記号 - / * / 数字. → 除去
+ *  - 連続改行 → 1 つに
  */
 function preprocessText(content) {
   if (!content) return null;
 
   let text = content
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, "URL省略")
+    // コードブロックは最初に処理（内部にリンク等が含まれうるため）
     .replace(/```[\s\S]*?```/g, "コード省略")
+    // 見出し
+    .replace(/^#{1,6}\s+/gm, "")
+    // 太字・斜体（1〜3重）
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+    .replace(/_{1,3}([^_]+)_{1,3}/g, "$1")
+    // 画像 ![alt](url)
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "画像")
+    // リンク [text](url) → text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // 裸のURL → 「こちらのリンク」
+    .replace(/https?:\/\/\S+/g, "こちらのリンク")
+    // インラインコード
     .replace(/`([^`]+)`/g, "$1")
+    // 引用記号 >
+    .replace(/^>\s?/gm, "")
+    // リスト記号
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    // 水平線
+    .replace(/^-{3,}$/gm, "")
+    // 連続改行
     .replace(/\n{2,}/g, "\n")
     .trim();
 
@@ -211,4 +240,4 @@ function speakMessage(roomId, content) {
   processQueue();
 }
 
-module.exports = { speakMessage, synthesize };
+module.exports = { speakMessage, synthesize, preprocessText };

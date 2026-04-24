@@ -6,7 +6,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { synthesize } = require('../lib/ttsSpeak');
+const { synthesize, preprocessText } = require('../lib/ttsSpeak');
 const botApi = require('../lib/botApi');
 const logger = require('../lib/logger');
 
@@ -54,8 +54,14 @@ router.post('/synthesize', async (req, res) => {
   }
   // synthesize() itself falls back to env default when resolvedModel is null
 
+  // Markdown 除去・URL 変換・長文切り詰め（#155 の自動読み上げと同じ前処理）
+  const cleaned = preprocessText(text);
+  if (!cleaned) {
+    return res.status(400).json({ error: 'text is empty after preprocessing' });
+  }
+
   try {
-    const wavBuf = await synthesize(text.trim(), resolvedModel);
+    const wavBuf = await synthesize(cleaned, resolvedModel);
     res.type('audio/wav').send(wavBuf);
   } catch (err) {
     logger.error(`[TTS] synthesize error: ${err.message}`);
