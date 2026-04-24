@@ -224,7 +224,7 @@ async function cmdSend(args) {
       console.log(`📁 検知: ${path.basename(filePath)}`);
       const complete = await waitForFileComplete(filePath);
       if (complete) {
-        await sendVoiceFile(token, room.id, room.name, filePath);
+        await sendVoiceFile(room.id, room.name, filePath);
         writeLastSent(parsed.watchDir, new Date());
       } else {
         console.error(`⚠️ ファイル書き込み未完了（スキップ）: ${path.basename(filePath)}`);
