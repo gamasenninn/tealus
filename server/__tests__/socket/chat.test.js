@@ -38,17 +38,17 @@ describe('Socket.IO Chat', () => {
     // Create users
     const res1 = await request(app)
       .post('/api/auth/register')
-      .send({ employee_id: 'EMP001', display_name: '田中太郎', password: 'pass123' });
+      .send({ login_id: 'EMP001', display_name: '田中太郎', password: 'pass123' });
     user1 = res1.body;
 
     const res2 = await request(app)
       .post('/api/auth/register')
-      .send({ employee_id: 'EMP002', display_name: '鈴木花子', password: 'pass123' });
+      .send({ login_id: 'EMP002', display_name: '鈴木花子', password: 'pass123' });
     user2 = res2.body;
 
     const res3 = await request(app)
       .post('/api/auth/register')
-      .send({ employee_id: 'EMP003', display_name: '佐藤次郎', password: 'pass123' });
+      .send({ login_id: 'EMP003', display_name: '佐藤次郎', password: 'pass123' });
     user3 = res3.body;
 
     // Create room

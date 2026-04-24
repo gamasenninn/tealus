@@ -16,7 +16,7 @@ const JWT_SECRET = (() => {
  */
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, employee_id: user.employee_id },
+    { id: user.id, login_id: user.login_id },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -37,7 +37,7 @@ async function authenticate(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const result = await pool.query(
-      'SELECT id, employee_id, display_name, avatar_url, status_message, role, is_active, created_at FROM users WHERE id = $1 AND is_active = true',
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, created_at FROM users WHERE id = $1 AND is_active = true',
       [decoded.id]
     );
 

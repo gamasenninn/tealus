@@ -16,8 +16,8 @@ describe('Message Delete API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
-    user2 = await createTestUser({ employee_id: 'EMP002', display_name: '鈴木花子' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
 
     const roomRes = await request(app)
       .post('/api/rooms')
@@ -74,7 +74,7 @@ describe('Message Delete API', () => {
     });
 
     it('should reject non-member', async () => {
-      const user3 = await createTestUser({ employee_id: 'EMP003', display_name: '佐藤次郎' });
+      const user3 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎' });
 
       const msgRes = await request(app)
         .post(`/api/rooms/${roomId}/messages`)

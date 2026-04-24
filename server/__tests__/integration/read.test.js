@@ -16,8 +16,8 @@ describe('Read Status API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
-    user2 = await createTestUser({ employee_id: 'EMP002', display_name: '鈴木花子' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
 
     const roomRes = await request(app)
       .post('/api/rooms/direct')
@@ -222,7 +222,7 @@ describe('Read Status API', () => {
     });
 
     it('should reject non-member', async () => {
-      const user3 = await createTestUser({ employee_id: 'EMP003', display_name: '佐藤次郎' });
+      const user3 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎' });
       const res = await request(app)
         .post(`/api/rooms/${roomId}/read/all`)
         .set('Authorization', `Bearer ${user3.token}`);

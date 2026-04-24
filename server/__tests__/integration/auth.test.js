@@ -23,23 +23,23 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           display_name: '田中太郎',
           password: 'password123',
         });
 
       expect(res.status).toBe(201);
       expect(res.body.token).toBeDefined();
-      expect(res.body.user.employee_id).toBe('EMP001');
+      expect(res.body.user.login_id).toBe('EMP001');
       expect(res.body.user.display_name).toBe('田中太郎');
       expect(res.body.user.password_hash).toBeUndefined(); // パスワードハッシュは返さない
     });
 
-    it('should reject duplicate employee_id', async () => {
+    it('should reject duplicate login_id', async () => {
       await request(app)
         .post('/api/auth/register')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           display_name: '田中太郎',
           password: 'password123',
         });
@@ -47,7 +47,7 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           display_name: '別の人',
           password: 'password456',
         });
@@ -60,7 +60,7 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           // display_name missing
           // password missing
         });
@@ -79,7 +79,7 @@ describe('Auth API', () => {
       await request(app)
         .post('/api/auth/register')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           display_name: '田中太郎',
           password: 'password123',
         });
@@ -89,13 +89,13 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           password: 'password123',
         });
 
       expect(res.status).toBe(200);
       expect(res.body.token).toBeDefined();
-      expect(res.body.user.employee_id).toBe('EMP001');
+      expect(res.body.user.login_id).toBe('EMP001');
       expect(res.body.user.display_name).toBe('田中太郎');
       expect(res.body.user.password_hash).toBeUndefined();
     });
@@ -104,7 +104,7 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           password: 'wrongpassword',
         });
 
@@ -112,11 +112,11 @@ describe('Auth API', () => {
       expect(res.body.error).toBeDefined();
     });
 
-    it('should reject non-existent employee_id', async () => {
+    it('should reject non-existent login_id', async () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({
-          employee_id: 'EMP999',
+          login_id: 'EMP999',
           password: 'password123',
         });
 
@@ -144,7 +144,7 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          employee_id: 'EMP001',
+          login_id: 'EMP001',
           display_name: '田中太郎',
           password: 'password123',
         });
@@ -157,7 +157,7 @@ describe('Auth API', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.user.employee_id).toBe('EMP001');
+      expect(res.body.user.login_id).toBe('EMP001');
       expect(res.body.user.display_name).toBe('田中太郎');
     });
 

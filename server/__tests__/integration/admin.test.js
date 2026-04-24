@@ -17,8 +17,8 @@ describe('Admin API', () => {
   beforeEach(async () => {
     await cleanTestDb();
     // Create users via register API
-    admin = await createTestUser({ employee_id: 'ADMIN001', display_name: '管理者' });
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
+    admin = await createTestUser({ login_id: 'ADMIN001', display_name: '管理者' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
 
     // Promote admin user directly in DB
     const pool = getTestPool();
@@ -73,19 +73,19 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ employee_id: 'EMP099', display_name: '新規ユーザー', password: '1234' });
+        .send({ login_id: 'EMP099', display_name: '新規ユーザー', password: '1234' });
 
       expect(res.status).toBe(201);
-      expect(res.body.user.employee_id).toBe('EMP099');
+      expect(res.body.user.login_id).toBe('EMP099');
       expect(res.body.user.display_name).toBe('新規ユーザー');
       expect(res.body.user.role).toBe('user');
     });
 
-    it('should reject duplicate employee_id', async () => {
+    it('should reject duplicate login_id', async () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ employee_id: 'EMP001', display_name: '重複', password: '1234' });
+        .send({ login_id: 'EMP001', display_name: '重複', password: '1234' });
 
       expect(res.status).toBe(409);
     });
@@ -94,7 +94,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ employee_id: 'EMP100' });
+        .send({ login_id: 'EMP100' });
 
       expect(res.status).toBe(400);
     });
@@ -103,7 +103,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ employee_id: 'ADMIN002', display_name: '管理者2', password: '1234', role: 'admin' });
+        .send({ login_id: 'ADMIN002', display_name: '管理者2', password: '1234', role: 'admin' });
 
       expect(res.status).toBe(201);
       expect(res.body.user.role).toBe('admin');
@@ -135,7 +135,7 @@ describe('Admin API', () => {
       // Verify new password works
       const loginRes = await request(app)
         .post('/api/auth/login')
-        .send({ employee_id: 'EMP001', password: 'newpass' });
+        .send({ login_id: 'EMP001', password: 'newpass' });
       expect(loginRes.status).toBe(200);
     });
 
@@ -198,7 +198,7 @@ describe('Admin API', () => {
 
       const loginRes = await request(app)
         .post('/api/auth/login')
-        .send({ employee_id: 'EMP001', password: 'password123' });
+        .send({ login_id: 'EMP001', password: 'password123' });
 
       expect(loginRes.status).toBe(401);
     });

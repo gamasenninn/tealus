@@ -15,7 +15,7 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, employee_id, display_name, avatar_url, status_message
+      `SELECT id, login_id, display_name, avatar_url, status_message
        FROM users
        WHERE is_active = true AND id != $1
        ORDER BY display_name`,

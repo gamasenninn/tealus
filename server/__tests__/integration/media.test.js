@@ -46,9 +46,9 @@ describe('Media API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
-    user2 = await createTestUser({ employee_id: 'EMP002', display_name: '鈴木花子' });
-    user3 = await createTestUser({ employee_id: 'EMP003', display_name: '佐藤次郎' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
+    user3 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎' });
 
     const roomRes = await request(app)
       .post('/api/rooms')

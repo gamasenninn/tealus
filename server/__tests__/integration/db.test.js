@@ -24,7 +24,7 @@ describe('Database', () => {
     `);
     const columns = result.rows.map(r => r.column_name);
     expect(columns).toContain('id');
-    expect(columns).toContain('employee_id');
+    expect(columns).toContain('login_id');
     expect(columns).toContain('display_name');
     expect(columns).toContain('password_hash');
   });

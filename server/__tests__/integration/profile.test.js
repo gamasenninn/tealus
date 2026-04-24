@@ -36,7 +36,7 @@ describe('Profile API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎', password: 'password123' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎', password: 'password123' });
   });
 
   // ============================================
@@ -146,7 +146,7 @@ describe('Profile API', () => {
       // Verify new password works
       const loginRes = await request(app)
         .post('/api/auth/login')
-        .send({ employee_id: 'EMP001', password: 'newpass456' });
+        .send({ login_id: 'EMP001', password: 'newpass456' });
       expect(loginRes.status).toBe(200);
     });
 

@@ -16,7 +16,7 @@ describe('Push Subscription API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '田中太郎' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
   });
 
   describe('POST /api/push/subscribe', () => {

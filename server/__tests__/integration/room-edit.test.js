@@ -35,8 +35,8 @@ describe('Room Edit API', () => {
 
   beforeEach(async () => {
     await cleanTestDb();
-    admin = await createTestUser({ employee_id: 'ADMIN01', display_name: '田中太郎' });
-    user1 = await createTestUser({ employee_id: 'EMP001', display_name: '鈴木花子' });
+    admin = await createTestUser({ login_id: 'ADMIN01', display_name: '田中太郎' });
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '鈴木花子' });
 
     const res = await request(app)
       .post('/api/rooms')
