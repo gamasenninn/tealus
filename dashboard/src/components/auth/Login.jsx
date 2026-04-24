@@ -5,7 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 function Login() {
   const { login } = useAuthStore();
   const navigate = useNavigate();
-  const [employeeId, setEmployeeId] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -15,7 +15,7 @@ function Login() {
     setIsSubmitting(true);
     setError('');
     try {
-      await login(employeeId, password);
+      await login(loginId, password);
       navigate('/');
     } catch (err) {
       setError(err.message);
@@ -32,8 +32,8 @@ function Login() {
         {error && <div className="login-error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="login-field">
-            <label>社員番号</label>
-            <input value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="Employee ID" required />
+            <label>ユーザーID</label>
+            <input value={loginId} onChange={e => setLoginId(e.target.value)} placeholder="user001" required />
           </div>
           <div className="login-field">
             <label>パスワード</label>
