@@ -130,11 +130,19 @@
   justify-content: center;
   border-radius: 4px;
   opacity: 0.6;
-  transition: opacity 0.15s, background 0.15s;
+  /* width/height を固定してアイコン切替時の layout shift を防ぐ */
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  /* transition は hover のみに限定（loading 切替時のちらつき防止） */
+  transition: background-color 0.15s;
 }
 
-.bubble-tts-btn:hover:not(:disabled) {
+.bubble-tts-btn:hover:not(.loading):not(:disabled) {
   opacity: 1;
+}
+
+.bubble-tts-btn:hover:not(.loading):not(:disabled) {
   background: rgba(0, 180, 160, 0.1);
   color: var(--primary);
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { api } from '../../services/api';
 import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
@@ -210,4 +210,20 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
   );
 }
 
-export default VoiceBubble;
+// 親コンポーネント（MessageBubble）の TTS state 変化で不要に再レンダーされないよう memo 化
+// message.id, transcription.version（編集時）, isOwn が同じなら re-render しない
+export default memo(VoiceBubble, (prev, next) => {
+  return (
+    prev.message.id === next.message.id &&
+    prev.message.is_edited === next.message.is_edited &&
+    prev.transcription?.formatted_text === next.transcription?.formatted_text &&
+    prev.transcription?.raw_text === next.transcription?.raw_text &&
+    prev.transcription?.status === next.transcription?.status &&
+    prev.transcription?.version === next.transcription?.version &&
+    prev.isOwn === next.isOwn &&
+    prev.canEditTranscription === next.canEditTranscription &&
+    prev.searchKeyword === next.searchKeyword &&
+    prev.replyMessage?.id === next.replyMessage?.id &&
+    JSON.stringify(prev.media) === JSON.stringify(next.media)
+  );
+});
