@@ -1,10 +1,14 @@
 /**
  * Deep Agent テスト
  */
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
 
 jest.mock('../../src/lib/botApi', () => ({
   pushMessage: jest.fn().mockResolvedValue({ message: {} }),
   pushStatus: jest.fn().mockResolvedValue({ success: true }),
+  getBotUserId: jest.fn(() => 'bot-uuid'),
 }));
 
 jest.mock('../../src/context/sessionManager', () => ({
@@ -22,6 +26,9 @@ jest.mock('../../src/lib/logger', () => ({
 jest.mock('../../src/config', () => ({
   DEEP_TIMEOUT: 100,  // テスト用に短く
   DEEP_MAX_BUFFER: 1024 * 1024,
+  TEALUS_API_URL: 'http://localhost:3000',
+  TEALUS_BOT_ID: 'test-bot',
+  TEALUS_BOT_PASS: 'test-pass',
 }));
 
 // child_process をモック
@@ -35,22 +42,30 @@ const { processDeep, buildClaudeArgs } = require('../../src/agents/deep');
 const botApi = require('../../src/lib/botApi');
 const sessionManager = require('../../src/context/sessionManager');
 
+// 各テストで使う一時的な workspace ディレクトリ（実在させて path.join が成功するように）
+const TEST_WORKSPACE = fs.mkdtempSync(path.join(os.tmpdir(), 'tealus-deep-test-'));
+
+afterAll(() => {
+  try { fs.rmSync(TEST_WORKSPACE, { recursive: true, force: true }); } catch {}
+});
+
 describe('Deep Agent', () => {
 
   describe('buildClaudeArgs', () => {
     test('基本引数を構築する', () => {
       const args = buildClaudeArgs({
-        prompt: 'レポートを作成して',
+        workspacePath: TEST_WORKSPACE,
       });
 
       expect(args).toContain('-p');
-      expect(args).toContain('レポートを作成して');
       expect(args).toContain('--dangerously-skip-permissions');
+      // prompt は stdin 経由なので args には含まれない（'-' プレースホルダが入る）
+      expect(args).toContain('-');
     });
 
     test('session_id がある場合は --resume を追加', () => {
       const args = buildClaudeArgs({
-        prompt: '続きをお願い',
+        workspacePath: TEST_WORKSPACE,
         sessionId: 'sess-123',
       });
 
@@ -60,7 +75,7 @@ describe('Deep Agent', () => {
 
     test('session_id がない場合は --resume なし', () => {
       const args = buildClaudeArgs({
-        prompt: '新しいタスク',
+        workspacePath: TEST_WORKSPACE,
       });
 
       expect(args).not.toContain('--resume');
@@ -77,6 +92,7 @@ describe('Deep Agent', () => {
       const mockProcess = {
         stdout: { on: jest.fn() },
         stderr: { on: jest.fn() },
+        stdin: { write: jest.fn(), end: jest.fn() },
         on: jest.fn(),
       };
 
@@ -98,7 +114,7 @@ describe('Deep Agent', () => {
       await processDeep({
         roomId: 'room1',
         prompt: 'レポートを作成して',
-        workspacePath: '/tmp/workspace',
+        workspacePath: TEST_WORKSPACE,
         agentId: 'agent1',
         sessionId: null,
       });
@@ -106,7 +122,7 @@ describe('Deep Agent', () => {
       expect(mockSpawn).toHaveBeenCalledWith(
         expect.stringContaining('claude'),
         expect.arrayContaining(['-p', '--dangerously-skip-permissions']),
-        expect.objectContaining({ cwd: '/tmp/workspace' })
+        expect.objectContaining({ cwd: TEST_WORKSPACE })
       );
 
       expect(botApi.pushMessage).toHaveBeenCalledWith('room1', expect.stringContaining('レポート'));
@@ -117,6 +133,7 @@ describe('Deep Agent', () => {
       const mockProcess = {
         stdout: { on: jest.fn() },
         stderr: { on: jest.fn() },
+        stdin: { write: jest.fn(), end: jest.fn() },
         on: jest.fn(),
         kill: jest.fn().mockImplementation(() => {
           // kill されたら close を発火
@@ -136,7 +153,7 @@ describe('Deep Agent', () => {
       await processDeep({
         roomId: 'room1',
         prompt: 'テスト',
-        workspacePath: '/tmp/workspace',
+        workspacePath: TEST_WORKSPACE,
         agentId: 'agent1',
         sessionId: null,
       });

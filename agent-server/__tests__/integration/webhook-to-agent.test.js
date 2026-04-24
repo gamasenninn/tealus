@@ -156,7 +156,7 @@ describe('Webhook → Agent 統合テスト', () => {
       room: { id: BOT_ROOM, name: null, member_count: 2 },
     });
     expect(processDeep).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: 'コードをレビューして' })
+      expect.objectContaining({ prompt: expect.stringContaining('コードをレビューして') })
     );
   });
 
