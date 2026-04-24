@@ -335,4 +335,4 @@ npm run build
 
 MIT License - 詳細は [LICENSE](./LICENSE) を参照してください。
 
-Copyright (c) 2026 Tealus Project
+Copyright (c) 2026 Satoshi Ono and Tealus Project Contributors
