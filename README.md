@@ -333,4 +333,6 @@ npm run build
 
 ## ライセンス
 
-MIT License
+MIT License - 詳細は [LICENSE](./LICENSE) を参照してください。
+
+Copyright (c) 2026 Tealus Project
