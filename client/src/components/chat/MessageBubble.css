@@ -151,12 +151,9 @@
   opacity: 1;
 }
 
-/* ローディング中は cursor のみ変更。opacity 変化や animation は
-   ちらつきの原因になるため廃止。TTS は 0.3〜0.5 秒で完了するため
-   視覚的なインジケータなしでも UX 上問題なし。*/
-.bubble-tts-btn.loading {
-  cursor: wait;
-}
+/* ローディング中の視覚インジケータは一切なし。
+   classList の変更自体がちらつきを引き起こすため、TTS 中の視覚フィードバックは廃止。
+   TTS は 0.3〜0.5 秒で完了するため UX 上問題なし。*/
 
 .bubble-tts-btn:hover:not(.loading) {
   background: rgba(0, 180, 160, 0.1);

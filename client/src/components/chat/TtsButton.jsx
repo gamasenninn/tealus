@@ -18,7 +18,6 @@ function stopCurrentTts() {
  */
 function TtsButton({ text, roomId }) {
   const audioRef = useRef(null);
-  const btnRef = useRef(null);
   const busyRef = useRef(false);
 
   const handleClick = async (e) => {
@@ -37,7 +36,6 @@ function TtsButton({ text, roomId }) {
     stopCurrentTts();
 
     busyRef.current = true;
-    btnRef.current?.classList.add('loading');
     try {
       const blob = await api.synthesizeTts(text, roomId);
       const url = URL.createObjectURL(blob);
@@ -62,13 +60,11 @@ function TtsButton({ text, roomId }) {
       alert('読み上げに失敗しました: ' + (err.message || ''));
     } finally {
       busyRef.current = false;
-      btnRef.current?.classList.remove('loading');
     }
   };
 
   return (
     <button
-      ref={btnRef}
       type="button"
       className="bubble-tts-btn"
       onClick={handleClick}
