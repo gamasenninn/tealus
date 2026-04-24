@@ -45,7 +45,7 @@ function ForwardModal({ message, onClose }) {
         message.id, // forwarded_from
       );
       onClose();
-      navigate(`/talk/${targetRoom.id}`);
+      navigate(`/rooms/${targetRoom.id}`);
     } catch (err) {
       setError('転送に失敗しました: ' + (err.message || ''));
     } finally {
