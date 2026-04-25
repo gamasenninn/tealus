@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Tealus',
           short_name: 'Tealus',
-          description: '社内メッセンジャー',
+          description: '人とAIのためのメッセンジャー',
           theme_color: '#00B4A0',
           background_color: '#ffffff',
           display: 'standalone',

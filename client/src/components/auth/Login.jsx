@@ -31,7 +31,7 @@ function Login() {
       <div className="login-card">
         <img src="/logo.png" alt="Tealus" className="login-logo" />
         <h1 className="login-title">Tealus</h1>
-        <p className="login-subtitle">社内メッセンジャー</p>
+        <p className="login-subtitle">人とAIのためのメッセンジャー</p>
 
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="login-error">{error}</div>}
