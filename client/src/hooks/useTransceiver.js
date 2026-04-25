@@ -13,6 +13,7 @@ export function useTransceiver(roomId) {
   const [state, setState] = useState('idle'); // idle | connecting | connected | producing | error
   const [remoteAudioLevel, setRemoteAudioLevel] = useState(0);
   const [remoteSpeaker, setRemoteSpeaker] = useState(null);
+  const [audioBlocked, setAudioBlocked] = useState(false);
 
   const wsRef = useRef(null);
   const deviceRef = useRef(null);
@@ -119,11 +120,14 @@ export function useTransceiver(roomId) {
       send({ type: 'resumeConsumer', consumerId: resp.consumerId });
       await consumer.resume();
 
-      // 音声再生
+      // 音声再生（autoplay policy で reject されたら unlockAudio で復旧可能にする）
       const stream = new MediaStream([consumer.track]);
       const audioEl = new Audio();
       audioEl.srcObject = stream;
-      audioEl.play().catch(() => {});
+      audioEl.play().catch((err) => {
+        console.warn('[transceiver] audio.play() blocked:', err.name, '— click unlock button to enable');
+        setAudioBlocked(true);
+      });
 
       consumersRef.current.set(producerPeerId, { consumer, stream, audioEl });
 
@@ -291,6 +295,22 @@ export function useTransceiver(roomId) {
     handlersRef.current = [];
   }, [stopAudioLevelMonitor]);
 
+  // --- autoplay block 解除（user gesture 内で呼ぶ）---
+  const unlockAudio = useCallback(async () => {
+    let unlocked = false;
+    for (const [, peer] of consumersRef.current) {
+      try {
+        await peer.audioEl.play();
+        unlocked = true;
+      } catch (err) {
+        console.warn('[transceiver] unlock retry failed:', err.name);
+      }
+    }
+    if (unlocked || consumersRef.current.size === 0) {
+      setAudioBlocked(false);
+    }
+  }, []);
+
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -320,11 +340,13 @@ export function useTransceiver(roomId) {
     state,
     remoteAudioLevel,
     remoteSpeaker,
+    audioBlocked,
     isConnected: state === 'connected' || state === 'producing',
     isProducing: state === 'producing',
     connect,
     disconnect,
     startProducing,
     stopProducing,
+    unlockAudio,
   };
 }

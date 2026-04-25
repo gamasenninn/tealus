@@ -204,6 +204,16 @@ function ChatRoom() {
             🔊 {'█'.repeat(Math.round(transceiver.remoteAudioLevel * 10))}{'░'.repeat(10 - Math.round(transceiver.remoteAudioLevel * 10))} {transceiver.remoteSpeaker}
           </div>
         )}
+        {transceiver.audioBlocked && (
+          <button
+            type="button"
+            className="audio-unlock-banner"
+            onClick={() => transceiver.unlockAudio()}
+            title="ブラウザの autoplay 制限により音声再生が止められています。クリックで有効化"
+          >
+            🔊 音声を有効化（ブラウザ制限解除）
+          </button>
+        )}
       </TransceiverErrorBoundary>
 
       {(Object.keys(typingUsers).length > 0 || agentStatus) && (
