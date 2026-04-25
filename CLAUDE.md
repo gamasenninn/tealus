@@ -89,7 +89,7 @@ npm test -- --testPathPattern="search"
 
 ## Git運用
 
-- Phase 1はブランチなし（master直接コミット）
+- Phase 1はブランチなし（main直接コミット）
 - コミットはStep単位で細かく刻む（Issue番号付き）
 - Phase 2以降、複数人開発になったらブランチ運用に切り替える
 
