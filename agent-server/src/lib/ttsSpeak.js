@@ -137,9 +137,14 @@ async function processQueue() {
 /**
  * メッセージを読み上げる（fire-and-forget）
  * pushMessage の後に呼ぶ。メッセージ送信をブロックしない。
+ *
+ * TTS_PROVIDER (config) で動作を分岐:
+ *   - 'browser'     : Socket.IO 経由で client に text を流し、各端末の Web Speech API で発声
+ *   - 'aivis-cloud' : 既存の Aivis Cloud + mediasoup PlainTransport で配信
+ *   - 'none'        : 何もしない
  */
 function speakMessage(roomId, content) {
-  if (!TTS_ENABLED || !AIVIS_API_KEY) return;
+  if (!TTS_ENABLED) return;
 
   // エラーメッセージはスキップ
   if (/^[❌⚠️]/.test(content)) return;
@@ -147,6 +152,25 @@ function speakMessage(roomId, content) {
   const text = preprocessText(content);
   if (!text) return;
 
+  const config = require('../config');
+  const provider = config.TTS_PROVIDER;
+
+  if (provider === 'none') return;
+
+  if (provider === 'browser') {
+    // Server に通知 → server が Socket.IO で room に emit → 各 client が Web Speech で発声
+    const botApi = require('./botApi');
+    botApi.pushTtsSpeak(roomId, text).catch((err) => {
+      logger.warn(`[TTS] browser provider notify failed: ${err.message}`);
+    });
+    return;
+  }
+
+  // provider === 'aivis-cloud'
+  if (!AIVIS_API_KEY) {
+    logger.warn('[TTS] aivis-cloud selected but AIVIS_API_KEY not set, skipping');
+    return;
+  }
   const modelUuid = getRoomTtsModel(roomId) || MODEL_UUID;
   logger.info(`[TTS] model: ${modelUuid} (room: ${roomId}, default: ${MODEL_UUID})`);
   queue.push({ roomId, text, modelUuid });

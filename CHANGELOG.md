@@ -14,6 +14,15 @@
 
 Tealus の初回公開リリース。
 
+### TTS Provider 選択（#184）
+
+- AI 音声応答の合成方式を `TTS_PROVIDER` 環境変数で選択可能に
+  - `browser` (デフォルト): Web Speech API による各端末ローカル合成（API key 不要、ゼロ設定）
+  - `aivis-cloud`: Aivis Cloud API + mediasoup PlainTransport（高品質）
+  - `none`: TTS 完全無効
+- 未設定時は `AIVIS_API_KEY` の有無で自動判定（既存ユーザーの動作は不変）
+- 個人 TTS ボタン（メッセージ単位の 🔊）も provider に追従
+
 ### コアメッセンジャー
 
 - 1 対 1 DM / グループチャット（リアルタイム送受信、Socket.IO）
