@@ -144,5 +144,24 @@ describe('Dispatcher', () => {
       const { processDeep } = require('../../src/agents/deep');
       expect(processDeep).toHaveBeenCalled();
     });
+
+    test('tier=unavailable は説明メッセージを送信、Light/Deep は呼ばない', async () => {
+      route.mockResolvedValueOnce({ tier: 'unavailable', prompt: 'コード書いて' });
+      botApi.pushMessage.mockResolvedValueOnce({ message: {} });
+
+      await dispatch({
+        message: { id: 'msg1', content: '/deep コード書いて', sender: { id: 'user1' } },
+        room: { id: 'room1', name: null, member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(botApi.pushMessage).toHaveBeenCalledTimes(1);
+      const sentMessage = botApi.pushMessage.mock.calls[0][1];
+      expect(sentMessage).toMatch(/Deep agent.*Claude Code CLI|Claude MAX/);
+      expect(processLight).not.toHaveBeenCalled();
+      const { processDeep } = require('../../src/agents/deep');
+      expect(processDeep).not.toHaveBeenCalled();
+    });
   });
 });

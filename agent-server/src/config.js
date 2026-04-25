@@ -2,6 +2,7 @@
  * Agent Server 設定
  */
 require('dotenv').config();
+const { spawnSync } = require('child_process');
 const logger = require('./lib/logger');
 
 // TTS Provider — 'browser' | 'aivis-cloud' | 'none'
@@ -14,6 +15,33 @@ logger.info(
   `TTS provider: ${TTS_PROVIDER} `
   + `(AIVIS_API_KEY: ${process.env.AIVIS_API_KEY ? `set, ${process.env.AIVIS_API_KEY.length} chars` : 'unset'}, `
   + `TTS_PROVIDER env: ${process.env.TTS_PROVIDER || 'unset'})`
+);
+
+// Deep agent (Claude Code CLI) availability — Claude MAX 契約者向けの premium 機能。
+// 起動時に 1 回だけ検出し、不在なら Router が Light に silent fallback する。
+// テスト用に AGENT_DEEP_AVAILABLE_OVERRIDE=true|false で強制 override 可能。
+function detectClaudeCli() {
+  if (process.env.AGENT_DEEP_AVAILABLE_OVERRIDE === 'true') return true;
+  if (process.env.AGENT_DEEP_AVAILABLE_OVERRIDE === 'false') return false;
+  try {
+    const cmd = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+    const result = spawnSync(cmd, ['--version'], {
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+      timeout: 5000,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+const DEEP_AVAILABLE = detectClaudeCli();
+
+logger.info(
+  `Deep agent: ${DEEP_AVAILABLE
+    ? 'enabled (claude CLI found)'
+    : 'disabled (claude CLI not found — Light のみで動作)'}`
 );
 
 module.exports = {
@@ -50,4 +78,7 @@ module.exports = {
 
   // TTS Provider
   TTS_PROVIDER,
+
+  // Deep agent CLI availability
+  DEEP_AVAILABLE,
 };

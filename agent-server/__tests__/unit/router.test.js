@@ -21,9 +21,11 @@ jest.mock('../../src/lib/logger', () => ({
 jest.mock('../../src/config', () => ({
   AGENT_ROUTER_MODEL: 'gpt-5.4-mini',
   OPENAI_API_KEY: 'test-key',
+  DEEP_AVAILABLE: true,  // 既存テスト互換: claude CLI が常時あると見なす
 }));
 
-const { classifyByRules, classifyByLLM, route } = require('../../src/router/index');
+const config = require('../../src/config');
+const { classifyByRules, classifyByLLM, route, applyDeepAvailability } = require('../../src/router/index');
 
 describe('Router', () => {
 
@@ -94,6 +96,7 @@ describe('Router', () => {
   describe('route（統合ルーティング）', () => {
     beforeEach(() => {
       mockCreate.mockReset();
+      config.DEEP_AVAILABLE = true;
     });
 
     test('ルールベースで判定できたらLLMを呼ばない', async () => {
@@ -110,6 +113,66 @@ describe('Router', () => {
       const result = await route('来月の売上予測を教えて');
       expect(result.tier).toBe('light');
       expect(mockCreate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Deep availability — DEEP_AVAILABLE=false', () => {
+    beforeEach(() => {
+      mockCreate.mockReset();
+      config.DEEP_AVAILABLE = false;
+    });
+
+    afterAll(() => {
+      config.DEEP_AVAILABLE = true;
+    });
+
+    test('/deep 明示指定 → tier=unavailable（dispatcher が説明メッセージを返す想定）', async () => {
+      const result = await route('/deep このコードをレビューして');
+      expect(result.tier).toBe('unavailable');
+      expect(result.prompt).toBe('このコードをレビューして');
+    });
+
+    test('DEEP_KEYWORDS マッチ → tier=light（silent fallback）', async () => {
+      const result = await route('このコードをリファクタリングして');
+      expect(result.tier).toBe('light');
+    });
+
+    test('LLM が deep を返す → tier=light（silent fallback）', async () => {
+      mockCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: 'deep' } }],
+      });
+
+      const result = await route('月次レポートをまとめて分析して');
+      expect(result.tier).toBe('light');
+    });
+
+    test('Light の通常ケース → 影響なし', async () => {
+      const result = await route('/light 在庫を確認');
+      expect(result.tier).toBe('light');
+      expect(result.prompt).toBe('在庫を確認');
+    });
+
+    test('挨拶パターンも影響なし（router 直接応答）', async () => {
+      const result = await route('こんにちは');
+      expect(result.tier).toBe('router');
+    });
+  });
+
+  describe('applyDeepAvailability ヘルパー単体', () => {
+    afterEach(() => {
+      config.DEEP_AVAILABLE = true;
+    });
+
+    test('DEEP_AVAILABLE=true: deep tier をそのまま返す', () => {
+      config.DEEP_AVAILABLE = true;
+      const r = applyDeepAvailability({ tier: 'deep', prompt: 'x' }, true);
+      expect(r.tier).toBe('deep');
+    });
+
+    test('DEEP_AVAILABLE=false + 非 deep tier はそのまま', () => {
+      config.DEEP_AVAILABLE = false;
+      const r = applyDeepAvailability({ tier: 'light', prompt: 'x' }, false);
+      expect(r.tier).toBe('light');
     });
   });
 });

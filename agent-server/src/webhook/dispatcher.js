@@ -100,6 +100,16 @@ async function _dispatch({ message, room, agentId, agentName }) {
       logger.info(`Router direct: "${result.response.slice(0, 30)}..." → room ${roomId}`);
       break;
 
+    case 'unavailable':
+      // Deep が明示指定されたが claude CLI 不在
+      await botApi.pushMessage(roomId,
+        'ℹ️ Deep agent は Claude Code CLI（Claude MAX 契約）が必要です。\n'
+        + 'セットアップ方法は README の Tier 表を参照ください。\n'
+        + '通常の質問は Light で対応できます（`/deep` を付けないでください）。'
+      );
+      logger.info(`Router: unavailable response → room ${roomId} (claude CLI not found)`);
+      break;
+
     case 'light':
       // Light Agent
       await updateStatus(agentId, roomId, 'processing');
