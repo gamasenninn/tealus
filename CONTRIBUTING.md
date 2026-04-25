@@ -134,6 +134,17 @@ PR 作成時に [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMP
 - 「1 コミット = 1 つの論理的な変更」を目指す
 - 無関係な変更を混ぜない
 
+### 依存追加時のライセンス確認
+
+新規 npm パッケージを追加する際は、Tealus の MIT との互換性を確認する:
+
+```bash
+cd server  # または当該パッケージ
+npm run license-check
+```
+
+GPL / AGPL は許可しない。MPL / LGPL を新規追加する場合は [`.github/LICENSE_AUDIT.md`](./.github/LICENSE_AUDIT.md) に追記して PR で議論。
+
 ## 質問・相談
 
 - 仕様の不明点: [GitHub Discussions](https://github.com/gamasenninn/tealus/discussions)
