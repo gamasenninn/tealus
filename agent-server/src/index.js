@@ -13,7 +13,7 @@ app.listen(config.PORT, async () => {
   logger.info(`Agent Server started on port ${config.PORT}`);
   logger.info(`Tealus API: ${config.TEALUS_API_URL}`);
   logger.info(`Light model: ${config.AGENT_LIGHT_MODEL}`);
-  logger.info(`TTS provider: ${config.TTS_PROVIDER} (AIVIS_API_KEY: ${process.env.AIVIS_API_KEY ? `set, ${process.env.AIVIS_API_KEY.length} chars` : 'unset'}, TTS_PROVIDER env: ${process.env.TTS_PROVIDER || 'unset'})`);
+  // TTS provider のログは config.js の load 時に出力済み（責務分離）
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   await initializeAgent();

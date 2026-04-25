@@ -2,6 +2,19 @@
  * Agent Server 設定
  */
 require('dotenv').config();
+const logger = require('./lib/logger');
+
+// TTS Provider — 'browser' | 'aivis-cloud' | 'none'
+// unset 時は AIVIS_API_KEY の有無で自動判定（既存ユーザー保護）。
+// 解決結果をモジュール load 時にログ出力 — OSS 採用者のトラブルシュート用。
+const TTS_PROVIDER = process.env.TTS_PROVIDER
+  || (process.env.AIVIS_API_KEY ? 'aivis-cloud' : 'browser');
+
+logger.info(
+  `TTS provider: ${TTS_PROVIDER} `
+  + `(AIVIS_API_KEY: ${process.env.AIVIS_API_KEY ? `set, ${process.env.AIVIS_API_KEY.length} chars` : 'unset'}, `
+  + `TTS_PROVIDER env: ${process.env.TTS_PROVIDER || 'unset'})`
+);
 
 module.exports = {
   // Server
@@ -35,8 +48,6 @@ module.exports = {
   DEEP_MAX_BUFFER: parseInt(process.env.DEEP_MAX_BUFFER || '10485760'),  // 10MB
   LIGHT_CONTEXT_MESSAGES: parseInt(process.env.LIGHT_CONTEXT_MESSAGES || '20'),
 
-  // TTS Provider — 'browser' | 'aivis-cloud' | 'none'
-  // unset 時は AIVIS_API_KEY の有無で自動判定（既存ユーザー保護）
-  TTS_PROVIDER: process.env.TTS_PROVIDER
-    || (process.env.AIVIS_API_KEY ? 'aivis-cloud' : 'browser'),
+  // TTS Provider
+  TTS_PROVIDER,
 };
