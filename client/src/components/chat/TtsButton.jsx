@@ -2,8 +2,7 @@ import { useRef, memo } from 'react';
 import { Volume2 } from 'lucide-react';
 import { api } from '../../services/api';
 import * as browserTts from '../../services/browserTts';
-
-const TTS_PROVIDER = import.meta.env.VITE_TTS_PROVIDER || 'browser';
+import { getConfig } from '../../services/clientConfig';
 
 // 個人TTS再生のシングルトン（aivis-cloud 経路: 同時再生防止、最後に押したものが優先）
 let currentTtsAudio = null;
@@ -24,16 +23,17 @@ function stopCurrentTts() {
 function TtsButton({ text, roomId }) {
   const audioRef = useRef(null);
   const busyRef = useRef(false);
+  const provider = getConfig().tts_provider;
 
   // none provider: ボタン非表示
-  if (TTS_PROVIDER === 'none') return null;
+  if (provider === 'none') return null;
 
   const handleClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!text || busyRef.current) return;
 
-    if (TTS_PROVIDER === 'browser') {
+    if (provider === 'browser') {
       // 同じテキストの連打 = 停止トグル
       // (既存再生中に再度押すと cancel、その後新規再生)
       browserTts.cancel();

@@ -1,6 +1,5 @@
 import { api } from './api';
-
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+import { getConfig } from './clientConfig';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -14,8 +13,9 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export async function registerPushNotification() {
+  const VAPID_PUBLIC_KEY = getConfig().vapid_public_key;
   if (!VAPID_PUBLIC_KEY) {
-    console.warn('[push] VITE_VAPID_PUBLIC_KEY not set');
+    console.warn('[push] vapid_public_key not provided by /api/config');
     return;
   }
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {

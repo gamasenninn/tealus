@@ -59,6 +59,8 @@ const searchRoutes = require('./routes/search');
 const botRoutes = require('./routes/bot');
 const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes, globalRouter: tagGlobalRoutes } = require('./routes/tags');
 const stampRoutes = require('./routes/stamps');
+const configRoutes = require('./routes/config');
+app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);

@@ -10,6 +10,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **client 設定を runtime fetch 化**: client は build 時 env (`VITE_*`) を持たず、起動時に `GET /api/config` で取得する設計に変更（#184 follow-up）。
+  - 真の情報源: `TTS_PROVIDER` は `agent-server/.env`、`VAPID_PUBLIC_KEY` は `server/.env`
+  - server は内部で agent-server `/public-config` を proxy し、resolved な値を返す
+  - 設定変更時の **client 再ビルドが不要**（OSS 採用者の体験向上）
+  - agent-server 停止時は `tts_provider: 'browser'` に safe fallback
+
+### Removed
+
+- `VITE_TTS_PROVIDER` および `VITE_VAPID_PUBLIC_KEY` の build 時 env 参照を廃止
+- `client/.env` は通常不要に（既存の `.env` は残置しても害なし）
+
 ## [0.1.0] - 2026-04-25
 
 Tealus の初回公開リリース。

@@ -134,13 +134,13 @@ AI が音声で応答する仕組みは Provider 形式で選択可能です。
 - `AIVIS_API_KEY` あり → `aivis-cloud` 自動選択（既存ユーザー保護）
 - `AIVIS_API_KEY` なし → `browser` 自動選択（OSS 採用者向け）
 
-**明示指定する場合は両方の `.env` を揃える**:
+**設定は `agent-server/.env` の 1 箇所のみ**:
 ```bash
 # agent-server/.env
-TTS_PROVIDER=browser
-# client/.env
-VITE_TTS_PROVIDER=browser
+TTS_PROVIDER=browser    # browser | aivis-cloud | none
 ```
+
+client は起動時に `GET /api/config` で resolved な provider を runtime 取得するため、設定変更後は **agent-server / server の再起動のみで反映**（client 再ビルド不要）。
 
 ブラウザモードでは `SpeechSynthesisUtterance` (Web Speech API) を使うため、各端末の OS 音声で発声します。iOS / macOS は Siri 品質、Windows は SAPI、Android は Google TTS が使われます。
 
@@ -168,10 +168,10 @@ npm start      # 本番
 ```bash
 cd client
 npm install
-cp .env.example .env
-# VITE_VAPID_PUBLIC_KEY を server の VAPID_PUBLIC_KEY と同じ値に設定
 npm run dev
 ```
+
+> client/.env は不要です。VAPID 公開鍵 / TTS provider 等の設定は server / agent-server の `.env` のみで管理され、client は起動時に `GET /api/config` 経由で取得します。
 
 クライアントは `http://localhost:5173` で起動します。
 Viteのプロキシ設定により、`/api/*` と `/socket.io` はサーバーに自動転送されます。

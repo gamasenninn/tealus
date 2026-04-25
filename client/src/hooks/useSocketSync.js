@@ -5,8 +5,7 @@ import { useMessageStore } from '../stores/messageStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
-
-const TTS_PROVIDER = import.meta.env.VITE_TTS_PROVIDER || 'browser';
+import { getConfig } from '../services/clientConfig';
 
 /**
  * Manages all Socket.IO event subscriptions for a chat room.
@@ -116,7 +115,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
       // #184 browser TTS: server からの tts:speak で Web Speech API で発声
       // (TTS_PROVIDER=browser かつ profile の ttsReadAloud が ON のときのみ実発声)
       socket.on('tts:speak', (data) => {
-        if (TTS_PROVIDER !== 'browser') return;
+        if (getConfig().tts_provider !== 'browser') return;
         if (data.room_id && data.room_id !== roomId) return;
         if (data.sender_id === user?.id) return;  // 自分が送ったテキストは読まない
         speakAuto(data.text);

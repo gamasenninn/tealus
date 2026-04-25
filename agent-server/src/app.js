@@ -8,6 +8,7 @@ const settingsRoutes = require('./routes/settings');
 const logsRoutes = require('./routes/logs');
 const ttsRoutes = require('./routes/tts');
 const { authenticate } = require('./middleware/auth');
+const config = require('./config');
 
 const app = express();
 app.use(express.json());
@@ -20,6 +21,12 @@ app.get('/health', (req, res) => {
     service: 'tealus-agent-server',
     timestamp: new Date().toISOString(),
   });
+});
+
+// 公開 config（認証不要）— server の /api/config から呼ばれ、resolved な TTS provider を返す。
+// client は build 時 env を持たない設計なので、ここが TTS_PROVIDER の真の情報源。
+app.get('/public-config', (req, res) => {
+  res.json({ tts_provider: config.TTS_PROVIDER });
 });
 
 // Webhook endpoint（認証不要、HMAC署名で別途検証）
