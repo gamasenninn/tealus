@@ -120,6 +120,30 @@ npx web-push generate-vapid-keys
 
 各変数の詳細は `server/.env.example` 参照。
 
+#### TTS Provider（AI 応答の音声合成）
+
+AI が音声で応答する仕組みは Provider 形式で選択可能です。
+
+| Provider | API Key | 品質 | セットアップ |
+|----------|---------|------|-----------|
+| `browser` (デフォルト) | 不要 | OS 依存 | **ゼロ設定**、各端末ローカルで合成 |
+| `aivis-cloud` | 必要 | 高品質（凛音エル等） | [Aivis Cloud](https://aivis-project.com) で API key 取得 |
+| `none` | - | - | TTS 完全無効 |
+
+**デフォルト判定**: `agent-server/.env` の `TTS_PROVIDER` を未設定の場合:
+- `AIVIS_API_KEY` あり → `aivis-cloud` 自動選択（既存ユーザー保護）
+- `AIVIS_API_KEY` なし → `browser` 自動選択（OSS 採用者向け）
+
+**明示指定する場合は両方の `.env` を揃える**:
+```bash
+# agent-server/.env
+TTS_PROVIDER=browser
+# client/.env
+VITE_TTS_PROVIDER=browser
+```
+
+ブラウザモードでは `SpeechSynthesisUtterance` (Web Speech API) を使うため、各端末の OS 音声で発声します。iOS / macOS は Siri 品質、Windows は SAPI、Android は Google TTS が使われます。
+
 #### DBマイグレーション
 
 ```bash

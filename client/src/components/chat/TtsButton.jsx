@@ -1,8 +1,11 @@
 import { useRef, memo } from 'react';
 import { Volume2 } from 'lucide-react';
 import { api } from '../../services/api';
+import * as browserTts from '../../services/browserTts';
 
-// 個人TTS再生のシングルトン（同時再生防止、最後に押したものが優先）
+const TTS_PROVIDER = import.meta.env.VITE_TTS_PROVIDER || 'browser';
+
+// 個人TTS再生のシングルトン（aivis-cloud 経路: 同時再生防止、最後に押したものが優先）
 let currentTtsAudio = null;
 function stopCurrentTts() {
   if (currentTtsAudio) {
@@ -13,19 +16,32 @@ function stopCurrentTts() {
 
 /**
  * メッセージの読み上げボタン（個人再生）。
- * React state を持たず、busyRef で多重クリック防止のみ行う。
- * 視覚フィードバックは一切なし（TTS 0.3〜0.5 秒で完了するため）。
- * classList 変更すら視覚ちらつきの原因になったため、DOM 変更も避ける。
+ * #184: TTS_PROVIDER で動作を分岐。
+ *  - 'browser'     : Web Speech API で各端末ローカル再生
+ *  - 'aivis-cloud' : 既存の REST API → WAV blob → <audio>
+ *  - 'none'        : ボタン自体を非表示
  */
 function TtsButton({ text, roomId }) {
   const audioRef = useRef(null);
   const busyRef = useRef(false);
+
+  // none provider: ボタン非表示
+  if (TTS_PROVIDER === 'none') return null;
 
   const handleClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!text || busyRef.current) return;
 
+    if (TTS_PROVIDER === 'browser') {
+      // 同じテキストの連打 = 停止トグル
+      // (既存再生中に再度押すと cancel、その後新規再生)
+      browserTts.cancel();
+      browserTts.speakNow(text);
+      return;
+    }
+
+    // 'aivis-cloud' (既存ロジック)
     // 同じボタン再タップ → トグル停止
     if (audioRef.current && audioRef.current === currentTtsAudio && !audioRef.current.paused) {
       stopCurrentTts();

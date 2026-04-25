@@ -73,6 +73,47 @@ router.post('/push', async (req, res) => {
 });
 
 /**
+ * POST /api/bot/tts-speak
+ * Notify all room members to speak the given text via their browser's Web Speech API.
+ * Used by agent-server when TTS_PROVIDER=browser (no DB write, no message creation).
+ */
+router.post('/tts-speak', async (req, res) => {
+  const { room_id, text } = req.body;
+  const userId = req.user.id;
+
+  if (!room_id) {
+    return res.status(400).json({ error: 'room_id は必須です' });
+  }
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: 'text は必須です' });
+  }
+
+  try {
+    // Check membership (same gate as /push)
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    // Socket.IO broadcast — clients with ttsReadAloud=on will speak via Web Speech API
+    const { io } = require('../app');
+    io.to(room_id).emit('tts:speak', {
+      text: text.trim(),
+      room_id,
+      sender_id: userId,
+    });
+
+    res.status(202).json({ ok: true });
+  } catch (err) {
+    logger.error('Bot tts-speak error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * POST /api/bot/status
  * Send a status update to a room (displayed as typing-indicator style, not a message)
  */

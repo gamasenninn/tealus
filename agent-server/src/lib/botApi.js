@@ -132,6 +132,15 @@ async function markRead(messageIds) {
   return request('POST', '/bot/mark-read', { message_ids: messageIds });
 }
 
+/**
+ * TTS_PROVIDER=browser 時に server へ TTS テキスト発話を依頼。
+ * Server が Socket.IO で room に 'tts:speak' イベントを emit し、
+ * 各 client が Web Speech API で発声する。
+ */
+async function pushTtsSpeak(roomId, text) {
+  return request('POST', '/bot/tts-speak', { room_id: roomId, text });
+}
+
 module.exports = {
   login,
   getBotUserId,
@@ -142,4 +151,5 @@ module.exports = {
   getRooms,
   joinRoom,
   markRead,
+  pushTtsSpeak,
 };

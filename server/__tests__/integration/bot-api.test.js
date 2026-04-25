@@ -103,6 +103,45 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // POST /api/bot/tts-speak（#184 browser TTS provider）
+  // ============================================
+  describe('POST /api/bot/tts-speak', () => {
+    it('should accept tts speak request from a room member', async () => {
+      const res = await request(app)
+        .post('/api/bot/tts-speak')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ room_id: roomId, text: 'こんにちは' });
+
+      expect(res.status).toBe(202);
+      expect(res.body.ok).toBe(true);
+    });
+
+    it('should reject if not a room member', async () => {
+      const outsider = await createTestUser({ login_id: 'EMPTTS01', display_name: 'よそ者' });
+      const res = await request(app)
+        .post('/api/bot/tts-speak')
+        .set('Authorization', `Bearer ${outsider.token}`)
+        .send({ room_id: roomId, text: 'こんにちは' });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('should require room_id and text', async () => {
+      const noRoom = await request(app)
+        .post('/api/bot/tts-speak')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ text: 'hi' });
+      expect(noRoom.status).toBe(400);
+
+      const noText = await request(app)
+        .post('/api/bot/tts-speak')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ room_id: roomId });
+      expect(noText.status).toBe(400);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages
   // ============================================
   describe('GET /api/bot/messages', () => {

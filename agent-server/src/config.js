@@ -34,4 +34,9 @@ module.exports = {
   DEEP_TIMEOUT: parseInt(process.env.DEEP_TIMEOUT || '300000'),  // 5分
   DEEP_MAX_BUFFER: parseInt(process.env.DEEP_MAX_BUFFER || '10485760'),  // 10MB
   LIGHT_CONTEXT_MESSAGES: parseInt(process.env.LIGHT_CONTEXT_MESSAGES || '20'),
+
+  // TTS Provider — 'browser' | 'aivis-cloud' | 'none'
+  // unset 時は AIVIS_API_KEY の有無で自動判定（既存ユーザー保護）
+  TTS_PROVIDER: process.env.TTS_PROVIDER
+    || (process.env.AIVIS_API_KEY ? 'aivis-cloud' : 'browser'),
 };
