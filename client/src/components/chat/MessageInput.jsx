@@ -35,13 +35,13 @@ function MessageInput({ roomId, transceiver, setAutoConnected }) {
     }, TYPING_DEBOUNCE);
   };
 
-  const handleSend = async () => {
-    const content = text.trim();
-    if (!content || isSending) return;
-
-    // 読み上げ ON かつトランシーバー未接続 → 自動接続
+  // 読み上げ ON かつトランシーバー未接続 → 自動接続。
+  // text/voice/image など AI 応答が期待されるどの送信経路からも呼ぶ。
+  const tryAutoConnectForTts = () => {
     const ttsFlag = localStorage.getItem('ttsReadAloud');
-    if (ttsFlag === 'on' && transceiver && !transceiver.isConnected) {
+    if (ttsFlag !== 'on') return;
+    if (!transceiver) return;
+    if (!transceiver.isConnected) {
       console.debug('[tts-auto] triggering transceiver.connect()', {
         state: transceiver.state,
         isConnected: transceiver.isConnected,
@@ -49,11 +49,16 @@ function MessageInput({ roomId, transceiver, setAutoConnected }) {
       Promise.resolve(transceiver.connect()).catch((err) => {
         console.error('[tts-auto] transceiver.connect() failed:', err);
       });
-      setAutoConnected?.(true);
-    } else if (ttsFlag === 'on' && transceiver?.isConnected) {
-      // 既接続なら auto-connect フラグだけ立てて自動切断を有効化
-      setAutoConnected?.(true);
     }
+    // 既接続でも setAutoConnected を立てて自動切断を有効化
+    setAutoConnected?.(true);
+  };
+
+  const handleSend = async () => {
+    const content = text.trim();
+    if (!content || isSending) return;
+
+    tryAutoConnectForTts();
 
     setIsSending(true);
     try {
@@ -153,6 +158,10 @@ function MessageInput({ roomId, transceiver, setAutoConnected }) {
   const handleVoiceSend = async (blob, mimeType) => {
     if (transceiver?.isProducing) transceiver.stopProducing();
     setRecorderStream(null);
+
+    // AI が文字起こし結果に応答するため、TTS 自動読み上げ ON ならトランシーバーを接続
+    tryAutoConnectForTts();
+
     setIsSending(true);
     setUploadProgress(0);
     try {
