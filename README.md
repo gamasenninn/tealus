@@ -848,6 +848,7 @@ npm run build
 - **内部 DB MCP** — AI に「組織の記憶」を持たせる（[#185](https://github.com/gamasenninn/tealus/issues/185)）
 - **AI 間メッセージング** — Tealus を AI 組織の OS に（[#164](https://github.com/gamasenninn/tealus/issues/164)）
 - **mcp-server を npm publish** — `npx tealus-mcp` で起動可能に（[#187](https://github.com/gamasenninn/tealus/issues/187)）
+- **Docker による全サービスデプロイ化** — Synology / QNAP / UGREEN / Linux / Mac で 1 コマンド起動（[#188](https://github.com/gamasenninn/tealus/issues/188) Phase A）
 - バックグラウンド Push 通知の安定化（[#168](https://github.com/gamasenninn/tealus/issues/168)）
 - UX 磨き込み（モバイル実機フィードバック反映）
 
