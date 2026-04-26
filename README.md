@@ -25,7 +25,7 @@
 - 外部サービスのAPI連携コストが高額
 - 誰でも使える直感的なUIが必要
 
-## 機能（Phase 1）
+## 機能
 
 - 1対1チャット / グループチャット
 - テキストメッセージ（リアルタイム送受信）
@@ -450,11 +450,29 @@ npm run build
 # dist/ ディレクトリが生成される
 ```
 
-## フェーズ計画
+## ロードマップ
 
-- **Phase 1（完了）**: MVP — チャット・メディア・既読・リプライ・メッセージ削除・音声メッセージ（Whisper文字起こし＋AI整形）・グループ管理・ユーザー管理・コンテキストメニュー・日付区切り・通知音・文字サイズ設定・PWA
-- **Phase 2**: メッセージ検索、メンション、アルバム、スタンプ、ピン留め
-- **Phase 3**: AI Bot連携（MCP経由）、AIエージェント参加、音声/ビデオ通話（SFU: mediasoup）、LDAP認証
+実装済みの機能は上の [機能](#機能) セクション参照。今後の予定は GitHub Issues で管理しています。
+
+### v0.1.x
+
+- バックグラウンド Push 通知の安定化（[#168](https://github.com/gamasenninn/tealus/issues/168)）
+- UX 磨き込み（モバイル実機フィードバック反映）
+
+### v0.2.0 候補
+
+- **内部 DB MCP** — AI に「組織の記憶」を持たせる（[#185](https://github.com/gamasenninn/tealus/issues/185)）
+- **Anthropic API 経由の Deep agent** — Claude MAX 不要化
+- **AI 間メッセージング** — Tealus を AI 組織の OS に（[#164](https://github.com/gamasenninn/tealus/issues/164)）
+- **TypeScript 化** — コントリビュータ誘致
+
+### 将来構想
+
+- LINE 連携ブリッジ（[#160](https://github.com/gamasenninn/tealus/issues/160)）
+- ゲストルーム — 外部チャット連携 + AI 一次対応（[#124](https://github.com/gamasenninn/tealus/issues/124)）
+- LDAP 認証
+- NAS クラスター構成（[#120](https://github.com/gamasenninn/tealus/issues/120)）
+- 通話品質の自動最適化（[#138](https://github.com/gamasenninn/tealus/issues/138)）
 
 ## ライセンス
 
