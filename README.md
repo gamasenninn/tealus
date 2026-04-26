@@ -563,6 +563,53 @@ Bot ユーザー JWT で認証。agent-server や外部 CLI（`scripts/tealus-cl
 | GET | /api/admin/agent-logs | エージェント実行ログ |
 | GET | /api/admin/agent-logs/:id/context | 個別実行のコンテキスト |
 
+## Tealus MCP
+
+`mcp-server/` は **Tealus Bot API を Model Context Protocol (MCP) ツールとして公開** する独立プロセス。Claude Code / Cursor / その他 MCP 対応 AI クライアントが、Tealus を「会話できる業務 OS」として直接呼び出せる。
+
+### 起動方法
+
+stdio トランスポートで動作。MCP クライアント側の設定例（Claude Code の `mcp_config.json`）:
+
+```json
+{
+  "mcpServers": {
+    "tealus": {
+      "command": "node",
+      "args": ["/path/to/tealus/mcp-server/src/index.js"],
+      "env": {
+        "TEALUS_API_URL": "http://localhost:3000",
+        "TEALUS_USER_ID": "AI_AGENT",
+        "TEALUS_PASSWORD": "your_bot_password"
+      }
+    }
+  }
+}
+```
+
+Bot 用ユーザーアカウント（管理者で作成）の認証情報を渡す。AI クライアントはこれらのツールを通じて Tealus を読み書きする。
+
+### ツール一覧
+
+| ツール名 | 概要 | パラメータ |
+|---------|------|----------|
+| `send_message` | ルームにテキストメッセージを送信 | `room_id`, `content` |
+| `send_image` | ルームに画像を送信（base64） | `room_id`, `image_base64`, `filename`, `caption?` |
+| `get_messages` | ルームのメッセージ履歴を取得 | `room_id`, `limit?` (デフォルト 20、最大 100) |
+| `list_rooms` | Bot が参加中のルーム一覧 | なし |
+| `join_room` | ルームに参加 | `room_id` |
+| `mark_read` | メッセージを既読化 | `message_ids[]` |
+
+### ユースケース例
+
+- **社外 Claude Code から Tealus にレポート投稿**: `send_message` + `send_image` でグラフ生成 → 社内 Tealus に直接投稿
+- **AI が会話履歴を参照して応答**: `get_messages` で直近の文脈を取得 → コンテキストに加味して回答
+- **複数 AI エージェントの相互通信**: 各 AI が `list_rooms` / `send_message` で連絡
+
+### v0.2.0 候補機能
+
+[#185](https://github.com/gamasenninn/tealus/issues/185) で **read-only な検索・分析ツール群**（`search_messages`, `find_todo_messages`, `query_agent_context` 等）の追加を計画中。実装されると AI が「組織の記憶」として機能する。
+
 ## Socket.IO イベント
 
 ### ルーム / メッセージ
