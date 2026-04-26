@@ -745,6 +745,7 @@ npm run build
 
 - LDAP 認証
 - NAS クラスター構成（[#120](https://github.com/gamasenninn/tealus/issues/120)）
+- ブロックチェーントークン（感謝経済）設計（[#83](https://github.com/gamasenninn/tealus/issues/83)）
 
 ## ライセンス
 
