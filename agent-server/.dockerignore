@@ -1,0 +1,10 @@
+node_modules
+__tests__
+*.log
+.env
+.git
+.gitignore
+.dockerignore
+Dockerfile
+agent-workspaces
+logs
