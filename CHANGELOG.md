@@ -10,6 +10,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Docker による全サービスデプロイ化 (Phase A)** ([#188](https://github.com/gamasenninn/tealus/issues/188))
+  - `docker-compose.full.yml`: postgres + redis + server + agent-server を 1 コマンドで起動
+    - server image は client / dashboard の dist を multi-stage build で同梱 (312MB)
+    - agent-server image は alpine ベース (261MB)
+    - 起動時にマイグレーション (冪等) を自動実行
+    - Mac / Windows / Linux 全て対応 (mediasoup の host network 制約を回避)
+  - `docker-compose.rtc.yml`: rtc-server を併走したい Linux ユーザ向け optional (network_mode: host)
+  - 各 service に `Dockerfile` + `.dockerignore` を新設
+  - dev 用の既存 `docker-compose.yml` は触らず、開発者フローを完全維持
+- **README に「Docker デプロイ」セクション追加**: 3 つの構成 (default / +rtc native / +rtc Docker) を明示
+
 ### Changed
 
 - **aivis-cloud TTS 配信を mediasoup → Socket.IO blob に切替** ([#189](https://github.com/gamasenninn/tealus/issues/189))
