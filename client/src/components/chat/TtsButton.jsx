@@ -34,9 +34,13 @@ function TtsButton({ text, roomId }) {
     if (!text || busyRef.current) return;
 
     if (provider === 'browser') {
-      // 同じテキストの連打 = 停止トグル
-      // (既存再生中に再度押すと cancel、その後新規再生)
-      browserTts.cancel();
+      // 既に何か発話中なら停止 (トグル off)。何も再生されていなければ新規発話。
+      // これにより、再生中に再タップで停止できる (ユーザ意図と整合)。
+      if (typeof window !== 'undefined' && window.speechSynthesis &&
+          (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+        browserTts.cancel();
+        return;
+      }
       browserTts.speakNow(text);
       return;
     }
