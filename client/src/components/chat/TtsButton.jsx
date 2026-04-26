@@ -35,7 +35,15 @@ function TtsButton({ text, roomId }) {
 
     if (provider === 'browser') {
       // 既に何か発話中なら停止 (トグル off)。何も再生されていなければ新規発話。
-      // これにより、再生中に再タップで停止できる (ユーザ意図と整合)。
+      //
+      // 旧実装は cancel + speakNow を毎回呼んでいたため、再タップで停止せず
+      // 「最初から再発話」になっていた (コメントは「停止トグル」と書いてあったが
+      // 実装が伴っていなかった)。aivis-cloud 経路は currentTtsAudio の参照で
+      // 自分のボタンが再生中かを判定してトグルしていたので挙動が分岐していた。
+      //
+      // 本実装では Web Speech API の global state (speechSynthesis.speaking /
+      // pending) を直接見て判定する。Web Speech API は一度に 1 つの utterance
+      // しか再生しないため、global で済む。
       if (typeof window !== 'undefined' && window.speechSynthesis &&
           (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
         browserTts.cancel();
