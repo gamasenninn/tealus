@@ -737,14 +737,14 @@ npm run build
 
 - **Anthropic API 経由の Deep agent** — Claude MAX 不要化
 - **TypeScript 化** — コントリビュータ誘致
+- LINE 連携ブリッジ（[#160](https://github.com/gamasenninn/tealus/issues/160)）
+- ゲストルーム — 外部チャット連携 + AI 一次対応（[#124](https://github.com/gamasenninn/tealus/issues/124)）
+- 通話品質の自動最適化（[#138](https://github.com/gamasenninn/tealus/issues/138)）
 
 ### 将来構想
 
-- LINE 連携ブリッジ（[#160](https://github.com/gamasenninn/tealus/issues/160)）
-- ゲストルーム — 外部チャット連携 + AI 一次対応（[#124](https://github.com/gamasenninn/tealus/issues/124)）
 - LDAP 認証
 - NAS クラスター構成（[#120](https://github.com/gamasenninn/tealus/issues/120)）
-- 通話品質の自動最適化（[#138](https://github.com/gamasenninn/tealus/issues/138)）
 
 ## ライセンス
 
