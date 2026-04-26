@@ -142,6 +142,9 @@ async function processQueue() {
  *   - 'browser'     : Socket.IO 経由で client に text を流し、各端末の Web Speech API で発声
  *   - 'aivis-cloud' : 既存の Aivis Cloud + mediasoup PlainTransport で配信
  *   - 'none'        : 何もしない
+ *
+ * 動的 degrade: aivis-cloud 選択中でも rtc-server が不可なら browser に
+ * 自動降格 (UX 安全網)。rtc 復活時は自動で aivis-cloud に戻る。
  */
 function speakMessage(roomId, content) {
   if (!TTS_ENABLED) return;
@@ -153,9 +156,18 @@ function speakMessage(roomId, content) {
   if (!text) return;
 
   const config = require('../config');
-  const provider = config.TTS_PROVIDER;
+  let provider = config.TTS_PROVIDER;
 
   if (provider === 'none') return;
+
+  // aivis-cloud 選択中でも rtc-server 不可なら browser に動的降格
+  if (provider === 'aivis-cloud') {
+    const rtcCapability = require('./rtcCapability');
+    if (!rtcCapability.getState()) {
+      logger.warn('[TTS] aivis-cloud requested but rtc-server unavailable, degrading to browser');
+      provider = 'browser';
+    }
+  }
 
   if (provider === 'browser') {
     // Server に通知 → server が Socket.IO で room に emit → 各 client が Web Speech で発声

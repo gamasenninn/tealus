@@ -1,6 +1,7 @@
 const logger = require('../../utils/logger');
 const pool = require('../../db/pool');
 const { sendPushToUser } = require('../../services/push');
+const capabilityWatcher = require('../../services/capabilityWatcher');
 
 /**
  * Handle call events (notification + history + status)
@@ -49,6 +50,19 @@ function registerCallHandler(socket, io) {
   // 通話開始 or 途中参加
   socket.on('call:start', async ({ roomId }) => {
     logger.debug(`call:start user=${socket.user.id} room=${roomId}`);
+
+    // Defense: rtc-server 不可時は reject (古い client / race condition 保護)
+    if (!capabilityWatcher.getState()) {
+      logger.info(`call:start rejected: realtime voice unavailable (user=${socket.user.id} room=${roomId})`);
+      socket.emit('call:rejected', {
+        roomId,
+        userName: 'システム',
+        reason: 'realtime_voice_unavailable',
+        message: '通話機能は現在利用できません (rtc-server 未起動)',
+      });
+      return;
+    }
+
     try {
       const existing = activeCalls.get(roomId);
 
