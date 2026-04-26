@@ -10,6 +10,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- **rtc-server reachability の動的検出** ([#188](https://github.com/gamasenninn/tealus/issues/188) Phase A の一部)
+  - server / agent-server が rtc-server の `/health` を 30 秒ごとに poll
+  - 状態変化時に Socket.IO `capability:changed` event を全 client に emit
+  - flap 抑制 (連続 2 回失敗で disable、1 回成功で即 enable)
+  - `/api/config` に `realtime_voice_available` フィールド追加
+  - rtc-server を後から起動 / 停止 / 別ホストに移動しても 30 秒以内に UI が自動追従
+- **client UI の動的連動**
+  - 通話ボタン / トランシーバーボタンを `realtimeVoiceAvailable` で条件 render
+  - `IncomingCallModal` / `CallWindow` / `CallBanner` も同様に条件 render
+  - `useCallNotification` / `useTransceiver` に safety net で二重防御
+- **server-side defense**: `call:start` を rtc 不可時に reject、古い client / race condition から UX 事故を保護
+- **agent-server TTS の dynamic degrade**: aivis-cloud 選択中でも rtc-server 不可なら browser に自動降格、復活時は aivis に戻る
+- `rtc-server/server.js` に `/health` endpoint 追加 (server / agent-server からの reachability 検出用)
+- 環境変数 `RTC_HEALTH_INTERVAL` で poll 間隔を上書き可能 (default 30 秒)
+
+これにより Plan B-1 (rtc 抜き) で「ボタンが見えるけど押しても音が出ない」事故が完全に解消される。OSS 採用者が rtc-server なしで Tealus を立ち上げても自然な体験を得られる。
+
 ## [0.1.0] - 2026-04-26
 
 Tealus の初回公開リリース。

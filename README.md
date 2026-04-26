@@ -330,6 +330,24 @@ rtc-server は `http://localhost:3100` で起動します。**ブラウザでマ
 >
 > mediasoup の本番運用では UDP ポート範囲（デフォルト 40000-49999）の開放と、NAT 越え用に `PUBLIC_IP` の指定が必要です。
 
+#### rtc-server の有無で何が動くか
+
+server は rtc-server の `/health` を 30 秒ごとに poll し、状態変化を Socket.IO で client に通知します。**rtc-server を後から起動 / 停止 / 別ホストに移動しても 30 秒以内に UI が自動追従**します。
+
+| 機能 | rtc-server あり | rtc-server なし |
+|------|---------------|---------------|
+| テキストチャット / 画像 / 動画 / ファイル | ✅ | ✅ |
+| AI エージェント連携 (Light / Deep) | ✅ | ✅ |
+| 音声メッセージ (録音 → 文字起こし) | ✅ | ✅ |
+| Browser TTS (Web Speech API) | ✅ | ✅ |
+| 個人 TTS ボタン (aivis-cloud mode) | ✅ | ✅ (HTTP 経由なので不要) |
+| AI 生成スタンプ / TODO / 検索 / メンション / リアクション | ✅ | ✅ |
+| 通話 / ビデオ通話 | ✅ | ❌ ボタン非表示 |
+| トランシーバー (PTT) | ✅ | ❌ ボタン非表示 |
+| Aivis Cloud TTS auto 読み上げ (room broadcast) | ✅ | 🔄 Browser TTS に自動降格 |
+
+**Plan B-1 (rtc 抜き) で起動した場合**: 通話 / トランシーバーボタンは非表示、AI 音声応答は各端末の Browser TTS で発声。テキスト + AI チャット中心の使い方なら違和感なく完結します。
+
 ### 7. 仲間を追加 / デモ環境でフル体験（任意）
 
 管理者ユーザー 1 人だけでは UI が寂しいので、以下のいずれかで複数人のチャットを試せます。
