@@ -123,20 +123,38 @@ export function useSocketSync(roomId, targetMsgId = null) {
       });
 
       // #189 aivis-cloud TTS: server が合成済 WAV の URL を Socket.IO 経由で配布。
-      // mediasoup を経由しないので rtc-server 不要。client は <audio> でストリーム再生。
-      socket.on('tts:audio', (data) => {
+      // mediasoup を経由しないので rtc-server 不要。
+      // <audio> は Authorization header を送れないため、fetch で blob を取得して
+      // blob URL 経由で再生 (JWT 認証を維持しつつ <audio> 制約を回避)。
+      socket.on('tts:audio', async (data) => {
         if (data.room_id && data.room_id !== roomId) return;
         if (data.sender_id === user?.id) return;
         if (!data.url) return;
         if (localStorage.getItem('ttsReadAloud') !== 'on') return;
 
-        const audio = new Audio(data.url);
-        const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
-        audio.volume = Math.max(0, Math.min(1, volumePct / 100));
-        audio.play().catch((err) => {
-          // browser autoplay policy で reject される可能性あり (一度ユーザがクリックすれば以降は通る)
-          console.warn('[tts:audio] playback blocked:', err.name);
-        });
+        try {
+          const token = localStorage.getItem('token');
+          const res = await fetch(data.url, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (!res.ok) {
+            console.warn('[tts:audio] fetch failed:', res.status);
+            return;
+          }
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const audio = new Audio(blobUrl);
+          const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
+          audio.volume = Math.max(0, Math.min(1, volumePct / 100));
+          audio.onended = () => URL.revokeObjectURL(blobUrl);
+          audio.onerror = () => URL.revokeObjectURL(blobUrl);
+          audio.play().catch((err) => {
+            console.warn('[tts:audio] playback blocked:', err.name);
+            URL.revokeObjectURL(blobUrl);
+          });
+        } catch (err) {
+          console.warn('[tts:audio] error:', err.message);
+        }
       });
     }
 
