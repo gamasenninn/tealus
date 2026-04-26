@@ -121,6 +121,23 @@ export function useSocketSync(roomId, targetMsgId = null) {
         if (data.sender_id === user?.id) return;  // 自分が送ったテキストは読まない
         speakAuto(data.text);
       });
+
+      // #189 aivis-cloud TTS: server が合成済 WAV の URL を Socket.IO 経由で配布。
+      // mediasoup を経由しないので rtc-server 不要。client は <audio> でストリーム再生。
+      socket.on('tts:audio', (data) => {
+        if (data.room_id && data.room_id !== roomId) return;
+        if (data.sender_id === user?.id) return;
+        if (!data.url) return;
+        if (localStorage.getItem('ttsReadAloud') !== 'on') return;
+
+        const audio = new Audio(data.url);
+        const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
+        audio.volume = Math.max(0, Math.min(1, volumePct / 100));
+        audio.play().catch((err) => {
+          // browser autoplay policy で reject される可能性あり (一度ユーザがクリックすれば以降は通る)
+          console.warn('[tts:audio] playback blocked:', err.name);
+        });
+      });
     }
 
     return () => {
@@ -141,6 +158,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
         socket.off('message:reaction');
         socket.off('link:preview');
         socket.off('tts:speak');
+        socket.off('tts:audio');
         socket.off('agent:status');
         socket.off('connect');
       }
