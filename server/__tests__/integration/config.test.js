@@ -26,4 +26,10 @@ describe('GET /api/config', () => {
     const res = await request(app).get('/api/config');
     expect(res.status).toBe(200);
   });
+
+  it('returns realtime_voice_available field (boolean)', async () => {
+    const res = await request(app).get('/api/config');
+    expect(res.body).toHaveProperty('realtime_voice_available');
+    expect(typeof res.body.realtime_voice_available).toBe('boolean');
+  });
 });

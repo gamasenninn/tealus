@@ -495,6 +495,16 @@ async function main() {
     res.set('Cache-Control', 'no-store');
     next();
   });
+
+  // Health check（認証不要）— server / agent-server からの reachability 検出用
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'tealus-rtc-server',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.use(express.static(path.join(__dirname, "public")));
 
   const server = http.createServer(app);

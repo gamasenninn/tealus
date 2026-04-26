@@ -140,6 +140,9 @@ if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
+    // rtc-server reachability の動的検出を開始
+    const capabilityWatcher = require('./services/capabilityWatcher');
+    capabilityWatcher.start(io);
   });
 }
 

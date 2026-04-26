@@ -7,9 +7,12 @@
  * - tts_provider: agent-server から /public-config 経由で取得（真の情報源）。
  *   agent-server 停止時は 'browser' に safe fallback。
  * - vapid_public_key: server 自身の env から（push 送信に private key も持つため server が真）。
+ * - realtime_voice_available: rtc-server reachability の現在値。capabilityWatcher が動的更新。
+ *   状態変化は Socket.IO 'capability:changed' でも通知。
  */
 const express = require('express');
 const router = express.Router();
+const capabilityWatcher = require('../services/capabilityWatcher');
 
 const AGENT_FETCH_TIMEOUT_MS = 2000;
 
@@ -33,6 +36,7 @@ router.get('/', async (req, res) => {
   res.json({
     tts_provider: ttsProvider,
     vapid_public_key: process.env.VAPID_PUBLIC_KEY || '',
+    realtime_voice_available: capabilityWatcher.getState(),
   });
 });
 
