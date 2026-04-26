@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
+import { useCapabilityStore } from './stores/capabilityStore';
 import { useCallNotification } from './hooks/useCallNotification';
 import Login from './components/auth/Login';
 import HomePage from './components/home/HomePage';
@@ -25,6 +26,7 @@ function PrivateRoute({ children }) {
 
 function App() {
   const { initialize, isLoading, user } = useAuthStore();
+  const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
   const { incomingCall, activeCall, acceptCall, rejectCall, endCall, getCallUrl } = useCallNotification();
 
   useEffect(() => {
@@ -42,17 +44,17 @@ function App() {
 
   return (
     <BrowserRouter>
-      {user && incomingCall && (
+      {user && realtimeVoiceAvailable && incomingCall && (
         <IncomingCallModal
           callerName={incomingCall.callerName}
           onAccept={acceptCall}
           onReject={rejectCall}
         />
       )}
-      {user && activeCall && callUrl && (
+      {user && realtimeVoiceAvailable && activeCall && callUrl && (
         <CallWindow callUrl={callUrl} onEnd={endCall} />
       )}
-      {user && activeCall && (
+      {user && realtimeVoiceAvailable && activeCall && (
         <CallBanner />
       )}
       <Routes>

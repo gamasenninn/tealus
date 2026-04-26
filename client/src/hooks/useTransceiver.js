@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Device } from 'mediasoup-client';
 import { useAuthStore } from '../stores/authStore';
 import { useRoomStore } from '../stores/roomStore';
+import { useCapabilityStore } from '../stores/capabilityStore';
 
 /**
  * トランシーバー（PTT）フック
@@ -142,6 +143,11 @@ export function useTransceiver(roomId) {
   const connect = useCallback(async () => {
     if (!roomId || !token) {
       console.debug('[transceiver] connect: skip (roomId/token missing)', { roomId: !!roomId, token: !!token });
+      return;
+    }
+    // Safety net: rtc-server 不可時は connect しない (UI 非表示と二重防御)
+    if (!useCapabilityStore.getState().realtimeVoiceAvailable) {
+      console.debug('[transceiver] connect: skip (realtime voice unavailable)');
       return;
     }
     // 'idle' と 'error' からは接続可（'error' は前回失敗からのリトライを許容）

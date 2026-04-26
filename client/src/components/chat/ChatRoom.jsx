@@ -18,6 +18,7 @@ import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall, Radio } from 'l
 import CallConfirmModal from '../call/CallConfirmModal';
 import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
+import { useCapabilityStore } from '../../stores/capabilityStore';
 import './ChatRoom.css';
 
 function ChatRoom() {
@@ -54,6 +55,7 @@ function ChatRoom() {
   const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
   const transceiver = useTransceiver(roomId);
+  const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
   const [callStatus, setCallStatus] = useState(null); // { state: 'waiting'|'active', count }
   const [autoConnected, setAutoConnected] = useState(false);
   const autoConnectedRef = useRef(false);
@@ -144,7 +146,7 @@ function ChatRoom() {
             <span className="chat-header-online">オンライン</span>
           )}
         </div>
-        {!callStatus && (
+        {realtimeVoiceAvailable && !callStatus && (
           <button
             className={`chat-header-btn ${transceiver.isConnected ? 'transceiver-active' : ''}`}
             onClick={() => transceiver.isConnected ? transceiver.disconnect() : transceiver.connect()}
@@ -153,14 +155,14 @@ function ChatRoom() {
             <Radio size={16} />
           </button>
         )}
-        {callStatus ? (
+        {realtimeVoiceAvailable && (callStatus ? (
           <button className="chat-header-btn call-status-btn" onClick={() => setShowCallConfirm(true)} title="通話に参加">
             <PhoneCall size={16} />
             <span className="call-status-label">{callStatus.state === 'waiting' ? '待機中' : '通話中'}</span>
           </button>
         ) : (
           <button className="chat-header-btn" onClick={() => setShowCallConfirm(true)} title="通話"><Phone size={18} /></button>
-        )}
+        ))}
         {appUrls.length > 0 && (
           <button className={`chat-header-btn ${showAppPanel ? 'active' : ''}`} onClick={() => setShowAppPanel(!showAppPanel)} title="アプリ"><Smartphone size={18} /></button>
         )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSocket } from '../services/socket';
 import { useAuthStore } from '../stores/authStore';
+import { useCapabilityStore } from '../stores/capabilityStore';
 
 export function useCallNotification() {
   const [incomingCall, setIncomingCall] = useState(null);
@@ -13,6 +14,8 @@ export function useCallNotification() {
     if (!socket || !user) return;
 
     const handleIncoming = (data) => {
+      // Safety net: rtc-server 不可時は incoming を無視 (UI 非表示と二重防御)
+      if (!useCapabilityStore.getState().realtimeVoiceAvailable) return;
       setIncomingCall((prev) => prev || data);
     };
 
