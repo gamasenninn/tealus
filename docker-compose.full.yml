@@ -1,0 +1,107 @@
+# Tealus 全部入り Docker compose (#188 Phase A)
+#
+# OSS 採用者向けの推奨デプロイ構成。テキストチャット + AI エージェント連携
+# + Aivis 高品質 TTS / Browser TTS が 1 コマンドで起動。
+#
+# rtc-server (mediasoup) は含まない。通話 / トランシーバー / mediasoup
+# broadcast を使う場合は docker-compose.rtc.yml を併用するか、host 側で
+# native install (rtc-server を npm install して起動)。
+#
+# 使い方:
+#   1. server/.env と agent-server/.env を作成 (env.example 参照)
+#   2. docker-compose -f docker-compose.full.yml up -d
+#   3. http://localhost:3000 でアクセス
+#
+# データ永続化:
+#   - PostgreSQL: pgdata-prod volume
+#   - Redis:      redisdata-prod volume
+#   - Media:      ./media (host bind mount、画像/動画/ファイル)
+#   - Agent ws:   agent-workspaces-prod volume
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tealus_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tealus
+      POSTGRES_PASSWORD: tealus_dev  # 本番では server/.env で override 推奨
+      POSTGRES_DB: tealus
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+      - ./server/src/db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tealus"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tealus_redis_prod
+    restart: unless-stopped
+    volumes:
+      - redisdata-prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: tealus_server_prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./server/.env
+    environment:
+      # compose 内で必須の override (env_file よりも優先)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379
+      AGENT_PORT: 4000
+      RTC_PORT: 3100
+      MEDIA_ROOT: /app/media
+    volumes:
+      - ./media:/app/media  # 画像/動画/ファイル (host bind mount で確認しやすく)
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux Docker でも host 参照可
+
+  agent-server:
+    build:
+      context: .
+      dockerfile: agent-server/Dockerfile
+    container_name: tealus_agent_server_prod
+    restart: unless-stopped
+    depends_on:
+      - server
+    env_file:
+      - ./agent-server/.env
+    environment:
+      # compose 内で必須の override
+      AGENT_PORT: 4000
+      TEALUS_API_URL: http://server:3000
+      RTC_PORT: 3100
+      AGENT_WORKSPACE_ROOT: /app/agent-server/agent-workspaces
+    volumes:
+      - agent-workspaces-prod:/app/agent-server/agent-workspaces
+    ports:
+      - "4000:4000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata-prod:
+  redisdata-prod:
+  agent-workspaces-prod:
