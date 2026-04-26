@@ -10,20 +10,7 @@
 
 ## [Unreleased]
 
-### Changed
-
-- **client 設定を runtime fetch 化**: client は build 時 env (`VITE_*`) を持たず、起動時に `GET /api/config` で取得する設計に変更（#184 follow-up）。
-  - 真の情報源: `TTS_PROVIDER` は `agent-server/.env`、`VAPID_PUBLIC_KEY` は `server/.env`
-  - server は内部で agent-server `/public-config` を proxy し、resolved な値を返す
-  - 設定変更時の **client 再ビルドが不要**（OSS 採用者の体験向上）
-  - agent-server 停止時は `tts_provider: 'browser'` に safe fallback
-
-### Removed
-
-- `VITE_TTS_PROVIDER` および `VITE_VAPID_PUBLIC_KEY` の build 時 env 参照を廃止
-- `client/.env` は通常不要に（既存の `.env` は残置しても害なし）
-
-## [0.1.0] - 2026-04-25
+## [0.1.0] - 2026-04-26
 
 Tealus の初回公開リリース。
 
@@ -45,7 +32,7 @@ Tealus の初回公開リリース。
 - 画像・動画・ファイルのアップロード（サーバー保存、サムネイル自動生成）
 - 既読表示（トーク一覧: 未読数、トーク画面: 既読数）
 - 絵文字リアクション（6 種類）
-- メンション（@ユーザー / @all / @here）
+- メンション（@ユーザー名）
 - メッセージ検索（全ルーム横断）
 - Markdown プレビュー（見出し・リスト・コード・テーブル等）
 - スタンプ（AI 生成、1 パック 16 枚）
@@ -98,7 +85,7 @@ Tealus の初回公開リリース。
 - Docker Compose でワンコマンド起動（PostgreSQL + Redis）
 - マイグレーションシステム（20 マイグレーション）
 - PostgreSQL RLS（Row Level Security）有効
-- GitHub Actions CI（207 テスト自動実行、client/dashboard ビルド検証）
+- GitHub Actions CI（4 ジョブ: server / client / dashboard / agent-server、合計 370+ テスト自動実行）
 - Vitest + Jest + Supertest によるテスト環境
 
 ### ドキュメント・公開準備
@@ -110,12 +97,28 @@ Tealus の初回公開リリース。
 - ランディングページ ([tealus.dev](https://tealus.dev))
 - MIT ライセンス
 
+### 公開直前の追加改善（v0.1.0 への統合）
+
+OSS 公開準備の最終フェーズで実施した、採用者体験を磨く改善群:
+
+- **ブラウザ TTS provider をデフォルト化**: API キー設定なしでも AI 音声応答を体験可能（[#184](https://github.com/gamasenninn/tealus/issues/184)）
+- **client 設定の runtime fetch 化**: build 時 env (`VITE_*`) を全廃、`GET /api/config` で起動時取得 → **再ビルド不要**で設定変更反映
+- **autoplay block の検出と解除 UI**: ブラウザの autoplay policy で audio.play() が reject されたとき「🔊 音声を有効化」ボタンを表示（iPhone 実機検証済み）
+- **Deep agent の優雅な無効化**（[#186](https://github.com/gamasenninn/tealus/issues/186)）: `claude` CLI 不在環境では Light に silent fallback、`/deep` 明示時のみ説明メッセージ。Tier 1 (OPENAI のみ) / Tier 2 (+Claude MAX) 構造を確立
+- **キャッチコピー確定**: 「人とAIのためのメッセンジャー」(Login 画面 + PWA manifest)
+- **TTS 自動接続バグの完全 fix**（[#179](https://github.com/gamasenninn/tealus/issues/179)）: 'error' state からのリトライ許可 + 音声メッセージ送信経路でも発火
+- **README 全面刷新**: 機能カテゴリ整理（差別化点 ★ 強調）、API 一覧拡張（30+ endpoint 追加）、Tealus MCP セクション新設、ディレクトリ構成更新、ロードマップ刷新、agent-server / rtc-server セットアップ手順追加、HTTPS 前提の Nginx 設定例
+- **ドキュメントセキュリティ強化**: tealus-docs に shared な「セキュリティ記述ルール」を追加。default シークレット / 弱パスワード / 実在ドメインの例示を全面 placeholder 化
+- **テストカバレッジ計測**: 4 リポ (server 213 / agent-server 151 / mcp-server 9 / client 1 file) で計測、コア logic 80-100% / 外周 5-30% の健全な分布を確認
+- **diagnostic ログを config.js に集約**: TTS / Deep agent の resolved 値を起動時に出力 → トラブルシュート効率化
+
 ### 非対応 / 既知の制限
 
 - TypeScript 未対応（v0.2.0 で導入予定、コントリビュータ誘致のため）
 - バックグラウンドでの Push 通知が iOS で不安定な場合あり（[#168](https://github.com/gamasenninn/tealus/issues/168)）
-- TTS 自動読み上げ ON 時のトランシーバー自動接続が発火しないケース（[#179](https://github.com/gamasenninn/tealus/issues/179)）
+- iOS Safari 以外の autoplay 挙動は実機未検証（fix 自体は実装済み）
 - rtc-server と agent-server は同一モノリポ前提（相対 require を使用）
+- mcp-server は npm publish 未実施（[#187](https://github.com/gamasenninn/tealus/issues/187) で対応予定）
 
 [Unreleased]: https://github.com/gamasenninn/tealus/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/gamasenninn/tealus/releases/tag/v0.1.0
