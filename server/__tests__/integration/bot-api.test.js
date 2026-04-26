@@ -142,6 +142,75 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // POST /api/bot/tts-audio + GET /:id (#189 aivis-cloud Socket.IO 配信)
+  // ============================================
+  describe('POST /api/bot/tts-audio + GET /:id', () => {
+    const fakeWav = Buffer.from('RIFFXXXXWAVEfake-pcm-data');
+
+    it('should accept WAV upload from a room member and return id+url', async () => {
+      const res = await request(app)
+        .post('/api/bot/tts-audio')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .field('room_id', roomId)
+        .attach('audio', fakeWav, { filename: 'tts.wav', contentType: 'audio/wav' });
+
+      expect(res.status).toBe(202);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.id).toMatch(/^[a-f0-9]{32}$/);
+      expect(res.body.url).toBe(`/api/bot/tts-audio/${res.body.id}`);
+    });
+
+    it('should serve the cached WAV via GET', async () => {
+      const post = await request(app)
+        .post('/api/bot/tts-audio')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .field('room_id', roomId)
+        .attach('audio', fakeWav, { filename: 'tts.wav', contentType: 'audio/wav' });
+
+      const get = await request(app)
+        .get(post.body.url)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(get.status).toBe(200);
+      expect(get.headers['content-type']).toMatch(/^audio\/wav/);
+      expect(get.body).toEqual(fakeWav);
+    });
+
+    it('should return 404 for unknown id', async () => {
+      const res = await request(app)
+        .get('/api/bot/tts-audio/0000000000000000000000000000000a')
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should reject if not a room member', async () => {
+      const outsider = await createTestUser({ login_id: 'EMPTTS02', display_name: 'よそ者2' });
+      const res = await request(app)
+        .post('/api/bot/tts-audio')
+        .set('Authorization', `Bearer ${outsider.token}`)
+        .field('room_id', roomId)
+        .attach('audio', fakeWav, { filename: 'tts.wav', contentType: 'audio/wav' });
+      expect(res.status).toBe(403);
+    });
+
+    it('should require room_id', async () => {
+      const res = await request(app)
+        .post('/api/bot/tts-audio')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .attach('audio', fakeWav, { filename: 'tts.wav', contentType: 'audio/wav' });
+      expect(res.status).toBe(400);
+    });
+
+    it('should require audio file', async () => {
+      const res = await request(app)
+        .post('/api/bot/tts-audio')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .field('room_id', roomId);
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages
   // ============================================
   describe('GET /api/bot/messages', () => {

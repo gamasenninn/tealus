@@ -10,8 +10,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **aivis-cloud TTS 配信を mediasoup → Socket.IO blob に切替** ([#189](https://github.com/gamasenninn/tealus/issues/189))
+  - agent-server が合成した WAV を server に POST → server が Socket.IO で room メンバーに URL 配布 → 各 client が `<audio>` で再生
+  - **rtc-server 不要** で Aivis 高品質 TTS が動作 (Plan B-1 で品質劣化なし)
+  - 合成と配信を分離 (synthesis: aivis-cloud/browser × delivery: socket.io blob/mediasoup)
+  - エラー fallback: Aivis 合成失敗 / Socket.IO POST 失敗 → browser TTS に自動降格
+
 ### Added
 
+- `TTS_BROADCAST_MEDIASOUP=true` env で legacy mediasoup TTS 配信も並走可能に ([#189](https://github.com/gamasenninn/tealus/issues/189))
+  - transceiver gateway 受信機 (mediasoup PlainTransport を listen する専用 hardware) を運用する環境向け
+  - default false (mediasoup 不要、Socket.IO のみで完結)
+- `POST /api/bot/tts-audio` + `GET /api/bot/tts-audio/:id` 新 endpoint
+  - WAV はメモリ cache (5 分 TTL、disk 不使用、5MB 上限)
 - **rtc-server reachability の動的検出** ([#188](https://github.com/gamasenninn/tealus/issues/188) Phase A の一部)
   - server / agent-server が rtc-server の `/health` を 30 秒ごとに poll
   - 状態変化時に Socket.IO `capability:changed` event を全 client に emit
@@ -23,11 +36,16 @@
   - `IncomingCallModal` / `CallWindow` / `CallBanner` も同様に条件 render
   - `useCallNotification` / `useTransceiver` に safety net で二重防御
 - **server-side defense**: `call:start` を rtc 不可時に reject、古い client / race condition から UX 事故を保護
-- **agent-server TTS の dynamic degrade**: aivis-cloud 選択中でも rtc-server 不可なら browser に自動降格、復活時は aivis に戻る
+- **agent-server TTS の dynamic degrade**: Aivis 合成失敗 / Socket.IO POST 失敗時に browser TTS に自動降格 (rtc-server とは独立、合成 / 配信どちらが落ちても fallback で発話保証)
 - `rtc-server/server.js` に `/health` endpoint 追加 (server / agent-server からの reachability 検出用)
 - 環境変数 `RTC_HEALTH_INTERVAL` で poll 間隔を上書き可能 (default 30 秒)
 
-これにより Plan B-1 (rtc 抜き) で「ボタンが見えるけど押しても音が出ない」事故が完全に解消される。OSS 採用者が rtc-server なしで Tealus を立ち上げても自然な体験を得られる。
+これにより Plan B-1 (rtc 抜き) で「ボタンが見えるけど押しても音が出ない」事故が完全に解消される。さらに [#189](https://github.com/gamasenninn/tealus/issues/189) と組み合わせて、**Aivis Cloud 高品質 TTS まで含めて rtc-server なしで動作**。OSS 採用者が rtc-server なしで Tealus を立ち上げても品質劣化なく完結。
+
+### Removed
+
+- agent-server の `rtcCapability` watcher (TTS が rtc 非依存になったため不要、[#189](https://github.com/gamasenninn/tealus/issues/189))
+- agent-server の rtc-based dynamic degrade (aivis-cloud→browser by rtc 状態) — Aivis 合成 / Socket.IO 配信ベースの fallback に置換
 
 ## [0.1.0] - 2026-04-26
 
