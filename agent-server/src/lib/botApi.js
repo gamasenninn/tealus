@@ -141,6 +141,34 @@ async function pushTtsSpeak(roomId, text) {
   return request('POST', '/bot/tts-speak', { room_id: roomId, text });
 }
 
+/**
+ * TTS_PROVIDER=aivis-cloud 時の新配信経路 (#189)。
+ * agent-server で合成済みの WAV を server に POST し、server が Socket.IO で
+ * room に 'tts:audio' イベント (URL) を emit する。各 client は <audio> で再生。
+ * mediasoup を経由しないので rtc-server 不要。
+ */
+async function pushTtsAudio(roomId, wavBuffer) {
+  const { token: t } = await login();
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('room_id', roomId);
+  form.append('audio', wavBuffer, { filename: 'tts.wav', contentType: 'audio/wav' });
+
+  const res = await fetch(`${config.TEALUS_API_URL}/api/bot/tts-audio`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${t}`,
+      ...form.getHeaders(),
+    },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`tts-audio POST failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
 module.exports = {
   login,
   getBotUserId,
@@ -152,4 +180,5 @@ module.exports = {
   joinRoom,
   markRead,
   pushTtsSpeak,
+  pushTtsAudio,
 };

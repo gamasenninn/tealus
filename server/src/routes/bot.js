@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const multer = require('multer');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { upload, MEDIA_ROOT } = require('../middleware/upload');
@@ -12,6 +13,25 @@ const { generateThumbnail } = require('../services/thumbnail');
 const router = express.Router();
 
 router.use(authenticate);
+
+// --- TTS audio cache (in-memory, transient) ---
+// agent-server から POST /tts-audio で WAV を受信、room に Socket.IO でURL通知。
+// client は GET /tts-audio/:id で取得して <audio> で再生。
+// 5 分 TTL で自動削除 (TTS は永続化不要)。
+const TTS_AUDIO_TTL_MS = 5 * 60 * 1000;
+const TTS_AUDIO_MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const ttsAudioCache = new Map(); // id → { buffer, contentType, expiresAt }
+const ttsAudioMemoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: TTS_AUDIO_MAX_SIZE },
+});
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of ttsAudioCache) {
+    if (entry.expiresAt < now) ttsAudioCache.delete(id);
+  }
+}, 60_000).unref();
 
 /**
  * POST /api/bot/push
@@ -111,6 +131,72 @@ router.post('/tts-speak', async (req, res) => {
     logger.error('Bot tts-speak error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
+});
+
+/**
+ * POST /api/bot/tts-audio
+ * Receive a synthesized WAV from agent-server and broadcast a URL to room members.
+ * The WAV stays in memory cache (5 min TTL); clients fetch via GET /tts-audio/:id.
+ *
+ * This is the new TTS delivery path that replaces mediasoup PlainTransport
+ * for aivis-cloud auto-readout. See #189.
+ */
+router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), async (req, res) => {
+  const { room_id } = req.body;
+  const userId = req.user.id;
+  const file = req.file;
+
+  if (!room_id) {
+    return res.status(400).json({ error: 'room_id は必須です' });
+  }
+  if (!file) {
+    return res.status(400).json({ error: 'audio ファイルが添付されていません' });
+  }
+
+  try {
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    const id = crypto.randomBytes(16).toString('hex');
+    ttsAudioCache.set(id, {
+      buffer: file.buffer,
+      contentType: file.mimetype || 'audio/wav',
+      expiresAt: Date.now() + TTS_AUDIO_TTL_MS,
+    });
+
+    const url = `/api/bot/tts-audio/${id}`;
+    const { io } = require('../app');
+    io.to(room_id).emit('tts:audio', {
+      url,
+      room_id,
+      sender_id: userId,
+    });
+
+    res.status(202).json({ ok: true, id, url });
+  } catch (err) {
+    logger.error('Bot tts-audio error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * GET /api/bot/tts-audio/:id
+ * Serve a cached TTS WAV. Returns 404 if expired or not found.
+ */
+router.get('/tts-audio/:id', (req, res) => {
+  const entry = ttsAudioCache.get(req.params.id);
+  if (!entry || entry.expiresAt < Date.now()) {
+    if (entry) ttsAudioCache.delete(req.params.id);
+    return res.status(404).json({ error: '音声が見つからないか、有効期限切れです' });
+  }
+  res.set('Content-Type', entry.contentType);
+  res.set('Cache-Control', 'no-store');
+  res.send(entry.buffer);
 });
 
 /**
