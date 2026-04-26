@@ -112,9 +112,11 @@ async function processQueue() {
 
   while (queue.length > 0) {
     const { roomId, text, modelUuid } = queue.shift();
+    let synthesized = false;
     try {
       const startTime = Date.now();
       const wavBuf = await synthesize(text, modelUuid);
+      synthesized = true;
       const tmpFile = path.join(__dirname, `../../.tts-tmp-${Date.now()}.wav`);
       fs.writeFileSync(tmpFile, wavBuf);
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -127,7 +129,26 @@ async function processQueue() {
         try { fs.unlinkSync(tmpFile); } catch {}
       }
     } catch (err) {
-      logger.error(`[TTS] エラー: ${err.message}`);
+      const msg = err && (err.message || err.code || err.toString()) || 'unknown';
+      logger.error(`[TTS] エラー: ${msg}`);
+
+      // 合成は成功して送信が失敗 = rtc-server 到達不可の可能性大。
+      // この発話はロスするが、ブラウザ TTS で代替送信して採用者の体験を守る。
+      // 同時に rtcCapability の即時再チェックを発火し、次回 polling を待たずに状態を更新。
+      if (synthesized) {
+        logger.warn('[TTS] aivis-cloud send failed, falling back to browser for this utterance');
+        try {
+          const botApi = require('./botApi');
+          await botApi.pushTtsSpeak(roomId, text);
+        } catch (e2) {
+          logger.warn(`[TTS] browser fallback also failed: ${e2.message}`);
+        }
+        // 即時再評価: rtcCapability の次回 poll を待たずに状態確認
+        try {
+          const rtcCapability = require('./rtcCapability');
+          rtcCapability.check();
+        } catch {}
+      }
     }
   }
 
