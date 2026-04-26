@@ -273,33 +273,64 @@ npm run test:watch # ウォッチモード
 
 ```
 tealus/
-├── client/                    # React PWA フロントエンド
+├── client/                    # React PWA フロントエンド (Vite + Zustand)
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── auth/          # ログイン画面
-│   │   │   ├── chat/          # トーク画面（吹き出し・入力）
-│   │   │   └── room-list/     # トーク一覧・ルーム作成
-│   │   ├── services/          # APIクライアント・Socket.IO
-│   │   └── stores/            # Zustand状態管理
+│   │   ├── components/        # 機能別 UI（auth, chat, room-list, call, media,
+│   │   │                      #   profile, search, admin, multi, stamp, tags, todo, ...）
+│   │   ├── hooks/             # useTransceiver, useSocketSync, useAppPanel ...
+│   │   ├── services/          # API クライアント、Socket.IO、browserTts、clientConfig
+│   │   └── stores/            # Zustand 状態管理（authStore, roomStore, messageStore）
 │   └── __tests__/
 │
-├── server/                    # Node.js バックエンド
+├── server/                    # Node.js バックエンド (Express + Socket.IO)
 │   ├── src/
-│   │   ├── routes/            # REST APIエンドポイント
-│   │   ├── socket/            # Socket.IOハンドラ
-│   │   ├── middleware/        # JWT認証・ファイルアップロード
-│   │   ├── services/          # Push通知・サムネイル生成
-│   │   └── db/                # DB接続・マイグレーション
+│   │   ├── routes/            # REST API エンドポイント（auth, rooms, messages, bot, ...）
+│   │   ├── socket/            # Socket.IO ハンドラ
+│   │   ├── middleware/        # JWT 認証・ファイルアップロード・room アクセス制御
+│   │   ├── services/          # Push 通知、サムネイル生成、stamp 画像生成
+│   │   ├── db/                # DB 接続・マイグレーション
+│   │   ├── constants/, utils/ # エラーコード、ロガー
+│   │   └── app.js             # Express app エントリ
 │   └── __tests__/
+│
+├── agent-server/              # AI エージェント (Router / Light / Deep)
+│   ├── src/
+│   │   ├── router/            # 第1段ルール + 第2段 LLM 振り分け
+│   │   ├── agents/            # Light (OpenAI Agents SDK), Deep (Claude Code CLI)
+│   │   ├── webhook/           # server からの message webhook 受信 → dispatcher
+│   │   ├── mcp/               # ルームごとの MCP 接続管理
+│   │   ├── memory/, context/  # ファイルメモリ・セッション管理
+│   │   ├── lib/               # tts-core, ttsSpeak, botApi
+│   │   └── routes/            # /public-config, /tts, /logs, /settings (ダッシュボード用)
+│   └── __tests__/
+│
+├── dashboard/                 # 管理者ダッシュボード (Vite, /system 配信)
+│   └── src/                   # pages, components, services, stores
+│
+├── mcp-server/                # MCP サーバー (Tealus Bot API を MCP ツール化)
+│   └── src/                   # tools.js, tealusClient.js
+│
+├── rtc-server/                # mediasoup SFU（音声/ビデオ通話、トランシーバー、TTS 配信）
+│   ├── server.js              # signaling + PlainTransport
+│   ├── src/                   # ルーム・transport・consumer 管理
+│   └── tts-speak.js           # CLI: テキスト → Aivis Cloud → mediasoup 配信
+│
+├── scripts/                   # CLI ツール群
+│   ├── tealus-cli.js          # メッセージ送信・音声ファイルアップロード（--watch 対応）
+│   ├── watch.js               # ディレクトリ監視
+│   └── seed-demo.js           # demo データ投入
 │
 ├── media/                     # アップロードファイル保存先
 ├── docs/                      # 設計書
 │   ├── 01_要件定義.md
 │   ├── 02_DB設計.md
 │   └── 03_アーキテクチャ設計.md
+├── screenshot/                # README 用スクリーンショット
+├── logo/                      # ロゴ素材
 │
 ├── docker-compose.yml
-└── CLAUDE.md                  # AI開発ガイドライン
+├── README.md, CHANGELOG.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, LICENSE
+└── CLAUDE.md                  # AI 開発ガイドライン
 ```
 
 ## API一覧
