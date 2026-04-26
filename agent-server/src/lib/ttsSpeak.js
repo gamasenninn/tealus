@@ -102,6 +102,10 @@ function getRoomTtsModel(roomId) {
   } catch { return null; }
 }
 
+// TTS_BROADCAST_MEDIASOUP=true なら Aivis 合成 WAV を mediasoup PlainTransport
+// でも broadcast (transceiver gateway 受信機向けの legacy 互換)。default false。
+const BROADCAST_MEDIASOUP = process.env.TTS_BROADCAST_MEDIASOUP === 'true';
+
 // --- キュー管理（同時読み上げ防止）---
 const queue = [];
 let isProcessing = false;
@@ -112,42 +116,55 @@ async function processQueue() {
 
   while (queue.length > 0) {
     const { roomId, text, modelUuid } = queue.shift();
-    let synthesized = false;
+    const botApi = require('./botApi');
+
+    let wavBuf;
     try {
       const startTime = Date.now();
-      const wavBuf = await synthesize(text, modelUuid);
-      synthesized = true;
-      const tmpFile = path.join(__dirname, `../../.tts-tmp-${Date.now()}.wav`);
-      fs.writeFileSync(tmpFile, wavBuf);
+      wavBuf = await synthesize(text, modelUuid);
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logger.info(`[TTS] 合成OK (${(wavBuf.length / 1024).toFixed(0)}KB, ${elapsed}s) → room ${roomId}`);
-
+    } catch (err) {
+      // Aivis 合成失敗 → browser TTS に fallback
+      const msg = (err && (err.message || err.code)) || 'unknown';
+      logger.error(`[TTS] 合成エラー: ${msg}, falling back to browser TTS`);
       try {
+        await botApi.pushTtsSpeak(roomId, text);
+      } catch (e2) {
+        logger.warn(`[TTS] browser fallback also failed: ${e2.message}`);
+      }
+      continue;
+    }
+
+    // Primary: Socket.IO blob 配信 (rtc 非依存、新設計の主経路)
+    try {
+      await botApi.pushTtsAudio(roomId, wavBuf);
+      logger.info(`[TTS] Socket.IO 配信完了 → room ${roomId}`);
+    } catch (err) {
+      // Socket.IO 配信失敗 → browser TTS に fallback
+      const msg = (err && err.message) || 'unknown';
+      logger.error(`[TTS] Socket.IO 配信失敗: ${msg}, falling back to browser TTS`);
+      try {
+        await botApi.pushTtsSpeak(roomId, text);
+      } catch (e2) {
+        logger.warn(`[TTS] browser fallback also failed: ${e2.message}`);
+      }
+      // mediasoup 並走も意味がないので skip
+      continue;
+    }
+
+    // Optional: mediasoup broadcast (TTS_BROADCAST_MEDIASOUP=true、transceiver gateway 受信機向け)
+    if (BROADCAST_MEDIASOUP) {
+      const tmpFile = path.join(__dirname, `../../.tts-tmp-${Date.now()}.wav`);
+      try {
+        fs.writeFileSync(tmpFile, wavBuf);
         await sendViaPlainTransport(tmpFile, roomId);
-        logger.info(`[TTS] 送信完了 → room ${roomId}`);
+        logger.info(`[TTS] mediasoup 配信完了 → room ${roomId}`);
+      } catch (err) {
+        // mediasoup 失敗は warning のみ — 主経路 (Socket.IO) は成功している
+        logger.warn(`[TTS] mediasoup 配信失敗 (Socket.IO は成功): ${err.message}`);
       } finally {
         try { fs.unlinkSync(tmpFile); } catch {}
-      }
-    } catch (err) {
-      const msg = err && (err.message || err.code || err.toString()) || 'unknown';
-      logger.error(`[TTS] エラー: ${msg}`);
-
-      // 合成は成功して送信が失敗 = rtc-server 到達不可の可能性大。
-      // この発話はロスするが、ブラウザ TTS で代替送信して採用者の体験を守る。
-      // 同時に rtcCapability の即時再チェックを発火し、次回 polling を待たずに状態を更新。
-      if (synthesized) {
-        logger.warn('[TTS] aivis-cloud send failed, falling back to browser for this utterance');
-        try {
-          const botApi = require('./botApi');
-          await botApi.pushTtsSpeak(roomId, text);
-        } catch (e2) {
-          logger.warn(`[TTS] browser fallback also failed: ${e2.message}`);
-        }
-        // 即時再評価: rtcCapability の次回 poll を待たずに状態確認
-        try {
-          const rtcCapability = require('./rtcCapability');
-          rtcCapability.check();
-        } catch {}
       }
     }
   }
@@ -160,12 +177,13 @@ async function processQueue() {
  * pushMessage の後に呼ぶ。メッセージ送信をブロックしない。
  *
  * TTS_PROVIDER (config) で動作を分岐:
- *   - 'browser'     : Socket.IO 経由で client に text を流し、各端末の Web Speech API で発声
- *   - 'aivis-cloud' : 既存の Aivis Cloud + mediasoup PlainTransport で配信
+ *   - 'browser'     : Socket.IO 'tts:speak' で text を配信、各 client が Web Speech API で発声
+ *   - 'aivis-cloud' : agent-server で WAV 合成 → server に POST → Socket.IO 'tts:audio' で URL 配信
+ *                     → 各 client が <audio> で再生 (rtc-server 不要、#189)
+ *                     TTS_BROADCAST_MEDIASOUP=true なら並行で mediasoup 配信も (legacy)
  *   - 'none'        : 何もしない
  *
- * 動的 degrade: aivis-cloud 選択中でも rtc-server が不可なら browser に
- * 自動降格 (UX 安全網)。rtc 復活時は自動で aivis-cloud に戻る。
+ * Aivis 合成 / Socket.IO 配信が失敗した場合は browser TTS (text 経由) に fallback。
  */
 function speakMessage(roomId, content) {
   if (!TTS_ENABLED) return;
@@ -177,18 +195,9 @@ function speakMessage(roomId, content) {
   if (!text) return;
 
   const config = require('../config');
-  let provider = config.TTS_PROVIDER;
+  const provider = config.TTS_PROVIDER;
 
   if (provider === 'none') return;
-
-  // aivis-cloud 選択中でも rtc-server 不可なら browser に動的降格
-  if (provider === 'aivis-cloud') {
-    const rtcCapability = require('./rtcCapability');
-    if (!rtcCapability.getState()) {
-      logger.warn('[TTS] aivis-cloud requested but rtc-server unavailable, degrading to browser');
-      provider = 'browser';
-    }
-  }
 
   if (provider === 'browser') {
     // Server に通知 → server が Socket.IO で room に emit → 各 client が Web Speech で発声
@@ -201,7 +210,9 @@ function speakMessage(roomId, content) {
 
   // provider === 'aivis-cloud'
   if (!AIVIS_API_KEY) {
-    logger.warn('[TTS] aivis-cloud selected but AIVIS_API_KEY not set, skipping');
+    logger.warn('[TTS] aivis-cloud selected but AIVIS_API_KEY not set, falling back to browser');
+    const botApi = require('./botApi');
+    botApi.pushTtsSpeak(roomId, text).catch(() => {});
     return;
   }
   const modelUuid = getRoomTtsModel(roomId) || MODEL_UUID;
