@@ -1,0 +1,9 @@
+node_modules
+public/bundle.js
+*.log
+.env
+.git
+.gitignore
+.dockerignore
+Dockerfile
+logs

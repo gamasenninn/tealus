@@ -18,8 +18,6 @@
 #   - Media:      ./media (host bind mount、画像/動画/ファイル)
 #   - Agent ws:   agent-workspaces-prod volume
 
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine

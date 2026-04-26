@@ -1,0 +1,35 @@
+# Tealus rtc-server compose (#188 Phase A optional)
+#
+# 通話 / トランシーバー (PTT) / aivis-cloud TTS の transceiver gateway
+# broadcast を有効化したい user 向け。docker-compose.full.yml に **追加で**
+# 起動する形:
+#
+#   docker compose -f docker-compose.full.yml -f docker-compose.rtc.yml up -d
+#
+# **重要な制約**:
+#   - Linux ホスト限定 (network_mode: host が必要)
+#     Mac / Windows Docker Desktop では動作しない
+#   - UDP ポート範囲 (default 40000-49999) を host のファイアウォールで開放
+#   - NAT 越え時は rtc-server/.env で ANNOUNCED_IP / PUBLIC_IP を設定
+#
+# Linux 以外の環境で通話を使いたい場合は host 側で native install を推奨:
+#   cd rtc-server && npm install && npm run start
+#
+# 使い方:
+#   1. rtc-server/.env を作成 (rtc-server/.env.example 参照)
+#   2. docker compose -f docker-compose.full.yml -f docker-compose.rtc.yml up -d
+
+services:
+  rtc-server:
+    build:
+      context: .
+      dockerfile: rtc-server/Dockerfile
+    container_name: tealus_rtc_server_prod
+    restart: unless-stopped
+    network_mode: host  # mediasoup の UDP / WebRTC のため必須 (Linux only)
+    env_file:
+      - ./rtc-server/.env
+    environment:
+      RTC_PORT: 3100
+      # JWT_SECRET は server/.env と一致する必要あり
+      # ANNOUNCED_IP / PUBLIC_IP は rtc-server/.env で設定
