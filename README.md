@@ -346,6 +346,12 @@ tealus/
 | POST | /api/auth/avatar | プロフィール画像アップロード |
 | PUT | /api/auth/password | パスワード変更 |
 
+### 設定（公開）
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/config | TTS provider / VAPID 公開鍵を返す（client が起動時 fetch、認証不要） |
+
 ### ユーザー
 
 | メソッド | パス | 説明 |
@@ -363,6 +369,8 @@ tealus/
 | GET | /api/rooms/:id | ルーム詳細 |
 | PUT | /api/rooms/:id | グループ名変更 |
 | POST | /api/rooms/:id/icon | グループアイコンアップロード |
+| GET | /api/rooms/portal-links | ポータルリンク一覧（ホーム画面用） |
+| GET | /api/rooms/announcements | お知らせメッセージ一覧 |
 
 ### メッセージ
 
@@ -370,6 +378,9 @@ tealus/
 |----------|------|------|
 | GET | /api/rooms/:id/messages | メッセージ履歴（ページネーション） |
 | POST | /api/rooms/:id/messages | メッセージ送信 |
+| PUT | /api/rooms/:id/messages/:msgId | メッセージ編集（編集履歴を保存） |
+| GET | /api/rooms/:id/messages/:msgId/edits | 編集履歴取得 |
+| PATCH | /api/rooms/:id/messages/:msgId/publish | 下書き公開（is_published=true） |
 | DELETE | /api/rooms/:id/messages/:msgId | メッセージ削除（論理削除） |
 | POST | /api/rooms/:id/messages/:msgId/reactions | 絵文字リアクション（トグル） |
 
@@ -378,6 +389,7 @@ tealus/
 | メソッド | パス | 説明 |
 |----------|------|------|
 | POST | /api/rooms/:id/media | ファイルアップロード（画像・動画・ファイル） |
+| GET | /api/rooms/:id/media/gallery | メディアギャラリー（ルーム内の画像/動画一覧） |
 | POST | /api/rooms/:id/voice | 音声メッセージアップロード（自動文字起こし） |
 
 ### 文字起こし
@@ -396,25 +408,107 @@ tealus/
 | DELETE | /api/rooms/:id/members/:userId | メンバー除外 |
 | PUT | /api/rooms/:id/members/:userId/role | グループ管理者変更 |
 
+### 検索
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/search | 全ルーム横断のメッセージ全文検索 |
+
+### タグ（TODO 機能含む）
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/rooms/:id/tags | ルーム内タグ一覧 |
+| POST | /api/rooms/:id/tags | タグ作成（既存ならそれを返す） |
+| GET | /api/rooms/:id/tags/suggest | タグ候補（前方一致） |
+| GET | /api/rooms/:id/tags/todo | TODO タグ付きメッセージ一覧 |
+| GET | /api/messages/:id/tags | メッセージのタグ一覧 |
+| POST | /api/messages/:id/tags | メッセージにタグを付与 |
+| PATCH | /api/messages/:id/tags/:tagId | タグの完了状態を変更 |
+| DELETE | /api/messages/:id/tags/:tagId | メッセージからタグを外す |
+| GET | /api/tags/all | 全ルーム横断のタグ一覧 |
+
+### スタンプ（AI 生成）
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| POST | /api/stamps/generate | 新規スタンプパック生成（テーマ → 16 枚を AI が生成） |
+| GET | /api/stamps/packs | 自分のスタンプパック一覧 |
+| GET | /api/stamps/packs/:id | パック詳細 |
+| PUT | /api/stamps/packs/:id | パックメタ情報更新 |
+| DELETE | /api/stamps/packs/:id | パック削除 |
+| DELETE | /api/stamps/:id | 個別スタンプ削除 |
+
+### Bot API（外部 / agent-server からの呼び出し用）
+
+Bot ユーザー JWT で認証。agent-server や外部 CLI（`scripts/tealus-cli.js`）が利用。
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| POST | /api/bot/push | テキストメッセージ送信 |
+| POST | /api/bot/push-image | 画像メッセージ送信（multipart） |
+| POST | /api/bot/status | エージェントステータス通知（タイピング風） |
+| POST | /api/bot/tts-speak | room メンバーに `tts:speak` Socket.IO イベントを emit |
+| GET | /api/bot/messages | メッセージ取得 |
+| GET | /api/bot/unread | 未読メッセージ取得 |
+| POST | /api/bot/mark-read | 既読マーク |
+| GET | /api/bot/rooms | 参加ルーム一覧 |
+| POST | /api/bot/rooms/:id/join | ルームに参加 |
+
 ### その他
 
 | メソッド | パス | 説明 |
 |----------|------|------|
 | POST | /api/rooms/:id/read | 既読マーク |
+| POST | /api/rooms/:id/read/all | ルーム内の全メッセージを既読 |
 | POST | /api/push/subscribe | Push通知購読登録 |
 | DELETE | /api/push/subscribe | Push通知購読解除 |
 | GET | /api/health | ヘルスチェック |
 
 ### 管理者API
 
+すべて `is_admin` フラグが必要。
+
+#### ユーザー管理
+
 | メソッド | パス | 説明 |
 |----------|------|------|
-| GET | /api/admin/users | ユーザー一覧（管理者のみ） |
+| GET | /api/admin/users | ユーザー一覧 |
 | POST | /api/admin/users | ユーザー作成 |
 | PUT | /api/admin/users/:id | ユーザー編集 |
 | PATCH | /api/admin/users/:id/status | ユーザー有効化/無効化 |
 
+#### ポータルリンク（ホーム画面のリンク管理）
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/admin/portal-links | リンク一覧 |
+| POST | /api/admin/portal-links | リンク追加 |
+| PUT | /api/admin/portal-links/:id | リンク編集 |
+| DELETE | /api/admin/portal-links/:id | リンク削除 |
+
+#### Webhook 管理
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/admin/webhooks | Webhook 一覧（agent-server 連携用） |
+| POST | /api/admin/webhooks | Webhook 登録 |
+| PUT | /api/admin/webhooks/:id | Webhook 編集 |
+| DELETE | /api/admin/webhooks/:id | Webhook 削除 |
+| POST | /api/admin/webhooks/:id/test | Webhook 疎通テスト |
+
+#### モニタリング
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | /api/admin/rooms | 全ルーム一覧（管理者俯瞰用） |
+| GET | /api/admin/agent-stats | エージェント実行統計 |
+| GET | /api/admin/agent-logs | エージェント実行ログ |
+| GET | /api/admin/agent-logs/:id/context | 個別実行のコンテキスト |
+
 ## Socket.IO イベント
+
+### ルーム / メッセージ
 
 | イベント | 方向 | 説明 |
 |----------|------|------|
@@ -422,18 +516,61 @@ tealus/
 | room:leave | client → server | ルームから退出 |
 | message:send | client → server | メッセージ送信 |
 | message:new | server → client | 新着メッセージ通知 |
-| message:read | 双方向 | 既読通知 |
+| message:updated | server → client | メッセージ編集通知 |
+| message:published | server → client | 下書き公開通知 |
 | message:deleted | server → client | メッセージ削除通知 |
+| message:read | 双方向 | 既読通知 |
 | message:reaction | server → client | リアクション更新 |
-| voice:status | server → client | 文字起こしステータス更新 |
-| voice:transcription | server → client | 文字起こし結果 |
 | link:preview | server → client | リンクプレビュー結果 |
+
+### 入力中・在席
+
+| イベント | 方向 | 説明 |
+|----------|------|------|
 | typing:start | 双方向 | 入力中通知 |
 | typing:stop | 双方向 | 入力停止通知 |
 | user:online | server → client | ユーザーオンライン通知 |
 | user:offline | server → client | ユーザーオフライン通知 |
+
+### メンバー管理
+
+| イベント | 方向 | 説明 |
+|----------|------|------|
 | member:added | server → client | メンバー追加通知 |
 | member:removed | server → client | メンバー退会/除外通知 |
+
+### 音声・TTS
+
+| イベント | 方向 | 説明 |
+|----------|------|------|
+| voice:status | server → client | 文字起こしステータス更新 |
+| voice:transcription | server → client | 文字起こし結果 |
+| tts:speak | server → client | ブラウザ TTS 読み上げ依頼（TTS_PROVIDER=browser 時） |
+
+### AI エージェント
+
+| イベント | 方向 | 説明 |
+|----------|------|------|
+| agent:status | server → client | エージェント処理中ステータス（タイピング風表示） |
+
+### スタンプ生成
+
+| イベント | 方向 | 説明 |
+|----------|------|------|
+| stamp:generated | server → client | スタンプパック生成完了 |
+| stamp:error | server → client | スタンプ生成失敗 |
+
+### 通話（mediasoup シグナリングは別経路、これは着信通知）
+
+| イベント | 方向 | 説明 |
+|----------|------|------|
+| call:start | client → server | 通話開始リクエスト |
+| call:reject | client → server | 着信拒否 |
+| call:end | client → server | 通話終了 |
+| call:incoming | server → client | 着信通知 |
+| call:rejected | server → client | 拒否通知 |
+| call:ended | server → client | 終了通知 |
+| call:status | server → client | 通話状態更新 |
 
 ## 本番デプロイ
 
