@@ -20,8 +20,10 @@ function createDeepMcpConfig(workspacePath, roomId) {
   const mcpConfig = {
     mcpServers: {
       tealus: {
-        command: 'node',
-        args: [path.resolve(__dirname, '../../../mcp-server/src/index.js')],
+        // tealus-mcp は独立 repo (gamasenninn/tealus-mcp) に分離済 (#187)。
+        // npx の GitHub 直接 install で取得する (zero-config、認証不要)。
+        command: 'npx',
+        args: ['-y', 'github:gamasenninn/tealus-mcp'],
         env: {
           TEALUS_API_URL: config.TEALUS_API_URL,
           TEALUS_USER_ID: config.TEALUS_BOT_ID,

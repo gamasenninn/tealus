@@ -52,8 +52,8 @@ cd server && npm test
 # AI エージェントテスト
 cd agent-server && npm test
 
-# MCP サーバーテスト
-cd mcp-server && npm test
+# MCP サーバーテスト (独立 repo: https://github.com/gamasenninn/tealus-mcp)
+# cd ../tealus-mcp && npm test
 
 # クライアントテスト（Vitest）
 cd client && npm test
@@ -111,7 +111,7 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
 ### 提出前チェックリスト
 
-- [ ] 該当する全テストが green（`server` / `agent-server` / `mcp-server` / `client` のうち変更があったもの）
+- [ ] 該当する全テストが green（`server` / `agent-server` / `client` のうち変更があったもの。MCP は独立 repo `tealus-mcp` 側で）
 - [ ] 新機能・変更に対するテストを追加
 - [ ] 設計書との整合を確認
 - [ ] 環境変数を追加した場合、該当の `.env.example` を更新（README / CHANGELOG にも反映）
