@@ -124,10 +124,6 @@ function MessageInput({ roomId }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setRecorderStream(stream);
-      // トランシーバー ON なら mediasoup にも流す
-      if (transceiver?.isConnected) {
-        transceiver.startProducing(stream.getAudioTracks()[0]);
-      }
     } catch (err) {
       setUploadError('マイクへのアクセスが許可されていません');
       setTimeout(() => setUploadError(''), 5000);
@@ -293,11 +289,9 @@ function MessageInput({ roomId }) {
           stream={recorderStream}
           onSend={handleVoiceSend}
           onCancel={() => {
-            if (transceiver?.isProducing) transceiver.stopProducing();
             recorderStream.getTracks().forEach((t) => t.stop());
             setRecorderStream(null);
           }}
-          isTransceiverActive={transceiver?.isProducing}
         />
       )}
     </div>
