@@ -12,6 +12,14 @@
 
 ### Added
 
+- **MCP `get_message_media` ツール + 対応 Bot API endpoint**
+  - 新エンドポイント: `GET /api/bot/messages/:id/media` (Bot のルーム所属検証 + 10MB 上限)
+  - 画像: base64 + メタ JSON で返却 → MCP 側で `image` content type にラップ → AI が直接視認可能
+  - 音声: `voice_transcriptions` の文字起こしを併せて返却 (MCP 側では文字起こし優先で text 化)
+  - 動画など: メタ情報のみ (バイナリは text 応答に大きすぎるため)
+  - tealus-mcp v0.2.0 で対応 (https://github.com/gamasenninn/tealus-mcp)
+  - これまで AI が画像メッセージを「見る」には DB 直クエリ等の裏技が必要だったが、標準ツール化された
+  - bot-api 統合テスト 5 件追加 (計 25 件 pass)
 - **mcp-server を独立 repo に分離 + GitHub 直接 install 対応** ([#187](https://github.com/gamasenninn/tealus/issues/187))
   - 移転先: [gamasenninn/tealus-mcp](https://github.com/gamasenninn/tealus-mcp)
   - clone 不要で MCP クライアント (Claude Code / Cursor 等) から呼び出し可能

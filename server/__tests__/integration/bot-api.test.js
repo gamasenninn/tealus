@@ -1,7 +1,10 @@
 const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
 const { app } = require('../../src/app');
 const { setupTestDb, cleanTestDb, closeTestDb, getTestPool } = require('../helpers/db');
 const { createTestUser } = require('../helpers/auth');
+const { MEDIA_ROOT } = require('../../src/middleware/upload');
 
 describe('Bot API', () => {
   let bot, user1, roomId;
@@ -239,6 +242,97 @@ describe('Bot API', () => {
         .set('Authorization', `Bearer ${bot.token}`);
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  // ============================================
+  // GET /api/bot/messages/:id/media
+  // ============================================
+  describe('GET /api/bot/messages/:id/media', () => {
+    const TEST_FIXTURE_DIR = 'test-fixtures-bot-media';
+    const TEST_FIXTURE_PATH = path.join(MEDIA_ROOT, TEST_FIXTURE_DIR);
+
+    beforeAll(() => {
+      fs.mkdirSync(TEST_FIXTURE_PATH, { recursive: true });
+    });
+
+    afterAll(() => {
+      try { fs.rmSync(TEST_FIXTURE_PATH, { recursive: true, force: true }); } catch {}
+    });
+
+    async function insertImageMessage(senderId, roomId, fileContent = 'PNG-TEST-DATA') {
+      const pool = getTestPool();
+      const filename = `test-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+      const relPath = `${TEST_FIXTURE_DIR}/${filename}`;
+      const fullPath = path.join(TEST_FIXTURE_PATH, filename);
+      fs.writeFileSync(fullPath, fileContent);
+
+      const msgRes = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'image', NULL) RETURNING id`,
+        [roomId, senderId]
+      );
+      const messageId = msgRes.rows[0].id;
+      await pool.query(
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
+         VALUES ($1, $2, $3, 'image/png', $4)`,
+        [messageId, relPath, filename, fileContent.length]
+      );
+      return { messageId, fullPath, filename, relPath };
+    }
+
+    it('should return base64 image data for room member bot', async () => {
+      const { messageId } = await insertImageMessage(user1.user.id, roomId);
+      const res = await request(app)
+        .get(`/api/bot/messages/${messageId}/media`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.type).toBe('image');
+      expect(res.body.mime_type).toBe('image/png');
+      expect(res.body.data_base64).toBeTruthy();
+      expect(Buffer.from(res.body.data_base64, 'base64').toString()).toBe('PNG-TEST-DATA');
+      expect(res.body.file_size).toBe('PNG-TEST-DATA'.length);
+    });
+
+    it('should reject non-member bot', async () => {
+      // Create another room without bot
+      const user2 = await createTestUser({ login_id: 'EMP002', display_name: '別ユーザ' });
+      const room2Res = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user2.token}`)
+        .send({ name: 'Bot 不在ルーム', member_ids: [] });
+      const { messageId } = await insertImageMessage(user2.user.id, room2Res.body.room.id);
+
+      const res = await request(app)
+        .get(`/api/bot/messages/${messageId}/media`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('should 404 for unknown message', async () => {
+      const res = await request(app)
+        .get('/api/bot/messages/00000000-0000-0000-0000-000000000000/media')
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should 404 for text message (no media)', async () => {
+      const pool = getTestPool();
+      const msg = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'no media') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      const res = await request(app)
+        .get(`/api/bot/messages/${msg.rows[0].id}/media`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should require authentication', async () => {
+      const res = await request(app)
+        .get('/api/bot/messages/00000000-0000-0000-0000-000000000000/media');
+      expect(res.status).toBe(401);
     });
   });
 

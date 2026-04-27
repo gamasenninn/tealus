@@ -385,6 +385,89 @@ router.get('/messages', async (req, res) => {
 });
 
 /**
+ * GET /api/bot/messages/:id/media
+ * Bot がアクセス可能なメッセージのメディア (image / video / voice) を base64 で取得。
+ * MCP / AI クライアントから「画像を見る」「音声を取得する」用途。
+ *
+ * Response:
+ *   { message_id, type, mime_type, file_name, file_size, data_base64,
+ *     transcription? (voice 時) }
+ *
+ * 制限: ファイル単位 10MB (それ以上は data 省略、メタのみ)。
+ */
+const BOT_MEDIA_MAX_SIZE = 10 * 1024 * 1024;
+router.get('/messages/:id/media', async (req, res) => {
+  const messageId = req.params.id;
+  const userId = req.user.id;
+
+  try {
+    // メッセージ + メディア + ルーム所属を一括チェック
+    const result = await pool.query(`
+      SELECT m.id, m.type, m.room_id, m.is_deleted,
+             mm.file_path, mm.file_name, mm.mime_type, mm.file_size
+      FROM messages m
+      LEFT JOIN message_media mm ON mm.message_id = m.id
+      WHERE m.id = $1
+    `, [messageId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+    const row = result.rows[0];
+    if (row.is_deleted) {
+      return res.status(410).json({ error: 'メッセージは削除されています' });
+    }
+    if (!row.file_path) {
+      return res.status(404).json({ error: 'このメッセージにメディアはありません' });
+    }
+
+    // Bot のルーム所属確認
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [row.room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    const filePath = path.join(MEDIA_ROOT, row.file_path);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'ファイルが存在しません' });
+    }
+
+    const response = {
+      message_id: row.id,
+      type: row.type,
+      mime_type: row.mime_type,
+      file_name: row.file_name,
+      file_size: parseInt(row.file_size),
+    };
+
+    if (parseInt(row.file_size) > BOT_MEDIA_MAX_SIZE) {
+      response.error = `ファイルサイズが上限 (${BOT_MEDIA_MAX_SIZE / 1024 / 1024}MB) を超えています。data_base64 は省略。`;
+    } else {
+      const buffer = fs.readFileSync(filePath);
+      response.data_base64 = buffer.toString('base64');
+    }
+
+    // 音声メッセージは文字起こしも一緒に返す (MCP 側でメタとして使える)
+    if (row.type === 'voice') {
+      const trans = await pool.query(
+        'SELECT raw_text, formatted_text, status FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+        [messageId]
+      );
+      if (trans.rows.length > 0) {
+        response.transcription = trans.rows[0];
+      }
+    }
+
+    res.json(response);
+  } catch (err) {
+    logger.error('Bot get media error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/unread?room_id=optional
  * Get unread messages across all rooms or a specific room
  */
