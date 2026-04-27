@@ -16,6 +16,7 @@ import SharePage from './components/share/SharePage';
 import IncomingCallModal from './components/call/IncomingCallModal';
 import CallWindow from './components/call/CallWindow';
 import CallBanner from './components/call/CallBanner';
+import ConfirmModal from './components/common/ConfirmModal';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -44,6 +45,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ConfirmModal />
       {user && realtimeVoiceAvailable && incomingCall && (
         <IncomingCallModal
           callerName={incomingCall.callerName}

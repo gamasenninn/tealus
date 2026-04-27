@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { useConfirm } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import { ArrowLeft, Settings, LogOut, RefreshCw } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
@@ -8,6 +9,7 @@ import './Profile.css';
 
 function Profile() {
   const { user, initialize, logout } = useAuthStore();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -263,7 +265,11 @@ function Profile() {
 
       <div className="profile-actions">
         <button className="profile-reload-btn" onClick={async () => {
-          if (!confirm('キャッシュをクリアしてリロードします。よろしいですか？')) return;
+          const ok = await confirm({
+            body: 'キャッシュをクリアしてリロードします。よろしいですか？',
+            okLabel: 'リロード',
+          });
+          if (!ok) return;
           const keys = await caches.keys();
           await Promise.all(keys.map(k => caches.delete(k)));
           const regs = await navigator.serviceWorker.getRegistrations();

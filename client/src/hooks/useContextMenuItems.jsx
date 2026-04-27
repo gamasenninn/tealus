@@ -1,6 +1,7 @@
 import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2 } from 'lucide-react';
 import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
+import { useConfirmStore } from '../stores/confirmStore';
 
 /**
  * メッセージのコンテキストメニュー項目を生成するhook
@@ -123,7 +124,12 @@ export function buildContextMenuItems({
       label: '削除',
       danger: true,
       onClick: async () => {
-        if (confirm('このメッセージを削除しますか？')) {
+        const ok = await useConfirmStore.getState().confirm({
+          body: 'このメッセージを削除しますか？',
+          okLabel: '削除',
+          danger: true,
+        });
+        if (ok) {
           try {
             await api.deleteMessage(roomId, message.id);
             useMessageStore.getState().markDeleted(message.id);

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useConfirm } from '../../stores/confirmStore';
 import ContextMenu from '../chat/ContextMenu';
 import { Pencil, Bell, Ban, CheckCircle, Trash2 } from 'lucide-react';
 
@@ -14,6 +15,7 @@ const EVENT_OPTIONS = [
 ];
 
 function WebhookManager() {
+  const confirm = useConfirm();
   const [webhooks, setWebhooks] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -100,7 +102,12 @@ function WebhookManager() {
   };
 
   const handleDelete = async (webhook) => {
-    if (!confirm(`Webhook「${webhook.url}」を削除しますか？`)) return;
+    const ok = await confirm({
+      body: `Webhook「${webhook.url}」を削除しますか？`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteWebhook(webhook.id);
       await loadWebhooks();

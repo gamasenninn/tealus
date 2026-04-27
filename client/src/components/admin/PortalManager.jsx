@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useConfirm } from '../../stores/confirmStore';
 import ContextMenu from '../chat/ContextMenu';
 import { Pencil, Trash2 } from 'lucide-react';
 
 function PortalManager() {
+  const confirm = useConfirm();
   const [links, setLinks] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -59,7 +61,12 @@ function PortalManager() {
   };
 
   const handleDelete = async (link) => {
-    if (!confirm(`「${link.title}」を削除しますか？`)) return;
+    const ok = await confirm({
+      body: `「${link.title}」を削除しますか？`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deletePortalLink(link.id);
       await loadLinks();

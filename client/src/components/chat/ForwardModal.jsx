@@ -4,6 +4,7 @@ import { Share2, Search } from 'lucide-react';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useRoomStore } from '../../stores/roomStore';
+import { useConfirm } from '../../stores/confirmStore';
 import './ForwardModal.css';
 
 /**
@@ -14,6 +15,7 @@ import './ForwardModal.css';
 function ForwardModal({ message, onClose }) {
   const navigate = useNavigate();
   const { rooms, fetchRooms } = useRoomStore();
+  const confirm = useConfirm();
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -53,7 +55,11 @@ function ForwardModal({ message, onClose }) {
   const handleSelect = async (targetRoom) => {
     if (sending) return;
     const targetName = targetRoom.name || targetRoom.partner_display_name || 'DM';
-    if (!confirm(`「${targetName}」にメッセージを転送しますか？`)) return;
+    const ok = await confirm({
+      body: `「${targetName}」にメッセージを転送しますか？`,
+      okLabel: '転送',
+    });
+    if (!ok) return;
 
     setSending(true);
     setError('');

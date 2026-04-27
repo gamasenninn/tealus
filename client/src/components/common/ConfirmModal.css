@@ -1,0 +1,22 @@
+.confirm-modal {
+  max-width: 400px;
+}
+
+.confirm-body {
+  margin: 8px 0 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-actions button {
+  min-width: 80px;
+}

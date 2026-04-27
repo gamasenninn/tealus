@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useConfirm } from '../../stores/confirmStore';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
@@ -13,6 +14,7 @@ import './RoomList.css';
 function RoomList() {
   const { user } = useAuthStore();
   const { rooms, fetchRooms, error } = useRoomStore();
+  const confirm = useConfirm();
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [contextMenu, setContextMenu] = useState(null);
@@ -187,8 +189,13 @@ function RoomList() {
           >
             <button className="room-context-item" onClick={async () => {
               const roomId = contextMenu.roomId;
+              const roomName = contextMenu.roomName;
               setContextMenu(null);
-              if (confirm(`「${contextMenu.roomName}」の未読をすべて既読にしますか？`)) {
+              const ok = await confirm({
+                body: `「${roomName}」の未読をすべて既読にしますか？`,
+                okLabel: '既読化',
+              });
+              if (ok) {
                 try {
                   await api.request('POST', `/rooms/${roomId}/read/all`);
                   fetchRooms();

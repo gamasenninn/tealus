@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { useConfirm } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import StampGenerator from './StampGenerator';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
@@ -8,6 +9,7 @@ import './StampPicker.css';
 
 function StampPicker({ onSelect, onClose }) {
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const [packs, setPacks] = useState([]);
   const [selectedPack, setSelectedPack] = useState(null);
   const [stamps, setStamps] = useState([]);
@@ -73,7 +75,12 @@ function StampPicker({ onSelect, onClose }) {
   const handleDeletePack = async () => {
     const pack = contextMenu.pack;
     setContextMenu(null);
-    if (!confirm(`スタンプパック「${pack.name}」を削除しますか？\n過去のトークでは表示されなくなります。`)) return;
+    const ok = await confirm({
+      body: `スタンプパック「${pack.name}」を削除しますか？\n過去のトークでは表示されなくなります。`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteStampPack(pack.id);
       loadPacks();
@@ -98,7 +105,12 @@ function StampPicker({ onSelect, onClose }) {
   const handleDeleteStamp = async () => {
     const stamp = contextMenu.stamp;
     setContextMenu(null);
-    if (!confirm(`スタンプ「${stamp.label}」を削除しますか？`)) return;
+    const ok = await confirm({
+      body: `スタンプ「${stamp.label}」を削除しますか？`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteStamp(stamp.id);
       // Reload current pack

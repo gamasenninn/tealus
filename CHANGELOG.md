@@ -25,6 +25,12 @@
 
 ### Changed
 
+- **`window.confirm()` を自前モーダル (`useConfirm` フック) に全置換** ([#191](https://github.com/gamasenninn/tealus/issues/191))
+  - Promise ベースの API: `const ok = await confirm({ body, okLabel, danger })`
+  - ブラウザ native confirm が表示するホスト名露出を排除 (将来のマルチテナント SaaS 化への布石)
+  - ESC でキャンセル / Enter で OK / overlay クリックでキャンセル / danger 時は cancel ボタンに初期 focus
+  - 実装: Zustand `confirmStore` + 単一インスタンスの `<ConfirmModal />` を App ルートに mount
+  - 置換 10 箇所: メッセージ削除 / 転送 / グループ退会 / メンバー除外 / Webhook 削除 / ポータル削除 / スタンプ・パック削除 / キャッシュクリア / ルーム既読化
 - **aivis-cloud TTS 配信を mediasoup → Socket.IO blob に切替** ([#189](https://github.com/gamasenninn/tealus/issues/189))
   - agent-server が合成した WAV を server に POST → server が Socket.IO で room メンバーに URL 配布 → 各 client が `<audio>` で再生
   - **rtc-server 不要** で Aivis 高品質 TTS が動作 (Plan B-1 で品質劣化なし)

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useConfirm } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import { Pencil } from 'lucide-react';
 import RoomSettings from './RoomSettings';
@@ -10,6 +11,7 @@ import './MemberList.css';
 function MemberList({ roomId, onClose }) {
   const { user } = useAuthStore();
   const { currentRoom, members, selectRoom } = useRoomStore();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [allUsers, setAllUsers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -77,7 +79,13 @@ function MemberList({ roomId, onClose }) {
   };
 
   const handleLeave = async () => {
-    if (!confirm('このグループを退会しますか？\n退会するとこのグループのメッセージは閲覧できなくなります。')) return;
+    const ok = await confirm({
+      title: '退会',
+      body: 'このグループを退会しますか？\n退会するとこのグループのメッセージは閲覧できなくなります。',
+      okLabel: '退会',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.leaveRoom(roomId);
       navigate('/talk');
@@ -87,7 +95,12 @@ function MemberList({ roomId, onClose }) {
   };
 
   const handleKick = async (userId, displayName) => {
-    if (!confirm(`${displayName}をこのグループから除外しますか？`)) return;
+    const ok = await confirm({
+      body: `${displayName}をこのグループから除外しますか？`,
+      okLabel: '除外',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.kickMember(roomId, userId);
       await selectRoom(roomId);
