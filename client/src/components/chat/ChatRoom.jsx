@@ -209,7 +209,7 @@ function ChatRoom() {
         </div>
       )}
 
-      <MessageInput roomId={roomId} />
+      <MessageInput roomId={roomId} transceiver={transceiver} />
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />
