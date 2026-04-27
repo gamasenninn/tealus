@@ -13,6 +13,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const proxyTarget = env.VITE_PROXY_TARGET || 'http://localhost:3000';
   const clientPort = parseInt(env.VITE_PORT || '5173', 10);
+  // VITE_ALLOWED_HOSTS=foo.example.com,bar.example.com (comma-separated) で制限可能。
+  // 未設定なら true (任意の Host を許可) で dev server に好きな URL でアクセス可能。
+  const allowedHosts = env.VITE_ALLOWED_HOSTS
+    ? env.VITE_ALLOWED_HOSTS.split(',').map((h) => h.trim()).filter(Boolean)
+    : true;
 
   return {
     plugins: [
@@ -60,7 +65,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       port: clientPort,
-      allowedHosts: ['linny.hksagri.diskstation.me', 'tealus.hksagri.diskstation.me', 'tealus.dev', 'app.tealus.dev'],
+      allowedHosts,
       proxy: {
         '/api': proxyTarget,
         '/media': proxyTarget,
