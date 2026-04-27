@@ -59,6 +59,13 @@
 
 - agent-server の `rtcCapability` watcher (TTS が rtc 非依存になったため不要、[#189](https://github.com/gamasenninn/tealus/issues/189))
 - agent-server の rtc-based dynamic degrade (aivis-cloud→browser by rtc 状態) — Aivis 合成 / Socket.IO 配信ベースの fallback に置換
+- **TTS 受信用の transceiver 自動接続 / 自動切断ロジック** ([#190](https://github.com/gamasenninn/tealus/issues/190))
+  - メッセージ送信時の自動 transceiver connect (`tryAutoConnectForTts`) 廃止
+  - AI 応答後 30 秒の自動 disconnect timer 廃止
+  - 関連する state machine (`autoConnected` / `autoConnectedRef` / `disconnectTimerRef`) 一掃
+  - [#189](https://github.com/gamasenninn/tealus/issues/189) で TTS が Socket.IO blob 経由になったので、TTS 受信のために mediasoup に接続する必要が消滅
+  - transceiver は手動 PTT (ヘッダーボタン) 専用に。`ttsReadAloud` の意味が「AI 応答を音声で読み上げる」だけに単純化
+  - [#179](https://github.com/gamasenninn/tealus/issues/179) で fix した自動接続バグ自体が根絶 (バグの源そのものが消える)
 
 ## [0.1.0] - 2026-04-26
 

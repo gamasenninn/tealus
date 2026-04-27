@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -57,47 +57,6 @@ function ChatRoom() {
   const transceiver = useTransceiver(roomId);
   const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
   const [callStatus, setCallStatus] = useState(null); // { state: 'waiting'|'active', count }
-  const [autoConnected, setAutoConnected] = useState(false);
-  const autoConnectedRef = useRef(false);
-  const transceiverRef = useRef(transceiver);
-  const disconnectTimerRef = useRef(null);
-
-  // ref を同期（useEffect 内で最新値を参照するため）
-  useEffect(() => { autoConnectedRef.current = autoConnected; }, [autoConnected]);
-  useEffect(() => { transceiverRef.current = transceiver; }, [transceiver]);
-
-  // TTS 自動切断: AI メッセージ受信後30秒で自動切断
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
-    const handleNewMessage = (msg) => {
-      if (!autoConnectedRef.current) return;
-      if (msg.room_id !== roomId) return;
-      const isBot = /AI|bot|Bot|Agent|アシスタント|Claude/i.test(msg.sender_display_name || '');
-      if (!isBot) return;
-
-      // タイマーリセット
-      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
-      disconnectTimerRef.current = setTimeout(function tryDisconnect() {
-        // 読み上げ中なら延長
-        if (transceiverRef.current.remoteSpeaker) {
-          disconnectTimerRef.current = setTimeout(tryDisconnect, 10000);
-          return;
-        }
-        if (autoConnectedRef.current && transceiverRef.current.isConnected) {
-          transceiverRef.current.disconnect();
-        }
-        setAutoConnected(false);
-      }, 30000);
-    };
-
-    socket.on('message:new', handleNewMessage);
-    return () => {
-      socket.off('message:new', handleNewMessage);
-      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current);
-    };
-  }, [roomId]); // transceiver を依存配列から除外 — ref で参照
 
   // 通話ステータスのリスナー
   useEffect(() => {
@@ -250,7 +209,7 @@ function ChatRoom() {
         </div>
       )}
 
-      <MessageInput roomId={roomId} transceiver={transceiver} setAutoConnected={setAutoConnected} />
+      <MessageInput roomId={roomId} />
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />

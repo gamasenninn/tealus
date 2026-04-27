@@ -241,9 +241,9 @@ function Profile() {
               localStorage.setItem('ttsReadAloud', e.target.checked ? 'on' : 'off');
             }}
           />
-          <span>AIの回答をトランシーバーで自動読み上げする</span>
+          <span>AI の回答を音声で読み上げる</span>
         </label>
-        <p className="profile-hint">ONにすると、メッセージ送信時にトランシーバーが自動接続され、AI回答後に自動切断されます</p>
+        <p className="profile-hint">AI の応答を音声で読み上げます。Aivis Cloud を設定している場合は高品質音声で、未設定なら各端末のブラウザ標準音声 (Web Speech API) で発声します。</p>
       </div>
 
       <div className="profile-section">

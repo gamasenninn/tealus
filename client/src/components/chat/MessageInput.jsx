@@ -10,7 +10,7 @@ import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants
 import { Mic } from 'lucide-react';
 import './MessageInput.css';
 
-function MessageInput({ roomId, transceiver, setAutoConnected }) {
+function MessageInput({ roomId }) {
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
@@ -35,30 +35,9 @@ function MessageInput({ roomId, transceiver, setAutoConnected }) {
     }, TYPING_DEBOUNCE);
   };
 
-  // 読み上げ ON かつトランシーバー未接続 → 自動接続。
-  // text/voice/image など AI 応答が期待されるどの送信経路からも呼ぶ。
-  const tryAutoConnectForTts = () => {
-    const ttsFlag = localStorage.getItem('ttsReadAloud');
-    if (ttsFlag !== 'on') return;
-    if (!transceiver) return;
-    if (!transceiver.isConnected) {
-      console.debug('[tts-auto] triggering transceiver.connect()', {
-        state: transceiver.state,
-        isConnected: transceiver.isConnected,
-      });
-      Promise.resolve(transceiver.connect()).catch((err) => {
-        console.error('[tts-auto] transceiver.connect() failed:', err);
-      });
-    }
-    // 既接続でも setAutoConnected を立てて自動切断を有効化
-    setAutoConnected?.(true);
-  };
-
   const handleSend = async () => {
     const content = text.trim();
     if (!content || isSending) return;
-
-    tryAutoConnectForTts();
 
     setIsSending(true);
     try {
@@ -156,11 +135,7 @@ function MessageInput({ roomId, transceiver, setAutoConnected }) {
   };
 
   const handleVoiceSend = async (blob, mimeType) => {
-    if (transceiver?.isProducing) transceiver.stopProducing();
     setRecorderStream(null);
-
-    // AI が文字起こし結果に応答するため、TTS 自動読み上げ ON ならトランシーバーを接続
-    tryAutoConnectForTts();
 
     setIsSending(true);
     setUploadProgress(0);
