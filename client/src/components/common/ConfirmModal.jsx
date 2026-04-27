@@ -29,7 +29,7 @@ function ConfirmModal() {
   if (!state) return null;
 
   return (
-    <div className="modal-overlay z-high" onClick={() => _resolve(false)}>
+    <div className="modal-overlay confirm-overlay" onClick={() => _resolve(false)}>
       <div className="modal-box confirm-modal" onClick={(e) => e.stopPropagation()}>
         {state.title && <h3>{state.title}</h3>}
         <div className="confirm-body">{state.body}</div>

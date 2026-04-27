@@ -1,3 +1,11 @@
+/*
+ * 既存の .modal-overlay (z:1000) / .z-high (z:1100) より常に上、Toast (z:10000)
+ * よりは下。confirm は他のモーダルから呼ばれることがあるため必ず最前面。
+ */
+.confirm-overlay {
+  z-index: 2000;
+}
+
 .confirm-modal {
   max-width: 400px;
 }
