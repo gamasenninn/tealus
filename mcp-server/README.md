@@ -1,17 +1,18 @@
-# tealus-mcp
+# mcp-server is moved
 
-[Tealus](https://github.com/gamasenninn/tealus) (人と AI のためのメッセンジャー) の Bot API を **MCP (Model Context Protocol)** ツールとして公開するサーバ。
+このパッケージ (`tealus-mcp`) は **独立 repo に分離** されました。
+最新の実装は以下を参照してください:
 
-Claude Code / Cursor / その他 MCP 対応 AI クライアントから、Tealus のルームへメッセージ送信、画像送信、履歴取得などができるようになる。
+**👉 https://github.com/gamasenninn/tealus-mcp**
 
-## インストール不要 (npx)
+## 利用方法 (MCP クライアント設定)
 
 ```json
 {
   "mcpServers": {
     "tealus": {
       "command": "npx",
-      "args": ["-y", "tealus-mcp"],
+      "args": ["-y", "github:gamasenninn/tealus-mcp"],
       "env": {
         "TEALUS_API_URL": "https://your-tealus.example.com",
         "TEALUS_USER_ID": "bot-user-id",
@@ -22,52 +23,11 @@ Claude Code / Cursor / その他 MCP 対応 AI クライアントから、Tealus
 }
 ```
 
-これを MCP クライアントの設定ファイル (Claude Desktop なら `claude_desktop_config.json`、Cursor なら `mcp.json`) に追加すれば、`@tealus` 経由でツールが呼べる。
+clone 不要、`npx -y github:gamasenninn/tealus-mcp` で GitHub から直接取得して起動します。
 
-## 環境変数
+## 移転の経緯
 
-| 変数 | 必須 | 説明 |
-|---|---|---|
-| `TEALUS_API_URL` | × | Tealus サーバの URL (default: `http://localhost:3000`) |
-| `TEALUS_USER_ID` | ○ | Tealus 上の bot ユーザ ID (旧 `TEALUS_BOT_ID` も互換) |
-| `TEALUS_PASSWORD` | ○ | bot ユーザのパスワード (旧 `TEALUS_BOT_PASS` も互換) |
-
-bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作成する。
-
-## 提供ツール
-
-| Tool | 用途 |
-|---|---|
-| `send_message` | ルームにテキストメッセージを送信 |
-| `send_image` | ルームに画像を送信 (base64) |
-| `get_messages` | ルームのメッセージ履歴を取得 |
-| `list_rooms` | 参加中ルーム一覧 |
-| `join_room` | ルームへ参加 |
-| `mark_read` | 既読化 |
-
-## 使用例 (Claude Code)
-
-```
-> @tealus list_rooms
-> @tealus send_message room_id="..." content="お疲れ様"
-> @tealus get_messages room_id="..." limit=10
-```
-
-## ローカル開発
-
-```bash
-git clone https://github.com/gamasenninn/tealus.git
-cd tealus/mcp-server
-npm install
-npm test                    # 9 件 jest
-TEALUS_USER_ID=... TEALUS_PASSWORD=... node src/index.js
-```
-
-## ライセンス
-
-MIT — [LICENSE](LICENSE) 参照。
-
-## 関連
-
-- [Tealus 本体](https://github.com/gamasenninn/tealus)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
+- 元: `gamasenninn/tealus` monorepo の `mcp-server/` ディレクトリ
+- 新: `gamasenninn/tealus-mcp` 独立 repo (v0.1.0 から)
+- 理由: MCP クライアント側 (Claude Code / Cursor 等) からの zero-config install ([#187](https://github.com/gamasenninn/tealus/issues/187))
+- npm registry には publish しない方針 (GitHub 直接 install で十分かつ 2FA 等の障壁を回避)

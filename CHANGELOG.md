@@ -12,16 +12,16 @@
 
 ### Added
 
-- **mcp-server を npm publish して `npx tealus-mcp` 対応** ([#187](https://github.com/gamasenninn/tealus/issues/187))
-  - パッケージ名: `tealus-mcp` (npm registry)
+- **mcp-server を独立 repo に分離 + GitHub 直接 install 対応** ([#187](https://github.com/gamasenninn/tealus/issues/187))
+  - 移転先: [gamasenninn/tealus-mcp](https://github.com/gamasenninn/tealus-mcp)
   - clone 不要で MCP クライアント (Claude Code / Cursor 等) から呼び出し可能
   - 設定例:
     ```json
-    { "mcpServers": { "tealus": { "command": "npx", "args": ["-y", "tealus-mcp"] } } }
+    { "mcpServers": { "tealus": { "command": "npx", "args": ["-y", "github:gamasenninn/tealus-mcp"] } } }
     ```
-  - `mcp-server/package.json` に description / keywords / repository / homepage / bugs / files / engines を整備
-  - `mcp-server/README.md` を新設 (パッケージ単独ドキュメント)
-  - 配布物: src/3 ファイル + README + LICENSE + package.json (4.4 kB)、テスト/カバレッジ等は除外
+  - `npx` が GitHub からアーカイブを取得 → 初回起動時に依存解決、以後はローカル cache
+  - npm registry には publish しない方針 (GitHub 直接 install で zero-config install できるため、npm 2FA 等の障壁を回避)
+  - tealus 本体 repo の `mcp-server/` は移転案内 stub のみ残置
 - **Docker による全サービスデプロイ化 (Phase A)** ([#188](https://github.com/gamasenninn/tealus/issues/188))
   - `docker-compose.full.yml`: postgres + redis + server + agent-server を 1 コマンドで起動
     - server image は client / dashboard の dist を multi-stage build で同梱 (312MB)
