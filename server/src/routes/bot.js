@@ -468,6 +468,242 @@ router.get('/messages/:id/media', async (req, res) => {
 });
 
 /**
+ * GET /api/bot/search
+ * AI / MCP クライアント向けの横断検索 endpoint。
+ *
+ * 仕様: #194 (https://github.com/gamasenninn/tealus/issues/194)
+ *
+ * - q なし: 単一 SELECT (btree index、~2ms)
+ * - q あり: UNION + tag_match CTE (GIN trigram index、~15ms)
+ * - 6 種 narrowing filter (q / room_id / sender_id / since / tag_names / type) のいずれか必須
+ * - room_members JOIN で Bot の所属 room のみ可視
+ */
+
+// LIKE wildcard escape: q に %, _, \ が含まれても安全に substring マッチ
+function escapeLike(s) {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+// match 前後 ±100 文字の snippet を **match** ハイライト付きで返す
+function buildSnippet(text, query, contextChars = 100) {
+  if (!text) return '(メディアのみ)';
+  if (!query) return text.length > 200 ? text.slice(0, 200) + '...' : text;
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(query.toLowerCase());
+  if (idx < 0) return text.length > 200 ? text.slice(0, 200) + '...' : text;
+  const start = Math.max(0, idx - contextChars);
+  const end = Math.min(text.length, idx + query.length + contextChars);
+  const before = text.slice(start, idx);
+  const match = text.slice(idx, idx + query.length);
+  const after = text.slice(idx + query.length, end);
+  let snippet = `${before}**${match}**${after}`;
+  if (start > 0) snippet = '...' + snippet;
+  if (end < text.length) snippet = snippet + '...';
+  return snippet;
+}
+
+router.get('/search', async (req, res) => {
+  const {
+    q, room_id, sender_id, type, tag_names, is_done,
+    since, until, limit = 10, offset = 0,
+  } = req.query;
+  const userId = req.user.id;
+  const tagNameList = tag_names
+    ? tag_names.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  // バリデーション: 6 種 narrowing filter のいずれか必須
+  const hasFilter = !!(q || room_id || sender_id || since || tagNameList.length > 0 || type);
+  if (!hasFilter) {
+    return res.status(400).json({
+      error: 'q / room_id / sender_id / since / tag_names / type のうち少なくとも 1 つ必須',
+    });
+  }
+  if (q && q.length > 500) {
+    return res.status(400).json({ error: 'q は 500 文字以下' });
+  }
+
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
+  const parsedOffset = Math.max(parseInt(offset) || 0, 0);
+  const escapedQ = q ? escapeLike(q.trim()) : null;
+
+  try {
+    // パラメータと WHERE 句を動的構築
+    const params = [];
+    let paramIdx = 1;
+    const filtersSQL = []; // 共通の追加 WHERE (Case 1 / 2 path で使い回し)
+
+    // bot user (room_members JOIN 用)
+    params.push(userId);
+    const userIdParamIdx = paramIdx++;
+
+    if (room_id) {
+      params.push(room_id);
+      filtersSQL.push(`m.room_id = $${paramIdx++}`);
+    }
+    if (sender_id) {
+      params.push(sender_id);
+      filtersSQL.push(`m.sender_id = $${paramIdx++}`);
+    }
+    if (type) {
+      params.push(type);
+      filtersSQL.push(`m.type = $${paramIdx++}`);
+    }
+    if (since) {
+      params.push(since);
+      filtersSQL.push(`m.created_at >= $${paramIdx++}`);
+    }
+    if (until) {
+      params.push(until);
+      filtersSQL.push(`m.created_at <= $${paramIdx++}`);
+    }
+
+    // tag_match CTE (tag_names 指定時のみ)
+    let tagCteSQL = '';
+    let tagFilterSQL = '';
+    if (tagNameList.length > 0) {
+      const tagPlaceholders = tagNameList.map((name) => {
+        params.push(name);
+        return `$${paramIdx++}`;
+      });
+      params.push(tagNameList.length);
+      const havingParam = paramIdx++;
+
+      let isDoneFilter = '';
+      if (is_done !== undefined && is_done !== '') {
+        params.push(is_done === 'true' || is_done === true);
+        isDoneFilter = ` AND mt.is_done = $${paramIdx++}`;
+      }
+
+      tagCteSQL = `
+        WITH tag_match AS (
+          SELECT mt.message_id
+          FROM message_tags mt
+          JOIN tags t ON t.id = mt.tag_id
+          WHERE t.name IN (${tagPlaceholders.join(', ')})${isDoneFilter}
+          GROUP BY mt.message_id
+          HAVING COUNT(DISTINCT t.name) = $${havingParam}
+        )
+      `;
+      tagFilterSQL = ` AND m.id IN (SELECT message_id FROM tag_match)`;
+    }
+
+    const commonWhere = filtersSQL.length > 0 ? ' AND ' + filtersSQL.join(' AND ') : '';
+    const selectFields = `
+      m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
+      u.display_name AS sender_display_name,
+      r.name AS room_name, r.type AS room_type
+    `;
+
+    let query;
+    if (!escapedQ) {
+      // Case 1: q なし — 単一 SELECT (btree index 経由)
+      params.push(parsedLimit + 1, parsedOffset);
+      const limitIdx = paramIdx++;
+      const offsetIdx = paramIdx++;
+      query = `
+        ${tagCteSQL}
+        SELECT ${selectFields},
+               vt.formatted_text AS transcription_formatted,
+               vt.raw_text AS transcription_raw
+        FROM messages m
+        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${userIdParamIdx}
+        JOIN users u ON u.id = m.sender_id
+        JOIN rooms r ON r.id = m.room_id
+        LEFT JOIN LATERAL (
+          SELECT formatted_text, raw_text FROM voice_transcriptions
+          WHERE message_id = m.id ORDER BY version DESC LIMIT 1
+        ) vt ON m.type = 'voice'
+        WHERE NOT m.is_deleted${commonWhere}${tagFilterSQL}
+        ORDER BY m.created_at DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+      `;
+    } else {
+      // Case 2: q あり — UNION (path_content + path_voice)
+      params.push(`%${escapedQ}%`);
+      const qIdx = paramIdx++;
+      params.push(parsedLimit + 1, parsedOffset);
+      const limitIdx = paramIdx++;
+      const offsetIdx = paramIdx++;
+
+      // path_voice は type フィルタが 'voice' 以外を強制した場合スキップ
+      const skipPathVoice = type && type !== 'voice';
+      // path_content は type='voice' が強制された場合スキップ
+      const skipPathContent = type === 'voice';
+
+      const pathContentSQL = skipPathContent ? '' : `
+        SELECT ${selectFields},
+               NULL::text AS transcription_formatted,
+               NULL::text AS transcription_raw
+        FROM messages m
+        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${userIdParamIdx}
+        JOIN users u ON u.id = m.sender_id
+        JOIN rooms r ON r.id = m.room_id
+        WHERE NOT m.is_deleted
+          AND m.content ILIKE $${qIdx} ESCAPE '\\'${commonWhere}${tagFilterSQL}
+      `;
+
+      const pathVoiceSQL = skipPathVoice ? '' : `
+        SELECT ${selectFields},
+               vt.formatted_text AS transcription_formatted,
+               vt.raw_text AS transcription_raw
+        FROM messages m
+        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${userIdParamIdx}
+        JOIN users u ON u.id = m.sender_id
+        JOIN rooms r ON r.id = m.room_id
+        JOIN voice_transcriptions vt ON vt.message_id = m.id
+          AND vt.version = (SELECT MAX(version) FROM voice_transcriptions WHERE message_id = m.id)
+        WHERE NOT m.is_deleted
+          AND m.type = 'voice'
+          AND (vt.formatted_text ILIKE $${qIdx} ESCAPE '\\' OR vt.raw_text ILIKE $${qIdx} ESCAPE '\\')${commonWhere}${tagFilterSQL}
+      `;
+
+      const unionSQL =
+        pathContentSQL && pathVoiceSQL
+          ? `(${pathContentSQL}) UNION (${pathVoiceSQL})`
+          : pathContentSQL || pathVoiceSQL;
+
+      query = `
+        ${tagCteSQL}
+        SELECT * FROM (${unionSQL}) u
+        ORDER BY created_at DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+      `;
+    }
+
+    logger.debug(`bot search: q=${q || ''} room=${room_id || 'all'} sender=${sender_id || ''} type=${type || ''} tags=${tagNameList.join(',') || ''} since=${since || ''} until=${until || ''}`);
+
+    const result = await pool.query(query, params);
+    const rows = result.rows;
+    const hasMore = rows.length > parsedLimit;
+    const trimmed = hasMore ? rows.slice(0, parsedLimit) : rows;
+
+    const results = trimmed.map((r) => {
+      const text = r.content || r.transcription_formatted || r.transcription_raw || null;
+      return {
+        message_id: r.id,
+        room_id: r.room_id,
+        room_name: r.room_type === 'direct' ? r.sender_display_name : r.room_name,
+        sender_id: r.sender_id,
+        sender_display_name: r.sender_display_name,
+        type: r.type,
+        created_at: r.created_at,
+        snippet: buildSnippet(text, q),
+      };
+    });
+
+    res.json({
+      results,
+      has_more: hasMore,
+      next_offset: hasMore ? parsedOffset + parsedLimit : null,
+    });
+  } catch (err) {
+    logger.error('Bot search error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/unread?room_id=optional
  * Get unread messages across all rooms or a specific room
  */

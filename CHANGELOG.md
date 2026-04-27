@@ -12,6 +12,16 @@
 
 ### Added
 
+- **MCP `search_messages` ツール + Bot API endpoint** ([#194](https://github.com/gamasenninn/tealus/issues/194))
+  - 新エンドポイント: `GET /api/bot/search` (Bot のルーム所属検証 + 6 種 narrowing filter のいずれか必須)
+  - キーワード / タグ / 期間 / 発言者 / type / room による横断検索
+  - **snippet ハイライト**: マッチ前後 ±100 文字、`**match**` 形式で返却 (索引→詳細パターン)
+  - `q` 有無で 2 分岐 SQL: 単一 SELECT (~2ms) / UNION+CTE (~15ms)
+  - `pg_trgm` GIN index ([migration 021](server/src/db/migrations/021_pg_trgm_search_index.sql)) を活用
+  - LIKE wildcard (`%` `_` `\`) を含む `q` を安全に escape
+  - tealus-mcp v0.3.0 で `search_messages` tool として公開
+  - 設計議論: [#193](https://github.com/gamasenninn/tealus/issues/193)、umbrella: [#185](https://github.com/gamasenninn/tealus/issues/185)
+  - bot-api 統合テスト 16 件追加 (計 41 件 pass)
 - **MCP `get_message_media` ツール + 対応 Bot API endpoint**
   - 新エンドポイント: `GET /api/bot/messages/:id/media` (Bot のルーム所属検証 + 10MB 上限)
   - 画像: base64 + メタ JSON で返却 → MCP 側で `image` content type にラップ → AI が直接視認可能

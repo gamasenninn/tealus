@@ -337,6 +337,258 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/search (#194)
+  // ============================================
+  describe('GET /api/bot/search', () => {
+    let user2, otherRoomId;
+    let textMsgId, imageMsgId, voiceMsgId, taggedMsgId;
+    let oldMsgId;
+
+    beforeEach(async () => {
+      const pool = getTestPool();
+
+      // 別ルーム (bot 不在) を準備
+      user2 = await createTestUser({ login_id: 'EMP002', display_name: '別ユーザ' });
+      const otherRoomRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user2.token}`)
+        .send({ name: 'Bot 不在ルーム', member_ids: [] });
+      otherRoomId = otherRoomRes.body.room.id;
+
+      // 標準テストデータを bot 所属 room に投入
+      const r1 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '削除確認の挙動を直す') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      textMsgId = r1.rows[0].id;
+
+      const r2 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'image', NULL) RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      imageMsgId = r2.rows[0].id;
+
+      const r3 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'voice', NULL) RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      voiceMsgId = r3.rows[0].id;
+      await pool.query(
+        `INSERT INTO voice_transcriptions (message_id, raw_text, formatted_text, status, version)
+         VALUES ($1, '音声メッセージのテストです', '音声メッセージのテストです。', 'done', 1)`,
+        [voiceMsgId]
+      );
+
+      // タグ付きメッセージ
+      const r4 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '今週の TODO 候補') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      taggedMsgId = r4.rows[0].id;
+      // POST /api/rooms が "TODO" タグを default で作るのでそれを使う
+      const tagRes = await pool.query(
+        `SELECT id FROM tags WHERE room_id = $1 AND name = 'TODO'`,
+        [roomId]
+      );
+      await pool.query(
+        `INSERT INTO message_tags (message_id, tag_id, is_done) VALUES ($1, $2, false)`,
+        [taggedMsgId, tagRes.rows[0].id]
+      );
+
+      // 別ルーム (bot 不在) に「削除」を含むメッセージ
+      await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '別ルームの削除に関する話')`,
+        [otherRoomId, user2.user.id]
+      );
+
+      // 過去日付メッセージ (since/until テスト用)
+      const oldRes = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, created_at) VALUES ($1, $2, 'text', '昔の削除話', '2026-01-01T00:00:00Z') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      oldMsgId = oldRes.rows[0].id;
+
+      // 削除済メッセージ
+      await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, is_deleted) VALUES ($1, $2, 'text', '削除済の発言です', true)`,
+        [roomId, user1.user.id]
+      );
+    });
+
+    it('1. 単純キーワード検索: results に該当メッセージが入る', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('削除確認')}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.length).toBeGreaterThan(0);
+      expect(res.body.results.some(r => r.message_id === textMsgId)).toBe(true);
+    });
+
+    it('2. voice transcription を q でヒット', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('音声メッセージ')}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      const found = res.body.results.find(r => r.message_id === voiceMsgId);
+      expect(found).toBeDefined();
+      expect(found.type).toBe('voice');
+      expect(found.snippet).toContain('音声メッセージ');
+    });
+
+    it('3. room_id で絞ると他ルームのメッセージが含まれない', async () => {
+      // bot を別ルームに参加させて、両方含む状態にしてから絞り込みを確認
+      await request(app)
+        .post(`/api/bot/rooms/${otherRoomId}/join`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('削除')}&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.every(r => r.room_id === roomId)).toBe(true);
+    });
+
+    it('4. sender_id で絞ると該当ユーザの発言のみ', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?sender_id=${user1.user.id}&since=2026-04-01T00:00:00Z`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.every(r => r.sender_id === user1.user.id)).toBe(true);
+    });
+
+    it('5. type=image で画像メッセージのみ', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?type=image&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.every(r => r.type === 'image')).toBe(true);
+      expect(res.body.results.some(r => r.message_id === imageMsgId)).toBe(true);
+    });
+
+    it('6. tag_names + is_done で TODO を絞れる', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?tag_names=TODO&is_done=false&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.some(r => r.message_id === taggedMsgId)).toBe(true);
+    });
+
+    it('7. since/until で期間外メッセージが含まれない', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('削除')}&since=2026-04-01T00:00:00Z&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.every(r => r.message_id !== oldMsgId)).toBe(true);
+    });
+
+    it('8. limit + offset でページング、has_more と next_offset が整合', async () => {
+      // 追加で大量に投入
+      const pool = getTestPool();
+      for (let i = 0; i < 5; i++) {
+        await pool.query(
+          `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', $3)`,
+          [roomId, user1.user.id, `削除関連メモ ${i}`]
+        );
+      }
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('削除')}&room_id=${roomId}&limit=3`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.length).toBe(3);
+      expect(res.body.has_more).toBe(true);
+      expect(res.body.next_offset).toBe(3);
+    });
+
+    it('9. 全パラメータ省略で 400', async () => {
+      const res = await request(app)
+        .get('/api/bot/search?limit=10')
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(400);
+    });
+
+    it('10. 非メンバールームのメッセージは見えない', async () => {
+      // bot は room2 (otherRoomId) に参加していない
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('別ルームの削除')}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.every(r => r.room_id !== otherRoomId)).toBe(true);
+    });
+
+    it('11. 認証なしで 401', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?q=test`);
+      expect(res.status).toBe(401);
+    });
+
+    it('12. 削除メッセージは含まない', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('削除済の発言')}&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.length).toBe(0);
+    });
+
+    it('13. snippet にハイライトが含まれる', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('削除確認')}&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      const hit = res.body.results.find(r => r.message_id === textMsgId);
+      expect(hit).toBeDefined();
+      expect(hit.snippet).toContain('**削除確認**');
+    });
+
+    it('14. snippet 切り詰め (200 文字超は ... が前後に)', async () => {
+      // 長文メッセージを投入
+      const pool = getTestPool();
+      const longText = 'あ'.repeat(150) + 'キーワード' + 'い'.repeat(150);
+      const longRes = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', $3) RETURNING id`,
+        [roomId, user1.user.id, longText]
+      );
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('キーワード')}&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      const hit = res.body.results.find(r => r.message_id === longRes.rows[0].id);
+      expect(hit).toBeDefined();
+      expect(hit.snippet.startsWith('...')).toBe(true);
+      expect(hit.snippet.endsWith('...')).toBe(true);
+      expect(hit.snippet).toContain('**キーワード**');
+    });
+
+    it('15. room_id + since のみで成功 (B1: 今日の業務メモ ケース、UNION 不要 path)', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?room_id=${roomId}&since=2026-04-01T00:00:00Z`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.length).toBeGreaterThan(0);
+      // 期間外 (oldMsgId、2026-01-01) は含まれない
+      expect(res.body.results.every(r => r.message_id !== oldMsgId)).toBe(true);
+    });
+
+    it('16. q に LIKE wildcard 文字 (%) を含めても誤動作しない', async () => {
+      // "50%" は SQL LIKE wildcard が誤動作すれば全件マッチしてしまう
+      const pool = getTestPool();
+      await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '達成率 50% を超えた')`,
+        [roomId, user1.user.id]
+      );
+      await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'ワイルドカードを含まない普通の発言')`,
+        [roomId, user1.user.id]
+      );
+      const res = await request(app)
+        .get(`/api/bot/search?q=${encodeURIComponent('50%')}&room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      // "50%" を含む発言だけがヒットすべき (% を wildcard 解釈してしまうと全件ヒットになる)
+      expect(res.body.results.every(r => r.snippet.includes('50%'))).toBe(true);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/rooms
   // ============================================
   describe('GET /api/bot/rooms', () => {
