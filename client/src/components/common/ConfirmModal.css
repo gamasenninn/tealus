@@ -1,8 +1,14 @@
 /*
  * 既存の .modal-overlay (z:1000) / .z-high (z:1100) より常に上、Toast (z:10000)
  * よりは下。confirm は他のモーダルから呼ばれることがあるため必ず最前面。
+ *
+ * Why `.modal-overlay.confirm-overlay`: 単独 `.confirm-overlay` だと
+ * `.modal-overlay { z-index: 1000 }` と specificity が同じ (0,1,0)で、
+ * バンドル上では後に出る `.modal-overlay` が勝ってしまい z-index が 1000 になる
+ * (= ForwardModal 等の z-high:1100 より下)。複合セレクタで specificity を
+ * (0,2,0) に上げて確実に勝たせる。
  */
-.confirm-overlay {
+.modal-overlay.confirm-overlay {
   z-index: 2000;
 }
 
