@@ -646,14 +646,14 @@ Bot ユーザー JWT で認証。agent-server や外部 CLI（`scripts/tealus-cl
 
 ### 起動方法
 
-stdio トランスポートで動作。MCP クライアント側の設定例（Claude Code の `mcp_config.json`）:
+stdio トランスポートで動作。**推奨は npx 経由（clone 不要・ゼロセットアップ）**:
 
 ```json
 {
   "mcpServers": {
     "tealus": {
-      "command": "node",
-      "args": ["/path/to/tealus/mcp-server/src/index.js"],
+      "command": "npx",
+      "args": ["-y", "tealus-mcp"],
       "env": {
         "TEALUS_API_URL": "http://localhost:3000",
         "TEALUS_USER_ID": "AI_AGENT",
@@ -663,6 +663,8 @@ stdio トランスポートで動作。MCP クライアント側の設定例（C
   }
 }
 ```
+
+ローカル開発で clone 済の場合は `node /path/to/tealus/mcp-server/src/index.js` を直接呼ぶことも可能。
 
 Bot 用ユーザーアカウント（管理者で作成）の認証情報を渡す。AI クライアントはこれらのツールを通じて Tealus を読み書きする。
 
@@ -945,7 +947,7 @@ npm run build
 
 - **内部 DB MCP** — AI に「組織の記憶」を持たせる（[#185](https://github.com/gamasenninn/tealus/issues/185)）
 - **AI 間メッセージング** — Tealus を AI 組織の OS に（[#164](https://github.com/gamasenninn/tealus/issues/164)）
-- **mcp-server を npm publish** — `npx tealus-mcp` で起動可能に（[#187](https://github.com/gamasenninn/tealus/issues/187)）
+- ~~**mcp-server を npm publish** — `npx tealus-mcp` で起動可能に（[#187](https://github.com/gamasenninn/tealus/issues/187)）~~ ✅ 完了
 - **Docker による全サービスデプロイ化** — Synology / QNAP / UGREEN / Linux / Mac で 1 コマンド起動（[#188](https://github.com/gamasenninn/tealus/issues/188) Phase A）
 - バックグラウンド Push 通知の安定化（[#168](https://github.com/gamasenninn/tealus/issues/168)）
 - UX 磨き込み（モバイル実機フィードバック反映）
