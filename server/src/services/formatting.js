@@ -1,6 +1,7 @@
 const logger = require('../utils/logger');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
+const { loadGuideline, buildFormattingExtension } = require('./transcriptionConfig');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -8,7 +9,7 @@ const openai = new OpenAI({
 
 const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
 
-const SYSTEM_PROMPT = `あなたは音声文字起こしテキストを自然な日本語に整形するアシスタントです。
+const BASE_SYSTEM_PROMPT = `あなたは音声文字起こしテキストを自然な日本語に整形するアシスタントです。
 以下のルールに従ってください：
 - 意味を変えずに読みやすく整える
 - 句読点を適切に補う
@@ -19,6 +20,11 @@ const SYSTEM_PROMPT = `あなたは音声文字起こしテキストを自然な
 - 整形後のテキストのみを返す（説明や注釈は不要）
 - 質問文はそのまま質問文として整形する（質問に回答してはいけない）
 - あなたの役割は文章の整形のみ。内容への応答や補足は一切しない`;
+
+function buildSystemPrompt() {
+  const extension = buildFormattingExtension(loadGuideline());
+  return extension ? `${BASE_SYSTEM_PROMPT}\n${extension}` : BASE_SYSTEM_PROMPT;
+}
 
 /**
  * Format transcribed text using AI
@@ -42,7 +48,7 @@ async function formatTranscription(messageId, rawText, io, roomId) {
     const response = await openai.chat.completions.create({
       model: AI_MODEL,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt() },
         { role: 'user', content: rawText },
       ],
       temperature: 0.3,

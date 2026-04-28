@@ -4,6 +4,7 @@ const path = require('path');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
 const { formatTranscription } = require('./formatting');
+const { loadGuideline, buildWhisperPrompt } = require('./transcriptionConfig');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -64,10 +65,12 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
       type: ext === 'mp3' ? 'audio/mpeg' : ext === 'mp4' ? 'audio/mp4' : `audio/${ext}`,
     });
 
+    const whisperPrompt = buildWhisperPrompt(loadGuideline());
     const transcription = await openai.audio.transcriptions.create({
       file: file,
       model: WHISPER_MODEL,
       language: 'ja',
+      ...(whisperPrompt ? { prompt: whisperPrompt } : {}),
     });
 
     const rawText = transcription.text;

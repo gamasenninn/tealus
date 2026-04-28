@@ -11,6 +11,9 @@ scripts/.env.trx
 agent-server/mcp_config.json
 agent-server/logs/
 
+# Voice transcription guideline (実運用版、example はコミット)
+server/config/transcription_guideline.json
+
 # Build output
 client/dist/
 server/dist/

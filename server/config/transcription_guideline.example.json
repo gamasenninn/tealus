@@ -1,0 +1,17 @@
+{
+  "_comment": "voice transcription pipeline (Whisper + AI 整形) のカスタマイズ設定。実運用版を transcription_guideline.json として配置 (gitignored)。空のままで動作 (従来挙動)。",
+  "version": 1,
+  "whisper_context": "これは業務無線の音声記録です。",
+  "vocabulary": [
+    {
+      "term": "正規表記の固有名詞",
+      "category": "person | role | product | code | place | term",
+      "aliases": ["転写ブレの例1", "転写ブレの例2"]
+    }
+  ],
+  "guidelines": [
+    "TV/動画由来の定型句 (「ご視聴ありがとう」「サブタイトルとコメント、よろしくお願いします」「エンディング」「チャンネル登録」) で、前後文脈に業務会話が無い場合は、空文字 (空文字列) のみを返す。",
+    "1-3 文字のひらがな単独 (例: 「ピロン」「ふん」) で意味を成さない短文は、空文字を返す。",
+    "vocabulary 内の固有名詞は、aliases に含まれる転写ブレを正規表記 (term) に置き換える。"
+  ]
+}

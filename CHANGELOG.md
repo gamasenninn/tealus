@@ -12,6 +12,15 @@
 
 ### Added
 
+- **voice transcription pipeline のカスタマイズ機構** ([#204](https://github.com/gamasenninn/tealus/issues/204))
+  - 外部 JSON 設定ファイル (`server/config/transcription_guideline.json`) で vocabulary + guidelines を組織固有に注入できる
+  - **Whisper 段階**: vocabulary を散文プロンプトに組み立てて `prompt` parameter に渡す (224 token 上限内に切り詰め)。固有名詞・専門用語の認識精度が向上
+  - **AI 整形段階**: vocabulary + guidelines を既存 SYSTEM_PROMPT に append。表記ブレの正規化、TV/動画由来ノイズ (「ご視聴ありがとう」「サブタイトルとコメント」「エンディング」等) の自動空文字化が可能
+  - 設定ファイル無しなら従来挙動 (空オブジェクト fallback、後方互換)
+  - `server/config/transcription_guideline.example.json` をサンプルとして同梱、実運用版は `.gitignore`
+  - Loader はプロセス起動時に lazy load + キャッシュ
+  - unit test 14 件追加 (loadGuideline / buildWhisperPrompt / buildFormattingExtension)
+  - 元議論: 当初 #203 (regex BL post-process) として起票したが、AI 整形段階の文脈判断力で同問題を扱える設計判断で #204 に集約
 - **Light agent に Tealus MCP を programmatic 注入** ([#199](https://github.com/gamasenninn/tealus/issues/199))
   - Deep agent と同じパターンで、`getOrCreateSharedGlobal()` 内で TEALUS_BOT_ID/PASS が設定されていれば自動的に Tealus MCP を追加
   - `npx -y github:gamasenninn/tealus-mcp` で zero-config 接続 (Deep と repo を共有)
