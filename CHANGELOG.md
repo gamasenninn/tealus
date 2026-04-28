@@ -22,6 +22,12 @@
 
 ### Fixed
 
+- **migrate.js が 003 で停止する idempotency 問題を修正** ([#201](https://github.com/gamasenninn/tealus/issues/201))
+  - `003_voice_message.sql` が `DROP & ADD CONSTRAINT` で既存 `stamp` 行 (111 件) の CHECK 違反を引き起こし、`node src/db/migrate.js` 全体が停止
+  - 008 で stamp 対応の CHECK に拡張済だが、再実行時 003 → 008 の順で 003 が先に違反検出
+  - DO BLOCK 化して **既存制約があれば skip** する形に書き換え (008 と同じパターン)
+  - 全 21 migration が既存環境でも新規環境でも通過することを確認
+  - Step 12 レポートで「未着手の技術的負債」として残置していた件
 - **TTS 配信の WAV サイズ上限を 5MB → 10MB に引き上げ** ([#199](https://github.com/gamasenninn/tealus/issues/199) follow-up)
   - Light agent が `search_messages` 等の MCP tools で長文応答 (500-700 文字) を返すケースで Aivis WAV が 5MB を超えて MulterError 発生 → browser TTS にフォールバック
   - `server/src/routes/bot.js` の `TTS_AUDIO_MAX_SIZE` を 10MB に拡大

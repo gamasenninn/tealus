@@ -1,8 +1,15 @@
 -- Add 'voice' to messages type CHECK constraint
--- Drop and re-create the constraint
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check;
-ALTER TABLE messages ADD CONSTRAINT messages_type_check
-  CHECK (type IN ('text', 'image', 'video', 'file', 'voice', 'system'));
+-- 既存制約があれば skip (idempotency 確保、#201)
+-- 後の 008 でさらに 'stamp' が追加されるため、ここでは voice 追加段階の CHECK のみ書く
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'messages_type_check' AND conrelid = 'messages'::regclass
+  ) THEN
+    ALTER TABLE messages ADD CONSTRAINT messages_type_check
+      CHECK (type IN ('text', 'image', 'video', 'file', 'voice', 'system'));
+  END IF;
+END $$;
 
 -- Voice transcriptions table (for Step B onwards)
 CREATE TABLE IF NOT EXISTS voice_transcriptions (
