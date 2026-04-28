@@ -6,6 +6,8 @@
  * mediasoup や API key 不要。
  */
 
+import { TTS_VOLUME_BOOST } from '../constants/ui';
+
 let currentUtterance = null;
 let cachedJaVoice = null;
 
@@ -40,7 +42,7 @@ function speakInternal(text) {
   u.rate = 1.0;
   u.pitch = 1.0;
   const volPct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
-  u.volume = Math.max(0, Math.min(1, volPct / 100));
+  u.volume = Math.max(0, Math.min(1, (volPct / 100) * TTS_VOLUME_BOOST));
   currentUtterance = u;
   u.onend = () => { if (currentUtterance === u) currentUtterance = null; };
   u.onerror = () => { if (currentUtterance === u) currentUtterance = null; };

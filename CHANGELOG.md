@@ -12,6 +12,11 @@
 
 ### Fixed
 
+- **TTS 読み上げ音量に compensate gain を適用** ([#198](https://github.com/gamasenninn/tealus/issues/198) follow-up)
+  - voiceVolume 同期化後も TTS (Aivis Cloud / Browser TTS) は録音音声 / トランシーバーに比べ loudness が小さい体感差が残った (音源固有の特性)
+  - `TTS_VOLUME_BOOST = 1.25` を導入し、TTS 経路 (`browserTts.js` / `useSocketSync.js` tts:audio / `TtsButton.jsx`) で `voiceVolume × 1.25` (上限 1.0) を適用
+  - voiceVolume 80% で max (1.0) に達する設計、それ以下は比例的にブースト
+  - 音声メッセージ (`VoiceBubble.jsx`) と トランシーバーは boost 対象外 (録音 / live 音声は元々 loudness 差が無いため)
 - **トランシーバー音量が `voiceVolume` 設定を無視していた** ([#198](https://github.com/gamasenninn/tealus/issues/198))
   - `useTransceiver.js` の consume() で audio element に音量未設定のまま再生していたため、default 1.0 (100%) で固定
   - 一方 TTS / 音声メッセージは `voiceVolume` (default 80%) を適用していたため、**トランシーバーだけ大きく聞こえる非対称** が発生

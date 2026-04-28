@@ -5,6 +5,7 @@ import { useMessageStore } from '../stores/messageStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
+import { TTS_VOLUME_BOOST } from '../constants/ui';
 
 /**
  * Manages all Socket.IO event subscriptions for a chat room.
@@ -145,7 +146,7 @@ export function useSocketSync(roomId, targetMsgId = null) {
           const blobUrl = URL.createObjectURL(blob);
           const audio = new Audio(blobUrl);
           const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
-          audio.volume = Math.max(0, Math.min(1, volumePct / 100));
+          audio.volume = Math.max(0, Math.min(1, (volumePct / 100) * TTS_VOLUME_BOOST));
           audio.onended = () => URL.revokeObjectURL(blobUrl);
           audio.onerror = () => URL.revokeObjectURL(blobUrl);
           audio.play().catch((err) => {
