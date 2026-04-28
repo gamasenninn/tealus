@@ -3,7 +3,7 @@ import { Volume2 } from 'lucide-react';
 import { api } from '../../services/api';
 import * as browserTts from '../../services/browserTts';
 import { getConfig } from '../../services/clientConfig';
-import { TTS_VOLUME_BOOST } from '../../constants/ui';
+import { playTtsSrc } from '../../services/ttsAudioPlayer';
 
 // 個人TTS再生のシングルトン（aivis-cloud 経路: 同時再生防止、最後に押したものが優先）
 let currentTtsAudio = null;
@@ -69,22 +69,21 @@ function TtsButton({ text, roomId }) {
     try {
       const blob = await api.synthesizeTts(text, roomId);
       const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
-      audio.volume = Math.max(0, Math.min(1, (volumePct / 100) * TTS_VOLUME_BOOST));
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        if (currentTtsAudio === audio) currentTtsAudio = null;
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        if (currentTtsAudio === audio) currentTtsAudio = null;
-        audioRef.current = null;
-      };
+      // Web Audio API 経由で再生 (TTS_VOLUME_BOOST > 1.0 の boost が効く)
+      const audio = playTtsSrc(url, {
+        onEnded: () => {
+          URL.revokeObjectURL(url);
+          if (currentTtsAudio === audio) currentTtsAudio = null;
+          audioRef.current = null;
+        },
+        onError: () => {
+          URL.revokeObjectURL(url);
+          if (currentTtsAudio === audio) currentTtsAudio = null;
+          audioRef.current = null;
+        },
+      });
       currentTtsAudio = audio;
       audioRef.current = audio;
-      await audio.play();
     } catch (err) {
       console.error('TTS error:', err);
       alert('読み上げに失敗しました: ' + (err.message || ''));

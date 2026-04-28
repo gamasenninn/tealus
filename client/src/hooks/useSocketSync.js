@@ -5,7 +5,7 @@ import { useMessageStore } from '../stores/messageStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
-import { TTS_VOLUME_BOOST } from '../constants/ui';
+import { playTtsSrc } from '../services/ttsAudioPlayer';
 
 /**
  * Manages all Socket.IO event subscriptions for a chat room.
@@ -144,14 +144,10 @@ export function useSocketSync(roomId, targetMsgId = null) {
           }
           const blob = await res.blob();
           const blobUrl = URL.createObjectURL(blob);
-          const audio = new Audio(blobUrl);
-          const volumePct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
-          audio.volume = Math.max(0, Math.min(1, (volumePct / 100) * TTS_VOLUME_BOOST));
-          audio.onended = () => URL.revokeObjectURL(blobUrl);
-          audio.onerror = () => URL.revokeObjectURL(blobUrl);
-          audio.play().catch((err) => {
-            console.warn('[tts:audio] playback blocked:', err.name);
-            URL.revokeObjectURL(blobUrl);
+          // Web Audio API 経由で再生 (TTS_VOLUME_BOOST > 1.0 の boost を効かせる)
+          playTtsSrc(blobUrl, {
+            onEnded: () => URL.revokeObjectURL(blobUrl),
+            onError: () => URL.revokeObjectURL(blobUrl),
           });
         } catch (err) {
           console.warn('[tts:audio] error:', err.message);

@@ -13,6 +13,9 @@ export const FILE_SIZE_LIMITS = {
 };
 
 // TTS (Aivis Cloud / Browser Speech Synthesis) は録音音声 / トランシーバーに比べ
-// loudness が小さい傾向があるため compensate gain を掛ける。voiceVolume 80% で
-// max (1.0) に達する目安。
-export const TTS_VOLUME_BOOST = 1.25;
+// loudness が小さい傾向があるため compensate gain を掛ける。
+// - Aivis Cloud / TtsButton (HTML audio + blob URL): Web Audio API GainNode で
+//   1.0 を超える gain を適用可能 (例: voiceVolume 80% × 2.0 = 1.6 倍)
+// - Browser TTS (Web Speech API): SpeechSynthesisUtterance.volume は 1.0 で
+//   ハードキャップ、boost は適用するが超過分は捨てられる
+export const TTS_VOLUME_BOOST = 2.0;
