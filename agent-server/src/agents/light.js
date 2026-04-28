@@ -132,6 +132,25 @@ async function sendGeneratedImages(result, roomId) {
 async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
   try {
     const agent = createLightAgent(workspacePath, mcpServers, roomId);
+
+    // Diagnostic: agent に渡される tools 一覧と MCP servers の状況を log
+    try {
+      const customToolNames = (agent.tools || []).map(t => t.name || '(unnamed)');
+      const mcpInfos = await Promise.all(
+        (mcpServers || []).map(async (s) => {
+          try {
+            const tools = await s.listTools();
+            const names = (tools || []).map(t => t.name);
+            return `${s.name || '?'}=[${names.join(', ')}]`;
+          } catch (e) {
+            return `${s.name || '?'}=ERROR(${e.message})`;
+          }
+        })
+      );
+      logger.info(`[Light] custom tools: [${customToolNames.join(', ')}], MCP tools: ${mcpInfos.join(' | ')}`);
+    } catch (e) {
+      logger.warn(`[Light] tool diagnostic failed: ${e.message}`);
+    }
     const session = new TealusSession(roomId);
 
     await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
