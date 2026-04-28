@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Light agent に Tealus MCP を programmatic 注入** ([#199](https://github.com/gamasenninn/tealus/issues/199))
+  - Deep agent と同じパターンで、`getOrCreateSharedGlobal()` 内で TEALUS_BOT_ID/PASS が設定されていれば自動的に Tealus MCP を追加
+  - `npx -y github:gamasenninn/tealus-mcp` で zero-config 接続 (Deep と repo を共有)
+  - これにより Light agent も `search_messages` / `get_message_media` / `mark_tag_done` / その他 8 tools にアクセス可能に
+  - 既存の `agent-server/mcp_config.json` は **user カスタム MCP 専用** として温存 (filesystem はルームごとに自動生成のまま)
+  - BOT 認証情報が無い環境では skip (エラーにならず)
+  - 起点: 業務メモ 2026-04-28 02:20「ライトエージェントに MCP を追加する」
+
 ### Fixed
 
 - **TTS 読み上げ音量に Web Audio API GainNode で 1.0 超のブースト適用** ([#198](https://github.com/gamasenninn/tealus/issues/198) follow-up)

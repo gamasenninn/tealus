@@ -20,30 +20,62 @@ let sweepTimer = null;
 
 /**
  * グローバルMCPサーバーを取得（初回のみ接続）
+ *
+ * 構成:
+ * 1. Tealus MCP (programmatic): TEALUS_BOT_ID/PASS が設定されていれば自動追加
+ *    Deep agent (agents/deep.js) と同じ npx 経由で組織記憶ツールに access (#199)
+ * 2. agent-server/mcp_config.json: user カスタム MCP 用 (filesystem は除外)
  */
 async function getOrCreateSharedGlobal() {
   if (sharedGlobalServers) return sharedGlobalServers;
 
-  const globalConfigPath = path.join(__dirname, '..', '..', 'mcp_config.json');
-  if (!fs.existsSync(globalConfigPath)) return [];
+  const servers = [];
 
-  try {
-    const globalConfig = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
-    if (!globalConfig.mcpServers) return [];
-
-    // filesystem はルームごとに自動生成するのでグローバルからは除外
-    const filtered = {};
-    for (const [name, def] of Object.entries(globalConfig.mcpServers)) {
-      if (name !== 'filesystem') filtered[name] = def;
+  // 1. Tealus MCP (#199、Bot 認証情報があれば追加)
+  if (config.TEALUS_BOT_ID && config.TEALUS_BOT_PASS) {
+    try {
+      const tealusServer = new MCPServerStdio({
+        name: 'tealus',
+        command: 'npx',
+        args: ['-y', 'github:gamasenninn/tealus-mcp'],
+        env: {
+          ...process.env,  // PATH 等の親 env を継承 (npx 実行に必須)
+          TEALUS_API_URL: config.TEALUS_API_URL,
+          TEALUS_USER_ID: config.TEALUS_BOT_ID,
+          TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
+        },
+      });
+      await tealusServer.connect();
+      servers.push(tealusServer);
+      logger.info('[RoomMCP] tealus MCP connected (shared global)');
+    } catch (err) {
+      logger.error(`[RoomMCP] tealus MCP connect failed: ${err.message}`);
     }
-
-    sharedGlobalServers = await connectFromConfig(filtered, 'global');
-    logger.info(`[RoomMCP] Shared global: ${sharedGlobalServers.length} servers connected`);
-  } catch (err) {
-    logger.error(`[RoomMCP] Global config error: ${err.message}`);
-    sharedGlobalServers = [];
+  } else {
+    logger.debug('[RoomMCP] Tealus MCP skipped (TEALUS_BOT_ID/PASS not set)');
   }
 
+  // 2. agent-server/mcp_config.json (user カスタム)
+  const globalConfigPath = path.join(__dirname, '..', '..', 'mcp_config.json');
+  if (fs.existsSync(globalConfigPath)) {
+    try {
+      const globalConfig = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
+      if (globalConfig.mcpServers) {
+        // filesystem はルームごとに自動生成するのでグローバルからは除外
+        const filtered = {};
+        for (const [name, def] of Object.entries(globalConfig.mcpServers)) {
+          if (name !== 'filesystem') filtered[name] = def;
+        }
+        const userServers = await connectFromConfig(filtered, 'global');
+        servers.push(...userServers);
+      }
+    } catch (err) {
+      logger.error(`[RoomMCP] Global config error: ${err.message}`);
+    }
+  }
+
+  sharedGlobalServers = servers;
+  logger.info(`[RoomMCP] Shared global: ${sharedGlobalServers.length} servers connected`);
   return sharedGlobalServers;
 }
 
