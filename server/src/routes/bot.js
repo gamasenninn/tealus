@@ -704,6 +704,69 @@ router.get('/search', async (req, res) => {
 });
 
 /**
+ * PATCH /api/bot/messages/:id/tags/:tag_name/done
+ * メッセージに付いた特定タグの完了状態 (is_done) を更新する。
+ *
+ * 仕様: #197 (https://github.com/gamasenninn/tealus/issues/197)
+ *
+ * - tag_name で room 内のタグを名前検索 → tag_id 解決
+ * - Bot のルーム所属検証
+ * - TODO 系タグ (is_todo=true) のみ意味を持つが、本 endpoint は is_todo を問わず更新する
+ *   (general タグの is_done は schema 上存在するがほぼ未使用、責任は呼び出し側)
+ *
+ * Body: { is_done: boolean }
+ */
+router.patch('/messages/:id/tags/:tag_name/done', async (req, res) => {
+  const messageId = req.params.id;
+  const tagName = req.params.tag_name;
+  const userId = req.user.id;
+  const { is_done } = req.body;
+
+  if (typeof is_done !== 'boolean') {
+    return res.status(400).json({ error: 'is_done (boolean) は必須です' });
+  }
+
+  try {
+    // メッセージの所属ルーム取得 + 所属検証
+    const msgRes = await pool.query(
+      `SELECT m.room_id FROM messages m
+       JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
+       WHERE m.id = $2 AND NOT m.is_deleted`,
+      [userId, messageId]
+    );
+    if (msgRes.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません (or 非メンバー)' });
+    }
+    const roomId = msgRes.rows[0].room_id;
+
+    // タグ名 → tag_id 解決 (room スコープ)
+    const tagRes = await pool.query(
+      `SELECT id FROM tags WHERE room_id = $1 AND name = $2`,
+      [roomId, tagName]
+    );
+    if (tagRes.rows.length === 0) {
+      return res.status(404).json({ error: `タグ "${tagName}" がこのルームに存在しません` });
+    }
+    const tagId = tagRes.rows[0].id;
+
+    // is_done 更新
+    const updateRes = await pool.query(
+      `UPDATE message_tags SET is_done = $1
+       WHERE message_id = $2 AND tag_id = $3`,
+      [is_done, messageId, tagId]
+    );
+    if (updateRes.rowCount === 0) {
+      return res.status(404).json({ error: 'このメッセージにそのタグは付与されていません' });
+    }
+
+    res.json({ success: true, message_id: messageId, tag_name: tagName, is_done });
+  } catch (err) {
+    logger.error('Bot mark tag done error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/unread?room_id=optional
  * Get unread messages across all rooms or a specific room
  */

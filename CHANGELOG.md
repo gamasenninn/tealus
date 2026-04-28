@@ -12,6 +12,13 @@
 
 ### Added
 
+- **MCP `mark_tag_done` ツール + Bot API endpoint** ([#197](https://github.com/gamasenninn/tealus/issues/197))
+  - 新エンドポイント: `PATCH /api/bot/messages/:id/tags/:tag_name/done` (Bot のルーム所属検証 + tag_name → tag_id 解決)
+  - `is_done` 状態を AI が直接更新できる primitive
+  - `search_messages` と組み合わせ: 「実は完了済の TODO を見つけて即マーク」フロー成立
+  - tealus-mcp v0.4.0 で公開
+  - bot-api 統合テスト 8 件追加 (計 49 件 pass)
+  - 関連 [#185](https://github.com/gamasenninn/tealus/issues/185) (umbrella)、[#195](https://github.com/gamasenninn/tealus/issues/195) (reconcile_todos の基盤ピース)
 - **MCP `search_messages` ツール + Bot API endpoint** ([#194](https://github.com/gamasenninn/tealus/issues/194))
   - 新エンドポイント: `GET /api/bot/search` (Bot のルーム所属検証 + 6 種 narrowing filter のいずれか必須)
   - キーワード / タグ / 期間 / 発言者 / type / room による横断検索

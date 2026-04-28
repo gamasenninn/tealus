@@ -589,6 +589,130 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // PATCH /api/bot/messages/:id/tags/:tag_name/done (#197)
+  // ============================================
+  describe('PATCH /api/bot/messages/:id/tags/:tag_name/done', () => {
+    let messageId, tagId;
+
+    beforeEach(async () => {
+      const pool = getTestPool();
+      const msgRes = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'テスト用 TODO 発言') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      messageId = msgRes.rows[0].id;
+      // POST /api/rooms が default の "TODO" タグを作るのでそれを使う
+      const tagRes = await pool.query(
+        `SELECT id FROM tags WHERE room_id = $1 AND name = 'TODO'`,
+        [roomId]
+      );
+      tagId = tagRes.rows[0].id;
+      await pool.query(
+        `INSERT INTO message_tags (message_id, tag_id, is_done) VALUES ($1, $2, false)`,
+        [messageId, tagId]
+      );
+    });
+
+    it('1. is_done=true に更新 (room メンバー bot)', async () => {
+      const res = await request(app)
+        .patch(`/api/bot/messages/${messageId}/tags/TODO/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ is_done: true });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.is_done).toBe(true);
+
+      // DB 反映確認
+      const pool = getTestPool();
+      const verifyRes = await pool.query(
+        `SELECT is_done FROM message_tags WHERE message_id = $1 AND tag_id = $2`,
+        [messageId, tagId]
+      );
+      expect(verifyRes.rows[0].is_done).toBe(true);
+    });
+
+    it('2. is_done=false に戻す', async () => {
+      const pool = getTestPool();
+      await pool.query(
+        `UPDATE message_tags SET is_done = true WHERE message_id = $1 AND tag_id = $2`,
+        [messageId, tagId]
+      );
+      const res = await request(app)
+        .patch(`/api/bot/messages/${messageId}/tags/TODO/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ is_done: false });
+      expect(res.status).toBe(200);
+      expect(res.body.is_done).toBe(false);
+    });
+
+    it('3. 非メンバー bot は 404 (メッセージ非可視)', async () => {
+      // bot 不在ルームを作成し、そこにメッセージを置く
+      const user2 = await createTestUser({ login_id: 'EMP004', display_name: '別ユーザ4' });
+      const otherRoomRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user2.token}`)
+        .send({ name: '不在ルーム', member_ids: [] });
+      const otherRoomId = otherRoomRes.body.room.id;
+      const pool = getTestPool();
+      const otherMsg = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'X') RETURNING id`,
+        [otherRoomId, user2.user.id]
+      );
+
+      const res = await request(app)
+        .patch(`/api/bot/messages/${otherMsg.rows[0].id}/tags/TODO/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ is_done: true });
+      expect(res.status).toBe(404);
+    });
+
+    it('4. 不明 message で 404', async () => {
+      const res = await request(app)
+        .patch(`/api/bot/messages/00000000-0000-0000-0000-000000000000/tags/TODO/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ is_done: true });
+      expect(res.status).toBe(404);
+    });
+
+    it('5. 不明 tag_name で 404', async () => {
+      const res = await request(app)
+        .patch(`/api/bot/messages/${messageId}/tags/UnknownTag/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ is_done: true });
+      expect(res.status).toBe(404);
+    });
+
+    it('6. message に tag が付いていない場合 404', async () => {
+      // 別 message (tag 未付与)
+      const pool = getTestPool();
+      const noTagMsg = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'no tag') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      const res = await request(app)
+        .patch(`/api/bot/messages/${noTagMsg.rows[0].id}/tags/TODO/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ is_done: true });
+      expect(res.status).toBe(404);
+    });
+
+    it('7. body に is_done が無いと 400', async () => {
+      const res = await request(app)
+        .patch(`/api/bot/messages/${messageId}/tags/TODO/done`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({});
+      expect(res.status).toBe(400);
+    });
+
+    it('8. 認証なしで 401', async () => {
+      const res = await request(app)
+        .patch(`/api/bot/messages/${messageId}/tags/TODO/done`)
+        .send({ is_done: true });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/rooms
   // ============================================
   describe('GET /api/bot/rooms', () => {
