@@ -19,7 +19,7 @@ router.use(authenticate);
 // client は GET /tts-audio/:id で取得して <audio> で再生。
 // 5 分 TTL で自動削除 (TTS は永続化不要)。
 const TTS_AUDIO_TTL_MS = 5 * 60 * 1000;
-const TTS_AUDIO_MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const TTS_AUDIO_MAX_SIZE = 10 * 1024 * 1024; // 10MB (Light agent の長文応答に対応、#189 / #199 follow-up)
 const ttsAudioCache = new Map(); // id → { buffer, contentType, expiresAt }
 const ttsAudioMemoryUpload = multer({
   storage: multer.memoryStorage(),

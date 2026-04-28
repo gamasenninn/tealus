@@ -22,6 +22,10 @@
 
 ### Fixed
 
+- **TTS 配信の WAV サイズ上限を 5MB → 10MB に引き上げ** ([#199](https://github.com/gamasenninn/tealus/issues/199) follow-up)
+  - Light agent が `search_messages` 等の MCP tools で長文応答 (500-700 文字) を返すケースで Aivis WAV が 5MB を超えて MulterError 発生 → browser TTS にフォールバック
+  - `server/src/routes/bot.js` の `TTS_AUDIO_MAX_SIZE` を 10MB に拡大
+  - 600-700 文字程度の応答 (実測 7-8MB WAV) も Aivis 高品質音声で配信可能に
 - **TTS 読み上げ音量に Web Audio API GainNode で 1.0 超のブースト適用** ([#198](https://github.com/gamasenninn/tealus/issues/198) follow-up)
   - 当初 `audio.volume × 1.25` で対処したが、HTML audio.volume の上限が 1.0 で実効ブースト不可だった (voiceVolume 80% 以上で頭打ち)
   - 解決: `client/src/services/ttsAudioPlayer.js` を新設、Web Audio API の `GainNode` を使って `audio.volume × TTS_VOLUME_BOOST (=2.0)` を適用 (1.0 超の amplification 可能)
