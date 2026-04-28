@@ -10,6 +10,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **トランシーバー音量が `voiceVolume` 設定を無視していた** ([#198](https://github.com/gamasenninn/tealus/issues/198))
+  - `useTransceiver.js` の consume() で audio element に音量未設定のまま再生していたため、default 1.0 (100%) で固定
+  - 一方 TTS / 音声メッセージは `voiceVolume` (default 80%) を適用していたため、**トランシーバーだけ大きく聞こえる非対称** が発生
+  - useTransceiver.js consume() で `audioEl.volume = voiceVolume / 100` を適用
+  - これで Profile の音量スライダー 1 つで全音声経路 (TTS / 音声メッセージ / トランシーバー) が同期
+
 ### Added
 
 - **MCP `mark_tag_done` ツール + Bot API endpoint** ([#197](https://github.com/gamasenninn/tealus/issues/197))

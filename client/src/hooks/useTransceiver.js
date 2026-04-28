@@ -125,6 +125,9 @@ export function useTransceiver(roomId) {
       const stream = new MediaStream([consumer.track]);
       const audioEl = new Audio();
       audioEl.srcObject = stream;
+      // voiceVolume を TTS / 音声メッセージと同じ仕組みで適用 (#198 非対称解消)
+      const volPct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
+      audioEl.volume = Math.max(0, Math.min(1, volPct / 100));
       audioEl.play().catch((err) => {
         console.warn('[transceiver] audio.play() blocked:', err.name, '— click unlock button to enable');
         setAudioBlocked(true);
