@@ -12,6 +12,13 @@
 
 ### Added
 
+- **MCP `create_room` ツール (tealus-mcp v0.5.0)** ([#200](https://github.com/gamasenninn/tealus/issues/200))
+  - AI が新しいグループルームを能動的に作成できる primitive。呼び出した bot は admin として自動追加
+  - 既存 `POST /api/rooms` を流用 (Bot 認証 = JWT で呼び出し可)、本体 repo 側に server コード変更なし
+  - `tealus-mcp` v0.5.0 release、合計 9 → 10 MCP ツール
+  - 用途: AI 班連絡用ルーム / 議題スレッド / 期間限定タスク / インシデント対応など、AI が組織を能動的に編成する場面
+  - 起点: 2026-04-28 の AI 班連絡ルーム開設時、curl + Bash 直叩きで作成した経験 (Bash の CP932 エンコード問題で日本語ルーム名が文字化けした) を MCP 化することで解消
+  - tealus-mcp 側 unit test 6 件追加 (23 → 29 件 全 pass)
 - **transcription guideline の自動学習 — Phase 1: batch mining script** ([#206](https://github.com/gamasenninn/tealus/issues/206))
   - `server/scripts/mine_transcription_aliases.js` 新設: voice_transcriptions の編集履歴 (AI 版 vs. 人間訂正版) から alias 候補を mining する CLI
   - GPT-4o-mini に編集ペアを投げて (誤転写, 正解) の固有名詞ペアを抽出。整形差・句読点差は GPT が自然に弾く
