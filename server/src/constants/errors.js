@@ -28,4 +28,6 @@ module.exports = {
   TEXT_REQUIRED: 'テキストは必須です',
   SELF_KICK_NOT_ALLOWED: '自分自身を除外することはできません。退会を使用してください。',
   LAST_ADMIN_CANNOT_LEAVE: 'あなたは最後のグループ管理者です。先に他のメンバーをグループ管理者に変更してください。',
+  ROOM_CREATOR_ONLY: 'ルームを作成した本人のみ削除できます',
+  ROOM_NOT_SOLO: '他のメンバーが残っているため削除できません。先にメンバーを退会させてください。',
 };

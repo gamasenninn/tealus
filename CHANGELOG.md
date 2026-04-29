@@ -12,6 +12,14 @@
 
 ### Added
 
+- **MCP `delete_room` ツール + `DELETE /api/rooms/:id` (tealus-mcp v0.6.0)** ([#207](https://github.com/gamasenninn/tealus/issues/207))
+  - `create_room` の対称機能、AI が能動的にルーム archive / cleanup できる primitive
+  - 安全制約 2 段階: (1) **creator only** (rooms.created_by) (2) **solo member only** (自分以外のメンバー 0 人)
+  - 他のメンバーが残っている場合は **先に退会させる必要**がある (= 「これから消すぞ」と明示する workflow を強制)
+  - `direct` ルームは削除不可 (leave で代替、`requireGroup` で 400 拒否)
+  - CASCADE で関連データ (messages, members, voice_transcriptions, message_media, tags 等) もすべて削除
+  - server 側に新 middleware 2 つ (`requireCreator` / `requireSoloMember`) + integration test 7 件 (server 295 → 302 全 pass)
+  - tealus-mcp v0.6.0 release、合計 10 → 11 MCP ツール、unit test 29 → 34 (+5)
 - **MCP `create_room` ツール (tealus-mcp v0.5.0)** ([#200](https://github.com/gamasenninn/tealus/issues/200))
   - AI が新しいグループルームを能動的に作成できる primitive。呼び出した bot は admin として自動追加
   - 既存 `POST /api/rooms` を流用 (Bot 認証 = JWT で呼び出し可)、本体 repo 側に server コード変更なし

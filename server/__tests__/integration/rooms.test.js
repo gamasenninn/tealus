@@ -204,4 +204,120 @@ describe('Rooms API', () => {
       expect(res.status).toBe(403);
     });
   });
+
+  // ============================================
+  // DELETE /api/rooms/:id
+  // ============================================
+  describe('DELETE /api/rooms/:id', () => {
+    it('should delete a solo bot-only room (creator + only member)', async () => {
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'solo room' });
+
+      const roomId = createRes.body.room.id;
+
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.room_id).toBe(roomId);
+
+      // Verify the room is gone (no longer appears in list)
+      const listRes = await request(app)
+        .get('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(listRes.status).toBe(200);
+      const ids = listRes.body.rooms.map(r => r.id);
+      expect(ids).not.toContain(roomId);
+    });
+
+    it('should reject deletion when other members exist (409)', async () => {
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'group with members', member_ids: [user2.user.id] });
+
+      const roomId = createRes.body.room.id;
+
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toContain('他のメンバー');
+    });
+
+    it('should reject deletion by non-creator (403)', async () => {
+      // user1 creates with user2 as member
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'shared', member_ids: [user2.user.id] });
+
+      const roomId = createRes.body.room.id;
+
+      // user2 (member but not creator) tries to delete
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${user2.token}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('作成した本人');
+    });
+
+    it('should reject deletion by non-member (403)', async () => {
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'private' });
+
+      const roomId = createRes.body.room.id;
+
+      // user3 (not a member) tries to delete
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${user3.token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('should return 404 for non-existent room', async () => {
+      const res = await request(app)
+        .delete('/api/rooms/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('should reject deletion of direct room (group only)', async () => {
+      const createRes = await request(app)
+        .post('/api/rooms/direct')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ partner_id: user2.user.id });
+
+      const roomId = createRes.body.room.id;
+
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('グループのみ');
+    });
+
+    it('should reject without auth', async () => {
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'private' });
+
+      const roomId = createRes.body.room.id;
+
+      const res = await request(app).delete(`/api/rooms/${roomId}`);
+      expect(res.status).toBe(401);
+    });
+  });
 });

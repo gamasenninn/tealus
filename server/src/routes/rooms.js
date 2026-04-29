@@ -6,7 +6,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
-const { requireMember, requireRoomAdmin, requireGroup } = require('../middleware/roomAccess');
+const { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } = require('../middleware/roomAccess');
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -384,6 +384,33 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     res.json({ room: result.rows[0] });
   } catch (err) {
     logger.error('Update room error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * DELETE /api/rooms/:id
+ * Delete a group room (creator only, must be the only remaining member)
+ *
+ * Safety constraints:
+ * - Group only (direct rooms use leave instead)
+ * - Caller must be the room creator (rooms.created_by)
+ * - No other members may exist (caller must remove all members first)
+ *
+ * CASCADE will cleanup: room_members, messages, message_media,
+ * voice_transcriptions, message_reads, room_read_cursors, tags etc.
+ */
+router.delete('/:id', requireGroup, requireMember, requireCreator, requireSoloMember, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM rooms WHERE id = $1 RETURNING id, name', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: E.ROOM_NOT_FOUND });
+    }
+    logger.info(`Room deleted: ${id} (${result.rows[0].name}) by user ${req.user.id}`);
+    res.json({ success: true, room_id: id });
+  } catch (err) {
+    logger.error('Delete room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
