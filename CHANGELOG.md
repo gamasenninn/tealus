@@ -14,8 +14,8 @@
 
 - **voice transcription pipeline のカスタマイズ機構** ([#204](https://github.com/gamasenninn/tealus/issues/204))
   - 外部 JSON 設定ファイル (`server/config/transcription_guideline.json`) で vocabulary + guidelines を組織固有に注入できる
-  - **Whisper 段階**: vocabulary を散文プロンプトに組み立てて `prompt` parameter に渡す (224 token 上限内に切り詰め)。固有名詞・専門用語の認識精度が向上
-  - **AI 整形段階**: vocabulary + guidelines を既存 SYSTEM_PROMPT に append。表記ブレの正規化、TV/動画由来ノイズ (「ご視聴ありがとう」「サブタイトルとコメント」「エンディング」等) の自動空文字化が可能
+  - **Whisper 段階**: `whisper_context` (ドメイン文脈の散文) のみ `prompt` parameter に渡す (200 文字上限)。**vocabulary は渡さない** (Whisper の prompt は style/spelling bias であって辞書ではないため、強く渡すと隣接音が歪む副作用あり、例: 「ビレッジ側」→「ビレッジガン」)
+  - **AI 整形段階**: vocabulary + guidelines を既存 SYSTEM_PROMPT に append。表記ブレの正規化、TV/動画由来ノイズ (「ご視聴ありがとう」「サブタイトルとコメント」「エンディング」等) の自動空文字化が可能。GPT が文脈と aliases を突き合わせて訂正するため、Whisper の鈍器より精密
   - 設定ファイル無しなら従来挙動 (空オブジェクト fallback、後方互換)
   - `server/config/transcription_guideline.example.json` をサンプルとして同梱、実運用版は `.gitignore`
   - Loader はプロセス起動時に lazy load + キャッシュ

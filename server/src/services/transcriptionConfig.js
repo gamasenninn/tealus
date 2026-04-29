@@ -38,24 +38,16 @@ function resetCache() {
 }
 
 function buildWhisperPrompt(config) {
-  const { whisper_context, vocabulary } = config;
-  if (!vocabulary.length && !whisper_context) return null;
+  // Whisper の prompt parameter は style/spelling bias であって辞書ではない。
+  // vocabulary を強く渡すと隣接音が歪む (例: 「ビレッジ側」→「ビレッジガン」) ので、
+  // ドメイン文脈 (whisper_context) のみ渡し、固有名詞の正規化は AI 整形に任せる。
+  const { whisper_context } = config;
+  if (!whisper_context) return null;
 
-  const terms = vocabulary.map(v => v.term).filter(Boolean);
-  const parts = [];
-  if (whisper_context) parts.push(whisper_context);
-  if (terms.length) {
-    parts.push(`会話には次の固有名詞が登場します: ${terms.join('、')}。`);
-  }
-  let prompt = parts.join(' ');
-
-  // Whisper prompt は 224 token 上限 (last-224 wins)。
-  // 日本語は概ね 1 文字 = 1-2 token。安全側で 200 文字 (~200-300 token 想定だが Whisper は最後の 224 を採用するので末尾優先で切る)。
   const MAX_CHARS = 200;
-  if (prompt.length > MAX_CHARS) {
-    prompt = prompt.slice(-MAX_CHARS);
-  }
-  return prompt;
+  return whisper_context.length > MAX_CHARS
+    ? whisper_context.slice(-MAX_CHARS)
+    : whisper_context;
 }
 
 function buildFormattingExtension(config) {

@@ -77,7 +77,7 @@ describe('loadGuideline', () => {
 });
 
 describe('buildWhisperPrompt', () => {
-  test('returns null when config is empty', () => {
+  test('returns null when whisper_context is empty', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '',
       vocabulary: [],
@@ -85,7 +85,7 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toBeNull();
   });
 
-  test('builds prose with whisper_context only', () => {
+  test('returns whisper_context as-is when set', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '業務無線です。',
       vocabulary: [],
@@ -93,32 +93,32 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toBe('業務無線です。');
   });
 
-  test('builds prose with vocabulary terms', () => {
+  test('does NOT include vocabulary terms (they are AI-formatting-only)', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '業務無線です。',
       vocabulary: [{ term: '甲' }, { term: '乙' }, { term: '丙' }],
     });
-    expect(prompt).toContain('業務無線です。');
-    expect(prompt).toContain('甲、乙、丙');
+    expect(prompt).toBe('業務無線です。');
+    expect(prompt).not.toContain('甲');
+    expect(prompt).not.toContain('乙');
+    expect(prompt).not.toContain('丙');
   });
 
-  test('skips vocabulary entries without term', () => {
+  test('returns null when whisper_context is missing even if vocabulary is large', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '',
-      vocabulary: [{ term: '甲' }, { category: 'person' }, { term: '' }],
+      vocabulary: Array.from({ length: 100 }, (_, i) => ({ term: `term${i}` })),
     });
-    expect(prompt).toContain('甲');
-    expect(prompt).not.toContain('、、');
+    expect(prompt).toBeNull();
   });
 
-  test('truncates to last 200 chars when exceeded', () => {
-    const longTerms = Array.from({ length: 100 }, (_, i) => ({ term: `term${i}` }));
+  test('truncates whisper_context to last 200 chars when exceeded', () => {
+    const longContext = 'あ'.repeat(250);
     const prompt = configModule.buildWhisperPrompt({
-      whisper_context: 'これは業務無線です。',
-      vocabulary: longTerms,
+      whisper_context: longContext,
+      vocabulary: [],
     });
-    expect(prompt.length).toBeLessThanOrEqual(200);
-    expect(prompt).toContain(`term99`);
+    expect(prompt.length).toBe(200);
   });
 });
 
