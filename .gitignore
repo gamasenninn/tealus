@@ -13,6 +13,7 @@ agent-server/logs/
 
 # Voice transcription guideline (実運用版、example はコミット)
 server/config/transcription_guideline.json
+server/config/mining_report.json
 
 # Build output
 client/dist/

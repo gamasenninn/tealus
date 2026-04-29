@@ -12,6 +12,14 @@
 
 ### Added
 
+- **transcription guideline の自動学習 — Phase 1: batch mining script** ([#206](https://github.com/gamasenninn/tealus/issues/206))
+  - `server/scripts/mine_transcription_aliases.js` 新設: voice_transcriptions の編集履歴 (AI 版 vs. 人間訂正版) から alias 候補を mining する CLI
+  - GPT-4o-mini に編集ペアを投げて (誤転写, 正解) の固有名詞ペアを抽出。整形差・句読点差は GPT が自然に弾く
+  - 出現回数集計 + 閾値フィルタ (default N=2)、既存 transcription_guideline.json の vocabulary と照合して merge 候補 (新規 term / 既存 term への alias 追加) を生成
+  - 出力は report ファイル (`server/config/mining_report.json`、gitignored)。**既存 guideline は書き換えない** — 人間が report を見て手動 merge
+  - Phase 2 (auto-update on edit) と Phase 3 (DB 化 + UI) は別フェーズ
+  - 実装の要点: `aliasMiner.js` で抽出ロジックを testable に分離、unit test 26 件 (GPT 部分はモック、buildPairs / aggregate / buildMergeCandidates の純ロジックは実テスト)
+  - 設計判断: AI 整形版 (`edited_by IS NULL`) と 人間編集版 (`edited_by IS NOT NULL`) を `voice_transcriptions.version` 単位で正しく区別。これにより AI 整形ノイズではなく純粋な人間訂正だけを学習対象にできる
 - **voice transcription pipeline のカスタマイズ機構** ([#204](https://github.com/gamasenninn/tealus/issues/204))
   - 外部 JSON 設定ファイル (`server/config/transcription_guideline.json`) で vocabulary + guidelines を組織固有に注入できる
   - **Whisper 段階**: `whisper_context` (ドメイン文脈の散文) のみ `prompt` parameter に渡す (200 文字上限)。**vocabulary は渡さない** (Whisper の prompt は style/spelling bias であって辞書ではないため、強く渡すと隣接音が歪む副作用あり、例: 「ビレッジ側」→「ビレッジガン」)
