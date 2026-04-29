@@ -15,11 +15,14 @@
  *   node --env-file=.env scripts/mine_transcription_aliases.js --threshold=2
  *
  * Options:
- *   --threshold=N         最低出現回数 (default 2)
- *   --since=YYYY-MM-DD    この日時以降の編集のみ対象
- *   --limit=N             GPT 呼び出し回数を制限 (試運転用)
- *   --guideline-path=PATH 既存 guideline JSON のパス
- *   --report-path=PATH    出力 report のパス
+ *   --threshold=N             最低出現回数 (default 2)
+ *   --since=YYYY-MM-DD        この日時以降の編集のみ対象
+ *   --limit=N                 GPT 呼び出し回数を制限 (試運転用)
+ *   --guideline-path=PATH     既存 guideline JSON のパス
+ *   --report-path=PATH        出力 report のパス
+ *   --mode=pair|by-term       集計モード (default 'pair')。by-term は同じ to に集まる
+ *                             散発 alias を救う (#208)
+ *   --require-high-confidence by-term モード時、high 1 件以上含む term のみ採用
  *
  * 必要な環境変数:
  *   OPENAI_API_KEY (必須)
@@ -44,6 +47,8 @@ function parseArgs(argv) {
     limit: null,
     guidelinePath: path.join(__dirname, '../config/transcription_guideline.json'),
     reportPath: path.join(__dirname, '../config/mining_report.json'),
+    mode: 'pair',
+    requireHighConfidence: false,
   };
   for (const arg of argv.slice(2)) {
     const m = arg.match(/^--([\w-]+)(?:=(.*))?$/);
@@ -65,6 +70,16 @@ function parseArgs(argv) {
       case 'report-path':
         args.reportPath = value;
         break;
+      case 'mode':
+        if (value === 'pair' || value === 'by-term') {
+          args.mode = value;
+        } else {
+          console.error(`[mine] WARN: unknown mode "${value}", using default 'pair'`);
+        }
+        break;
+      case 'require-high-confidence':
+        args.requireHighConfidence = true;
+        break;
       case 'help':
         printHelp();
         process.exit(0);
@@ -78,12 +93,19 @@ function printHelp() {
   console.log(`mine_transcription_aliases.js — voice_transcriptions 編集履歴から alias 候補を mining
 
 Options:
-  --threshold=N         最低出現回数 (default 2)
-  --since=YYYY-MM-DD    この日時以降の編集のみ対象
-  --limit=N             GPT 呼び出し回数を制限 (試運転用)
-  --guideline-path=PATH 既存 guideline JSON のパス
-  --report-path=PATH    出力 report のパス
-  --help                このメッセージ`);
+  --threshold=N             最低出現回数 (default 2)
+  --since=YYYY-MM-DD        この日時以降の編集のみ対象
+  --limit=N                 GPT 呼び出し回数を制限 (試運転用)
+  --guideline-path=PATH     既存 guideline JSON のパス
+  --report-path=PATH        出力 report のパス
+  --mode=pair|by-term       集計モード (default 'pair')
+  --require-high-confidence by-term モード時、high 信頼度を含む term のみ採用
+  --help                    このメッセージ
+
+集計モードの違い:
+  pair (default): (from, to) ペア単位で出現回数を集計、threshold 判定
+  by-term:        to (= 正規表記の term) 単位で集計、頻出 term の長尾誤認も救う
+                  例: 「ガマ」関連 4 通りの誤認が個別 1 件ずつでも合計 4 で採用される`);
 }
 
 function loadExistingVocabulary(guidelinePath) {
@@ -165,9 +187,17 @@ async function main() {
     }
     console.log(`[mine] Total raw aliases extracted: ${allAliases.length}`);
 
-    const aggregated = aliasMiner.aggregateAliases(allAliases, args.threshold);
-    console.log(`[mine] After threshold (>=${args.threshold}): ${aggregated.length} alias(es)`);
+    const aggregated = aliasMiner.aggregateAliases(allAliases, {
+      mode: args.mode,
+      threshold: args.threshold,
+      requireHighConfidence: args.requireHighConfidence,
+    });
+    const modeDesc = args.mode === 'by-term'
+      ? `by-term${args.requireHighConfidence ? ' + require-high-confidence' : ''}`
+      : 'pair';
+    console.log(`[mine] After threshold (>=${args.threshold}, mode=${modeDesc}): ${aggregated.length} alias(es)`);
 
+    // 閾値未満は常に pair モードで参考表示 (mode に依存しない比較対象として)
     const belowThreshold = aliasMiner.aggregateAliases(allAliases, 1).filter(a => a.count < args.threshold);
 
     const existingVocab = loadExistingVocabulary(args.guidelinePath);
@@ -216,6 +246,8 @@ function writeReport(reportPath, args, rowsFetched, pairsAnalyzed, aliasesRaw, a
       since: args.since,
       limit: args.limit,
       guidelinePath: args.guidelinePath,
+      mode: args.mode,
+      requireHighConfidence: args.requireHighConfidence,
     },
     stats: {
       rows_fetched: rowsFetched,

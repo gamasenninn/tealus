@@ -139,7 +139,7 @@ describe('extractAliases', () => {
   });
 });
 
-describe('aggregateAliases', () => {
+describe('aggregateAliases (pair mode, default)', () => {
   test('drops aliases below threshold', () => {
     const aliases = [{ from: 'a', to: 'b', category: 'person', confidence: 'high' }];
     expect(aliasMiner.aggregateAliases(aliases, 2)).toEqual([]);
@@ -185,6 +185,104 @@ describe('aggregateAliases', () => {
     const result = aliasMiner.aggregateAliases(aliases, 1);
     expect(result[0].category).toBe('term');
     expect(result[0].confidences).toEqual({ high: 0, medium: 2, low: 0 });
+  });
+
+  test('legacy number threshold argument is supported (backwards compatibility)', () => {
+    const aliases = [
+      { from: 'a', to: 'b' },
+      { from: 'a', to: 'b' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, 2);
+    expect(result).toHaveLength(1);
+  });
+
+  test('options object form works equivalently', () => {
+    const aliases = [
+      { from: 'a', to: 'b' },
+      { from: 'a', to: 'b' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, { threshold: 2 });
+    expect(result).toHaveLength(1);
+  });
+});
+
+describe('aggregateAliases (by-term mode, #208)', () => {
+  test('aggregates by `to` and includes long-tail variants under threshold', () => {
+    // ガマ系: 4 通りの誤認 1 件ずつ (個別 pair は閾値未満だが term 単位で 4)
+    const aliases = [
+      { from: '河川くん', to: 'ガマくん', category: 'person', confidence: 'medium' },
+      { from: 'ごまちゃん', to: 'ガマちゃん', category: 'person', confidence: 'medium' },
+      { from: '今', to: 'ガマ', category: 'person', confidence: 'medium' },
+      { from: '岡本', to: 'ガマ', category: 'person', confidence: 'medium' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, { mode: 'by-term', threshold: 2 });
+    // 4 つの to 値: ガマくん / ガマちゃん / ガマ / ガマ
+    // by-term 集約: ガマくん=1, ガマちゃん=1, ガマ=2 → threshold=2 では ガマ のみ採用 (2 件)
+    const tos = result.map(r => r.to);
+    expect(tos).toEqual(['ガマ', 'ガマ']); // 「今」「岡本」の 2 件
+    expect(result).toHaveLength(2);
+  });
+
+  test('high threshold drops all when no term reaches it', () => {
+    const aliases = [
+      { from: 'a1', to: 'X' },
+      { from: 'a2', to: 'X' },
+      { from: 'a3', to: 'Y' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, { mode: 'by-term', threshold: 5 });
+    expect(result).toEqual([]);
+  });
+
+  test('low threshold (1) accepts all', () => {
+    const aliases = [
+      { from: 'a', to: 'X' },
+      { from: 'b', to: 'Y' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, { mode: 'by-term', threshold: 1 });
+    expect(result).toHaveLength(2);
+  });
+
+  test('requireHighConfidence drops terms with no high-confidence alias', () => {
+    const aliases = [
+      { from: 'a1', to: 'X', confidence: 'medium' },
+      { from: 'a2', to: 'X', confidence: 'medium' },
+      { from: 'b1', to: 'Y', confidence: 'high' },
+      { from: 'b2', to: 'Y', confidence: 'medium' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, {
+      mode: 'by-term',
+      threshold: 2,
+      requireHighConfidence: true,
+    });
+    // X は high 0 で除外、Y は high 1 で採用
+    const tos = [...new Set(result.map(r => r.to))];
+    expect(tos).toEqual(['Y']);
+    expect(result).toHaveLength(2);
+  });
+
+  test('by-term mode preserves pair-level count and confidences in output', () => {
+    const aliases = [
+      { from: '岡本', to: 'ガマ', confidence: 'high' },
+      { from: '今', to: 'ガマ', confidence: 'medium' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, { mode: 'by-term', threshold: 2 });
+    const okamoto = result.find(r => r.from === '岡本');
+    const ima = result.find(r => r.from === '今');
+    expect(okamoto.count).toBe(1);
+    expect(ima.count).toBe(1);
+    expect(okamoto.confidences.high).toBe(1);
+    expect(ima.confidences.medium).toBe(1);
+  });
+
+  test('by-term mode does not affect entries with multiple pair-level occurrences', () => {
+    const aliases = [
+      { from: 'a', to: 'X' },
+      { from: 'a', to: 'X' },
+      { from: 'a', to: 'X' },
+    ];
+    const result = aliasMiner.aggregateAliases(aliases, { mode: 'by-term', threshold: 2 });
+    expect(result).toHaveLength(1);
+    expect(result[0].count).toBe(3);
   });
 });
 

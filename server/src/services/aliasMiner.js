@@ -76,12 +76,30 @@ async function extractAliases(pair, openai, options = {}) {
   }
 }
 
-function aggregateAliases(allAliases, threshold = 2) {
-  const map = new Map();
+/**
+ * 集計モード:
+ *   'pair'    : (from, to) pair の出現回数で threshold 判定 (default、現状動作)
+ *   'by-term' : to (term) の合計出現回数で threshold 判定。
+ *               頻出 term の長尾誤認パターン (個別 pair 1 件) を救う (#208)
+ *
+ * 互換性: 第 2 引数が number の場合 (legacy) は threshold として扱う
+ */
+function aggregateAliases(allAliases, options = {}) {
+  if (typeof options === 'number') {
+    options = { threshold: options };
+  }
+  const {
+    mode = 'pair',
+    threshold = 2,
+    requireHighConfidence = false,
+  } = options;
+
+  // Step 1: Build pair-level map
+  const pairMap = new Map();
   for (const alias of allAliases) {
     const key = `${alias.from}|${alias.to}`;
-    if (!map.has(key)) {
-      map.set(key, {
+    if (!pairMap.has(key)) {
+      pairMap.set(key, {
         from: alias.from,
         to: alias.to,
         count: 0,
@@ -89,7 +107,7 @@ function aggregateAliases(allAliases, threshold = 2) {
         categories: new Map(),
       });
     }
-    const entry = map.get(key);
+    const entry = pairMap.get(key);
     entry.count++;
     const conf = alias.confidence || 'medium';
     if (entry.confidences[conf] !== undefined) entry.confidences[conf]++;
@@ -97,9 +115,30 @@ function aggregateAliases(allAliases, threshold = 2) {
     entry.categories.set(cat, (entry.categories.get(cat) || 0) + 1);
   }
 
+  // Step 2: Compute term-level totals (used in by-term mode)
+  const termTotals = new Map();
+  for (const entry of pairMap.values()) {
+    if (!termTotals.has(entry.to)) {
+      termTotals.set(entry.to, { totalCount: 0, hasHigh: false });
+    }
+    const tt = termTotals.get(entry.to);
+    tt.totalCount += entry.count;
+    if (entry.confidences.high > 0) tt.hasHigh = true;
+  }
+
+  // Step 3: Apply threshold and build result
   const result = [];
-  for (const entry of map.values()) {
-    if (entry.count < threshold) continue;
+  for (const entry of pairMap.values()) {
+    let pass;
+    if (mode === 'by-term') {
+      const tt = termTotals.get(entry.to);
+      pass = tt.totalCount >= threshold;
+      if (requireHighConfidence) pass = pass && tt.hasHigh;
+    } else {
+      pass = entry.count >= threshold;
+    }
+    if (!pass) continue;
+
     let bestCat = 'term';
     let bestCount = 0;
     for (const [cat, n] of entry.categories) {
