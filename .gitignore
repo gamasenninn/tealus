@@ -15,6 +15,11 @@ agent-server/logs/
 server/config/transcription_guideline.json
 server/config/mining_report.json
 
+# Marp 生成物 (markdown source からビルド可能、commit 不要)
+docs/presentation/*.html
+docs/presentation/*.pdf
+docs/presentation/*.pptx
+
 # Build output
 client/dist/
 server/dist/
