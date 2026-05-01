@@ -15,9 +15,11 @@
 │         ↓                                                   │
 │   ③ agent-server を立ち上げる (Bot として login する process)   │
 │         ↓                                                   │
-│   ④ Bot ユーザーをルームに招待                                 │
+│   ④ admin で webhook 登録 (server → agent-server URL の紐付け) │
 │         ↓                                                   │
-│   ⑤ チャット内で @Bot に話しかけると AI が返答                  │
+│   ⑤ Bot ユーザーをルームに招待                                 │
+│         ↓                                                   │
+│   ⑥ チャット内で @Bot に話しかけると AI が返答                  │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -133,9 +135,47 @@ Agent Server started on port 4000
 
 ---
 
-## ステップ 4. 起動確認 (~2 分)
+## ステップ 4. Webhook を登録する (~3 分) ⚠️ **必須**
 
-### 4-1. agent-server の health check
+agent-server は server から **Webhook イベント** (POST `/webhook/tealus`) を受け取って AI 応答を生成します。**この登録をしないと Bot がチャットメッセージを認識できません** (= setup したのに反応しない、という新規ユーザーが詰まる定番ポイント)。
+
+### 4-1. admin ダッシュボードで Webhook を登録
+
+1. `http://localhost:5173` で admin login → 「システム管理」 → 左サイドバーの **「Webhook 管理」**
+2. **「+ 新規 Webhook」** をクリック
+3. フォームを以下のように入力:
+
+   | 項目 | 値 | 備考 |
+   |---|---|---|
+   | URL | `http://localhost:4000/webhook/tealus` | agent-server の listen URL + `/webhook/tealus` path |
+   | events | `message.created` (default) | これだけで対話 OK、後から `voice.transcription_completed` / `reaction.added` 等を追加可能 |
+   | room_id | 空 | 全ルーム共通。特定ルームに限定したい場合のみ選択 |
+   | secret | 空 (or 任意の文字列) | 本番では HMAC 検証用に設定推奨、dev では空でも動く |
+   | is_active | ✅ ON | デフォルト ON |
+
+4. **「作成」** をクリック → 一覧に追加されたことを確認
+
+### 4-2. テスト送信で疎通確認
+
+webhook 一覧の作成した行で **「テスト送信」** ボタンをクリック → status `200` が返れば agent-server 側で受信成功 ✅。
+
+agent-server のターミナルログにも以下のような line が出るはず:
+
+```
+[Webhook] Received event: test
+```
+
+> 💡 events は配列で複数指定可能。`message.created` で対話、`voice.transcription_completed` で音声起こし完了通知、`member.joined` で Bot 参加検知、`reaction.added` でリアクション拾い、など。**まず `message.created` だけで動かしてから後で追加**するのが安全。
+
+> ⚠️ **本番環境** (Docker compose.full / NAS デプロイ) では URL を `http://localhost:4000` ではなく **agent-server のコンテナ名** (例: `http://agent-server:4000/webhook/tealus`) にする必要があります。Docker network 内では `localhost` は各コンテナ自身を指すため。
+
+> ⚠️ webhook を登録したのに「テスト送信」が `502` 等で失敗する場合は、ステップ 3 で agent-server がちゃんと起動しているか確認してください (`curl http://localhost:4000/health` で `200` が返るはず)。
+
+---
+
+## ステップ 5. 起動確認 (~2 分)
+
+### 5-1. agent-server の health check
 
 別ターミナルで:
 
@@ -145,14 +185,14 @@ curl http://localhost:4000/health
 
 成功すると JSON が返ります (例: `{"status":"ok","version":"0.2.1"}`)。
 
-### 4-2. ブラウザで Bot がオンラインなのを確認
+### 5-2. ブラウザで Bot がオンラインなのを確認
 
 1. `http://localhost:5173` で admin login
 2. 左の友だちリスト (またはユーザー検索) に `AI アシスタント` (display_name) が出ていれば OK
 
 ---
 
-## ステップ 5. Bot をルームに参加させる (~2 分)
+## ステップ 6. Bot をルームに参加させる (~2 分)
 
 Bot は **ルームに招待されないと反応しません**。1 対 1 DM か、グループルームに参加させる必要があります。
 
@@ -171,9 +211,9 @@ Bot は **ルームに招待されないと反応しません**。1 対 1 DM か
 
 ---
 
-## ステップ 6. AI と対話する (~1 分)
+## ステップ 7. AI と対話する (~1 分)
 
-### 6-1. テストメッセージ
+### 7-1. テストメッセージ
 
 DM ルームで以下のようなメッセージを送ってみる:
 
@@ -183,7 +223,7 @@ DM ルームで以下のようなメッセージを送ってみる:
 
 数秒以内に Bot が返答すれば成功 ✅。
 
-### 6-2. 返答が来ない場合のチェック
+### 7-2. 返答が来ない場合のチェック
 
 | 症状 | 確認ポイント |
 |---|---|
@@ -195,9 +235,9 @@ DM ルームで以下のようなメッセージを送ってみる:
 
 ---
 
-## ステップ 7. (任意) ルームごとのカスタマイズ
+## ステップ 8. (任意) ルームごとのカスタマイズ
 
-### 7-1. system prompt をルームごとに設定
+### 8-1. system prompt をルームごとに設定
 
 ダッシュボード → ルーム設定 → **「エージェント設定」** で、ルームごとに以下をカスタマイズできます:
 
@@ -205,7 +245,7 @@ DM ルームで以下のようなメッセージを送ってみる:
 - **system prompt**: そのルームでの Bot の役割や口調 (例: 「経理の質問に答える」「日本語で短く答える」)
 - **TTS 音声モデル**: ルームごとに別の声を割り当てる (Aivis Cloud TTS 利用時)
 
-### 7-2. ルーム単位の MCP 接続
+### 8-2. ルーム単位の MCP 接続
 
 ルーム設定 → **「MCP 設定」** で、そのルームで有効にする MCP server (filesystem / web search / Tealus 自身など) を選べます。`agent-server/mcp_config.json` で利用可能な MCP を定義してから、UI でルームごとに ON/OFF します。
 
@@ -223,7 +263,7 @@ DM ルームで以下のようなメッセージを送ってみる:
 
 ---
 
-## トラブルシュート (ステップ 6 以外の問題)
+## トラブルシュート (ステップ 7 以外の問題)
 
 ### Q. `Bot login failed: User not found`
 
@@ -239,12 +279,14 @@ DM ルームで以下のようなメッセージを送ってみる:
 
 ### Q. agent-server は起動するが Bot がメッセージに反応しない
 
-複数の原因が考えられます:
+頻度順に確認:
 
-1. **Bot がそのルームに参加していない** → ルーム設定 → メンバー一覧で確認
-2. **グループルームで mention していない** → `@AI アシスタント` のように `@` でメンションする
-3. **OPENAI_API_KEY が未設定 or 不正** → agent-server のログに「OpenAI ...」というエラー、または「OPENAI_API_KEY is not set」のような diagnostic ログが出ているはず
-4. **Webhook が server から agent-server に届いていない** → server のログに「webhook delivered to ...」のようなメッセージがあるか確認
+1. **Webhook が登録されていない** (← 一番多い原因) → admin ダッシュボード → Webhook 管理 で `http://localhost:4000/webhook/tealus` の行が **is_active=ON** で存在するか確認。無ければステップ 4 を実施
+2. **Webhook の URL が間違っている** → 「テスト送信」で 200 が返るか確認 (502 や接続エラーなら URL or agent-server 起動状態を見直す)
+3. **Bot がそのルームに参加していない** → ルーム設定 → メンバー一覧で確認
+4. **グループルームで mention していない** → `@AI アシスタント` のように `@` でメンションする (DM では mention 不要)
+5. **OPENAI_API_KEY が未設定 or 不正** → agent-server のログに「OpenAI ...」というエラー、または「OPENAI_API_KEY is not set」の diagnostic が出ているはず
+6. **events に `message.created` が含まれていない** → Webhook 編集で events を確認
 
 ### Q. 「Bot ユーザー」フラグを ON にし忘れた
 
