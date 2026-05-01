@@ -237,6 +237,8 @@ npm run migrate
 >
 > 2 回目以降（新しい migration が追加された時）は `npm run migrate` を手動実行してください。migrations は冪等に設計されているため、再実行しても問題は起きません。
 
+> **PostgreSQL extension 要件 (v0.2.0 以降)**: migration 021 (`pg_trgm` GIN index、メッセージ全文検索の高速化に使用) が `pg_trgm` extension を有効化します。Tealus 同梱の Docker Postgres image (`docker-compose.yml`) では自動有効化されるため追加作業不要です。**managed PostgreSQL** (Supabase / RDS / Heroku Postgres / Cloud SQL 等) を使う場合は事前に `CREATE EXTENSION pg_trgm` 実行可能な権限 (SUPERUSER 相当) を確認してください。
+
 #### サーバー起動
 
 ```bash
