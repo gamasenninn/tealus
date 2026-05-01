@@ -10,6 +10,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **tealus-cli watch モードで token 再取得時に「ユーザーIDとパスワードは必須です」で停止する問題に対する防御層** ([#212](https://github.com/gamasenninn/tealus/issues/212))
+  - 症状: `tealus-cli --watch` で運用中、JWT 再取得 (refresh) のタイミングで login() が server に空 body を送ってしまい `AUTH_LOGIN_REQUIRED` で停止 (再発性あり、現場運用で実害あり)
+  - 真の root cause は code path 上未特定 (BOT_ID/BOT_PASS の再代入箇所は startup 3 行のみ、watch loop 中の変化は無いはず) — Windows / fs.watch / native callback 経由の状態混乱が疑われるが確証なし
+  - **防御策として** 認証情報を起動時に `Object.freeze({ login_id, password })` で固定 capture、login() は `credentials` を参照するよう変更 (process.env / module-level let が runtime 中に変化しても credentials は不変)
+  - 再発時の root cause 特定用 diagnostic を追加: login() 入口で credentials 不在を WARN、refresh 失敗時に request body 概要 + server response を log
+  - 過去の発生報告: 2026-05-01 業務メモで現場運用者から報告 (「やはり CLI が途中で止まる」)、複数回再発した recurring bug
+
 ## [0.2.1] - 2026-05-01
 
 ### Fixed

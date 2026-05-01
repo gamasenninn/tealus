@@ -102,9 +102,23 @@ function uploadFile(token, endpoint, fieldName, filePath) {
 // --- Auth ---
 
 async function login() {
-  const data = await request('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
+  // #212: credentials は startup 時に Object.freeze() で capture した frozen object。
+  // BOT_ID/BOT_PASS の途中欠落 (process.env clobber 等の suspected root cause) から守る。
+  if (!credentials.login_id || !credentials.password) {
+    console.error('[FATAL] credentials missing at login() entry. login_id present=', !!credentials.login_id, ', password present=', !!credentials.password);
+  }
+  const data = await request('POST', '/api/auth/login', {
+    login_id: credentials.login_id,
+    password: credentials.password,
+  });
   if (!data.token) {
     console.error('❌ ログイン失敗:', data.error || 'Unknown error');
+    // #212: refresh 失敗時の root cause 特定用 diagnostic
+    console.error('   診断:', JSON.stringify({
+      login_id: credentials.login_id,
+      password_length: credentials.password ? credentials.password.length : 0,
+      server_response: data,
+    }));
     process.exit(1);
   }
   return data.token;
@@ -346,6 +360,14 @@ if (!BOT_ID || !BOT_PASS) {
   console.error('❌ --bot-id / --bot-pass を指定するか、scripts/.env に TEALUS_BOT_ID と TEALUS_BOT_PASS を設定してください');
   process.exit(1);
 }
+
+// #212: 認証情報を起動時に Object.freeze() で固定 capture。
+// process.env や module-level let が runtime 中に変化しても credentials は startup 値を保持する。
+// login() は credentials を参照するので「watch loop 中に途中で空になる」現象に対する防御層。
+const credentials = Object.freeze({
+  login_id: BOT_ID,
+  password: BOT_PASS,
+});
 
 const [command, ...args] = globalParsed.rest;
 
