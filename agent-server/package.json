@@ -1,6 +1,9 @@
 {
   "name": "tealus-agent-server",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "license": "MIT",
   "description": "Tealus AI Agent Server",
   "main": "src/index.js",

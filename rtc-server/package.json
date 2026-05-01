@@ -1,6 +1,9 @@
 {
   "name": "tealus-rtc-server",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "Tealus RTC Server — mediasoup SFU for voice/video calls and transceiver",
   "license": "MIT",
   "main": "server.js",

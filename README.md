@@ -23,6 +23,8 @@ Tealus は LINE ライクな直感 UI のオープンソース社内メッセン
 
 ## クイックスタート（5 分で動く最小構成）
 
+> **前提**: **Node.js 20 以上** (推奨: 22 LTS) + **Docker** + **Docker Compose**。Node 18 以下では `undici` が `ReferenceError: File is not defined` で crash します ([#210](https://github.com/gamasenninn/tealus/issues/210))。`.npmrc` で `engine-strict=true` を有効化しているため、Node 18 では `npm install` 自体が `EBADENGINE` で fail します。Ubuntu 等の apt 標準が Node 18 系の場合は [nvm](https://github.com/nvm-sh/nvm) や [NodeSource](https://github.com/nodesource/distributions) で 22 LTS を入れてください。
+
 ```bash
 git clone https://github.com/gamasenninn/tealus.git
 cd tealus

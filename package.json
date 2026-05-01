@@ -1,6 +1,9 @@
 {
   "name": "tealus-cli",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "Tealus CLI — コマンドラインからTealusにメッセージ送信",
   "license": "MIT",
   "bin": {

@@ -12,6 +12,12 @@
 
 ### Fixed
 
+- **Node.js 18 環境で `undici` が `ReferenceError: File is not defined` で crash する問題を install 時点で防止** ([#210](https://github.com/gamasenninn/tealus/issues/210))
+  - `File` global は Node.js 20 で初めて runtime に追加された。`undici` v6+ (openai SDK 等の transitive dependency) が `webidl.MakeTypeAssertion(File)` で global を要求するため、Node 18 では起動時に即 crash していた
+  - 全 6 package.json (`/`, `server/`, `client/`, `dashboard/`, `agent-server/`, `rtc-server/`) に `engines.node: ">=20.0.0"` を追加
+  - ルートに `.npmrc` を新設 (`engine-strict=true`)、Node 18 では `npm install` 自体が `EBADENGINE` で hard fail する状態に
+  - README クイックスタートの先頭に Node 20+ 必須を太字で明記、`nvm` / NodeSource 案内付き
+  - 採用者が起動時の cryptic な undici エラーで詰まる前に install 時点で気付ける防御層を追加
 - **初回ユーザー登録が admin role にならない問題を修正** ([#211](https://github.com/gamasenninn/tealus/issues/211))
   - `POST /api/auth/register` が `role` 未指定で INSERT していたため、migration 002 の default `'user'` で作成され、README どおりに登録した「管理者」が一般 user 権限になっていた
   - **最初の非 Bot ユーザー (`is_bot = false` の COUNT が 0) を admin として作成**するロジックを追加 (Mattermost / Rocket.Chat / GitLab 等の標準 OSS パターン)
