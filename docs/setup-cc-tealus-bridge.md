@@ -57,6 +57,60 @@ Agent Server started on port 4000
 [Bot Login] Logged in as AI_AGENT
 ```
 
+### ⚠️ ステップ 1.5: 自己ループ防止の env 設定 (必須、~1 分)
+
+**重要**: Claude Code session が `mcp__tealus__send_message` で reply 投稿すると、その reply 本文に `@cc-{project}` mention が含まれていれば、agent-server がそれを検知して file beacon に再 append → 自分の reply で自分が wake up する **自己ループ**が発生します。
+
+これを防ぐため、`agent-server/.env` に **`CC_SKIP_SENDER_IDS`** (CSV) を設定して、Claude Code session が使う bot user の UUID を skip 対象に登録してください。
+
+#### 1.5-1. Claude Code session の bot user UUID を確認
+
+最初に 1 度、Claude Code session で適当に Tealus に message を送信 (例: `mcp__tealus__send_message` で hello 送信) し、レスポンスから `sender_id` を取得:
+
+```json
+{
+  "message": {
+    "id": "...",
+    "sender_id": "b3e292d6-1953-4389-9fba-7e56421a2aef",
+    ...
+  }
+}
+```
+
+この `sender_id` の UUID をメモします。
+
+#### 1.5-2. agent-server/.env に追記
+
+`agent-server/.env` の末尾に:
+
+```bash
+# cc-queue (Claude Code routing、#213 Phase A) — self-loop prevention
+CC_SKIP_SENDER_IDS=b3e292d6-1953-4389-9fba-7e56421a2aef
+```
+
+複数 cc bot がある場合は CSV で:
+
+```bash
+CC_SKIP_SENDER_IDS=uuid-1,uuid-2,uuid-3
+```
+
+#### 1.5-3. agent-server を再起動
+
+env は process 起動時に読み込まれるため、再起動が必要:
+
+```
+Ctrl+C   ← 停止
+npm run dev   ← 再起動
+```
+
+#### 1.5-4. 動作確認
+
+設定が効いているか確認するには:
+
+1. Tealus に `@cc-{project} test` 投稿 (Claude Code session が wake up する想定)
+2. session から reply を投稿 (本文に `@cc-{project}` を含めて test)
+3. `tail ~/.tealus/cc-queue/{project}.jsonl` で確認 → **自分の reply が含まれていなければ skip 成功** ✅
+
 ---
 
 ## ステップ 2. プロジェクト側に cc-tealus 設定を作る (~2 分)
@@ -155,6 +209,18 @@ listen-tealus skill を実行して、Tealus からの mention を待機して
 ---
 
 ## トラブルシュート
+
+### Q. 自分の reply で自分が再 wake する (無限ループ前段)
+
+→ **`CC_SKIP_SENDER_IDS` env 未設定**が原因。ステップ 1.5 を実施してください。
+
+確認方法:
+
+```bash
+tail -n 5 ~/.tealus/cc-queue/{project}.jsonl
+```
+
+自分の bot UUID (sender_id) が末尾に append されてたら fix 必要。env 設定 + agent-server 再起動後、同じ操作で **自分の reply が file に append されない**ことを確認。
 
 ### Q. mention 投稿しても session が反応しない
 
