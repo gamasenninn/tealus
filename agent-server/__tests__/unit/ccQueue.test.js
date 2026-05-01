@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { extractCcProject, appendCcEvent } = require('../../src/webhook/ccQueue');
+const { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds } = require('../../src/webhook/ccQueue');
 
 describe('extractCcProject', () => {
   test('@cc-{name} mention があれば project 名を返す', () => {
@@ -103,5 +103,60 @@ describe('appendCcEvent', () => {
 
     expect(fs.existsSync(newDir)).toBe(true);
     expect(fs.existsSync(path.join(newDir, 'tealus.jsonl'))).toBe(true);
+  });
+});
+
+describe('shouldSkipCcSender (self-loop prevention)', () => {
+  test('skip set が空ならどんな sender でも false', () => {
+    expect(shouldSkipCcSender('any-id', new Set())).toBe(false);
+    expect(shouldSkipCcSender('any-id', null)).toBe(false);
+    expect(shouldSkipCcSender('any-id', undefined)).toBe(false);
+  });
+
+  test('senderId が skip set に含まれていれば true', () => {
+    const set = new Set(['bot-1', 'bot-2']);
+    expect(shouldSkipCcSender('bot-1', set)).toBe(true);
+    expect(shouldSkipCcSender('bot-2', set)).toBe(true);
+  });
+
+  test('senderId が skip set に含まれていなければ false', () => {
+    const set = new Set(['bot-1']);
+    expect(shouldSkipCcSender('user-1', set)).toBe(false);
+  });
+
+  test('senderId が空 / null / undefined なら false', () => {
+    const set = new Set(['bot-1']);
+    expect(shouldSkipCcSender('', set)).toBe(false);
+    expect(shouldSkipCcSender(null, set)).toBe(false);
+    expect(shouldSkipCcSender(undefined, set)).toBe(false);
+  });
+});
+
+describe('loadSkipSenderIds', () => {
+  test('CSV から Set を構築', () => {
+    const set = loadSkipSenderIds('id-1,id-2,id-3');
+    expect(set.size).toBe(3);
+    expect(set.has('id-1')).toBe(true);
+    expect(set.has('id-2')).toBe(true);
+    expect(set.has('id-3')).toBe(true);
+  });
+
+  test('前後 whitespace を trim', () => {
+    const set = loadSkipSenderIds(' id-1 , id-2 ,id-3 ');
+    expect(set.has('id-1')).toBe(true);
+    expect(set.has('id-2')).toBe(true);
+    expect(set.has('id-3')).toBe(true);
+  });
+
+  test('空 / undefined / null は空 Set', () => {
+    expect(loadSkipSenderIds('').size).toBe(0);
+    expect(loadSkipSenderIds(undefined).size).toBe(0);
+    expect(loadSkipSenderIds(null).size).toBe(0);
+  });
+
+  test('単一 ID も処理', () => {
+    const set = loadSkipSenderIds('only-one');
+    expect(set.size).toBe(1);
+    expect(set.has('only-one')).toBe(true);
   });
 });

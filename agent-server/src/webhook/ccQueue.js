@@ -50,4 +50,35 @@ function appendCcEvent(project, payload, baseDir = DEFAULT_QUEUE_DIR) {
   return filePath;
 }
 
-module.exports = { extractCcProject, appendCcEvent, DEFAULT_QUEUE_DIR };
+/**
+ * 自己ループ防止: sender が cc bot user list に含まれていればスキップ。
+ * Claude Code session が自分の reply で再 wake されないための防御。
+ *
+ * @param {string|null|undefined} senderId
+ * @param {Set<string>|null|undefined} skipSet - skip 対象 sender ID Set
+ * @returns {boolean} skip すべきなら true
+ */
+function shouldSkipCcSender(senderId, skipSet) {
+  if (!senderId || !skipSet || skipSet.size === 0) return false;
+  return skipSet.has(senderId);
+}
+
+/**
+ * env (default `process.env.CC_SKIP_SENDER_IDS`、CSV) から skip Set を構築。
+ * テスト用に直接 string 渡し可。
+ *
+ * @param {string} [envVal=process.env.CC_SKIP_SENDER_IDS]
+ * @returns {Set<string>}
+ */
+function loadSkipSenderIds(envVal = process.env.CC_SKIP_SENDER_IDS) {
+  if (!envVal) return new Set();
+  return new Set(envVal.split(',').map(s => s.trim()).filter(Boolean));
+}
+
+module.exports = {
+  extractCcProject,
+  appendCcEvent,
+  shouldSkipCcSender,
+  loadSkipSenderIds,
+  DEFAULT_QUEUE_DIR,
+};

@@ -5,7 +5,10 @@
 const logger = require('../lib/logger');
 const { dispatch } = require('./dispatcher');
 const botApi = require('../lib/botApi');
-const { extractCcProject, appendCcEvent } = require('./ccQueue');
+const { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds } = require('./ccQueue');
+
+// #213 Phase A polish: 自己ループ防止用 sender skip set (env CC_SKIP_SENDER_IDS、CSV)
+const ccSkipSenderIds = loadSkipSenderIds();
 
 // Bot ユーザーIDのキャッシュ（起動時に設定）
 const botUserIds = new Set();
@@ -75,20 +78,25 @@ async function handleMessageCreated(payload) {
   // Bot membership 検証より前に実行 (cc routing は agent-server の Light/Deep dispatch とは独立)。
   const ccProject = extractCcProject(message.content);
   if (ccProject) {
-    try {
-      const ccPayload = {
-        id: message.id,
-        room_id: room.id,
-        room_name: room.name,
-        sender: message.sender,
-        content: message.content,
-        type: message.type,
-        created_at: message.created_at,
-      };
-      const filePath = appendCcEvent(ccProject, ccPayload);
-      logger.info(`[cc-queue] Routed @cc-${ccProject} → ${filePath}`);
-    } catch (err) {
-      logger.error(`[cc-queue] Append failed: ${err.message}`);
+    if (shouldSkipCcSender(senderId, ccSkipSenderIds)) {
+      // #213 Phase A polish: Claude Code session 等の cc bot からの @cc-* 言及は self-loop の元。skip。
+      logger.debug(`[cc-queue] Skipped self-loop sender ${senderId} for @cc-${ccProject}`);
+    } else {
+      try {
+        const ccPayload = {
+          id: message.id,
+          room_id: room.id,
+          room_name: room.name,
+          sender: message.sender,
+          content: message.content,
+          type: message.type,
+          created_at: message.created_at || new Date().toISOString(),
+        };
+        const filePath = appendCcEvent(ccProject, ccPayload);
+        logger.info(`[cc-queue] Routed @cc-${ccProject} → ${filePath}`);
+      } catch (err) {
+        logger.error(`[cc-queue] Append failed: ${err.message}`);
+      }
     }
     // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
   }

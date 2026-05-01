@@ -21,8 +21,10 @@
   - **L2 (suggest reply) が default**: 私が reply 案を提案 → user が `OK` / 編集 / `スキップ` 選択 → tealus-mcp で投稿
   - 採用者向け walkthrough: `docs/setup-cc-tealus-bridge.md`
   - 例設定ファイル: `.claude/cc-tealus.json.example` (`.claude/cc-tealus.json` は gitignore)
-  - 単体テスト 12 件 (`agent-server/__tests__/unit/ccQueue.test.js`、170 全 pass)
-  - **Phase B 候補** (本 release では out of scope): multi-session lock file、tag 形式 routing、L1/L3 切り替え skill、watermark 自動 GC、network-aware (別 PC 対応)
+  - 単体テスト 20 件 (`agent-server/__tests__/unit/ccQueue.test.js`、178 全 pass)
+  - **自己ループ防止** (実機 end-to-end test 中に発見): \`CC_SKIP_SENDER_IDS\` env (CSV) で「cc routing で skip する sender bot user ID list」を設定可能。Claude Code session が自分の reply で再 wake されないための防御層 (`shouldSkipCcSender` + `loadSkipSenderIds`)
+  - **`created_at` fallback**: webhook payload に `message.created_at` が無い場合は `new Date().toISOString()` で補完
+  - **Phase B 候補** (本 release では out of scope): multi-session lock file、tag 形式 routing、L1/L3 切り替え skill、watermark 自動 GC、network-aware (別 PC 対応)、cc bot 動的登録 (env なしで自動検出)
   - 起点: 「Webhook を per-project で立てると重い」という現場運用の声、agent-server を「AI 応答エンジン」から「**AI 班 dispatcher**」へ進化させる構造判断の入口
 
 ### Fixed
