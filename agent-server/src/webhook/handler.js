@@ -5,6 +5,7 @@
 const logger = require('../lib/logger');
 const { dispatch } = require('./dispatcher');
 const botApi = require('../lib/botApi');
+const { extractCcProject, appendCcEvent } = require('./ccQueue');
 
 // Bot ユーザーIDのキャッシュ（起動時に設定）
 const botUserIds = new Set();
@@ -68,6 +69,28 @@ async function handleMessageCreated(payload) {
   if (senderId && botUserIds.has(senderId)) {
     logger.debug(`Skipped bot message from ${senderId}`);
     return;
+  }
+
+  // #213 Phase A: cc-queue routing — `@cc-{project}` mention を file beacon に追記。
+  // Bot membership 検証より前に実行 (cc routing は agent-server の Light/Deep dispatch とは独立)。
+  const ccProject = extractCcProject(message.content);
+  if (ccProject) {
+    try {
+      const ccPayload = {
+        id: message.id,
+        room_id: room.id,
+        room_name: room.name,
+        sender: message.sender,
+        content: message.content,
+        type: message.type,
+        created_at: message.created_at,
+      };
+      const filePath = appendCcEvent(ccProject, ccPayload);
+      logger.info(`[cc-queue] Routed @cc-${ccProject} → ${filePath}`);
+    } catch (err) {
+      logger.error(`[cc-queue] Append failed: ${err.message}`);
+    }
+    // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
   }
 
   // Bot が参加していないルームは無視（ただしルーム一覧を再取得して確認）

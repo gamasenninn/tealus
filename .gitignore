@@ -63,3 +63,6 @@ agent-server/config/system_prompt.md
 
 # Internal reports
 report/
+
+# Claude Code cc-tealus runtime config (#213) — example はコミット
+.claude/cc-tealus.json

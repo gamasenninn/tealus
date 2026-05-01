@@ -1,0 +1,7 @@
+{
+  "_comment": "Tealus cc-queue 設定。.claude/cc-tealus.json として copy + 編集してください (gitignored)。",
+  "project_name": "tealus",
+  "auto_level": "L2",
+  "queue_path": "~/.tealus/cc-queue/tealus.jsonl",
+  "catch_up_policy": "ask"
+}
