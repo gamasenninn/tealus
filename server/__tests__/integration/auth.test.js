@@ -68,6 +68,63 @@ describe('Auth API', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBeDefined();
     });
+
+    // #211: First non-bot user should be auto-promoted to admin
+    it('should auto-promote first non-bot user to admin role', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          login_id: 'FIRST_USER',
+          display_name: '管理者',
+          password: 'password123',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.user.role).toBe('admin');
+    });
+
+    it('should create subsequent users with default user role', async () => {
+      // First user → admin
+      await request(app)
+        .post('/api/auth/register')
+        .send({
+          login_id: 'FIRST_USER',
+          display_name: '管理者',
+          password: 'password123',
+        });
+
+      // Second user → user
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          login_id: 'SECOND_USER',
+          display_name: '一般ユーザー',
+          password: 'password456',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.user.role).toBe('user');
+    });
+
+    it('should auto-promote even if Bot users exist (only non-bot users counted)', async () => {
+      const pool = getTestPool();
+      // Insert a Bot user directly (simulating migration 006_bot_user.sql)
+      await pool.query(
+        `INSERT INTO users (login_id, display_name, password_hash, role, is_bot)
+         VALUES ('BOT_TEST', 'Test Bot', 'dummy_hash', 'user', true)`
+      );
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          login_id: 'FIRST_HUMAN',
+          display_name: '管理者',
+          password: 'password123',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.user.role).toBe('admin');
+    });
   });
 
   // ============================================

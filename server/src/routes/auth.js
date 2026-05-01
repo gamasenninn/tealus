@@ -47,12 +47,18 @@ router.post('/register', async (req, res) => {
     // Hash password
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
+    // 最初の非 Bot ユーザーは admin として作成 (#211)
+    const { rows: [{ count }] } = await pool.query(
+      'SELECT COUNT(*) FROM users WHERE is_bot = false'
+    );
+    const role = parseInt(count, 10) === 0 ? 'admin' : 'user';
+
     // Insert user
     const result = await pool.query(
-      `INSERT INTO users (login_id, display_name, password_hash)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (login_id, display_name, password_hash, role)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
-      [login_id, display_name, password_hash]
+      [login_id, display_name, password_hash, role]
     );
 
     const user = result.rows[0];

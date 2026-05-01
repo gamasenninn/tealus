@@ -10,6 +10,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **初回ユーザー登録が admin role にならない問題を修正** ([#211](https://github.com/gamasenninn/tealus/issues/211))
+  - `POST /api/auth/register` が `role` 未指定で INSERT していたため、migration 002 の default `'user'` で作成され、README どおりに登録した「管理者」が一般 user 権限になっていた
+  - **最初の非 Bot ユーザー (`is_bot = false` の COUNT が 0) を admin として作成**するロジックを追加 (Mattermost / Rocket.Chat / GitLab 等の標準 OSS パターン)
+  - 以降の登録は user role で作成、admin がダッシュボード経由で昇格管理可能
+  - integration test 3 件追加 (auth.test.js: first-user → admin / second-user → user / Bot 存在下でも auto-promote)
+  - README 5 章にも auto-promote 挙動を明記
+
 ## [0.2.0] - 2026-04-30
 
 ### Added
