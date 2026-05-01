@@ -295,6 +295,8 @@ Invoke-RestMethod -Uri http://localhost:3000/api/auth/register -Method Post -Con
 
 server / client だけでも動きますが、Tealus のコア体験 (AI 連携、通話、トランシーバー、Aivis Cloud TTS) を使うには **agent-server** と **rtc-server** が必要です。
 
+> 📖 **初めて触る方向けの詳細手順**: [`docs/setup-ai-agent.md`](./docs/setup-ai-agent.md) に「OpenAI API キー取得 → Bot ユーザー作成 → agent-server 起動 → ルーム招待 → 対話確認」までの完全な walkthrough があります (15-20 分)。下記 6-1 / 6-2 はそのサマリです。
+
 #### 6-1. Bot ユーザー作成
 
 agent-server は Bot ユーザーとしてログインしてチャットに参加します。Step 5 で登録した管理者でログイン → ダッシュボード (`http://localhost:3000/system`) → ユーザー管理 で、もう 1 ユーザー（例: `login_id=AI_AGENT`）を **「Bot ユーザー」フラグ ON** で作成してください。Bot ユーザーはログイン画面に出ず、API/CLI から呼ぶ専用です。
