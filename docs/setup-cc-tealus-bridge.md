@@ -57,11 +57,13 @@ Agent Server started on port 4000
 [Bot Login] Logged in as AI_AGENT
 ```
 
-### ⚠️ ステップ 1.5: 自己ループ防止の env 設定 (必須、~1 分)
+### ステップ 1.5: 自己ループ防止の env 設定 (任意、defense in depth)
 
-**重要**: Claude Code session が `mcp__tealus__send_message` で reply 投稿すると、その reply 本文に `@cc-{project}` mention が含まれていれば、agent-server がそれを検知して file beacon に再 append → 自分の reply で自分が wake up する **自己ループ**が発生します。
+> 💡 **#215 (2026-05-02) 以降**、cc-tealus は `@cc-{project}` を **メッセージの先頭** にある場合のみ match する仕様になりました。AI reply は本文中で mention を引用しても、先頭ではないため自然に skip されます。**この env 設定は基本不要**です。
+>
+> ただし「文中 mention まで含めて strict に防御したい」場合の defense in depth として、以下の env 設定が利用可能です。
 
-これを防ぐため、`agent-server/.env` に **`CC_SKIP_SENDER_IDS`** (CSV) を設定して、Claude Code session が使う bot user の UUID を skip 対象に登録してください。
+`agent-server/.env` に **`CC_SKIP_SENDER_IDS`** (CSV) を設定すると、指定した sender bot user の UUID からの mention は先頭マッチング判定の前に skip されます。
 
 #### 1.5-1. Claude Code session の bot user UUID を確認
 
@@ -193,6 +195,8 @@ listen-tealus skill を実行して、Tealus からの mention を待機して
 ```
 @cc-tealus これ進捗教えて
 ```
+
+> ⚠️ **重要**: `@cc-{project}` は **メッセージの先頭** に書いてください (#215 以降の仕様)。例えば `これ見て @cc-tealus` のような文中 mention は **無効** です (改行直後の `@cc-{project}` は OK、行頭扱い)。
 
 数秒以内に Claude Code session に通知が出れば成功 ✅:
 

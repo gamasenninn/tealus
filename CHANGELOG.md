@@ -13,7 +13,7 @@
 ### Added
 
 - **Claude Code ↔ Tealus リアルタイム連携 (file beacon パターン、Phase A)** ([#213](https://github.com/gamasenninn/tealus/issues/213))
-  - agent-server に `@cc-{project}` mention 検出 + file beacon append logic を追加 (`agent-server/src/webhook/ccQueue.js`)。webhook 受信時、メッセージ content に `@cc-{project}` が含まれていれば `~/.tealus/cc-queue/{project}.jsonl` に payload を 1 行 append
+  - agent-server に `@cc-{project}` mention 検出 + file beacon append logic を追加 (`agent-server/src/webhook/ccQueue.js`)。webhook 受信時、メッセージ content の **先頭に** `@cc-{project}` があれば `~/.tealus/cc-queue/{project}.jsonl` に payload を 1 行 append (#215 で先頭マッチング方式に変更)
   - **stateless / convention-based** な設計: agent-server は project 一覧を管理しない、mention の suffix がそのまま file 名になる
   - **論理識別子方式** で routing: ディレクトリ位置と project 識別子を decouple、`.claude/cc-tealus.json` で `project_name` を明示
   - **Claude Code session 側**: `.claude/skills/listen-tealus.md` skill で Monitor を arm、`tail -n 0 -F` で新着監視 (sub-second wake-up)
@@ -21,8 +21,9 @@
   - **L2 (suggest reply) が default**: 私が reply 案を提案 → user が `OK` / 編集 / `スキップ` 選択 → tealus-mcp で投稿
   - 採用者向け walkthrough: `docs/setup-cc-tealus-bridge.md`
   - 例設定ファイル: `.claude/cc-tealus.json.example` (`.claude/cc-tealus.json` は gitignore)
-  - 単体テスト 20 件 (`agent-server/__tests__/unit/ccQueue.test.js`、178 全 pass)
-  - **自己ループ防止** (実機 end-to-end test 中に発見): \`CC_SKIP_SENDER_IDS\` env (CSV) で「cc routing で skip する sender bot user ID list」を設定可能。Claude Code session が自分の reply で再 wake されないための防御層 (`shouldSkipCcSender` + `loadSkipSenderIds`)
+  - 単体テスト 22 件 (`agent-server/__tests__/unit/ccQueue.test.js`、180 全 pass)
+  - **自己ループ防止 (主要メカニズム)**: mention は **メッセージの先頭** にある場合のみ match ([#215](https://github.com/gamasenninn/tealus/issues/215))。AI reply は本文中で `@cc-*` を引用しても、その mention は先頭にないため自然に skip される。env 設定不要、stateless
+  - **自己ループ防止 (defense in depth)**: `CC_SKIP_SENDER_IDS` env (CSV) で「cc routing で skip する sender bot user ID list」を任意設定可能 (`shouldSkipCcSender` + `loadSkipSenderIds`)。Phase A 初期実装の名残、先頭マッチング後は基本不要
   - **`created_at` fallback**: webhook payload に `message.created_at` が無い場合は `new Date().toISOString()` で補完
   - **Phase B 候補** (本 release では out of scope): multi-session lock file、tag 形式 routing、L1/L3 切り替え skill、watermark 自動 GC、network-aware (別 PC 対応)、cc bot 動的登録 (env なしで自動検出)
   - 起点: 「Webhook を per-project で立てると重い」という現場運用の声、agent-server を「AI 応答エンジン」から「**AI 班 dispatcher**」へ進化させる構造判断の入口

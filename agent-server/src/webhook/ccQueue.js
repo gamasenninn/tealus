@@ -14,11 +14,14 @@ const os = require('os');
 
 const DEFAULT_QUEUE_DIR = path.join(os.homedir(), '.tealus', 'cc-queue');
 
-// `@cc-{project}` mention 検出。
-// - 単語境界: 直前は word char (英数_) 以外 (メールアドレス内の偽 match を回避)
+// `@cc-{project}` mention 検出 (#215 先頭マッチング方式)。
+// - **メッセージ (or 行) の先頭** に @cc-{project} がある場合のみ match。
+//   /m flag で multi-line 対応 (改行直後も「先頭」扱い)
 // - project 名: 英小文字 / 数字 / ハイフン (lowercase 規約)
 // - 複数 mention は最初の 1 つを返す
-const CC_MENTION_RE = /(?<![A-Za-z0-9_])@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/;
+// - 自己ループ防止の主要メカニズム: AI reply は本文中 (先頭ではない位置) で
+//   @cc-* を引用するため、自然に skip される (CC_SKIP_SENDER_IDS は defense in depth)
+const CC_MENTION_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/m;
 
 /**
  * メッセージ content から @cc-{project} の project 名を抽出する。

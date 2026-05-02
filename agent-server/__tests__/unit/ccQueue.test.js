@@ -7,19 +7,38 @@ const path = require('path');
 const os = require('os');
 const { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds } = require('../../src/webhook/ccQueue');
 
-describe('extractCcProject', () => {
-  test('@cc-{name} mention があれば project 名を返す', () => {
+describe('extractCcProject (先頭マッチング、#215)', () => {
+  test('文字列の先頭にあれば match', () => {
     expect(extractCcProject('@cc-tealus 進捗教えて')).toBe('tealus');
-    expect(extractCcProject('hello @cc-life-line bye')).toBe('life-line');
+    expect(extractCcProject('@cc-life-line')).toBe('life-line');
     expect(extractCcProject('@cc-foo123')).toBe('foo123');
     expect(extractCcProject('@cc-multi-hyphen-name')).toBe('multi-hyphen-name');
   });
 
-  test('@cc mention が無ければ null を返す', () => {
+  test('改行直後 (新しい行の先頭) なら match (multi-line)', () => {
+    expect(extractCcProject('hello\n@cc-tealus 進捗')).toBe('tealus');
+    expect(extractCcProject('line1\nline2\n@cc-foo')).toBe('foo');
+  });
+
+  test('文中 (先頭以外) なら null (#215 で挙動変更)', () => {
+    expect(extractCcProject('hello @cc-tealus bye')).toBeNull();
+    expect(extractCcProject('これも見て @cc-tealus')).toBeNull();
+    expect(extractCcProject('  @cc-tealus  ')).toBeNull(); // 前に whitespace
+  });
+
+  test('複数 @cc mention があり、先頭のものが返る', () => {
+    expect(extractCcProject('@cc-foo middle @cc-bar')).toBe('foo');
+    expect(extractCcProject('not at start\n@cc-bar')).toBe('bar'); // 2 行目の先頭は match
+  });
+
+  test('hyphen 無し / project 名空は null', () => {
+    expect(extractCcProject('@cc')).toBeNull();
+    expect(extractCcProject('@cc-')).toBeNull();
+  });
+
+  test('別形式の mention は null', () => {
     expect(extractCcProject('hello world')).toBeNull();
     expect(extractCcProject('@AI please help')).toBeNull();
-    expect(extractCcProject('@cc')).toBeNull(); // hyphen 無し
-    expect(extractCcProject('@cc-')).toBeNull(); // project 名空
   });
 
   test('null / undefined / 空文字を安全に処理', () => {
@@ -28,23 +47,15 @@ describe('extractCcProject', () => {
     expect(extractCcProject(undefined)).toBeNull();
   });
 
-  test('複数 @cc mention があれば最初の 1 つを返す', () => {
-    expect(extractCcProject('@cc-foo @cc-bar')).toBe('foo');
-  });
-
-  test('単語境界: メールアドレス内の偽 match を回避', () => {
+  test('mailto 偽 match を回避 (引き続き)', () => {
     expect(extractCcProject('mailto:user@cc-test.com')).toBeNull();
     expect(extractCcProject('a@cc-test')).toBeNull();
+    expect(extractCcProject('user@cc-test')).toBeNull();
   });
 
-  test('英大文字は不可 (lowercase 規約)', () => {
+  test('英大文字は不可 (lowercase 規約、引き続き)', () => {
     expect(extractCcProject('@cc-Tealus')).toBeNull();
     expect(extractCcProject('@cc-TEALUS')).toBeNull();
-  });
-
-  test('改行や前後 whitespace でも match', () => {
-    expect(extractCcProject('foo\n@cc-tealus 進捗')).toBe('tealus');
-    expect(extractCcProject('  @cc-tealus  ')).toBe('tealus');
   });
 });
 
