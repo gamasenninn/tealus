@@ -66,10 +66,12 @@ export function useSocketSync(roomId, targetMsgId = null) {
       });
 
       socket.on('voice:transcription', (data) => {
+        // #216: version も含めて更新 (再文字起こしで v2+ になった時に履歴ボタンが出るように)
         useMessageStore.getState().updateTranscription(data.message_id, {
           status: data.status,
           raw_text: data.raw_text,
           formatted_text: data.formatted_text,
+          ...(data.version !== undefined ? { version: data.version } : {}),
         });
       });
 
