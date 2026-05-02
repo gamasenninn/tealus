@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import { api } from '../../services/api';
+import { useConfirm } from '../../stores/confirmStore';
 import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
 import './VoiceBubble.css';
@@ -11,7 +12,9 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
   const [isEditing, setIsEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
+  const [isRetranscribing, setIsRetranscribing] = useState(false);
   const audioRef = useRef(null);
+  const confirm = useConfirm();
 
   // Listen for edit/history/play trigger
   useEffect(() => {
@@ -128,6 +131,27 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     }
   };
 
+  // #216: 再文字起こし
+  const handleRetranscribe = async () => {
+    const ok = await confirm({
+      body: '再文字起こしを実行します。少し時間がかかります。',
+      okLabel: '実行',
+    });
+    if (!ok) return;
+
+    setIsRetranscribing(true);
+    try {
+      await api.retranscribeVoiceMessage(message.id);
+      // status は Socket.IO の voice:status / voice:transcription event で更新されるので、
+      // ここでは何もしない (transcription は親から再受信)
+    } catch (err) {
+      console.error('Retranscribe error:', err);
+      alert('再文字起こしに失敗しました: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsRetranscribing(false);
+    }
+  };
+
   const filePath = media?.[0]?.file_path;
   if (!filePath) return null;
 
@@ -181,6 +205,9 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
               {canEditTranscription && (
                 <div className="voice-trans-actions">
                   <button className="voice-edit-btn" onClick={handleStartEdit}>編集</button>
+                  <button className="voice-retranscribe-btn" onClick={handleRetranscribe} disabled={isRetranscribing}>
+                    {isRetranscribing ? '再実行中...' : '再文字起こし'}
+                  </button>
                   {transcription.version > 1 && (
                     <button className="voice-history-btn" onClick={handleShowHistory}>履歴</button>
                   )}
@@ -188,7 +215,18 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
               )}
             </>
           )}
-          {transcription.status === 'error' && <span className="voice-trans-error">⚠ 文字起こしできませんでした</span>}
+          {transcription.status === 'error' && (
+            <>
+              <span className="voice-trans-error">⚠ 文字起こしできませんでした</span>
+              {canEditTranscription && (
+                <div className="voice-trans-actions">
+                  <button className="voice-retranscribe-btn" onClick={handleRetranscribe} disabled={isRetranscribing}>
+                    {isRetranscribing ? '再実行中...' : '再文字起こし'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

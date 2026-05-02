@@ -234,6 +234,11 @@ class ApiClient {
     return this.request('GET', `/messages/${messageId}/transcription/history`);
   }
 
+  // #216: voice transcription 再実行 (新 version で Whisper + AI 整形を再実行)
+  retranscribeVoiceMessage(messageId) {
+    return this.request('POST', `/messages/${messageId}/transcription/retranscribe`);
+  }
+
   // Profile
   updateProfile(data) {
     return this.request('PUT', '/auth/profile', data);

@@ -126,7 +126,8 @@
 }
 
 .voice-edit-btn,
-.voice-history-btn {
+.voice-history-btn,
+.voice-retranscribe-btn {
   background: none;
   border: none;
   font-size: 11px;
@@ -136,8 +137,14 @@
   text-decoration: underline;
 }
 
+.voice-retranscribe-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .bubble.own .voice-edit-btn,
-.bubble.own .voice-history-btn {
+.bubble.own .voice-history-btn,
+.bubble.own .voice-retranscribe-btn {
   color: rgba(0, 0, 0, 0.4);
 }
 
