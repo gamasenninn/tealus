@@ -316,15 +316,24 @@ router.post('/push-image', upload.single('image'), async (req, res) => {
 
 /**
  * GET /api/bot/messages?room_id=xxx&since=timestamp
- * Get messages since a timestamp (for polling)
+ *   &include_transcription=true|false (default true)
+ *   &include_raw=true|false (default false)
+ *
+ * Voice transcription verbosity (#219):
+ *   include_transcription=false              → { id, status, version }
+ *   default (true) + include_raw=false       → { id, status, version, formatted_text }
+ *   true + include_raw=true                  → { id, status, version, formatted_text, raw_text }
  */
 router.get('/messages', async (req, res) => {
-  const { room_id, since } = req.query;
+  const { room_id, since, include_transcription, include_raw } = req.query;
   const userId = req.user.id;
 
   if (!room_id) {
     return res.status(400).json({ error: 'room_id は必須です' });
   }
+
+  const includeTranscription = include_transcription !== 'false';
+  const includeRaw = include_raw === 'true';
 
   try {
     // Check membership
@@ -364,11 +373,16 @@ router.get('/messages', async (req, res) => {
     const result = await pool.query(query, params);
     const messages = result.rows;
 
-    // 音声メッセージに文字起こしを付加
+    // 音声メッセージに文字起こしを付加 (verbosity 制御 #219)
+    const transcriptionCols = ['id', 'status', 'version'];
+    if (includeTranscription) transcriptionCols.push('formatted_text');
+    if (includeTranscription && includeRaw) transcriptionCols.push('raw_text');
+    const selectList = transcriptionCols.join(', ');
+
     for (const msg of messages) {
       if (msg.type === 'voice') {
         const trans = await pool.query(
-          'SELECT raw_text, formatted_text, status FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+          `SELECT ${selectList} FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1`,
           [msg.id]
         );
         if (trans.rows.length > 0) {

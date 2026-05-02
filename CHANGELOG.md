@@ -10,6 +10,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`GET /api/bot/messages` の transcription verbosity 制御** ([#219](https://github.com/gamasenninn/tealus/issues/219))
+  - voice メッセージの `transcription` field を 3 段階で出し分けできる query parameter を追加: `include_transcription` (default `true`) / `include_raw` (default `false`)
+  - **default 振る舞い変更 (破壊的)**: 旧 `{ raw_text, formatted_text, status }` → 新 `{ id, status, version, formatted_text }` (raw_text 省略 + version / id 追加)
+  - 3 段階の field 構成:
+    - `include_transcription=false` → `{ id, status, version }` (id-only モード、本文を取得せず存在 / 状態だけ確認)
+    - default (`include_transcription=true, include_raw=false`) → `{ id, status, version, formatted_text }`
+    - `include_transcription=true, include_raw=true` → `{ id, status, version, formatted_text, raw_text }`
+  - 動機: voice 含む room の `get_messages` 取得が raw_text + formatted_text 両方 inline で 数十 KB に膨らみ、AI agent が MCP を避けて SQL 直叩きに走る reflex の根因になっていた。formatted-only default で **transcription 領域がほぼ半減**、`include_transcription=false` で更に縮退可能
+  - 後方互換性: `raw_text` を必須としていた caller は `include_raw=true` を明示する必要あり。本リポジトリの consumer は `agent-server/src/media/messageAdapter.js` の `formatted_text || raw_text` fallback のみ (formatted-only default で raw が undefined になっても fallback chain として機能、実害なし — むしろ整形空 voice で raw garbage を LLM に渡さなくなる improvement)
+  - tealus-mcp 側の対応 issue: [tealus-mcp#1](https://github.com/gamasenninn/tealus-mcp/issues/1) で同期改修予定
+  - integration test 6 件追加 (`__tests__/integration/bot-api.test.js`、計 325 件 pass)
+
 ## [0.2.2] - 2026-05-02
 
 ### Added

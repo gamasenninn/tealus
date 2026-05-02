@@ -246,6 +246,131 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/messages — transcription verbosity (#219)
+  // ============================================
+  describe('GET /api/bot/messages — transcription verbosity (#219)', () => {
+    let voiceMsgId, voiceMultiVersionMsgId, voiceNoTransMsgId, textMsgId;
+
+    beforeEach(async () => {
+      const pool = getTestPool();
+
+      // text message
+      const r1 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'テキスト本文') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      textMsgId = r1.rows[0].id;
+
+      // voice message with transcription v1
+      const r2 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'voice', NULL) RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      voiceMsgId = r2.rows[0].id;
+      await pool.query(
+        `INSERT INTO voice_transcriptions (message_id, raw_text, formatted_text, status, version)
+         VALUES ($1, '生のおと', '整形済みテキストです。', 'done', 1)`,
+        [voiceMsgId]
+      );
+
+      // voice message with multiple versions (v1 + v2)
+      const r3 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'voice', NULL) RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      voiceMultiVersionMsgId = r3.rows[0].id;
+      await pool.query(
+        `INSERT INTO voice_transcriptions (message_id, raw_text, formatted_text, status, version)
+         VALUES ($1, 'v1 生', 'v1 整形', 'done', 1),
+                ($1, 'v2 生', 'v2 整形 (latest)', 'done', 2)`,
+        [voiceMultiVersionMsgId]
+      );
+
+      // voice message with no transcription row
+      const r4 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'voice', NULL) RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      voiceNoTransMsgId = r4.rows[0].id;
+    });
+
+    it('default (flag 未指定): voice transcription は formatted_text のみ inline、raw_text は省略', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const voice = res.body.messages.find(m => m.id === voiceMsgId);
+      expect(voice.transcription).toBeDefined();
+      expect(voice.transcription.formatted_text).toBe('整形済みテキストです。');
+      expect(voice.transcription.status).toBe('done');
+      expect(voice.transcription.version).toBe(1);
+      expect(voice.transcription.raw_text).toBeUndefined();
+    });
+
+    it('include_raw=true: raw_text と formatted_text の両方を inline で返す', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&include_raw=true`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const voice = res.body.messages.find(m => m.id === voiceMsgId);
+      expect(voice.transcription.formatted_text).toBe('整形済みテキストです。');
+      expect(voice.transcription.raw_text).toBe('生のおと');
+      expect(voice.transcription.status).toBe('done');
+      expect(voice.transcription.version).toBe(1);
+    });
+
+    it('include_transcription=false: text field を省略し id + status + version のみ返す', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&include_transcription=false`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const voice = res.body.messages.find(m => m.id === voiceMsgId);
+      expect(voice.transcription).toBeDefined();
+      expect(voice.transcription.id).toBeDefined();
+      expect(voice.transcription.status).toBe('done');
+      expect(voice.transcription.version).toBe(1);
+      expect(voice.transcription.formatted_text).toBeUndefined();
+      expect(voice.transcription.raw_text).toBeUndefined();
+    });
+
+    it('text message には verbosity flag に関わらず transcription field が付かない', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&include_raw=true`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const text = res.body.messages.find(m => m.id === textMsgId);
+      expect(text.transcription).toBeUndefined();
+    });
+
+    it('voice message に transcription row が無い場合は transcription field を付けない', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const voice = res.body.messages.find(m => m.id === voiceNoTransMsgId);
+      expect(voice).toBeDefined();
+      expect(voice.transcription).toBeUndefined();
+    });
+
+    it('複数 version の transcription は最新版 (version=2) を返す', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&include_raw=true`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const voice = res.body.messages.find(m => m.id === voiceMultiVersionMsgId);
+      expect(voice.transcription.version).toBe(2);
+      expect(voice.transcription.formatted_text).toBe('v2 整形 (latest)');
+      expect(voice.transcription.raw_text).toBe('v2 生');
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages/:id/media
   // ============================================
   describe('GET /api/bot/messages/:id/media', () => {
