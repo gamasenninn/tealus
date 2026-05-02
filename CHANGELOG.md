@@ -12,6 +12,15 @@
 
 ### Added
 
+- **voice transcription 失敗時の再実行 endpoint (server-side Phase A)** ([#216](https://github.com/gamasenninn/tealus/issues/216))
+  - 新エンドポイント: `POST /api/messages/:id/transcription/retranscribe` (sender or `allow_member_transcription_edit=true` ルームメンバー)
+  - 動作: voice_transcriptions に新 version を `status=pending` で INSERT、`edited_by=requestUser` を記録、async で Whisper + AI 整形を再実行 → `status=done` で完了
+  - 既存 voice 編集機構 (PUT route) と並ぶ「voice 再生成」path として利用可能
+  - `transcribeVoiceMessage` / `formatTranscription` を **version-aware** に refactor (default version=1 で初回 upload と互換)
+  - integration test 6 件追加 (`__tests__/integration/transcription-edit.test.js`、計 319 件 pass)
+  - 起点: 業務メモ msg `fcde7980` (2026-05-02 05:10、現場運用者「文字起こしできないものが発生」報告)
+  - **UI (voice メッセージ context menu に「再文字起こし」)** は Phase A.2 で別 commit、本 commit は server-side のみ
+  - Phase B 候補: rate limit (1h N 回)、自動判定 (TV ノイズ検出 → auto retry)、`retranscribe_voice` MCP tool
 - **Claude Code ↔ Tealus リアルタイム連携 (file beacon パターン、Phase A)** ([#213](https://github.com/gamasenninn/tealus/issues/213))
   - agent-server に `@cc-{project}` mention 検出 + file beacon append logic を追加 (`agent-server/src/webhook/ccQueue.js`)。webhook 受信時、メッセージ content の **先頭に** `@cc-{project}` があれば `~/.tealus/cc-queue/{project}.jsonl` に payload を 1 行 append (#215 で先頭マッチング方式に変更)
   - **stateless / convention-based** な設計: agent-server は project 一覧を管理しない、mention の suffix がそのまま file 名になる

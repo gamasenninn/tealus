@@ -130,4 +130,81 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/messages/:id/transcription/retranscribe
+ * Retry transcription (creates new version with status='pending')
+ * #216: Whisper 失敗時の再実行機能
+ */
+router.post('/retranscribe', authenticate, async (req, res) => {
+  const messageId = req.params.id;
+  const userId = req.user.id;
+
+  try {
+    // Check message exists + permission (same logic as PUT)
+    const msgResult = await pool.query(
+      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2',
+      [messageId, 'voice']
+    );
+    if (msgResult.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+
+    const { sender_id, room_id, allow_member_transcription_edit } = msgResult.rows[0];
+
+    if (sender_id !== userId) {
+      if (!allow_member_transcription_edit) {
+        return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
+      }
+      const memberCheck = await pool.query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [room_id, userId]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'ルームメンバーのみ再文字起こしできます' });
+      }
+    }
+
+    // Get audio file path from message_media
+    const mediaResult = await pool.query(
+      'SELECT file_path FROM message_media WHERE message_id = $1 LIMIT 1',
+      [messageId]
+    );
+    if (mediaResult.rows.length === 0) {
+      return res.status(404).json({ error: '音声ファイルが見つかりません' });
+    }
+    const filePath = mediaResult.rows[0].file_path;
+
+    // Compute new version
+    const versionResult = await pool.query(
+      'SELECT MAX(version) as max_version FROM voice_transcriptions WHERE message_id = $1',
+      [messageId]
+    );
+    const newVersion = (versionResult.rows[0].max_version || 0) + 1;
+
+    // Insert new version row with status='pending', edited_by=requestUser
+    await pool.query(
+      `INSERT INTO voice_transcriptions (message_id, version, status, edited_by)
+       VALUES ($1, $2, 'pending', $3)`,
+      [messageId, newVersion, userId]
+    );
+
+    // Respond immediately (async transcription kicks off)
+    res.status(202).json({
+      message_id: messageId,
+      version: newVersion,
+      status: 'pending',
+    });
+
+    // Async transcription on the new version
+    const { io } = require('../app');
+    const { transcribeVoiceMessage } = require('../services/transcription');
+    transcribeVoiceMessage(messageId, filePath, io, room_id, newVersion).catch(err => {
+      logger.error('Retranscribe error:', err);
+    });
+  } catch (err) {
+    logger.error('Retranscribe error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 module.exports = router;

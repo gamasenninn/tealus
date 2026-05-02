@@ -16,15 +16,21 @@ const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../medi
 /**
  * Transcribe a voice message using OpenAI Whisper API
  * Runs asynchronously — does not block the upload response
+ *
+ * @param {string} messageId
+ * @param {string} filePath
+ * @param {object} io - Socket.IO instance
+ * @param {string} roomId
+ * @param {number} [version=1] - voice_transcriptions の対象 version (#216 retranscribe 用、default=1 で初回 upload と互換)
  */
-async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
+async function transcribeVoiceMessage(messageId, filePath, io, roomId, version = 1) {
   const fullPath = path.join(MEDIA_ROOT, filePath);
 
   try {
     // Update status to transcribing
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'transcribing' WHERE message_id = $1`,
-      [messageId]
+      `UPDATE voice_transcriptions SET status = 'transcribing' WHERE message_id = $1 AND version = $2`,
+      [messageId, version]
     );
 
     // Notify clients
@@ -77,8 +83,8 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
 
     // Save raw text, proceed to formatting
     await pool.query(
-      `UPDATE voice_transcriptions SET raw_text = $1 WHERE message_id = $2`,
-      [rawText, messageId]
+      `UPDATE voice_transcriptions SET raw_text = $1 WHERE message_id = $2 AND version = $3`,
+      [rawText, messageId, version]
     );
 
     // Notify clients with raw text while formatting continues
@@ -94,7 +100,7 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
     if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
     // AI formatting
-    await formatTranscription(messageId, rawText, io, roomId);
+    await formatTranscription(messageId, rawText, io, roomId, version);
 
     return rawText;
   } catch (err) {
@@ -103,8 +109,8 @@ async function transcribeVoiceMessage(messageId, filePath, io, roomId) {
     if (typeof tempPath !== 'undefined' && tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'error' WHERE message_id = $1`,
-      [messageId]
+      `UPDATE voice_transcriptions SET status = 'error' WHERE message_id = $1 AND version = $2`,
+      [messageId, version]
     );
 
     if (io) {

@@ -30,14 +30,16 @@ function buildSystemPrompt() {
  * Format transcribed text using AI
  * Runs asynchronously after transcription completes
  */
-async function formatTranscription(messageId, rawText, io, roomId) {
+async function formatTranscription(messageId, rawText, io, roomId, version = null) {
+  // #216: version 指定があれば対象 version、無ければ MAX(version) を使う (旧挙動互換)
+  const versionWhereClause = version !== null
+    ? 'AND version = $2'
+    : 'AND version = (SELECT MAX(version) FROM voice_transcriptions WHERE message_id = $1)';
   try {
     // Update status to formatting
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'formatting' WHERE message_id = $1 AND version = (
-        SELECT MAX(version) FROM voice_transcriptions WHERE message_id = $1
-      )`,
-      [messageId]
+      `UPDATE voice_transcriptions SET status = 'formatting' WHERE message_id = $1 ${versionWhereClause}`,
+      version !== null ? [messageId, version] : [messageId]
     );
 
     if (io) {
@@ -57,12 +59,14 @@ async function formatTranscription(messageId, rawText, io, roomId) {
 
     const formattedText = response.choices[0].message.content.trim();
 
-    // Update transcription record
+    // Update transcription record (formatted_text + done)
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'done', formatted_text = $1 WHERE message_id = $2 AND version = (
-        SELECT MAX(version) FROM voice_transcriptions WHERE message_id = $2
-      )`,
-      [formattedText, messageId]
+      version !== null
+        ? `UPDATE voice_transcriptions SET status = 'done', formatted_text = $1 WHERE message_id = $2 AND version = $3`
+        : `UPDATE voice_transcriptions SET status = 'done', formatted_text = $1 WHERE message_id = $2 AND version = (
+             SELECT MAX(version) FROM voice_transcriptions WHERE message_id = $2
+           )`,
+      version !== null ? [formattedText, messageId, version] : [formattedText, messageId]
     );
 
     if (io) {
@@ -71,7 +75,7 @@ async function formatTranscription(messageId, rawText, io, roomId) {
         status: 'done',
         raw_text: rawText,
         formatted_text: formattedText,
-        version: 1,
+        version: version !== null ? version : 1,
       });
     }
 
@@ -91,10 +95,12 @@ async function formatTranscription(messageId, rawText, io, roomId) {
 
     // Formatting failed — still mark as done with raw_text only
     await pool.query(
-      `UPDATE voice_transcriptions SET status = 'done' WHERE message_id = $1 AND version = (
-        SELECT MAX(version) FROM voice_transcriptions WHERE message_id = $1
-      )`,
-      [messageId]
+      version !== null
+        ? `UPDATE voice_transcriptions SET status = 'done' WHERE message_id = $1 AND version = $2`
+        : `UPDATE voice_transcriptions SET status = 'done' WHERE message_id = $1 AND version = (
+             SELECT MAX(version) FROM voice_transcriptions WHERE message_id = $1
+           )`,
+      version !== null ? [messageId, version] : [messageId]
     );
 
     if (io) {

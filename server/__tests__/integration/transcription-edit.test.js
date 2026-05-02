@@ -131,4 +131,83 @@ describe('Transcription Edit API', () => {
       expect(res.status).toBe(403);
     });
   });
+
+  // ============================================
+  // POST /api/messages/:id/transcription/retranscribe (#216)
+  // ============================================
+  describe('POST /api/messages/:id/transcription/retranscribe', () => {
+    it('should create new pending version (status 202) and increment version', async () => {
+      const res = await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(202);
+      expect(res.body.message_id).toBe(messageId);
+      expect(res.body.version).toBe(2);
+      expect(res.body.status).toBe('pending');
+
+      // Verify DB state
+      const pool = getTestPool();
+      const result = await pool.query(
+        'SELECT version, status, edited_by FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+        [messageId]
+      );
+      expect(result.rows[0].version).toBe(2);
+      expect(result.rows[0].edited_by).toBe(user1.user.id);
+    });
+
+    it('should preserve previous version', async () => {
+      await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      const pool = getTestPool();
+      const result = await pool.query(
+        'SELECT version, formatted_text FROM voice_transcriptions WHERE message_id = $1 ORDER BY version ASC',
+        [messageId]
+      );
+      expect(result.rows.length).toBe(2);
+      expect(result.rows[0].version).toBe(1);
+      expect(result.rows[0].formatted_text).toBe('整形済みテキスト'); // v1 preserved
+      expect(result.rows[1].version).toBe(2);
+    });
+
+    it('should reject retranscribe by non-sender (when allow_member_transcription_edit=false)', async () => {
+      const res = await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user2.token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('should allow retranscribe by other member when allow_member_transcription_edit=true', async () => {
+      const pool = getTestPool();
+      await pool.query(
+        'UPDATE rooms SET allow_member_transcription_edit = true WHERE id = $1',
+        [roomId]
+      );
+
+      const res = await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user2.token}`);
+
+      expect(res.status).toBe(202);
+      expect(res.body.version).toBe(2);
+    });
+
+    it('should reject retranscribe of non-existent message', async () => {
+      const res = await request(app)
+        .post(`/api/messages/00000000-0000-0000-0000-000000000000/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('should reject without auth', async () => {
+      const res = await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`);
+
+      expect(res.status).toBe(401);
+    });
+  });
 });
