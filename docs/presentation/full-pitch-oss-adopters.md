@@ -388,8 +388,8 @@ npx -y github:gamasenninn/tealus-mcp
 | 項目 | 最低 | 推奨 |
 |---|---|---|
 | OS | Linux / Mac / NAS | NAS (Synology / QNAP) |
-| メモリ | 1 GB | 2-4 GB |
-| ディスク | 5 GB | 50 GB+ (メディア蓄積想定) |
+| メモリ | **4 GB** | **8 GB+** |
+| ディスク | **50 GB** | **1 TB+** (50 ユーザ × 3 年メディア蓄積想定) |
 | ネット | 100 Mbps | 1 Gbps |
 | API key | OpenAI (任意) | OpenAI + Aivis (TTS) |
 
@@ -406,7 +406,7 @@ npx -y github:gamasenninn/tealus-mcp
 
 vs Slack 有料プラン: **1,000 円/user × 10 user = 月 10,000 円**
 
-→ **5-7 倍安い**、しかも **全機能フル**
+→ **3-7 倍安い**、しかも **全機能フル** (実数: 10,000 / 1,500 = 6.67 倍 〜 10,000 / 3,500 = 2.86 倍)
 
 ---
 
