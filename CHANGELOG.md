@@ -10,6 +10,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **voice transcription の default モデルを `whisper-1` → `gpt-4o-transcribe` に変更** ([#217](https://github.com/gamasenninn/tealus/issues/217))
+  - 動機: whisper-1 は無音 / 不明瞭な audio に対して「ご視聴ありがとうございました」「サブタイトルとコメント」等の TV 字幕由来 noise を hallucinate する既知の弱点があり、業務無線運用で transcription 失敗が現場運用者から報告されていた (2026-05-02 業務メモ)
+  - gpt-4o-transcribe (OpenAI 2025 release) は autoregressive な silence handling が改善され、無音は空文字を返すようになっている。token-based 課金だが、whisper-1 と **コストはほぼ同等** (~$0.006/分相当)
+  - 実機評価 (2026-05-02): 業務無線 voice 「フロント、取れますか」「野菜市場」「みこがい君」等の業務用語を自然に transcribe、無音 voice は **正しく空文字返却** (whisper-1 では hallucinate していた case で改善確認)
+  - 互換性: `openai.audio.transcriptions.create` の API signature は同じ。env `WHISPER_MODEL` で旧モデルに即戻し可能 (`whisper-1` / `gpt-4o-mini-transcribe` も選択肢)
+  - server tests 全 pass、本体実装変更は default 値の 1 行のみ
+
 ### Added
 
 - **voice transcription 失敗時の再実行機能 (Phase A 完了)** ([#216](https://github.com/gamasenninn/tealus/issues/216))

@@ -10,7 +10,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const WHISPER_MODEL = process.env.WHISPER_MODEL || 'whisper-1';
+// #217: gpt-4o-transcribe を default 採用 (whisper-1 比 hallucination 軽減、コスト同等)。
+// env で whisper-1 / gpt-4o-mini-transcribe にも切替可能。
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'gpt-4o-transcribe';
 const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../media');
 
 /**
