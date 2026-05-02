@@ -476,7 +476,6 @@ vs Slack 有料プラン: **1,000 円/user × 10 user = 月 10,000 円**
 | MCP tools | **11** |
 | 自動テスト | **502+** |
 | GitHub issues | **209** |
-| 公開評価レポート | **14 本** (Phase 4 Step 4-14) |
 | commit (累積) | **600+** |
 | Phase 達成 | **1-4** |
 
@@ -487,12 +486,11 @@ vs Slack 有料プラン: **1,000 円/user × 10 user = 月 10,000 円**
 ## 透明性
 
 - ✅ **GitHub Issue tracker**: open / closed すべて、philosophy 議論も含む
-- ✅ **公開評価レポート**: Step 4-14、自己批判の透明性
 - ✅ **設計書**: 要件定義 / DB 設計 / アーキテクチャ
 - ✅ **CHANGELOG**: Keep a Changelog 形式
 - ✅ **公式 docs**: https://docs.tealus.dev (mkdocs --strict ゼロ警告)
 
-→ **失敗も隠さず、議論も公開**。OSS としての信用設計
+→ **設計判断・議論・変更履歴がすべて GitHub 上で見える**。OSS としての信用設計
 
 ---
 
