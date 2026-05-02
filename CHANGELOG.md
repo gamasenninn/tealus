@@ -16,12 +16,13 @@
   - 元は cc-tealus bridge (Tealus → Claude Code wake-up、Inbound) のみを扱っていた doc を、**tealus-mcp (Claude Code → Tealus、Outbound) も含む 2 方向の統合 setup guide** として再構成
   - **Part 1: Outbound** (tealus-mcp) を新規追加: bot 準備 / `~/.claude.json` の `mcpServers` 登録 / 動作確認 / 11 ツール一覧
   - **Part 2: Inbound** (cc-tealus bridge) は既存内容を保持、節番号を `1B / 2B / ...` に再付番
+  - **ステップ 3.5B: listen-tealus skill ファイル配置** を新規追加 (Claude Code の skill は `npm install` 等不要、`~/.claude/skills/` または `<project>/.claude/skills/` への単純コピーで認識される旨を明示。**user-level 配置 (案 A)** を推奨)
   - **Part 3: 統合動作確認** を新規追加: outbound + inbound が 1 cycle で繋がる流れを明示
-  - トラブルシュートに **Outbound 系 (npx cache、Bot login 失敗、v0.7.0 flag 不可)** の Q を追加
+  - トラブルシュートに **Outbound 系 (npx cache、Bot login 失敗、v0.7.0 flag 不可)** の Q × 3、**`/listen-tealus` skill 認識されない**の Q を追加
   - 関連 link に [tealus-mcp v0.7.0 release](https://github.com/gamasenninn/tealus-mcp/releases/tag/v0.7.0) と [#219](https://github.com/gamasenninn/tealus/issues/219) を追記
-  - 動機: tealus-mcp v0.7.0 release ([#219](https://github.com/gamasenninn/tealus/issues/219)) で MCP 側が成熟し、「Claude Code を Tealus の能動的メンバー化」する full setup を 1 doc にまとめる時期が熟した。採用者が outbound / inbound の 2 piece を自分で継ぎ合わせる必要がなくなる
+  - 動機: tealus-mcp v0.7.0 release ([#219](https://github.com/gamasenninn/tealus/issues/219)) で MCP 側が成熟し、「Claude Code を Tealus の能動的メンバー化」する full setup を 1 doc にまとめる時期が熟した。採用者が outbound / inbound の 2 piece を自分で継ぎ合わせる必要がなくなる。skill 配置は別プロジェクトで使う採用者の「実感が薄い」 install model への明示的補完
   - file 名 `setup-cc-tealus-bridge.md` は既存リンク (CHANGELOG / `.claude/skills/listen-tealus.md`) との互換性のため未 rename。将来的に `setup-claude-code-integration.md` 等への rename を検討
-  - サイズ: 266 → 447 行 (+181)
+  - サイズ: 266 → 約 500 行 (+230 程度)
 
 - **`GET /api/bot/messages` の transcription verbosity 制御** ([#219](https://github.com/gamasenninn/tealus/issues/219))
   - voice メッセージの `transcription` field を 3 段階で出し分けできる query parameter を追加: `include_transcription` (default `true`) / `include_raw` (default `false`)
