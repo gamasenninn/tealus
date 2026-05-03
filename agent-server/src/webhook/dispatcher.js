@@ -128,9 +128,16 @@ async function _dispatch({ message, room, agentId, agentName }) {
       await updateStatus(agentId, roomId, 'processing');
       try {
         const mcpServers = await getOrCreateRoomMcp(agentId, roomId, context.workspace_path);
+        // Deep pattern を Light でも踏襲: room_id を user prompt に embed
+        // (詳細 instruction は system prompt 側に集約)
+        const userPrompt = result.prompt || prompt;
+        const lightPrompt = `現在のルーム ID: ${roomId}
+
+ユーザーの質問: ${userPrompt}`;
+
         await processLight({
           roomId,
-          prompt: result.prompt || prompt,
+          prompt: lightPrompt,
           workspacePath: context.workspace_path,
           mcpServers,
         });

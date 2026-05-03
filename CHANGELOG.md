@@ -10,6 +10,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Light agent が Tealus context を統合 — minimum viable prompt + dispatcher pattern** ([#229](https://github.com/gamasenninn/tealus/issues/229))
+  - Light agent が Deep agent と同じ「Tealus を読みに行く」pattern で動作するよう改修
+  - `agent-server/config/default_system_prompt.md`: 7038 → 1874 bytes に簡略化
+    - Tealus 哲学 (4 step: get_messages → get_message_media → search_messages → 応答) + 一般ルール + MCP ツール参照のみに集約
+    - binary rule / 詳細具体例 / 失敗例を削除 (gpt-5.4-mini の reasoning なら不要、token-efficient)
+  - `agent-server/src/webhook/dispatcher.js`: Light path で user prompt に `現在のルーム ID: ${roomId}` を prepend (Deep style minimal)
+  - `agent-server/config/settings.json`: `max_turns: 8` 追加 (default 3 → 8、深い探索を許容)
+  - 実機 verified eval baseline: `gpt-5.4-mini` で画像 (ラベル OCR + context 推論) / PDF (メタ取得 + honest 限界宣言 + 代替提案) 両対応
+  - 採用者保護: 採用者は `agent-server/.env` で `AGENT_LIGHT_MODEL=gpt-5.4-mini` を設定推奨 (cost up は input 5x / output 7.5x、月 $5-30 想定 → 月 $25-225)
+  - これは [#220](https://github.com/gamasenninn/tealus/issues/220) harness の starting point baseline として今後の prompt iteration の起点になる
+
 ### Fixed
 
 - **MCP timeout 5s が #226 Phase C で完全には fix されていなかった件を修正** ([#227](https://github.com/gamasenninn/tealus/issues/227))
