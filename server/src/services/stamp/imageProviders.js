@@ -48,7 +48,7 @@ class OpenAIImageProvider {
  * Factory function
  */
 function createImageProvider(provider) {
-  const apiKey = process.env.STAMP_IMAGE_API_KEY;
+  const apiKey = process.env.STAMP_IMAGE_API_KEY || process.env.OPENAI_API_KEY;
   const model = process.env.STAMP_IMAGE_MODEL;
 
   switch (provider || 'openai') {

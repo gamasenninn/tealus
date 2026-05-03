@@ -73,7 +73,9 @@ class OpenAITextProvider {
  * Factory function
  */
 function createTextProvider(provider) {
-  const apiKey = process.env.STAMP_TEXT_API_KEY || process.env.STAMP_IMAGE_API_KEY;
+  const apiKey = process.env.STAMP_TEXT_API_KEY
+    || process.env.STAMP_IMAGE_API_KEY
+    || process.env.OPENAI_API_KEY;
   const model = process.env.STAMP_TEXT_MODEL;
 
   switch (provider || 'openai') {

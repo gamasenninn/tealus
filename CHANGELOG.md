@@ -12,6 +12,13 @@
 
 ### Changed
 
+- **stamp 生成: `OPENAI_API_KEY` フォールバック追加** ([#221](https://github.com/gamasenninn/tealus/issues/221))
+  - `STAMP_TEXT_API_KEY` / `STAMP_IMAGE_API_KEY` が未設定の場合に `OPENAI_API_KEY` に自動 fallback する fallback chain を追加 (`server/src/services/stamp/{textProviders,imageProviders}.js`)
+  - 動機: 2026-05-03 朝、user が「stamp 生成だけ `Incorrect API key provided: undefined` で失敗」(assistant は動く) を報告。`.env` には STAMP keys が設定済だが running server で `undefined` になっていた根因不明 case。defensive 改修として OPENAI_API_KEY fallback で再発防止
+  - **採用者保護 narrative**: `OPENAI_API_KEY` 1 本で stamp も assistant も動く UX に。別 provider (将来 Stable Diffusion 等) を使う採用者は STAMP_*_API_KEY を明示すれば override 可能
+  - `.env.example` の Stamp section に fallback chain の説明 comment 追加
+  - unit test 7 件追加 (`__tests__/unit/stampProviders.test.js`、env fallback chain 各組合せ)
+
 - **`docs/setup-cc-tealus-bridge.md` を双方向統合 guide に拡張**
   - 元は cc-tealus bridge (Tealus → Claude Code wake-up、Inbound) のみを扱っていた doc を、**tealus-mcp (Claude Code → Tealus、Outbound) も含む 2 方向の統合 setup guide** として再構成
   - **Part 1: Outbound** (tealus-mcp) を新規追加: bot 準備 / `~/.claude.json` の `mcpServers` 登録 / 動作確認 / 11 ツール一覧
