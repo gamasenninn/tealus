@@ -12,6 +12,22 @@
 
 ### Fixed
 
+- **agent-server: ダンマリ問題 + filesystem ENOENT + tealus MCP timeout の 3 連鎖 fix** ([#226](https://github.com/gamasenninn/tealus/issues/226))
+  - 採用者報告 (藤井さん @ ubuntu22): mention 明示後も「ダンマリ状態」、起動ログに `mcp-server-filesystem ENOENT` / `tealus MCP timeout`
+  - **3 layer の問題が連鎖**していたのを切り分け fix:
+  - **Phase A**: `agent-server/nodemon.json` 新設、watch を `src/` に限定 + `agent-workspaces` / `logs` / `node_modules` / `*.log` を ignore
+    - 旧: nodemon が project 全体を watch → 新 room 初回処理で workspace dir 作成 → restart trigger → message 処理中断 (= 「ダンマリ」直接原因)
+    - 新: workspace 作成しても restart しない、応答処理が完了する
+  - **Phase B**: filesystem MCP を npx 経由に変更 (`agent-server/src/mcp/roomMcpManager.js:118`)
+    - 旧: `fullCommand: 'mcp-server-filesystem <path>'` → 採用者環境にバイナリ無いと ENOENT
+    - 新: `command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', <path>]` → 事前 install 不要、初回起動時に npx が pull
+  - **Phase C**: MCP 接続 timeout を 5s → **30s** に延長 (`MCP_CONNECT_TIMEOUT` 定数化)
+    - 旧: SDK default 5s → npx 初回 fetch で間に合わず cold start 失敗
+    - 新: 30s で cold start 余裕、warm 後は実時間に影響なし
+    - tealus MCP / filesystem MCP / connectFromConfig (room/global config) すべて適用
+  - **採用者保護**: 表層症状 (ダンマリ / OPENAI 使えない) から **3 層を切り分けて根因 (nodemon watch + MCP startup)** を fix。「事前 install 要求しない」「cold start を許容する」narrative
+  - 既存 agent-server 183 件 pass、回帰なし
+
 - **agent-server: silent init failure → "Received null" error の 4 層 defensive fix** ([#225](https://github.com/gamasenninn/tealus/issues/225))
   - 採用者報告: 別ルーム (総務グループ) で `[Agent] Queue error: The "path" argument must be of type string. Received null` 発生
   - 根本原因: `initializeAgent()` が silently 失敗 (Tealus 接続失敗 / bot credentials 不正 / DB 接続失敗等) → `botAgentId=null` のまま → bot membership filter が短絡 skip → `dispatch({ agentId: null })` → `path.join(WORKSPACE_ROOT, null, roomId)` で TypeError

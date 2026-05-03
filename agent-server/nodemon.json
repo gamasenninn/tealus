@@ -1,0 +1,10 @@
+{
+  "watch": ["src"],
+  "ignore": [
+    "agent-workspaces",
+    "logs",
+    "node_modules",
+    "*.log"
+  ],
+  "ext": "js,json"
+}

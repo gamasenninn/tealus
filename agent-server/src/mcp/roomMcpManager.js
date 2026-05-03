@@ -18,6 +18,10 @@ const roomMcpCache = new Map();
 let sharedGlobalServers = null;
 let sweepTimer = null;
 
+// MCP server connect timeout (#226 Phase C)
+// default 5s では npx 初回 fetch が間に合わず採用者環境で cold start 失敗する
+const MCP_CONNECT_TIMEOUT = 30000;
+
 /**
  * グローバルMCPサーバーを取得（初回のみ接続）
  *
@@ -44,6 +48,7 @@ async function getOrCreateSharedGlobal() {
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
           TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
         },
+        timeout: MCP_CONNECT_TIMEOUT,  // #226 Phase C: 5s default では cold start で間に合わない
       });
       await tealusServer.connect();
       servers.push(tealusServer);
@@ -109,13 +114,16 @@ async function getOrCreateRoomMcp(agentId, roomId, workspacePath) {
 
   const hasCustomFilesystem = !!roomConfig.mcpServers?.filesystem;
 
-  // 1. filesystem MCP（カスタムfilesystemがなければ自動生成）
+  // 1. filesystem MCP（カスタムfilesystemがなければ自動生成、#226 で npx 経由に変更）
   if (!hasCustomFilesystem) {
     try {
       const normalizedPath = path.resolve(workspacePath).replace(/\\/g, '/');
       const fsServer = new MCPServerStdio({
         name: 'tealus-workspace-fs',
-        fullCommand: `mcp-server-filesystem ${normalizedPath}`,
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', normalizedPath],
+        env: { ...process.env },
+        timeout: MCP_CONNECT_TIMEOUT,  // #226 Phase C: cold start 対応
       });
       await fsServer.connect();
       servers.push(fsServer);
@@ -157,6 +165,7 @@ async function connectFromConfig(serverDefs, prefix) {
       const server = new MCPServerStdio({
         name: `${prefix}-${name}`,
         fullCommand,
+        timeout: MCP_CONNECT_TIMEOUT,  // #226 Phase C: cold start 対応
       });
       await server.connect();
       servers.push(server);
