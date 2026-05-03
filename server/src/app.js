@@ -7,6 +7,11 @@ const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
 
+const { ensureMediaDirs } = require('./utils/mediaSetup');
+const { MEDIA_ROOT } = require('./middleware/upload');
+ensureMediaDirs(MEDIA_ROOT);
+logger.info(`Media dirs ensured at ${MEDIA_ROOT}`);
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {

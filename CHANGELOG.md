@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **media subdir が初期 setup で作成されない問題を fix** ([#222](https://github.com/gamasenninn/tealus/issues/222))
+  - 採用者報告: 初期設定で `media/images/` が作られず、画像 download/upload が機能しなかった (手動 `mkdir` で復旧した報告)
+  - 影響範囲は 8 subdir (`avatars` / `icons` / `images` / `videos` / `files` / `voices` / `stamps` / `thumbnails`) すべて auto-create されていなかった
+  - `server/src/utils/mediaSetup.js` 新設、`ensureMediaDirs(mediaRoot)` で全 subdir を `mkdirSync({ recursive: true })`
+  - `server/src/app.js` 起動時に `ensureMediaDirs(MEDIA_ROOT)` 呼び出し (dotenv 直後、Express 構築前)
+  - unit test 5 件追加 (`__tests__/unit/mediaSetup.test.js`、idempotent / 既存 dir 保護 / nested mediaRoot 等)
+  - **採用者保護**: fresh install で初手から動く。手動 `mkdir` 不要
+
 ### Changed
 
 - **stamp 生成: `OPENAI_API_KEY` フォールバック追加** ([#221](https://github.com/gamasenninn/tealus/issues/221))
