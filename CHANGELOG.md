@@ -12,6 +12,18 @@
 
 ### Changed
 
+- **Light agent context cleanup — TealusSession 削除 (D4 哲学完結)** ([#230](https://github.com/gamasenninn/tealus/issues/230))
+  - [#229](https://github.com/gamasenninn/tealus/issues/229) で agent が自分で `get_messages` を呼ぶ pattern が完成 → `TealusSession` の役割 (session として前 N 件を fetch して agent に prepend) は **二重 fetch で重複** → 削除
+  - `agent-server/src/agents/lightSession.js` 削除 (76 行、class TealusSession 全体)
+  - `agent-server/src/agents/light.js`: `require('./lightSession')` + `new TealusSession(roomId)` + `run()` の `session: session` を削除
+  - `agent-server/src/config.js`: `LIGHT_CONTEXT_MESSAGES` env 削除
+  - `agent-server/src/routes/settings.js`: SAFE_ENV_KEYS から `LIGHT_CONTEXT_MESSAGES` 削除
+  - `agent-server/__tests__/unit/lightSession.test.js` 削除
+  - SDK 仕様確認: `@openai/agents` の `run({ session })` は session **optional**、`run.d.ts:141` で `session?: Session;`、`sessionPersistence.js:19` で session 無しは早期 return → run() は session なしで正常動作、turn 内 history は SDK internal で保持、過去 dispatch との連続性は **messaging (Tealus) 側で担保** = D4 哲学そのもの
+  - test 修正: `webhook-to-agent.test.js` の prompt expectation を `stringContaining` に変更 ([#229](https://github.com/gamasenninn/tealus/issues/229) で dispatcher が user prompt に room_id prepend する仕様変更を反映、test 漏れの後追い fix)
+  - agent-server **177 件 pass** (-6: lightSession.test 削除分、回帰なし)
+  - 効果: code 簡潔化 (~80 行削除)、二重 fetch 解消 (cost/latency 改善)、mental model 統一 (light も deep も「Tealus を読みに行く」で一貫)
+
 - **Light agent が Tealus context を統合 — minimum viable prompt + dispatcher pattern** ([#229](https://github.com/gamasenninn/tealus/issues/229))
   - Light agent が Deep agent と同じ「Tealus を読みに行く」pattern で動作するよう改修
   - `agent-server/config/default_system_prompt.md`: 7038 → 1874 bytes に簡略化

@@ -20,7 +20,7 @@ const ENV_PATH = path.join(__dirname, '..', '..', '.env');
 // 安全に公開する .env のキー（API Key は除外）
 const SAFE_ENV_KEYS = [
   'AGENT_PORT', 'TEALUS_API_URL', 'AGENT_LIGHT_MODEL', 'AGENT_ROUTER_MODEL',
-  'AGENT_WORKSPACE_ROOT', 'DEEP_TIMEOUT', 'DEEP_MAX_BUFFER', 'LIGHT_CONTEXT_MESSAGES',
+  'AGENT_WORKSPACE_ROOT', 'DEEP_TIMEOUT', 'DEEP_MAX_BUFFER',
 ];
 
 /**

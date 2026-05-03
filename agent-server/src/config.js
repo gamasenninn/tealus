@@ -74,7 +74,7 @@ module.exports = {
   // Limits
   DEEP_TIMEOUT: parseInt(process.env.DEEP_TIMEOUT || '300000'),  // 5分
   DEEP_MAX_BUFFER: parseInt(process.env.DEEP_MAX_BUFFER || '10485760'),  // 10MB
-  LIGHT_CONTEXT_MESSAGES: parseInt(process.env.LIGHT_CONTEXT_MESSAGES || '20'),
+  // LIGHT_CONTEXT_MESSAGES: #230 で削除 (TealusSession 不要、agent が自分で get_messages を呼ぶ)
 
   // TTS Provider
   TTS_PROVIDER,

@@ -10,7 +10,6 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
-const { TealusSession } = require('./lightSession');
 const { createTools } = require('./lightTools');
 const { getSetting } = require('../context/settingsManager');
 
@@ -151,12 +150,12 @@ async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
     } catch (e) {
       logger.warn(`[Light] tool diagnostic failed: ${e.message}`);
     }
-    const session = new TealusSession(roomId);
+    // #230: TealusSession 削除済 (D4 哲学: agent が get_messages で自分で context 取得)
+    // session 渡さない = SDK 内部で turn loop は維持、過去 dispatch との連続性は messaging 側で担保
 
     await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
 
     const result = await run(agent, prompt, {
-      session,
       maxTurns: getSetting('max_turns', config.LIGHT_MAX_TURNS || 3),
     });
 

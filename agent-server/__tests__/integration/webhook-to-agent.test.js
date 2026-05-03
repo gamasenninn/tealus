@@ -108,8 +108,12 @@ describe('Webhook → Agent 統合テスト', () => {
       message: { id: 'msg1', content: 'テスト質問', type: 'text', sender: { id: 'user1' } },
       room: { id: BOT_ROOM, name: null, member_count: 2 },
     });
+    // #229 で dispatcher が user prompt に room_id を prepend する仕様に変更
     expect(processLight).toHaveBeenCalledWith(
-      expect.objectContaining({ roomId: BOT_ROOM, prompt: 'テスト質問' })
+      expect.objectContaining({
+        roomId: BOT_ROOM,
+        prompt: expect.stringContaining('テスト質問'),
+      })
     );
   });
 
@@ -121,7 +125,9 @@ describe('Webhook → Agent 統合テスト', () => {
       room: { id: BOT_ROOM, name: 'Web部', member_count: 5 },
     });
     expect(processLight).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: '在庫教えて' })
+      expect.objectContaining({
+        prompt: expect.stringContaining('在庫教えて'),
+      })
     );
   });
 
