@@ -12,6 +12,17 @@
 
 ### Fixed
 
+- **agent-server: silent init failure → "Received null" error の 4 層 defensive fix** ([#225](https://github.com/gamasenninn/tealus/issues/225))
+  - 採用者報告: 別ルーム (総務グループ) で `[Agent] Queue error: The "path" argument must be of type string. Received null` 発生
+  - 根本原因: `initializeAgent()` が silently 失敗 (Tealus 接続失敗 / bot credentials 不正 / DB 接続失敗等) → `botAgentId=null` のまま → bot membership filter が短絡 skip → `dispatch({ agentId: null })` → `path.join(WORKSPACE_ROOT, null, roomId)` で TypeError
+  - **4 層 defensive 改修**:
+    1. `agent-server/src/context/sessionManager.js` — `getOrCreateContext` に input validation (`agentId` / `roomId` null チェック、明確な error message で throw)
+    2. `agent-server/src/webhook/dispatcher.js` — `_dispatch` 冒頭に agentId null ガード + 採用者向け診断 message (TEALUS_API_URL / Bot credentials / DB の確認誘導)
+    3. `agent-server/src/setup/register.js` — `initializeAgent` catch を **loud な failure banner** に拡張 (5 連 logger.error で原因切り分け、採用者見落とし防止)
+    4. unit test 3 件追加 (dispatcher null guard / sessionManager input validation × 2)
+  - 既存 server 337 件 + agent-server 180 件 + 新規 3 件 = **520 件 pass**、回帰なし
+  - **採用者保護**: silent failure → loud + actionable な誘導。`Received null` Node 内部エラーから「init 失敗、こういう原因」の診断ガイドへ変換
+
 - **EADDRINUSE 時の actionable エラーメッセージ — 3 server (tealus / agent / rtc) で同型 fix** ([#224](https://github.com/gamasenninn/tealus/issues/224))
   - 採用者報告: 「3 時間ほど動かしていた後、全て再起動したら agent-server が `EADDRINUSE: address already in use :::4000` で起動しない、サーバ再起動ですかね」
   - 旧実装: `app.listen()` の error event を捕捉しておらず、port 既使用時に **uncaught error で crash** + Node default stack trace のみ → 採用者がどう対処すればよいか分からなかった

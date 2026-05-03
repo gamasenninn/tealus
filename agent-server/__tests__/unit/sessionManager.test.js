@@ -60,6 +60,19 @@ describe('SessionManager', () => {
       expect(mockQuery).toHaveBeenCalledTimes(2);
       expect(mockQuery.mock.calls[1][0]).toContain('INSERT');
     });
+
+    test('agentId が null だと clear な error を throw (#225)', async () => {
+      await expect(getOrCreateContext(null, 'room1')).rejects.toThrow(/agentId is required/);
+      await expect(getOrCreateContext(undefined, 'room1')).rejects.toThrow(/agentId is required/);
+      // DB query は呼ばれない (validation で先に throw)
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    test('roomId が null だと clear な error を throw (#225)', async () => {
+      await expect(getOrCreateContext('agent1', null)).rejects.toThrow(/roomId is required/);
+      await expect(getOrCreateContext('agent1', undefined)).rejects.toThrow(/roomId is required/);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateStatus', () => {

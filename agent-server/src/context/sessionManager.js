@@ -16,6 +16,13 @@ const pool = new Pool({
  * コンテキストを取得または新規作成
  */
 async function getOrCreateContext(agentId, roomId) {
+  if (!agentId) {
+    throw new Error('getOrCreateContext: agentId is required (agent-server not initialized? check earlier logs for login errors)');
+  }
+  if (!roomId) {
+    throw new Error('getOrCreateContext: roomId is required');
+  }
+
   // 既存を検索
   const existing = await pool.query(
     'SELECT * FROM agent_contexts WHERE agent_id = $1 AND room_id = $2',

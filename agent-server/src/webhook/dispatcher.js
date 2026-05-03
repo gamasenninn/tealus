@@ -53,6 +53,19 @@ async function _dispatch({ message, room, agentId, agentName }) {
   const roomId = room.id;
   const memberCount = room.member_count || 2;
 
+  // agent-server 初期化失敗の defensive guard (#225)
+  // initializeAgent() が失敗すると botAgentId が null のまま webhook が来る → null を path.join に渡して TypeError
+  if (!agentId) {
+    logger.error(`agent-server is not initialized (botAgentId is null). Cannot dispatch message in room ${roomId}.`);
+    logger.error('  This usually means initializeAgent() failed at startup.');
+    logger.error('  Check earlier logs for "Agent initialization failed" or "Bot login failed" errors.');
+    logger.error('  Common causes:');
+    logger.error('    - Tealus server not reachable (TEALUS_API_URL incorrect)');
+    logger.error('    - Bot credentials invalid (TEALUS_BOT_ID / TEALUS_BOT_PASS in agent-server/.env)');
+    logger.error('    - Database not reachable (DB_HOST / DB_NAME etc.)');
+    return;
+  }
+
   // メッセージタイプに応じてプロンプトを抽出
   let prompt = extractPromptFromMessage(message);
   if (!prompt) {

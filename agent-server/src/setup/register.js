@@ -40,7 +40,22 @@ async function initializeAgent() {
 
     return { rooms };
   } catch (err) {
-    logger.error(`Agent initialization failed: ${err.message}`);
+    logger.error('=================================================');
+    logger.error('AGENT INITIALIZATION FAILED');
+    logger.error('=================================================');
+    logger.error(`Error: ${err.message}`);
+    logger.error('');
+    logger.error('agent-server は起動を継続しますが、以下が失敗します:');
+    logger.error('  - メッセージへの応答 (botAgentId が未設定のため、webhook 受信時に dispatch でガード skip)');
+    logger.error('  - room 一覧の認識 (botRoomIds が空)');
+    logger.error('');
+    logger.error('Common causes:');
+    logger.error('  - Tealus server not reachable (TEALUS_API_URL incorrect)');
+    logger.error('  - Bot credentials invalid (TEALUS_BOT_ID / TEALUS_BOT_PASS in agent-server/.env)');
+    logger.error('  - Database not reachable (DB_HOST / DB_NAME etc.)');
+    logger.error('');
+    logger.error('Tealus server / DB / Bot credentials を確認後、agent-server を再起動してください。');
+    logger.error('=================================================');
     return { rooms: [], mcpServers: [] };
   }
 }

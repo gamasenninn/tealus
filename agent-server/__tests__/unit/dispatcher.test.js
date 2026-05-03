@@ -116,6 +116,27 @@ describe('Dispatcher', () => {
       expect(processLight).not.toHaveBeenCalled();
     });
 
+    test('agentId が null の場合は安全に skip (#225 init failure guard)', async () => {
+      const logger = require('../../src/lib/logger');
+
+      await dispatch({
+        message: { id: 'msg1', content: 'こんにちは', sender: { id: 'user1' } },
+        room: { id: 'room1', name: '総務グループ', member_count: 5 },
+        agentId: null,
+        agentName: null,
+      });
+
+      // route / processLight / sessionManager どれも呼ばれない
+      expect(route).not.toHaveBeenCalled();
+      expect(processLight).not.toHaveBeenCalled();
+      expect(sessionManager.getOrCreateContext).not.toHaveBeenCalled();
+
+      // 採用者向けの診断 message が出力される
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('agent-server is not initialized')
+      );
+    });
+
     test('Router直接応答（挨拶）はBot APIで送信', async () => {
       route.mockResolvedValueOnce({ tier: 'router', response: 'こんにちは！' });
       botApi.pushMessage.mockResolvedValueOnce({ message: {} });
