@@ -121,6 +121,13 @@ function MessageInput({ roomId, transceiver }) {
   };
 
   const handleMicClick = async () => {
+    // 事前チェック: insecure context (HTTPS 未対応) では mediaDevices が undefined になる
+    if (!window.isSecureContext || !navigator.mediaDevices) {
+      setUploadError('マイクの利用には HTTPS 接続が必要です。HTTPS で再度アクセスするか、管理者に確認してください。');
+      setTimeout(() => setUploadError(''), 8000);
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setRecorderStream(stream);
@@ -129,8 +136,18 @@ function MessageInput({ roomId, transceiver }) {
         transceiver.startProducing(stream.getAudioTracks()[0]);
       }
     } catch (err) {
-      setUploadError('マイクへのアクセスが許可されていません');
-      setTimeout(() => setUploadError(''), 5000);
+      let message;
+      if (err.name === 'NotAllowedError') {
+        message = 'マイクへのアクセスがブラウザで拒否されました。ブラウザ設定でマイク許可を有効にしてください。';
+      } else if (err.name === 'NotFoundError') {
+        message = 'マイクが見つかりません。マイクを接続してから再度お試しください。';
+      } else if (err.name === 'NotReadableError') {
+        message = 'マイクが他のアプリで使用中の可能性があります。他のアプリを閉じて再度お試しください。';
+      } else {
+        message = `マイクの利用に失敗しました: ${err.message || err.name || 'unknown error'}`;
+      }
+      setUploadError(message);
+      setTimeout(() => setUploadError(''), 8000);
     }
   };
 

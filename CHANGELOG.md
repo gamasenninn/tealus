@@ -12,6 +12,17 @@
 
 ### Fixed
 
+- **音声メッセージ「許可されていない」エラーの原因切り分け + HTTPS 未対応時の明示メッセージ** ([#223](https://github.com/gamasenninn/tealus/issues/223))
+  - 採用者報告: 「音声メッセージを使いたいのですが、許可されていないと表示されます、何か設定が必要ですか」
+  - 旧実装: `getUserMedia` の catch で原因に関わらず一律「マイクへのアクセスが許可されていません」を表示 → 採用者が次の正しい行動 (HTTPS 化等) に到達できなかった
+  - 改修: `client/src/components/chat/MessageInput.jsx` の `handleMicClick` で error.name に応じて 4 ケース + fallback で具体的メッセージ表示
+    - `NotAllowedError` → ブラウザ設定でマイク許可を確認
+    - `NotFoundError` → マイク接続を確認
+    - `NotReadableError` → 他アプリでの使用を確認
+    - それ以外 → エラー内容を併記
+  - **insecure context (`!window.isSecureContext`) の事前チェック**を追加: `getUserMedia` 呼び出し前に弾き、「マイクの利用には HTTPS 接続が必要です」を即座に表示。LAN IP 等での HTTP アクセス採用者が **エラーから HTTPS 設定に到達しやすく**なる
+  - エラー表示時間 5s → 8s に延長 (採用者が読みやすく)
+
 - **media subdir が初期 setup で作成されない問題を fix** ([#222](https://github.com/gamasenninn/tealus/issues/222))
   - 採用者報告: 初期設定で `media/images/` が作られず、画像 download/upload が機能しなかった (手動 `mkdir` で復旧した報告)
   - 影響範囲は 8 subdir (`avatars` / `icons` / `images` / `videos` / `files` / `voices` / `stamps` / `thumbnails`) すべて auto-create されていなかった
