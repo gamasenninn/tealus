@@ -12,6 +12,16 @@
 
 ### Fixed
 
+- **EADDRINUSE 時の actionable エラーメッセージ — 3 server (tealus / agent / rtc) で同型 fix** ([#224](https://github.com/gamasenninn/tealus/issues/224))
+  - 採用者報告: 「3 時間ほど動かしていた後、全て再起動したら agent-server が `EADDRINUSE: address already in use :::4000` で起動しない、サーバ再起動ですかね」
+  - 旧実装: `app.listen()` の error event を捕捉しておらず、port 既使用時に **uncaught error で crash** + Node default stack trace のみ → 採用者がどう対処すればよいか分からなかった
+  - 改修: 3 server すべてに `server.on('error', ...)` を追加、`EADDRINUSE` の場合に **OS 別の kill コマンドを併記した actionable メッセージ**を logger.error で出力後 `process.exit(1)`:
+    - Linux/Mac: `lsof -ti:<PORT> | xargs kill -9`
+    - Windows: `netstat -ano | findstr :<PORT>` → `taskkill /F /PID <pid>`
+  - `agent-server/src/index.js`: graceful shutdown に `server.close()` を追加 (前から MCP のみ close で HTTP server 残存していた副次 bug を fix)
+  - 影響範囲: tealus 本体 (port 3000) / agent-server (port 4000) / rtc-server (port 3100)
+  - 既存 server 337 件 + agent-server 180 件 = **517 件 pass**、回帰なし
+
 - **音声メッセージ「許可されていない」エラーの原因切り分け + HTTPS 未対応時の明示メッセージ** ([#223](https://github.com/gamasenninn/tealus/issues/223))
   - 採用者報告: 「音声メッセージを使いたいのですが、許可されていないと表示されます、何か設定が必要ですか」
   - 旧実装: `getUserMedia` の catch で原因に関わらず一律「マイクへのアクセスが許可されていません」を表示 → 採用者が次の正しい行動 (HTTPS 化等) に到達できなかった

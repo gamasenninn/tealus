@@ -527,6 +527,19 @@ async function main() {
   server.listen(config.listenPort, () => {
     logger.info(`Server running at http://localhost:${config.listenPort}`);
   });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`Port ${config.listenPort} は既に使用中です。`);
+      logger.error('既存のプロセスを停止してから再起動してください:');
+      logger.error(`  Linux/Mac:  lsof -ti:${config.listenPort} | xargs kill -9`);
+      logger.error(`  Windows:    netstat -ano | findstr :${config.listenPort}`);
+      logger.error('              (PID 確認後 taskkill /F /PID <pid>)');
+      process.exit(1);
+    }
+    logger.error('RTC Server start error:', err);
+    process.exit(1);
+  });
 }
 
 main();

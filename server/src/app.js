@@ -149,6 +149,19 @@ if (require.main === module) {
     const capabilityWatcher = require('./services/capabilityWatcher');
     capabilityWatcher.start(io);
   });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`Port ${PORT} は既に使用中です。`);
+      logger.error('既存のプロセスを停止してから再起動してください:');
+      logger.error(`  Linux/Mac:  lsof -ti:${PORT} | xargs kill -9`);
+      logger.error(`  Windows:    netstat -ano | findstr :${PORT}`);
+      logger.error('              (PID 確認後 taskkill /F /PID <pid>)');
+      process.exit(1);
+    }
+    logger.error('Tealus server start error:', err);
+    process.exit(1);
+  });
 }
 
 module.exports = { app, server, io };
