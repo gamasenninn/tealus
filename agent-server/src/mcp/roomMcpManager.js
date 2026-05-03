@@ -18,9 +18,14 @@ const roomMcpCache = new Map();
 let sharedGlobalServers = null;
 let sweepTimer = null;
 
-// MCP server connect timeout (#226 Phase C)
-// default 5s では npx 初回 fetch が間に合わず採用者環境で cold start 失敗する
-const MCP_CONNECT_TIMEOUT = 30000;
+// MCP server connect timeout (#226 Phase C → #227 完全 fix)
+// MCPServerStdio には 2 種類の timeout option がある:
+//   - timeout (ms): listTools / callTool 等の request method timeout
+//   - clientSessionTimeoutSeconds (秒): connect (initialize handshake) timeout、default 5s
+// #226 では timeout のみ渡したが connect には効かず、採用者環境で 5s timeout が出続けた。
+// 本 fix では両方渡す (#227)。
+const MCP_CONNECT_TIMEOUT = 30000;          // request timeout (ms)
+const MCP_CONNECT_TIMEOUT_SECONDS = 30;     // connect/initialize timeout (秒)
 
 /**
  * グローバルMCPサーバーを取得（初回のみ接続）
@@ -48,7 +53,8 @@ async function getOrCreateSharedGlobal() {
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
           TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
         },
-        timeout: MCP_CONNECT_TIMEOUT,  // #226 Phase C: 5s default では cold start で間に合わない
+        timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
+        clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
       });
       await tealusServer.connect();
       servers.push(tealusServer);
@@ -123,7 +129,8 @@ async function getOrCreateRoomMcp(agentId, roomId, workspacePath) {
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-filesystem', normalizedPath],
         env: { ...process.env },
-        timeout: MCP_CONNECT_TIMEOUT,  // #226 Phase C: cold start 対応
+        timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
+        clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
       });
       await fsServer.connect();
       servers.push(fsServer);
@@ -165,7 +172,8 @@ async function connectFromConfig(serverDefs, prefix) {
       const server = new MCPServerStdio({
         name: `${prefix}-${name}`,
         fullCommand,
-        timeout: MCP_CONNECT_TIMEOUT,  // #226 Phase C: cold start 対応
+        timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
+        clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
       });
       await server.connect();
       servers.push(server);

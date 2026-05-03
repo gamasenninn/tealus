@@ -12,6 +12,24 @@
 
 ### Fixed
 
+- **MCP timeout 5s が #226 Phase C で完全には fix されていなかった件を修正** ([#227](https://github.com/gamasenninn/tealus/issues/227))
+  - 採用者の log evidence で `data: { timeout: 5000 }` が依然出ていた
+  - 根本原因: `MCPServerStdio` には 2 種類の timeout option があり、#226 では誤った方を渡していた:
+    - `timeout` (ms): listTools / callTool 等の **request method** timeout
+    - `clientSessionTimeoutSeconds` (秒): **connect (initialize handshake)** timeout、default 5s
+  - #226 は `timeout: 30000` (request 用) のみ渡したが、connect には効かず default 5s のままだった
+  - 修正: `clientSessionTimeoutSeconds: 30` (秒) を追加、tealus MCP / filesystem MCP / connectFromConfig すべてに適用
+  - **教訓**: 「fix 完了 ≠ verify 完了」。unit test では constructor option までしか verify できず、SDK 内部での実利用までは届かなかった。実機 evidence で初めて根因に到達したのは反省点
+
+- **本体 server 起動時に OPENAI_API_KEY 空チェック + loud warn** ([#228](https://github.com/gamasenninn/tealus/issues/228))
+  - 採用者報告 (藤井さん @ ubuntu22): `server/.env` の `OPENAI_API_KEY=` が空 → stamp 生成時に OpenAI から「key 未提供」エラー、切り分けに 30 分以上
+  - 旧: 空 key でも server は起動成功、API call 時に初めて OpenAI の error response → server side で原因が見えない
+  - 新: `server/src/utils/envCheck.js` 新設、`runStartupEnvCheck(logger)` で起動時に env validation
+    - 空 / 未設定 / 空白のみを検出 → 解決手順 (.env 編集 / 影響機能 / OpenAI dashboard URL) を案内する loud warn banner
+  - fail-fast はせず起動継続 (一部機能だけ使いたい採用者の柔軟性確保)
+  - unit test 8 件追加 (`__tests__/unit/envCheck.test.js`、isEmpty / checkOpenAIApiKey / runStartupEnvCheck)
+  - 本体 server 337 件 + 新規 8 件 = **345 件 pass**、回帰なし
+
 - **agent-server: ダンマリ問題 + filesystem ENOENT + tealus MCP timeout の 3 連鎖 fix** ([#226](https://github.com/gamasenninn/tealus/issues/226))
   - 採用者報告 (藤井さん @ ubuntu22): mention 明示後も「ダンマリ状態」、起動ログに `mcp-server-filesystem ENOENT` / `tealus MCP timeout`
   - **3 layer の問題が連鎖**していたのを切り分け fix:

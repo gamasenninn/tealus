@@ -12,6 +12,10 @@ const { MEDIA_ROOT } = require('./middleware/upload');
 ensureMediaDirs(MEDIA_ROOT);
 logger.info(`Media dirs ensured at ${MEDIA_ROOT}`);
 
+// #228 採用者切り分け改善: OPENAI_API_KEY 等が空なら起動時に loud warn
+const { runStartupEnvCheck } = require('./utils/envCheck');
+runStartupEnvCheck(logger);
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
