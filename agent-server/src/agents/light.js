@@ -17,9 +17,13 @@ const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
 const CONFIG_DIR = path.join(__dirname, '..', '..', 'config');
 
+// admin UI が「カスタムプロンプト」のような placeholder text を保存することがあり、
+// 短すぎる custom は default に fallback (D4 哲学の MCP-first 指示が消えるのを防ぐ)
+const MIN_CUSTOM_PROMPT_LENGTH = 50;
+
 /**
  * システムプロンプトを取得
- * 1. config/system_prompt.md があればそれを使う（カスタム）
+ * 1. config/system_prompt.md があればそれを使う（カスタム、ただし MIN_CUSTOM_PROMPT_LENGTH 以上）
  * 2. なければ config/default_system_prompt.md を使う（デフォルト）
  */
 function loadSystemPrompt() {
@@ -28,7 +32,7 @@ function loadSystemPrompt() {
   try {
     if (fs.existsSync(customPath)) {
       const content = fs.readFileSync(customPath, 'utf8').trim();
-      if (content) return content;
+      if (content && content.length >= MIN_CUSTOM_PROMPT_LENGTH) return content;
     }
     if (fs.existsSync(defaultPath)) {
       return fs.readFileSync(defaultPath, 'utf8').trim();
@@ -74,23 +78,29 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
     mcpServers,
   });
 
-  // ツール実行時のステータス通知フック
-  if (roomId) {
-    const TOOL_STATUS_MAP = {
-      tavily_search: { status: 'searching', message: '検索中...' },
-      code_interpreter: { status: 'calculating', message: '計算中...' },
-      generate_image: { status: 'generating', message: '画像生成中...' },
-      read_text_file: { status: 'reading', message: 'ファイル読み込み中...' },
-      write_text_file: { status: 'writing', message: 'ファイル書き込み中...' },
-      list_directory: { status: 'reading', message: 'ディレクトリ読み込み中...' },
-    };
-    agent.on('agent_tool_start', (ctx, tool) => {
+  // ツール実行時の log + ステータス通知フック
+  // log は Max turns exceeded 時にも残るため (run() throw → newItems 経由の log は消失) 必須 visibility
+  const TOOL_STATUS_MAP = {
+    tavily_search: { status: 'searching', message: '検索中...' },
+    code_interpreter: { status: 'calculating', message: '計算中...' },
+    generate_image: { status: 'generating', message: '画像生成中...' },
+    read_text_file: { status: 'reading', message: 'ファイル読み込み中...' },
+    write_text_file: { status: 'writing', message: 'ファイル書き込み中...' },
+    list_directory: { status: 'reading', message: 'ディレクトリ読み込み中...' },
+  };
+  agent.on('agent_tool_start', (ctx, tool, details) => {
+    const args = details?.toolCall?.arguments;
+    const argsStr = args
+      ? ` args=${typeof args === 'string' ? args.slice(0, 200) : JSON.stringify(args).slice(0, 200)}`
+      : '';
+    logger.info(`[Tool] start: ${tool?.name || '?'}${argsStr}`);
+    if (roomId) {
       const mapped = TOOL_STATUS_MAP[tool?.name];
       if (mapped) {
         botApi.pushStatus(roomId, mapped.status, mapped.message).catch(() => {});
       }
-    });
-  }
+    }
+  });
 
   return agent;
 }

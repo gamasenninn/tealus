@@ -12,6 +12,18 @@
 
 ### Changed
 
+- **Light agent: tool call visibility + admin UI 上書き耐性 ([#229](https://github.com/gamasenninn/tealus/issues/229)/[#230](https://github.com/gamasenninn/tealus/issues/230) follow-up)** ([#231](https://github.com/gamasenninn/tealus/issues/231))
+  - [#229](https://github.com/gamasenninn/tealus/issues/229)/[#230](https://github.com/gamasenninn/tealus/issues/230) 完了直後の実機 verify で **admin UI と code 編集の 2-source-of-truth conflict** が判明
+    - `PUT /config/settings` が settings オブジェクト全置換で書き込み → admin UI 保存で `max_turns` field 消える
+    - `loadSystemPrompt` の `if (content)` 判定が admin UI placeholder「カスタムプロンプト」27 bytes も truthy 扱い → default 1874 chars 読まれず
+  - **F1**: `agent-server/src/config.js` に `LIGHT_MAX_TURNS: parseInt(process.env.LIGHT_MAX_TURNS || '12')` 追加 — settings.json から消えても code default で fallback
+  - **F2**: `agent-server/src/agents/light.js` の `loadSystemPrompt` に `MIN_CUSTOM_PROMPT_LENGTH = 50` 追加 — placeholder 弾いて default に fallback
+  - **Step 1 (visibility)**: `agent_tool_start` hook に `logger.info('[Tool] start: ${name} args=...')` 追加、`roomId` 条件分岐の外に出して全経路で log。Max turns exceeded で `run()` throw 時も tool sequence が log に残る (従来は `if (result.newItems)` block 到達せず消失)
+  - **Step 2**: `LIGHT_MAX_TURNS` default 8 → 12 (4 step × 3 retry 余地、8 で exceed 実績あり)
+  - SDK 仕様確認: `turnPreparation.js:23-28` で 1 turn = 1 model invocation、`lifecycle.d.ts:46-52` で hook 第 3 引数 `details.toolCall.arguments` で args 取得可能
+  - 実機 verify: PDF 1 件 test → **3 turns で完結**、234 chars 応答、tool sequence (`get_messages` + `search_messages` parallel → `get_message_media` → 応答) 全可視化
+  - 教訓: 2-source-of-truth 衝突は code 側に robustness を寄せる ([#226](https://github.com/gamasenninn/tealus/issues/226) → [#227](https://github.com/gamasenninn/tealus/issues/227) と同型 pattern)、visibility 不足は対症療法を強要する
+
 - **Light agent context cleanup — TealusSession 削除 (D4 哲学完結)** ([#230](https://github.com/gamasenninn/tealus/issues/230))
   - [#229](https://github.com/gamasenninn/tealus/issues/229) で agent が自分で `get_messages` を呼ぶ pattern が完成 → `TealusSession` の役割 (session として前 N 件を fetch して agent に prepend) は **二重 fetch で重複** → 削除
   - `agent-server/src/agents/lightSession.js` 削除 (76 行、class TealusSession 全体)

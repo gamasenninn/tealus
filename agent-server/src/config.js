@@ -75,6 +75,10 @@ module.exports = {
   DEEP_TIMEOUT: parseInt(process.env.DEEP_TIMEOUT || '300000'),  // 5分
   DEEP_MAX_BUFFER: parseInt(process.env.DEEP_MAX_BUFFER || '10485760'),  // 10MB
   // LIGHT_CONTEXT_MESSAGES: #230 で削除 (TealusSession 不要、agent が自分で get_messages を呼ぶ)
+  // LIGHT_MAX_TURNS: D4 哲学下で multi-step tool chain (get_messages → get_message_media → 応答) が必要、
+  // default 12 (4 step × 3 retry 余地)。8 では PDF 解析で exceed した実績 (#229/#230 follow-up)。
+  // settings.json の max_turns で UI override 可、env でも override 可
+  LIGHT_MAX_TURNS: parseInt(process.env.LIGHT_MAX_TURNS || '12'),
 
   // TTS Provider
   TTS_PROVIDER,
