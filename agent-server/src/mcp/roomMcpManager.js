@@ -172,6 +172,9 @@ async function connectFromConfig(serverDefs, prefix) {
       const server = new MCPServerStdio({
         name: `${prefix}-${name}`,
         fullCommand,
+        // #240: parent env を継承 + def.env で override
+        // (TAVILY_API_KEY 等の API key を必要とする user MCP のため必須)
+        env: { ...process.env, ...(def.env || {}) },
         timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
         clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
       });

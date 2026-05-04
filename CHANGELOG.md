@@ -33,6 +33,13 @@
 
 ### Fixed
 
+- **agent-server: connectFromConfig が user MCP に env を渡してない ([#235](https://github.com/gamasenninn/tealus/issues/235) Tavily 復元時に発覚)** ([#240](https://github.com/gamasenninn/tealus/issues/240))
+  - `roomMcpManager.js` の `connectFromConfig` (user-defined `mcp_config.json` の MCP を起動) が **env を child process に渡していなかった**
+  - filesystem / tealus MCP は明示 `env: { ...process.env }` で動作していたが、user MCP は parent env 継承なし
+  - 結果: tavily-mcp が `process.env.TAVILY_API_KEY` を読めず認証 fail、agent が「検索用 API が使えませんでした」と応答
+  - **修正**: `env: { ...process.env, ...(def.env || {}) }` を追加 — parent env 継承 + `mcp_config.json` の `env` field で override 可能
+  - 採用者保護: 採用者が他の API key 系 MCP (github / slack 等) を追加する時にも同じ問題を踏むため、本 fix で広く救済
+
 - **client: useSocketSync の socket.off が全 listener を消し sidebar 未読更新を阻害 ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#239](https://github.com/gamasenninn/tealus/issues/239))
   - `useSocketSync.js` cleanup の `socket.off('message:new')` 等が引数なしで **全 listener を削除** していた既存 bug を発見
   - mobile では RoomList が route 遷移で unmount/remount するため masked、PC layout (#237) で sidebar 永続化により発覚
