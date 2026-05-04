@@ -31,6 +31,15 @@
   - rtc-server v0.1.0 → v0.1.1 (patch、bug fix)
   - 業務メモ B 「rtc で何かのデグレード起こってるかも」(5/3 18:59) の調査で発覚した構造的問題
 
+### Fixed
+
+- **client: PC layout で sidebar 未読 badge が既読化後も残る ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#238](https://github.com/gamasenninn/tealus/issues/238))
+  - Mobile では room 遷移で RoomList unmount → 戻り時に fresh 取得していたが、PC layout (#237) で sidebar 永続化された結果、ChatRoom 既読化後の sidebar 未読 badge が更新されず残留
+  - Server `message:read` socket は sender 除外で emit (`socket.to(room_id)`)、自分自身には届かない構造
+  - Fix: `RoomList.jsx` の room onClick で `useRoomStore.updateRoomInList(roomId, { unread_count: 0 })` を optimistic 呼び出し
+  - ChatRoom mount で `markVisibleAsRead` が server cursor を更新するので eventually consistent
+  - +9 LOC、Mobile UX 影響なし
+
 ### Added
 
 - **client: PC レイアウト (2-pane sidebar) — desktop ユーザーの戸惑い解消** ([#237](https://github.com/gamasenninn/tealus/issues/237))

@@ -136,7 +136,16 @@ function RoomList() {
           <div
             key={room.id}
             className="room-item"
-            onClick={() => !contextMenu && navigate(`/rooms/${room.id}`)}
+            onClick={() => {
+              if (contextMenu) return;
+              // #238: PC layout (#237) で sidebar 永続 mount のため、room click 後の
+              // 未読 clear が自動で来ない。ChatRoom mount で markVisibleAsRead が
+              // server cursor を進めるので、ここで optimistic に local state を更新。
+              if (room.unread_count > 0) {
+                useRoomStore.getState().updateRoomInList(room.id, { unread_count: 0 });
+              }
+              navigate(`/rooms/${room.id}`);
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY, roomId: room.id, roomName: getRoomDisplayName(room) });
