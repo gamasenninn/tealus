@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **rtc-server: bundle.js auto-build + 起動時 sanity check (採用者保護)** ([#234](https://github.com/gamasenninn/tealus/issues/234))
+  - `rtc-server/public/bundle.js` (esbuild の output) は `.gitignore` で除外される build artifact、最後の `npm run build` 以降に消えると通話 popup が「未接続」のまま固まる
+  - 5/3 14:45 藤井さんの本機 test、5/4 14:57 user 環境再現で観測 (信号 (call:start) は届くが popup 内で mediasoup-client が load されない)
+  - **Defense layer 1**: `package.json` に `postinstall: "npm run build"` 追加 — 採用者が `npm install` した瞬間に bundle.js が auto 生成
+  - **Defense layer 2**: `server.js` 起動時に `public/bundle.js` 存在 check、不在時 loud warn (`npm run build` を提案)。signaling は問題ないので fail-fast にせず継続起動
+  - rtc-server v0.1.0 → v0.1.1 (patch、bug fix)
+  - 業務メモ B 「rtc で何かのデグレード起こってるかも」(5/3 18:59) の調査で発覚した構造的問題
+
 ### Added
 
 - **tealus-mcp v0.8.0 連携 — read_document tool で PDF/DOCX/XLSX 解析対応** ([#232](https://github.com/gamasenninn/tealus/issues/232))

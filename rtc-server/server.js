@@ -6,6 +6,7 @@ const { WebSocketServer } = require("ws");
 const logger = require("./logger");
 const http = require("http");
 const https = require("https");
+const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const dns = require("dns");
@@ -506,6 +507,22 @@ async function main() {
   });
 
   app.use(express.static(path.join(__dirname, "public")));
+
+  // Defensive: bundle.js (esbuild の output、通話 popup から script src で参照) が
+  // 不在だと popup が「未接続」のまま固まる。npm postinstall で auto build されるが
+  // 何らかの理由で削除された / build に失敗したケースの二重防御として loud warn。
+  // signaling 自体は影響を受けないので fail-fast にはしない。
+  const bundlePath = path.join(__dirname, "public", "bundle.js");
+  if (!fs.existsSync(bundlePath)) {
+    logger.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    logger.error("public/bundle.js が存在しません。通話 popup が「未接続」のまま固まります。");
+    logger.error("解決方法:");
+    logger.error("  cd rtc-server");
+    logger.error("  npm run build");
+    logger.error("通常 npm install で自動 build されますが、build artifact が");
+    logger.error("削除された / build に失敗した場合は手動実行が必要です。");
+    logger.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  }
 
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws" });
