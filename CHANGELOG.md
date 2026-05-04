@@ -33,6 +33,14 @@
 
 ### Added
 
+- **agent-server: Light/Deep memory 共有 (Option 1) — Deep CLAUDE.md に @memory/MEMORY.md 参照を追加** ([#236](https://github.com/gamasenninn/tealus/issues/236))
+  - Light agent (`memory/MEMORY.md` を読み書き) と Deep agent (`CLAUDE.md` を Claude Code が auto-read) は同一 workspace に居るが互いの memory を見ていなかった
+  - Option 1 (minimal change): Deep の CLAUDE.md template に「## 共有メモリ」section + `@memory/MEMORY.md` 参照を追加 → Claude Code の `@filename` mechanism で auto-load → Light が write した memory を Deep が自然に参照可能
+  - `agent-server/src/context/sessionManager.js`: 新 room template に section 追加
+  - `agent-server/scripts/migrate-claude-md.js` (新規): 既存 11 rooms を idempotent migration (dry-run 対応、`@memory/MEMORY.md` 参照済 room は skip)
+  - 実機 migration 結果: 11 rooms 全 update、二度目実行で全 skip (idempotent 確認)
+  - Light は CLAUDE.md を読まないので逆方向 (Light → Deep) は未対応、Option 2 で別途検討
+
 - **tealus-mcp v0.9.0 連携 — read_document に Vision API fallback (Gemini) 統合、scan PDF 対応** ([#233](https://github.com/gamasenninn/tealus/issues/233))
   - tealus-mcp v0.8.1 で検出していた scan PDF / image-only PDF を、Gemini API multimodal で text 化する fallback layer を tealus-mcp 側に追加
   - 採用者は `agent-server/.env` に `GOOGLE_API_KEY` を設定すれば自動で有効化、unset で従来動作

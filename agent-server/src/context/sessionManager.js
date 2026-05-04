@@ -122,6 +122,11 @@ function initWorkspace(workspacePath) {
 - このワークスペース外のファイルにアクセスしない
 - rm -rf や破壊的コマンドを実行しない
 - 機密情報（APIキー、パスワード等）をファイルに書き出さない
+
+## 共有メモリ
+
+過去の会話で蓄積した記憶や user 情報は @memory/MEMORY.md を参照してください。
+このファイルは Light agent が能動的に書き、Deep agent (本 session) からは読み取りで参照します。
 `);
     }
 
