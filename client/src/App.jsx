@@ -17,6 +17,7 @@ import IncomingCallModal from './components/call/IncomingCallModal';
 import CallWindow from './components/call/CallWindow';
 import CallBanner from './components/call/CallBanner';
 import ConfirmModal from './components/common/ConfirmModal';
+import DesktopShell from './components/layout/DesktopShell';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -61,15 +62,20 @@ function App() {
       )}
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
-        <Route path="/talk" element={<PrivateRoute><RoomList /></PrivateRoute>} />
-        <Route path="/rooms/:roomId" element={<PrivateRoute><ChatRoom /></PrivateRoute>} />
-        <Route path="/rooms/:roomId/gallery" element={<PrivateRoute><MediaGallery /></PrivateRoute>} />
-        <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-        <Route path="/search" element={<PrivateRoute><SearchPage /></PrivateRoute>} />
-        <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
-        <Route path="/multi" element={<PrivateRoute><MultiTalk /></PrivateRoute>} />
-        <Route path="/share" element={<PrivateRoute><SharePage /></PrivateRoute>} />
+        {/* 認証必須 routes は DesktopShell でラップ (#237 Phase 1)
+            Mobile (< 1024px): shell の sidebar 非表示で main 全画面 (既存 UX 維持)
+            Desktop (>= 1024px): sidebar (RoomList) + main pane (各画面) の 2-pane */}
+        <Route element={<PrivateRoute><DesktopShell /></PrivateRoute>}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/talk" element={<RoomList />} />
+          <Route path="/rooms/:roomId" element={<ChatRoom />} />
+          <Route path="/rooms/:roomId/gallery" element={<MediaGallery />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/multi" element={<MultiTalk />} />
+          <Route path="/share" element={<SharePage />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

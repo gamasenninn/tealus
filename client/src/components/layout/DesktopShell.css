@@ -1,0 +1,61 @@
+/**
+ * Desktop 2-pane shell layout (#237 Phase 1)
+ * Mobile-first: sidebar 隠して main 全画面、desktop で 2-pane に。
+ */
+
+.desktop-shell {
+  width: 100%;
+  height: 100dvh;
+}
+
+/* Mobile (< 1024px): sidebar 非表示、main 全画面 (既存 UX 維持) */
+.desktop-sidebar {
+  display: none;
+}
+
+.desktop-main {
+  width: 100%;
+  height: 100%;
+}
+
+/* Desktop (>= 1024px): 2-pane layout */
+@media (min-width: 1024px) {
+  .desktop-shell {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+  }
+
+  .desktop-sidebar {
+    display: block;
+    height: 100dvh;
+    overflow: hidden;
+    border-right: 1px solid #e0e0e0;
+    background: #fafafa;
+  }
+
+  .desktop-main {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* sidebar 内の RoomList は max-width 制約を外して sidebar 幅 (320px) を使う */
+  .desktop-sidebar .room-list-container {
+    max-width: none;
+    width: 100%;
+  }
+
+  /* main pane の各画面は max-width 1200px に緩和 (PC で読みやすい上限、横長すぎ防止) */
+  .desktop-main .home-container,
+  .desktop-main .chat-container,
+  .desktop-main .profile-container,
+  .desktop-main .search-container,
+  .desktop-main .gallery-container,
+  .desktop-main .share-container {
+    max-width: 1200px;
+  }
+
+  /* main pane では BottomNav 不要 (sidebar が代替) */
+  .desktop-main .bottom-nav {
+    display: none;
+  }
+}

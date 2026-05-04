@@ -33,6 +33,17 @@
 
 ### Added
 
+- **client: PC レイアウト (2-pane sidebar) — desktop ユーザーの戸惑い解消** ([#237](https://github.com/gamasenninn/tealus/issues/237))
+  - 業務メモ 5/4 01:38 (user 自身の dogfooding 体感) 起点。Tealus は 97% スマホ稼働だが、user / admin / 採用検証ユーザー = 縦糸を支える層が PC を使うと縦長スマホサイズで戸惑いがある
+  - **Progressive enhancement**: CSS responsive で `≥1024px` の breakpoint で 2-pane (sidebar 320px + main 1200px) layout を適用、mobile (<1024px) UX は完全維持
+  - `client/src/components/layout/DesktopShell.jsx` (新規): React Router Outlet で 2-pane shell wrapper、JS state branching なし (CSS media query only)
+  - `App.jsx`: 認証必須 routes を `<DesktopShell>` でラップ (PrivateRoute → DesktopShell → 各画面)
+  - `main.jsx`: PC PWA 強制縮小 (`window.resizeTo(480, ...)`) を削除 — 2-pane layout と矛盾
+  - DesktopShell.css の cascade で各画面 container の max-width 制約を sidebar 内 / main pane で別々に override (個別 component CSS は触らず)
+  - sidebar には既存 `RoomList` コンポーネントを再利用 (CSS のみで sidebar 幅に合わせ可)
+  - desktop で BottomNav は hide (sidebar が代替)
+  - Out of scope (Phase 2): right panel / multi-chat split / sidebar collapsible / tablet 専用 layout / keyboard shortcut
+
 - **agent-server: Light/Deep memory 共有 (Option 1) — Deep CLAUDE.md に @memory/MEMORY.md 参照を追加** ([#236](https://github.com/gamasenninn/tealus/issues/236))
   - Light agent (`memory/MEMORY.md` を読み書き) と Deep agent (`CLAUDE.md` を Claude Code が auto-read) は同一 workspace に居るが互いの memory を見ていなかった
   - Option 1 (minimal change): Deep の CLAUDE.md template に「## 共有メモリ」section + `@memory/MEMORY.md` 参照を追加 → Claude Code の `@filename` mechanism で auto-load → Light が write した memory を Deep が自然に参照可能

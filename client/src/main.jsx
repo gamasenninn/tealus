@@ -5,10 +5,9 @@ import { loadConfig } from './services/clientConfig';
 import { useCapabilityStore } from './stores/capabilityStore';
 import './index.css';
 
-// PC PWA: ウィンドウ幅をアプリに合わせる
-if (window.matchMedia('(display-mode: standalone)').matches && window.innerWidth > 520) {
-  window.resizeTo(480, window.outerHeight);
-}
+// #237 Phase 1: PC PWA の強制 480px 縮小は削除
+// (DesktopShell の 2-pane layout で横領域を活用するため)
+// 旧 resizeTo(480, ...) は mobile-first 設計の名残、新 design では矛盾する
 
 // runtime config を取得してから render（fetch 失敗時は fallback で起動継続）
 loadConfig().then((config) => {
