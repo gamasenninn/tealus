@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **tealus-mcp v0.8.0 連携 — read_document tool で PDF/DOCX/XLSX 解析対応** ([#232](https://github.com/gamasenninn/tealus/issues/232))
+  - 業務メモ 5/3 18:58「MCP で PDF を読めるようにした方がいい」起点
+  - tealus-mcp に `read_document(message_id)` tool 追加 (pdf-parse / mammoth / exceljs で text 抽出)
+  - Light agent (gpt-5.4-mini) が `get_message_media` でメタ情報、`read_document` で本文を取得する 2 段構成
+  - tealus 本体 (server / agent-server) は変更なし、新 tool は agent から自動的に拾われる
+  - tealus-mcp release: https://github.com/gamasenninn/tealus-mcp/releases/tag/v0.8.0
+  - Approach 2 (Vision API fallback for scan PDF) は将来別 issue で対応予定
+
 ### Changed
 
 - **Light agent: tool call visibility + admin UI 上書き耐性 ([#229](https://github.com/gamasenninn/tealus/issues/229)/[#230](https://github.com/gamasenninn/tealus/issues/230) follow-up)** ([#231](https://github.com/gamasenninn/tealus/issues/231))
