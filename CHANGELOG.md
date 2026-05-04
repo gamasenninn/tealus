@@ -12,6 +12,17 @@
 
 ### Fixed
 
+- **agent-server: test pollution 防止 — 本番 config file を test が上書きしない構造に** ([#235](https://github.com/gamasenninn/tealus/issues/235))
+  - [#231](https://github.com/gamasenninn/tealus/issues/231) で「admin UI 上書き耐性」として F1+F2 を実装したが、5/4 朝の調査で **真因は admin UI ではなく test pollution** と判明 (user 指摘「admin UI 開いた覚えない」)
+  - `__tests__/integration/settingsManager.test.js:105` が `manager.saveSettings({ count: 0, enabled: false })` で本番 `agent-server/config/settings.json` を直接上書き
+  - `__tests__/integration/settings-api.test.js:122` が PUT `/config/system-prompt` で本番 `agent-server/config/system_prompt.md` に「カスタムプロンプト」27 bytes を書き込み
+  - **修正**: production code に `AGENT_CONFIG_DIR` / `AGENT_MCP_CONFIG_PATH` env override を追加 (`settingsManager.js`, `routes/settings.js`, `light.js`)、test 内で env を tmpDir に向けて隔離
+  - production cleanup: `agent-server/config/settings.json` を `{}` に、`config/system_prompt.md` 削除 (両方 test 由来の garbage)
+  - 過去 [#107](https://github.com/gamasenninn/tealus/issues/107) commit で test garbage が誤 commit されていた長期残留問題も同時解消
+  - 全 177 件 pass、回帰なし
+  - memory `feedback_test_file_guard.md` 追加 ([feedback_test_db_guard.md](https://github.com/gamasenninn/tealus/blob/main/CLAUDE.md) の file 版、同型 pattern)
+  - [#231](https://github.com/gamasenninn/tealus/issues/231) F1+F2 (`LIGHT_MAX_TURNS` env default + system_prompt placeholder fallback) は本問題の **真因解決** でもあり、副次的に admin UI からの誤上書きへの保護としても有効。本 issue で F1+F2 の表現を「admin UI 上書き耐性」→「test pollution 耐性 (副次的に admin UI 誤上書きも防護)」に訂正
+
 - **rtc-server: bundle.js auto-build + 起動時 sanity check (採用者保護)** ([#234](https://github.com/gamasenninn/tealus/issues/234))
   - `rtc-server/public/bundle.js` (esbuild の output) は `.gitignore` で除外される build artifact、最後の `npm run build` 以降に消えると通話 popup が「未接続」のまま固まる
   - 5/3 14:45 藤井さんの本機 test、5/4 14:57 user 環境再現で観測 (信号 (call:start) は届くが popup 内で mediasoup-client が load されない)

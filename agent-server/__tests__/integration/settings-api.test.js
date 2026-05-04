@@ -1,11 +1,28 @@
 /**
  * 統合テスト: 設定 API ルート
  * Supertest で実際の HTTP リクエストを検証。
+ *
+ * Test isolation: AGENT_CONFIG_DIR / AGENT_MCP_CONFIG_PATH を tmpDir に向けて、
+ * 本番 config/system_prompt.md / mcp_config.json を触らないように隔離する
+ * (#235、本番 file 上書き事故の予防)。
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// **重要**: 下記 require より先に env を設定する必要がある (require 時に const 化される)
+const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-api-test-'));
+const tmpMcpPath = path.join(tmpConfigDir, 'mcp_config.json');
+process.env.AGENT_CONFIG_DIR = tmpConfigDir;
+process.env.AGENT_MCP_CONFIG_PATH = tmpMcpPath;
+
+afterAll(() => {
+  delete process.env.AGENT_CONFIG_DIR;
+  delete process.env.AGENT_MCP_CONFIG_PATH;
+  fs.rmSync(tmpConfigDir, { recursive: true, force: true });
+});
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 const JWT_SECRET = process.env.JWT_SECRET;

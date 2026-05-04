@@ -6,7 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../lib/logger');
 
-const SETTINGS_PATH = path.join(__dirname, '..', '..', 'config', 'settings.json');
+// AGENT_CONFIG_DIR env で override 可能 (test isolation 用、production では unset で default)
+const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(__dirname, '..', '..', 'config');
+const SETTINGS_PATH = path.join(CONFIG_DIR, 'settings.json');
 
 let settings = {};
 

@@ -15,7 +15,8 @@ const { getSetting } = require('../context/settingsManager');
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
-const CONFIG_DIR = path.join(__dirname, '..', '..', 'config');
+// AGENT_CONFIG_DIR env で override 可能 (test isolation 用、production では unset で default)
+const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(__dirname, '..', '..', 'config');
 
 // admin UI が「カスタムプロンプト」のような placeholder text を保存することがあり、
 // 短すぎる custom は default に fallback (D4 哲学の MCP-first 指示が消えるのを防ぐ)

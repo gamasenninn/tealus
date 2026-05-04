@@ -1,6 +1,9 @@
 /**
  * 統合テスト: settingsManager
  * 実ファイル I/O で loadSettings, getSetting, saveSettings を検証。
+ *
+ * Test isolation: AGENT_CONFIG_DIR を tmpDir に向けて、本番 config/settings.json を
+ * 触らないように隔離する (#235、本番 file 上書き事故の予防)。
  */
 const fs = require('fs');
 const path = require('path');
@@ -11,27 +14,24 @@ jest.mock('../../src/lib/logger', () => ({
 }));
 
 let tmpDir;
-let originalSettingsPath;
 
 beforeEach(() => {
   jest.resetModules();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-test-'));
+  // settingsManager の SETTINGS_PATH を tmpDir 配下に向ける
+  process.env.AGENT_CONFIG_DIR = tmpDir;
 });
 
 afterEach(() => {
+  delete process.env.AGENT_CONFIG_DIR;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-// settingsManager のパスを tmpDir に差し替えるヘルパー
+// settingsManager の fresh instance を取得 (モジュールキャッシュをクリア)
 function getManager() {
-  // モジュールキャッシュをクリアして新しいインスタンスを取得
   const managerPath = require.resolve('../../src/context/settingsManager');
   delete require.cache[managerPath];
-
-  // SETTINGS_PATH を上書き
-  const manager = require('../../src/context/settingsManager');
-  // 内部の SETTINGS_PATH を変更するため、saveSettings でファイルを作成してから loadSettings
-  return manager;
+  return require('../../src/context/settingsManager');
 }
 
 describe('settingsManager 統合テスト', () => {

@@ -13,7 +13,9 @@ const { invalidateRoomMcp } = require('../mcp/roomMcpManager');
 
 const router = express.Router();
 
-const MCP_CONFIG_PATH = path.join(__dirname, '..', '..', 'mcp_config.json');
+// AGENT_CONFIG_DIR / AGENT_MCP_CONFIG_PATH env で override 可能 (test isolation 用、production では unset で default)
+const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(__dirname, '..', '..', 'config');
+const MCP_CONFIG_PATH = process.env.AGENT_MCP_CONFIG_PATH || path.join(__dirname, '..', '..', 'mcp_config.json');
 const WORKSPACE_ROOT = path.resolve(__dirname, '..', '..', config.WORKSPACE_ROOT || './agent-workspaces');
 const ENV_PATH = path.join(__dirname, '..', '..', '.env');
 
@@ -105,9 +107,8 @@ router.get('/env', (req, res) => {
  * GET /config/system-prompt — カスタムプロンプトを返す（なければデフォルト）
  */
 router.get('/system-prompt', (req, res) => {
-  const configDir = path.join(__dirname, '..', '..', 'config');
-  const customPath = path.join(configDir, 'system_prompt.md');
-  const defaultPath = path.join(configDir, 'default_system_prompt.md');
+  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
+  const defaultPath = path.join(CONFIG_DIR, 'default_system_prompt.md');
   try {
     const custom = fs.existsSync(customPath) ? fs.readFileSync(customPath, 'utf8') : '';
     const defaultPrompt = fs.existsSync(defaultPath) ? fs.readFileSync(defaultPath, 'utf8') : '';
@@ -123,8 +124,7 @@ router.get('/system-prompt', (req, res) => {
 router.put('/system-prompt', (req, res) => {
   const { content } = req.body;
   if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
-  const configDir = path.join(__dirname, '..', '..', 'config');
-  const customPath = path.join(configDir, 'system_prompt.md');
+  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
   try {
     if (!content.trim()) {
       // 空 → カスタムファイル削除（デフォルトに戻す）
