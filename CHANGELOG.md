@@ -33,6 +33,14 @@
 
 ### Added
 
+- **tealus-mcp v0.9.0 連携 — read_document に Vision API fallback (Gemini) 統合、scan PDF 対応** ([#233](https://github.com/gamasenninn/tealus/issues/233))
+  - tealus-mcp v0.8.1 で検出していた scan PDF / image-only PDF を、Gemini API multimodal で text 化する fallback layer を tealus-mcp 側に追加
+  - 採用者は `agent-server/.env` に `GOOGLE_API_KEY` を設定すれば自動で有効化、unset で従来動作
+  - Default model: `gemini-2.5-flash-lite` (free tier 1,000 RPD / 15 RPM)
+  - Privacy 注意: Gemini free tier は Google が製品改善利用、社内文書は paid billing account に紐付けた key 推奨
+  - tealus-mcp release: https://github.com/gamasenninn/tealus-mcp/releases/tag/v0.9.0
+  - tealus 本体 (server / agent-server) は変更なし、`.env.example` に GOOGLE_API_KEY + 関連 env の解説 + privacy 注意を追記
+
 - **tealus-mcp v0.8.0 連携 — read_document tool で PDF/DOCX/XLSX 解析対応** ([#232](https://github.com/gamasenninn/tealus/issues/232))
   - 業務メモ 5/3 18:58「MCP で PDF を読めるようにした方がいい」起点
   - tealus-mcp に `read_document(message_id)` tool 追加 (pdf-parse / mammoth / exceljs で text 抽出)
