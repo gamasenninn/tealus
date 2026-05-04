@@ -33,6 +33,14 @@
 
 ### Fixed
 
+- **client: useSocketSync の socket.off が全 listener を消し sidebar 未読更新を阻害 ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#239](https://github.com/gamasenninn/tealus/issues/239))
+  - `useSocketSync.js` cleanup の `socket.off('message:new')` 等が引数なしで **全 listener を削除** していた既存 bug を発見
+  - mobile では RoomList が route 遷移で unmount/remount するため masked、PC layout (#237) で sidebar 永続化により発覚
+  - room A 表示中に room B に message 着信 → sidebar 未読 badge が出ない症状
+  - **修正**: 全 handler を const に extract、`socket.off(event, handler)` で specific reference 削除に変更 (15 個の event 全て)
+  - これで useSocketSync 自身の handler だけ削除、RoomList 等の他 component listener は影響なし
+  - dogfooding が露わにした既存 bug の典型例
+
 - **client: PC layout で sidebar 未読 badge が既読化後も残る ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#238](https://github.com/gamasenninn/tealus/issues/238))
   - Mobile では room 遷移で RoomList unmount → 戻り時に fresh 取得していたが、PC layout (#237) で sidebar 永続化された結果、ChatRoom 既読化後の sidebar 未読 badge が更新されず残留
   - Server `message:read` socket は sender 除外で emit (`socket.to(room_id)`)、自分自身には届かない構造
