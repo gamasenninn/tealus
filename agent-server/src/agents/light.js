@@ -81,13 +81,22 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
 
   // ツール実行時の log + ステータス通知フック
   // log は Max turns exceeded 時にも残るため (run() throw → newItems 経由の log は消失) 必須 visibility
+  // #249: agent_tool_end hook + generic fallback で tool chain 全 step を visualize
   const TOOL_STATUS_MAP = {
+    // 基本 tool
     tavily_search: { status: 'searching', message: '検索中...' },
     code_interpreter: { status: 'calculating', message: '計算中...' },
     generate_image: { status: 'generating', message: '画像生成中...' },
     read_text_file: { status: 'reading', message: 'ファイル読み込み中...' },
     write_text_file: { status: 'writing', message: 'ファイル書き込み中...' },
     list_directory: { status: 'reading', message: 'ディレクトリ読み込み中...' },
+    // 主要 MCP tool (Tealus 体験で頻発、#249)
+    get_messages: { status: 'reading', message: 'メッセージ確認中...' },
+    search_messages: { status: 'searching', message: 'メッセージ検索中...' },
+    get_message_media: { status: 'reading', message: 'メディア取得中...' },
+    read_document: { status: 'reading', message: '文書を読み込み中...' },
+    share_text_as_file: { status: 'writing', message: 'ファイル送信中...' },
+    send_message: { status: 'sending', message: 'メッセージ送信中...' },
   };
   agent.on('agent_tool_start', (ctx, tool, details) => {
     const args = details?.toolCall?.arguments;
@@ -99,7 +108,30 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
       const mapped = TOOL_STATUS_MAP[tool?.name];
       if (mapped) {
         botApi.pushStatus(roomId, mapped.status, mapped.message).catch(() => {});
+      } else {
+        // #249 generic fallback: mapping 漏れ tool も「動いてる感」を表示
+        botApi.pushStatus(roomId, 'processing', `${tool?.name || 'ツール'} を実行中...`).catch(() => {});
       }
+    }
+  });
+
+  // #249: tool 終了時に「考え中」に戻す (次 step decision 待ち state を可視化)
+  // 既存 agent_tool_start のみだと tool 終了 → 次 tool 開始 の間で status が凍結していた
+  agent.on('agent_tool_end', (ctx, tool, result, details) => {
+    logger.info(`[Tool] end: ${tool?.name || '?'}`);
+    if (!roomId) return;
+    const resultStr = typeof result === 'string' ? result : '';
+    const lower = resultStr.toLowerCase();
+    const isError = lower.includes('error')
+      || lower.includes('failed')
+      || resultStr.includes('失敗')
+      || resultStr.includes('タイムアウト')
+      || resultStr.includes('エラー:');
+    if (isError) {
+      botApi.pushStatus(roomId, 'error', `${tool?.name || 'tool'}: 失敗、別アプローチを検討中...`).catch(() => {});
+    } else {
+      // 「考え中」に戻す (次 step decision まで)
+      botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
     }
   });
 

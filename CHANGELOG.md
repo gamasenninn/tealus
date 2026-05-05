@@ -52,6 +52,16 @@
 
 ### Added
 
+- **agent-server: Light agent 進行中表示 — `agent_tool_end` hook 追加で tool chain 全 step 可視化** ([#249](https://github.com/gamasenninn/tealus/issues/249))
+  - 業務メモ 5/4 18:04 user 「進行中表示が hook 効いてないのを何とか」起点。user が過去 try したが catch できなかった問題を SDK lifecycle 再調査で真因特定
+  - Root cause 2 件: (1) `agent_tool_end` hook 未登録 → tool 終了 → 次 tool 開始の間で status 凍結、(2) TOOL_STATUS_MAP が 6 tool のみで MCP tool 30+ silent
+  - Fix: TOOL_STATUS_MAP に主要 MCP tool 6 件追加 (get_messages / search_messages / get_message_media / read_document / share_text_as_file / send_message)
+  - `agent_tool_start` に generic fallback: mapping 漏れ tool も `${tool.name} を実行中...` 表示
+  - `agent_tool_end` hook 新規登録: 通常時「考え中...」、result の error heuristic 検出時「失敗、別アプローチ検討中...」
+  - 状態遷移完成: thinking → tool_start → tool_end → thinking → ... → idle、user は秒単位で進行可視化
+  - [#231](https://github.com/gamasenninn/tealus/issues/231) `agent_tool_start` の対称完成、agent-server 177 件 pass 回帰なし
+  - 業務メモ 11 件中 #5
+
 - **client: 文字起こし編集 modal に音声再生スライダー (MVP)** ([#248](https://github.com/gamasenninn/tealus/issues/248))
   - 業務メモ 5/4 18:01 user 力説「編集画面の上に音声スライダー、ユーザーが自由に再生位置を control できれば編集が極めて楽になる」起点
   - VoiceBubble の audio + slider logic を `VoiceEditModal.jsx` に直書き copy で移植 (yagni、3 例目で共通 component 抽出検討)
