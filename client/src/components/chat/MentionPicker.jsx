@@ -8,9 +8,13 @@ function MentionPicker({ members, query, onSelect, onClose }) {
 
   if (filtered.length === 0) return null;
 
+  // #242: 旧 slice(0, 8) で 8 人で打ち止めして「尻切れ」体感が発生していた。
+  // CSS の max-height (min(400px, 50vh)) + overflow-y: auto と組み合わせて
+  // 50 人まで render、それ以上は仮想スクロールが必要だが現実的には room 内
+  // member が 50 人超は稀なので simple な上限で済ませる。
   return (
     <div className="mention-picker">
-      {filtered.slice(0, 8).map(member => (
+      {filtered.slice(0, 50).map(member => (
         <button
           key={member.user_id}
           className="mention-picker-item"

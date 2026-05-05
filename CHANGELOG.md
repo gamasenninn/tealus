@@ -53,9 +53,10 @@
 ### Fixed
 
 - **client: mention @ 入力時の member 一覧が尻切れ** ([#242](https://github.com/gamasenninn/tealus/issues/242))
-  - `MentionPicker.css` の `max-height: 200px` 固定で 5-6 人しか表示できず、scroll bar が default styling で気付きにくく「尻切れ」体感
-  - Fix: `max-height: min(400px, 50vh)` で viewport-relative + thin scrollbar 常時表示で overflow 視覚化
-  - メンバー多 room では PC 400px / mobile 50vh、少 room では auto で空白なし
+  - 真因 2 つ:
+    - **CSS**: `max-height: 200px` 固定で 5-6 人で打ち止め → `min(400px, 50vh)` + thin scrollbar 常時表示で overflow 視覚化
+    - **JS** (user dogfood で発覚): `MentionPicker.jsx:13` の `.slice(0, 8)` で **8 人ハード制限** → `.slice(0, 50)` に緩和
+  - 教訓: bug 切り分け時、CSS / JS / data の 3 layer 全て確認すべきだった
   - 業務メモ 11 件中 #2
 
 - **client: PC layout で profile / home 等が scroll しない ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#241](https://github.com/gamasenninn/tealus/issues/241))
