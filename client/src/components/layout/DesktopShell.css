@@ -35,7 +35,12 @@
 
   .desktop-main {
     height: 100dvh;
-    overflow: hidden;
+    /* #237 Phase 1 では overflow: hidden だったが、profile / home 等の
+       縦に伸びる画面で scroll できなくなるため auto に変更。
+       ChatRoom は内部 flex column で自前 scroll するので main pane が
+       scrollable でも影響なし (content が height: 100dvh で main と同サイズ) */
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   /* sidebar 内の RoomList は max-width 制約を外して sidebar 幅 (320px) を使う */

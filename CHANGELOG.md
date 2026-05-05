@@ -33,6 +33,12 @@
 
 ### Fixed
 
+- **client: PC layout で profile / home 等が scroll しない ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#241](https://github.com/gamasenninn/tealus/issues/241))
+  - Profile / HomePage 等は `min-height: 100dvh` で content に応じて伸びる設計だが、`DesktopShell.css` の `.desktop-main { overflow: hidden }` で main pane の scroll が殺されていた
+  - ChatRoom は `height: 100dvh` 固定 + 内部 messages div で自前 scroll するので影響なかったが、伸びる画面は下が切れて管理画面リンクに到達できない bug
+  - Fix: `.desktop-main` を `overflow-y: auto; overflow-x: hidden;` に変更
+  - dogfood loop ([#237](https://github.com/gamasenninn/tealus/issues/237)/[#238](https://github.com/gamasenninn/tealus/issues/238)/[#239](https://github.com/gamasenninn/tealus/issues/239)) 4 件目
+
 - **agent-server: connectFromConfig が user MCP に env を渡してない ([#235](https://github.com/gamasenninn/tealus/issues/235) Tavily 復元時に発覚)** ([#240](https://github.com/gamasenninn/tealus/issues/240))
   - `roomMcpManager.js` の `connectFromConfig` (user-defined `mcp_config.json` の MCP を起動) が **env を child process に渡していなかった**
   - filesystem / tealus MCP は明示 `env: { ...process.env }` で動作していたが、user MCP は parent env 継承なし
