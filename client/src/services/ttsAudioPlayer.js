@@ -11,6 +11,7 @@
  *   // 戻り値の audio.pause() / audio.currentTime = 0 で停止可能
  */
 import { TTS_VOLUME_BOOST } from '../constants/ui';
+import { useTtsStore } from '../stores/ttsStore';
 
 let audioContext = null;
 function getAudioContext() {
@@ -26,6 +27,24 @@ function getAudioContext() {
   return audioContext;
 }
 
+// #243: 同時再生される TTS は 1 つに限定。新規再生時に以前の audio を stop し、
+// store に isPlaying を反映する。stop button (TtsStopButton) はこの state を見る。
+let currentAudio = null;
+
+/**
+ * 現在再生中の TTS を停止する (UI の stop button から呼ばれる)
+ */
+export function stopCurrentTts() {
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch {}
+    currentAudio = null;
+  }
+  useTtsStore.getState().setPlaying(false);
+}
+
 /**
  * 1 つの audio element + GainNode で再生 (blob URL or 直接 URL)
  *
@@ -36,7 +55,13 @@ function getAudioContext() {
  * @returns {HTMLAudioElement} 制御用 audio 要素 (pause/currentTime 等)
  */
 export function playTtsSrc(src, { onEnded, onError } = {}) {
+  // #243: 既存再生があれば stop してから新規 start (同時再生 1 つに限定)
+  if (currentAudio) {
+    try { currentAudio.pause(); currentAudio.currentTime = 0; } catch {}
+  }
   const audio = new Audio(src);
+  currentAudio = audio;
+  useTtsStore.getState().setPlaying(true);
   const volPct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
   const baseGain = Math.max(0, Math.min(1, volPct / 100)); // 0-1 の audio.volume 部分
   audio.volume = baseGain;
@@ -59,12 +84,27 @@ export function playTtsSrc(src, { onEnded, onError } = {}) {
     }
   }
 
-  if (onEnded) audio.addEventListener('ended', onEnded);
-  if (onError) audio.addEventListener('error', onError);
+  // #243: 終了時に store の isPlaying を false に + currentAudio クリア
+  const handleEnded = () => {
+    if (currentAudio === audio) {
+      currentAudio = null;
+      useTtsStore.getState().setPlaying(false);
+    }
+    if (onEnded) onEnded();
+  };
+  const handleError = (err) => {
+    if (currentAudio === audio) {
+      currentAudio = null;
+      useTtsStore.getState().setPlaying(false);
+    }
+    if (onError) onError(err);
+  };
+  audio.addEventListener('ended', handleEnded);
+  audio.addEventListener('error', handleError);
 
   audio.play().catch((err) => {
     console.warn('[ttsAudioPlayer] play blocked:', err.name);
-    if (onError) onError(err);
+    handleError(err);
   });
 
   return audio;

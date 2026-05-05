@@ -1,0 +1,45 @@
+/**
+ * TTS stop button — floating bottom-right、再生中だけ表示 (#243)
+ * Mobile: BottomNav の上に出るよう bottom 値を調整
+ * PC: main pane 内の bottom-right
+ */
+
+.tts-stop-button {
+  position: fixed;
+  bottom: 80px; /* mobile: BottomNav (~56px) の上に余裕 */
+  right: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--primary, #00B4A0);
+  color: white;
+  border: none;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.tts-stop-button:hover {
+  background: var(--primary-hover, #009E8C);
+  transform: scale(1.05);
+}
+
+.tts-stop-button:active {
+  transform: scale(0.95);
+}
+
+.tts-stop-label {
+  white-space: nowrap;
+}
+
+/* PC layout (#237): BottomNav が hide されるので bottom 値を下げる */
+@media (min-width: 1024px) {
+  .tts-stop-button {
+    bottom: 24px;
+  }
+}

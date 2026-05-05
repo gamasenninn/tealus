@@ -31,6 +31,16 @@
   - rtc-server v0.1.0 → v0.1.1 (patch、bug fix)
   - 業務メモ B 「rtc で何かのデグレード起こってるかも」(5/3 18:59) の調査で発覚した構造的問題
 
+### Added
+
+- **client: AI 回答音声 (TTS auto-play) の停止 button** ([#243](https://github.com/gamasenninn/tealus/issues/243))
+  - AI 応答の auto-play は aivis-cloud / browser TTS 両 path で **再生中参照を UI が保持していなかった** (停止操作の入口無し)
+  - `stores/ttsStore.js` 新設で `isPlaying` 一元管理、`playTtsSrc` / `speakInternal` 開始/終了で更新
+  - `ttsAudioPlayer.js` に `stopCurrentTts()` 追加、同時再生 1 つに限定 (新規開始時に既存停止)
+  - 新 component `TtsStopButton.jsx`: floating bottom-right、再生中だけ表示、両 path 兼用 stop
+  - `App.jsx` に `{user && <TtsStopButton />}` で room 越えグローバル配置
+  - 業務メモ 11 件中 #3
+
 ### Fixed
 
 - **client: mention @ 入力時の member 一覧が尻切れ** ([#242](https://github.com/gamasenninn/tealus/issues/242))

@@ -7,6 +7,7 @@
  */
 
 import { TTS_VOLUME_BOOST } from '../constants/ui';
+import { useTtsStore } from '../stores/ttsStore';
 
 let currentUtterance = null;
 let cachedJaVoice = null;
@@ -44,8 +45,20 @@ function speakInternal(text) {
   const volPct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
   u.volume = Math.max(0, Math.min(1, (volPct / 100) * TTS_VOLUME_BOOST));
   currentUtterance = u;
-  u.onend = () => { if (currentUtterance === u) currentUtterance = null; };
-  u.onerror = () => { if (currentUtterance === u) currentUtterance = null; };
+  // #243: store 連動で stop button visibility を制御
+  useTtsStore.getState().setPlaying(true);
+  u.onend = () => {
+    if (currentUtterance === u) {
+      currentUtterance = null;
+      useTtsStore.getState().setPlaying(false);
+    }
+  };
+  u.onerror = () => {
+    if (currentUtterance === u) {
+      currentUtterance = null;
+      useTtsStore.getState().setPlaying(false);
+    }
+  };
   window.speechSynthesis.speak(u);
 }
 
@@ -72,6 +85,7 @@ export function cancel() {
   if (currentUtterance) {
     try { window.speechSynthesis.cancel(); } catch {}
     currentUtterance = null;
+    useTtsStore.getState().setPlaying(false);
   }
 }
 

@@ -17,6 +17,7 @@ import IncomingCallModal from './components/call/IncomingCallModal';
 import CallWindow from './components/call/CallWindow';
 import CallBanner from './components/call/CallBanner';
 import ConfirmModal from './components/common/ConfirmModal';
+import TtsStopButton from './components/common/TtsStopButton';
 import DesktopShell from './components/layout/DesktopShell';
 import './index.css';
 
@@ -47,6 +48,7 @@ function App() {
   return (
     <BrowserRouter>
       <ConfirmModal />
+      {user && <TtsStopButton />}
       {user && realtimeVoiceAvailable && incomingCall && (
         <IncomingCallModal
           callerName={incomingCall.callerName}
