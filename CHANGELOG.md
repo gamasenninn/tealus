@@ -52,6 +52,16 @@
 
 ### Added
 
+- **Deep agent cancel path — 暴走/長時間実行を user が中断可能に** ([#250](https://github.com/gamasenninn/tealus/issues/250))
+  - 業務メモ 5/4 16:07/16:10/16:18 user 力説 3 voice 「deep が止まったままだとキャンセルできない」起点。Deep は claude CLI を child process spawn する構造上、外部から到達不能で **5 分 timeout 待ち以外に脱出 path 無し** という結構な structural gap だった
+  - **Phase 1**: `agent-server/src/agents/deepRegistry.js` 新規 — in-memory `Map<roomId, ChildProcess>` で spawn 中の process を track、`cancel(roomId)` で SIGTERM + Windows taskkill (既存 timeout kill と同 path)
+  - `deep.js`: spawn 直後 register、close/error で unregister、status name `thinking` → `analyzing` に変更 (Light の `thinking` と分離して client が識別可能に)
+  - **新 endpoint**: `POST /agent-api/agent/cancel` (agent-server `/agent/cancel`)、JWT 認証、room 単位で kill。was_running=true なら chat に `⏹ 分析を中断しました。` 投稿 + idle status 通知
+  - **Phase 4 (UI 可視化)**: `DeepCancelButton.jsx` 新規、ChatRoom の `.typing-indicator` 内に配置、`agentStatus.status === 'analyzing'` 時のみ表示 (Light 中は出ない)
+  - 副次発見: 同 room で並列 Deep 実行は workspace 共有で race condition リスク (Phase 2 候補、本 issue 対象外)
+  - agent-server 177 件 pass / client build 通過、回帰なし
+  - 業務メモ 11 件中 #9 (重 × 高効果)
+
 - **agent-server: Light agent 進行中表示 — `agent_tool_end` hook 追加で tool chain 全 step 可視化** ([#249](https://github.com/gamasenninn/tealus/issues/249))
   - 業務メモ 5/4 18:04 user 「進行中表示が hook 効いてないのを何とか」起点。user が過去 try したが catch できなかった問題を SDK lifecycle 再調査で真因特定
   - Root cause 2 件: (1) `agent_tool_end` hook 未登録 → tool 終了 → 次 tool 開始の間で status 凍結、(2) TOOL_STATUS_MAP が 6 tool のみで MCP tool 30+ silent

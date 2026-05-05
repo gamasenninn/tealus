@@ -1,0 +1,25 @@
+.deep-cancel-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-medium, rgba(0, 0, 0, 0.2));
+  border-radius: 12px;
+  background: var(--bg-surface, #fff);
+  color: var(--text-secondary, #666);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.deep-cancel-button:hover:not(:disabled) {
+  background: var(--color-error-bg, #fee);
+  color: var(--color-error, #c00);
+  border-color: var(--color-error, #c00);
+}
+
+.deep-cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

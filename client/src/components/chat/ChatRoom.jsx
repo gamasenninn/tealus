@@ -18,6 +18,7 @@ import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall, Radio } from 'l
 import CallConfirmModal from '../call/CallConfirmModal';
 import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
+import DeepCancelButton from './DeepCancelButton';
 import { useCapabilityStore } from '../../stores/capabilityStore';
 import './ChatRoom.css';
 
@@ -182,6 +183,7 @@ function ChatRoom() {
           {agentStatus
             ? `${agentStatus.display_name}: ${agentStatus.message || agentStatus.status}`
             : `${Object.values(typingUsers).join(', ')}が入力中...`}
+          {agentStatus?.status === 'analyzing' && <DeepCancelButton roomId={roomId} />}
         </div>
       )}
 

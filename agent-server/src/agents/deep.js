@@ -11,6 +11,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { updateContext } = require('../context/sessionManager');
+const deepRegistry = require('./deepRegistry');
 
 /**
  * Deep Agent 用の MCP 設定を動的生成
@@ -82,7 +83,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
     logger.info(`Deep Agent starting: claude ${args.join(' ').slice(0, 100)}...`);
     logger.debug(`Deep Agent full prompt:\n${prompt}`);
 
-    botApi.pushStatus(roomId, 'thinking', '高度な分析中...').catch(() => {});
+    botApi.pushStatus(roomId, 'analyzing', '高度な分析中...').catch(() => {});
 
     // Windows では .cmd を使う
     const claudeCmd = process.platform === 'win32' ? 'claude.cmd' : 'claude';
@@ -92,6 +93,9 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       timeout: config.DEEP_TIMEOUT,
       env: { ...process.env, HOME: workspacePath },
     });
+
+    // #250: cancel 用に registry に登録 (close/error/timeout で必ず unregister)
+    deepRegistry.register(roomId, proc);
 
     // stdin からプロンプトを渡す
     proc.stdin.write(prompt);
@@ -121,7 +125,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
       // 進捗検知: 長い出力の途中でステータス更新
       if (stdout.length > 500 && stdout.length % 1000 < chunk.length) {
-        botApi.pushStatus(roomId, 'thinking', '分析中...').catch(() => {});
+        botApi.pushStatus(roomId, 'analyzing', '分析中...').catch(() => {});
       }
     });
 
@@ -131,6 +135,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     proc.on('close', async (code) => {
       clearTimeout(timer);
+      deepRegistry.unregister(roomId);
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
 
       if (timedOut) {
@@ -166,6 +171,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     proc.on('error', async (err) => {
       clearTimeout(timer);
+      deepRegistry.unregister(roomId);
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
       logger.error(`Deep Agent spawn error: ${err.message}`);
       await botApi.pushMessage(roomId, `❌ Deep Agent の起動に失敗しました: ${err.message}`);

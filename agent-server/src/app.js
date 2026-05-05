@@ -7,6 +7,7 @@ const webhookRoutes = require('./webhook/routes');
 const settingsRoutes = require('./routes/settings');
 const logsRoutes = require('./routes/logs');
 const ttsRoutes = require('./routes/tts');
+const agentRoutes = require('./routes/agent');
 const { authenticate } = require('./middleware/auth');
 const config = require('./config');
 
@@ -40,5 +41,8 @@ app.use('/logs', authenticate, logsRoutes);
 
 // TTS API（認証必要）— #155 個人読み上げ用
 app.use('/tts', authenticate, ttsRoutes);
+
+// Agent control API（認証必要）— #250 Deep agent cancel
+app.use('/agent', authenticate, agentRoutes);
 
 module.exports = { app };

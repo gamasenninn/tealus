@@ -112,6 +112,26 @@ class ApiClient {
   }
 
   /**
+   * Deep agent の処理を中断 (#250)
+   */
+  async cancelAgent(roomId) {
+    const res = await fetch('/agent-api/agent/cancel', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({ room_id: roomId }),
+    });
+    if (!res.ok) {
+      let err = '中断リクエストに失敗しました';
+      try { const j = await res.json(); err = j.error || err; } catch {}
+      throw new Error(err);
+    }
+    return await res.json();
+  }
+
+  /**
    * TTS synthesis (personal read-aloud) — returns Blob (audio/wav)
    * Uses room's TTS model setting. Safe to call from any component.
    */
