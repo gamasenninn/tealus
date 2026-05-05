@@ -107,7 +107,9 @@ app.use('/rtc', rtcProxy);
 // Dashboard static files（/system パス、client SPA fallback より前に配置）
 const dashboardDistPath = path.join(__dirname, '../../dashboard/dist');
 app.use('/system', express.static(dashboardDistPath));
-app.get('/system/*', (req, res) => {
+// #247: /system (trailing slash なし) も /system/* も index.html を返す
+// (client SPA fallback に流れて React Router で / リダイレクトされる bug 防止)
+app.get(['/system', '/system/*'], (req, res) => {
   res.sendFile(path.join(dashboardDistPath, 'index.html'));
 });
 

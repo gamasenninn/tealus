@@ -33,6 +33,11 @@
 
 ### Fixed
 
+- **server: /system (trailing slash なし) で dashboard が開かず client へ redirect** ([#247](https://github.com/gamasenninn/tealus/issues/247))
+  - `app.get('/system/*', ...)` は wildcard 必須で `/system` 単独に match せず、SPA fallback で client index.html が返り `<Route path="*">` で `/` リダイレクトしていた
+  - Fix: route pattern 配列に `/system` を追加 (`app.get(['/system', '/system/*'], ...)`)
+  - [#241](https://github.com/gamasenninn/tealus/issues/241) PC profile scroll fix で管理画面リンク到達可能になり露呈、長期残留 bug
+
 - **client: file 添付の DL filename が cryptic basename になる ([#244](https://github.com/gamasenninn/tealus/issues/244) follow-up)** ([#246](https://github.com/gamasenninn/tealus/issues/246))
   - 旧 `<a target="_blank" onClick={() => window.open()}>` で `download` attribute 未指定、browser の save default で URL basename (`1777953339385-a1fc4098ea931352.md`) として保存されていた
   - UI 表示は `file_name` (原本名 `meishi_ono_analysis.md`) で正しいが、実 DL 時に物理 path 採用 = UX bug
