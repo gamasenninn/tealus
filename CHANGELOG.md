@@ -69,6 +69,14 @@
 
 ### Added
 
+- **client: メンション picker に cc-proj 仮想 user を表示** ([#253](https://github.com/gamasenninn/tealus/issues/253))
+  - 業務メモ 5/4 18:07 user 「メンション機能で、CC-projを表示させたい」起点。[#213](https://github.com/gamasenninn/tealus/issues/213) cc-tealus bridge は動作していたが project 名を手入力する必要があった
+  - **agent-server**: `GET /agent-api/agent/cc-projects` 新 endpoint、`~/.tealus/cc-queue/*.jsonl` の basename を validation regex (`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`) で filter して返す。mtime も同梱 (Phase 2 stale 表示の準備)
+  - **client**: `MessageInput.jsx` で mount 時に fetch、`{user_id: 'cc:<proj>', display_name: 'cc-<proj>', is_cc: true}` として members に merge
+  - **MentionPicker.jsx**: `is_cc` 仮想 user は terminal icon (lucide-react) + dark-teal avatar bg で人間と視覚区別、選択時 `@cc-<proj>` 挿入 (extractor regex と完全一致)
+  - **Self-bootstrapping**: project は最初の `@cc-x` で beacon file が作られた時点で picker に出現、admin UI / DB schema 不要
+  - 5 件 test 追加 (182 件 pass)、client build 通過
+
 - **Deep agent cancel path — 暴走/長時間実行を user が中断可能に** ([#250](https://github.com/gamasenninn/tealus/issues/250))
   - 業務メモ 5/4 16:07/16:10/16:18 user 力説 3 voice 「deep が止まったままだとキャンセルできない」起点。Deep は claude CLI を child process spawn する構造上、外部から到達不能で **5 分 timeout 待ち以外に脱出 path 無し** という結構な structural gap だった
   - **Phase 1**: `agent-server/src/agents/deepRegistry.js` 新規 — in-memory `Map<roomId, ChildProcess>` で spawn 中の process を track、`cancel(roomId)` で SIGTERM + Windows taskkill (既存 timeout kill と同 path)

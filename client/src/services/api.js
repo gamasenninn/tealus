@@ -112,6 +112,22 @@ class ApiClient {
   }
 
   /**
+   * cc-queue から登録済 project 一覧を取得 (#253)
+   * mention picker の virtual user 候補に使う。
+   */
+  async getCcProjects() {
+    try {
+      const res = await fetch('/agent-api/agent/cc-projects', {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!res.ok) return { projects: [] };
+      return await res.json();
+    } catch {
+      return { projects: [] };
+    }
+  }
+
+  /**
    * Deep agent の処理を中断 (#250)
    */
   async cancelAgent(roomId) {

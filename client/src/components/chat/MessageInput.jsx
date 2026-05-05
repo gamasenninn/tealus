@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
@@ -24,6 +24,21 @@ function MessageInput({ roomId, transceiver }) {
   const typingTimerRef = useRef(null);
   const { replyTo, clearReplyTo } = useMessageStore();
   const { members } = useRoomStore();
+
+  // #253: cc-proj を mention picker に virtual user として表示
+  const [ccProjects, setCcProjects] = useState([]);
+  useEffect(() => {
+    api.getCcProjects().then(d => setCcProjects(d.projects || [])).catch(() => {});
+  }, []);
+  const mentionMembers = useMemo(() => {
+    const ccMembers = ccProjects.map(p => ({
+      user_id: `cc:${p.name}`,
+      display_name: `cc-${p.name}`,
+      avatar_url: null,
+      is_cc: true,
+    }));
+    return [...members, ...ccMembers];
+  }, [members, ccProjects]);
 
   const emitTyping = () => {
     const socket = getSocket();
@@ -207,7 +222,7 @@ function MessageInput({ roomId, transceiver }) {
       )}
       {showMention && (
         <MentionPicker
-          members={members}
+          members={mentionMembers}
           query={mentionQuery}
           onSelect={(name) => {
             const textarea = textareaRef.current;

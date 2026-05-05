@@ -66,6 +66,12 @@
   flex-shrink: 0;
 }
 
+/* #253: cc-proj 仮想 user は terminal icon + 別色で人間と視覚区別 */
+.mention-picker-avatar-placeholder.cc {
+  background: #2d3748;
+  color: #4fd1c5;
+}
+
 .mention-picker-name {
   flex: 1;
   overflow: hidden;
