@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
-const { upload, MEDIA_ROOT } = require('../middleware/upload');
+const { upload, MEDIA_ROOT, getMessageType, getSubdir } = require('../middleware/upload');
 const { generateThumbnail } = require('../services/thumbnail');
 
 const router = express.Router();
@@ -308,6 +308,81 @@ router.post('/push-image', upload.single('image'), async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error('Bot push-image error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * POST /api/bot/push-file
+ * Send a file (any mime type) message to a room (#244)
+ *
+ * Use case: agent が OCR 結果や生成 text を file として user に届ける。
+ * Image / video は existing /push-image, /media path に lateral OK だが、
+ * text / pdf 等の attached file は本 endpoint で。
+ */
+router.post('/push-file', upload.single('file'), async (req, res) => {
+  const { room_id, content } = req.body;
+  const userId = req.user.id;
+  const file = req.file;
+
+  if (!room_id) {
+    return res.status(400).json({ error: 'room_id は必須です' });
+  }
+  if (!file) {
+    return res.status(400).json({ error: 'ファイルが添付されていません' });
+  }
+
+  const client = await pool.connect();
+  try {
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      client.release();
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    await client.query('BEGIN');
+
+    // mime に応じて type 判定 (image/video は専用 type、それ以外は 'file')
+    const messageType = getMessageType(file.mimetype);
+
+    const msgResult = await client.query(
+      `INSERT INTO messages (room_id, sender_id, content, type)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [room_id, userId, content || null, messageType]
+    );
+    const message = msgResult.rows[0];
+
+    const subdir = getSubdir(file.mimetype);
+    const relativePath = `${subdir}/${file.filename}`;
+
+    const mediaResult = await client.query(
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [message.id, relativePath, file.originalname, file.mimetype, file.size]
+    );
+
+    await client.query('COMMIT');
+
+    const { io } = require('../app');
+    io.to(room_id).emit('message:new', {
+      ...message,
+      sender_display_name: req.user.display_name,
+      sender_avatar_url: req.user.avatar_url,
+      media: [mediaResult.rows[0]],
+    });
+
+    logger.info(`Bot push-file: ${req.user.display_name} → room ${room_id} (${file.originalname})`);
+    res.status(201).json({ message, media: [mediaResult.rows[0]] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Bot push-file error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   } finally {
     client.release();

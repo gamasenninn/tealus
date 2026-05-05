@@ -105,6 +105,37 @@ async function pushImage(roomId, buffer, filename, content = '') {
 }
 
 /**
+ * ルームに任意 file を送信 (#244)
+ *
+ * mime auto detect、text / pdf 等の attached file 用。
+ * image / video も使えるが、image は pushImage が thumbnail / dimensions も処理するので推奨。
+ *
+ * @param {string} roomId
+ * @param {Buffer} buffer
+ * @param {string} filename - file name (拡張子付き、ex: 'ocr_result.txt')
+ * @param {string} mimeType - 'text/plain', 'application/pdf', 等
+ * @param {string} content - optional 添付メッセージ text
+ */
+async function pushFile(roomId, buffer, filename, mimeType, content = '') {
+  const { token: t } = await login();
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('room_id', roomId);
+  form.append('file', buffer, { filename, contentType: mimeType });
+  if (content) form.append('content', content);
+
+  const res = await fetch(`${config.TEALUS_API_URL}/api/bot/push-file`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${t}`,
+      ...form.getHeaders(),
+    },
+    body: form,
+  });
+  return res.json();
+}
+
+/**
  * ルームのメッセージ履歴を取得
  */
 async function getMessages(roomId, limit = 20) {
@@ -175,6 +206,7 @@ module.exports = {
   pushMessage,
   pushStatus,
   pushImage,
+  pushFile,
   getMessages,
   getRooms,
   joinRoom,

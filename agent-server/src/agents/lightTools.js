@@ -66,6 +66,42 @@ function createTools(workspacePath, roomId) {
     },
   }));
 
+  // text を file としてチャットに添付投稿 (#244)
+  // OCR 結果 / 整形 text / 生成 markdown 等を user が DL できる形で届けるため
+  if (roomId) {
+    tools.push(tool({
+      name: 'share_text_as_file',
+      description: 'OCR 結果、要約、変換 text 等を **file としてチャットに添付投稿** する。user が click で DL 可能。長文や保存したい内容、後で参照したい text に使う。短い回答や口頭応答には不要 (普通のメッセージで十分)。mime type は filename 拡張子から自動推測 (.txt/.md/.csv/.json/.html 等)。',
+      parameters: z.object({
+        filename: z.string().describe('file 名 (拡張子付き、ex: "ocr_result.txt", "summary.md", "data.csv")'),
+        content: z.string().describe('file の本文 text'),
+      }),
+      execute: async ({ filename, content }) => {
+        try {
+          // filename 拡張子から mime 推測
+          const ext = (filename.split('.').pop() || '').toLowerCase();
+          const mimeMap = {
+            txt: 'text/plain',
+            md: 'text/markdown',
+            csv: 'text/csv',
+            json: 'application/json',
+            html: 'text/html',
+            xml: 'text/xml',
+            log: 'text/plain',
+          };
+          const mt = mimeMap[ext] || 'text/plain';
+          const buffer = Buffer.from(content, 'utf8');
+          await botApi.pushFile(roomId, buffer, filename, mt, '');
+          logger.info(`[ShareFile] ${filename} (${mt}, ${buffer.length} bytes) → room ${roomId}`);
+          return `file "${filename}" (${buffer.length} bytes) をチャットに送信しました。user は click で DL 可能。`;
+        } catch (err) {
+          logger.error(`[ShareFile] failed: ${err.message}`);
+          return `file 送信に失敗しました: ${err.message}`;
+        }
+      },
+    }));
+  }
+
   // ファイル一覧
   tools.push(tool({
     name: 'list_workspace_files',

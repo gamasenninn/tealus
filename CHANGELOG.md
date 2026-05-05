@@ -33,6 +33,15 @@
 
 ### Added
 
+- **agent-server: share_text_as_file tool — OCR 結果等を DL 可能な file として届ける** ([#244](https://github.com/gamasenninn/tealus/issues/244))
+  - 5/4 ベータテスト連絡板で藤井さんが画像 OCR 依頼、agent が「ワークスペース外への保存ができない」と応答 → user 「OCR 結果保存ダウンロード経路あるといい」起点
+  - 既存の image / file は user upload 時のみ media record が作られていた (agent から user へ file を届ける手段なし)
+  - **新 server endpoint** `POST /api/bot/push-file`: any mime accept、`/push-image` と同型構造
+  - **新 agent-server**: `botApi.pushFile(roomId, buffer, filename, mimeType)`
+  - **新 MCP tool** `share_text_as_file({ filename, content })`: mime は filename 拡張子から auto 推測 (.txt/.md/.csv/.json/.html/.xml/.log)、user は click で DL
+  - server tests 345 件 / agent-server tests 177 件 pass、回帰なし
+  - 業務メモ 11 件中 #4
+
 - **client: AI 回答音声 (TTS auto-play) の停止 button** ([#243](https://github.com/gamasenninn/tealus/issues/243))
   - AI 応答の auto-play は aivis-cloud / browser TTS 両 path で **再生中参照を UI が保持していなかった** (停止操作の入口無し)
   - `stores/ttsStore.js` 新設で `isPlaying` 一元管理、`playTtsSrc` / `speakInternal` 開始/終了で更新
