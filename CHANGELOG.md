@@ -31,6 +31,14 @@
   - rtc-server v0.1.0 → v0.1.1 (patch、bug fix)
   - 業務メモ B 「rtc で何かのデグレード起こってるかも」(5/3 18:59) の調査で発覚した構造的問題
 
+### Fixed
+
+- **agent-server: share_text_as_file の hallucinated link 抑制 (`sandbox:/mnt/data/...` 捏造) ([#244](https://github.com/gamasenninn/tealus/issues/244) follow-up)** ([#245](https://github.com/gamasenninn/tealus/issues/245))
+  - 実機 verify で agent が tool 呼び出し成功後、応答テキストに `[meishi_ono.md](sandbox:/mnt/data/meishi_ono.md)` を捏造 = ChatGPT Code Interpreter 環境の URL pattern 由来 training bias
+  - tool description / return value を「**応答に download link を書かない**」と明示 (file は tool が直接添付済、agent は acknowledge のみ)
+  - `default_system_prompt.md` に新 section「応答に書いてはいけない URL (training artifact)」追加: `sandbox:/...`、`file:///...`、markdown 形式 fake URL 全般禁止
+  - [#229](https://github.com/gamasenninn/tealus/issues/229) で観察した training bias 同型 (LLM の構造的問題、prompt-level で防御)
+
 ### Added
 
 - **agent-server: share_text_as_file tool — OCR 結果等を DL 可能な file として届ける** ([#244](https://github.com/gamasenninn/tealus/issues/244))

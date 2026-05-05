@@ -71,7 +71,7 @@ function createTools(workspacePath, roomId) {
   if (roomId) {
     tools.push(tool({
       name: 'share_text_as_file',
-      description: 'OCR 結果、要約、変換 text 等を **file としてチャットに添付投稿** する。user が click で DL 可能。長文や保存したい内容、後で参照したい text に使う。短い回答や口頭応答には不要 (普通のメッセージで十分)。mime type は filename 拡張子から自動推測 (.txt/.md/.csv/.json/.html 等)。',
+      description: 'OCR 結果、要約、変換 text 等を **file としてチャットに添付投稿** する。長文や保存したい内容、後で参照したい text に使う。短い回答や口頭応答には不要。mime type は filename 拡張子から自動推測 (.txt/.md/.csv/.json/.html 等)。\n\n**重要**: この tool は file を直接チャットに添付メッセージとして投稿する。user は file message そのものを click で DL する。応答テキストには **download link を書かないこと** (実 URL を持っていない、書くと hallucinated link になる)。短く「○○を添付しました」と acknowledge するだけで十分。`sandbox:/mnt/data/...` 等の URL は training data の artifact なので絶対に書かない。',
       parameters: z.object({
         filename: z.string().describe('file 名 (拡張子付き、ex: "ocr_result.txt", "summary.md", "data.csv")'),
         content: z.string().describe('file の本文 text'),
@@ -93,7 +93,8 @@ function createTools(workspacePath, roomId) {
           const buffer = Buffer.from(content, 'utf8');
           await botApi.pushFile(roomId, buffer, filename, mt, '');
           logger.info(`[ShareFile] ${filename} (${mt}, ${buffer.length} bytes) → room ${roomId}`);
-          return `file "${filename}" (${buffer.length} bytes) をチャットに送信しました。user は click で DL 可能。`;
+          // #245: hallucination 防止のため、return text で「link 書くな」を明示
+          return `file をチャットに添付しました。応答テキストには download link を書かないでください (実 URL を持っていません)。user は file message を click で DL します。短く「${filename} を添付しました」と acknowledge するだけで十分。`;
         } catch (err) {
           logger.error(`[ShareFile] failed: ${err.message}`);
           return `file 送信に失敗しました: ${err.message}`;
