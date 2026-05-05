@@ -52,6 +52,14 @@
 
 ### Fixed
 
+- **agent-server: Deep cancel が claude.exe を kill できず work が裏で続行する critical bug ([#250](https://github.com/gamasenninn/tealus/issues/250) follow-up)** ([#252](https://github.com/gamasenninn/tealus/issues/252))
+  - 実機 verify (5/5 17:00) で発覚: cancel 15 分後に Mandelbrot 結果 + 画像が chat に post された
+  - 原因: Windows `spawn('claude.cmd', { shell: true })` で `cmd.exe → claude.cmd → claude.exe → MCP children` の tree。cmd.exe を taskkill /T /F した瞬間 claude.cmd は既に exit、claude.exe は System に reparent され /T tree walk から外れる
+  - 結果 claude.exe は workload を完遂し `send_message` MCP tool で chat に直接 post (cancel 後の orphan)
+  - **修正**: `registry.cancel()` で `Get-CimInstance Win32_Process` を PowerShell sweep、workspace path (room-unique) を CommandLine に含む claude.exe / cmd.exe を全 kill。WQL LIKE escape `\` → `\\` 含む
+  - Name filter で sweep 自身の powershell.exe を除外 (self-kill 防止)
+  - 実機 dry-run: orphan PID 392 のみ hit、Stop-Process で消滅確認
+
 - **agent-server: Deep cancel 後の timeout が redundant 「⚠ タイムアウト」message を post する ([#250](https://github.com/gamasenninn/tealus/issues/250) follow-up)** ([#251](https://github.com/gamasenninn/tealus/issues/251))
   - 実機 verify (5/5 16:50) で観察: cancel から 5 分後に「⚠ タイムアウトしました（300秒超過）」が post される
   - 原因: `registry.cancel()` が process kill するだけで、`deep.js` 内の timeout timer を clear していなかった

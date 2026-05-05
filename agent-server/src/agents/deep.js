@@ -103,6 +103,8 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
 
     // #250 follow-up: registry.cancel から timer を clear / cancel flag を立てるための reference
     proc._tealusCancelled = false;
+    // #252: cancel 時に CommandLine 一致で sweep kill するため workspace path を expose
+    proc._tealusWorkspacePath = workspacePath;
 
     let stdout = '';
     let stderr = '';
