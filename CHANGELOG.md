@@ -52,6 +52,15 @@
 
 ### Added
 
+- **client: 文字起こし編集 modal に音声再生スライダー (MVP)** ([#248](https://github.com/gamasenninn/tealus/issues/248))
+  - 業務メモ 5/4 18:01 user 力説「編集画面の上に音声スライダー、ユーザーが自由に再生位置を control できれば編集が極めて楽になる」起点
+  - VoiceBubble の audio + slider logic を `VoiceEditModal.jsx` に直書き copy で移植 (yagni、3 例目で共通 component 抽出検討)
+  - `VoiceBubble.jsx` から `audioUrl` props を渡す (1 行追加)
+  - `.voice-edit-player` / `.voice-edit-progress` 等の new CSS class 追加、既存 `.voice-progress-*` と同じ design 基調
+  - 朝の見積 ~3-4h → 実装 ~30 分 (user 提案「既存 slider 再利用」の insight で 1/4 に圧縮)
+  - Phase 2 (keyboard shortcut / 再生速度 / A-B repeat) は dogfood で pain あれば検討、yagni
+  - 業務メモ 11 件中 #6 (重 × 高効果)
+
 - **agent-server: share_text_as_file tool — OCR 結果等を DL 可能な file として届ける** ([#244](https://github.com/gamasenninn/tealus/issues/244))
   - 5/4 ベータテスト連絡板で藤井さんが画像 OCR 依頼、agent が「ワークスペース外への保存ができない」と応答 → user 「OCR 結果保存ダウンロード経路あるといい」起点
   - 既存の image / file は user upload 時のみ media record が作られていた (agent から user へ file を届ける手段なし)

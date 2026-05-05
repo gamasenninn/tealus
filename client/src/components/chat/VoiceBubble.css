@@ -149,6 +149,67 @@
 }
 
 /* Edit modal */
+
+/* #248: 再生 player (textarea の上に配置、編集中の seek を可能に) */
+.voice-edit-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+}
+
+.voice-edit-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-edit-play-btn:hover {
+  background: var(--primary-hover);
+}
+
+.voice-edit-progress {
+  flex: 1;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.voice-edit-progress-track {
+  height: 4px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.voice-edit-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width 0.1s;
+}
+
+.voice-edit-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: right;
+}
+
 .voice-edit-modal textarea {
   width: 100%;
   padding: 12px;
