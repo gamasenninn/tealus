@@ -50,6 +50,15 @@
   - `default_system_prompt.md` に新 section「応答に書いてはいけない URL (training artifact)」追加: `sandbox:/...`、`file:///...`、markdown 形式 fake URL 全般禁止
   - [#229](https://github.com/gamasenninn/tealus/issues/229) で観察した training bias 同型 (LLM の構造的問題、prompt-level で防御)
 
+### Fixed
+
+- **agent-server: Deep cancel 後の timeout が redundant 「⚠ タイムアウト」message を post する ([#250](https://github.com/gamasenninn/tealus/issues/250) follow-up)** ([#251](https://github.com/gamasenninn/tealus/issues/251))
+  - 実機 verify (5/5 16:50) で観察: cancel から 5 分後に「⚠ タイムアウトしました（300秒超過）」が post される
+  - 原因: `registry.cancel()` が process kill するだけで、`deep.js` 内の timeout timer を clear していなかった
+  - 副次問題: 万一 close event が late fire すると「❌ エラーが発生しました」も出る可能性
+  - **修正**: `proc._tealusTimer` / `proc._tealusCancelled` property attach、`registry.cancel()` で clearTimeout + flag 立て、close handler 冒頭で cancelled flag check して early return
+  - 177 件 pass、回帰なし
+
 ### Added
 
 - **Deep agent cancel path — 暴走/長時間実行を user が中断可能に** ([#250](https://github.com/gamasenninn/tealus/issues/250))

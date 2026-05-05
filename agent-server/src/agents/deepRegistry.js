@@ -28,6 +28,13 @@ function cancel(roomId) {
   const proc = runningProcesses.get(roomId);
   if (!proc) return { success: true, was_running: false };
   const pid = proc.pid;
+  // close handler / timeout handler が cancel と知らずに redundant message を出さないよう
+  // flag を立てて timer を clear する。
+  proc._tealusCancelled = true;
+  if (proc._tealusTimer) {
+    clearTimeout(proc._tealusTimer);
+    proc._tealusTimer = null;
+  }
   try {
     proc.kill('SIGTERM');
     if (process.platform === 'win32' && pid) {

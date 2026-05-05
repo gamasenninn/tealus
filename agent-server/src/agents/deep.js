@@ -101,11 +101,14 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
     proc.stdin.write(prompt);
     proc.stdin.end();
 
+    // #250 follow-up: registry.cancel から timer を clear / cancel flag を立てるための reference
+    proc._tealusCancelled = false;
+
     let stdout = '';
     let stderr = '';
     let timedOut = false;
 
-    // タイムアウト管理
+    // タイムアウト管理 — registry.cancel から clearTimeout できるよう proc 経由で参照可能に
     const timer = setTimeout(async () => {
       timedOut = true;
       logger.warn(`Deep Agent timeout (${config.DEEP_TIMEOUT}ms)`);
@@ -118,6 +121,7 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
         try { spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { shell: true }); } catch {}
       }
     }, config.DEEP_TIMEOUT);
+    proc._tealusTimer = timer;
 
     proc.stdout.on('data', (data) => {
       const chunk = data.toString();
@@ -136,6 +140,15 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
     proc.on('close', async (code) => {
       clearTimeout(timer);
       deepRegistry.unregister(roomId);
+
+      // #250: cancel 経由なら cancel route 側で「⏹ 分析を中断しました。」+ idle 配信済、
+      // 重複 message や ❌ エラー message を出さない
+      if (proc._tealusCancelled) {
+        logger.info(`Deep Agent close after cancel (code ${code}) — skip post-processing`);
+        resolve();
+        return;
+      }
+
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
 
       if (timedOut) {
