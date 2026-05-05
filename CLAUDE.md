@@ -14,6 +14,10 @@
 
 設計書の内容と矛盾する実装をしないこと。設計変更が必要な場合は、まず設計書を更新してから実装に反映する。
 
+## Claude Code skill の書き方
+
+このプロジェクトで `/<name>` slash command (custom skill) を作る時は **`.claude/skills/<name>/SKILL.md`** (ディレクトリ構造) で配置すること。flat `.md` file (`.claude/skills/<name>.md`) は読み込まれない。詳細仕様 / トラブルシューティングは [`docs/claude-code-skills.md`](docs/claude-code-skills.md) 参照。
+
 ## 技術スタック
 
 - フロントエンド: React + Vite (PWA)
