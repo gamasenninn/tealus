@@ -7,9 +7,23 @@
   border: 1px solid var(--border-medium);
   border-radius: 8px 8px 0 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
-  max-height: 200px;
+  /* #242: 200px 固定だと 5-6 人で打ち止めで「尻切れ」体感、viewport-relative に
+     変更。content 少ない時は auto で小さくなる、多い時は 50vh まで使って
+     scroll で全員見られる */
+  max-height: min(400px, 50vh);
   overflow-y: auto;
   z-index: 100;
+  /* scroll bar を thin で常時表示 (overflow を user に明示) */
+  scrollbar-width: thin;
+}
+
+.mention-picker::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mention-picker::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 3px;
 }
 
 .mention-picker-item {

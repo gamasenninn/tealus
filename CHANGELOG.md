@@ -33,6 +33,12 @@
 
 ### Fixed
 
+- **client: mention @ 入力時の member 一覧が尻切れ** ([#242](https://github.com/gamasenninn/tealus/issues/242))
+  - `MentionPicker.css` の `max-height: 200px` 固定で 5-6 人しか表示できず、scroll bar が default styling で気付きにくく「尻切れ」体感
+  - Fix: `max-height: min(400px, 50vh)` で viewport-relative + thin scrollbar 常時表示で overflow 視覚化
+  - メンバー多 room では PC 400px / mobile 50vh、少 room では auto で空白なし
+  - 業務メモ 11 件中 #2
+
 - **client: PC layout で profile / home 等が scroll しない ([#237](https://github.com/gamasenninn/tealus/issues/237) follow-up)** ([#241](https://github.com/gamasenninn/tealus/issues/241))
   - Profile / HomePage 等は `min-height: 100dvh` で content に応じて伸びる設計だが、`DesktopShell.css` の `.desktop-main { overflow: hidden }` で main pane の scroll が殺されていた
   - ChatRoom は `height: 100dvh` 固定 + 内部 messages div で自前 scroll するので影響なかったが、伸びる画面は下が切れて管理画面リンクに到達できない bug
