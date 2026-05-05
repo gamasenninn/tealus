@@ -114,8 +114,15 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
 
   const renderReply = () => {
     if (!message.reply_to_message) return null;
+    const replyId = message.reply_to_message.id;
     return (
-      <div className="bubble-reply">
+      <div
+        className="bubble-reply"
+        onClick={(e) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent('message:scroll-to', { detail: { id: replyId } }));
+        }}
+      >
         <span className="bubble-reply-sender">{message.reply_to_message.sender_display_name}</span>
         <span className="bubble-reply-content">{message.reply_to_message.content || '(メディア)'}</span>
       </div>

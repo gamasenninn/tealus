@@ -188,7 +188,14 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
       </div>
 
       {replyMessage && (
-        <div className="bubble-reply" style={{ flexBasis: '100%' }}>
+        <div
+          className="bubble-reply"
+          style={{ flexBasis: '100%' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent('message:scroll-to', { detail: { id: replyMessage.id } }));
+          }}
+        >
           <span className="bubble-reply-sender">{replyMessage.sender_display_name}</span>
           <span className="bubble-reply-content">{replyMessage.content || '(メディア)'}</span>
         </div>

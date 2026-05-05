@@ -69,6 +69,15 @@
 
 ### Added
 
+- **client: Reply 引用 tap → 元 message へ scroll + highlight (dead-end UX 解消)** ([#255](https://github.com/gamasenninn/tealus/issues/255))
+  - 現状のリプライ機能は引用を tap しても何も反応しない dead-end UX。LINE / Slack / Discord 等の標準は「引用 tap → 元メッセージへ scroll + 一瞬 highlight」
+  - 既存 search 結果遷移用 scroll-jump 機構 (`ChatRoom.jsx:41-51`、`data-msg-id` + `highlight-msg`) を reply click にも reuse
+  - **MessageBubble.jsx** / **VoiceBubble.jsx** の `.bubble-reply` に `onClick` 追加、`stopPropagation` + CustomEvent `message:scroll-to` dispatch
+  - **ChatRoom.jsx** に listener: DOM 検索 → 即 scroll、不在なら `fetchMessages around` で再 load → scroll
+  - **MessageBubble.css** に `cursor: pointer` + 微 hover 効果で clickable と user に伝える視覚 cue
+  - 既存 voice:* event pattern と同型、prop drilling 回避、長押し context menu との衝突は `stopPropagation` で確実に分離
+  - 削除済 reply target は server `attachReplies` 既存挙動 (null で返って引用自体非表示) で網羅
+
 - **server: `GET /api/bot/tags` 新 endpoint — LLM の tag discovery primitive** ([#254](https://github.com/gamasenninn/tealus/issues/254))
   - 5/5 session で LLM が「tealus関係」tag 検索時、tag 名を guess して 5 候補全 miss → user に literal 名を教えてもらってやっと到達した「discovery 不在」体験が起点
   - 既存 `/api/tags/all` は user JWT 用 (client `api.js` の `getAllTags`)、bot JWT 用が無く tealus-mcp から tag list 取得不能だった

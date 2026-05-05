@@ -51,6 +51,32 @@ function ChatRoom() {
     }
   }, [targetMsgId, messages.length]);
 
+  // #256: reply 引用 tap → 元 message へ scroll + highlight
+  // CustomEvent 'message:scroll-to' を MessageBubble / VoiceBubble の bubble-reply onClick から dispatch
+  // 現 viewport に居れば即 scroll、不在なら fetchMessages around で再 load してから scroll
+  useEffect(() => {
+    const tryScroll = (id) => {
+      const el = document.querySelector(`[data-msg-id="${id}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.classList.add('highlight-msg');
+        setTimeout(() => el.classList.remove('highlight-msg'), 3000);
+        return true;
+      }
+      return false;
+    };
+    const handler = async (e) => {
+      const { id } = e.detail || {};
+      if (!id) return;
+      if (tryScroll(id)) return;
+      // 未 load: around fetch で再 render → 再 query
+      await useMessageStore.getState().fetchMessages(roomId, id);
+      setTimeout(() => tryScroll(id), 200);
+    };
+    window.addEventListener('message:scroll-to', handler);
+    return () => window.removeEventListener('message:scroll-to', handler);
+  }, [roomId]);
+
   // Custom hooks
   const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
   const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
