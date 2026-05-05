@@ -59,12 +59,18 @@ function ImageGrid({ media, onImageClick }) {
             <video key={m.id} src={`/media/${m.file_path}`} controls className="media-video" />
           );
         }
+        // #246: download attribute 必須 — 旧 implementation は target="_blank"
+        //   + onClick window.open() で新タブ inline 表示していたが、browser save 時に
+        //   URL basename (cryptic timestamp + hash) で保存される UX 不備があった。
+        //   `<a download={file_name}>` で原本名で DL する native 挙動に変更。
+        //   stopPropagation のみ keep (parent click 干渉防止)。
         return (
-          <a key={m.id} href={`/media/${m.file_path}`} target="_blank" rel="noopener noreferrer" className="media-file" onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(`/media/${m.file_path}`, '_blank');
-          }}>
+          <a key={m.id}
+             href={`/media/${m.file_path}`}
+             download={m.file_name}
+             rel="noopener noreferrer"
+             className="media-file"
+             onClick={(e) => e.stopPropagation()}>
             📎 {m.file_name}
           </a>
         );

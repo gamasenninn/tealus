@@ -33,6 +33,12 @@
 
 ### Fixed
 
+- **client: file 添付の DL filename が cryptic basename になる ([#244](https://github.com/gamasenninn/tealus/issues/244) follow-up)** ([#246](https://github.com/gamasenninn/tealus/issues/246))
+  - 旧 `<a target="_blank" onClick={() => window.open()}>` で `download` attribute 未指定、browser の save default で URL basename (`1777953339385-a1fc4098ea931352.md`) として保存されていた
+  - UI 表示は `file_name` (原本名 `meishi_ono_analysis.md`) で正しいが、実 DL 時に物理 path 採用 = UX bug
+  - Fix: `<a download={m.file_name}>` 追加 + `target="_blank"` / `window.open()` 削除 (`<a download>` の native 挙動を効かせる)、`stopPropagation` のみ keep
+  - 「ダウンロードは第一版要素」(user 観点) の completion
+
 - **agent-server: share_text_as_file の hallucinated link 抑制 (`sandbox:/mnt/data/...` 捏造) ([#244](https://github.com/gamasenninn/tealus/issues/244) follow-up)** ([#245](https://github.com/gamasenninn/tealus/issues/245))
   - 実機 verify で agent が tool 呼び出し成功後、応答テキストに `[meishi_ono.md](sandbox:/mnt/data/meishi_ono.md)` を捏造 = ChatGPT Code Interpreter 環境の URL pattern 由来 training bias
   - tool description / return value を「**応答に download link を書かない**」と明示 (file は tool が直接添付済、agent は acknowledge のみ)
