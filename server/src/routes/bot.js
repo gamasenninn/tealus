@@ -793,6 +793,37 @@ router.get('/search', async (req, res) => {
 });
 
 /**
+ * GET /api/bot/tags?limit=N
+ * Bot がメンバーである全 room の tag 一覧を usage 順で集計して返す。
+ *
+ * #254: LLM (MCP 経由) が tag 名を discovery するための endpoint。
+ * client api.js の `/api/tags/all` (user JWT) と同 SQL、bot JWT scope。
+ *
+ * Response: { tags: [{ name, is_todo, total_usage }] }
+ */
+router.get('/tags', async (req, res) => {
+  const userId = req.user.id;
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 30, 1), 100);
+
+  try {
+    const result = await pool.query(
+      `SELECT t.name, t.is_todo, COUNT(mt.message_id)::int AS total_usage
+       FROM tags t
+       JOIN room_members rm ON rm.room_id = t.room_id AND rm.user_id = $1
+       LEFT JOIN message_tags mt ON mt.tag_id = t.id
+       GROUP BY t.name, t.is_todo
+       ORDER BY total_usage DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    res.json({ tags: result.rows });
+  } catch (err) {
+    logger.error('Bot tag list error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * PATCH /api/bot/messages/:id/tags/:tag_name/done
  * メッセージに付いた特定タグの完了状態 (is_done) を更新する。
  *

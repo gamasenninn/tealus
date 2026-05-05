@@ -69,6 +69,13 @@
 
 ### Added
 
+- **server: `GET /api/bot/tags` 新 endpoint — LLM の tag discovery primitive** ([#254](https://github.com/gamasenninn/tealus/issues/254))
+  - 5/5 session で LLM が「tealus関係」tag 検索時、tag 名を guess して 5 候補全 miss → user に literal 名を教えてもらってやっと到達した「discovery 不在」体験が起点
+  - 既存 `/api/tags/all` は user JWT 用 (client `api.js` の `getAllTags`)、bot JWT 用が無く tealus-mcp から tag list 取得不能だった
+  - SQL は `tags.js:324` の集計 query を流用、bot メンバー全 room から tag 集計、`{ name, is_todo, total_usage }` を usage desc 順で返す
+  - tealus-mcp v0.10.0 で `list_tags` tool として export、search_messages の前段 discovery として活用
+  - 教訓 (memory): LLM 向け MCP / API は CRUD だけでなく list / discovery primitive 必須
+
 - **client: メンション picker に cc-proj 仮想 user を表示** ([#253](https://github.com/gamasenninn/tealus/issues/253))
   - 業務メモ 5/4 18:07 user 「メンション機能で、CC-projを表示させたい」起点。[#213](https://github.com/gamasenninn/tealus/issues/213) cc-tealus bridge は動作していたが project 名を手入力する必要があった
   - **agent-server**: `GET /agent-api/agent/cc-projects` 新 endpoint、`~/.tealus/cc-queue/*.jsonl` の basename を validation regex (`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`) で filter して返す。mtime も同梱 (Phase 2 stale 表示の準備)

@@ -716,6 +716,78 @@ describe('Bot API', () => {
   // ============================================
   // PATCH /api/bot/messages/:id/tags/:tag_name/done (#197)
   // ============================================
+  // ============================================
+  // GET /api/bot/tags (#254 — list_tags discovery primitive)
+  // ============================================
+  describe('GET /api/bot/tags', () => {
+    beforeEach(async () => {
+      const pool = getTestPool();
+      // bot を別 room にも配置、cross-room aggregation を test
+      const room2Res = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'テストルーム 2', member_ids: [bot.user.id] });
+      const room2Id = room2Res.body.room.id;
+
+      // room1 に独自 tag, room2 に別 tag を仕込む (POST /api/rooms で default "TODO" tag が作られている)
+      await pool.query(
+        `INSERT INTO tags (room_id, name, is_todo) VALUES
+          ($1, 'feedback', false),
+          ($2, 'tealus関係', true)`,
+        [roomId, room2Id]
+      );
+    });
+
+    it('1. bot が auth で全 room の tag 集計を取得', async () => {
+      const res = await request(app)
+        .get('/api/bot/tags')
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.tags)).toBe(true);
+      const names = res.body.tags.map(t => t.name);
+      expect(names).toContain('TODO');
+      expect(names).toContain('feedback');
+      expect(names).toContain('tealus関係');
+      // tealus関係 は is_todo=true で出ること
+      const tealusTag = res.body.tags.find(t => t.name === 'tealus関係');
+      expect(tealusTag.is_todo).toBe(true);
+      expect(typeof tealusTag.total_usage).toBe('number');
+    });
+
+    it('2. 認証なし → 401', async () => {
+      const res = await request(app).get('/api/bot/tags');
+      expect(res.status).toBe(401);
+    });
+
+    it('3. limit query で件数を制限', async () => {
+      const res = await request(app)
+        .get('/api/bot/tags?limit=1')
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.tags.length).toBe(1);
+    });
+
+    it('4. bot が member でない room の tag は含まない', async () => {
+      const user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子' });
+      const orphanRoomRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user2.token}`)
+        .send({ name: 'bot 非メンバー room', member_ids: [] });
+      const orphanRoomId = orphanRoomRes.body.room.id;
+      const pool = getTestPool();
+      await pool.query(
+        `INSERT INTO tags (room_id, name, is_todo) VALUES ($1, 'orphan-only-tag', false)`,
+        [orphanRoomId]
+      );
+
+      const res = await request(app)
+        .get('/api/bot/tags')
+        .set('Authorization', `Bearer ${bot.token}`);
+      const names = res.body.tags.map(t => t.name);
+      expect(names).not.toContain('orphan-only-tag');
+    });
+  });
+
   describe('PATCH /api/bot/messages/:id/tags/:tag_name/done', () => {
     let messageId, tagId;
 
