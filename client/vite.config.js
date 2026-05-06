@@ -69,6 +69,13 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': proxyTarget,
         '/media': proxyTarget,
+        // #257: agent-server (TTS / cancel / cc-projects 等) と rtc-server を Vite dev server からも
+        // 見えるように proxy 設定。本番 build → server (3000) 経由では server.js の proxy で動くが、
+        // Vite dev server (5173) を採用者が使った時に /agent-api と /rtc が SPA fallback で
+        // index.html を返してしまい client が「TTS に失敗しました」default error を表示する trap が
+        // 藤井さんの dogfood で発覚。
+        '/agent-api': proxyTarget,
+        '/rtc': proxyTarget,
         '/socket.io': {
           target: proxyTarget,
           ws: true,

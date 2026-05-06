@@ -69,6 +69,14 @@
 
 ### Fixed
 
+- **client: Vite dev server proxy に `/agent-api` と `/rtc` を追加 — 採用者が dev mode で TTS / cancel / cc-projects / RTC が動かない trap を fix** ([#257](https://github.com/gamasenninn/tealus/issues/257))
+  - 採用者第 1 号 (藤井さん) のサーバー (Ubuntu 22) で Mac Safari から Vite dev server (5173) 経由で TTS を試行 → 「TTS に失敗しました」error で動作しなかった
+  - 5/4 で `/agent-api` を新設した時 (#243 / #248 / #250-#254 系で agent-server 経路拡充)、**Vite dev server 側 proxy 追加が漏れていた**構造的 bug
+  - `/agent-api/tts/synthesize` request が Vite dev server で proxy されず SPA fallback で index.html → client JSON parse fail → default error
+  - `/rtc` も同型で、トランシーバー / 通話の rtc-server proxy も dev server 経由では動かない構造だった
+  - 影響範囲: 採用者が `npm run dev` で試した時の TTS / cancel / cc-projects mention / RTC 全機能 (本番 build → server 3000 経由なら問題なし)
+  - 4 番目の「採用者第 1 号 dogfood で発見した trap」(過去: dashboard build / server port / Aivis key 設定)
+
 - **agent-server: Router LLM で `max_tokens` → `max_completion_tokens` rename — 新 OpenAI model (o1/o3/gpt-5 系) で 400 エラー回避** ([#256](https://github.com/gamasenninn/tealus/issues/256))
   - 採用者第 1 号 (藤井さん) のログで発見: `Router LLM error: 400 Unsupported parameter: 'max_tokens' is not supported with this model`
   - Router (`router/index.js:83`) で OpenAI Chat Completions API call 時 `max_tokens: 10` 使用、新 model は reject
