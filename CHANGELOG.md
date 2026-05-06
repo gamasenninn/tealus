@@ -67,6 +67,15 @@
   - **修正**: `proc._tealusTimer` / `proc._tealusCancelled` property attach、`registry.cancel()` で clearTimeout + flag 立て、close handler 冒頭で cancelled flag check して early return
   - 177 件 pass、回帰なし
 
+### Fixed
+
+- **agent-server: Router LLM で `max_tokens` → `max_completion_tokens` rename — 新 OpenAI model (o1/o3/gpt-5 系) で 400 エラー回避** ([#256](https://github.com/gamasenninn/tealus/issues/256))
+  - 採用者第 1 号 (藤井さん) のログで発見: `Router LLM error: 400 Unsupported parameter: 'max_tokens' is not supported with this model`
+  - Router (`router/index.js:83`) で OpenAI Chat Completions API call 時 `max_tokens: 10` 使用、新 model は reject
+  - 影響: catch で light fallback で致命ではないが、Router の振り分け logic が実質機能せず全 message が light に流れる
+  - **修正**: `max_completion_tokens` に rename、新旧両 model で動作
+  - future-proof naming で OpenAI 公式 deprecation path に追従
+
 ### Added
 
 - **client: Reply 引用 tap → 元 message へ scroll + highlight (dead-end UX 解消)** ([#255](https://github.com/gamasenninn/tealus/issues/255))
