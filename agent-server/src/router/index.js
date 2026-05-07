@@ -26,11 +26,31 @@ const DEEP_KEYWORDS = [
 ];
 
 /**
+ * 先頭の @mention を除去する。
+ *
+ * Tealus の bot は group room で `@<bot_name>` mention 付きで呼ばれる
+ * (DM は mention 不要)。mention が prefix 判定の前に居ると
+ * `@アシスタント /light2 hello` のような入力で `/light2` 検出が失敗し、
+ * LLM 振り分けに fallback して v1 に流れてしまう (実機 #258 dogfood で発覚)。
+ *
+ * 1 個以上の `@<word> ` を strip して実 content に対して prefix /
+ * 挨拶 / DEEP_KEYWORDS 判定を行う。
+ *
+ * 例:
+ *   "@アシスタント /light2 hello"        → "/light2 hello"
+ *   "@user1 @bot /deep refactor"        → "/deep refactor"
+ *   "@cc-tealus こんにちは"              → "こんにちは"
+ */
+function stripLeadingMentions(content) {
+  return content.trim().replace(/^(?:@\S+\s+)+/, '');
+}
+
+/**
  * 第1段: ルールベース分類
  * @returns {{ tier: string, prompt?: string, response?: string } | null}
  */
 function classifyByRules(content) {
-  const trimmed = content.trim();
+  const trimmed = stripLeadingMentions(content);
 
   // /deep コマンド
   if (trimmed.startsWith('/deep ')) {
@@ -125,7 +145,8 @@ function applyDeepAvailability(result, isExplicitDeep) {
  * 統合ルーティング: 第1段 → 第2段
  */
 async function route(content) {
-  const isExplicitDeep = content.trim().startsWith('/deep ');
+  const stripped = stripLeadingMentions(content);
+  const isExplicitDeep = stripped.startsWith('/deep ');
 
   // 第1段: ルールベース
   const ruleResult = classifyByRules(content);
@@ -135,12 +156,18 @@ async function route(content) {
     return adjusted;
   }
 
-  // 第2段: LLM分類
-  const llmResult = await classifyByLLM(content);
+  // 第2段: LLM分類 (mention 除去後の content で intent 判定して noise 排除)
+  const llmResult = await classifyByLLM(stripped);
   // LLM 経由は明示指定ではないので silent fallback のみ
   const adjusted = applyDeepAvailability(llmResult, false);
   logger.debug(`Router (LLM): ${adjusted.tier}`);
   return adjusted;
 }
 
-module.exports = { classifyByRules, classifyByLLM, route, applyDeepAvailability };
+module.exports = {
+  classifyByRules,
+  classifyByLLM,
+  route,
+  applyDeepAvailability,
+  stripLeadingMentions,
+};

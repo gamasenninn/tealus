@@ -25,7 +25,7 @@ jest.mock('../../src/config', () => ({
 }));
 
 const config = require('../../src/config');
-const { classifyByRules, classifyByLLM, route, applyDeepAvailability } = require('../../src/router/index');
+const { classifyByRules, classifyByLLM, route, applyDeepAvailability, stripLeadingMentions } = require('../../src/router/index');
 
 describe('Router', () => {
 
@@ -155,6 +155,88 @@ describe('Router', () => {
     test('挨拶パターンも影響なし（router 直接応答）', async () => {
       const result = await route('こんにちは');
       expect(result.tier).toBe('router');
+    });
+  });
+
+  describe('mention 付き入力 (group room、#258 follow-up)', () => {
+    beforeEach(() => {
+      mockCreate.mockReset();
+      config.DEEP_AVAILABLE = true;
+    });
+
+    test('stripLeadingMentions: 単一 mention を除去', () => {
+      expect(stripLeadingMentions('@アシスタント hello')).toBe('hello');
+    });
+
+    test('stripLeadingMentions: 複数 mention を除去', () => {
+      expect(stripLeadingMentions('@user1 @bot /deep refactor')).toBe('/deep refactor');
+    });
+
+    test('stripLeadingMentions: mention なしは無加工', () => {
+      expect(stripLeadingMentions('普通のメッセージ')).toBe('普通のメッセージ');
+    });
+
+    test('stripLeadingMentions: 文中の @ は除去しない', () => {
+      expect(stripLeadingMentions('text with @mention inside')).toBe('text with @mention inside');
+    });
+
+    test('mention 付き /light2 を v2 に振り分け', () => {
+      const result = classifyByRules('@アシスタント /light2 PDFを要約');
+      expect(result.tier).toBe('light2');
+      expect(result.prompt).toBe('PDFを要約');
+    });
+
+    test('mention 付き /deep を deep に振り分け', () => {
+      const result = classifyByRules('@cc-tealus /deep このコードをレビュー');
+      expect(result.tier).toBe('deep');
+      expect(result.prompt).toBe('このコードをレビュー');
+    });
+
+    test('mention 付き /light を light に振り分け', () => {
+      const result = classifyByRules('@アシスタント /light 在庫を確認');
+      expect(result.tier).toBe('light');
+      expect(result.prompt).toBe('在庫を確認');
+    });
+
+    test('複数 mention でも prefix 検出', () => {
+      const result = classifyByRules('@user1 @bot /light2 hello');
+      expect(result.tier).toBe('light2');
+      expect(result.prompt).toBe('hello');
+    });
+
+    test('mention 付き greeting も router 直接応答', () => {
+      const result = classifyByRules('@アシスタント こんにちは');
+      expect(result.tier).toBe('router');
+      expect(result.response).toBeTruthy();
+    });
+
+    test('mention 付き DEEP_KEYWORD も deep ヒント', () => {
+      const result = classifyByRules('@アシスタント このコードをリファクタリングして');
+      expect(result.tier).toBe('deep');
+    });
+
+    test('mention 付き /deep が DEEP_AVAILABLE=false で unavailable に変換', async () => {
+      config.DEEP_AVAILABLE = false;
+      try {
+        const result = await route('@アシスタント /deep refactor');
+        expect(result.tier).toBe('unavailable');
+        expect(result.prompt).toBe('refactor');
+      } finally {
+        config.DEEP_AVAILABLE = true;
+      }
+    });
+
+    test('mention 付き未知入力は LLM に stripped content を渡す', async () => {
+      mockCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: 'light' } }],
+      });
+      const result = await route('@アシスタント 来月の売上予測を教えて');
+      expect(result.tier).toBe('light');
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      // LLM に渡された content は mention 除去済
+      const callArg = mockCreate.mock.calls[0][0];
+      const userMsg = callArg.messages.find(m => m.role === 'user');
+      expect(userMsg.content).toBe('来月の売上予測を教えて');
     });
   });
 
