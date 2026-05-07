@@ -217,6 +217,22 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
             if (event.item.type === 'agent_message') {
               lastAgentMessage = event.item.text;
               await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
+            } else if (event.item.type === 'mcp_tool_call') {
+              // MCP tool call の result/error 詳細を log (debug 用)
+              const status = event.item.status || '?';
+              const server = event.item.server || '?';
+              const tool = event.item.tool || '?';
+              if (event.item.error) {
+                logger.warn(`[LightV2] mcp_tool_call FAILED: server=${server} tool=${tool} status=${status} error=${event.item.error.message || JSON.stringify(event.item.error).slice(0, 300)}`);
+              } else if (status === 'failed') {
+                logger.warn(`[LightV2] mcp_tool_call status=failed: server=${server} tool=${tool} (no error field) item=${JSON.stringify(event.item).slice(0, 400)}`);
+              } else {
+                const resultPreview = event.item.result
+                  ? JSON.stringify(event.item.result).slice(0, 200)
+                  : '(no result)';
+                logger.info(`[LightV2] mcp_tool_call OK: server=${server} tool=${tool} status=${status} result=${resultPreview}`);
+              }
+              await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
             } else {
               const mapped = mapToolToStatus(event.item);
               if (mapped) {
