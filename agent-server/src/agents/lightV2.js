@@ -201,34 +201,49 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
 
     const { events } = await thread.runStreamed(fullPrompt);
 
-    for await (const event of events) {
-      try {
-        if (event.type === 'item.started') {
-          const mapped = mapToolToStatus(event.item);
-          if (mapped) {
-            await botApi.pushStatus(roomId, mapped.status, mapped.message).catch(() => {});
-            logger.info(`[LightV2] tool start: ${event.item.type} (${event.item.tool || event.item.command || ''})`);
-          }
-        } else if (event.type === 'item.completed') {
-          if (event.item.type === 'agent_message') {
-            lastAgentMessage = event.item.text;
-            await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
-          } else {
+    // turn completed 後に MCP child process cleanup 等で発生する parse error は
+    // 応答自体に影響しないため、turn 完了フラグで判定して warn に格下げする
+    let turnCompleted = false;
+    try {
+      for await (const event of events) {
+        try {
+          if (event.type === 'item.started') {
             const mapped = mapToolToStatus(event.item);
             if (mapped) {
-              await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
-              logger.info(`[LightV2] tool end: ${event.item.type}`);
+              await botApi.pushStatus(roomId, mapped.status, mapped.message).catch(() => {});
+              logger.info(`[LightV2] tool start: ${event.item.type} (${event.item.tool || event.item.command || ''})`);
             }
+          } else if (event.type === 'item.completed') {
+            if (event.item.type === 'agent_message') {
+              lastAgentMessage = event.item.text;
+              await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
+            } else {
+              const mapped = mapToolToStatus(event.item);
+              if (mapped) {
+                await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
+                logger.info(`[LightV2] tool end: ${event.item.type}`);
+              }
+            }
+          } else if (event.type === 'turn.completed') {
+            turnCompleted = true;
+            logger.info(`[LightV2] turn completed, usage: input=${event.usage?.input_tokens} output=${event.usage?.output_tokens}`);
+          } else if (event.type === 'turn.failed') {
+            logger.error(`[LightV2] turn failed: ${event.error?.message || 'unknown'}`);
+          } else if (event.type === 'error') {
+            logger.error(`[LightV2] stream error: ${event.message}`);
           }
-        } else if (event.type === 'turn.completed') {
-          logger.info(`[LightV2] turn completed, usage: input=${event.usage?.input_tokens} output=${event.usage?.output_tokens}`);
-        } else if (event.type === 'turn.failed') {
-          logger.error(`[LightV2] turn failed: ${event.error?.message || 'unknown'}`);
-        } else if (event.type === 'error') {
-          logger.error(`[LightV2] stream error: ${event.message}`);
+        } catch (eventErr) {
+          logger.warn(`[LightV2] event handler error: ${eventErr.message}`);
         }
-      } catch (eventErr) {
-        logger.warn(`[LightV2] event handler error: ${eventErr.message}`);
+      }
+    } catch (streamErr) {
+      // turn completed 後の cleanup parse error (Windows 日本語環境で taskkill
+      // 出力が JSONL stream に混入する codex SDK の既知の挙動) は応答に影響なし、
+      // warn に格下げして flow 継続。turn 未完了で error 出た場合は throw する。
+      if (turnCompleted) {
+        logger.warn(`[LightV2] post-turn stream error (ignored, response captured): ${streamErr.message}`);
+      } else {
+        throw streamErr;
       }
     }
 
