@@ -164,13 +164,18 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
     const Codex = await getCodex();
 
     // codex SDK 初期化
-    // 認証 path 2 通り (codex CLI 標準動作):
-    //   1. OPENAI_API_KEY 設定済 → API key 認証 (usage-based billing、production 向き)
-    //   2. 未設定 + `codex login` 済 → ~/.codex/auth.json から ChatGPT subscription 認証
-    //      (Plus/Pro/Team 等持ってる採用者は追加 API cost 0 で運用可、Fast Mode も使える)
+    // 認証 path 2 通り:
+    //   1. OPENAI_API_KEY 設定済 + LIGHTV2_AUTH != 'subscription' → API key 認証
+    //      (usage-based billing、production 向き、default)
+    //   2. LIGHTV2_AUTH='subscription' → apiKey 渡さず ~/.codex/auth.json で
+    //      ChatGPT subscription 認証 (Plus/Pro/Team 持ち、API cost 0、dogfood 向き)
+    //
+    // Light v1 / Router は依然 OPENAI_API_KEY を使うため、env 自体は unset しない。
+    // Light v2 だけ subscription に向けるには LIGHTV2_AUTH=subscription を設定。
     const mcp_servers = buildLightV2McpConfig(workspacePath);
     const codexOpts = { config: { mcp_servers } };
-    if (config.OPENAI_API_KEY) {
+    const useSubscription = config.LIGHTV2_AUTH === 'subscription';
+    if (!useSubscription && config.OPENAI_API_KEY) {
       codexOpts.apiKey = config.OPENAI_API_KEY;
     }
     const codex = new Codex(codexOpts);

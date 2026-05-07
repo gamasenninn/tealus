@@ -58,6 +58,12 @@ module.exports = {
   AGENT_LIGHT_MODEL: process.env.AGENT_LIGHT_MODEL || 'gpt-5.4-mini',
   AGENT_ROUTER_MODEL: process.env.AGENT_ROUTER_MODEL || 'gpt-5.4-mini',
 
+  // Light v2 auth path (#258):
+  // - undefined / 'api-key' (default): OPENAI_API_KEY を渡す (production 向き)
+  // - 'subscription': apiKey 渡さず ~/.codex/auth.json (codex login 済) で auth
+  //   ChatGPT Plus/Pro/Team 持ちで dogfood / dev 用、API cost 0、Fast Mode access 可
+  LIGHTV2_AUTH: process.env.LIGHTV2_AUTH,
+
   // Tavily
   TAVILY_API_KEY: process.env.TAVILY_API_KEY,
 
