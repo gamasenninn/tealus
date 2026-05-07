@@ -186,10 +186,15 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
     }
 
     // thread 開始 (per-message 都度新規)
+    // networkAccessEnabled=true は MCP child process が tealus server (localhost:3000)
+    // 等への HTTP call を行うために必須。codex の sandbox_workspace_write は
+    // default で network_access=false で、これが MCP tool call を「user cancelled」
+    // で fail させる原因。
     const thread = codex.startThread({
       model: config.AGENT_LIGHT_MODEL,
       workingDirectory: workspacePath,
       sandboxMode: 'workspace-write',
+      networkAccessEnabled: true,
       approvalPolicy: 'never',
       skipGitRepoCheck: true,
     });
