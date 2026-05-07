@@ -111,11 +111,17 @@ async function processLightV2({ roomId, prompt, workspacePath, mcpServers }) {
     const Codex = await getCodex();
 
     // codex SDK 初期化
+    // 認証 path 2 通り (codex CLI 標準動作):
+    //   1. OPENAI_API_KEY 設定済 → API key 認証 (usage-based billing、production 向き)
+    //   2. 未設定 + `codex login` 済 → ~/.codex/auth.json から ChatGPT subscription 認証
+    //      (Plus/Pro/Team 等持ってる採用者は追加 API cost 0 で運用可、Fast Mode も使える)
     const mcp_servers = buildCodexMcpConfig(mcpServers);
-    const codex = new Codex({
-      apiKey: config.OPENAI_API_KEY,
-      config: { mcp_servers },
-    });
+    const codexOpts = { config: { mcp_servers } };
+    if (config.OPENAI_API_KEY) {
+      codexOpts.apiKey = config.OPENAI_API_KEY;
+    }
+    const codex = new Codex(codexOpts);
+    logger.debug(`[LightV2] auth path: ${codexOpts.apiKey ? 'API key' : 'subscription (auth.json)'}`);
 
     // memory + system prompt 構築
     let systemPrompt = loadSystemPrompt();
