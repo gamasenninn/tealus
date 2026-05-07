@@ -67,6 +67,19 @@
   - **修正**: `proc._tealusTimer` / `proc._tealusCancelled` property attach、`registry.cancel()` で clearTimeout + flag 立て、close handler 冒頭で cancelled flag check して early return
   - 177 件 pass、回帰なし
 
+### Added
+
+- **agent-server: Light v2 (codex-sdk backed) 並列追加 — `/light2` prefix で codex 経由の Light agent** ([#258](https://github.com/gamasenninn/tealus/issues/258))
+  - 業務メモ 5/6 夜 user voice 起点 (「light エージェントに codex を組み替え」)
+  - **scope 議論で確定した線引き**: codex app-server 等の resident service spawn は NG (agent-server と二重 dispatcher で重い)、`@openai/codex-sdk` v0.128.0 (公式 npm、SDK が CLI spawn を完全 hide) は OK
+  - 現 Light v1 (`@openai/agents` SDK) は変更なし、`/light2` prefix で並列追加
+  - **新規**: `agent-server/src/agents/lightV2.js` (~140 行)、`processLightV2()` で codex SDK 経由の event streaming → typing indicator 更新 → 最終 agent_message を chat push
+  - **編集**: `router/index.js` で `/light2 ` prefix detect、`dispatcher.js` で `case 'light2'` 追加
+  - **MCP config**: 既存 `getOrCreateRoomMcp()` で取得した MCP server 配列を `Codex({ config: { mcp_servers } })` 形式に変換、per-request 動的注入
+  - **設計判断**: thread lifecycle = per-message 都度新規 (D4 哲学と整合) / sandbox = `workspace-write` / approvalPolicy = `never` / custom tools 0 個 (codex 内蔵 + 既存 MCP で全カバー)
+  - **注目点**: input_tokens が Light v1 比 ~6-25x の可能性 (codex CLI が context に system prompt + tools 定義を大量注入)、後で性能 / コスト比較で詳細評価
+  - 182 件 pass、回帰なし
+
 ### Fixed
 
 - **client: Vite dev server proxy に `/agent-api` と `/rtc` を追加 — 採用者が dev mode で TTS / cancel / cc-projects / RTC が動かない trap を fix** ([#257](https://github.com/gamasenninn/tealus/issues/257))

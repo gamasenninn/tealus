@@ -42,6 +42,11 @@ function classifyByRules(content) {
     return { tier: 'light', prompt: trimmed.slice(7).trim() };
   }
 
+  // #258 /light2 コマンド (codex-sdk backed)
+  if (trimmed.startsWith('/light2 ')) {
+    return { tier: 'light2', prompt: trimmed.slice(8).trim() };
+  }
+
   // 挨拶パターン
   for (const { pattern, response } of GREETING_PATTERNS) {
     if (pattern.test(trimmed)) {

@@ -6,6 +6,7 @@ const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { route } = require('../router/index');
 const { processLight } = require('../agents/light');
+const { processLightV2 } = require('../agents/lightV2');
 const { processDeep } = require('../agents/deep');
 const { getOrCreateContext, updateStatus } = require('../context/sessionManager');
 const { getOrCreateRoomMcp } = require('../mcp/roomMcpManager');
@@ -145,6 +146,28 @@ async function _dispatch({ message, room, agentId, agentName }) {
         await updateStatus(agentId, roomId, 'idle');
       }
       break;
+
+    case 'light2': {
+      // #258 Light v2 Agent (codex-sdk backed、並列追加)
+      await updateStatus(agentId, roomId, 'processing');
+      try {
+        const mcpServers = await getOrCreateRoomMcp(agentId, roomId, context.workspace_path);
+        const userPrompt = result.prompt || prompt;
+        const lightPrompt = `現在のルーム ID: ${roomId}
+
+ユーザーの質問: ${userPrompt}`;
+
+        await processLightV2({
+          roomId,
+          prompt: lightPrompt,
+          workspacePath: context.workspace_path,
+          mcpServers,
+        });
+      } finally {
+        await updateStatus(agentId, roomId, 'idle');
+      }
+      break;
+    }
 
     case 'deep': {
       // Deep Agent（claude -p + Tealus MCP）
