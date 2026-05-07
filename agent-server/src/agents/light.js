@@ -202,6 +202,27 @@ async function processLight({ roomId, prompt, workspacePath, mcpServers }) {
       maxTurns: getSetting('max_turns', config.LIGHT_MAX_TURNS || 3),
     });
 
+    // #258: Light v1 vs v2 比較用、token usage を log
+    // @openai/agents の result から usage を抽出する path は SDK version で異なるので
+    // 多 path で fallback (rawResponses / responses / lastResponse)
+    try {
+      let totalInput = 0;
+      let totalOutput = 0;
+      const responses = result.rawResponses || result.responses || (result.lastResponse ? [result.lastResponse] : []);
+      for (const r of responses) {
+        const u = r.usage || r.responseUsage || {};
+        totalInput += u.inputTokens || u.input_tokens || u.promptTokens || u.prompt_tokens || 0;
+        totalOutput += u.outputTokens || u.output_tokens || u.completionTokens || u.completion_tokens || 0;
+      }
+      if (totalInput > 0 || totalOutput > 0) {
+        logger.info(`[Light] turn completed, usage: input=${totalInput} output=${totalOutput} (responses=${responses.length})`);
+      } else {
+        logger.debug(`[Light] usage extraction returned 0; result keys=${Object.keys(result).join(',')}`);
+      }
+    } catch (usageErr) {
+      logger.debug(`[Light] usage extract error: ${usageErr.message}`);
+    }
+
     // 使用されたツールをログ
     if (result.newItems) {
       logger.debug(`[Run] newItems: ${result.newItems.length}件`);
