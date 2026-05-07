@@ -186,15 +186,18 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
     }
 
     // thread 開始 (per-message 都度新規)
-    // networkAccessEnabled=true は MCP child process が tealus server (localhost:3000)
-    // 等への HTTP call を行うために必須。codex の sandbox_workspace_write は
-    // default で network_access=false で、これが MCP tool call を「user cancelled」
-    // で fail させる原因。
+    // sandboxMode='danger-full-access' を試行: workspace-write + networkAccessEnabled=true
+    // でも tealus MCP (network 必要) が「user cancelled」で fail し、workspace-fs MCP
+    // (network 不要) のみ動作する症状を観測 (5/7 14:30 verify)。sandbox restriction が
+    // localhost への HTTP call を依然 block している可能性。
+    // danger-full-access で fix すれば sandbox 確定 → 後で fine-grained config 探求。
+    // Tealus は agent-server 上で trusted execution context なので、最終的にも
+    // この sandboxMode で問題ない (codex の本来用途は untrusted code execution、
+    // Tealus AI agent は trusted code path)。
     const thread = codex.startThread({
       model: config.AGENT_LIGHT_MODEL,
       workingDirectory: workspacePath,
-      sandboxMode: 'workspace-write',
-      networkAccessEnabled: true,
+      sandboxMode: 'danger-full-access',
       approvalPolicy: 'never',
       skipGitRepoCheck: true,
     });
