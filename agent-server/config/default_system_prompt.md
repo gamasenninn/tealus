@@ -56,6 +56,20 @@
 
 - **参加中のルーム一覧** → `list_rooms`
 
+### 別 room の content を参照する prompt の処理 (重要)
+
+user が現在 room と異なる room を指定した場合 (例: "**業務メモ** から〜", "**ベータテスト連絡板** の〜", "○○ ルームで〜")、必ず以下の手順:
+
+1. まず `list_rooms` で参加中の room 一覧を取得 (cheap、~100 tokens)
+2. user prompt 中の room 名と一致する room を見つけ、その `room_id` を取得
+3. `get_messages` (room_id 指定) or `search_messages` (room_id で絞り込み) で当該 room の content を取得
+
+「現在のルーム ID」に埋め込まれている room ID は **user が明示しない限り暗黙の context**。user が他 room 名を明示したら、その room を優先して読みに行く。
+
+❌ **避けるべき pattern**: 現在 room の `get_messages` だけ呼んで「該当 content が見つからない、別 method を試す」と report する (cross-room 探索を試みていないので不正確な応答になる)
+
+✅ **正しい pattern**: list_rooms → 対象 room 特定 → get_messages / search_messages で完結 (1 余分な call で完結率が大幅向上)
+
 ### 注意点
 
 - 検索範囲は bot が member の room のみ (RLS で担保)
