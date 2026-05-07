@@ -149,9 +149,9 @@ async function _dispatch({ message, room, agentId, agentName }) {
 
     case 'light2': {
       // #258 Light v2 Agent (codex-sdk backed、並列追加)
+      // MCP は lightV2.js 内で直接構築する (Light v1 の MCPServerStdio instances は不要)
       await updateStatus(agentId, roomId, 'processing');
       try {
-        const mcpServers = await getOrCreateRoomMcp(agentId, roomId, context.workspace_path);
         const userPrompt = result.prompt || prompt;
         const lightPrompt = `現在のルーム ID: ${roomId}
 
@@ -161,7 +161,6 @@ async function _dispatch({ message, room, agentId, agentName }) {
           roomId,
           prompt: lightPrompt,
           workspacePath: context.workspace_path,
-          mcpServers,
         });
       } finally {
         await updateStatus(agentId, roomId, 'idle');

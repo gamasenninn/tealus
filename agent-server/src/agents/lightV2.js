@@ -49,21 +49,74 @@ function loadSystemPrompt() {
 }
 
 /**
- * 既存 Light v1 の MCP server 配列 (MCPServerStdio instances) を codex SDK config 形式に変換。
- * codex SDK は `--config mcp_servers.<name>.command="..."` 形式で MCP を渡す (SDK 内部で TOML 化)。
+ * Light v2 用 MCP 設定を直接構築 (codex SDK 形式 = TOML mcp_servers)
+ *
+ * 注意: roomMcpManager が持つ MCPServerStdio instances (Light v1 用) からの抽出ではなく、
+ * deep.js の createDeepMcpConfig と同型で **設定 source から直接** 構築する。
+ * 理由: Light v1 と v2 は別 process group の MCP server を spawn するため、
+ * Light v1 の instances から再利用しても意味がない (codex CLI 内部で再 spawn)。
+ *
+ * 構成:
+ *   1. tealus MCP (Bot 認証情報があれば自動追加、Light v1 / Deep と同型)
+ *   2. workspace-fs MCP (filesystem、room workspace に root)
+ *   3. ルーム固有 MCP (workspace/mcp_config.json があればマージ)
+ *   4. グローバル MCP (agent-server/mcp_config.json があればマージ、filesystem は除外)
  */
-function buildCodexMcpConfig(mcpServers) {
+function buildLightV2McpConfig(workspacePath) {
   const mcp_servers = {};
-  for (const srv of mcpServers || []) {
-    if (!srv?.name) continue;
-    const params = srv.params || srv._params || {};
-    if (!params.command) continue;
-    mcp_servers[srv.name] = {
-      command: params.command,
-      args: params.args || [],
-      env: params.env || {},
+
+  // 1. Tealus MCP
+  if (config.TEALUS_BOT_ID && config.TEALUS_BOT_PASS) {
+    mcp_servers.tealus = {
+      command: 'npx',
+      args: ['-y', 'github:gamasenninn/tealus-mcp'],
+      env: {
+        TEALUS_API_URL: config.TEALUS_API_URL,
+        TEALUS_USER_ID: config.TEALUS_BOT_ID,
+        TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
+      },
     };
   }
+
+  // 2. workspace-fs MCP
+  if (workspacePath) {
+    const normalizedPath = workspacePath.replace(/\\/g, '/');
+    mcp_servers['workspace-fs'] = {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', normalizedPath],
+      env: {},
+    };
+  }
+
+  // 3. ルーム固有 MCP
+  if (workspacePath) {
+    const roomMcpPath = path.join(workspacePath, 'mcp_config.json');
+    if (fs.existsSync(roomMcpPath)) {
+      try {
+        const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8'));
+        Object.assign(mcp_servers, roomMcp.mcpServers || {});
+      } catch (err) {
+        logger.warn(`[LightV2] Failed to load room MCP config: ${err.message}`);
+      }
+    }
+  }
+
+  // 4. グローバル MCP (filesystem 重複を避けて除外)
+  const globalConfigPath = path.join(__dirname, '..', '..', 'mcp_config.json');
+  if (fs.existsSync(globalConfigPath)) {
+    try {
+      const globalMcp = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
+      if (globalMcp.mcpServers) {
+        for (const [name, def] of Object.entries(globalMcp.mcpServers)) {
+          if (name === 'filesystem') continue;
+          if (!mcp_servers[name]) mcp_servers[name] = def;
+        }
+      }
+    } catch (err) {
+      logger.warn(`[LightV2] Failed to load global MCP config: ${err.message}`);
+    }
+  }
+
   return mcp_servers;
 }
 
@@ -105,7 +158,7 @@ function mapToolToStatus(item) {
 /**
  * Light v2 でメッセージを処理
  */
-async function processLightV2({ roomId, prompt, workspacePath, mcpServers }) {
+async function processLightV2({ roomId, prompt, workspacePath }) {
   let lastAgentMessage = null;
   try {
     const Codex = await getCodex();
@@ -115,13 +168,13 @@ async function processLightV2({ roomId, prompt, workspacePath, mcpServers }) {
     //   1. OPENAI_API_KEY 設定済 → API key 認証 (usage-based billing、production 向き)
     //   2. 未設定 + `codex login` 済 → ~/.codex/auth.json から ChatGPT subscription 認証
     //      (Plus/Pro/Team 等持ってる採用者は追加 API cost 0 で運用可、Fast Mode も使える)
-    const mcp_servers = buildCodexMcpConfig(mcpServers);
+    const mcp_servers = buildLightV2McpConfig(workspacePath);
     const codexOpts = { config: { mcp_servers } };
     if (config.OPENAI_API_KEY) {
       codexOpts.apiKey = config.OPENAI_API_KEY;
     }
     const codex = new Codex(codexOpts);
-    logger.debug(`[LightV2] auth path: ${codexOpts.apiKey ? 'API key' : 'subscription (auth.json)'}`);
+    logger.info(`[LightV2] auth=${codexOpts.apiKey ? 'API key' : 'subscription'} mcp_servers=${Object.keys(mcp_servers).join(',')}`);
 
     // memory + system prompt 構築
     let systemPrompt = loadSystemPrompt();
@@ -215,4 +268,4 @@ function splitMessage(text, maxLength) {
   return chunks;
 }
 
-module.exports = { processLightV2, splitMessage, buildCodexMcpConfig };
+module.exports = { processLightV2, splitMessage, buildLightV2McpConfig };
