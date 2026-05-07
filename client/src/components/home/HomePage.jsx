@@ -11,12 +11,47 @@ function HomePage() {
   const [portalLinks, setPortalLinks] = useState([]);
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  // Portal iframe load 状態 ('loading' | 'loaded' | 'timeout')
+  // X-Frame-Options block 時は load event がまだ発火するため timeout 検出だけでは
+  // 不十分。常時表示の「新タブで開く」 button と組み合わせて user の動線確保。
+  const [iframeState, setIframeState] = useState('loading');
   const iframeRef = useRef(null);
+  const iframeTimeoutRef = useRef(null);
 
   useEffect(() => {
     loadAnnouncements();
     loadPortalLinks();
   }, []);
+
+  // activeTab が portal-* に切り替わった時、iframe load の watch を仕掛ける
+  useEffect(() => {
+    if (activeTab.startsWith('portal-')) {
+      startIframeLoadWatch();
+    }
+    return () => {
+      if (iframeTimeoutRef.current) {
+        clearTimeout(iframeTimeoutRef.current);
+        iframeTimeoutRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const startIframeLoadWatch = () => {
+    setIframeState('loading');
+    if (iframeTimeoutRef.current) clearTimeout(iframeTimeoutRef.current);
+    iframeTimeoutRef.current = setTimeout(() => {
+      setIframeState((s) => (s === 'loading' ? 'timeout' : s));
+    }, 5000);
+  };
+
+  const handleIframeLoad = () => {
+    setIframeState('loaded');
+    if (iframeTimeoutRef.current) {
+      clearTimeout(iframeTimeoutRef.current);
+      iframeTimeoutRef.current = null;
+    }
+  };
 
   const loadPortalLinks = async () => {
     try {
@@ -100,6 +135,7 @@ function HomePage() {
                   // クロスオリジンの場合はsrc再設定でリロード
                   iframeRef.current.src = iframeRef.current.src;
                 }
+                startIframeLoadWatch();
               } else {
                 setActiveTab(tab.id);
               }
@@ -178,15 +214,63 @@ function HomePage() {
           </>
         )}
 
-        {activeTab.startsWith('portal-') && (
-          <iframe
-            ref={iframeRef}
-            className="home-iframe"
-            src={tabs.find(t => t.id === activeTab)?.url}
-            title={tabs.find(t => t.id === activeTab)?.label}
-            allow="microphone; camera; autoplay; fullscreen"
-          />
-        )}
+        {activeTab.startsWith('portal-') && (() => {
+          const portal = tabs.find(t => t.id === activeTab);
+          return (
+            <div className="home-iframe-wrapper">
+              <iframe
+                ref={iframeRef}
+                className="home-iframe"
+                src={portal?.url}
+                title={portal?.label}
+                allow="microphone; camera; autoplay; fullscreen"
+                onLoad={handleIframeLoad}
+              />
+              {portal?.url && (
+                <a
+                  href={portal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="home-iframe-open-external"
+                  title="新タブで開く"
+                  aria-label="新タブで開く"
+                >
+                  ↗
+                </a>
+              )}
+              {iframeState === 'loading' && (
+                <div className="home-iframe-overlay loading">
+                  <div className="home-iframe-spinner" />
+                  <p>読み込み中...</p>
+                </div>
+              )}
+              {iframeState === 'timeout' && (
+                <div className="home-iframe-overlay timeout">
+                  <p className="home-iframe-overlay-title">読み込みに時間がかかっています</p>
+                  <p className="home-iframe-overlay-msg">
+                    サイトが埋め込み表示を許可していない可能性があります。新タブで開いてみてください。
+                  </p>
+                  {portal?.url && (
+                    <a
+                      href={portal.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="home-iframe-overlay-button"
+                    >
+                      新タブで開く
+                    </a>
+                  )}
+                  <button
+                    className="home-iframe-overlay-dismiss"
+                    onClick={() => setIframeState('loaded')}
+                  >
+                    閉じる
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       <BottomNav />
