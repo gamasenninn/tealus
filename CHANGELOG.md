@@ -69,15 +69,22 @@
 
 ### Added
 
-- **agent-server: Light v2 (codex-sdk backed) 並列追加 — `/light2` prefix で codex 経由の Light agent** ([#258](https://github.com/gamasenninn/tealus/issues/258))
+- **agent-server: Light v2 (codex-sdk backed) 並列追加 — `/light2` prefix で codex 経由の Light agent (verify 済)** ([#258](https://github.com/gamasenninn/tealus/issues/258))
   - 業務メモ 5/6 夜 user voice 起点 (「light エージェントに codex を組み替え」)
-  - **scope 議論で確定した線引き**: codex app-server 等の resident service spawn は NG (agent-server と二重 dispatcher で重い)、`@openai/codex-sdk` v0.128.0 (公式 npm、SDK が CLI spawn を完全 hide) は OK
-  - 現 Light v1 (`@openai/agents` SDK) は変更なし、`/light2` prefix で並列追加
-  - **新規**: `agent-server/src/agents/lightV2.js` (~140 行)、`processLightV2()` で codex SDK 経由の event streaming → typing indicator 更新 → 最終 agent_message を chat push
-  - **編集**: `router/index.js` で `/light2 ` prefix detect、`dispatcher.js` で `case 'light2'` 追加
-  - **MCP config**: 既存 `getOrCreateRoomMcp()` で取得した MCP server 配列を `Codex({ config: { mcp_servers } })` 形式に変換、per-request 動的注入
-  - **設計判断**: thread lifecycle = per-message 都度新規 (D4 哲学と整合) / sandbox = `workspace-write` / approvalPolicy = `never` / custom tools 0 個 (codex 内蔵 + 既存 MCP で全カバー)
-  - **注目点**: input_tokens が Light v1 比 ~6-25x の可能性 (codex CLI が context に system prompt + tools 定義を大量注入)、後で性能 / コスト比較で詳細評価
+  - **scope 議論で確定した線引き**: codex app-server 等の resident service spawn は NG (agent-server と二重 dispatcher で重い)、`@openai/codex-sdk` v0.128.0 (公式 npm、SDK が CLI spawn を完全 hide) は OK = 「resident service NG / ephemeral subprocess via SDK OK」
+  - 現 Light v1 (`@openai/agents` SDK) は変更なし、`/light2` prefix で並列追加 (user 選択式)
+  - **新規**: `agent-server/src/agents/lightV2.js` (~170 行)、`processLightV2()` で codex SDK 経由の event streaming → typing indicator 更新 → 最終 agent_message を chat push
+  - **編集**: `router/index.js` で `/light2 ` prefix detect、`dispatcher.js` で `case 'light2'` 追加、`config/default_system_prompt.md` に cross-room 探索 pattern 追記 (Light v1 / v2 共通改善)
+  - **MCP config**: `buildLightV2McpConfig(workspacePath)` で deep.js 同型に直接構築 (Light v1 用 MCPServerStdio instances からの抽出ではなく source 直読み)、tealus / workspace-fs / room 固有 / global を merge
+  - **設計判断**: thread lifecycle = per-message 都度新規 / sandbox = `danger-full-access` (Tealus は trusted execution context、network 制限解消で localhost MCP 動作)、approvalPolicy = `never` / custom tools 0 個 (codex 内蔵 + 既存 MCP で全カバー)
+  - **認証 path 2 通り**: API key (production) / ChatGPT subscription (個人 dev、`codex login` 経由で追加 API cost 0、Plus/Pro/Team 持ちの採用者保護)
+  - **4 段 fix chain で完成**: 初期実装 → MCP config refactor → post-turn parse error warn 格下げ → sandbox network restriction 解消 → cross-room prompt 改善
+  - **性能比較 (実機 5/7 verify、gpt-4o-mini 単価仮定)**:
+    - 単純会話: v1 19.9k / v2 40.4k input tokens (2.07x cost)
+    - 単 MCP 要約: v1 19.6k / v2 40.4k (2.07x)
+    - cross-room TODO 分類: v1 50.1k / v2 188.9k (3.78x)、ただし v1 は cross-room 完結率低く v2 が明確に勝る
+  - **メタ気付き**: prompt-level 改善には天井がある ([#220](https://github.com/gamasenninn/tealus/issues/220) で議論した「task decomposition が浅い」問題は system prompt 改善で部分的にしか改善せず、codex CLI 内蔵の reasoning + tool orchestration が structurally 強い)
+  - **推奨運用**: 単純会話 / 単 room → v1 (cost 効率)、cross-room / 多角探索 → v2 (完結率)、ChatGPT Plus 持ち → v2 (subscription path で API cost 0)
   - 182 件 pass、回帰なし
 
 ### Fixed
