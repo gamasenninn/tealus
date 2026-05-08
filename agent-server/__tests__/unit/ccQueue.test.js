@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds } = require('../../src/webhook/ccQueue');
+const { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, getClaudeDefaultProject } = require('../../src/webhook/ccQueue');
 
 describe('extractCcProject (先頭マッチング、#215)', () => {
   test('文字列の先頭にあれば match', () => {
@@ -56,6 +56,78 @@ describe('extractCcProject (先頭マッチング、#215)', () => {
   test('英大文字は不可 (lowercase 規約、引き続き)', () => {
     expect(extractCcProject('@cc-Tealus')).toBeNull();
     expect(extractCcProject('@cc-TEALUS')).toBeNull();
+  });
+});
+
+describe('@Claude mention routing (#263)', () => {
+  // 既存 cc-tealus bot の display_name "Claude" で mention picker から
+  // 挿入される `@Claude` も @cc-{default-project} 同等に routing する
+  let origEnv;
+
+  beforeEach(() => {
+    origEnv = process.env.CLAUDE_DEFAULT_PROJECT;
+  });
+
+  afterEach(() => {
+    if (origEnv === undefined) delete process.env.CLAUDE_DEFAULT_PROJECT;
+    else process.env.CLAUDE_DEFAULT_PROJECT = origEnv;
+  });
+
+  test('@Claude 行頭 → default project (tealus) に routing', () => {
+    expect(extractCcProject('@Claude 進捗教えて')).toBe('tealus');
+    expect(extractCcProject('@Claude README をレビュー')).toBe('tealus');
+  });
+
+  test('case-insensitive で受け付け', () => {
+    expect(extractCcProject('@claude hello')).toBe('tealus');
+    expect(extractCcProject('@CLAUDE hello')).toBe('tealus');
+    expect(extractCcProject('@cLaUdE hello')).toBe('tealus');
+  });
+
+  test('改行直後の @Claude も match', () => {
+    expect(extractCcProject('hello\n@Claude 進捗')).toBe('tealus');
+  });
+
+  test('文中 (先頭以外) なら null (#215 同 stance)', () => {
+    expect(extractCcProject('hello @Claude bye')).toBeNull();
+    expect(extractCcProject('  @Claude  ')).toBeNull();
+  });
+
+  test('@Claudeなんとか (続き字) は word boundary 違反で match しない', () => {
+    expect(extractCcProject('@Claudette is different')).toBeNull();
+    expect(extractCcProject('@Claudia hello')).toBeNull();
+  });
+
+  test('CLAUDE_DEFAULT_PROJECT env で override 可能', () => {
+    process.env.CLAUDE_DEFAULT_PROJECT = 'myproj';
+    expect(extractCcProject('@Claude hello')).toBe('myproj');
+  });
+
+  test('@cc-{project} と @Claude が共存する場合 cc- が優先', () => {
+    expect(extractCcProject('@cc-foo bar @Claude')).toBe('foo');
+  });
+
+  test('@Claude 単独 (引数なし) でも match', () => {
+    expect(extractCcProject('@Claude')).toBe('tealus');
+  });
+});
+
+describe('getClaudeDefaultProject', () => {
+  let origEnv;
+  beforeEach(() => { origEnv = process.env.CLAUDE_DEFAULT_PROJECT; });
+  afterEach(() => {
+    if (origEnv === undefined) delete process.env.CLAUDE_DEFAULT_PROJECT;
+    else process.env.CLAUDE_DEFAULT_PROJECT = origEnv;
+  });
+
+  test('env 未設定なら "tealus"', () => {
+    delete process.env.CLAUDE_DEFAULT_PROJECT;
+    expect(getClaudeDefaultProject()).toBe('tealus');
+  });
+
+  test('env 設定済なら env value', () => {
+    process.env.CLAUDE_DEFAULT_PROJECT = 'myproj';
+    expect(getClaudeDefaultProject()).toBe('myproj');
   });
 });
 

@@ -23,15 +23,41 @@ const DEFAULT_QUEUE_DIR = path.join(os.homedir(), '.tealus', 'cc-queue');
 //   @cc-* を引用するため、自然に skip される (CC_SKIP_SENDER_IDS は defense in depth)
 const CC_MENTION_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/m;
 
+// `@Claude` mention 検出 (#263)。
+// 既存 cc-tealus bot は display_name が "Claude" のため、user が mention picker で
+// 「Claude」を選ぶと本文には `@Claude` が挿入される。これを `@cc-{default-project}`
+// と同等の routing として扱い、自然な mention 体験を提供する。
+//
+// 設計:
+// - case-insensitive (Claude / claude / CLAUDE 等を全部受け付け)
+// - 行頭マッチ (#215 自己ループ防止と同 stance)
+// - 後ろは word boundary or 空白 / 句読点 / 終端 (Japanese 句読点も含めるなら別途)
+// - default project は env `CLAUDE_DEFAULT_PROJECT` で指定 (default "tealus")
+const CLAUDE_MENTION_RE = /^@claude\b/im;
+
 /**
- * メッセージ content から @cc-{project} の project 名を抽出する。
+ * `@Claude` mention の routing 先 project (env override 可)。
+ * default は "tealus" (現状単一 project 運用)。
+ */
+function getClaudeDefaultProject() {
+  return process.env.CLAUDE_DEFAULT_PROJECT || 'tealus';
+}
+
+/**
+ * メッセージ content から cc-queue routing 用の project 名を抽出する。
+ * - `@cc-{project}` mention があればその project
+ * - `@Claude` mention があれば CLAUDE_DEFAULT_PROJECT
+ * - どちらも無ければ null
+ *
  * @param {string|null|undefined} content
  * @returns {string|null} project 名、無ければ null
  */
 function extractCcProject(content) {
   if (typeof content !== 'string' || content.length === 0) return null;
-  const match = content.match(CC_MENTION_RE);
-  return match ? match[1] : null;
+  const ccMatch = content.match(CC_MENTION_RE);
+  if (ccMatch) return ccMatch[1];
+  if (CLAUDE_MENTION_RE.test(content)) return getClaudeDefaultProject();
+  return null;
 }
 
 /**
@@ -83,5 +109,6 @@ module.exports = {
   appendCcEvent,
   shouldSkipCcSender,
   loadSkipSenderIds,
+  getClaudeDefaultProject,
   DEFAULT_QUEUE_DIR,
 };
