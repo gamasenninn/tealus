@@ -244,7 +244,16 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
             }
           } else if (event.type === 'item.completed') {
             if (event.item.type === 'agent_message') {
-              lastAgentMessage = event.item.text;
+              // [debug #260] codex の agent_message item の field 名を判明させる
+              logger.debug(`[LightV2 debug] agent_message keys: ${Object.keys(event.item).join(',')} item=${JSON.stringify(event.item).slice(0, 600)}`);
+              // text / message / content / output_text / value 等の候補を順に try
+              lastAgentMessage =
+                event.item.text ||
+                event.item.message ||
+                event.item.content ||
+                event.item.output_text ||
+                event.item.value ||
+                null;
               await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
             } else if (event.item.type === 'mcp_tool_call') {
               // MCP tool call の result/error 詳細を log (debug 用)
