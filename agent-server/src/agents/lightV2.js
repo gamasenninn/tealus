@@ -74,6 +74,14 @@ function buildLightV2McpConfig(workspacePath) {
         TEALUS_API_URL: config.TEALUS_API_URL,
         TEALUS_USER_ID: config.TEALUS_BOT_ID,
         TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
+        // generate_and_send_image (#260) で DALL-E 3 を呼ぶため必要
+        // (Light v2 が subscription mode でも image gen は API key 必須、別 cost path)
+        ...(config.OPENAI_API_KEY ? { OPENAI_API_KEY: config.OPENAI_API_KEY } : {}),
+        // read_document の vision fallback (Gemini) で必要
+        ...(process.env.GOOGLE_API_KEY ? { GOOGLE_API_KEY: process.env.GOOGLE_API_KEY } : {}),
+        ...(process.env.DOCUMENT_VISION_PROVIDER ? { DOCUMENT_VISION_PROVIDER: process.env.DOCUMENT_VISION_PROVIDER } : {}),
+        ...(process.env.DOCUMENT_VISION_MODEL ? { DOCUMENT_VISION_MODEL: process.env.DOCUMENT_VISION_MODEL } : {}),
+        ...(process.env.DOCUMENT_VISION_MAX_PAGES ? { DOCUMENT_VISION_MAX_PAGES: process.env.DOCUMENT_VISION_MAX_PAGES } : {}),
       },
     };
   }
