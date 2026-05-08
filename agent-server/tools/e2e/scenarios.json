@@ -1,0 +1,126 @@
+{
+  "$comment": "Light agent E2E verification scenarios (#262). 'CI gate' ではなく '調整 phase の verification run' として設計。判定軸 = (1) tool chain shape の機械 match (loose) (2) response text の sanity (LLM-as-judge or 人 review) (3) 副次 metric (token / latency)。詳細 schema は ./scenario-schema.md。",
+  "metadata": {
+    "version": "0.1",
+    "test_room_env": "TEALUS_E2E_ROOM_ID",
+    "test_user_env": {
+      "login_id": "TEALUS_E2E_BOT_ID",
+      "password": "TEALUS_E2E_BOT_PASS"
+    },
+    "agent_log_path": "agent-server/logs/agent-{date}.log",
+    "default_timeout_ms": 120000
+  },
+  "scenarios": [
+    {
+      "id": "S1-cross-room-tag-organize",
+      "description": "業務メモ から 5/5 以降の messages を 3 タグ別に整理 (cross-room 探索 + explicit prompt の効果 verify)",
+      "prompt": "/light2 業務メモから 2026-05-05 以降の messages を 3 タグ (tealus関係 / TODO / 日常業務) 別に整理して。日付順、完了/未完了で分類。",
+      "target_agent": "light2",
+      "expected_tool_chain": {
+        "must_include": ["list_rooms", "search_messages"],
+        "should_include": ["get_messages", "list_tags"]
+      },
+      "expected_response": {
+        "must_contain": ["tealus関係", "日常業務"],
+        "must_not_contain": ["該当なし"],
+        "min_chars": 200
+      },
+      "metrics": {
+        "max_input_tokens": 250000,
+        "max_output_tokens": 6000,
+        "max_latency_ms": 90000
+      },
+      "manual_check": "業務メモ室の正しい messages のみを参照 (DM 等 別 room を混入していない事)、完了/未完了 tag が正確"
+    },
+    {
+      "id": "S2-router-mention-strip",
+      "description": "group room で `@<bot> /light2 ...` が v1 落ちせず v2 に行くか (router mention strip #258 follow-up `49ea6e1` regression check)",
+      "prompt": "@<TEST_BOT_NAME> /light2 こんにちは",
+      "target_agent": "light2",
+      "expected_tool_chain": {
+        "must_include": [],
+        "should_include": ["get_messages"]
+      },
+      "expected_response": {
+        "min_chars": 5
+      },
+      "expected_log_lines": ["Router (rules): light2"],
+      "metrics": {
+        "max_latency_ms": 30000
+      },
+      "manual_check": "log で `Router (LLM): light` が出ていないこと (v1 落ちしていない事)"
+    },
+    {
+      "id": "S3-pdf-scan-summary",
+      "description": "scan PDF を read_document で要約 (vision fallback 動作、#261 fix verify)",
+      "prompt": "/light この PDF を要約して",
+      "preconditions": {
+        "attach_pdf": "test-fixtures/sample-scan.pdf",
+        "note": "scan / image-only PDF を test room に事前投稿してから実行"
+      },
+      "target_agent": "light",
+      "expected_tool_chain": {
+        "must_include": ["read_document"],
+        "should_include": ["get_message_media"]
+      },
+      "expected_response": {
+        "min_chars": 100,
+        "must_not_contain": ["抽出できなかった", "読めません"]
+      },
+      "expected_log_lines": ["extraction_method=vision_fallback"],
+      "metrics": {
+        "max_latency_ms": 60000
+      },
+      "manual_check": "応答が PDF の実 content に基づいているか (filename hallucination ではない事)"
+    },
+    {
+      "id": "S4-image-generation",
+      "description": "画像生成 prompt が light/light2 両方で動作 (#260 fix の verify、send_image / generate_and_send_image MCP)",
+      "prompt": "/light2 子犬の画像を生成して",
+      "target_agent": "light2",
+      "expected_tool_chain": {
+        "must_include_any_of": ["generate_image", "generate_and_send_image", "send_image"]
+      },
+      "expected_response": {
+        "min_chars": 5
+      },
+      "expected_chat_messages": {
+        "must_have_image": true
+      },
+      "metrics": {
+        "max_latency_ms": 120000
+      },
+      "manual_check": "実 image message が test room に投稿された事 (chat 履歴で image attachment 確認)"
+    },
+    {
+      "id": "S5-greeting-direct",
+      "description": "router 直接応答 path (LLM 呼ばずに rules で response 返す)",
+      "prompt": "こんにちは",
+      "target_agent": "router",
+      "expected_tool_chain": {
+        "must_include": [],
+        "must_not_include_any": ["get_messages", "search_messages"]
+      },
+      "expected_response": {
+        "min_chars": 5
+      },
+      "expected_log_lines": ["Router (rules): router"],
+      "metrics": {
+        "max_latency_ms": 5000
+      },
+      "manual_check": "応答が greeting らしい (例: 'こんにちは！何か...') 事"
+    },
+    {
+      "id": "S6-deep-keyword",
+      "description": "DEEP_KEYWORD ヒット → deep agent (DEEP_AVAILABLE=true 前提)",
+      "prompt": "このコードをリファクタリングしてください",
+      "target_agent": "deep",
+      "expected_log_lines": ["Router (rules): deep"],
+      "metrics": {
+        "max_latency_ms": 180000
+      },
+      "manual_check": "deep agent が起動した事 (claude CLI process spawn)、deep の応答が text として返る事",
+      "skip_if_not_available": true
+    }
+  ]
+}
