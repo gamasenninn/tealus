@@ -71,6 +71,23 @@ async function postMessage(roomId, content) {
   return res.json();
 }
 
+async function postFile(roomId, buffer, filename, mimeType, content = '') {
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('room_id', roomId);
+  form.append('file', buffer, { filename, contentType: mimeType });
+  if (content) form.append('content', content);
+  const res = await fetch(`${TEALUS_API_URL}/api/bot/push-file`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+      ...form.getHeaders(),
+    },
+    body: form,
+  });
+  return res.json();
+}
+
 async function getMessages(roomId, limit = 20) {
   const res = await fetch(
     `${TEALUS_API_URL}/api/bot/messages?room_id=${roomId}&limit=${limit}`,
@@ -236,6 +253,35 @@ async function waitForBotResponse(roomId, sinceTime, timeoutMs) {
   return null;
 }
 
+// ---- Preconditions handler (#262 Phase 2) ----
+// scenario.preconditions に従って、prompt 投下前に test room に file 等を attach する。
+// 現状は attach_pdf のみ対応、将来 attach_image / attach_text も拡張可。
+async function applyPreconditions(scenario) {
+  const pre = scenario.preconditions;
+  if (!pre) return null;
+
+  if (pre.attach_pdf) {
+    const pdfPath = path.isAbsolute(pre.attach_pdf)
+      ? pre.attach_pdf
+      : path.join(SCRIPT_DIR, pre.attach_pdf);
+    if (!fs.existsSync(pdfPath)) {
+      throw new Error(`fixture not found: ${pdfPath}`);
+    }
+    const buffer = fs.readFileSync(pdfPath);
+    const filename = path.basename(pdfPath);
+    const result = await postFile(E2E_ROOM_ID, buffer, filename, 'application/pdf');
+    if (!result.message) {
+      throw new Error(`postFile failed: ${JSON.stringify(result).slice(0, 200)}`);
+    }
+    logInfo(`[preconditions] attached PDF: ${filename} (${buffer.length} bytes, msg_id=${result.message.id})`);
+    // bot に file message を認識させるため少し待つ (websocket 配信 + index 等)
+    await sleep(2000);
+    return { attached_message_id: result.message.id, type: 'pdf', filename };
+  }
+  // 将来: attach_image / attach_text 等の拡張は scenario-schema.md と同期で追加
+  return null;
+}
+
 // ---- Run single scenario ----
 async function runScenario(scenario) {
   logInfo(`[${scenario.id}] start: ${scenario.description}`);
@@ -246,8 +292,10 @@ async function runScenario(scenario) {
   // resolve placeholders
   const prompt = scenario.prompt.replaceAll('<TEST_BOT_NAME>', AGENT_BOT_ID_DISPLAY);
 
-  let postedMsg, botResponse, latencyMs;
+  let postedMsg, botResponse, latencyMs, preconditionResult = null;
   try {
+    // preconditions (e.g., attach_pdf for S3) を実行してから prompt 投下
+    preconditionResult = await applyPreconditions(scenario);
     postedMsg = await postMessage(E2E_ROOM_ID, prompt);
     if (!postedMsg.message) {
       throw new Error(`post failed: ${JSON.stringify(postedMsg)}`);
@@ -277,6 +325,7 @@ async function runScenario(scenario) {
     log_slice: logSlice,
     log_lines_found: findLogLines(logSlice, scenario.expected_log_lines || []),
     token_usage: extractTokenUsage(logSlice),
+    precondition: preconditionResult,
   };
 
   if (!botResponse) {
