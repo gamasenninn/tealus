@@ -146,9 +146,35 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
+// Build artifact sanity check (採用者保護、#234 同型 pattern)
+// client/dist や dashboard/dist が無ければ production-style access で 503 / 空白 になるため
+// 起動時に loud warn して採用者の install/setup の moor 状態を可視化する
+function checkBuildArtifacts() {
+  const fs = require('fs');
+  const checks = [
+    {
+      name: 'client',
+      path: path.join(__dirname, '../../client/dist/index.html'),
+      hint: 'cd client && npm install (postinstall で auto-build)',
+    },
+    {
+      name: 'dashboard',
+      path: path.join(__dirname, '../../dashboard/dist/index.html'),
+      hint: 'cd dashboard && npm install (postinstall で auto-build)',
+    },
+  ];
+  for (const c of checks) {
+    if (!require('fs').existsSync(c.path)) {
+      logger.warn(`[build-check] ${c.name}/dist/index.html が見つかりません — ${c.hint}`);
+      logger.warn(`[build-check]   production-style access (server 経由 SPA serve) が動作しません。dev mode (vite dev server) を使うなら無視可。`);
+    }
+  }
+}
+
 // Start server (only when run directly, not in tests)
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
+  checkBuildArtifacts();
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
     // rtc-server reachability の動的検出を開始

@@ -12,6 +12,7 @@
     "dev:demo": "vite --mode demo",
     "build": "vite build",
     "preview": "vite preview",
+    "postinstall": "vite build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
