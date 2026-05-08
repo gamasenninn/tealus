@@ -46,7 +46,7 @@ async function getOrCreateSharedGlobal() {
       const tealusServer = new MCPServerStdio({
         name: 'tealus',
         command: 'npx',
-        args: ['-y', 'github:gamasenninn/tealus-mcp'],
+        args: ['-y', 'github:gamasenninn/tealus-mcp#v0.11.0'],
         env: {
           ...process.env,  // PATH 等の親 env を継承 (npx 実行に必須)
           TEALUS_API_URL: config.TEALUS_API_URL,
