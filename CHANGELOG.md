@@ -10,7 +10,62 @@
 
 ## [Unreleased]
 
+### Added
+
+- **agent-server: Light v2 機能 parity — tealus-mcp v0.11.0 で `send_text_as_file` + `generate_and_send_image` 追加、Light v1 の custom tool を MCP 化** ([#260](https://github.com/gamasenninn/tealus/issues/260))
+  - [#258](https://github.com/gamasenninn/tealus/issues/258) D5 で TODO 化していた gap (画像生成 / file 投稿) を解消
+  - tealus-mcp v0.11.0 release (`9c37810`、別 repo) — tools 13 → 15、tests 67 → 70
+  - tealus 本体側で tealus-mcp の version pin (`github:gamasenninn/tealus-mcp#v0.11.0`、3 箇所)
+  - Light v2 (codex SDK) で `/light2 子犬の画像を生成して` 動作 verify ✅、`generate_and_send_image` tool が DALL-E 3 → Tealus 投稿の composite 完結
+  - **OPENAI_API_KEY 必須** (Light v2 が subscription mode でも image gen は API 経由、別 cost path)
+  - default_system_prompt.md に `generate_and_send_image` / `send_text_as_file` の use case 明記 (「実際に tool を呼んで完結させる事」と指示、codex の「宣言だけで終わる」傾向への対処)
+
+- **agent-server: Light agent E2E verification harness (Phase 1)** ([#262](https://github.com/gamasenninn/tealus/issues/262))
+  - 「CI gate ではなく **調整 phase の verification run**」として設計
+  - `agent-server/tools/e2e/`: `scenarios.json` + `run.js` + `report.js` + `setup.js`
+  - 初期 6 scenario: cross-room tag整理 / mention strip / PDF scan / image gen / greeting / deep keyword
+  - judgment は multi-criteria: 決定論層 (tool chain shape, log line) → fail / 観察層 (token, latency) → warn / 人 review 層 (manual_check)
+  - test bot user (e2e-runner) + test room (e2e-sandbox) で本番 DB 隔離
+  - 実機 path 全通す (CLI が Tealus API 経由で test room に投下)
+  - 初回 run baseline: 4/6 PASS (S1 / S5 / S6 / S2 PASS、S3 / S4 は #260 #261 fix 前 baseline)、fix 後 S4 PASS verify 済
+  - 副次効用: S1 で同 prompt の **quality variance** を可視化 (1 件 / 8+ 件 / 13 件)、LLM 系 E2E は決定論前提では機能しない事を実証
+
 ### Fixed
+
+- **agent-server: Light v2 で `/light2` の応答が空になる「no final agent message captured」bug** ([#260](https://github.com/gamasenninn/tealus/issues/260) follow-up)
+  - codex SDK は 1 turn で `agent_message` を複数回 emit (thinking aloud → final answer → empty marker `""`)
+  - 旧 code (`lastAgentMessage = event.item.text`) は最後の空文字列で前の有用 text を上書き → user 応答 0 chars
+  - subscription mode の v2 で 5/7 から頻発していた既知 issue の根本原因 (画像生成 fail / PDF wrong-document hallucination 等の真因)
+  - 修正: 「最後の非空 agent_message を採用」(`if (text && text.trim()) lastAgentMessage = text`) で空 marker 弾く + thinking aloud は捨てる
+  - commit `28d648f` (accumulate、UX bug あり) → `6f8ff1f` (最後の非空、正解) の 2 段階で着地
+  - memory `feedback_codex_agent_message_pattern.md` 追加 (multi-emit pattern の実装指針)
+
+- **agent-server: tealus-mcp child process に env が伝播せず GOOGLE_API_KEY / OPENAI_API_KEY が undefined になっていた** ([#260](https://github.com/gamasenninn/tealus/issues/260) follow-up)
+  - codex SDK の `mcp_servers` config は `...process.env` 不継承、明示 env 指定が必須
+  - Light v2 / Deep の tealus-mcp 起動時に `OPENAI_API_KEY` (image gen)、`GOOGLE_API_KEY` (vision fallback) 等が child に届かず無効化
+  - **副次的に [#261](https://github.com/gamasenninn/tealus/issues/261) (vision fallback skip) も resolved** — read_document の library 失敗時に Gemini fallback が走らなかった真因 (logic は元から正しかった)
+  - Light v1 (`roomMcpManager.js`) は `...process.env` で全 env 継承していたため影響なし、本 bug は v2 限定
+  - 5/8 dogfood で同 PDF を /light2 に投げると本文を正確に抽出 + 537 chars 要約成功 verified
+  - memory `feedback_lightv2_pdf_limitation.md` を 5/8 大幅見直し (5/7「PDF 読めない」認識は真因取り違いと訂正)
+
+- **agent-server: router の mention 後 prefix 検出 (group room の `@bot /light2 ...` が v1 落ちする bug)** ([#258](https://github.com/gamasenninn/tealus/issues/258) follow-up、commit `49ea6e1`)
+  - group room で `@アシスタント /light2 ...` と書くと router の prefix 検出が content 先頭 startsWith しか見ていないため失敗、LLM 振り分けに fallback して v1 に流れていた (DM では mention 不要なので問題なし)
+  - 5/7 #258 dogfood (出品業務 group room) で発覚、test coverage に group room mention pattern が無かった事が surface
+  - 修正: `stripLeadingMentions` helper 追加、classifyByRules / route 両方で先頭 mention strip
+  - 副次的に mention 付き挨拶 / DEEP_KEYWORD / LLM 振り分けも改善
+  - 12 件 test 追加 (mention strip 単体 4 件 + multi-pattern verify 8 件)、194 件 pass
+
+- **agent-server: Light v2 専用 `LIGHTV2_AUTH` env で subscription path を提供 (採用者 dogfood で API cost 0 化)** ([#258](https://github.com/gamasenninn/tealus/issues/258) follow-up、commit `523d034`)
+  - dogfood / dev で v2 を gun gun 回したい時、`OPENAI_API_KEY` を unset すると Light v1 / Router まで死ぬので Light v2 専用 env で切替
+  - `LIGHTV2_AUTH=subscription` 設定時、`apiKey` を渡さず `~/.codex/auth.json` (codex login 済) で auth
+  - ChatGPT Plus/Pro/Team 持ちの採用者は API cost 0、Fast Mode access 可
+  - Light v1 / Router は OPENAI_API_KEY を使い続ける、無影響
+
+- **client: Portal 機能 — iframe load 失敗時の通知 UX (X-Frame-Options で blank になるケースの動線確保)** ([#259](https://github.com/gamasenninn/tealus/issues/259))
+  - ベータテスター 藤井さん の Portal 登録 dogfood 中、X-Frame-Options で iframe が空表示になる「ダンマリ」現象を 小野哲 経由で報告
+  - X-Frame-Options block 時は load event がまだ発火するため timeout-based 検出だけでは不完全、**常時表示の「↗ 新タブで開く」 escape link** を確実な動線として用意
+  - 追加: load 中 spinner overlay (onLoad で消える) / 5 秒 timeout overlay (「埋め込み許可してない可能性」+ 新タブ button + dismiss)
+  - active tab 再 tap reload 時も watch を再起動
 
 - **agent-server: test pollution 防止 — 本番 config file を test が上書きしない構造に** ([#235](https://github.com/gamasenninn/tealus/issues/235))
   - [#231](https://github.com/gamasenninn/tealus/issues/231) で「admin UI 上書き耐性」として F1+F2 を実装したが、5/4 朝の調査で **真因は admin UI ではなく test pollution** と判明 (user 指摘「admin UI 開いた覚えない」)
