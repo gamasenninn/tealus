@@ -228,14 +228,6 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
     try {
       for await (const event of events) {
         try {
-          // [debug #260] 全 event type を log で可視化、codex の reasoning / message
-          // 等が item type 不一致で無音になる failure mode を切り分けるため
-          if (event.type === 'item.started' || event.type === 'item.completed') {
-            logger.debug(`[LightV2 debug] event=${event.type} item.type=${event.item?.type} tool=${event.item?.tool || ''} server=${event.item?.server || ''}`);
-          } else {
-            logger.debug(`[LightV2 debug] event=${event.type}`);
-          }
-
           if (event.type === 'item.started') {
             const mapped = mapToolToStatus(event.item);
             if (mapped) {
@@ -244,7 +236,7 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
             }
           } else if (event.type === 'item.completed') {
             if (event.item.type === 'agent_message') {
-              // codex は agent_message を 1 turn で複数回 emit することがある (#260 dogfood):
+              // codex は agent_message を 1 turn で複数回 emit する (#260 dogfood で判明):
               //   - 最初: 「これから tool を使って X します」(thinking aloud)
               //   - 中間: tool call の前後で短い comment
               //   - 最後: 空文字列 (turn 終了 signal、新 codex SDK の behavior)
