@@ -486,6 +486,30 @@ tail -n 5 ~/.tealus/cc-queue/{project}.jsonl
 
 file beacon は **agent-server と同じマシン**にあります。別 PC で Claude Code を動かす場合、共有ストレージ (NAS / SMB) で `~/.tealus/cc-queue/` を mount する必要あり (Phase A 想定外、Phase B で network-aware 化検討、[#214](https://github.com/gamasenninn/tealus/issues/214))。
 
+### Q. `@cc-tealus` 以外の自然な mention 名で呼びたい (例: `@Claude`)
+
+[#263](https://github.com/gamasenninn/tealus/issues/263) で追加した **alias 機能** を使う。`agent-server/config/cc-aliases.json` に entry を追加:
+
+```json
+{
+  "aliases": [
+    { "mention": "Claude", "project": "tealus" },
+    { "mention": "AI", "project": "tealus" },
+    { "mention": "Helper", "project": "proj1" }
+  ]
+}
+```
+
+各 entry:
+- `mention`: chat で使う display name (例: "Claude")。case-insensitive、word boundary で誤 match 回避
+- `project`: 書込先 cc-queue project (= jsonl ファイル名)
+
+**特徴**:
+- code 変更不要、config file 編集だけで alias 追加可能
+- agent-server 再起動で反映 (or admin 経由で reload)
+- 行頭 only、`@cc-{project}` と同 stance (#215 自己ループ防止と整合)
+- bot user (`is_bot=true`) を Tealus 側に作成して mention picker に表示させる必要あり (alias は単に dispatcher の routing rule、bot user 自体は別途登録)
+
 ---
 
 # 関連

@@ -23,21 +23,64 @@ const DEFAULT_QUEUE_DIR = path.join(os.homedir(), '.tealus', 'cc-queue');
 //   @cc-* を引用するため、自然に skip される (CC_SKIP_SENDER_IDS は defense in depth)
 const CC_MENTION_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/m;
 
-// `@Claude` mention 検出 (#263)。
-// 既存 cc-tealus bot は display_name が "Claude" のため、user が mention picker で
-// 「Claude」を選ぶと本文には `@Claude` が挿入される。これを `@cc-{default-project}`
-// と同等の routing として扱い、自然な mention 体験を提供する。
-//
-// 設計:
-// - case-insensitive (Claude / claude / CLAUDE 等を全部受け付け)
-// - 行頭マッチ (#215 自己ループ防止と同 stance)
-// - 後ろは word boundary or 空白 / 句読点 / 終端 (Japanese 句読点も含めるなら別途)
-// - default project は env `CLAUDE_DEFAULT_PROJECT` で指定 (default "tealus")
-const CLAUDE_MENTION_RE = /^@claude\b/im;
+// alias mention 設定ファイルの path 解決 (#263、Level 2)。
+// AGENT_CONFIG_DIR env で override 可能 (test isolation 用、production では unset で default)。
+function getAliasesConfigPath() {
+  const configDir = process.env.AGENT_CONFIG_DIR || path.join(__dirname, '..', '..', 'config');
+  return path.join(configDir, 'cc-aliases.json');
+}
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
- * `@Claude` mention の routing 先 project (env override 可)。
- * default は "tealus" (現状単一 project 運用)。
+ * cc-aliases.json を読み込んで alias entry の配列を返す。
+ * 各 entry は { mention, project, regex } を持つ。
+ * file 不在 / parse 失敗時は空配列 (graceful degrade)。
+ */
+function loadAliases() {
+  const configPath = getAliasesConfigPath();
+  try {
+    if (!fs.existsSync(configPath)) return [];
+    const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!Array.isArray(data.aliases)) return [];
+    return data.aliases
+      .filter(a => a && typeof a.mention === 'string' && typeof a.project === 'string'
+        && a.mention.length > 0 && a.project.length > 0)
+      .map(a => ({
+        mention: a.mention,
+        project: a.project,
+        // 行頭マッチ (#215 同 stance) + case-insensitive + word boundary で誤 match 回避
+        regex: new RegExp(`^@${escapeRegex(a.mention)}\\b`, 'im'),
+      }));
+  } catch (err) {
+    // logger は遅延 require (循環 import 回避、startup 順序の問題)
+    require('../lib/logger').error(`[cc-aliases] failed to load ${configPath}: ${err.message}`);
+    return [];
+  }
+}
+
+// alias cache (module load 時に lazy initialize、reloadAliases() で invalidate)
+let _aliasesCache = null;
+
+function getAliases() {
+  if (_aliasesCache === null) _aliasesCache = loadAliases();
+  return _aliasesCache;
+}
+
+/**
+ * cache を invalidate して次回 getAliases() で再読込する。
+ * test isolation + 将来の hot-reload endpoint で使う。
+ */
+function reloadAliases() {
+  _aliasesCache = null;
+  return getAliases();
+}
+
+/**
+ * 後方互換: 旧 `@Claude` hardcode 時代の env override (#263 初期実装)。
+ * 設定ファイル登場後 (Level 2) は cc-aliases.json が source of truth、本 helper は legacy。
  */
 function getClaudeDefaultProject() {
   return process.env.CLAUDE_DEFAULT_PROJECT || 'tealus';
@@ -46,8 +89,10 @@ function getClaudeDefaultProject() {
 /**
  * メッセージ content から cc-queue routing 用の project 名を抽出する。
  * - `@cc-{project}` mention があればその project
- * - `@Claude` mention があれば CLAUDE_DEFAULT_PROJECT
- * - どちらも無ければ null
+ * - cc-aliases.json の alias 一覧を順に check、最初に match した alias の project
+ * - backward compat: alias の mention が "claude" (case-insensitive) で
+ *   `CLAUDE_DEFAULT_PROJECT` env が設定されていれば、そちらを優先
+ * - どれも無ければ null
  *
  * @param {string|null|undefined} content
  * @returns {string|null} project 名、無ければ null
@@ -56,7 +101,16 @@ function extractCcProject(content) {
   if (typeof content !== 'string' || content.length === 0) return null;
   const ccMatch = content.match(CC_MENTION_RE);
   if (ccMatch) return ccMatch[1];
-  if (CLAUDE_MENTION_RE.test(content)) return getClaudeDefaultProject();
+  const aliases = getAliases();
+  for (const alias of aliases) {
+    if (alias.regex.test(content)) {
+      // legacy env override: 旧実装互換 (cc-aliases.json 未登場時の deploy 救済)
+      if (alias.mention.toLowerCase() === 'claude' && process.env.CLAUDE_DEFAULT_PROJECT) {
+        return process.env.CLAUDE_DEFAULT_PROJECT;
+      }
+      return alias.project;
+    }
+  }
   return null;
 }
 
@@ -110,5 +164,8 @@ module.exports = {
   shouldSkipCcSender,
   loadSkipSenderIds,
   getClaudeDefaultProject,
+  loadAliases,
+  reloadAliases,
+  getAliasesConfigPath,
   DEFAULT_QUEUE_DIR,
 };

@@ -131,6 +131,184 @@ describe('getClaudeDefaultProject', () => {
   });
 });
 
+describe('cc-aliases.json (Level 2 config file、#263 follow-up)', () => {
+  // AGENT_CONFIG_DIR を tmp dir に向けて test isolation
+  const { loadAliases, reloadAliases, getAliasesConfigPath } = require('../../src/webhook/ccQueue');
+  let origConfigDir;
+  let testConfigDir;
+
+  beforeEach(() => {
+    origConfigDir = process.env.AGENT_CONFIG_DIR;
+    testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-aliases-test-'));
+    process.env.AGENT_CONFIG_DIR = testConfigDir;
+    reloadAliases();  // cache clear
+  });
+
+  afterEach(() => {
+    if (origConfigDir === undefined) delete process.env.AGENT_CONFIG_DIR;
+    else process.env.AGENT_CONFIG_DIR = origConfigDir;
+    fs.rmSync(testConfigDir, { recursive: true, force: true });
+    reloadAliases();  // cache clear
+  });
+
+  function writeConfig(obj) {
+    fs.writeFileSync(path.join(testConfigDir, 'cc-aliases.json'), JSON.stringify(obj));
+  }
+
+  test('config file 不在で extractCcProject は @cc-* のみ動作 (alias なし)', () => {
+    expect(extractCcProject('@cc-tealus hello')).toBe('tealus');
+    expect(extractCcProject('@Claude hello')).toBeNull();  // alias 未登録なので null
+  });
+
+  test('cc-aliases.json で 単一 alias を登録', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('tealus');
+  });
+
+  test('複数 alias を登録、それぞれ別 project に routing', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Claude', project: 'tealus' },
+        { mention: 'Helper', project: 'proj1' },
+        { mention: 'AI', project: 'proj2' },
+      ],
+    });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('tealus');
+    expect(extractCcProject('@Helper task')).toBe('proj1');
+    expect(extractCcProject('@AI ask')).toBe('proj2');
+  });
+
+  test('alias は case-insensitive で match', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@claude hello')).toBe('tealus');
+    expect(extractCcProject('@CLAUDE hello')).toBe('tealus');
+    expect(extractCcProject('@cLaUdE hello')).toBe('tealus');
+  });
+
+  test('alias でも word boundary で誤 match 防止', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claudette hello')).toBeNull();
+    expect(extractCcProject('@Claudia hello')).toBeNull();
+  });
+
+  test('alias でも 行頭 only (#215 同 stance)', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('hello @Claude bye')).toBeNull();
+    expect(extractCcProject('  @Claude  ')).toBeNull();
+  });
+
+  test('複数 alias で先に登録された方が優先 (登録順)', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Helper', project: 'proj-a' },
+        { mention: 'Helper', project: 'proj-b' },  // duplicate mention
+      ],
+    });
+    reloadAliases();
+    expect(extractCcProject('@Helper task')).toBe('proj-a');
+  });
+
+  test('@cc-{project} は alias より優先 (regex 順)', () => {
+    writeConfig({ aliases: [{ mention: 'cc-test', project: 'override' }] });
+    reloadAliases();
+    expect(extractCcProject('@cc-test hello')).toBe('test');  // alias でなく標準 path
+  });
+
+  test('CLAUDE_DEFAULT_PROJECT env で Claude alias の project を override (legacy)', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    process.env.CLAUDE_DEFAULT_PROJECT = 'myproj';
+    try {
+      expect(extractCcProject('@Claude hello')).toBe('myproj');
+    } finally {
+      delete process.env.CLAUDE_DEFAULT_PROJECT;
+    }
+  });
+
+  test('CLAUDE_DEFAULT_PROJECT は Claude 以外の alias には影響なし', () => {
+    writeConfig({ aliases: [{ mention: 'Helper', project: 'proj1' }] });
+    reloadAliases();
+    process.env.CLAUDE_DEFAULT_PROJECT = 'myproj';
+    try {
+      expect(extractCcProject('@Helper hello')).toBe('proj1');  // override されない
+    } finally {
+      delete process.env.CLAUDE_DEFAULT_PROJECT;
+    }
+  });
+
+  test('invalid JSON は空 alias 扱い (graceful degrade)', () => {
+    fs.writeFileSync(path.join(testConfigDir, 'cc-aliases.json'), '{ invalid json');
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBeNull();
+    expect(extractCcProject('@cc-tealus hello')).toBe('tealus');  // 標準 path は健在
+  });
+
+  test('aliases field が array でない場合は空扱い', () => {
+    writeConfig({ aliases: 'not-an-array' });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBeNull();
+  });
+
+  test('alias entry に必須 field が無いものは skip', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Valid', project: 'good' },
+        { mention: '' },  // empty mention
+        { project: 'no-mention' },  // no mention
+        { mention: 'NoProject' },  // no project
+        null,
+        { mention: 'Helper', project: '' },  // empty project
+      ],
+    });
+    reloadAliases();
+    expect(extractCcProject('@Valid hello')).toBe('good');
+    expect(extractCcProject('@NoProject hello')).toBeNull();
+    expect(extractCcProject('@Helper hello')).toBeNull();
+  });
+
+  test('特殊文字を含む mention 名も escape されて regex として安全', () => {
+    writeConfig({ aliases: [{ mention: 'Bot.X+Y', project: 'special' }] });
+    reloadAliases();
+    expect(extractCcProject('@Bot.X+Y hello')).toBe('special');
+    expect(extractCcProject('@BotXY hello')).toBeNull();  // . が literal なので match しない
+  });
+
+  test('reloadAliases() で file 編集後の変更が反映される', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('tealus');
+
+    // file を rewrite
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'newproj' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('newproj');
+  });
+
+  test('AGENT_CONFIG_DIR で config 場所を override', () => {
+    expect(getAliasesConfigPath()).toBe(path.join(testConfigDir, 'cc-aliases.json'));
+  });
+
+  test('loadAliases は array を返す (内部 structure 確認)', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Claude', project: 'tealus' },
+        { mention: 'AI', project: 'proj1' },
+      ],
+    });
+    reloadAliases();
+    const aliases = loadAliases();
+    expect(aliases).toHaveLength(2);
+    expect(aliases[0].mention).toBe('Claude');
+    expect(aliases[0].project).toBe('tealus');
+    expect(aliases[0].regex).toBeInstanceOf(RegExp);
+  });
+});
+
 describe('appendCcEvent', () => {
   let testDir;
 

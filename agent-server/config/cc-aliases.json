@@ -1,0 +1,6 @@
+{
+  "_comment": "cc-queue routing で project alias として認識される mention 一覧。@cc-{project} 形式の標準 mention 以外で、user が好きな名前で Claude Code を呼べるようにする (#263)。各 entry は { mention: 表示名, project: 書込先 cc-queue project } を持つ。case-insensitive で行頭マッチ、word boundary で誤 match 回避。設定変更後は agent-server 再起動で反映 (or test 時は reloadAliases() を呼ぶ)。",
+  "aliases": [
+    { "mention": "Claude", "project": "tealus" }
+  ]
+}
