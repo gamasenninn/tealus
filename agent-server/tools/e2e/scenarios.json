@@ -22,15 +22,15 @@
       },
       "expected_response": {
         "must_contain": ["tealus関係", "日常業務"],
-        "must_not_contain": ["該当なし"],
-        "min_chars": 200
+        "must_not_contain": ["該当なし", "ヒットしませんでした", "見つかりませんでした"],
+        "min_chars": 500
       },
       "metrics": {
         "max_input_tokens": 250000,
         "max_output_tokens": 6000,
         "max_latency_ms": 90000
       },
-      "manual_check": "業務メモ室の正しい messages のみを参照 (DM 等 別 room を混入していない事)、完了/未完了 tag が正確"
+      "manual_check": "業務メモ室の正しい messages のみを参照 (DM 等 別 room を混入していない事)、完了/未完了 tag が正確、tealus関係 タグの 5/5 以降の 10+ 件 (DB 上 total_usage=92) が拾えている事 (5/7 verify では 13 件取得実績)"
     },
     {
       "id": "S2-router-mention-strip",
