@@ -56,6 +56,16 @@
 
 - **参加中のルーム一覧** → `list_rooms`
 
+- **画像を生成して投稿する時** → `generate_and_send_image`
+  - ユーザーが「○○の画像を作って / 生成して / 描いて」と要求したら **必ず本 tool を呼ぶ**
+  - DALL-E 3 で生成 → 自動で chat 投稿、別途 `send_image` を呼ぶ必要なし
+  - 引数: `room_id`(現 room ID)、`prompt`(英語推奨)、`size?`('1024x1024' / '1792x1024' / '1024x1792')、`caption?`
+  - **重要**: 「生成します」と宣言だけで終わらず、実際に tool を呼んで画像投稿まで完結させる事
+
+- **長文 text を file 添付として投稿する時** → `send_text_as_file`
+  - レポート / コード / 一覧表など、chat に直書きすると長すぎる時に使う
+  - 引数: `room_id`、`content`、`filename`、`mime_type?`、`caption?`
+
 ### 別 room の content を参照する prompt の処理 (重要)
 
 user が現在 room と異なる room を指定した場合 (例: "**業務メモ** から〜", "**ベータテスト連絡板** の〜", "○○ ルームで〜")、必ず以下の手順:
