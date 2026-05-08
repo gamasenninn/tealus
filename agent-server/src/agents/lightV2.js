@@ -237,14 +237,18 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
           } else if (event.type === 'item.completed') {
             if (event.item.type === 'agent_message') {
               // codex は agent_message を 1 turn で複数回 emit する (#260 dogfood で判明):
-              //   - 最初: 「これから tool を使って X します」(thinking aloud)
-              //   - 中間: tool call の前後で短い comment
-              //   - 最後: 空文字列 (turn 終了 signal、新 codex SDK の behavior)
-              // 空文字列で前の有用な text を上書きしないよう、非空のみ accumulate
+              //   - 最初/中間: 「これから X します」「次は Y を読みます」(thinking aloud、tool 呼び前後の narration)
+              //   - 最後の非空: 実際の user 向け回答 (要約 / 結論 等)
+              //   - 最後: 空文字列 ("" turn 終了 signal、新 codex SDK の behavior)
+              //
+              // 旧実装 (accumulate) は thinking aloud 全部 concat → user が最初に
+              // 「直近の room メッセージを確認して...」等の前置きを見て「要約されてない」
+              // と誤認する UX bug が発生 (5/8 dogfood)。
+              //
+              // **「最後の非空 agent_message を採用」**が正しい (空文字列で上書きしない、
+              // ただし非空が来たら overwrite で前の thinking aloud を捨てる)。
               if (event.item.text && event.item.text.trim()) {
-                lastAgentMessage = lastAgentMessage
-                  ? `${lastAgentMessage}\n\n${event.item.text}`
-                  : event.item.text;
+                lastAgentMessage = event.item.text;
               }
               await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
             } else if (event.item.type === 'mcp_tool_call') {
