@@ -158,6 +158,52 @@ describe('Router', () => {
     });
   });
 
+  // ===========================================================
+  // 標準 routing pattern 検証 template (5/8、#258 follow-up の経験を template 化)
+  //
+  // 背景: 5/7 dogfood で `/light2` を追加した時、DM (mention 不要) でしか test
+  //   していなかったため group room (`@bot /light2 ...`) で v1 落ちする bug が
+  //   発覚。新しい slash command を追加する時は (1) DM (2) group + mention
+  //   (3) 複数 mention の 3 pattern を全部 cover する事で再発防止。
+  //
+  // 使い方: 新 command を追加したら下の COMMANDS 配列に entry 1 行追加するだけ。
+  //   それで 3 pattern × N command の test が自動生成される。
+  // ===========================================================
+  describe('標準 routing pattern (commands × 3 pattern matrix)', () => {
+    beforeEach(() => {
+      mockCreate.mockReset();
+      config.DEEP_AVAILABLE = true;
+    });
+
+    const COMMANDS = [
+      { name: '/deep', tier: 'deep', samplePrompt: 'コードをレビュー' },
+      { name: '/light', tier: 'light', samplePrompt: '在庫を確認' },
+      { name: '/light2', tier: 'light2', samplePrompt: 'PDFを要約' },
+    ];
+
+    for (const { name, tier, samplePrompt } of COMMANDS) {
+      describe(`${name} → ${tier}`, () => {
+        test('(1) DM (mention なし) で振り分け', () => {
+          const result = classifyByRules(`${name} ${samplePrompt}`);
+          expect(result.tier).toBe(tier);
+          expect(result.prompt).toBe(samplePrompt);
+        });
+
+        test('(2) group room (@bot mention 付き) で振り分け', () => {
+          const result = classifyByRules(`@アシスタント ${name} ${samplePrompt}`);
+          expect(result.tier).toBe(tier);
+          expect(result.prompt).toBe(samplePrompt);
+        });
+
+        test('(3) 複数 mention でも振り分け', () => {
+          const result = classifyByRules(`@user1 @bot ${name} ${samplePrompt}`);
+          expect(result.tier).toBe(tier);
+          expect(result.prompt).toBe(samplePrompt);
+        });
+      });
+    }
+  });
+
   describe('mention 付き入力 (group room、#258 follow-up)', () => {
     beforeEach(() => {
       mockCreate.mockReset();
