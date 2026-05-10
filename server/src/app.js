@@ -39,11 +39,15 @@ app.use('/agent-api', createProxyMiddleware({
 }));
 
 // tealus-mcp HTTP transport proxy (#264 Phase 1 alpha)
-// pathRewrite なし: tealus-mcp 側も /mcp で listen するので 1:1 forward
-// 認証は pass-through、tealus-mcp 側で JWT_SECRET 共有検証 (fail-fast 401)
+// Express の app.use('/mcp', ...) は req.url から /mcp prefix を strip するので、
+// tealus-mcp 側 (/mcp で listen) に正しく届けるため pathRewrite で re-add する。
+// /agent-api / /rtc は target が root path で listen しているので strip 動作で OK だが、
+// tealus-mcp は /mcp namespace に揃えているため逆方向の rewrite が必要。
+// 認証は pass-through、tealus-mcp 側で JWT_SECRET 共有検証 (fail-fast 401)。
 app.use('/mcp', createProxyMiddleware({
   target: `http://localhost:${process.env.MCP_HTTP_PORT || 3200}`,
   changeOrigin: true,
+  pathRewrite: (path) => '/mcp' + path,
 }));
 
 app.use(express.json());
