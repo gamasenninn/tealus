@@ -127,6 +127,131 @@ mcp__tealus__send_message で room_id=<実際の room id>、content="hello from 
 
 Tealus 上で当該ルームに bot からの「hello from Claude Code」が見えれば outbound 完了。
 
+## ステップ 5A. (任意) HTTP transport で接続する — cross-machine 構成 (v0.12.0+) 🌟
+
+採用者環境で **agent-server (Tealus 本体) と Claude Code が別マシン** に居る場合、stdio transport は使えない (child process spawn が成立しない)。代わりに **HTTP transport** を使う ([#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha、tealus-mcp v0.12.0+)。
+
+### 構成
+
+```
+[Claude Code (マシン A)]              [Tealus サーバ (マシン B)]
+  ~/.claude.json                          port 3000 (Tealus 本体)
+  mcpServers:                             ┌──────────────────┐
+    tealus:                               │ /mcp proxy       │
+      url: https://<host>/mcp             │   ↓              │
+      headers:                            │ port 3200        │
+        Authorization: Bearer <JWT> ────► │ tealus-mcp HTTP  │
+                                          └──────────────────┘
+```
+
+JWT_SECRET は **Tealus 本体 server / agent-server / tealus-mcp の 3 process で完全同値** にする (proxy で pass-through、検証は tealus-mcp 側で fail-fast 401)。
+
+### 5A-1. Tealus host で tealus-mcp HTTP server を起動
+
+Tealus 本体と同マシンで tealus-mcp を **HTTP mode** で立ち上げる:
+
+```bash
+cd /path/to/tealus-mcp     # repo を clone してから
+npm install
+
+# .env を作成 (.env.example をコピー)
+cp .env.example .env
+# .env を編集して以下を埋める:
+#   TEALUS_USER_ID=<bot user id>
+#   TEALUS_PASSWORD=<bot password>
+#   JWT_SECRET=<Tealus 本体と同値>
+#   MCP_HTTP_PORT=3200
+
+# HTTP mode で起動
+node src/index.js --transport=http
+```
+
+期待出力:
+
+```
+[tealus-mcp] HTTP transport listening on :3200
+[tealus-mcp] POST /mcp (JWT required), GET /health (no auth)
+```
+
+production 運用では systemd / docker compose / pm2 等で daemonize 推奨。
+
+### 5A-2. Tealus 本体側で `/mcp` proxy が動いているか確認
+
+Tealus 本体 server (port 3000) は `/mcp/*` を内部 port 3200 に転送する proxy を持つ ([#264](https://github.com/gamasenninn/tealus/issues/264))。reachability check:
+
+```bash
+curl http://<tealus-host>:3000/mcp/health
+# 期待: {"status":"ok","transport":"http","server":"tealus-mcp"}
+```
+
+### 5A-3. JWT を発行 (Claude Code config 用)
+
+Tealus 本体と同じ `JWT_SECRET` を使って、長寿命 JWT を発行 (例: 30 日 expiry):
+
+```bash
+cd /path/to/tealus-mcp
+node -e "require('dotenv').config(); console.log(require('jsonwebtoken').sign({userId:'claude-code-mcp'}, process.env.JWT_SECRET, {expiresIn:'30d'}))"
+```
+
+出力された JWT (eyJ... の長い文字列) をコピー。
+
+### 5A-4. `~/.claude.json` に url-based entry を追加
+
+ステップ 2A の stdio entry **に加えて**、HTTP 用 entry を並列追加 (project 単位の `mcpServers` block):
+
+```json
+{
+  "projects": {
+    "C:/path/to/your/project": {
+      "mcpServers": {
+        "tealus": {
+          "type": "stdio",
+          "command": "npx",
+          "args": ["-y", "github:gamasenninn/tealus-mcp"],
+          "env": { "TEALUS_API_URL": "...", "TEALUS_USER_ID": "...", "TEALUS_PASSWORD": "..." }
+        },
+        "tealus-http": {
+          "type": "http",
+          "url": "https://<your-tealus-host>/mcp",
+          "headers": {
+            "Authorization": "Bearer <ステップ 5A-3 で発行した JWT>"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+> 💡 既存 stdio entry を残したまま並列追加すれば、両 transport を比較しながら dogfood 可能。HTTP path に切り替え完了したら stdio entry を削除する流れ。
+
+### 5A-5. Claude Code を再起動して動作確認
+
+```bash
+claude  # 既存 session を Ctrl+C → 再起動
+```
+
+session 内で:
+
+```
+/mcp
+```
+
+server 一覧に **`tealus-http · ✔ connected · 15 tools`** と表示されれば成功。実呼び出し:
+
+```
+@tealus-http list_rooms を使って参加 room を一覧して
+```
+
+stdio (`@tealus list_rooms`) と同じ結果が返れば transport 透明性が確認できる (Phase 1 alpha 動作確認の頂点)。
+
+### 5A 注意事項
+
+- **scope**: Phase 1 alpha は HTTP request/response (tools 呼び出し) のみ。Tealus → Claude Code への mention 通知 (cc-tealus bridge wake-up) は **stdio + file beacon 経路に依存** (Part 2 参照)。Phase 2 で SSE event broker (server-push wake-up) が乗るまで、**HTTP + cc-tealus 併用構成** が当面の現実解。
+- **stdio との関係**: stdio は v0.12.0+ でも維持、既存採用者環境は無変更で動く。HTTP は **opt-in** (`--transport=http` flag、JWT_SECRET 設定)。
+- **公開**: tealus host を public expose する場合は HTTPS / reverse proxy (nginx 等) で TLS 終端必須。`<JWT>` は適切な expiry で運用、漏洩時は `JWT_SECRET` rotate で全 token 失効。
+- **詳細**: [tealus-mcp README v0.12.x](https://github.com/gamasenninn/tealus-mcp#http-transport-リモート利用-v0120) 参照。
+
 ## 提供される 11 個の MCP tool
 
 [tealus-mcp v0.7.0 時点](https://github.com/gamasenninn/tealus-mcp):
