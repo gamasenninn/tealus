@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
-          navigateFallbackDenylist: [/^\/media\//, /^\/api\//, /^\/system\//, /^\/agent-api\//, /^\/rtc\//],
+          navigateFallbackDenylist: [/^\/media\//, /^\/api\//, /^\/system\//, /^\/agent-api\//, /^\/rtc\//, /^\/mcp\//],
           importScripts: ['/custom-sw.js'],
         },
         manifest: {
@@ -76,6 +76,8 @@ export default defineConfig(({ mode }) => {
         // 藤井さんの dogfood で発覚。
         '/agent-api': proxyTarget,
         '/rtc': proxyTarget,
+        // tealus-mcp HTTP transport (#264) — Vite dev server からも /mcp が見えるように
+        '/mcp': proxyTarget,
         '/socket.io': {
           target: proxyTarget,
           ws: true,

@@ -290,3 +290,28 @@ cc-tealus bridge の **本質課題**は「agent-server と Claude Code が同 f
 これらは tealus-mcp が **HTTP transport 化** ([#264](https://github.com/gamasenninn/tealus/issues/264)) すれば本質的に解消される (file beacon 自体が不要になり、agent-server と Claude Code が直接 HTTP で会話)。本 walkthrough はそれまでの **繋ぎ** として位置付ける。
 
 採用者環境で本 setup を運用する間に得られる feedback は、#264 の仕様検討に直接 contributing する。dogfood 価値は十分にある。
+
+---
+
+## 9. HTTP transport (推奨経路、v0.12.0+) 🌟
+
+tealus-mcp v0.12.0 (#264 Phase 1 alpha、2026-05-10) で **HTTP transport** が利用可能。cross-machine では本経路が cleaner、Syncthing よりも先に **こちらを検討推奨**。
+
+```
+[Claude Code (マシン A)]               [Tealus サーバ (マシン B)]
+  ~/.claude.json                          port 3000 (Tealus 本体)
+  mcpServers:                             ┌──────────────────┐
+    tealus:                               │ /mcp proxy       │
+      url: https://tealus.example.com/mcp │   ↓              │
+      headers:                            │ port 3200        │
+        Authorization: Bearer <JWT> ────► │ tealus-mcp HTTP  │
+                                          └──────────────────┘
+```
+
+- **JWT 共有**: Tealus 本体 server / agent-server / tealus-mcp で同 `JWT_SECRET`
+- **Phase 1 scope**: HTTP request/response のみ (tools 呼び出し)、SSE event broker (server-push wake-up) は Phase 2 以降
+- **stdio との関係**: stdio transport も v0.12.0 で維持、既存採用者環境は無変更で動く
+
+詳細は [tealus-mcp/README.md の "HTTP transport (リモート利用)" section](https://github.com/gamasenninn/tealus-mcp#http-transport-リモート利用-v0120) 参照。
+
+cc-tealus bridge の wake-up (server → Claude Code への mention 通知) はまだ stdio + file beacon に依存しているため、**当面は HTTP transport (tools 呼び出し) + Syncthing (file beacon 共有)** の併用構成が現実解。Phase 2 で SSE broker が乗ると Syncthing も不要になる予定。

@@ -38,6 +38,14 @@ app.use('/agent-api', createProxyMiddleware({
   changeOrigin: true,
 }));
 
+// tealus-mcp HTTP transport proxy (#264 Phase 1 alpha)
+// pathRewrite なし: tealus-mcp 側も /mcp で listen するので 1:1 forward
+// 認証は pass-through、tealus-mcp 側で JWT_SECRET 共有検証 (fail-fast 401)
+app.use('/mcp', createProxyMiddleware({
+  target: `http://localhost:${process.env.MCP_HTTP_PORT || 3200}`,
+  changeOrigin: true,
+}));
+
 app.use(express.json());
 
 // API リクエストログ
@@ -119,7 +127,7 @@ app.use(express.static(clientDistPath));
 // SPA fallback — all non-API routes return index.html
 const clientIndexPath = path.join(clientDistPath, 'index.html');
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/') || req.path.startsWith('/system/') || req.path.startsWith('/agent-api/') || req.path.startsWith('/rtc/')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/media/') || req.path.startsWith('/socket.io/') || req.path.startsWith('/system/') || req.path.startsWith('/agent-api/') || req.path.startsWith('/rtc/') || req.path === '/mcp' || req.path.startsWith('/mcp/')) {
     return next();
   }
   // Dev mode では client 未ビルドなので分かりやすいメッセージを返す（通常は Vite dev server 経由でアクセス）
