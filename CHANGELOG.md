@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-05-10
+
+Phase 4 中盤の累積を整理した release。Light v2 (codex SDK backed) の並列追加、tealus-mcp v0.10.0/v0.11.0/v0.11.1 連携、PC 2-pane layout、Deep cancel path、E2E verification harness + LLM-as-judge layer、cc-aliases.json による `@Claude` alias 化、複数の採用者保護 trap 解消 (Vite proxy、Router `max_completion_tokens`、tealus-mcp env 名、test pollution 等) を含む。
+
 ### Added
 
 - **server: STT model 比較検証 — トランシーバー用途で gpt-4o-mini-transcribe + 辞書 prompt が有望と判明** ([#269](https://github.com/gamasenninn/tealus/issues/269))
