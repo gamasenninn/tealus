@@ -10,6 +10,36 @@
 
 ## [Unreleased]
 
+### Added
+
+- **server: tealus-mcp HTTP transport 用の `/mcp` proxy 追加 — cross-machine 構成への構造解** ([#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha)
+  - tealus 本体 server (port 3000) が `/mcp/*` を内部 port 3200 に転送する `createProxyMiddleware` を追加 (`/agent-api` `/rtc` と同 pattern、`express.json()` の前に配置で body parse 不要)
+  - SPA fallback exclusion list に `/mcp/` 追加 (router が SPA fallback で index.html を返す trap 防止)
+  - `client/vite.config.js` の `navigateFallbackDenylist` + `proxy` block にも `/mcp` 追加 (#257 同型 dev mode trap 防止)
+  - `server/.env.example` に `MCP_HTTP_PORT=3200` (default、env で override 可) 追加、`JWT_SECRET` の comment に「agent-server / tealus-mcp と完全同値要件」を明記
+  - 認証は **proxy で pass-through**、tealus-mcp 側で fail-fast 401 (JWT_SECRET 共有検証)
+  - tealus-mcp v0.12.0 → v0.12.3 と組で機能、stdio path は default 維持で既存採用者環境は無変更
+
+- **docs: `setup-cc-tealus-bridge.md` ステップ 5A 追加 — HTTP transport 採用者向け walkthrough** ([#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha)
+  - 構成図 (Claude Code → Tealus host /mcp proxy → tealus-mcp HTTP)、5A-1〜5A-5 で段階的に setup
+  - `.env` 集約 (tealus-mcp v0.12.1 の dotenv 経由)、30 日 expiry JWT 発行、`~/.claude.json` の url-based MCP entry 追加
+  - 採用者第 2 号以降の cross-machine onboarding 経路として活用予定、stdio (zero-config) → HTTP (cross-machine 用) の 2 段階案内 layer 完成
+
+- **docs: `setup-ai-agent.md` に Light v2 + LIGHTV2_AUTH subscription path 反映 (#258 採用者保護)** ([#268](https://github.com/gamasenninn/tealus/issues/268))
+  - ステップ 9 (新規): Light v2 を使う、選び分け表、cost 比較、subscription path、内蔵 MCP tool (generate_and_send_image / send_text_as_file)、E2E harness 案内
+  - ステップ 7-1: `/light` `/light2` `/deep` prefix 明示の使い分け callout
+  - トラブルシュート: `/light2` 系 Q × 2 追加 (no final agent message / 画像が来ない)
+  - 採用者第 2 号 onboarding に直結する Light v2 動線を整備、subscription path で API cost 0 + Fast Mode access の選択肢を明示
+
+### Fixed
+
+- **server: `/mcp` proxy pathRewrite で Express の prefix strip を re-add — Test 3 で `Cannot POST /` 404 になっていた問題の構造 fix** ([#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha follow-up)
+  - 5/10 手動テストで proxy 経由 POST `/mcp` が 404 で `Cannot POST /` を返していた
+  - 原因: Express の `app.use('/mcp', middleware)` は req.url から `/mcp` prefix を strip してから middleware を呼ぶため、tealus-mcp 側 (`/mcp` で listen) に届いた時点で path mismatch
+  - `/agent-api` / `/rtc` は target が root path で listen しているので strip 動作で正解だが、tealus-mcp は `/mcp` namespace に揃えているため逆方向の rewrite が必要
+  - 修正: `pathRewrite: (path) => '/mcp' + path` で `/mcp` を再付与
+  - tealus-mcp v0.12.2 (`/mcp/health` endpoint 追加) と組で機能
+
 ## [0.2.3] - 2026-05-10
 
 Phase 4 中盤の累積を整理した release。Light v2 (codex SDK backed) の並列追加、tealus-mcp v0.10.0/v0.11.0/v0.11.1 連携、PC 2-pane layout、Deep cancel path、E2E verification harness + LLM-as-judge layer、cc-aliases.json による `@Claude` alias 化、複数の採用者保護 trap 解消 (Vite proxy、Router `max_completion_tokens`、tealus-mcp env 名、test pollution 等) を含む。
