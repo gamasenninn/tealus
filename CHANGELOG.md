@@ -27,6 +27,14 @@
   - **OPENAI_API_KEY 必須** (Light v2 が subscription mode でも image gen は API 経由、別 cost path)
   - default_system_prompt.md に `generate_and_send_image` / `send_text_as_file` の use case 明記 (「実際に tool を呼んで完結させる事」と指示、codex の「宣言だけで終わる」傾向への対処)
 
+- **agent-server: E2E LLM-as-judge layer (Phase 2.b)** ([#262](https://github.com/gamasenninn/tealus/issues/262))
+  - 観察層 (warn-only) として bot 応答を LLM (default `gpt-4o-mini`) に採点させ、決定論層では捉えられない semantic correctness を可視化
+  - scenarios.json の各 scenario に optional な `llm_judge: { criteria, min_score }` field 追加、score < min_score → warn (fail にはしない、LLM 採点 variance 許容)
+  - `agent-server/tools/e2e/judge.js` 新規 — fetch + OpenAI chat completions API、JSON mode (`response_format`)、env (`E2E_JUDGE_API_KEY` / `OPENAI_API_KEY` fallback、`E2E_JUDGE_MODEL` で model 切替)
+  - run.js / report.js 統合: scenario あたり 1 judge call、report に score / threshold / reasoning 表示
+  - S1 (cross-room tag組織) と S3 (PDF scan summary) に judge config 追加 — 元々 LLM variance prone な scenario
+  - 9 件 unit test 追加 (mock fetch、env override、clamp、graceful error)、agent-server 全 239 件 pass
+
 - **agent-server: Light agent E2E verification harness (Phase 1)** ([#262](https://github.com/gamasenninn/tealus/issues/262))
   - 「CI gate ではなく **調整 phase の verification run**」として設計
   - `agent-server/tools/e2e/`: `scenarios.json` + `run.js` + `report.js` + `setup.js`

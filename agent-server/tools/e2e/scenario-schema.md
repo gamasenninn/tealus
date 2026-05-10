@@ -65,6 +65,24 @@
 - `attach_pdf` / `attach_image` / `attach_file`: scenario 実行前に test room に対象 file を投稿しておく
 - `note`: 人向けメモ
 
+### Optional - LLM-as-judge (#262 Phase 2.b)
+
+`llm_judge` (object): bot 応答を LLM (default `gpt-4o-mini`) に採点させる。**観察層 (warn-only)** で扱う、score < min_score → warn だが fail にはしない (LLM 採点の variance を許容)。
+
+- `criteria` (string、必須): 応答が満たすべき要件を列挙した natural language の指示。多項目を改行 / 番号付き list で書くと安定。
+- `min_score` (number、optional、default 70): pass 判定 threshold (0-100)。
+
+判定: `judge.js` が OpenAI API (`E2E_JUDGE_MODEL` 環境変数で切替可、default `gpt-4o-mini`) で `{score, reasoning}` の JSON を要求。`E2E_JUDGE_API_KEY` か `OPENAI_API_KEY` が必要、未設定なら judge は skip (warn のみ)。
+
+例:
+
+```json
+"llm_judge": {
+  "criteria": "応答が以下を満たすか:\n1. 業務メモ room の messages を実際に参照している\n2. タグ別に分類されている",
+  "min_score": 70
+}
+```
+
 ### Optional - 人 review 欄
 
 `manual_check`: 自動判定で覆い切れない部分を report に手動チェック欄として転記。
@@ -83,6 +101,7 @@
 2. **観察層** (warn のみ):
    - `expected_tool_chain.should_include`
    - `metrics` 閾値超え
+   - `llm_judge` score < min_score (#262 Phase 2.b)
 3. **人 review 層** (manual):
    - `manual_check` を report に転記、人が後で chk
 

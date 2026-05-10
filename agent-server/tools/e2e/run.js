@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+const { runJudge } = require('./judge');
 
 const SCRIPT_DIR = __dirname;
 const SCENARIOS_PATH = path.join(SCRIPT_DIR, 'scenarios.json');
@@ -160,6 +161,16 @@ function extractTokenUsage(logSlice) {
 function evaluateScenario(scenario, observed) {
   const fails = [];
   const warns = [];
+
+  // LLM-as-judge は warn 層で扱う (#262 Phase 2.b、score < min_score → warn、judge 自体の error も warn)
+  if (observed.llm_judge) {
+    const j = observed.llm_judge;
+    if (j.error) {
+      warns.push(`llm_judge error: ${j.error}`);
+    } else if (typeof j.score === 'number' && !j.pass) {
+      warns.push(`llm_judge score ${j.score} < ${j.min_score}: ${j.reasoning}`);
+    }
+  }
   const tc = scenario.expected_tool_chain || {};
   const er = scenario.expected_response || {};
   const ell = scenario.expected_log_lines || [];
@@ -334,6 +345,18 @@ async function runScenario(scenario) {
       observed,
       result: { fails: ['no bot response within timeout'], warns: [] },
     };
+  }
+
+  // LLM-as-judge (optional、scenario.llm_judge がある時のみ)
+  if (scenario.llm_judge) {
+    const judgement = await runJudge(scenario, observed);
+    if (judgement) {
+      observed.llm_judge = judgement;
+      const detail = judgement.error
+        ? `error: ${judgement.error}`
+        : `score=${judgement.score}/${judgement.min_score} pass=${judgement.pass}`;
+      logInfo(`[${scenario.id}] llm_judge ${detail}`);
+    }
   }
 
   const result = evaluateScenario(scenario, observed);

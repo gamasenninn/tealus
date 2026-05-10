@@ -30,6 +30,10 @@
         "max_output_tokens": 6000,
         "max_latency_ms": 90000
       },
+      "llm_judge": {
+        "criteria": "応答が以下を満たすか厳密に評価:\n1. 業務メモ room の messages を実際に参照している (「見つからなかった」「該当なし」と self-report していない)\n2. 3 タグ (tealus関係 / TODO / 日常業務) ごとに分類されている\n3. 各タグに少なくとも 1 件 message が listed されている\n4. 完了/未完了の分類が試みられている (どちらか欠けても 80 点以下)\n5. 日付が含まれた状態で list されている (時系列性が見える)",
+        "min_score": 70
+      },
       "manual_check": "業務メモ室の正しい messages のみを参照 (DM 等 別 room を混入していない事)、完了/未完了 tag が正確、tealus関係 タグの 5/5 以降の 10+ 件 (DB 上 total_usage=92) が拾えている事 (5/7 verify では 13 件取得実績)"
     },
     {
@@ -68,6 +72,10 @@
       },
       "metrics": {
         "max_latency_ms": 60000
+      },
+      "llm_judge": {
+        "criteria": "応答が以下を満たすか:\n1. PDF を実際に確認した事を示している (read_document を call した事と整合)\n2. 「本文なし」「抽出できなかった」等の honest な self-report があれば pass (本 fixture は blank PDF なので幻想 summary を出すと逆に減点)\n3. user に他の document を試すよう案内する等の next-step 提示があれば加点\n4. wrong-document hallucination (実在しない別 PDF の内容を summarize する) は重大失敗で 30 点以下",
+        "min_score": 60
       },
       "manual_check": "agent が read_document を call し、parseError or vision fallback 経由で何らかの応答を返す事 (本 fixture は blank PDF なので「本文なし」系応答でも OK、#261 #262 では path 通過の verify が主目的)"
     },

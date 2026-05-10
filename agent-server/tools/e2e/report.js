@@ -38,14 +38,20 @@ function generateReport(results) {
 
   lines.push('## Scenarios');
   lines.push('');
-  lines.push('| id | status | latency | tokens (in/out) | tools called |');
-  lines.push('|---|---|---|---|---|');
+  lines.push('| id | status | latency | tokens (in/out) | judge | tools called |');
+  lines.push('|---|---|---|---|---|---|');
   for (const r of results) {
     const tools = (r.observed.tool_calls || []).map(t => t.tool).join(', ');
     const tu = r.observed.token_usage;
     const tokens = tu ? `${tu.input}/${tu.output}` : '—';
     const lat = r.observed.latency_ms ? `${r.observed.latency_ms}ms` : '—';
-    lines.push(`| ${r.scenario.id} | ${statusBadge(r.result)} | ${lat} | ${tokens} | ${escapeMd(tools)} |`);
+    const j = r.observed.llm_judge;
+    let judgeCell = '—';
+    if (j) {
+      if (j.error) judgeCell = `err`;
+      else if (typeof j.score === 'number') judgeCell = `${j.score}/${j.min_score} ${j.pass ? '✓' : '✗'}`;
+    }
+    lines.push(`| ${r.scenario.id} | ${statusBadge(r.result)} | ${lat} | ${tokens} | ${judgeCell} | ${escapeMd(tools)} |`);
   }
   lines.push('');
 
@@ -106,6 +112,19 @@ function generateReport(results) {
 
     if (r.observed.log_lines_found && r.observed.log_lines_found.length > 0) {
       lines.push(`**Expected log lines found**: ${r.observed.log_lines_found.map(l => `\`${l}\``).join(', ')}`);
+      lines.push('');
+    }
+
+    if (r.observed.llm_judge) {
+      const j = r.observed.llm_judge;
+      lines.push('**LLM-as-judge**:');
+      if (j.error) {
+        lines.push(`- ⚠️ error: ${j.error}`);
+      } else {
+        lines.push(`- score: **${j.score}** / threshold ${j.min_score} → ${j.pass ? '✅ pass' : '⚠️ below threshold'}`);
+        lines.push(`- reasoning: ${j.reasoning}`);
+        if (j.model) lines.push(`- model: \`${j.model}\``);
+      }
       lines.push('');
     }
 
