@@ -12,6 +12,13 @@
 
 ### Added
 
+- **server: STT model 比較検証 — トランシーバー用途で gpt-4o-mini-transcribe + 辞書 prompt が有望と判明** ([#269](https://github.com/gamasenninn/tealus/issues/269))
+  - 5/9 別 session の検証で同一 test.wav に対して `gpt-4o-mini-transcribe` (no prompt) > `gpt-4o-transcribe` (現 default、文末欠落)、辞書 prompt 注入で更に improve
+  - 構造的観察: `transcriptionConfig.js` の「vocabulary を whisper prompt に流さない」現方針は `whisper-1` / `gpt-4o-transcribe` には正しいが、`gpt-4o-mini-transcribe` では逆に improve する **model 依存** の挙動
+  - `server/.env.example` の WHISPER_MODEL コメント更新 (議事録 vs トランシーバー の用途別 guidance)
+  - `transcription_guideline.example.json` のコメントに finding 反映
+  - Phase 2 (code 改修): `buildWhisperPrompt` の model-specific 化、room ごとの WHISPER_MODEL 切替、別 sample での再現性確認 — 別 issue 候補
+
 - **agent-server: Light v2 機能 parity — tealus-mcp v0.11.0 で `send_text_as_file` + `generate_and_send_image` 追加、Light v1 の custom tool を MCP 化** ([#260](https://github.com/gamasenninn/tealus/issues/260))
   - [#258](https://github.com/gamasenninn/tealus/issues/258) D5 で TODO 化していた gap (画像生成 / file 投稿) を解消
   - tealus-mcp v0.11.0 release (`9c37810`、別 repo) — tools 13 → 15、tests 67 → 70

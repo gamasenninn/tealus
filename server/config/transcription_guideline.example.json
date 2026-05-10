@@ -1,5 +1,5 @@
 {
-  "_comment": "voice transcription pipeline (Whisper + AI 整形) のカスタマイズ設定。実運用版を transcription_guideline.json として配置 (gitignored)。空のままで動作 (従来挙動)。whisper_context は Whisper にドメイン文脈を渡すのみ (固有名詞 bias は副作用が大きいため使わない)。vocabulary と guidelines は AI 整形段階で使われ、文脈付きで転写ブレを正規化する。",
+  "_comment": "voice transcription pipeline (Whisper + AI 整形) のカスタマイズ設定。実運用版を transcription_guideline.json として配置 (gitignored)。空のままで動作 (従来挙動)。whisper_context は Whisper にドメイン文脈を渡すのみ (gpt-4o-transcribe / whisper-1 では固有名詞 bias の副作用が大きいため、現実装は vocabulary を whisper prompt に流さない)。vocabulary と guidelines は AI 整形段階で使われ、文脈付きで転写ブレを正規化する。なお #269 検証で gpt-4o-mini-transcribe (トランシーバー用途) では vocabulary を whisper_context に混ぜると improve する model 依存の挙動が確認されており、Phase 2 で model-specific 化を検討中。",
   "version": 1,
   "whisper_context": "これは業務無線の音声記録です。",
   "vocabulary": [
