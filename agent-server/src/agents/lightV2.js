@@ -191,6 +191,14 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
 
     // memory + system prompt 構築
     let systemPrompt = loadSystemPrompt();
+    // ルーム固有 Light プロンプト (Light v1 と parity、#258 follow-up)
+    if (workspacePath) {
+      const lightPromptPath = path.join(workspacePath, 'light_prompt.md');
+      if (fs.existsSync(lightPromptPath)) {
+        const roomPrompt = fs.readFileSync(lightPromptPath, 'utf8').trim();
+        if (roomPrompt) systemPrompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
+      }
+    }
     const memory = loadMemoryForPrompt(workspacePath);
     if (memory) systemPrompt += `\n\n## 記憶\n${memory}`;
     if (workspacePath) {

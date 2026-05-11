@@ -31,6 +31,12 @@
   - トラブルシュート: `/light2` 系 Q × 2 追加 (no final agent message / 画像が来ない)
   - 採用者第 2 号 onboarding に直結する Light v2 動線を整備、subscription path で API cost 0 + Fast Mode access の選択肢を明示
 
+- **agent-server: Light v2 で `light_prompt.md` (ルーム固有 Light プロンプト) を読み込むよう parity 追加** ([#258](https://github.com/gamasenninn/tealus/issues/258) follow-up)
+  - 5/11 社内 DB 検索ルームの dogfood で判明: Light v1 (`light.js`) は room workspace の `light_prompt.md` を呼び出し毎に読むが、Light v2 (`lightV2.js`) は読まない仕様だった。`/light2` だけ system prompt が thin になる v1/v2 非対称
+  - `lightV2.js:193` 直後に `light_prompt.md` reader block を追加 (Light v1 と完全同 logic、`## ルーム固有の指示\n${roomPrompt}` で append)
+  - dogfood verify: `/light2` 経由で Q5 (社長 handoff 確認質問) が `light_prompt.md` Section 3 の strict 化 を正しく遵守 (確認質問付き response、5/11 19:19 ログ)
+  - 副次効果: per-room MCP + per-room prompt の組み合わせで Light v2 でも query 精度を 1 室単位で tune できるようになった (社内 DB ルーム 6/6 stress test 完勝)
+
 ### Fixed
 
 - **agent-server: Deep agent timeout 後に同 room の以後の質問が受け付けられなくなる構造 bug を fix — #252 と同型 sweep を timeout path に適用 + Promise safety net** ([#250](https://github.com/gamasenninn/tealus/issues/250)-[#252](https://github.com/gamasenninn/tealus/issues/252) follow-up、Step 27 同日 follow-up)
