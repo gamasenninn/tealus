@@ -94,4 +94,4 @@ function cancel(roomId) {
   return { success: true, was_running: true, pid };
 }
 
-module.exports = { register, unregister, isRunning, cancel };
+module.exports = { register, unregister, isRunning, cancel, sweepByWorkspacePath };

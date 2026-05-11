@@ -33,6 +33,18 @@
 
 ### Fixed
 
+- **agent-server: Deep agent timeout 後に同 room の以後の質問が受け付けられなくなる構造 bug を fix — #252 と同型 sweep を timeout path に適用 + Promise safety net** ([#250](https://github.com/gamasenninn/tealus/issues/250)-[#252](https://github.com/gamasenninn/tealus/issues/252) follow-up、Step 27 同日 follow-up)
+  - 5/11 01:33 user 報告「アシスタントとのやり取りなんだが 一度 タイムアウトをしてしまうと次の質問が受け付けなくなってしまう」
+  - log 解析で真因 3 層特定:
+    - 層 1: `deep.js:121-132` の timeout timer callback が `proc.kill` + `taskkill /T /F` のみ、**cancel path で #252 が導入した `deepRegistry.sweepByWorkspacePath()` を呼んでいない**
+    - 層 2: cmd.exe → claude.cmd → claude.exe tree で race により claude.exe が orphan 化、cmd.exe も exit せず → `proc.on('close')` が永久 fire しない
+    - 層 3: `processDeep` の Promise resolve が `proc.on('close')` 一本足 → Promise 永久 pending → `dispatcher.js` `enqueueForRoom` の room queue が dead lock → 以後同 room の message dispatch 不可
+  - **修正 (A)**: `deep.js` timer callback で `deepRegistry.sweepByWorkspacePath(workspacePath, roomId)` を呼ぶ (cancel path と同型)、`deepRegistry` の `module.exports` に `sweepByWorkspacePath` を追加して公開 API 化
+  - **修正 (B)**: timer callback の最後に safety net `setTimeout(..., 10000)` を追加。10s 後に proc が依然生きていれば `proc._tealusSafetyNetFired = true` flag → `deepRegistry.unregister(roomId)` → `resolve()` で room queue を強制解放。`proc.on('close')` 冒頭に同 flag の early return guard を追加して二重投下防止
+  - **過去 fix との関係**: #250 (cancel button) / #251 (redundant timeout message) / #252 (cancel path orphan kill) は完了済、本件は **#252 の盲点** = timeout path に sweep が未適用だった事の構造 fix。CHANGELOG #252 entry に timeout path 言及なし → 意図的除外ではなく単なる見落とし
+  - **Out of scope**: `enqueueForRoom` 全体の outer timeout (Light v1/v2 同型 risk 含む) は別 issue で議論先行 ([#264](https://github.com/gamasenninn/tealus/issues/264) と同 pattern の spec freeze before code)
+  - tests: `deepRegistry.test.js` 新規 (10 件、register/unregister/cancel/sweep の coverage)、`deep.test.js` の既存 timeout test 強化 (sweep 呼び出し verify) + safety net path 新規 test (jest fake timer で 10s safety net 発火と Promise resolve を verify)、agent-server **239 → 250 件 pass** (+11)、回帰なし
+
 - **server: `/mcp` proxy pathRewrite で Express の prefix strip を re-add — Test 3 で `Cannot POST /` 404 になっていた問題の構造 fix** ([#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha follow-up)
   - 5/10 手動テストで proxy 経由 POST `/mcp` が 404 で `Cannot POST /` を返していた
   - 原因: Express の `app.use('/mcp', middleware)` は req.url から `/mcp` prefix を strip してから middleware を呼ぶため、tealus-mcp 側 (`/mcp` で listen) に届いた時点で path mismatch

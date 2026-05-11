@@ -128,7 +128,22 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       // Windows のシェルプロセスを強制終了
       if (process.platform === 'win32' && proc.pid) {
         try { spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { shell: true }); } catch {}
+        // #252 と同型: cmd.exe → claude.cmd → claude.exe tree で taskkill /T /F が race により
+        // claude.exe を取り逃すケースに対応。cancel path (deepRegistry.cancel) と同じ PowerShell
+        // sweep を timeout path にも適用 (5/11 user 報告 bug の root cause、Step 27 follow-up)
+        deepRegistry.sweepByWorkspacePath(workspacePath, roomId);
       }
+      // Promise safety net: sweep + close 経路が race で fail した worst case でも room queue を
+      // blocking しないよう、10s 後に proc が依然生きていれば強制 resolve する構造保険。
+      // 通常 path では sweep effective + close 1-2s 以内発火、本 net は出ない想定。
+      setTimeout(() => {
+        if (proc.exitCode === null && proc.signalCode === null && !proc._tealusSafetyNetFired) {
+          proc._tealusSafetyNetFired = true;
+          logger.warn(`Deep Agent safety net fired: process still alive 10s after timeout sweep (room=${roomId}, pid=${proc.pid}). Forcing resolve to unblock room queue.`);
+          deepRegistry.unregister(roomId);
+          resolve();
+        }
+      }, 10000);
     }, config.DEEP_TIMEOUT);
     proc._tealusTimer = timer;
 
@@ -154,6 +169,14 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       // 重複 message や ❌ エラー message を出さない
       if (proc._tealusCancelled) {
         logger.info(`Deep Agent close after cancel (code ${code}) — skip post-processing`);
+        resolve();
+        return;
+      }
+
+      // safety net path: timeout の後 10s 経過で強制 resolve 済、close は遅延発火。
+      // 「⚠ タイムアウトしました...」message は timer callback で送信済なので二重投下を避ける
+      if (proc._tealusSafetyNetFired) {
+        logger.info(`Deep Agent close after safety net (code ${code}) — skip post-processing`);
         resolve();
         return;
       }
