@@ -12,6 +12,13 @@
 
 ### Added
 
+- **server: model-aware Whisper prompt 上限拡張 + 切り捨て方向 fix** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 follow-up)
+  - 5/12 user dogfood で判明: 旧実装の `MAX_CHARS=200` は **whisper-1 由来の保守値** (legacy 仕様は 224 token = ~200 char)。新世代 `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` は **16,000 token 上限** で 74 倍の余裕あり ([OpenAI 公式](https://developers.openai.com/api/docs/models/gpt-4o-mini-transcribe))
+  - model-aware truncation に変更: whisper-1 / unknown は 200 char (legacy 互換)、新世代 transcribe は **2,000 char** (16,000 token の 1/8、安全側)
+  - 切り捨て方向: `slice(-N)` (末尾保持) → `slice(0, N)` (先頭保持) に変更。旧実装では whisper_context 冒頭 (例: 「これは農機販売店...」) が削れて vocab 末尾が残る非対称な truncation だった。新実装は whisper_context が先頭で安定、vocab list が末尾切れに
+  - 実 verify: 37 entries の現 vocabulary で `これは農機販売店の業務無線の音声記録です。 用語: ガマ、みこがい、...、ビレッジ側` が **205 chars で全部入る** (旧 200 char 上限では冒頭「これは農機」が削れていた)
+  - tests: +5 (legacy 200 / 新世代 2000 / slice(0,N) 動作 / 全 37 entry 収納)、計 24 件 pass
+
 - **server: voice transcription で model-aware vocabulary inject 機能 — gpt-4o-mini-transcribe で業務用語認識を改善** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 実装)
   - 5/9 別 session の STT 検証で `gpt-4o-mini-transcribe + 辞書 prompt` が業務無線音声で固有名詞認識を明らかに改善する finding が surface (元結果: 「冷蔵庫」→「冷蔵コンテナ」、「業務連絡です」が拾える等)
   - 旧コード (`transcriptionConfig.js`) は **vocabulary を Whisper prompt に渡さない方針** だった — whisper-1 / gpt-4o-transcribe で bias 観測 (「ビレッジ側」→「ビレッジガン」) を根拠に。今回 model 依存の挙動が判明したため model-aware に拡張

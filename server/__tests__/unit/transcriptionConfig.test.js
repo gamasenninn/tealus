@@ -160,7 +160,7 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toContain('甲');
   });
 
-  test('truncates whisper_context to last 200 chars when exceeded (no vocab)', () => {
+  test('legacy model (no model passed): truncates to 200 chars from start', () => {
     const longContext = 'あ'.repeat(250);
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: longContext,
@@ -169,14 +169,50 @@ describe('buildWhisperPrompt', () => {
     expect(prompt.length).toBe(200);
   });
 
-  test('truncates combined prompt to 200 chars when vocab inject overflows', () => {
-    const longContext = 'あ'.repeat(150);
-    const longVocab = Array.from({ length: 50 }, (_, i) => ({ term: `用語${i}` }));
+  test('legacy model (whisper-1): truncates to 200 chars', () => {
+    const longContext = 'あ'.repeat(250);
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: longContext,
-      vocabulary: longVocab,
-    }, 'gpt-4o-mini-transcribe');
+      vocabulary: [],
+    }, 'whisper-1');
     expect(prompt.length).toBe(200);
+  });
+
+  test('new gen (gpt-4o-mini-transcribe): truncates to 2000 chars, not 200', () => {
+    const longContext = 'あ'.repeat(2500);
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: longContext,
+      vocabulary: [],
+    }, 'gpt-4o-mini-transcribe');
+    expect(prompt.length).toBe(2000);
+  });
+
+  test('new gen (gpt-4o-transcribe): 2000 char 上限', () => {
+    const longContext = 'あ'.repeat(2500);
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: longContext,
+      vocabulary: [],
+    }, 'gpt-4o-transcribe');
+    expect(prompt.length).toBe(2000);
+  });
+
+  test('vocab inject + 新世代 model で whisper_context 冒頭が保持される (slice(0, N))', () => {
+    // 旧実装 slice(-200) では whisper_context 冒頭が削れていた問題の regression
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: 'これは農機販売店の業務無線です。',
+      vocabulary: Array.from({ length: 37 }, (_, i) => ({ term: `用語${i}` })),
+    }, 'gpt-4o-mini-transcribe');
+    expect(prompt.startsWith('これは農機販売店の業務無線です。')).toBe(true);
+  });
+
+  test('vocab inject 全 37 term が 2000 char 上限内に収まる (実 dataset 想定)', () => {
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: 'これは農機販売店の業務無線の音声記録です。',
+      vocabulary: Array.from({ length: 37 }, (_, i) => ({ term: `用語${i}` })),
+    }, 'gpt-4o-mini-transcribe');
+    expect(prompt).toContain('用語0');
+    expect(prompt).toContain('用語36');
+    expect(prompt.length).toBeLessThan(2000);
   });
 });
 

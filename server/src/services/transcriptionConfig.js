@@ -67,8 +67,19 @@ function buildWhisperPrompt(config, model = null) {
 
   if (!prompt) return null;
 
-  const MAX_CHARS = 200;
-  return prompt.length > MAX_CHARS ? prompt.slice(-MAX_CHARS) : prompt;
+  // Model-aware truncation (#269 Phase 2 follow-up、5/12 user dogfood で判明):
+  // - whisper-1: 224 token (最終 224 のみ参照、それ以前は無視されるという legacy 仕様)
+  // - gpt-4o-transcribe / gpt-4o-mini-transcribe: 16,000 token (新世代、whisper-1 の 74 倍)
+  //
+  // 日本語 1 char ≈ 1-1.5 token、安全側で:
+  //   legacy (whisper-1 or unknown model) → 200 char (~140-200 token)
+  //   new gen (gpt-4o-* transcribe)        → 2000 char (~1400-2000 token、16000 token の 1/8)
+  //
+  // truncate 方向は slice(0, N) で先頭保持に変更 (旧 slice(-N) は末尾保持で whisper_context
+  // 冒頭が削れる問題あり、辞書 inject 順序的に先頭 = whisper_context + 重要 term の方が自然)。
+  const isLegacyModel = !model || model === 'whisper-1';
+  const MAX_CHARS = isLegacyModel ? 200 : 2000;
+  return prompt.length > MAX_CHARS ? prompt.slice(0, MAX_CHARS) : prompt;
 }
 
 function buildFormattingExtension(config) {
