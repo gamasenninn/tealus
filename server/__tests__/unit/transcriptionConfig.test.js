@@ -77,6 +77,10 @@ describe('loadGuideline', () => {
 });
 
 describe('buildWhisperPrompt', () => {
+  afterEach(() => {
+    delete process.env.WHISPER_VOCAB_INJECT_MODELS;
+  });
+
   test('returns null when whisper_context is empty', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '',
@@ -85,7 +89,7 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toBeNull();
   });
 
-  test('returns whisper_context as-is when set', () => {
+  test('returns whisper_context as-is when set (no model passed)', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '業務無線です。',
       vocabulary: [],
@@ -93,31 +97,85 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toBe('業務無線です。');
   });
 
-  test('does NOT include vocabulary terms (they are AI-formatting-only)', () => {
+  test('does NOT include vocabulary when model is not in VOCAB_INJECT_MODELS (default: gpt-4o-transcribe)', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '業務無線です。',
       vocabulary: [{ term: '甲' }, { term: '乙' }, { term: '丙' }],
+    }, 'gpt-4o-transcribe');
+    expect(prompt).toBe('業務無線です。');
+    expect(prompt).not.toContain('甲');
+  });
+
+  test('does NOT include vocabulary for whisper-1 (legacy bias risk)', () => {
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: '業務無線です。',
+      vocabulary: [{ term: '甲' }],
+    }, 'whisper-1');
+    expect(prompt).toBe('業務無線です。');
+    expect(prompt).not.toContain('甲');
+  });
+
+  test('does NOT include vocabulary when no model passed (backward compat)', () => {
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: '業務無線です。',
+      vocabulary: [{ term: '甲' }],
     });
     expect(prompt).toBe('業務無線です。');
     expect(prompt).not.toContain('甲');
-    expect(prompt).not.toContain('乙');
-    expect(prompt).not.toContain('丙');
   });
 
-  test('returns null when whisper_context is missing even if vocabulary is large', () => {
+  test('INCLUDES vocabulary for gpt-4o-mini-transcribe (#269 Phase 2、5/9 verify)', () => {
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: '業務無線です。',
+      vocabulary: [{ term: '冷蔵コンテナ' }, { term: 'アシストさん' }],
+    }, 'gpt-4o-mini-transcribe');
+    expect(prompt).toContain('業務無線です。');
+    expect(prompt).toContain('冷蔵コンテナ');
+    expect(prompt).toContain('アシストさん');
+    expect(prompt).toContain('用語:');
+  });
+
+  test('vocab inject works with empty whisper_context (gpt-4o-mini-transcribe)', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '',
-      vocabulary: Array.from({ length: 100 }, (_, i) => ({ term: `term${i}` })),
-    });
+      vocabulary: [{ term: '甲' }, { term: '乙' }],
+    }, 'gpt-4o-mini-transcribe');
+    expect(prompt).toBe('用語: 甲、乙');
+  });
+
+  test('returns null when whisper_context empty + vocabulary empty (any model)', () => {
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: '',
+      vocabulary: [],
+    }, 'gpt-4o-mini-transcribe');
     expect(prompt).toBeNull();
   });
 
-  test('truncates whisper_context to last 200 chars when exceeded', () => {
+  test('env WHISPER_VOCAB_INJECT_MODELS で list 拡張可能', () => {
+    process.env.WHISPER_VOCAB_INJECT_MODELS = 'gpt-4o-transcribe,gpt-4o-mini-transcribe';
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: '業務無線です。',
+      vocabulary: [{ term: '甲' }],
+    }, 'gpt-4o-transcribe');
+    expect(prompt).toContain('甲');
+  });
+
+  test('truncates whisper_context to last 200 chars when exceeded (no vocab)', () => {
     const longContext = 'あ'.repeat(250);
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: longContext,
       vocabulary: [],
     });
+    expect(prompt.length).toBe(200);
+  });
+
+  test('truncates combined prompt to 200 chars when vocab inject overflows', () => {
+    const longContext = 'あ'.repeat(150);
+    const longVocab = Array.from({ length: 50 }, (_, i) => ({ term: `用語${i}` }));
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: longContext,
+      vocabulary: longVocab,
+    }, 'gpt-4o-mini-transcribe');
     expect(prompt.length).toBe(200);
   });
 });

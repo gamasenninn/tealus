@@ -12,6 +12,15 @@
 
 ### Added
 
+- **server: voice transcription で model-aware vocabulary inject 機能 — gpt-4o-mini-transcribe で業務用語認識を改善** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 実装)
+  - 5/9 別 session の STT 検証で `gpt-4o-mini-transcribe + 辞書 prompt` が業務無線音声で固有名詞認識を明らかに改善する finding が surface (元結果: 「冷蔵庫」→「冷蔵コンテナ」、「業務連絡です」が拾える等)
+  - 旧コード (`transcriptionConfig.js`) は **vocabulary を Whisper prompt に渡さない方針** だった — whisper-1 / gpt-4o-transcribe で bias 観測 (「ビレッジ側」→「ビレッジガン」) を根拠に。今回 model 依存の挙動が判明したため model-aware に拡張
+  - `buildWhisperPrompt(config, model)` の signature 拡張、`model` が `WHISPER_VOCAB_INJECT_MODELS` env (default: `gpt-4o-mini-transcribe`) に該当する時のみ vocabulary を `用語: ...` 形式で whisper_context に追加
+  - default 動作 (gpt-4o-transcribe + no vocab inject) は **無変更**、議事録 use case を保護
+  - 使い方: `WHISPER_MODEL=gpt-4o-mini-transcribe` に切替 + server 再起動で自動的に vocab inject 有効
+  - tests: `transcriptionConfig.test.js` に 7 ケース追加 (各 model × vocab あり/無し + env override + truncate)、計 20 件 pass
+  - 副次効果: 5/12 の `transcribe_media` 機能でも、`WHISPER_MODEL=gpt-4o-mini-transcribe` 切替で動画 transcription にも vocab inject が自動適用される (server-side で同 pipeline 共有)
+
 - **server: `POST /api/bot/messages/:id/transcribe` 新 endpoint + agent-server tealus-mcp pin v0.13.0 へ更新 — 動画/音声 文字起こし機能** ([#271](https://github.com/gamasenninn/tealus/issues/271) follow-up、案 B 実装)
   - 5/12 朝に user 業務メモで動画投稿 → 文字起こし依頼 → `get_message_media` の 10MB 上限で fail → 構造解として server-side endpoint + thin MCP wrapper パターン
   - server: 既存 voice STT pipeline (`transcription.js` の `transcribeVoiceMessage`) を `transcribeMessage` に generalize、video 入力時に ffmpeg `-vn` で audio 抽出 (16kHz mono opus 24kbps、Whisper API 25MB 上限内)

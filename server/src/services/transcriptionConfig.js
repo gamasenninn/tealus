@@ -37,17 +37,38 @@ function resetCache() {
   cached = null;
 }
 
-function buildWhisperPrompt(config) {
+function buildWhisperPrompt(config, model = null) {
   // Whisper の prompt parameter は style/spelling bias であって辞書ではない。
-  // vocabulary を強く渡すと隣接音が歪む (例: 「ビレッジ側」→「ビレッジガン」) ので、
-  // ドメイン文脈 (whisper_context) のみ渡し、固有名詞の正規化は AI 整形に任せる。
-  const { whisper_context } = config;
-  if (!whisper_context) return null;
+  // vocabulary を強く渡すと隣接音が歪む (例: 「ビレッジ側」→「ビレッジガン」)、
+  // この特性は **model 依存** で、whisper-1 / gpt-4o-transcribe では bias 観測されたが、
+  // gpt-4o-mini-transcribe では vocabulary を渡すと「業務連絡 / 冷蔵コンテナ / アシストさん」等の
+  // 固有名詞認識が改善することが 5/9 検証で確認された (#269 Phase 1 finding)。
+  //
+  // Phase 2 実装: model-aware vocab inject。WHISPER_VOCAB_INJECT_MODELS env で list 指定、
+  // 該当 model のとき vocabulary を whisper_context に追加。non-該当 model は従来通り
+  // whisper_context のみ (vocab は AI 整形段階で正規化)。
+  //
+  // 安全層:
+  // - default WHISPER_VOCAB_INJECT_MODELS は 'gpt-4o-mini-transcribe' のみ (5/9 verify 済)
+  // - 200 char 上限 (Whisper prompt token budget)
+  // - 議事録など gpt-4o-transcribe 用途は無変更 (default 維持)
+  const { whisper_context, vocabulary } = config;
+
+  const VOCAB_INJECT_MODELS = (process.env.WHISPER_VOCAB_INJECT_MODELS
+    || 'gpt-4o-mini-transcribe').split(',').map((s) => s.trim()).filter(Boolean);
+  const shouldInjectVocab = model && VOCAB_INJECT_MODELS.includes(model)
+    && Array.isArray(vocabulary) && vocabulary.length > 0;
+
+  let prompt = whisper_context || '';
+  if (shouldInjectVocab) {
+    const terms = vocabulary.map((v) => v.term).filter(Boolean).join('、');
+    prompt = prompt ? `${prompt} 用語: ${terms}` : `用語: ${terms}`;
+  }
+
+  if (!prompt) return null;
 
   const MAX_CHARS = 200;
-  return whisper_context.length > MAX_CHARS
-    ? whisper_context.slice(-MAX_CHARS)
-    : whisper_context;
+  return prompt.length > MAX_CHARS ? prompt.slice(-MAX_CHARS) : prompt;
 }
 
 function buildFormattingExtension(config) {

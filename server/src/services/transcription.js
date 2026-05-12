@@ -113,7 +113,7 @@ async function transcribeMessage(messageId, filePath, options = {}) {
           : `audio/${ext}`,
     });
 
-    const whisperPrompt = buildWhisperPrompt(loadGuideline());
+    const whisperPrompt = buildWhisperPrompt(loadGuideline(), WHISPER_MODEL);
     const transcription = await openai.audio.transcriptions.create({
       file: file,
       model: WHISPER_MODEL,
