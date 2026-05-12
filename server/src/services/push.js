@@ -12,6 +12,36 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 /**
+ * SPIKE (5/12): user の全 room 未読合計を計算 (App Badge 用)。
+ * Badging API は home icon 上に未読数を表示する PWA 機能、push payload に含めて
+ * Service Worker で `navigator.setAppBadge(count)` を call する設計。
+ */
+async function calculateTotalUnreadForUser(userId) {
+  try {
+    const r = await pool.query(`
+      SELECT COALESCE(SUM(unread_count), 0)::int AS total
+      FROM (
+        SELECT COUNT(*)::int AS unread_count
+        FROM messages msg
+        JOIN room_members rm ON rm.room_id = msg.room_id
+        WHERE rm.user_id = $1
+          AND msg.is_deleted = false
+          AND msg.sender_id != $1
+          AND msg.created_at > COALESCE(
+            (SELECT last_read_at FROM room_read_cursors WHERE room_id = msg.room_id AND user_id = $1),
+            '1970-01-01'
+          )
+        GROUP BY msg.room_id
+      ) sub
+    `, [userId]);
+    return r.rows[0]?.total || 0;
+  } catch (err) {
+    logger.warn('calculateTotalUnreadForUser failed:', err.message);
+    return 0;
+  }
+}
+
+/**
  * Send push notifications to all subscriptions of a user.
  * @param {string} userId - Target user ID
  * @param {object} payload - Notification payload { title, body, data }
@@ -23,6 +53,10 @@ async function sendPushToUser(userId, payload) {
       [userId]
     );
     logger.debug(`push: user=${userId} subscriptions=${result.rows.length} title=${payload.title}`);
+
+    // SPIKE: 全 room 未読合計を計算して payload に追加 (App Badge 用)
+    const totalUnread = await calculateTotalUnreadForUser(userId);
+    const enrichedPayload = { ...payload, total_unread: totalUnread };
 
     const notifications = result.rows.map(async (sub) => {
       const pushSubscription = {
@@ -36,7 +70,7 @@ async function sendPushToUser(userId, payload) {
       try {
         await webpush.sendNotification(
           pushSubscription,
-          JSON.stringify(payload)
+          JSON.stringify(enrichedPayload)
         );
       } catch (err) {
         if (err.statusCode === 410 || err.statusCode === 404) {

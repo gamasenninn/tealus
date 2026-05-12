@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
+import { syncBadgeFromRooms } from '../services/appBadge';
 
 export const useRoomStore = create((set, get) => ({
   rooms: [],
@@ -12,6 +13,8 @@ export const useRoomStore = create((set, get) => ({
     try {
       const data = await api.getRooms();
       set({ rooms: data.rooms, error: null });
+      // PWA App Badge を foreground でも自動 sync (#badge SPIKE、5/12)
+      syncBadgeFromRooms(data.rooms);
     } catch (err) {
       set({ error: 'ルーム一覧の取得に失敗しました' });
     }

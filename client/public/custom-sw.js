@@ -3,7 +3,17 @@
 // --- プッシュ通知 ---
 self.addEventListener('push', (event) => {
   const data = event.data?.json() || {};
-  const { title, body, data: notifData } = data;
+  const { title, body, data: notifData, total_unread } = data;
+
+  // SPIKE (5/12): App Badge — ホーム画面アイコン上に未読数表示 (PWA 機能)
+  // iOS Safari 16.4+ (PWA installed) / Chrome / Edge で対応、Firefox は silent fail
+  if ('setAppBadge' in self.navigator) {
+    if (total_unread && total_unread > 0) {
+      self.navigator.setAppBadge(total_unread).catch(() => {});
+    } else {
+      self.navigator.clearAppBadge().catch(() => {});
+    }
+  }
 
   event.waitUntil(
     self.registration.showNotification(title || 'Tealus', {

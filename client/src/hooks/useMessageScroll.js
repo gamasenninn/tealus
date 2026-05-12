@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useMessageStore } from '../stores/messageStore';
+import { useRoomStore } from '../stores/roomStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
 import { SCROLL_NEAR_BOTTOM, INITIAL_SCROLL_DELAY } from '../constants/ui';
@@ -100,7 +101,10 @@ export function useMessageScroll(roomId) {
       .filter((m) => m.sender_id !== user.id)
       .map((m) => m.id);
     if (unreadIds.length > 0) {
-      api.markRead(roomId, unreadIds).catch(() => {});
+      api.markRead(roomId, unreadIds).then(() => {
+        // mark-read 後に room list を再 fetch → App Badge を即更新 (badge spike、5/12)
+        useRoomStore.getState().fetchRooms();
+      }).catch(() => {});
       const socket = getSocket();
       if (socket) {
         socket.emit('message:read', { room_id: roomId, message_ids: unreadIds });
