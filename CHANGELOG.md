@@ -12,6 +12,17 @@
 
 ### Added
 
+- **server: `POST /api/bot/messages/:id/transcribe` 新 endpoint + agent-server tealus-mcp pin v0.13.0 へ更新 — 動画/音声 文字起こし機能** ([#271](https://github.com/gamasenninn/tealus/issues/271) follow-up、案 B 実装)
+  - 5/12 朝に user 業務メモで動画投稿 → 文字起こし依頼 → `get_message_media` の 10MB 上限で fail → 構造解として server-side endpoint + thin MCP wrapper パターン
+  - server: 既存 voice STT pipeline (`transcription.js` の `transcribeVoiceMessage`) を `transcribeMessage` に generalize、video 入力時に ffmpeg `-vn` で audio 抽出 (16kHz mono opus 24kbps、Whisper API 25MB 上限内)
+  - server: 新 endpoint `POST /api/bot/messages/:id/transcribe` で cached (cached:true) / fresh transcribe + format 同期実行、JSON 返却。Bot JWT auth + room member check 必須
+  - server: voice の既存 transcription pipeline は無変更、video 用の path のみ追加 (regression なし、既存 92 voice/transcription test pass)
+  - server: 新 test `__tests__/integration/bot-transcribe.test.js` 10 件 pass (cached / version / type / 404 / 410 / 403 / 401 / video cached)
+  - agent-server: tealus-mcp pin v0.11.1 → v0.13.0 (Light v1 / Light v2 / Deep の全 agent path)、新 `transcribe_media` tool が registered tools 一覧に追加
+  - tealus-mcp v0.13.0: `transcribe_media` MCP tool 新設、本 endpoint への thin wrapper
+  - **設計判断**: 元の Deep 提案は tealus-mcp に ffmpeg + OpenAI を抱える想定だったが、tealus 本体側に完成された STT pipeline (gpt-4o-transcribe + transcription_guideline.json) があったため、tealus-mcp は依存追加 0 で済む server-side endpoint パターンに pivot
+  - **波及**: 業務無線辞書 (vocabulary) を voice / video で共有、AI agent が voice / video / DB / 会話を統一 text context として扱える状態に到達 (organic ontology の modality 拡張)
+
 - **server: tealus-mcp HTTP transport 用の `/mcp` proxy 追加 — cross-machine 構成への構造解** ([#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha)
   - tealus 本体 server (port 3000) が `/mcp/*` を内部 port 3200 に転送する `createProxyMiddleware` を追加 (`/agent-api` `/rtc` と同 pattern、`express.json()` の前に配置で body parse 不要)
   - SPA fallback exclusion list に `/mcp/` 追加 (router が SPA fallback で index.html を返す trap 防止)

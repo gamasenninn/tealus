@@ -557,6 +557,148 @@ router.get('/messages/:id/media', async (req, res) => {
 });
 
 /**
+ * POST /api/bot/messages/:id/transcribe
+ * メッセージ (voice / video / audio) を文字起こし、結果を JSON で返す。
+ *
+ * - 既存 cached (status='done') があれば即返却 (`cached: true`)
+ * - cache 無 or `force_retranscribe=true` の場合、新 version で transcribe + format を **同期実行** して text 返却
+ * - video は内部で ffmpeg -vn で audio 抽出 (Whisper API 25MB 上限対策)
+ *
+ * Body: { force_retranscribe?: boolean }
+ * Response: { status, message_type, formatted_text, raw_text, language, cached, model, version }
+ *
+ * #271 (per-room MCP + light_prompt.md tuning pattern reference) follow-up、
+ * 案 B (tealus-mcp `transcribe_media` MCP tool) の server-side 実装。
+ */
+router.post('/messages/:id/transcribe', async (req, res) => {
+  const messageId = req.params.id;
+  const userId = req.user.id;
+  const forceRetranscribe = req.body?.force_retranscribe === true;
+
+  try {
+    // 1. メッセージ + メディア 取得
+    const msgResult = await pool.query(`
+      SELECT m.id, m.type, m.room_id, m.is_deleted,
+             mm.file_path, mm.file_name, mm.mime_type, mm.file_size
+      FROM messages m
+      LEFT JOIN message_media mm ON mm.message_id = m.id
+      WHERE m.id = $1
+    `, [messageId]);
+
+    if (msgResult.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+    const msg = msgResult.rows[0];
+    if (msg.is_deleted) {
+      return res.status(410).json({ error: 'メッセージは削除されています' });
+    }
+
+    // 2. type check (voice / video / audio のみ対応)
+    if (!['voice', 'video', 'audio'].includes(msg.type)) {
+      return res.status(400).json({
+        error: `${msg.type} 型はサポート対象外。voice / video / audio のみ。`,
+        message_type: msg.type,
+      });
+    }
+    if (!msg.file_path) {
+      return res.status(404).json({ error: 'このメッセージにメディアはありません' });
+    }
+
+    // 3. Bot のルーム所属確認
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [msg.room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    // 4. cache check
+    if (!forceRetranscribe) {
+      const cached = await pool.query(
+        `SELECT raw_text, formatted_text, status, version
+         FROM voice_transcriptions
+         WHERE message_id = $1 AND status = 'done'
+         ORDER BY version DESC LIMIT 1`,
+        [messageId]
+      );
+      if (cached.rows.length > 0) {
+        return res.json({
+          status: 'done',
+          message_type: msg.type,
+          formatted_text: cached.rows[0].formatted_text,
+          raw_text: cached.rows[0].raw_text,
+          language: 'ja',
+          cached: true,
+          model: process.env.WHISPER_MODEL || 'gpt-4o-transcribe',
+          version: cached.rows[0].version,
+        });
+      }
+    }
+
+    // 5. 新 version 計算
+    const versionResult = await pool.query(
+      'SELECT MAX(version) as max_version FROM voice_transcriptions WHERE message_id = $1',
+      [messageId]
+    );
+    const newVersion = (versionResult.rows[0].max_version || 0) + 1;
+
+    // 6. pending 行を作成 (video の場合は upload 時に自動作成されないので必須、voice は通常既存だが force_retranscribe 時に新 version 作成)
+    await pool.query(
+      `INSERT INTO voice_transcriptions (message_id, version, status, edited_by)
+       VALUES ($1, $2, 'pending', $3)`,
+      [messageId, newVersion, userId]
+    );
+
+    // 7. transcribe + format を同期実行 (Bot endpoint は MCP からの synchronous call を想定)
+    const { transcribeMessage } = require('../services/transcription');
+    const isVideo = msg.type === 'video';
+    const rawText = await transcribeMessage(messageId, msg.file_path, {
+      io: null,           // headless 経路、Socket.IO emit 抑制
+      roomId: null,       // 同上、webhook fire も抑制 (MCP からの再 query は cache hit するため不要)
+      version: newVersion,
+      isVideo,
+      messageType: msg.type,
+    });
+
+    if (rawText === null) {
+      // transcribe または format 失敗、status は既に 'error' に更新済
+      return res.status(503).json({
+        error: '文字起こしに失敗しました',
+        status: 'error',
+        message_type: msg.type,
+        version: newVersion,
+      });
+    }
+
+    // 8. 最新の row を取得 (formatted_text 含む)
+    const finalResult = await pool.query(
+      `SELECT raw_text, formatted_text, status
+       FROM voice_transcriptions
+       WHERE message_id = $1 AND version = $2`,
+      [messageId, newVersion]
+    );
+    const final = finalResult.rows[0] || {};
+
+    logger.info(`Bot transcribe: message ${messageId} type=${msg.type} version=${newVersion} status=${final.status}`);
+
+    res.json({
+      status: final.status || 'done',
+      message_type: msg.type,
+      formatted_text: final.formatted_text || null,
+      raw_text: final.raw_text || null,
+      language: 'ja',
+      cached: false,
+      model: process.env.WHISPER_MODEL || 'gpt-4o-transcribe',
+      version: newVersion,
+    });
+  } catch (err) {
+    logger.error('Bot transcribe error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/search
  * AI / MCP クライアント向けの横断検索 endpoint。
  *

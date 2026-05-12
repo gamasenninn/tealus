@@ -29,8 +29,15 @@ function buildSystemPrompt() {
 /**
  * Format transcribed text using AI
  * Runs asynchronously after transcription completes
+ *
+ * @param {string} messageId
+ * @param {string} rawText
+ * @param {object} io - Socket.IO instance (nullable、Bot endpoint 経由など headless 経路で skip emit)
+ * @param {string} roomId
+ * @param {number|null} version
+ * @param {string} [messageType='voice'] - webhook fire 時の type ('voice' | 'video' | 'audio')
  */
-async function formatTranscription(messageId, rawText, io, roomId, version = null) {
+async function formatTranscription(messageId, rawText, io, roomId, version = null, messageType = 'voice') {
   // #216: version 指定があれば対象 version、無ければ MAX(version) を使う (旧挙動互換)
   const versionWhereClause = version !== null
     ? 'AND version = $2'
@@ -42,7 +49,7 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       version !== null ? [messageId, version] : [messageId]
     );
 
-    if (io) {
+    if (io && roomId) {
       io.to(roomId).emit('voice:status', { message_id: messageId, status: 'formatting' });
     }
 
@@ -69,7 +76,7 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       version !== null ? [formattedText, messageId, version] : [formattedText, messageId]
     );
 
-    if (io) {
+    if (io && roomId) {
       io.to(roomId).emit('voice:transcription', {
         message_id: messageId,
         status: 'done',
@@ -79,15 +86,17 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       });
     }
 
-    // Webhook: 文字起こし完了通知
-    const { fireWebhooks } = require('./webhook');
-    const msgResult = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
-    const senderId = msgResult.rows[0]?.sender_id;
-    fireWebhooks('voice.transcription_completed', roomId, {
-      room: { id: roomId },
-      message: { id: messageId, type: 'voice', sender: { id: senderId } },
-      transcription: { raw_text: rawText, formatted_text: formattedText },
-    });
+    // Webhook: 文字起こし完了通知 (roomId が null の場合 = headless 経路では fire しない)
+    if (roomId) {
+      const { fireWebhooks } = require('./webhook');
+      const msgResult = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+      const senderId = msgResult.rows[0]?.sender_id;
+      fireWebhooks('voice.transcription_completed', roomId, {
+        room: { id: roomId },
+        message: { id: messageId, type: messageType, sender: { id: senderId } },
+        transcription: { raw_text: rawText, formatted_text: formattedText },
+      });
+    }
 
     return formattedText;
   } catch (err) {
@@ -103,7 +112,7 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       version !== null ? [messageId, version] : [messageId]
     );
 
-    if (io) {
+    if (io && roomId) {
       io.to(roomId).emit('voice:transcription', {
         message_id: messageId,
         status: 'done',
@@ -112,14 +121,16 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       });
     }
 
-    // Webhook: 文字起こし完了通知（フォーマット失敗時）
-    const { fireWebhooks: fireWh } = require('./webhook');
-    const msgRes = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
-    fireWh('voice.transcription_completed', roomId, {
-      room: { id: roomId },
-      message: { id: messageId, type: 'voice', sender: { id: msgRes.rows[0]?.sender_id } },
-      transcription: { raw_text: rawText, formatted_text: null },
-    });
+    // Webhook: 文字起こし完了通知（フォーマット失敗時、roomId なしなら fire skip）
+    if (roomId) {
+      const { fireWebhooks: fireWh } = require('./webhook');
+      const msgRes = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+      fireWh('voice.transcription_completed', roomId, {
+        room: { id: roomId },
+        message: { id: messageId, type: messageType, sender: { id: msgRes.rows[0]?.sender_id } },
+        transcription: { raw_text: rawText, formatted_text: null },
+      });
+    }
 
     return null;
   }
