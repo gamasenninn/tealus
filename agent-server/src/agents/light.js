@@ -117,22 +117,22 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
 
   // #249: tool 終了時に「考え中」に戻す (次 step decision 待ち state を可視化)
   // 既存 agent_tool_start のみだと tool 終了 → 次 tool 開始 の間で status が凍結していた
+  //
+  // 5/12 fix: 旧 heuristic (resultStr.includes('error'|'failed'|'失敗'|'タイムアウト'|'エラー:'))
+  // を撤廃。get_messages 等が return した room の過去メッセージ内容に「失敗」「エラー」等の
+  // 文字列が含まれているだけで false positive 発火し、UI に「${tool}: 失敗、別アプローチを
+  // 検討中...」status が出て user に「assistant が失敗した」誤印象を与えていた。実際は
+  // tool は正常 return、agent も正常応答していた。
+  //
+  // 真の tool error は (1) tool 自体が throw した時 SDK が error 文字列を tool result に
+  // 詰めて agent に渡す → agent の判断で最終応答に error 内容が反映される、(2) MCP tool
+  // wrapper が 'エラー:' prefix の text を return する → 同じく agent 判断で fallback。
+  // どちらも最終的に agent 応答に表れるので、tool_end 時点で status='error' を出す価値は薄い。
   agent.on('agent_tool_end', (ctx, tool, result, details) => {
     logger.info(`[Tool] end: ${tool?.name || '?'}`);
     if (!roomId) return;
-    const resultStr = typeof result === 'string' ? result : '';
-    const lower = resultStr.toLowerCase();
-    const isError = lower.includes('error')
-      || lower.includes('failed')
-      || resultStr.includes('失敗')
-      || resultStr.includes('タイムアウト')
-      || resultStr.includes('エラー:');
-    if (isError) {
-      botApi.pushStatus(roomId, 'error', `${tool?.name || 'tool'}: 失敗、別アプローチを検討中...`).catch(() => {});
-    } else {
-      // 「考え中」に戻す (次 step decision まで)
-      botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
-    }
+    // 「考え中」に戻す (次 step decision まで)
+    botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
   });
 
   return agent;
