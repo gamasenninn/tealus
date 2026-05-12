@@ -10,7 +10,20 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-05-12
+
 ### Added
+
+- **client + server: PWA App Badge (ホーム画面アイコン未読数バッジ) — テスター要望、Badging API + 二経路 defense in depth** (5/12 spike → 本実装 1 セッション完走、commit `6319cdd`)
+  - 「スマホホーム画面アイコンに未読を知らせる印 (数字バッジ) がほしい」テスター要望から spike 着手
+  - 二経路 (foreground Socket.IO + background Web Push) で defense in depth、片方の path が落ちても他方で補完
+  - **foreground path**: `client/src/services/appBadge.js` 新規、`navigator.setAppBadge()` ラッパー (feature detection 付き silent fail)、`roomStore.fetchRooms` 後に `syncBadgeFromRooms` で auto sync、mark-read 後も `fetchRooms` 再走で即更新
+  - **background path**: `server/src/services/push.js` の `sendPushToUser` に `calculateTotalUnreadForUser` 追加、push payload に `total_unread` 含める。`client/public/custom-sw.js` push event handler で `self.navigator.setAppBadge(total_unread)` / `clearAppBadge()`
+  - **platform 動作確認 (5/12 dogfood)**:
+    - Android Chrome PWA: ドット表示 ✓ (Android 仕様で数字未対応)
+    - iOS Safari PWA 16.4+ (鈴木花子 user で verify): **数字バッジ** ✓
+    - Firefox: silent fail (未対応、設計通り)
+  - 残課題: push event 経由 path の dogfood 完了確認 + multi-device 同 user 同期挙動観察 (future cycle)
 
 - **server: voice transcription の 3 段 dormant bug fix (Whisper prompt hallucination 検出 / 短文 formatting skip / メタ literal 防御)** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 follow-up、5/12 user dogfood で surface)
   - 5/12 user 観察: トランシーバー履歴の voice の一部が「空文字」「空文字列」literal で transcription される / 完全に空になる現象
