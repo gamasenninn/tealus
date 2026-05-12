@@ -12,6 +12,14 @@
 
 ### Added
 
+- **server: voice transcription default を gpt-4o-mini-transcribe + 新世代 transcribe 兄弟 2 model に vocab inject 拡張** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 完走、5/12 dogfood 確定)
+  - 5/12 dogfood で 6 test 文すべて完璧 (グレンコンテナ / マニアスプレッダ / ハーベスタ / みこがい / ガマ / たけのこ 等の業界用語 + 短人名すべて正確認識、control 文も clean、副作用なし)
+  - `WHISPER_MODEL` default: `gpt-4o-transcribe` → **`gpt-4o-mini-transcribe`** に切替 (採用者が `.env` 未設定でも最初から vocab inject 効果 + cost ~半分)
+  - `WHISPER_VOCAB_INJECT_MODELS` default: `gpt-4o-mini-transcribe` → **`gpt-4o-mini-transcribe,gpt-4o-transcribe`** (新世代兄弟 2 model)
+  - whisper-1 は **default で除外維持** (legacy で bias 観測 history あり、新規採用非推奨)
+  - 議事録 use case で vocab inject を opt-out したい採用者は env で revert 可能 (`WHISPER_VOCAB_INJECT_MODELS=gpt-4o-mini-transcribe` で gpt-4o-transcribe を除外)
+  - test 更新 (`gpt-4o-transcribe` default で vocab inject 含む assertion)、計 24 件 pass
+
 - **server: model-aware Whisper prompt 上限拡張 + 切り捨て方向 fix** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 follow-up)
   - 5/12 user dogfood で判明: 旧実装の `MAX_CHARS=200` は **whisper-1 由来の保守値** (legacy 仕様は 224 token = ~200 char)。新世代 `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` は **16,000 token 上限** で 74 倍の余裕あり ([OpenAI 公式](https://developers.openai.com/api/docs/models/gpt-4o-mini-transcribe))
   - model-aware truncation に変更: whisper-1 / unknown は 200 char (legacy 互換)、新世代 transcribe は **2,000 char** (16,000 token の 1/8、安全側)

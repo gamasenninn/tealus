@@ -97,16 +97,17 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toBe('業務無線です。');
   });
 
-  test('does NOT include vocabulary when model is not in VOCAB_INJECT_MODELS (default: gpt-4o-transcribe)', () => {
+  test('INCLUDES vocabulary for gpt-4o-transcribe (5/12 default 拡張、新世代兄弟モデル)', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '業務無線です。',
       vocabulary: [{ term: '甲' }, { term: '乙' }, { term: '丙' }],
     }, 'gpt-4o-transcribe');
-    expect(prompt).toBe('業務無線です。');
-    expect(prompt).not.toContain('甲');
+    expect(prompt).toContain('甲');
+    expect(prompt).toContain('乙');
+    expect(prompt).toContain('用語:');
   });
 
-  test('does NOT include vocabulary for whisper-1 (legacy bias risk)', () => {
+  test('does NOT include vocabulary for whisper-1 (legacy bias risk、default で除外維持)', () => {
     const prompt = configModule.buildWhisperPrompt({
       whisper_context: '業務無線です。',
       vocabulary: [{ term: '甲' }],

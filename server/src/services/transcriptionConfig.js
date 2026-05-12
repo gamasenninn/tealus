@@ -54,8 +54,10 @@ function buildWhisperPrompt(config, model = null) {
   // - 議事録など gpt-4o-transcribe 用途は無変更 (default 維持)
   const { whisper_context, vocabulary } = config;
 
+  // default は新世代 transcribe 2 model (5/12 dogfood で gpt-4o-mini-transcribe 完璧、
+  // gpt-4o-transcribe も同世代兄弟で bias なしと期待、whisper-1 は legacy で除外)
   const VOCAB_INJECT_MODELS = (process.env.WHISPER_VOCAB_INJECT_MODELS
-    || 'gpt-4o-mini-transcribe').split(',').map((s) => s.trim()).filter(Boolean);
+    || 'gpt-4o-mini-transcribe,gpt-4o-transcribe').split(',').map((s) => s.trim()).filter(Boolean);
   const shouldInjectVocab = model && VOCAB_INJECT_MODELS.includes(model)
     && Array.isArray(vocabulary) && vocabulary.length > 0;
 
