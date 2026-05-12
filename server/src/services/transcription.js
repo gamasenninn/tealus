@@ -58,21 +58,29 @@ async function transcribeMessage(messageId, filePath, options = {}) {
 
     if (isVideo) {
       // Video: ffmpeg -vn で audio 抽出 (Whisper API 25MB 上限対策)
-      // 16kHz mono opus 24kbps ≈ 11MB/hour、長尺動画でも 25MB 内に収まりやすい
-      tempPath = path.join(path.dirname(fullPath), `tealus-stt-${messageId}-v${version}.ogg`);
+      // mp3 VBR -q:a 4 ≈ 128kbps、1 時間で ~58MB だが Whisper API は最大 25MB なので
+      // ~20 分動画まで対応。長尺は将来 chunk 分割で対応 (out of scope for Phase 1)。
+      // codec=mp3 で Windows ffmpeg 標準ビルド互換 (libopus は build-dependent)
+      tempPath = path.join(path.dirname(fullPath), `tealus-stt-${messageId}-v${version}.mp3`);
       try {
         const { execSync } = require('child_process');
         execSync(
-          `ffmpeg -i "${fullPath}" -y -vn -ar 16000 -ac 1 -c:a libopus -b:a 24k "${tempPath}" 2>/dev/null`,
-          { stdio: 'pipe' }
+          `ffmpeg -i "${fullPath}" -y -vn -ar 16000 -ac 1 -q:a 4 "${tempPath}"`,
+          { stdio: ['ignore', 'pipe', 'pipe'] }  // stderr 捕捉 (失敗時の debug 用)
         );
         inputPath = tempPath;
-        ext = 'ogg';
-        logger.info(`[transcribe] video audio extracted: ${path.basename(tempPath)} (${fs.statSync(tempPath).size} bytes)`);
+        ext = 'mp3';
+        const audioSize = fs.statSync(tempPath).size;
+        logger.info(`[transcribe] video audio extracted: ${path.basename(tempPath)} (${audioSize} bytes)`);
+        if (audioSize > 25 * 1024 * 1024) {
+          throw new Error(`Extracted audio (${(audioSize / 1024 / 1024).toFixed(1)}MB) exceeds Whisper API 25MB limit. Video too long, chunk split needed (future work).`);
+        }
       } catch (e) {
         if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
         tempPath = null;
-        throw new Error(`ffmpeg video → audio extraction failed: ${e.message}`);
+        const stderr = e.stderr ? e.stderr.toString() : '';
+        const stderrTail = stderr ? `\nffmpeg stderr (last 500 chars): ${stderr.slice(-500)}` : '';
+        throw new Error(`ffmpeg video → audio extraction failed: ${e.message}${stderrTail}`);
       }
     } else {
       // Voice / Audio: detect format, fallback to mp3 conversion if unknown
