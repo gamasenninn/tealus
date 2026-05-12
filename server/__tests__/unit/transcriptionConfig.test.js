@@ -217,6 +217,91 @@ describe('buildWhisperPrompt', () => {
   });
 });
 
+describe('isWhisperPromptHallucination (#269 Bug 1 fix)', () => {
+  const { isWhisperPromptHallucination } = require('../../src/services/transcriptionConfig');
+
+  test('false: null / empty inputs', () => {
+    expect(isWhisperPromptHallucination(null, 'prompt')).toBe(false);
+    expect(isWhisperPromptHallucination('text', null)).toBe(false);
+    expect(isWhisperPromptHallucination('', 'prompt')).toBe(false);
+    expect(isWhisperPromptHallucination('text', '')).toBe(false);
+  });
+
+  test('true: raw_text が prompt 全体と完全一致 (基本 case)', () => {
+    const prompt = 'これは農機販売店の業務無線の音声記録です。 用語: ガマ、ビレッジ';
+    expect(isWhisperPromptHallucination(prompt, prompt)).toBe(true);
+  });
+
+  test('true: raw_text が prompt の whisper_context 部分のみと一致 (vocab 部分が echo されない場合)', () => {
+    const prompt = 'これは農機販売店の業務無線の音声記録です。 用語: ガマ、ビレッジ';
+    const raw = 'これは農機販売店の業務無線の音声記録です。';
+    expect(isWhisperPromptHallucination(raw, prompt)).toBe(true);
+  });
+
+  test('true: raw_text が whisper_context のみで vocab inject なし', () => {
+    const prompt = 'これは農機販売店の業務無線の音声記録です。';
+    const raw = 'これは農機販売店の業務無線の音声記録です。';
+    expect(isWhisperPromptHallucination(raw, prompt)).toBe(true);
+  });
+
+  test('true: raw_text が prompt の prefix (10 char 以上)', () => {
+    const prompt = 'これは農機販売店の業務無線の音声記録です。 用語: ガマ';
+    const raw = 'これは農機販売店の業務無線の';  // 14 chars, prompt の prefix
+    expect(isWhisperPromptHallucination(raw, prompt)).toBe(true);
+  });
+
+  test('false: raw_text が prompt の prefix でも < 10 chars (短すぎる prefix は normal speech 可能)', () => {
+    const prompt = 'これは農機販売店の業務無線の音声記録です。';
+    const raw = 'これは';  // 3 chars, prefix だが短すぎる
+    expect(isWhisperPromptHallucination(raw, prompt)).toBe(false);
+  });
+
+  test('false: 正常な転写は hallucination 判定されない', () => {
+    const prompt = 'これは農機販売店の業務無線の音声記録です。 用語: ガマ';
+    expect(isWhisperPromptHallucination('斉藤くん、どこにいますか？', prompt)).toBe(false);
+    expect(isWhisperPromptHallucination('はい、了解です。', prompt)).toBe(false);
+  });
+
+  test('false: prompt と無関係な文', () => {
+    const prompt = 'これは農機販売店の業務無線です。';
+    expect(isWhisperPromptHallucination('全然関係ない文章', prompt)).toBe(false);
+  });
+});
+
+describe('isMetaEmptyLiteral (#269 Bug 3 fix)', () => {
+  const { isMetaEmptyLiteral } = require('../../src/services/transcriptionConfig');
+
+  test('true: 空文字 / 空文字列 / メタ表現 literal', () => {
+    expect(isMetaEmptyLiteral('空文字')).toBe(true);
+    expect(isMetaEmptyLiteral('空文字列')).toBe(true);
+    expect(isMetaEmptyLiteral('空白')).toBe(true);
+    expect(isMetaEmptyLiteral('(空)')).toBe(true);
+    expect(isMetaEmptyLiteral('（空）')).toBe(true);
+    expect(isMetaEmptyLiteral('内容なし')).toBe(true);
+    expect(isMetaEmptyLiteral('無音')).toBe(true);
+    expect(isMetaEmptyLiteral('empty')).toBe(true);
+    expect(isMetaEmptyLiteral('null')).toBe(true);
+    expect(isMetaEmptyLiteral('none')).toBe(true);
+  });
+
+  test('true: 前後 whitespace でも trim して match', () => {
+    expect(isMetaEmptyLiteral('  空文字  ')).toBe(true);
+    expect(isMetaEmptyLiteral('\n空文字列\n')).toBe(true);
+  });
+
+  test('false: 空文字を含む文章は normal text', () => {
+    expect(isMetaEmptyLiteral('空文字を返してください')).toBe(false);
+    expect(isMetaEmptyLiteral('整形対象なし、空文字')).toBe(false);
+  });
+
+  test('false: 正常な転写', () => {
+    expect(isMetaEmptyLiteral('斉藤くん、了解です。')).toBe(false);
+    expect(isMetaEmptyLiteral('')).toBe(false);
+    expect(isMetaEmptyLiteral(null)).toBe(false);
+    expect(isMetaEmptyLiteral(undefined)).toBe(false);
+  });
+});
+
 describe('buildFormattingExtension', () => {
   test('returns empty string when config is empty', () => {
     const ext = configModule.buildFormattingExtension({

@@ -4,7 +4,7 @@ const path = require('path');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
 const { formatTranscription } = require('./formatting');
-const { loadGuideline, buildWhisperPrompt } = require('./transcriptionConfig');
+const { loadGuideline, buildWhisperPrompt, isWhisperPromptHallucination } = require('./transcriptionConfig');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -121,9 +121,18 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       ...(whisperPrompt ? { prompt: whisperPrompt } : {}),
     });
 
-    const rawText = transcription.text;
+    let rawText = transcription.text || '';
+    const trimmedRaw = rawText.trim();
 
-    // Save raw text, proceed to formatting
+    // Bug 1 fix: Whisper prompt hallucination 検出 (#269 follow-up、5/12 user 発見)
+    // 無音 / ノイズ / 短すぎる発話で Whisper が prompt を echo して返す既知挙動。
+    // raw_text が prompt 自体 / 冒頭部分と一致なら effective empty として扱う。
+    if (isWhisperPromptHallucination(trimmedRaw, whisperPrompt)) {
+      logger.info(`[transcribe] Whisper prompt hallucination detected: raw_text matched prompt for message ${messageId} (raw="${trimmedRaw.slice(0, 50)}...")`);
+      rawText = '';
+    }
+
+    // Save raw_text (effective、hallucination の場合は空)
     await pool.query(
       `UPDATE voice_transcriptions SET raw_text = $1 WHERE message_id = $2 AND version = $3`,
       [rawText, messageId, version]
@@ -142,8 +151,50 @@ async function transcribeMessage(messageId, filePath, options = {}) {
     if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     tempPath = null;
 
-    // AI formatting
-    await formatTranscription(messageId, rawText, io, roomId, version, messageType);
+    // Bug 2 fix: 短い raw_text の AI 整形 skip (#269 follow-up、5/12 user 発見)
+    // AI 整形 (gpt-4o-mini) が短い / 断片的な raw_text を「意味なし」と判断して
+    // 空文字を返してしまう挙動が観測された。例: "松さん、松です。" → ""
+    // 短い raw_text は raw_text そのまま formatted_text として採用、AI 整形 skip。
+    const MIN_FORMATTING_LENGTH = 10;
+    if (!rawText) {
+      // hallucination または genuinely empty → status='done', formatted_text=''
+      await pool.query(
+        `UPDATE voice_transcriptions SET status = 'done', formatted_text = '' WHERE message_id = $1 AND version = $2`,
+        [messageId, version]
+      );
+      if (io && roomId) {
+        io.to(roomId).emit('voice:transcription', {
+          message_id: messageId, status: 'done',
+          raw_text: '', formatted_text: '', version,
+        });
+      }
+    } else if (rawText.length < MIN_FORMATTING_LENGTH) {
+      // 短い: AI 整形 skip、raw_text を formatted_text に採用
+      logger.info(`[transcribe] short raw_text (${rawText.length} chars), skipping AI formatting for message ${messageId}: "${rawText}"`);
+      await pool.query(
+        `UPDATE voice_transcriptions SET status = 'done', formatted_text = $1 WHERE message_id = $2 AND version = $3`,
+        [rawText, messageId, version]
+      );
+      if (io && roomId) {
+        io.to(roomId).emit('voice:transcription', {
+          message_id: messageId, status: 'done',
+          raw_text: rawText, formatted_text: rawText, version,
+        });
+      }
+      // Webhook (roomId なしなら fire skip)
+      if (roomId) {
+        const { fireWebhooks } = require('./webhook');
+        const msgRes = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+        fireWebhooks('voice.transcription_completed', roomId, {
+          room: { id: roomId },
+          message: { id: messageId, type: messageType, sender: { id: msgRes.rows[0]?.sender_id } },
+          transcription: { raw_text: rawText, formatted_text: rawText },
+        });
+      }
+    } else {
+      // 通常: AI formatting
+      await formatTranscription(messageId, rawText, io, roomId, version, messageType);
+    }
 
     return rawText;
   } catch (err) {

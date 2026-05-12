@@ -12,6 +12,21 @@
 
 ### Added
 
+- **server: voice transcription の 3 段 dormant bug fix (Whisper prompt hallucination 検出 / 短文 formatting skip / メタ literal 防御)** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 follow-up、5/12 user dogfood で surface)
+  - 5/12 user 観察: トランシーバー履歴の voice の一部が「空文字」「空文字列」literal で transcription される / 完全に空になる現象
+  - 真因 (3 段の cascade):
+    - **Bug 1**: Whisper API が無音 / ノイズ / 短すぎる音声に対して **prompt の文字列をそのまま echo** して返す既知挙動 (vocab inject で prompt が太くなり leak surface)。例: raw_text が `これは農機販売店の業務無線の音声記録です。` (whisper_context そのもの) になる
+    - **Bug 2**: AI 整形 (gpt-4o-mini) が **短い raw_text** ("松さん、松です。" "はい、了解です。" 等 < 10 chars) を「意味なし」と判断して空文字を返す
+    - **Bug 3**: AI 整形が「空文字」「空文字列」「(空)」「無音」等の **Japanese meta literal を律儀に返す** (system prompt の「整形のみ」指示の意図と外れた挙動)
+  - 修正 (3 軸 + defense in depth):
+    - **Bug 1 fix**: `transcriptionConfig.js` に `isWhisperPromptHallucination(rawText, prompt)` 追加、`transcription.js` で Whisper 出力直後に検出して effective rawText を空に set
+    - **Bug 2 fix**: `transcription.js` で raw_text 長さ < 10 chars なら AI 整形 skip、raw_text をそのまま formatted_text に採用
+    - **Bug 3 fix (定義防御)**: `formatting.js` の system prompt に「**空文字、「空文字」「空文字列」「(空)」「内容なし」「無音」「empty」「null」「none」等のメタ表現を返してはならない**」を明示
+    - **Bug 3 fix (post-process 防御)**: `isMetaEmptyLiteral()` で META_EMPTY_LITERALS list に該当する応答を catch、raw_text に fallback
+    - 完全空文字応答も raw_text に content があれば fallback
+  - tests: `transcriptionConfig.test.js` に `isWhisperPromptHallucination` 8 ケース + `isMetaEmptyLiteral` 4 ケース = +12 件、計 36 件 pass
+  - regression: voice/transcription/bot-transcribe/formatting 全 65 件 pass
+
 - **server: voice transcription default を gpt-4o-mini-transcribe + 新世代 transcribe 兄弟 2 model に vocab inject 拡張** ([#269](https://github.com/gamasenninn/tealus/issues/269) Phase 2 完走、5/12 dogfood 確定)
   - 5/12 dogfood で 6 test 文すべて完璧 (グレンコンテナ / マニアスプレッダ / ハーベスタ / みこがい / ガマ / たけのこ 等の業界用語 + 短人名すべて正確認識、control 文も clean、副作用なし)
   - `WHISPER_MODEL` default: `gpt-4o-transcribe` → **`gpt-4o-mini-transcribe`** に切替 (採用者が `.env` 未設定でも最初から vocab inject 効果 + cost ~半分)

@@ -110,9 +110,59 @@ function buildFormattingExtension(config) {
   return lines.join('\n');
 }
 
+/**
+ * Whisper prompt hallucination 検出
+ *
+ * Whisper API は音声内容が薄い (無音 / ノイズ / 短すぎる発話) 場合、
+ * prompt として渡した文字列を **そのまま echo して返す** known issue がある。
+ * vocab inject で prompt が太くなったため、leak が surface しやすくなった。
+ *
+ * 検出: rawText が whisperPrompt 全体、または whisperPrompt の冒頭 (whisper_context 部分)
+ * と完全一致する場合、prompt hallucination と判定。
+ *
+ * @param {string} rawText - Whisper API の出力
+ * @param {string|null} whisperPrompt - Whisper に渡した prompt
+ * @returns {boolean}
+ */
+function isWhisperPromptHallucination(rawText, whisperPrompt) {
+  if (!rawText || !whisperPrompt) return false;
+  const raw = rawText.trim();
+  const prompt = whisperPrompt.trim();
+  if (raw === prompt) return true;
+  // whisper_context 部分のみ (vocab inject 前の文脈) と一致するか
+  const contextOnly = prompt.split(' 用語:')[0].trim();
+  if (contextOnly && raw === contextOnly) return true;
+  // raw が prompt の冒頭部分と一致 (prompt の prefix を echo)
+  if (prompt.startsWith(raw) && raw.length >= 10) return true;
+  return false;
+}
+
+/**
+ * AI 整形が返してしまう「空文字を意味する Japanese literal」の検出。
+ *
+ * gpt-4o-mini が短い / 内容が薄い raw_text を整形する時、空文字を返す代わりに
+ * 「空文字」「空文字列」「(空)」等のメタ description を返してしまう挙動が観測された。
+ * これを検出して raw_text に fallback する。
+ */
+const META_EMPTY_LITERALS = [
+  '空文字', '空文字列', '空白', '空',
+  '(空)', '（空）', '(空文字)', '（空文字）',
+  '内容なし', '内容無し', '無音', '(無音)', '（無音）',
+  '(none)', 'none', 'null', 'empty',
+];
+
+function isMetaEmptyLiteral(text) {
+  if (!text) return false;
+  const trimmed = text.trim();
+  return META_EMPTY_LITERALS.includes(trimmed);
+}
+
 module.exports = {
   loadGuideline,
   resetCache,
   buildWhisperPrompt,
   buildFormattingExtension,
+  isWhisperPromptHallucination,
+  isMetaEmptyLiteral,
+  META_EMPTY_LITERALS,
 };
