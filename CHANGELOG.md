@@ -10,6 +10,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **server: transcription_guideline の example に「数字+の+数字」hyphen 復元 rule を任意 guidelines として追加 (漢数字対応含む)** (5/13 dogfood、業務無線運用向け template として example に反映)
+  - 5/12 dogfood で「19452-1」が「19452の1」と転写される pattern を観察 → rule 9 で半角数字 + の → - 復元、5/13 追加で **漢数字 (一九三五の一 等) も digit-by-digit で半角数字に正規化 + ハイフン復元** まで rule 9 拡張
+  - 検証: 4-digit (一九三五の一→1935-1) / 5-digit (一九三五一の一→19351-1) の両 case で formatted_text が期待通り
+  - 例外: 「ファーム」「番目」「位」「倍数」等、本来「の」を必要とする語が前後にある場合は保持 (「三の倍数」「一の位」等)
+  - example file の guidelines は skeleton 用途のため compact 表現で記述、operational 版 (gitignored) では full の rule 9 として展開
+
 ## [0.2.4] - 2026-05-12
 
 ### Added
