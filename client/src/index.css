@@ -93,3 +93,15 @@ body {
     background: #e0e0e0;
   }
 }
+
+/* iOS auto-zoom 防止: モバイル幅で input/textarea/select の font-size を 16px に強制
+   iOS Safari は focus 時に font-size < 16px だと auto-zoom し、blur 後に zoom out が戻らない bug あり
+   ("入力せずに戻ると layout が崩れる、pinch out で直る" 症状の真因)
+   platform constraint なので個別 design 意図より優先 (!important) */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
