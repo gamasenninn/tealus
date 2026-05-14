@@ -3,9 +3,11 @@
 [![Test](https://github.com/gamasenninn/tealus/actions/workflows/test.yml/badge.svg)](https://github.com/gamasenninn/tealus/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> **AI が声で答える。NAS 1 台で動く。月額ゼロ円。**
+> **AI が組織の記憶を声で運ぶ。NAS 1 台で動く。月額ゼロ円。**
 
-Tealus は LINE ライクな直感 UI のオープンソース社内メッセンジャー。AI エージェントがチャットに参加して**自然言語で業務を手伝い、音声で応答**する。画像・動画はサーバ保存で端末容量を使わない。**完全オンプレミス、サブスクリプション費用なし**で 50 人規模の社内コミュニケーションを支えられる。
+Tealus は **LINE ライクな直感 UI のオープンソース社内メッセンジャー**、かつ **AI が時間とともに organic に成長する組織記憶基盤**。AI エージェントがチャットに参加して**自然言語で業務を手伝い、音声で応答**するだけでなく、業務メモ・トランシーバー音声・編集履歴がそのまま AI の文脈と辞書になり、**使うほど組織の語彙が育つ** — voice で育てた辞書が video や DB query でも同じ精度で効く。画像・動画はサーバ保存で端末容量を使わない。**完全オンプレミス、サブスクリプション費用なし**で 50 人規模の社内コミュニケーションを支える。
+
+設計姿勢の詳細: [philosophy.md](docs/presentation/philosophy.md) (organic ontology / 4 柱 / 5 必要条件) — 物語化: [walkthrough-script-v1.md](docs/presentation/walkthrough-script-v1.md) (5/11-5/14 dogfood 5 act script) — elevator pitch: [elevator-pitches.md](docs/presentation/elevator-pitches.md)。
 
 公式サイト: [tealus.dev](https://tealus.dev) — ロードマップ・思想・スクリーンショットあり。
 
@@ -1009,30 +1011,46 @@ npm run build
 
 ## ロードマップ
 
-実装済みの機能は上の [機能](#機能) セクション参照。今後の予定は GitHub Issues で管理しています。
+実装済みの機能は上の [機能](#機能) セクション参照。リリース履歴は [CHANGELOG.md](./CHANGELOG.md) を参照 (現在 **v0.2.4**、2026-05-12 release)。今後の予定は GitHub Issues で管理しています。
 
-### v0.1.x
+### v0.1.x — v0.2.x で消化済 ✅
 
-- **内部 DB MCP** — AI に「組織の記憶」を持たせる（[#185](https://github.com/gamasenninn/tealus/issues/185)）
-- **AI 間メッセージング** — Tealus を AI 組織の OS に（[#164](https://github.com/gamasenninn/tealus/issues/164)）
-- ~~**mcp-server を npm publish** — `npx tealus-mcp` で起動可能に（[#187](https://github.com/gamasenninn/tealus/issues/187)）~~ ✅ 完了
-- **Docker による全サービスデプロイ化** — Synology / QNAP / UGREEN / Linux / Mac で 1 コマンド起動（[#188](https://github.com/gamasenninn/tealus/issues/188) Phase A）
-- バックグラウンド Push 通知の安定化（[#168](https://github.com/gamasenninn/tealus/issues/168)）
-- UX 磨き込み（モバイル実機フィードバック反映）
+- ~~**内部 DB MCP** — AI に「組織の記憶」を持たせる~~ ✅ ([#185](https://github.com/gamasenninn/tealus/issues/185)、v0.2.x 系で実装、5/11 社内 DB dogfood 成功)
+- ~~**AI 間メッセージング** — Tealus を AI 組織の OS に~~ ✅ ([#164](https://github.com/gamasenninn/tealus/issues/164))
+- ~~**mcp-server を npm publish** — `npx tealus-mcp` で起動可能に~~ ✅ ([#187](https://github.com/gamasenninn/tealus/issues/187))
 
-### v0.2.0 候補
+### v0.2.x ハイライト (リリース済み)
 
+- **PWA App Badge** (Android ドット / iOS 数字、二経路 defense in depth) — v0.2.4
+- **動画文字起こし** (`transcribe_media`、cross-modality dividend の起点) — v0.2.x
+- **vocab inject 拡張** (model-aware 上限 2000 char、新世代 transcribe 2 model に default 適用) — v0.2.x
+- **tealus-mcp HTTP transport** (cross-machine 用、[#264](https://github.com/gamasenninn/tealus/issues/264)) — v0.2.x
+- 詳細は [CHANGELOG.md](./CHANGELOG.md) 参照
+
+### v0.3.x 候補
+
+- **Docker による全サービスデプロイ化** — Synology / QNAP / UGREEN / Linux / Mac で 1 コマンド起動 ([#188](https://github.com/gamasenninn/tealus/issues/188) Phase A)
 - **Anthropic API 経由の Deep agent** — Claude MAX 不要化
 - **TypeScript 化** — コントリビュータ誘致
-- LINE 連携ブリッジ（[#160](https://github.com/gamasenninn/tealus/issues/160)）
-- ゲストルーム — 外部チャット連携 + AI 一次対応（[#124](https://github.com/gamasenninn/tealus/issues/124)）
-- 通話品質の自動最適化（[#138](https://github.com/gamasenninn/tealus/issues/138)）
+- **ローカルエージェント** (Light agent provider abstraction、データ主権 driven、[#272](https://github.com/gamasenninn/tealus/issues/272)) — 議論先行、採用者 voice surface 待ち
+- **バックグラウンド Push 通知** 残 sub-task ([#168](https://github.com/gamasenninn/tealus/issues/168)) — core path は v0.2.4 完了、SW 永続化 / 死活監視は trigger 待ち
+- LINE 連携ブリッジ ([#160](https://github.com/gamasenninn/tealus/issues/160))
+- ゲストルーム — 外部チャット連携 + AI 一次対応 ([#124](https://github.com/gamasenninn/tealus/issues/124))
+- 通話品質の自動最適化 ([#138](https://github.com/gamasenninn/tealus/issues/138))
+
+### Phase 4 物語化 (進行中、中盤の優先 lever)
+
+`docs/presentation/` に narrative 3 doc が同 vocabulary で連動:
+
+- **プレゼン資料 umbrella** ([#209](https://github.com/gamasenninn/tealus/issues/209)) — philosophy.md v2 / elevator-pitches.md v2 / walkthrough-script-v1.md (5/14 sub-1 着地)
+- **採用者 case study** (sub-4、許諾後)
+- **tealus 関連ブログ立ち上げ** ([#265](https://github.com/gamasenninn/tealus/issues/265))
 
 ### 将来構想
 
 - LDAP 認証
-- NAS クラスター構成（[#120](https://github.com/gamasenninn/tealus/issues/120)）
-- ブロックチェーントークン（感謝経済）設計（[#83](https://github.com/gamasenninn/tealus/issues/83)）
+- NAS クラスター構成 ([#120](https://github.com/gamasenninn/tealus/issues/120))
+- ブロックチェーントークン（感謝経済）設計 ([#83](https://github.com/gamasenninn/tealus/issues/83))
 
 ## ライセンス
 
