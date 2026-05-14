@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { api } from '../../services/api';
 import BottomNav from '../common/BottomNav';
 import './HomePage.css';
@@ -172,7 +173,7 @@ function HomePage() {
 
                     {body && (
                       <div className={`announcement-body ${!isExpanded && isLong ? 'collapsed' : ''}`}>
-                        <Markdown remarkPlugins={[remarkGfm]}>{isExpanded || !isLong ? body : body.slice(0, 150) + '...'}</Markdown>
+                        <Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{isExpanded || !isLong ? body : body.slice(0, 150) + '...'}</Markdown>
                       </div>
                     )}
 

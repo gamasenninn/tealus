@@ -18,6 +18,7 @@ import { diffChars } from 'diff';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems.jsx';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import './MessageBubble.css';
 
 function MessageBubble({ message, isOwn, searchKeyword }) {
@@ -258,7 +259,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
                   <>
                     {mdPreview ? (
                       <div className={`bubble-text bubble-markdown ${!showFull ? 'collapsed' : ''}`}>
-                        <Markdown remarkPlugins={[remarkGfm]} components={{
+                        <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                           p: ({ children }) => <p>{processMentions(children)}</p>,
                           li: ({ children }) => <li>{processMentions(children)}</li>,
                         }}>{displayContent}</Markdown>
