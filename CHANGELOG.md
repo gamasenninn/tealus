@@ -12,11 +12,64 @@
 
 ### Added
 
+- **client: メッセージ表示で段落内改行 `\n` を `<br>` として render** (`remark-breaks` plugin 追加、5/14 業務メモ小野さん voice 起点、[#273](https://github.com/gamasenninn/tealus/issues/273)、commit `bdf3ccc`)
+  - 現状の `remark-gfm` のみだと CommonMark 仕様で段落内 `\n` が soft wrap で消える → user が打った改行が表示されない苦情
+  - `MessageBubble.jsx` + `HomePage.jsx` の `remarkPlugins` に追加、コードブロック / MD 強調 / table / list は完全 unchanged、copy → paste roundtrip でも改行保持 (lossless)
+  - dogfood 6 項目完走 (新規送信 / regression / コードブロック / copy-paste / iPhone Safari / perf 体感差なし)
+  - 5/14 cycle 最短例: 社内 user voice (02:24) → 同日 commit `bdf3ccc` (organic ontology 1 営業日 cycle)
+
+- **agent-server + server: agent prompt に `reply_to` / `reply_to_message` を伝達する構造修正** ([#274](https://github.com/gamasenninn/tealus/issues/274)、5/14 朝礼ルーム TODO 抽出 dogfood で surface、commit `28698bb` + `c8f044b`)
+  - **L1 (server)** `socket/handlers/message.js` + `routes/voice.js` + `routes/bot.js` の webhook payload に `reply_to` + `reply_to_message` を追加 (既存 `fetchReplyMessage` 流用、voice transcription fallback 込み)
+  - **L2 (agent-server)** `dispatcher.js` に `buildReplyToHint(message)` helper 追加 (2-mode: content embed / id-only fallback)、light/light2/deep の 3 path で共通利用、TDD で B1-B7 の 7 ケース追加 (既存 250 + 新 7 = 257 全 pass)
+  - **L3 (room config)** 朝礼 room の `light_prompt.md` (tealus-workspaces 配下、repo 外) で TODO 抽出 protocol を per-room tuning
+  - LLM in-context echo trap への counter pattern として content embed mode が決定的 (id-only では chat history pattern に LLM が押される、memory `feedback_llm_in_context_echo_trap.md` 参照)
+  - Dogfood verify: prompt 270 → 1483 chars (議事録本文 embed)、5/14 議事録 9 section 100% 反映、5/12 議事録 items 0 件混入なし
+
 - **server: transcription_guideline の example に「数字+の+数字」hyphen 復元 rule を任意 guidelines として追加 (漢数字対応含む)** (5/13 dogfood、業務無線運用向け template として example に反映)
   - 5/12 dogfood で「19452-1」が「19452の1」と転写される pattern を観察 → rule 9 で半角数字 + の → - 復元、5/13 追加で **漢数字 (一九三五の一 等) も digit-by-digit で半角数字に正規化 + ハイフン復元** まで rule 9 拡張
   - 検証: 4-digit (一九三五の一→1935-1) / 5-digit (一九三五一の一→19351-1) の両 case で formatted_text が期待通り
   - 例外: 「ファーム」「番目」「位」「倍数」等、本来「の」を必要とする語が前後にある場合は保持 (「三の倍数」「一の位」等)
   - example file の guidelines は skeleton 用途のため compact 表現で記述、operational 版 (gitignored) では full の rule 9 として展開
+
+### Fixed
+
+- **client: iOS PWA input focus 時の auto-zoom 防止** (mobile で input/textarea/select の font-size を 16px 強制、commit `4d00839`、5/13 iPhone dogfood 起点)
+  - iOS Safari の auto-zoom 挙動 (font-size < 16px の input にフォーカスすると画面拡大 + blur 後の layout 崩れ) を採用検討者の iPhone dogfood で観察 → 翌日 fix
+  - memory `feedback_ios_input_autozoom_16px.md` (5/13) に design guideline として記録
+
+### Changed
+
+- **docs: README opening narrative refresh + ロードマップ v0.2.x 反映** ([#209](https://github.com/gamasenninn/tealus/issues/209) sub-2、commit `a9a3444`)
+  - tagline: 「AI が声で答える」→ 「AI が組織の記憶を声で運ぶ」(組織記憶軸追加)
+  - intro paragraph: dual identity (LINE 風 UI + organic 組織記憶基盤) + cross-modality dividend echo、`philosophy.md` / `elevator-pitches.md` / `walkthrough-script-v1.md` への surface link 追加
+  - ロードマップ: v0.1.x 消化済 strikethrough (#185 / #164 / #187)、v0.2.x ハイライト + v0.3.x 候補に restructure、Phase 4 物語化 section 新設
+
+- **docs(presentation): `philosophy.md` v2 — organic ontology section 新設** (#209 sub-1.1、commit `4c81236`)
+  - 5/11 user 言語化 (organic ontology) を 4 柱の手前に layer として配置
+  - artificial / organic ontology 対比 + 5 必要条件 + 4 柱との対応 + 新機能設計判断時の評価軸 + 5/11-5/14 dogfood の cycle 検証 4 例
+  - 柱 3 に「使うほど自分自身に追いついていく」副題 + cross-modality dividend bullet 追加
+
+- **docs(presentation): `elevator-pitches.md` v2 — 推奨案 E に 3 軸追記** (#209 sub-1.2、commit `a3490bc`)
+  - 5/11-5/14 dogfood で言語化された 3 軸 (業務 DB / cross-modality dividend / 採用者 voice → 機能進化 cycle) を slide 2 / FAQ 用 2nd layer 素材として確立
+  - 4 行拡張 brushup 候補 + audience 別開示深度の対応表 (OSS 採用者 3 行 / CTO 4 行 / 思想共感者 / 現場別 framing)
+
+### Docs
+
+- **docs(presentation): `walkthrough-script-v1.md` 追加** (#209 sub-5、commit `cb105bd`)
+  - 5/7-5/14 dogfood log を物語化した 6-7 分 walkthrough script v1 draft
+  - 5 act 構成 (Act 1 vocab inject / Act 2 社内 DB MCP / Act 3 video transcription / Act 4 iPhone fix / Act 5 1 週間 4 commit 総括)
+  - 新語の言語化: `cross-modality dividend` / `organic ontology` / 「使うほど自分自身に追いついていく」
+
+- **docs(guide): 通知設定とトラブルシューティング新規作成** ([#168](https://github.com/gamasenninn/tealus/issues/168) Phase 1 sub-task、commit `497b5fb`)
+  - `docs/guide/settings/notification.md` 新規、将来の user guide tree (`docs/guide/`) 起点
+  - 5 section 構成 (PWA install / 通知許可 / バッテリー最適化 / 二経路 defense in depth 仕組み / 既知制限)
+
+### Test
+
+- **test(client): markdown plugins behavior + remark-breaks regression guard** (#273 follow-up、commit `e0d3977`)
+  - `client/__tests__/components/markdown-plugins.test.jsx` 新規、6 ケース
+  - 段落内 `\n` → `<br>` regression guard、コードブロック / MD 強調 / リスト / GFM table の共存挙動を検証
+  - client test 1 → 7 件、TDD pattern reference として確立
 
 ## [0.2.4] - 2026-05-12
 

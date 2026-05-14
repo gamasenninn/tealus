@@ -95,16 +95,17 @@ Tealus はこの 5 条件を **1 OS 内で満たす稀な system**。Notion / Sl
 
 ### 実例: 5/11 - 5/14 dogfood の cycle 検証
 
-直近 1 週間で organic ontology cycle が実際に回った 4 例 (`docs/presentation/walkthrough-script-v1.md` も同素材):
+直近 1 週間で organic ontology cycle が実際に回った 5 例 (`docs/presentation/walkthrough-script-v1.md` も同素材):
 
 | date | cycle | crystallized output |
 |---|---|---|
 | 5/11 | 社内 DB に AI が届く | `memory: project_internal_db_mcp_dogfood.md` (条件 2 強化、第 3 軸獲得) |
 | 5/12 | voice vocab 投資 → video transcription にも reciprocal に効く | "cross-modality dividend" 言語化 (条件 3 強化、柱 3 内 sub-mechanism) |
 | 5/13 | 採用検討者の iPhone voice → 翌日 commit | `memory: feedback_ios_input_autozoom_16px.md` + commit `4d00839` (条件 1+4 強化) |
-| 5/14 | 社内 user「改行が消える」voice → 同日 commit | commit `bdf3ccc` / #273 (条件 1+4 強化、cycle 最短例) |
+| 5/14 朝 | 社内 user「改行が消える」voice → 同日 commit | commit `bdf3ccc` / #273 (条件 1+4 強化、cycle 最短例) |
+| 5/14 午後 | 朝礼 TODO 抽出 bug surface → 3 層構造修正 1 セッション内完走 | commit `28698bb` + `c8f044b` / #274、**AI 自身の挙動 bug が同日 fix** ─ "LLM in-context echo trap" 言語化 (`memory: feedback_llm_in_context_echo_trap.md`)、reply_to propagation design guideline (`feedback_agent_prompt_reply_to_design.md`)。AI が AI の bug を可視化し、人間と一緒に構造修正する cycle (条件 1+2+3+4 同時強化、organic ontology 最深例) |
 
-設計時に事前 planning されたものではなく、**現場 dogfood で surface した事象が後付けで pattern 化された**例。Phase 4 retrospective が internal proof of concept として機能している。
+設計時に事前 planning されたものではなく、**現場 dogfood で surface した事象が後付けで pattern 化された**例。Phase 4 retrospective が internal proof of concept として機能している。特に **5/14 午後の朝礼 fix** は、**AI 自身の振る舞いに関する pattern を AI と人間が共同で言語化する**新しい例で、organic ontology が技術 layer (DB / modality / UX) だけでなく **AI behavior の layer にも届く**ことを示している。
 
 ---
 

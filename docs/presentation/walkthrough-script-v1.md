@@ -1,25 +1,25 @@
 # Tealus Walkthrough Script v1 — 「1 週間で何が起きたか」
 
-5/7 - 5/13 dogfood log を物語化した 6-7 分 walkthrough script (v1 draft)。
+5/7 - 5/14 dogfood log を物語化した 7-8 分 walkthrough script (v1.1 draft)。
 Tealus が掲げる **"organic ontology" / "使うほど賢くなる" / "cross-modality dividend"** を
-**実際に起きた連続事例**で示す。
+**実際に起きた連続事例**で示す。Act 5 (5/14 朝礼 fix) で AI 自身の振る舞いも organic ontology の対象に含まれることを示す構成。
 
-> **status**: v1 draft、user review 待ち。narrative 固定後に sub-1 (philosophy refresh) /
-> sub-2 (README opening) と整合させて収録 / 編集に進む想定 (#209 / sub-5)。
+> **status**: v1.1 draft (5/14 朝礼 fix を Act 5 として追加)、user review 待ち。narrative 固定後に sub-1 (philosophy refresh、完了) /
+> sub-2 (README opening、完了) と整合させて収録 / 編集に進む想定 (#209 / sub-5)。
 
 ---
 
 ## 想定 audience / 用途
 
-- **Primary**: OSS 採用検討者 (個人開発者 / SMB の技術者) — 「動かせる」感の前に「**なぜ動かす価値があるか**」を 7 分で渡す
+- **Primary**: OSS 採用検討者 (個人開発者 / SMB の技術者) — 「動かせる」感の前に「**なぜ動かす価値があるか**」を 8 分で渡す
 - **Secondary**: 技術評価者 (CTO / アーキテクト) — Tealus 独自の "self-improving" 設計が抽象論ではなく **実例で成立している** ことの証跡
 - **配信先**: tealus.dev LP の hero / SNS 短尺版 / 採用説明会の冒頭
 
 ## 尺と形式
 
-- 全長 **6:30 - 7:30** (ナレーション ~1500 字目安、~210 字/分)
-- 構成: cold open + 5 act + closing
-- 各 act = 1 つの 5/7-5/13 dogfood 事例 ↔ Tealus 設計の 1 つの差別化軸
+- 全長 **7:30 - 8:15** (ナレーション ~1700 字目安、~210 字/分)
+- 構成: cold open + 6 act + closing
+- 各 act = 1 つの 5/7-5/14 dogfood 事例 ↔ Tealus 設計の 1 つの差別化軸
 - scene cue は画面キャプチャ or 図解、live demo は別 take
 
 ---
@@ -133,33 +133,80 @@ Tealus が掲げる **"organic ontology" / "使うほど賢くなる" / "cross-m
 > これが Tealus が掲げる **"organic ontology"** ─
 > あらかじめ完璧な仕様を作るのではなく、**生きた使用の文脈から、後付けで pattern が形成されていく**設計の姿です。
 
-**[scene transition]** git log の visualization、5/7 から 5/13 までの commit dot が時間軸に並ぶ。
+**[scene transition]** 朝礼ルームの画面、新しい議事録メッセージ、その下に user が reply で「TODO を抜き出して」と書く。
 
 ---
 
-## Act 5: 1 週間で 4 つの commit、すべて dogfood 起点 (5:45 - 6:45)
+## Act 5: AI 自身の挙動 bug が、その日のうちに修正される (5:45 - 6:45)
+
+**[scene]** 朝礼ルームに新しい動画が upload される。AI が瞬時に議事録化。
+**[scene]** user が新しい議事録に reply で「この議事録から TODO を抜き出して」と書く。
+**[scene]** AI 回答 — 表示される TODO list の中身が、**前々日の議事録の内容**。
+**[overlay]** 「これ前回のだよ」と user 訂正、その後 4 回試行、毎回同じ。
+
+> **ナレーション**:
+> 5月14日、Tealus 自身に関する小さな bug が surface しました。
+>
+> AI が朝礼の動画から議事録を作るところまでは完璧。
+> でも、その議事録から TODO を抜き出させると、**なぜか前々日の TODO 一覧**を、一字一句そのまま返してくる。
+>
+> reply で「この議事録から」と明示しても、何度頼んでも、毎回同じ過去の内容。
+
+**[scene transition]** 開発側のログ調査画面。dispatcher.js のコード、agent prompt の log。
+
+> **ナレーション**:
+> 調べてみると、原因は 3 つの層に重なっていました。
+>
+> 1 つ目は、**サーバ**。メッセージの reply 関係が AI に渡る webhook payload で抜け落ちていた。
+> 2 つ目は、**AI agent server**。reply された message id を agent の prompt に embed していなかった。
+> 3 つ目は、もっと面白くて ─ AI 言語モデル自身の **"in-context echo trap"** という挙動でした。
+>
+> chat history に「同じ質問 → 同じ答え」pattern が 4 例残っていると、
+> AI は新しい instruction を**無視して**、過去の自分の答えを copy する lazy mode に陥る。
+
+**[scene]** 修正後の prompt log: `lightPrompt 270 chars → 1483 chars` の対比表示。
+
+> **ナレーション**:
+> その日のうちに、3 層すべてを構造修正しました。
+> サーバが reply 関係を agent に渡すように、agent prompt が reply 先の本文を直接埋め込むように、
+> そして 朝礼ルーム固有の指示で「過去の TODO 出力を copy しない」protocol を明示。
+>
+> 結果、AI は新しい議事録の本文だけを読んで、**新しい TODO を 100% 反映**するように戻りました。
+>
+> 印象的なのは、これが **AI 自身の振る舞いに関する pattern を、AI と人間が共同で言語化した瞬間**だったこと。
+> Tealus の organic ontology は、コードや UX だけでなく、**AI の振る舞いそのもの**にも届きます。
+> AI が間違えた事象が、設計の知見になり、構造修正になり、組織記憶として蓄積する ─
+> これも Tealus の cycle の 1 つです。
+
+**[scene transition]** git log の visualization、5/7 から 5/14 までの commit dot が時間軸に並ぶ。
+
+---
+
+## Act 6: 1 週間で 5 つの commit、すべて dogfood 起点 (6:45 - 7:45)
 
 **[scene]** git log の dot に hover すると、各 commit の起点 voice / 出来事が pop up。
 - `7c275f4` (5/12): 動画文字起こし機能 ← user voice 「動画でも欲しい」
 - `2f2969f` (5/12): vocab inject 拡張 ← Whisper が業界用語を壊す
 - `4d00839` (5/13): iOS PWA auto-zoom fix ← 採用者の iPhone dogfood
-- `bdf3ccc` (5/14): markdown 改行 ← 社内 user 「改行が消えて読みにくい」
+- `bdf3ccc` (5/14 朝): markdown 改行 ← 社内 user 「改行が消えて読みにくい」
+- `28698bb` + `c8f044b` (5/14 午後): agent reply_to 構造修正 ← 朝礼 TODO 抽出 bug、AI in-context echo trap 言語化
 
 > **ナレーション**:
-> この 1 週間で Tealus に入った 4 つの大きな変更は、**全部、誰かの実際の使用から生まれました**。
+> この 1 週間で Tealus に入った 5 つの大きな変更は、**全部、誰かの実際の使用から生まれました**。
 >
-> 採用検討者の iPhone、社内ユーザーの改行感覚、朝礼の動画、業界用語の発音。
+> 採用検討者の iPhone、社内ユーザーの改行感覚、朝礼の動画、業界用語の発音、そして **AI 自身の振る舞いの揺らぎ**。
 >
 > Tealus は単に「使うほど賢くなる」のではありません。
 > **使うほど、自分自身に追いついていく**。
 >
 > ユーザーが使い、AI が困り、人が訂正し、設計が学ぶ ─ このループが、毎週何かを生み出します。
+> 最後の例 (5/14 朝礼 fix) は、AI 自身が困っていた事象を、AI と人間が一緒に修正した日でした。
 >
 > どれも「思いついた機能」ではなく、「**起きた事象**」が機能になっています。
 
 ---
 
-## Closing (6:45 - 7:30)
+## Closing (7:45 - 8:15)
 
 **[scene]** tealus.dev のトップページ、`docker-compose up` の 1 行コマンド。
 
@@ -209,6 +256,7 @@ sub-1 (philosophy refresh) でこの 4 用語を 4 柱 narrative に統合する
 - `project_internal_db_mcp_dogfood.md` (5/11) ─ Act 2 事例
 - `project_step29_video_transcribe.md` (5/12) ─ Act 3 timing 数値
 - `feedback_ios_input_autozoom_16px.md` (5/13) ─ Act 4 事例
-- commits `7c275f4` / `2f2969f` / `4d00839` / `bdf3ccc` ─ Act 5 git log
+- `project_chourei_todo_fix.md` (5/14) + `feedback_llm_in_context_echo_trap.md` + `feedback_agent_prompt_reply_to_design.md` ─ Act 5 事例 + 言語化された pattern
+- commits `7c275f4` / `2f2969f` / `4d00839` / `bdf3ccc` / `28698bb` + `c8f044b` ─ Act 6 git log (5 commits)
 - `feedback_demo_priority_stance.md` (5/13) ─ 物語化優先 stance との整合
-- #209 (umbrella) / #265 (ブログ立ち上げ、publish 先候補)
+- [#209](https://github.com/gamasenninn/tealus/issues/209) (umbrella) / [#265](https://github.com/gamasenninn/tealus/issues/265) (ブログ立ち上げ、publish 先候補) / [#273](https://github.com/gamasenninn/tealus/issues/273) / [#274](https://github.com/gamasenninn/tealus/issues/274)
