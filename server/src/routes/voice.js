@@ -104,7 +104,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     const { fireWebhooks } = require('../services/webhook');
     fireWebhooks('message.created', roomId, {
       room: { id: roomId },
-      message: { id: message.id, type: 'voice', content: null, sender: { id: req.user.id, display_name: req.user.display_name } },
+      message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user.id, display_name: req.user.display_name } },
     });
 
     res.status(201).json({

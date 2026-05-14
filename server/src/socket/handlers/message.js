@@ -102,7 +102,7 @@ function registerMessageHandler(socket, io) {
       const { fireWebhooks } = require('../../services/webhook');
       fireWebhooks('message.created', room_id, {
         room: { id: room_id },
-        message: { id: message.id, type, content: content?.trim(), sender: { id: socket.user.id, display_name: socket.user.display_name } },
+        message: { id: message.id, type, content: content?.trim(), reply_to: reply_to || null, reply_to_message: message.reply_to_message || null, sender: { id: socket.user.id, display_name: socket.user.display_name } },
       });
 
       // Async link preview
