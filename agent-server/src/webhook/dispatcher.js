@@ -33,6 +33,48 @@ function isMentioned(content, agentName) {
 }
 
 /**
+ * message.reply_to があれば agent prompt に「reply 先 message を最優先 context にせよ」
+ * という instruction を文字列で返す。reply_to がなければ空文字 (既存挙動 retain)。
+ *
+ * 5/14 朝礼ルーム TODO 抽出 bug 起点 — user が reply_to で「この議事録」と明示しても
+ * agent が前回議事録の TODO を verbatim copy していた問題の構造修正。
+ *
+ * 2-mode behavior:
+ * - **content mode** (推奨): `message.reply_to_message.content` が存在する場合、本文を
+ *   verbatim で hint に embed。agent は tool call 不要で reply 先 message の本文を
+ *   prompt 内に literal に持つ。chat history の対抗 pattern (= 過去 assistant 応答の
+ *   echo) より強い signal になり、LLM が history copy する trap を抑制できる。
+ * - **id-only fallback** (server 側で reply_to_message を含めていない時): id だけ
+ *   embed して agent に get_messages で look up させる。chat history overwhelming
+ *   なら通り抜ける弱い form だが、最低限の signal は提供。
+ *
+ * light/light2/deep 全 path に適用。
+ */
+function buildReplyToHint(message) {
+  if (!message?.reply_to) return '';
+  const replyId = message.reply_to;
+  const replyMsg = message.reply_to_message;
+
+  if (replyMsg?.content) {
+    const senderName = replyMsg.sender_display_name || '不明';
+    return `\n\n**重要**: ユーザーは以下の message に返信しています。これが**唯一**の参照対象です:
+
+--- 対象 message (id="${replyId}", from "${senderName}") ---
+${replyMsg.content}
+--- 対象 message ここまで ---
+
+上記「対象 message」本文のみを context として回答してください。
+chat history に類似質問への過去応答 (assistant が以前出した list / 要約等) があっても、絶対に参照・引用・copy しないでください。
+output の全ての項目は、上記対象 message 本文に **literal に存在する fact** のみから生成してください。\n`;
+  }
+
+  // fallback: id-only (server が reply_to_message を含めていない / fetch 失敗時)
+  return `\n\n**重要**: ユーザーは message id="${replyId}" に返信しています。`
+       + `get_messages で当該 message を確認し、その内容を context として最優先で扱ってください。`
+       + `過去の類似質問への自分の応答を copy せず、reply 先 message の最新内容から再生成してください。\n`;
+}
+
+/**
  * メンション部分を除去してプロンプトを抽出
  */
 function extractPrompt(content, agentName) {
@@ -132,7 +174,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
         // Deep pattern を Light でも踏襲: room_id を user prompt に embed
         // (詳細 instruction は system prompt 側に集約)
         const userPrompt = result.prompt || prompt;
-        const lightPrompt = `現在のルーム ID: ${roomId}
+        const lightPrompt = `現在のルーム ID: ${roomId}${buildReplyToHint(message)}
 
 ユーザーの質問: ${userPrompt}`;
 
@@ -153,7 +195,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
       await updateStatus(agentId, roomId, 'processing');
       try {
         const userPrompt = result.prompt || prompt;
-        const lightPrompt = `現在のルーム ID: ${roomId}
+        const lightPrompt = `現在のルーム ID: ${roomId}${buildReplyToHint(message)}
 
 ユーザーの質問: ${userPrompt}`;
 
@@ -177,7 +219,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
         const deepPrompt = `あなたは Tealus メッセンジャーの AI アシスタントです。
 Tealus MCP ツール（tealus サーバー）を使って情報を取得し、ユーザーの質問に回答してください。
 
-現在のルーム ID: ${roomId}
+現在のルーム ID: ${roomId}${buildReplyToHint(message)}
 まず get_messages ツールでこのルームの直近の会話を確認してから回答してください。
 
 ユーザーの質問: ${userPrompt}`;
