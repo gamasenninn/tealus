@@ -178,6 +178,11 @@ function MemberList({ roomId, onClose }) {
           ))}
         </div>
 
+        <div className="member-actions">
+          <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>
+          <button className="member-leave-btn" onClick={handleLeave}>このグループを退会</button>
+        </div>
+
         <RoomSettings
           roomId={roomId}
           currentRoom={currentRoom}
@@ -185,11 +190,6 @@ function MemberList({ roomId, onClose }) {
           isSysAdmin={isSysAdmin}
           selectRoom={selectRoom}
         />
-
-        <div className="member-actions">
-          <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>
-          <button className="member-leave-btn" onClick={handleLeave}>このグループを退会</button>
-        </div>
 
         <button className="member-close-btn" onClick={onClose}>閉じる</button>
       </div>
