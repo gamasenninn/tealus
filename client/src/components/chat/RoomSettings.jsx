@@ -178,47 +178,6 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
         </label>
       </div>
 
-      {canEditAgent && (
-        <div className="room-settings-section">
-          <h3>エージェント設定</h3>
-          <div className="room-setting-select">
-            <label htmlFor="agent-response-mode">応答モード</label>
-            <select
-              id="agent-response-mode"
-              value={responseMode}
-              onChange={e => handleResponseModeChange(e.target.value)}
-            >
-              <option value="auto">自動</option>
-              <option value="all">全メッセージ</option>
-              <option value="mention">メンション時のみ</option>
-              <option value="off">停止</option>
-            </select>
-          </div>
-          <div className="room-setting-textarea">
-            <label htmlFor="agent-light-prompt">Light Agent プロンプト</label>
-            <textarea
-              id="agent-light-prompt"
-              value={lightPrompt}
-              onChange={e => setLightPrompt(e.target.value)}
-              onBlur={handleLightPromptBlur}
-              rows={6}
-              placeholder="このルームでの Light Agent の振る舞いを記述 (空欄でデフォルト)"
-            />
-          </div>
-          <div className="room-setting-textarea">
-            <label htmlFor="agent-deep-prompt">Deep Agent プロンプト</label>
-            <textarea
-              id="agent-deep-prompt"
-              value={claudeMd}
-              onChange={e => setClaudeMd(e.target.value)}
-              onBlur={handleClaudeMdBlur}
-              rows={6}
-              placeholder="このルームでの Deep Agent の振る舞いを記述 (空欄でデフォルト)"
-            />
-          </div>
-        </div>
-      )}
-
       {isAdmin && (
         <div className="room-settings-section">
           <h3>ルーム設定（管理者）</h3>
@@ -285,6 +244,47 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
             <input type="checkbox" checked={isAnnouncement} onChange={handleToggleAnnouncement} />
             <span>ホーム画面にお知らせとして表示</span>
           </label>
+        </div>
+      )}
+
+      {canEditAgent && (
+        <div className="room-settings-section">
+          <h3>エージェント設定</h3>
+          <div className="room-setting-select">
+            <label htmlFor="agent-response-mode">応答モード</label>
+            <select
+              id="agent-response-mode"
+              value={responseMode}
+              onChange={e => handleResponseModeChange(e.target.value)}
+            >
+              <option value="auto">自動</option>
+              <option value="all">全メッセージ</option>
+              <option value="mention">メンション時のみ</option>
+              <option value="off">停止</option>
+            </select>
+          </div>
+          <div className="room-setting-textarea">
+            <label htmlFor="agent-light-prompt">Light Agent プロンプト</label>
+            <textarea
+              id="agent-light-prompt"
+              value={lightPrompt}
+              onChange={e => setLightPrompt(e.target.value)}
+              onBlur={handleLightPromptBlur}
+              rows={6}
+              placeholder="このルームでの Light Agent の振る舞いを記述 (空欄でデフォルト)"
+            />
+          </div>
+          <div className="room-setting-textarea">
+            <label htmlFor="agent-deep-prompt">Deep Agent プロンプト</label>
+            <textarea
+              id="agent-deep-prompt"
+              value={claudeMd}
+              onChange={e => setClaudeMd(e.target.value)}
+              onBlur={handleClaudeMdBlur}
+              rows={6}
+              placeholder="このルームでの Deep Agent の振る舞いを記述 (空欄でデフォルト)"
+            />
+          </div>
         </div>
       )}
     </>
