@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import './RoomSettings.css';
 
@@ -13,7 +13,56 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
   const [editingAppIndex, setEditingAppIndex] = useState(null);
   const [error, setError] = useState('');
 
+  // --- エージェント設定 (#156) ---
+  const canEditAgent = currentRoom?.type === 'direct' || isAdmin;
+  const [responseMode, setResponseMode] = useState('auto');
+  const [agentEnabled, setAgentEnabled] = useState(true);
+  const [lightPrompt, setLightPrompt] = useState('');
+  const [claudeMd, setClaudeMd] = useState('');
+
   const showError = (msg) => setError(msg);
+
+  useEffect(() => {
+    if (!canEditAgent || !roomId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, lp, cm] = await Promise.all([
+          api.getRoomAgentSettings(roomId),
+          api.getRoomLightPrompt(roomId),
+          api.getRoomClaudeMd(roomId),
+        ]);
+        if (cancelled) return;
+        setResponseMode(s?.settings?.response_mode || 'auto');
+        setAgentEnabled(s?.settings?.enabled !== false);
+        setLightPrompt(lp?.content || '');
+        setClaudeMd(cm?.content || '');
+      } catch (err) {
+        if (!cancelled) showError(err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [roomId, canEditAgent]);
+
+  const handleResponseModeChange = async (value) => {
+    const next = { response_mode: value, enabled: agentEnabled };
+    setResponseMode(value);
+    try {
+      await api.updateRoomAgentSettings(roomId, next);
+    } catch (err) { showError(err.message); }
+  };
+
+  const handleLightPromptBlur = async () => {
+    try {
+      await api.updateRoomLightPrompt(roomId, lightPrompt);
+    } catch (err) { showError(err.message); }
+  };
+
+  const handleClaudeMdBlur = async () => {
+    try {
+      await api.updateRoomClaudeMd(roomId, claudeMd);
+    } catch (err) { showError(err.message); }
+  };
 
   // --- 個人設定 ---
   const handleToggleContinuousPlay = () => {
@@ -128,6 +177,47 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
           <span>音声の連続再生</span>
         </label>
       </div>
+
+      {canEditAgent && (
+        <div className="room-settings-section">
+          <h3>エージェント設定</h3>
+          <div className="room-setting-select">
+            <label htmlFor="agent-response-mode">応答モード</label>
+            <select
+              id="agent-response-mode"
+              value={responseMode}
+              onChange={e => handleResponseModeChange(e.target.value)}
+            >
+              <option value="auto">自動</option>
+              <option value="all">全メッセージ</option>
+              <option value="mention">メンション時のみ</option>
+              <option value="off">停止</option>
+            </select>
+          </div>
+          <div className="room-setting-textarea">
+            <label htmlFor="agent-light-prompt">Light Agent プロンプト</label>
+            <textarea
+              id="agent-light-prompt"
+              value={lightPrompt}
+              onChange={e => setLightPrompt(e.target.value)}
+              onBlur={handleLightPromptBlur}
+              rows={6}
+              placeholder="このルームでの Light Agent の振る舞いを記述 (空欄でデフォルト)"
+            />
+          </div>
+          <div className="room-setting-textarea">
+            <label htmlFor="agent-deep-prompt">Deep Agent プロンプト</label>
+            <textarea
+              id="agent-deep-prompt"
+              value={claudeMd}
+              onChange={e => setClaudeMd(e.target.value)}
+              onBlur={handleClaudeMdBlur}
+              rows={6}
+              placeholder="このルームでの Deep Agent の振る舞いを記述 (空欄でデフォルト)"
+            />
+          </div>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="room-settings-section">

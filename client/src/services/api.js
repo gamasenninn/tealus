@@ -168,6 +168,49 @@ class ApiClient {
     return await res.blob();
   }
 
+  // === Room agent settings (#156) — agent-server /config/room/:roomId/... proxy 経由 ===
+  async _agentApi(method, path, body) {
+    const opts = {
+      method,
+      headers: { Authorization: `Bearer ${this.token}` },
+    };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(`/agent-api${path}`, opts);
+    if (!res.ok) {
+      let err = 'agent-server リクエストに失敗しました';
+      try { const j = await res.json(); err = j.error || err; } catch {}
+      throw new Error(err);
+    }
+    return await res.json();
+  }
+
+  getRoomAgentSettings(roomId) {
+    return this._agentApi('GET', `/config/room/${roomId}/settings`);
+  }
+
+  updateRoomAgentSettings(roomId, settings) {
+    return this._agentApi('PUT', `/config/room/${roomId}/settings`, { settings });
+  }
+
+  getRoomLightPrompt(roomId) {
+    return this._agentApi('GET', `/config/room/${roomId}/light-prompt`);
+  }
+
+  updateRoomLightPrompt(roomId, content) {
+    return this._agentApi('PUT', `/config/room/${roomId}/light-prompt`, { content });
+  }
+
+  getRoomClaudeMd(roomId) {
+    return this._agentApi('GET', `/config/room/${roomId}/claude-md`);
+  }
+
+  updateRoomClaudeMd(roomId, content) {
+    return this._agentApi('PUT', `/config/room/${roomId}/claude-md`, { content });
+  }
+
   // Media (single file or array of files)
   uploadMedia(roomId, files, onProgress) {
     const formData = new FormData();

@@ -50,6 +50,34 @@
   font-weight: 600;
 }
 
+.room-setting-textarea {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.room-setting-textarea label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.room-setting-textarea textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.room-setting-textarea textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
 /* App URL management */
 .app-url-item {
   display: flex;
