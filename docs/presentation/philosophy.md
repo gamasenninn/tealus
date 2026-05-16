@@ -95,7 +95,7 @@ Tealus はこの 5 条件を **1 OS 内で満たす稀な system**。Notion / Sl
 
 ### 実例: 5/11 - 5/14 dogfood の cycle 検証
 
-直近 1 週間で organic ontology cycle が実際に回った 5 例 (`docs/presentation/walkthrough-script-v1.md` も同素材):
+直近 1 週間で organic ontology cycle が実際に回った 6 例 (`docs/presentation/walkthrough-script-v1.md` も同素材):
 
 | date | cycle | crystallized output |
 |---|---|---|
@@ -104,8 +104,9 @@ Tealus はこの 5 条件を **1 OS 内で満たす稀な system**。Notion / Sl
 | 5/13 | 採用検討者の iPhone voice → 翌日 commit | `memory: feedback_ios_input_autozoom_16px.md` + commit `4d00839` (条件 1+4 強化) |
 | 5/14 朝 | 社内 user「改行が消える」voice → 同日 commit | commit `bdf3ccc` / #273 (条件 1+4 強化、cycle 最短例) |
 | 5/14 午後 | 朝礼 TODO 抽出 bug surface → 3 層構造修正 1 セッション内完走 | commit `28698bb` + `c8f044b` / #274、**AI 自身の挙動 bug が同日 fix** ─ "LLM in-context echo trap" 言語化 (`memory: feedback_llm_in_context_echo_trap.md`)、reply_to propagation design guideline (`feedback_agent_prompt_reply_to_design.md`)。AI が AI の bug を可視化し、人間と一緒に構造修正する cycle (条件 1+2+3+4 同時強化、organic ontology 最深例) |
+| 5/15 | エージェント設定 UI を実装したら、隣の MemberList の違和感が見えて即連鎖 fix | commits `6ac122f` + `b3f4ec9` + `1f849f4` / #156、**dogfood UX cascade** ─ 1 つの実装に触れたことで隣接領域 (RoomSettings 内 section 順 + MemberList 操作 button 位置) の Gestalt 違和感が surface し同セッション内で 2 連 refactor。「触っていて気持ちがいい」signal で UX 完成判定 (条件 1+4 強化、implementation arc 内の cascade 例) |
 
-設計時に事前 planning されたものではなく、**現場 dogfood で surface した事象が後付けで pattern 化された**例。Phase 4 retrospective が internal proof of concept として機能している。特に **5/14 午後の朝礼 fix** は、**AI 自身の振る舞いに関する pattern を AI と人間が共同で言語化する**新しい例で、organic ontology が技術 layer (DB / modality / UX) だけでなく **AI behavior の layer にも届く**ことを示している。
+設計時に事前 planning されたものではなく、**現場 dogfood で surface した事象が後付けで pattern 化された**例。Phase 4 retrospective が internal proof of concept として機能している。特に **5/14 午後の朝礼 fix** は、**AI 自身の振る舞いに関する pattern を AI と人間が共同で言語化する**新しい例で、organic ontology が技術 layer (DB / modality / UX) だけでなく **AI behavior の layer にも届く**ことを示している。**5/15 の dogfood UX cascade** は、cycle が user voice 駆動だけでなく **実装行為そのものから連鎖的に surface する** ことを示す例で、「使うほど自分自身に追いついていく」が AI behavior 層に続いて UX 層にも適用された。
 
 ---
 

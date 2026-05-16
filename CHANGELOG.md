@@ -12,6 +12,12 @@
 
 ### Added
 
+- **client: チャット画面の RoomSettings に「エージェント設定」section 追加** ([#156](https://github.com/gamasenninn/tealus/issues/156) Phase 1、5/15、commit `6ac122f`)
+  - チャットルームの「ルームメニュー → 設定」から応答モード (auto / all / mention / off) と Light Agent / Deep Agent prompt を変更可能に (既存 agent-server endpoint を使用、API 変更なし)
+  - 権限: DM = ユーザー自身、グループ = ルーム admin (isAdmin)、sysAdmin はダッシュボード経由 (admin オーバーライド) で従来通り
+  - TDD: `RoomSettings.test.jsx` 新規 8 ケース、client test 7 → 15 件 (regression なし)
+  - Out of Scope: TTS 音声モデル設定 (settings.json の保存場所未確定、別 commit でフォロー)
+
 - **client: メッセージ表示で段落内改行 `\n` を `<br>` として render** (`remark-breaks` plugin 追加、5/14 業務メモ小野さん voice 起点、[#273](https://github.com/gamasenninn/tealus/issues/273)、commit `bdf3ccc`)
   - 現状の `remark-gfm` のみだと CommonMark 仕様で段落内 `\n` が soft wrap で消える → user が打った改行が表示されない苦情
   - `MessageBubble.jsx` + `HomePage.jsx` の `remarkPlugins` に追加、コードブロック / MD 強調 / table / list は完全 unchanged、copy → paste roundtrip でも改行保持 (lossless)
@@ -38,6 +44,14 @@
   - memory `feedback_ios_input_autozoom_16px.md` (5/13) に design guideline として記録
 
 ### Changed
+
+- **client: RoomSettings 内の section 順序を「個人 → ルーム (admin) → システム (sysAdmin) → エージェント」に変更** (#156 follow-up、5/15 founder voice、commit `b3f4ec9`)
+  - エージェント設定は重要度高だが触る頻度低い特殊な設定 (prompt / 応答モード)、誤操作 risk 低減のため最下部に配置
+  - UX 原則「上 = 頻繁 / 下 = 稀」と整合、論理階層軸では isAdmin と同レベルだが「触る人を絞りたい」性質を強調
+
+- **client: MemberList のメンバー操作 button をメンバー一覧直下に移動** (5/15 dogfood UX cascade、commit `1f849f4`)
+  - 「+メンバーを追加」「このグループを退会」が RoomSettings 群の下にあるのは Gestalt 近接の原則に反し scan path も分断、メンバー一覧の直後に移動して「メンバー operation cluster」として明示
+  - エージェント設定 section 追加 (#156) で UX 全体が見えるようになり連鎖的に気付いた改善 (organic ontology の implementation arc 内 cascade 例)
 
 - **docs: README opening narrative refresh + ロードマップ v0.2.x 反映** ([#209](https://github.com/gamasenninn/tealus/issues/209) sub-2、commit `a9a3444`)
   - tagline: 「AI が声で答える」→ 「AI が組織の記憶を声で運ぶ」(組織記憶軸追加)

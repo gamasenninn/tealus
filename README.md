@@ -1034,6 +1034,8 @@ npm run build
 - **TypeScript 化** — コントリビュータ誘致
 - **ローカルエージェント** (Light agent provider abstraction、データ主権 driven、[#272](https://github.com/gamasenninn/tealus/issues/272)) — 議論先行、採用者 voice surface 待ち
 - **バックグラウンド Push 通知** 残 sub-task ([#168](https://github.com/gamasenninn/tealus/issues/168)) — core path は v0.2.4 完了、SW 永続化 / 死活監視は trigger 待ち
+- **multi-agent dock vision** — Tealus = Role を持った主体 (AI / 人間) が dock する context 空間 ([#275](https://github.com/gamasenninn/tealus/issues/275) umbrella、[#276](https://github.com/gamasenninn/tealus/issues/276) codex spike) — 議論先行、Anthropic 6/15 制度との整合 + Codex 自律 / Claude N dock 棲み分け
+- **iOS PWA 他アプリ転送** — Apple Shortcuts 経由 ([#277](https://github.com/gamasenninn/tealus/issues/277) Phase 2 手動 setup MVP / [#278](https://github.com/gamasenninn/tealus/issues/278) Phase 3 profile 画面から自動 setup) — 議論先行、Web Share Target が iOS 非対応のため別 path
 - LINE 連携ブリッジ ([#160](https://github.com/gamasenninn/tealus/issues/160))
 - ゲストルーム — 外部チャット連携 + AI 一次対応 ([#124](https://github.com/gamasenninn/tealus/issues/124))
 - 通話品質の自動最適化 ([#138](https://github.com/gamasenninn/tealus/issues/138))

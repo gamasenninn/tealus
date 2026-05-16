@@ -182,7 +182,7 @@ Tealus が掲げる **"organic ontology" / "使うほど賢くなる" / "cross-m
 
 ---
 
-## Act 6: 1 週間で 5 つの commit、すべて dogfood 起点 (6:45 - 7:45)
+## Act 6: 1 週間で 6 つの cycle、すべて dogfood 起点 (6:45 - 7:45)
 
 **[scene]** git log の dot に hover すると、各 commit の起点 voice / 出来事が pop up。
 - `7c275f4` (5/12): 動画文字起こし機能 ← user voice 「動画でも欲しい」
@@ -190,17 +190,18 @@ Tealus が掲げる **"organic ontology" / "使うほど賢くなる" / "cross-m
 - `4d00839` (5/13): iOS PWA auto-zoom fix ← 採用者の iPhone dogfood
 - `bdf3ccc` (5/14 朝): markdown 改行 ← 社内 user 「改行が消えて読みにくい」
 - `28698bb` + `c8f044b` (5/14 午後): agent reply_to 構造修正 ← 朝礼 TODO 抽出 bug、AI in-context echo trap 言語化
+- `6ac122f` + `b3f4ec9` + `1f849f4` (5/15): RoomSettings エージェント設定 UI + UX cascade 2 連 ← 1 つの実装に触れたら隣接 UI の違和感が surface して即修正
 
 > **ナレーション**:
-> この 1 週間で Tealus に入った 5 つの大きな変更は、**全部、誰かの実際の使用から生まれました**。
+> この 1 週間で Tealus に入った 6 つの大きな変更は、**全部、誰かの実際の使用から生まれました**。
 >
-> 採用検討者の iPhone、社内ユーザーの改行感覚、朝礼の動画、業界用語の発音、そして **AI 自身の振る舞いの揺らぎ**。
+> 採用検討者の iPhone、社内ユーザーの改行感覚、朝礼の動画、業界用語の発音、**AI 自身の振る舞いの揺らぎ**、そして **実装した自分の手から見えた違和感**。
 >
 > Tealus は単に「使うほど賢くなる」のではありません。
 > **使うほど、自分自身に追いついていく**。
 >
 > ユーザーが使い、AI が困り、人が訂正し、設計が学ぶ ─ このループが、毎週何かを生み出します。
-> 最後の例 (5/14 朝礼 fix) は、AI 自身が困っていた事象を、AI と人間が一緒に修正した日でした。
+> 5/14 朝礼 fix は AI 自身が困っていた事象を AI と人間が一緒に修正した日、5/15 UX cascade は実装行為そのものから連鎖的に違和感が浮かび上がった日でした。
 >
 > どれも「思いついた機能」ではなく、「**起きた事象**」が機能になっています。
 
@@ -257,6 +258,6 @@ sub-1 (philosophy refresh) でこの 4 用語を 4 柱 narrative に統合する
 - `project_step29_video_transcribe.md` (5/12) ─ Act 3 timing 数値
 - `feedback_ios_input_autozoom_16px.md` (5/13) ─ Act 4 事例
 - `project_chourei_todo_fix.md` (5/14) + `feedback_llm_in_context_echo_trap.md` + `feedback_agent_prompt_reply_to_design.md` ─ Act 5 事例 + 言語化された pattern
-- commits `7c275f4` / `2f2969f` / `4d00839` / `bdf3ccc` / `28698bb` + `c8f044b` ─ Act 6 git log (5 commits)
+- commits `7c275f4` / `2f2969f` / `4d00839` / `bdf3ccc` / `28698bb` + `c8f044b` / `6ac122f` + `b3f4ec9` + `1f849f4` ─ Act 6 git log (6 cycle / 8 commits)
 - `feedback_demo_priority_stance.md` (5/13) ─ 物語化優先 stance との整合
 - [#209](https://github.com/gamasenninn/tealus/issues/209) (umbrella) / [#265](https://github.com/gamasenninn/tealus/issues/265) (ブログ立ち上げ、publish 先候補) / [#273](https://github.com/gamasenninn/tealus/issues/273) / [#274](https://github.com/gamasenninn/tealus/issues/274)
