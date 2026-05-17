@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" font-family="'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+  <defs>
+    <marker id="ah-up" markerWidth="10" markerHeight="10" refX="5" refY="0" orient="auto">
+      <path d="M0,8 L5,0 L10,8 z" fill="#00695C"/>
+    </marker>
+    <marker id="ah-down" markerWidth="10" markerHeight="10" refX="5" refY="8" orient="auto">
+      <path d="M0,0 L5,8 L10,0 z" fill="#8B7016"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="660" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="480" y="35" text-anchor="middle" font-size="20" font-weight="700" fill="#263238">Organic Ontology Architecture (4-layer emergence)</text>
+  <text x="480" y="58" text-anchor="middle" font-size="12" fill="#546E7A">経験 (Activity) → 文脈 (Context) → 構造 (Ontology) → 観測 (Meta-axis) の 4 層</text>
+
+  <!-- Layer 4: Meta-axis Observation (top, narrowest, gold) -->
+  <polygon points="340,100 620,100 670,190 290,190" fill="#FFF8E1" stroke="#C9A227" stroke-width="2"/>
+  <text x="480" y="125" text-anchor="middle" font-size="14" font-weight="700" fill="#8B7016">Layer 4 — Meta-axis Observation</text>
+  <text x="480" y="145" text-anchor="middle" font-size="11" fill="#8B7016">判断軸そのものの観測</text>
+  <text x="480" y="170" text-anchor="middle" font-size="10" fill="#8B7016">axis drift | hazard pattern | value evolution</text>
+
+  <!-- Layer 3: Organic Ontology (crystallized) -->
+  <polygon points="280,195 680,195 730,305 230,305" fill="#4DB6AC" stroke="#004D40" stroke-width="2"/>
+  <!-- Crystal facet hint lines on L3 -->
+  <line x1="480" y1="195" x2="480" y2="305" stroke="#004D40" stroke-width="0.4" opacity="0.3"/>
+  <line x1="280" y1="195" x2="730" y2="305" stroke="#004D40" stroke-width="0.4" opacity="0.3"/>
+  <line x1="680" y1="195" x2="230" y2="305" stroke="#004D40" stroke-width="0.4" opacity="0.3"/>
+  <text x="480" y="220" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">Layer 3 — Organic Ontology (crystallized)</text>
+  <text x="480" y="240" text-anchor="middle" font-size="11" fill="#E0F2F1">意味構造の結晶 / = tealus-organon repo</text>
+  <text x="480" y="270" text-anchor="middle" font-size="10" fill="#ffffff">role tree | hazard family | value-context | 判断軸</text>
+  <text x="480" y="290" text-anchor="middle" font-size="9" fill="#E0F2F1">(5+1 原則 + 3 層分離、organic structure tree、6 hazard 軸 family)</text>
+
+  <!-- Layer 2: Context Space (tealus core, brand teal) -->
+  <polygon points="220,310 740,310 800,420 160,420" fill="#80CBC4" stroke="#00695C" stroke-width="2"/>
+  <text x="480" y="335" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">Layer 2 — Context Space (tealus core)</text>
+  <text x="480" y="355" text-anchor="middle" font-size="11" fill="#004D40">コンテキストの場 / 流れる substrate</text>
+  <text x="480" y="385" text-anchor="middle" font-size="10" fill="#004D40">messages | voice | edit history | dictionary | memory</text>
+  <text x="480" y="405" text-anchor="middle" font-size="10" fill="#004D40">AI agent (Light/Deep) | MCP | Socket.IO | room context</text>
+
+  <!-- Layer 1: Activity Modality (bottom, widest, light teal) -->
+  <polygon points="150,425 810,425 880,545 80,545" fill="#E0F2F1" stroke="#00897B" stroke-width="2"/>
+  <text x="480" y="450" text-anchor="middle" font-size="14" font-weight="700" fill="#00695C">Layer 1 — Activity Modality</text>
+  <text x="480" y="470" text-anchor="middle" font-size="11" fill="#00695C">現場の経験 / 個別 modality</text>
+  <text x="480" y="500" text-anchor="middle" font-size="10" fill="#00695C">chat | voice | 無線 (PTT) | mention | edit / 訂正</text>
+  <text x="480" y="520" text-anchor="middle" font-size="10" fill="#00695C">files | 判断 / 評価 | 会議 / 議論 | 業務指示</text>
+
+  <!-- Left side: organic emergence arrow (up) -->
+  <line x1="45" y1="540" x2="45" y2="120" stroke="#00695C" stroke-width="2" marker-end="url(#ah-up)"/>
+  <text x="22" y="330" text-anchor="middle" font-size="12" font-weight="600" fill="#00695C" transform="rotate(-90, 22, 330)">organic emergence (経験 → 構造)</text>
+
+  <!-- Right side: feedback arrow (down) -->
+  <line x1="915" y1="120" x2="915" y2="540" stroke="#C9A227" stroke-width="2" marker-end="url(#ah-down)"/>
+  <text x="938" y="330" text-anchor="middle" font-size="12" font-weight="600" fill="#8B7016" transform="rotate(90, 938, 330)">influence / 帰還 (観測 → 経験)</text>
+
+  <!-- Bottom caption -->
+  <text x="480" y="595" text-anchor="middle" font-size="11" fill="#546E7A">下から: 経験 → 文脈 → 構造 → 観測 の 4 段 emergence</text>
+  <text x="480" y="615" text-anchor="middle" font-size="11" fill="#546E7A">上から: 観測層が判断軸を整え、現場の経験 modality へ feedback (organic な循環)</text>
+  <text x="480" y="640" text-anchor="middle" font-size="10" font-style="italic" fill="#8B7016">Tealus は Layer 1〜2 を提供する OS、Layer 3 は organon に crystallize、Layer 4 は将来 module</text>
+</svg>

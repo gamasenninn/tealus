@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 820" font-family="'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+  <defs>
+    <linearGradient id="crystalGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E0F2F1"/>
+      <stop offset="100%" stop-color="#80CBC4"/>
+    </linearGradient>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#546E7A"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="820" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="480" y="32" text-anchor="middle" font-size="20" font-weight="700" fill="#263238">Tealus = 組織のコンテキスト空間 / Organic Ontology Concept</text>
+
+  <!-- Meta-axis annotation (top-right) -->
+  <text x="940" y="62" text-anchor="end" font-size="13" font-weight="600" fill="#C9A227">── meta-axis 観測層</text>
+  <text x="940" y="80" text-anchor="end" font-size="11" fill="#8B7016">(判断軸の変化を観測)</text>
+
+  <!-- Meta-axis dashed gold ring (outermost) -->
+  <circle cx="480" cy="410" r="385" fill="none" stroke="#C9A227" stroke-width="1.2" stroke-dasharray="5,7" opacity="0.55"/>
+
+  <!-- "組織の現実" outer label -->
+  <text x="480" y="62" text-anchor="middle" font-size="13" font-style="italic" fill="#546E7A">── 組織の現実 (顧客 / 案件 / 判断 / 業務) ──</text>
+
+  <!-- 8 modality inward arrows (from r=315 to r=240) -->
+  <line x1="480" y1="95" x2="480" y2="170" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="703" y1="187" x2="650" y2="240" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="795" y1="410" x2="720" y2="410" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="703" y1="633" x2="650" y2="580" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="725" x2="480" y2="650" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="257" y1="633" x2="310" y2="580" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="165" y1="410" x2="240" y2="410" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="257" y1="187" x2="310" y2="240" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- Modality labels (at r ~ 360) -->
+  <text x="480" y="85"  text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">顧客との会話</text>
+  <text x="725" y="172" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">朝礼 / 終礼</text>
+  <text x="850" y="414" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">無線 / 通話</text>
+  <text x="730" y="652" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">会議 / 議論</text>
+  <text x="480" y="745" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">AI agent 議論</text>
+  <text x="235" y="652" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">編集 / 訂正</text>
+  <text x="105" y="414" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">判断 / 評価</text>
+  <text x="235" y="172" text-anchor="middle" font-size="12" font-weight="600" fill="#37474F">mention / TODO</text>
+
+  <!-- Donut ring: tealus context space (outer r=230, inner r=110) -->
+  <path d="M 480 180 A 230 230 0 1 1 479.99 180 Z M 480 300 A 110 110 0 1 0 480.01 300 Z" fill="#00B4A0" fill-opacity="0.18" stroke="#00B4A0" stroke-width="2" fill-rule="evenodd"/>
+
+  <!-- Tealus ring header label (inside top of ring) -->
+  <text x="480" y="215" text-anchor="middle" font-size="16" font-weight="700" fill="#00695C">tealus context space</text>
+  <text x="480" y="234" text-anchor="middle" font-size="11" fill="#00695C">(組織のコンテキストが流れる場)</text>
+
+  <!-- Ring sub-labels at r=170 around the ring (7 positions excluding N) -->
+  <text x="601" y="296" text-anchor="middle" font-size="11" fill="#00695C">memory</text>
+  <text x="655" y="414" text-anchor="middle" font-size="11" fill="#00695C">dictionary</text>
+  <text x="601" y="534" text-anchor="middle" font-size="11" fill="#00695C">edit history</text>
+  <text x="480" y="586" text-anchor="middle" font-size="11" fill="#00695C">AI agent</text>
+  <text x="360" y="534" text-anchor="middle" font-size="11" fill="#00695C">MCP</text>
+  <text x="305" y="414" text-anchor="middle" font-size="11" fill="#00695C">messages</text>
+  <text x="360" y="296" text-anchor="middle" font-size="11" fill="#00695C">transcript</text>
+
+  <!-- Center crystal: octagon r=90 -->
+  <polygon points="480,320 544,346 570,410 544,474 480,500 416,474 390,410 416,346" fill="url(#crystalGrad)" stroke="#00695C" stroke-width="2.5"/>
+
+  <!-- Crystal facet lines -->
+  <line x1="480" y1="320" x2="480" y2="500" stroke="#00695C" stroke-width="0.6" opacity="0.35"/>
+  <line x1="390" y1="410" x2="570" y2="410" stroke="#00695C" stroke-width="0.6" opacity="0.35"/>
+  <line x1="416" y1="346" x2="544" y2="474" stroke="#00695C" stroke-width="0.6" opacity="0.35"/>
+  <line x1="544" y1="346" x2="416" y2="474" stroke="#00695C" stroke-width="0.6" opacity="0.35"/>
+
+  <!-- Crystal labels -->
+  <text x="480" y="395" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">organic</text>
+  <text x="480" y="415" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">ontology</text>
+  <text x="480" y="442" text-anchor="middle" font-size="9" fill="#004D40">role / hazard / value / 判断軸</text>
+
+  <!-- Bottom caption -->
+  <text x="480" y="795" text-anchor="middle" font-size="11" font-style="italic" fill="#546E7A">組織の現実が 8 modality で context space に流れ、中心に organic ontology が結晶化する</text>
+</svg>
