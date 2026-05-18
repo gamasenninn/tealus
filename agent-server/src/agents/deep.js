@@ -24,7 +24,7 @@ function createDeepMcpConfig(workspacePath, roomId) {
         // tealus-mcp は独立 repo (gamasenninn/tealus-mcp) に分離済 (#187)。
         // npx の GitHub 直接 install で取得する (zero-config、認証不要)。
         command: 'npx',
-        args: ['-y', 'github:gamasenninn/tealus-mcp#v0.13.1'],
+        args: ['-y', 'github:gamasenninn/tealus-mcp#v0.13.2'],
         env: {
           TEALUS_API_URL: config.TEALUS_API_URL,
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
