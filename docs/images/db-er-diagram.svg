@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 820" font-family="'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+  <defs>
+    <marker id="crow" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto">
+      <path d="M2,7 L12,1 M2,7 L12,7 M2,7 L12,13" stroke="#546E7A" stroke-width="1.2" fill="none"/>
+    </marker>
+    <marker id="one" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <line x1="5" y1="2" x2="5" y2="8" stroke="#546E7A" stroke-width="1.5"/>
+    </marker>
+  </defs>
+
+  <rect width="1300" height="820" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="650" y="32" text-anchor="middle" font-size="20" font-weight="700" fill="#263238">Tealus DB ER 図 (Phase 1〜2、PostgreSQL + RLS)</text>
+  <text x="650" y="54" text-anchor="middle" font-size="12" fill="#546E7A">9 主要 table、users / rooms / messages を中心とする放射構造</text>
+
+  <!-- ===== Tier 1: 主要 entity (top) ===== -->
+
+  <!-- users -->
+  <rect x="80" y="80" width="260" height="170" fill="#00B4A0" fill-opacity="0.18" stroke="#00695C" stroke-width="2" rx="6"/>
+  <rect x="80" y="80" width="260" height="28" fill="#00B4A0" fill-opacity="0.4" stroke="#00695C" stroke-width="2" rx="6"/>
+  <text x="210" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">users</text>
+  <text x="92" y="128" font-size="10" fill="#004D40" font-weight="700">PK id (UUID)</text>
+  <text x="92" y="144" font-size="10" fill="#004D40">login_id (UNIQUE)</text>
+  <text x="92" y="160" font-size="10" fill="#004D40">display_name</text>
+  <text x="92" y="176" font-size="10" fill="#004D40">password_hash</text>
+  <text x="92" y="192" font-size="10" fill="#004D40">role (admin/user)</text>
+  <text x="92" y="208" font-size="10" fill="#004D40">avatar_url, status_message</text>
+  <text x="92" y="224" font-size="10" fill="#004D40">is_active, created_at</text>
+  <text x="328" y="244" text-anchor="end" font-size="9" font-style="italic" fill="#00695C">Phase 1</text>
+
+  <!-- room_members (junction) -->
+  <rect x="430" y="100" width="220" height="130" fill="#80CBC4" fill-opacity="0.35" stroke="#00897B" stroke-width="2" rx="6"/>
+  <rect x="430" y="100" width="220" height="28" fill="#80CBC4" fill-opacity="0.5" stroke="#00897B" stroke-width="2" rx="6"/>
+  <text x="540" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#004D40">room_members</text>
+  <text x="540" y="134" text-anchor="middle" font-size="9" fill="#00695C">(junction、N:N)</text>
+  <text x="442" y="158" font-size="10" fill="#004D40" font-weight="700">PK (room_id, user_id)</text>
+  <text x="442" y="174" font-size="10" fill="#004D40">FK → users.id</text>
+  <text x="442" y="190" font-size="10" fill="#004D40">FK → rooms.id</text>
+  <text x="442" y="206" font-size="10" fill="#004D40">role (member/admin)</text>
+  <text x="442" y="222" font-size="10" fill="#004D40">joined_at</text>
+
+  <!-- rooms -->
+  <rect x="740" y="80" width="260" height="170" fill="#00B4A0" fill-opacity="0.18" stroke="#00695C" stroke-width="2" rx="6"/>
+  <rect x="740" y="80" width="260" height="28" fill="#00B4A0" fill-opacity="0.4" stroke="#00695C" stroke-width="2" rx="6"/>
+  <text x="870" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">rooms</text>
+  <text x="752" y="128" font-size="10" fill="#004D40" font-weight="700">PK id (UUID)</text>
+  <text x="752" y="144" font-size="10" fill="#004D40">type (direct/group)</text>
+  <text x="752" y="160" font-size="10" fill="#004D40">name (group のみ)</text>
+  <text x="752" y="176" font-size="10" fill="#004D40">icon_url</text>
+  <text x="752" y="192" font-size="10" fill="#004D40">created_by FK → users.id</text>
+  <text x="752" y="208" font-size="10" fill="#004D40">created_at</text>
+  <text x="988" y="244" text-anchor="end" font-size="9" font-style="italic" fill="#00695C">Phase 1</text>
+
+  <!-- push_subscriptions -->
+  <rect x="1050" y="80" width="220" height="170" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
+  <rect x="1050" y="80" width="220" height="28" fill="#CFD8DC" stroke="#455A64" stroke-width="2" rx="6"/>
+  <text x="1160" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#263238">push_subscriptions</text>
+  <text x="1062" y="128" font-size="10" fill="#37474F" font-weight="700">PK id (UUID)</text>
+  <text x="1062" y="144" font-size="10" fill="#37474F">FK → users.id</text>
+  <text x="1062" y="160" font-size="10" fill="#37474F">endpoint (UNIQUE)</text>
+  <text x="1062" y="176" font-size="10" fill="#37474F">p256dh_key</text>
+  <text x="1062" y="192" font-size="10" fill="#37474F">auth_secret</text>
+  <text x="1062" y="208" font-size="10" fill="#37474F">created_at</text>
+  <text x="1258" y="244" text-anchor="end" font-size="9" font-style="italic" fill="#546E7A">Phase 1 (PWA)</text>
+
+  <!-- Lines Tier 1: users — room_members — rooms -->
+  <line x1="340" y1="165" x2="430" y2="165" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+  <line x1="650" y1="165" x2="740" y2="165" stroke="#546E7A" stroke-width="1.5" marker-start="url(#crow)" marker-end="url(#one)"/>
+
+  <!-- Line: users → push_subscriptions -->
+  <line x1="340" y1="135" x2="1050" y2="135" stroke="#546E7A" stroke-width="1" opacity="0.6"/>
+  <text x="1045" y="128" text-anchor="end" font-size="9" fill="#546E7A" font-style="italic">1:N (device)</text>
+
+  <!-- ===== Tier 2: messages (center) + room_read_cursors ===== -->
+
+  <!-- messages (core) -->
+  <rect x="440" y="310" width="320" height="220" fill="#00B4A0" fill-opacity="0.18" stroke="#00695C" stroke-width="2" rx="6"/>
+  <rect x="440" y="310" width="320" height="28" fill="#00B4A0" fill-opacity="0.4" stroke="#00695C" stroke-width="2" rx="6"/>
+  <text x="600" y="330" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">messages</text>
+  <text x="452" y="358" font-size="10" fill="#004D40" font-weight="700">PK id (UUID)</text>
+  <text x="452" y="374" font-size="10" fill="#004D40">FK room_id → rooms.id</text>
+  <text x="452" y="390" font-size="10" fill="#004D40">FK sender_id → users.id</text>
+  <text x="452" y="406" font-size="10" fill="#004D40">type (text/image/video/file/voice/stamp/system)</text>
+  <text x="452" y="422" font-size="10" fill="#004D40">content (TEXT)</text>
+  <text x="452" y="438" font-size="10" fill="#004D40">FK reply_to → messages.id (self-ref)</text>
+  <text x="452" y="454" font-size="10" fill="#004D40">is_deleted, is_edited</text>
+  <text x="452" y="470" font-size="10" fill="#004D40">created_at, updated_at</text>
+  <text x="452" y="490" font-size="10" font-style="italic" fill="#00695C">→ message_media / message_reads / voice_transcriptions の親</text>
+  <text x="748" y="524" text-anchor="end" font-size="9" font-style="italic" fill="#00695C">Phase 1〜2</text>
+
+  <!-- Self-loop for reply_to -->
+  <path d="M 760 360 C 800 360 800 410 760 410" fill="none" stroke="#00695C" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#crow)"/>
+  <text x="805" y="388" font-size="9" fill="#00695C" font-style="italic">self (reply_to)</text>
+
+  <!-- room_read_cursors -->
+  <rect x="850" y="320" width="270" height="160" fill="#B2DFDB" fill-opacity="0.55" stroke="#00897B" stroke-width="2" rx="6"/>
+  <rect x="850" y="320" width="270" height="28" fill="#B2DFDB" fill-opacity="0.8" stroke="#00897B" stroke-width="2" rx="6"/>
+  <text x="985" y="340" text-anchor="middle" font-size="13" font-weight="700" fill="#004D40">room_read_cursors</text>
+  <text x="985" y="354" text-anchor="middle" font-size="9" fill="#00695C">トーク一覧の未読数</text>
+  <text x="862" y="378" font-size="10" fill="#004D40" font-weight="700">PK (room_id, user_id)</text>
+  <text x="862" y="394" font-size="10" fill="#004D40">FK → users.id</text>
+  <text x="862" y="410" font-size="10" fill="#004D40">FK → rooms.id</text>
+  <text x="862" y="426" font-size="10" fill="#004D40">last_read_message_id</text>
+  <text x="862" y="442" font-size="10" fill="#004D40">updated_at</text>
+  <text x="1108" y="474" text-anchor="end" font-size="9" font-style="italic" fill="#00695C">Phase 1</text>
+
+  <!-- Lines from users / rooms → messages -->
+  <line x1="210" y1="250" x2="490" y2="310" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+  <text x="320" y="290" font-size="9" fill="#546E7A" font-style="italic">1:N (sender)</text>
+  <line x1="870" y1="250" x2="710" y2="310" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+  <text x="850" y="290" font-size="9" fill="#546E7A" font-style="italic">1:N (room)</text>
+
+  <!-- Lines from users / rooms → room_read_cursors -->
+  <line x1="340" y1="200" x2="850" y2="380" stroke="#546E7A" stroke-width="1" opacity="0.5"/>
+  <line x1="985" y1="250" x2="985" y2="320" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+
+  <!-- ===== Tier 3: messages children (bottom) ===== -->
+
+  <!-- message_media -->
+  <rect x="80" y="600" width="260" height="160" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
+  <rect x="80" y="600" width="260" height="28" fill="#CFD8DC" stroke="#455A64" stroke-width="2" rx="6"/>
+  <text x="210" y="620" text-anchor="middle" font-size="13" font-weight="700" fill="#263238">message_media</text>
+  <text x="92" y="648" font-size="10" fill="#37474F" font-weight="700">PK id (UUID)</text>
+  <text x="92" y="664" font-size="10" fill="#37474F">FK message_id → messages.id</text>
+  <text x="92" y="680" font-size="10" fill="#37474F">file_url (NAS path)</text>
+  <text x="92" y="696" font-size="10" fill="#37474F">file_name, file_size</text>
+  <text x="92" y="712" font-size="10" fill="#37474F">mime_type</text>
+  <text x="92" y="728" font-size="10" fill="#37474F">thumbnail_url</text>
+  <text x="328" y="754" text-anchor="end" font-size="9" font-style="italic" fill="#546E7A">Phase 1</text>
+
+  <!-- voice_transcriptions -->
+  <rect x="380" y="600" width="270" height="160" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
+  <rect x="380" y="600" width="270" height="28" fill="#CFD8DC" stroke="#455A64" stroke-width="2" rx="6"/>
+  <text x="515" y="620" text-anchor="middle" font-size="13" font-weight="700" fill="#263238">voice_transcriptions</text>
+  <text x="515" y="634" text-anchor="middle" font-size="9" fill="#546E7A">音声 + 動画 文字起こし (cached)</text>
+  <text x="392" y="658" font-size="10" fill="#37474F" font-weight="700">PK id (UUID)</text>
+  <text x="392" y="674" font-size="10" fill="#37474F">FK message_id → messages.id</text>
+  <text x="392" y="690" font-size="10" fill="#37474F">raw_text (Whisper 出力)</text>
+  <text x="392" y="706" font-size="10" fill="#37474F">formatted_text (AI 整形後)</text>
+  <text x="392" y="722" font-size="10" fill="#37474F">version (編集履歴連番)</text>
+  <text x="392" y="738" font-size="10" fill="#37474F">status (processing/completed)</text>
+  <text x="638" y="758" text-anchor="end" font-size="9" font-style="italic" fill="#546E7A">Phase 2</text>
+
+  <!-- message_reads -->
+  <rect x="690" y="600" width="260" height="160" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
+  <rect x="690" y="600" width="260" height="28" fill="#CFD8DC" stroke="#455A64" stroke-width="2" rx="6"/>
+  <text x="820" y="620" text-anchor="middle" font-size="13" font-weight="700" fill="#263238">message_reads</text>
+  <text x="820" y="634" text-anchor="middle" font-size="9" fill="#546E7A">既読数 (トーク画面用)</text>
+  <text x="702" y="658" font-size="10" fill="#37474F" font-weight="700">PK (message_id, user_id)</text>
+  <text x="702" y="674" font-size="10" fill="#37474F">FK message_id → messages.id</text>
+  <text x="702" y="690" font-size="10" fill="#37474F">FK user_id → users.id</text>
+  <text x="702" y="706" font-size="10" fill="#37474F">read_at</text>
+  <text x="938" y="758" text-anchor="end" font-size="9" font-style="italic" fill="#546E7A">Phase 1</text>
+
+  <!-- Lines from messages → 3 children -->
+  <line x1="500" y1="530" x2="200" y2="600" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+  <line x1="570" y1="530" x2="515" y2="600" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+  <line x1="650" y1="530" x2="800" y2="600" stroke="#546E7A" stroke-width="1.5" marker-end="url(#crow)" marker-start="url(#one)"/>
+
+  <!-- Notation legend -->
+  <text x="1050" y="600" font-size="11" font-weight="600" fill="#263238">Notation</text>
+  <line x1="1050" y1="615" x2="1085" y2="615" stroke="#546E7A" stroke-width="1.5" marker-start="url(#one)" marker-end="url(#crow)"/>
+  <text x="1095" y="619" font-size="10" fill="#37474F">1:N (parent:child)</text>
+  <path d="M 1050 640 C 1065 640 1065 660 1050 660" fill="none" stroke="#00695C" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="1075" y="654" font-size="10" fill="#37474F">self-reference (reply_to)</text>
+  <rect x="1050" y="670" width="20" height="14" fill="#00B4A0" fill-opacity="0.4" stroke="#00695C" stroke-width="1.5"/>
+  <text x="1075" y="681" font-size="10" fill="#37474F">core entity</text>
+  <rect x="1050" y="690" width="20" height="14" fill="#80CBC4" fill-opacity="0.5" stroke="#00897B" stroke-width="1.5"/>
+  <text x="1075" y="701" font-size="10" fill="#37474F">junction / read tracking</text>
+  <rect x="1050" y="710" width="20" height="14" fill="#CFD8DC" stroke="#455A64" stroke-width="1.5"/>
+  <text x="1075" y="721" font-size="10" fill="#37474F">child / subsystem</text>
+
+  <!-- Bottom caption -->
+  <text x="650" y="795" text-anchor="middle" font-size="11" fill="#546E7A">主要 9 table、RLS 有効 (users 自身 / 同 room member のみ参照可)。実装 phase は Phase 1 = MVP / Phase 2 = 音声拡張</text>
+</svg>
