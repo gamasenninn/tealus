@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" font-family="'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#546E7A"/>
+    </marker>
+    <marker id="arrow-dash" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#90A4AE"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="760" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="600" y="32" text-anchor="middle" font-size="20" font-weight="700" fill="#263238">Tealus Phase 4 中盤 構成図 (2026-05 時点、実装済)</text>
+  <text x="600" y="54" text-anchor="middle" font-size="12" fill="#546E7A">Cloudflare / Nginx → 4 backend services → data stores + ChildProcess spawn</text>
+
+  <!-- Layer 1: Cloudflare + Nginx (path routing) -->
+  <rect x="80" y="90" width="1040" height="100" fill="#ECEFF1" stroke="#546E7A" stroke-width="2" rx="6"/>
+  <text x="600" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="#263238">Cloudflare DNS/CDN + Nginx (リバースプロキシ、前段)</text>
+  <text x="100" y="142" font-size="11" fill="#37474F">/api/*       → server (3000)</text>
+  <text x="100" y="160" font-size="11" fill="#37474F">/agent-api/* → server proxy → agent-server (4000)</text>
+  <text x="100" y="178" font-size="11" fill="#37474F">/mcp/*       → server proxy → tealus-mcp (3200)</text>
+  <text x="620" y="142" font-size="11" fill="#37474F">/rtc/*       → server proxy → rtc-server (3100)</text>
+  <text x="620" y="160" font-size="11" fill="#37474F">/ws          → server Socket.IO</text>
+  <text x="620" y="178" font-size="11" fill="#37474F">/media       → 静的配信 (画像/動画/音声/file)</text>
+  <text x="900" y="142" font-size="11" fill="#37474F">/*           → React PWA (Vite build)</text>
+
+  <!-- Vertical lines from Nginx to 4 services -->
+  <line x1="200" y1="190" x2="200" y2="220" stroke="#546E7A" stroke-width="1.5"/>
+  <line x1="470" y1="190" x2="470" y2="220" stroke="#546E7A" stroke-width="1.5"/>
+  <line x1="740" y1="190" x2="740" y2="220" stroke="#546E7A" stroke-width="1.5"/>
+  <line x1="1005" y1="190" x2="1005" y2="220" stroke="#546E7A" stroke-width="1.5"/>
+
+  <!-- Layer 2: 4 backend services -->
+  <!-- server (3000) - core -->
+  <rect x="80" y="220" width="240" height="160" fill="#00B4A0" fill-opacity="0.18" stroke="#00695C" stroke-width="2" rx="6"/>
+  <text x="200" y="244" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">server (3000)</text>
+  <text x="200" y="263" text-anchor="middle" font-size="10" fill="#004D40">tealus 本体</text>
+  <text x="92" y="288" font-size="10" fill="#004D40">• REST API + Socket.IO</text>
+  <text x="92" y="304" font-size="10" fill="#004D40">• Web Push 通知</text>
+  <text x="92" y="320" font-size="10" fill="#004D40">• proxy: 4 paths (agent/mcp/rtc)</text>
+  <text x="92" y="336" font-size="10" fill="#004D40">• Whisper / gpt-4o-mini integration</text>
+  <text x="92" y="352" font-size="10" fill="#004D40">• transcription_guideline (vocab)</text>
+  <text x="92" y="368" font-size="10" fill="#004D40">• 認証 (JWT) / RLS</text>
+
+  <!-- agent-server (4000) - core -->
+  <rect x="350" y="220" width="240" height="160" fill="#00B4A0" fill-opacity="0.18" stroke="#00695C" stroke-width="2" rx="6"/>
+  <text x="470" y="244" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">agent-server (4000)</text>
+  <text x="470" y="263" text-anchor="middle" font-size="10" fill="#004D40">AI エージェント</text>
+  <text x="362" y="288" font-size="10" fill="#004D40">• Router (LLM 振分)</text>
+  <text x="362" y="304" font-size="10" fill="#004D40">• Light v1 / v2 (codex)</text>
+  <text x="362" y="320" font-size="10" fill="#004D40">• Deep (Claude CLI)</text>
+  <text x="362" y="336" font-size="10" fill="#004D40">• cc-tealus dispatcher</text>
+  <text x="362" y="352" font-size="10" fill="#004D40">• room MCP manager</text>
+  <text x="362" y="368" font-size="10" fill="#004D40">• E2E harness</text>
+
+  <!-- tealus-mcp (3200) - extension -->
+  <rect x="620" y="220" width="240" height="160" fill="#80CBC4" fill-opacity="0.35" stroke="#00897B" stroke-width="2" rx="6"/>
+  <text x="740" y="244" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">tealus-mcp (3200)</text>
+  <text x="740" y="263" text-anchor="middle" font-size="10" fill="#00695C">MCP server (別 repo)</text>
+  <text x="632" y="288" font-size="10" fill="#00695C">• stdio (default、npx pin)</text>
+  <text x="632" y="304" font-size="10" fill="#00695C">• HTTP transport (v0.12.0+)</text>
+  <text x="632" y="320" font-size="10" fill="#00695C">• 16 MCP tools</text>
+  <text x="632" y="336" font-size="10" fill="#00695C">• read_document (v0.13.1 text対応)</text>
+  <text x="632" y="352" font-size="10" fill="#00695C">• vision fallback (Gemini)</text>
+  <text x="632" y="368" font-size="10" fill="#00695C">• JWT shared with server/agent</text>
+
+  <!-- rtc-server (3100) - extension -->
+  <rect x="890" y="220" width="230" height="160" fill="#80CBC4" fill-opacity="0.35" stroke="#00897B" stroke-width="2" rx="6"/>
+  <text x="1005" y="244" text-anchor="middle" font-size="14" font-weight="700" fill="#004D40">rtc-server (3100)</text>
+  <text x="1005" y="263" text-anchor="middle" font-size="10" fill="#00695C">WebRTC / SFU</text>
+  <text x="902" y="288" font-size="10" fill="#00695C">• mediasoup SFU</text>
+  <text x="902" y="304" font-size="10" fill="#00695C">• グループ通話</text>
+  <text x="902" y="320" font-size="10" fill="#00695C">• PTT (Push-to-Talk)</text>
+  <text x="902" y="336" font-size="10" fill="#00695C">• トランシーバー</text>
+  <text x="902" y="352" font-size="10" fill="#00695C">• 音声・ビデオ通話</text>
+
+  <!-- Lines from server to PostgreSQL / Redis -->
+  <line x1="160" y1="380" x2="160" y2="480" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="260" y1="380" x2="500" y2="480" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Line from agent-server to ChildProcess box -->
+  <line x1="470" y1="380" x2="740" y2="470" stroke="#90A4AE" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow-dash)"/>
+
+  <!-- Layer 3: data stores -->
+  <!-- PostgreSQL -->
+  <rect x="80" y="480" width="240" height="200" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
+  <text x="200" y="504" text-anchor="middle" font-size="14" font-weight="700" fill="#263238">PostgreSQL</text>
+  <text x="200" y="522" text-anchor="middle" font-size="10" fill="#37474F">RLS 有効、Phase 1 〜</text>
+  <text x="92" y="546" font-size="10" fill="#37474F">• users / rooms / messages</text>
+  <text x="92" y="562" font-size="10" fill="#37474F">• media / reads / tags</text>
+  <text x="92" y="578" font-size="10" fill="#37474F">• voice_transcript (生 + 整形)</text>
+  <text x="92" y="594" font-size="10" fill="#37474F">• edit_history</text>
+  <text x="92" y="610" font-size="10" fill="#37474F">• room_settings</text>
+  <text x="92" y="626" font-size="10" fill="#37474F">• reactions / mentions</text>
+  <text x="92" y="642" font-size="10" fill="#37474F">• webhook_subscriptions</text>
+  <text x="92" y="664" font-size="10" font-style="italic" fill="#546E7A">→ 詳細は 02_DB設計.md</text>
+
+  <!-- Redis -->
+  <rect x="350" y="480" width="240" height="200" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
+  <text x="470" y="504" text-anchor="middle" font-size="14" font-weight="700" fill="#263238">Redis</text>
+  <text x="470" y="522" text-anchor="middle" font-size="10" fill="#37474F">Phase 1 〜</text>
+  <text x="362" y="546" font-size="10" fill="#37474F">• Socket.IO Pub/Sub adapter</text>
+  <text x="362" y="562" font-size="10" fill="#37474F">  (将来 multi-process scale)</text>
+  <text x="362" y="578" font-size="10" fill="#37474F">• 在席状態 (online/offline)</text>
+  <text x="362" y="594" font-size="10" fill="#37474F">• session cache</text>
+  <text x="362" y="610" font-size="10" fill="#37474F">• rate limit counter</text>
+
+  <!-- ChildProcess spawn (dashed box) -->
+  <rect x="620" y="470" width="500" height="210" fill="#FAFAFA" stroke="#90A4AE" stroke-width="1.5" stroke-dasharray="6,4" rx="6"/>
+  <text x="870" y="494" text-anchor="middle" font-size="13" font-weight="700" fill="#546E7A">agent-server からの ChildProcess spawn</text>
+  <text x="870" y="512" text-anchor="middle" font-size="10" font-style="italic" fill="#78909C">(per-session / per-request、stdio MCP 含む)</text>
+  <text x="632" y="538" font-size="10" fill="#37474F">• <tspan font-weight="600">claude CLI</tspan> (Deep agent、Anthropic Claude Code subscription)</text>
+  <text x="632" y="558" font-size="10" fill="#37474F">• <tspan font-weight="600">npx tealus-mcp</tspan> #v0.13.1 (room-scoped MCP、stdio)</text>
+  <text x="632" y="578" font-size="10" fill="#37474F">• <tspan font-weight="600">filesystem MCP</tspan> (per-room workspace)</text>
+  <text x="632" y="598" font-size="10" fill="#37474F">• <tspan font-weight="600">tavily-mcp</tspan> (Web 検索、global shared)</text>
+  <text x="632" y="618" font-size="10" fill="#37474F">• <tspan font-weight="600">dbhub MCP</tspan> (社内 DB、room-scoped opt-in)</text>
+  <text x="632" y="638" font-size="10" fill="#37474F">• <tspan font-weight="600">codex SDK</tspan> backend (Light v2、ChatGPT subscription)</text>
+  <text x="632" y="664" font-size="10" font-style="italic" fill="#546E7A">→ stdio 経由で 1 session 内に複数 MCP server を並列起動</text>
+
+  <!-- External services side annotation -->
+  <text x="600" y="715" text-anchor="middle" font-size="11" fill="#546E7A">外部 service (opt-in): OpenAI API (Whisper / gpt-4o-mini / gpt-5.4-mini) | Aivis Cloud TTS | Google Gemini (vision) | DALL-E 3 (画像生成) | Anthropic Claude API (Deep)</text>
+  <text x="600" y="735" text-anchor="middle" font-size="10" font-style="italic" fill="#78909C">いずれも env / API key で個別 enable、依存ゼロでも基本動作 (チャット + 通話 + ファイル共有) は完結</text>
+</svg>
