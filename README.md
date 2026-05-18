@@ -1048,6 +1048,21 @@ npm run build
 - **採用者 case study** (sub-4、許諾後)
 - **tealus 関連ブログ立ち上げ** ([#265](https://github.com/gamasenninn/tealus/issues/265))
 
+**docs disclosure 階段** (5/18 物理化完成、CHANGELOG `[Unreleased]` 参照):
+
+- **LP** (`tealus.dev`) — concrete hook (NAS / ゼロ円 / AI 音声 / LINE ライク) + 組織記憶 signal (5/17 PR 1/2 で確立)
+- **`docs/00_what-is-tealus.md`** — 入り口 doc (新規 5/18)、Tealus とは何か / なぜ / 何が起こるか / どう違うか / 本質
+- **`docs/04_オーガニックオントロジー構造.md`** — full disclosure (5/17 初版 + 5/18 v0.5 update)、4 層 emergence architecture + 6 段階 feedback loop
+- **`tealus-organon` repo** (private) — Layer 3 data 担体、5+1 原則の運用 manual
+
+audience の認知負荷を段階的に管理する 4 段階構造、SVG 3 枚 + PNG 3 枚で visual 統一感も `docs/images/` で確立。
+
+**Organic ontology の運用 phase 到達** (5/18):
+
+- **organon v0.5 release**: entries 12 → 20、hazard 軸 family 8 → 11、organization kind 正式追加、cover 27.3% → **57% (倍以上)**
+- **第 6 feedback layer = upstream pipeline rectification 正典化**: 観測 → 上流 data source 修正 → 量的訂正効果 で因果 loop を外向きに開く戦略確立、internal pragmatic 閉じ + 外部因果 loop 開きの二段戦略で organic に解消
+- **第 1 例 feedback loop closure** (本体班 ↔ organon 班 23 分 round-trip): organon hazard 発見 → 本体 `transcription_guideline.json` vocabulary 38 → 42 → Day 3 朝礼で量的訂正効果測定 protocol、distributed AI lane coordination の経験的根拠 ([Issue #279](https://github.com/gamasenninn/tealus/issues/279) (b) 一般理論)
+
 ### 将来構想
 
 - LDAP 認証
