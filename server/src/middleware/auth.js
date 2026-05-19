@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
+const { isAdmin } = require('../utils/permissions');
 
 const JWT_SECRET = (() => {
   const secret = process.env.JWT_SECRET;
@@ -57,7 +58,7 @@ async function authenticate(req, res, next) {
  * Must be used after authenticate
  */
 function requireAdmin(req, res, next) {
-  if (req.user.role !== 'admin') {
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ error: '管理者権限が必要です' });
   }
   next();

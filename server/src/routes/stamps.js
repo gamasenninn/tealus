@@ -3,6 +3,7 @@ const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { isAdmin } = require('../utils/permissions');
 const { generateStampPack, saveStampFiles, checkDailyLimit } = require('../services/stamp');
 
 const router = express.Router();
@@ -23,7 +24,7 @@ router.post('/generate', async (req, res) => {
   }
 
   // Check daily limit (admin exempt)
-  if (req.user.role !== 'admin') {
+  if (!isAdmin(req.user)) {
     const todayCount = await checkDailyLimit(pool, userId);
     if (todayCount >= DAILY_LIMIT) {
       return res.status(429).json({ error: `1日の生成上限（${DAILY_LIMIT}パック）に達しました` });
@@ -216,7 +217,7 @@ router.delete('/packs/:id', async (req, res) => {
       return res.status(404).json({ error: 'スタンプパックが見つかりません' });
     }
 
-    if (pack.rows[0].created_by !== userId && req.user.role !== 'admin') {
+    if (pack.rows[0].created_by !== userId && !isAdmin(req.user)) {
       return res.status(403).json({ error: '削除権限がありません' });
     }
 
@@ -269,7 +270,7 @@ router.put('/packs/:id', async (req, res) => {
       return res.status(404).json({ error: 'スタンプパックが見つかりません' });
     }
 
-    if (pack.rows[0].created_by !== userId && req.user.role !== 'admin') {
+    if (pack.rows[0].created_by !== userId && !isAdmin(req.user)) {
       return res.status(403).json({ error: '編集権限がありません' });
     }
 
@@ -305,7 +306,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'スタンプが見つかりません' });
     }
 
-    if (stamp.rows[0].created_by !== userId && req.user.role !== 'admin') {
+    if (stamp.rows[0].created_by !== userId && !isAdmin(req.user)) {
       return res.status(403).json({ error: '削除権限がありません' });
     }
 

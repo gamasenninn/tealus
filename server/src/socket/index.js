@@ -2,6 +2,7 @@ const logger = require('../utils/logger');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const { JWT_SECRET } = require('../middleware/auth');
+const { isAdmin } = require('../utils/permissions');
 const { registerMessageHandler } = require('./handlers/message');
 const { registerReadHandler } = require('./handlers/read');
 const { registerTypingHandler } = require('./handlers/typing');
@@ -47,7 +48,7 @@ function setupSocketHandlers(io) {
     socket.join(`user:${userId}`);
 
     // Admin: join all rooms for dashboard monitoring
-    if (socket.user.role === 'admin') {
+    if (isAdmin(socket.user)) {
       pool.query('SELECT id FROM rooms').then(result => {
         for (const r of result.rows) {
           socket.join(r.id);
