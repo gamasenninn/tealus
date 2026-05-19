@@ -3,6 +3,7 @@ const E = require('../constants/errors');
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { canSearchUsers } = require('../utils/permissions');
 
 const router = express.Router();
 
@@ -13,6 +14,9 @@ router.use(authenticate);
  * List all active users (excluding current user)
  */
 router.get('/', async (req, res) => {
+  if (!canSearchUsers(req.user)) {
+    return res.status(403).json({ error: 'ゲストユーザは他のユーザー情報を参照できません' });
+  }
   try {
     const result = await pool.query(
       `SELECT id, login_id, display_name, avatar_url, status_message
@@ -33,6 +37,9 @@ router.get('/', async (req, res) => {
  * Get list of online user IDs
  */
 router.get('/online', (req, res) => {
+  if (!canSearchUsers(req.user)) {
+    return res.status(403).json({ error: 'ゲストユーザは他のユーザー情報を参照できません' });
+  }
   const { getOnlineUserIds } = require('../socket');
   res.json({ online: getOnlineUserIds() });
 });

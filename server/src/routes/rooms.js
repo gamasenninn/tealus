@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } = require('../middleware/roomAccess');
+const { canCreateRoom } = require('../utils/permissions');
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -104,6 +105,9 @@ router.get('/announcements', async (req, res) => {
  * Create a group room
  */
 router.post('/', async (req, res) => {
+  if (!canCreateRoom(req.user)) {
+    return res.status(403).json({ error: 'ゲストユーザはルームを作成できません' });
+  }
   const { name, member_ids } = req.body;
   const userId = req.user.id;
 
@@ -175,6 +179,9 @@ router.post('/', async (req, res) => {
  * Create or get a direct (1-on-1) room
  */
 router.post('/direct', async (req, res) => {
+  if (!canCreateRoom(req.user)) {
+    return res.status(403).json({ error: 'ゲストユーザはルームを作成できません' });
+  }
   const { partner_id } = req.body;
   const userId = req.user.id;
 
