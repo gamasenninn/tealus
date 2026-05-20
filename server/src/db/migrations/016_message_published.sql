@@ -1,7 +1,26 @@
 -- メッセージ公開フラグ（お知らせ用）
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT false;
 
--- 既存のお知らせメッセージは一括公開
-UPDATE messages SET is_published = true
-WHERE room_id IN (SELECT id FROM rooms WHERE is_announcement = true)
-AND is_deleted = false AND type != 'system';
+-- ============================================================
+-- 旧 UPDATE 句 (= お知らせルームの既存 message を一括公開) は 2026-05-21 に削除済。
+--
+-- 旧 SQL:
+--   UPDATE messages SET is_published = true
+--   WHERE room_id IN (SELECT id FROM rooms WHERE is_announcement = true)
+--     AND is_deleted = false AND type != 'system';
+--
+-- 旧 SQL は 016 追加 (2026-04 頃) の初回 deploy 時に「既存お知らせを救済」目的だったが、
+-- migrate.js は history tracking なしで毎回全 .sql を再実行するため、本 UPDATE が
+-- migrate 再実行のたびに **お知らせルーム内の全 message を is_published=true に書き戻す**
+-- 副作用があった (= idempotent でない bug)。
+--
+-- 2026-05-21 user 報告で発覚 (= migration 022 適用のため migrate 再実行した結果、
+-- 全 announcement message が誤公開された)。本 UPDATE 句を削除して以降 migrate 再実行で
+-- 副作用なし、初回 deploy 時の既存 message 救済が必要な場合は手動 SQL 実行で対応する
+-- (= 新 deploy 環境は稀、手動運用で許容)。
+--
+-- データ復旧 SQL (2026-05-21 user 実施):
+--   UPDATE messages SET is_published = false
+--   WHERE room_id IN (SELECT id FROM rooms WHERE is_announcement = true)
+--     AND is_deleted = false AND type != 'system';
+-- ============================================================
