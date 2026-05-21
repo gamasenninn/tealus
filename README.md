@@ -1057,11 +1057,19 @@ npm run build
 
 audience の認知負荷を段階的に管理する 4 段階構造、SVG 3 枚 + PNG 3 枚で visual 統一感も `docs/images/` で確立。
 
-**Organic ontology の運用 phase 到達** (5/18):
+**Organic ontology の運用 phase 到達** (5/18 → 5/19 update):
 
-- **organon v0.5 release**: entries 12 → 20、hazard 軸 family 8 → 11、organization kind 正式追加、cover 27.3% → **57% (倍以上)**
+- **organon v0.5 → v0.5.1 release**: entries 12 → 20 → **26 (+30%)**、hazard 軸 family 8 → 11 → **12 軸目 candidate (observer-architect-duality)**、organization kind 正式追加、cover 27.3% → **57% (倍以上)**
 - **第 6 feedback layer = upstream pipeline rectification 正典化**: 観測 → 上流 data source 修正 → 量的訂正効果 で因果 loop を外向きに開く戦略確立、internal pragmatic 閉じ + 外部因果 loop 開きの二段戦略で organic に解消
-- **第 1 例 feedback loop closure** (本体班 ↔ organon 班 23 分 round-trip): organon hazard 発見 → 本体 `transcription_guideline.json` vocabulary 38 → 42 → Day 3 朝礼で量的訂正効果測定 protocol、distributed AI lane coordination の経験的根拠 ([Issue #279](https://github.com/gamasenninn/tealus/issues/279) (b) 一般理論)
+- **第 1 例 feedback loop 量的成功 4/4 ✅ confirmed** (5/19 Day 3 trace、27 時間 round-trip closure): organon hazard 発見 → 本体 `transcription_guideline.json` vocabulary 38 → 42 → Day 3 朝礼 STT で「上山/アンプリ/中田/クラッチー」全て 0 件 + 「神山/三瓶/舟太/山崎整備長」正発火、distributed AI lane coordination の経験的根拠 ([Issue #279](https://github.com/gamasenninn/tealus/issues/279) (b) 一般理論)
+- **第 7 layer 候補 framing 訂正 (architect-mediated organon ingestion)** + **★★ 14 軸目 candidate (observer-architect-duality)**: universality 主張 = methodology + architect role prerequisite (= adoption barrier) 二重 thesis、Phase 5 narrative の qualifier
+- **maturation curve 4 日連続 layer surface** (5/17 layer 5 / 5/18 layer 6 / 5/19 朝 layer 7 候補 / 5/19 夕 14 軸目 candidate): steepness 自体が architect の active co-evolution の structural evidence
+
+**Phase 5 narrative core 候補 — ゲストユーザ role 拡張 Phase 1 MVP 完成** (5/19 [#282](https://github.com/gamasenninn/tealus/issues/282)):
+
+- `users.role IN ('admin', 'user', 'guest')` 1 軸追加で **schema (Phase A) + permission helper (Phase B) + route guards (Phase C)** 3 層が 1 day 完成、+33 tests、production deploy 済
+- Tealus 根幹原則 (= AI と人間を区別する仕組みが最小限) を外部 user にも適用、`users.is_bot` flag と同型の対称的拡張
+- 採用者 voice trigger 解除候補: 「外部問い合わせ機能?」と聞かれた瞬間に dep ゼロで提示可能
 
 ### 将来構想
 

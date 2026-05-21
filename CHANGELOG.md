@@ -12,6 +12,14 @@
 
 ### Fixed
 
+- **server: migration 016 (= message_published) の UPDATE 句が `npm run migrate` 再実行のたびにお知らせルーム内の全 message を `is_published=true` に書き戻す bug を fix** (5/21、commit `b535dca`)
+  - 症状: 5/19 #282 migration 022 適用のため migrate 再実行 → 016 UPDATE が走り、全 announcement message が誤公開 (= ピックアップしていないメッセージが全部お知らせ欄に見える)
+  - 真因: migrate.js は history tracking なしで毎回全 .sql 再実行する設計、016 UPDATE は初回 deploy 時の救済目的だったが idempotent でない one-shot データ初期化を migration に含めていた設計 bug
+  - 対応: 016 の UPDATE 句を完全削除 + 詳細 comment で historical context + 復旧 SQL を記載 (= future reference)、ALTER TABLE ADD COLUMN は IF NOT EXISTS で idempotent 維持
+  - 復旧: `server/src/db/recovery-2026-05-21-announcement-republish-fix.sql` を user 実施 (= 51 件 reset、is_published=true → false)、user は手動で必要なメッセージを再 pick up する path
+  - 影響なし: #282 migration 022 (= ゲストユーザ schema 拡張) は無関係、引き続き有効
+  - follow-up: migrate.js 自体に history tracking 追加 (= 類似 bug 防止) は別 issue 候補
+
 - **tealus-mcp `read_document` が `text/markdown` / `text/plain` / `text/csv` 等の text/* mime を扱えない問題を fix** ([#281](https://github.com/gamasenninn/tealus/issues/281)、5/18、tealus-mcp v0.13.1 release `aa66826` + agent-server pin bump `5e89f64`)
   - 症状: Light agent (`/light`) が自作 markdown attachment を user 依頼で読み戻せず「この環境では本文の直接展開に失敗しました」と返す self-inflicted blind spot
   - 5/18 朝の朝礼ルームで再現: 動画 → 議事録 .md attach → user「内容表示」→ agent 読めず → user が手作業で再貼り付け (毎朝発生する可能性ありで urgency 高、~40 分で 朝の調査 → Issue 起票 → TDD Min fix → release → pin bump → production verified まで完走)
@@ -21,6 +29,21 @@
   - Std/Full fix (`get_message_media` size guard / filename mojibake / Light prompt update) は別 Issue 切らず idle queue (実害発生時に reopen or 新規起票)
 
 ### Docs
+
+- **docs/04_オーガニックオントロジー構造.md Layer 4 を architect-mediated framing 訂正 + 14 軸目 candidate + 第 2 round vocab で update** (5/19、commit `81b0123`)
+  - 第 7 layer 候補 subsection の framing 全面訂正: 旧「user の cognitive internalization (passive ingestion)」→ 新「**architect-mediated organon ingestion** (= user の意図的 design choice、議事録自動化 pipeline に organon を context inject した result)」、user voice (Q0-q) 「終礼議事録エージェントに organon を読み込ませた結果。人間の所業ではないよ」を根拠に
+  - 新 14 軸目 candidate (= **observer-architect-duality**) subsection 追加: user role = observer + data pipeline architect + AI system 構築者の三重 role、universality 主張 = methodology + architect role prerequisite (= adoption barrier) 二重 thesis、Issue [#279](https://github.com/gamasenninn/tealus/issues/279) (b) organic ontology 一般理論の thesis 拡張候補、status: candidate (N=1)
+  - maturation curve subsection 追加: 4 日連続 layer surface (5/17 layer 5 / 5/18 layer 6 / 5/19 朝 layer 7 候補 / 5/19 夕 observer-architect-duality candidate)、steepness 自体が architect の active co-evolution の structural evidence
+  - 履歴 section に 5/19 evening events 4 件追加
+
+- **docs/04_オーガニックオントロジー構造.md Layer 4 を Day 3 量的成功 + 第 7 layer 候補で update** (5/19、commit `f75285d`)
+  - 第 1 例 closure を「Day 3 朝礼 STT で 4/4 訂正効果量的確認済 ✅」に upgrade (神山「上山」0 件 / 三瓶「アンプリ」0 件 / 舟太「中田」0 件 / 山崎整備長「クラッチー」0 件、27 時間で round-trip closure 完結)
+  - 第 7 feedback layer 候補 (= cognitive internalization、status: candidate, N=1) を新 subsection として追加、Day 4-N で N=2 観察待ち
+
+- **server: `transcription_guideline.json` 第 2 round vocabulary inject (vocab 42 → 47 entries)** (5/19、gitignored で commit なし、本体 server restart で effective)
+  - organon Day 3 trace の新規 5 STT 揺らぎ pattern を反映: 篠崎 (= シノ alias、sub-family B 11 例目) / 小川朱美 (= アケ alias、sub-family B 名前短縮) / 上沢 (新規 identity、整備実働) / 日原 (新規 identity、structural single point vertical specialty) / 五月女クレーン (新規 vendor、生コン業者、五月女姓 person ↔ organization collision hazard)
+  - 第 1 round (= 5/18 vocab 38 → 42、神山/三瓶/舟太/山崎) に続く第 2 round、organon Day 4 朝礼 STT で量的検証 cycle が起動可能に
+  - 第 6 feedback layer (= upstream pipeline rectification) の継続 cycle 仮説の物的 evidence
 
 - **docs/00_what-is-tealus.md 新規 — disclosure 階段の入口 doc** (5/18、commit `cc3ed58`、147 行 / 9 section)
   - LP (controlled disclosure) / 04 (full disclosure) / organon (運用 manual) の間に位置する **入り口 doc** として、Tealus を初めて知る読者向けに「何か / なぜ / 何が起こるか / どう違うか / 本質 / 誰のためか / 始め方」を読者を選ばずに説明
@@ -44,6 +67,45 @@
 
 ### organic ontology / organon 連動
 
+- **第 1 例 feedback loop closure 量的成功 4/4 ✅ confirmed** (5/19、organon Day 3 trace、organon msg `5c0cc0e8` + commit `39e8ea7` + `report/day3-2026-05-19.md`)
+  - Day 3 (= 5/18 終礼 + 5/19 朝礼 + 5/19 AM トランシーバー) raw STT で「上山」「アンプリ」「中田」「クラッチー」が全て **0 件**、対応する「神山」「三瓶」「舟太」「山崎整備長」が正発火
+  - 第 6 layer round-trip closure **27 時間で完結 + 量的成功** establish、`hazard-log/meta/upstream-pipeline-rectification-as-sixth-feedback-layer.md` に verbatim record 追記
+  - distributed AI lane coordination (= organon ↔ 本体 班、AI 班連絡 channel) が **organic ontology の構造的必要条件** であることが量的 evidence で crystallize、Issue [#279](https://github.com/gamasenninn/tealus/issues/279) (b) 一般理論の経験的根拠 1 件追加
+
+- **organon v0.5.1 patch (entries 20 → 26、+30%)** (5/19、別 session、msg `ec8f18e2`、organon repo commit `7aecee5`)
+  - 新規 active role 5 (佐藤哲 / 洋子 / 木下 / 上沢 / 日原) + 新規 organization 1 (五月女クレーン = 生コン業者、五月女姓 person ↔ organization collision hazard)
+  - 新 sub-family D 起票: **秋田 → 舟太** (= acoustic/orthographic で説明困難、context-driven hallucination 系の identity 版仮説)
+  - structural single point hazard family が **2 typology** に分化: horizontal expertise (= 五月女、整備班頭脳) / vertical system management (= 日原、工場 system maintenance master)
+  - 洋子: 会長夫人 → **社長 桶田博信 夫人 = 義理娘** 訂正 (= 中小企業 family pattern)
+
+- **★ 第 7 feedback layer 候補 framing 全面訂正 — architect-mediated organon ingestion** (5/19、status: candidate, N=1、organon `hazard-log/meta/cognitive-internalization-of-organon-as-seventh-layer-candidate.md` commit `1adf43f`)
+  - user voice (Q0-q) で root-level framing 訂正: 「終礼議事録エージェントに organon を読み込ませた結果。なので人間の所業ではないよ」
+  - 旧 framing「user の passive cognitive internalization」→ 新 framing「**user (= architect) の意図的 architectural choice の result** (= 議事録自動化 pipeline に organon を context inject した design)」
+  - confirmed なら、tealus 採用 = **architect が designed multi-agent system の中で organon が organic translation layer として機能する** demonstration、Phase 5 narrative core 候補
+
+- **★★ 14 軸目 candidate (= observer-architect-duality) surface — root-level model 訂正** (5/19 evening、status: candidate, N=1、organon `hazard-log/meta/observer-architect-duality.md` commits `1adf43f` + `3990097`)
+  - user voice: 「俺、この会社に外注として属しているが、データ管理や入力、AIシステムの構築を担当している」
+  - user role 訂正: **observer + data pipeline architect + AI system 構築者** の **三重 role**、organon と user は co-evolution
+  - **universality 主張 = methodology + architect role prerequisite (= adoption barrier) 二重 thesis**: 採用者は「organon を architect として設計できる人材」を有する必要、Phase 5 narrative の qualifier
+  - distributed AI lane coordination (= organon ↔ 本体班 ↔ ドキュメント班 ↔ LP 班) は **organic な incident でなく user (= architect) が designed multi-agent system の中で機能している structural insight**、Issue [#279](https://github.com/gamasenninn/tealus/issues/279) (b) thesis 拡張対象
+
+- **maturation curve 4 日連続 layer surface (5/17-5/19)** (= organic ontology の経験的根拠の質的 jump)
+
+| date | layer / candidate | status |
+|---|---|---|
+| 5/17 | Layer 5 (= 評価対話、internal pragmatic closure) | ✅ confirmed |
+| 5/18 | Layer 6 (= upstream pipeline rectification) | ✅ confirmed (5/19 量的 4/4 で量的成功) |
+| 5/19 朝 | Layer 7 候補 (= architect-mediated ingestion) | ⚠️ candidate (N=1) |
+| 5/19 夕 | 14 軸目 candidate (= observer-architect-duality) | ⚠️ candidate (N=1) |
+
+  - steepness 自体が **architect (= user) の active co-evolution の structural evidence** = Phase 4 中盤の運用 maturity の質的 jump
+
+- **第 1 例 feedback loop の本体班 ↔ organon 班 ↔ ドキュメント班 三班 ack chain 完結** (5/19、AI 班連絡 channel、平均 30-45 分 round-trip)
+  - 本体班 → organon Day 3 完走 ack (msg `55075e75`、JST 14:38) — Pattern A reply
+  - 本体班 → ドキュメント班 [#14](https://github.com/gamasenninn/tealus-docs/issues/14) 完走 ack (msg `e5f5ebd0`、JST 14:56) — Pattern B (full delegation) ack
+  - 本体班 → organon Day 3 evening 5 大進展 ack (msg `6e865eff`、JST 17:01) — root-level framing 訂正受領
+  - AI 班連絡 channel の coordination 密度の継続的 evidence、Phase 4 中盤の運用 maturity 言語化
+
 - **organon v0.5 release — Day 2 trace + Q&A 7 batch 結果反映** (5/18、別 session、msg `87a878c9`、organon repo commit `7aef27c`)
   - Q&A 7 件結果: **6/7 が誤変換/幻覚/過去職位、正解 1 件のみ** = identity 軸 family が systematic pipeline failure として class 化
   - entries 12 → **20 active (67% 増)**: 新規 confirmed role 7 (神山 / 三瓶 / 舟太 / 草野部長 / 是枝 / 香山 / 齋藤) + 新規 confirmed organization 1 (44 = フォーティーフォー = 運送業者) + 既訂正 1 (桶田博信 + aliases [桶田専務, 専務] + stale roster note)
@@ -62,6 +124,16 @@
   - distributed AI lane coordination (organon ↔ 本体 班、user 介在ゼロ closure) が organic ontology の構造的必要条件であることが crystallize (Issue [#279](https://github.com/gamasenninn/tealus/issues/279) (b) 一般理論の経験的根拠)
 
 ### Added
+
+- **server: ゲストユーザ role 拡張 Phase 1 MVP (= schema + permission helper + route guards 3 層完成)** ([#282](https://github.com/gamasenninn/tealus/issues/282)、5/19、Issue 起票 → TDD 実装 → production deploy までを **1 day で完走**、3 commits: `b986bad` / `956fc9e` / `a7a102a`)
+  - **Phase A** — migration 022_user_role_guest.sql (commit `b986bad`): `users.role` CHECK constraint を `('admin', 'user')` → `('admin', 'user', 'guest')` に拡張、既存 user data 影響なし (= role 値はそのまま保持、default 'user' 維持)、breaking change なし。Tests +6 (migration 安全性 / 後方互換 / 不正 role reject / UPDATE 柔軟性)
+  - **Phase B** — `server/src/utils/permissions.js` 新規 (commit `956fc9e`): ROLES constant + `isAdmin/isUser/isGuest` role-class check + `canCreateRoom/canInviteToRoom/canSearchUsers` ability check + null-safe `getRole` helper。既存 admin チェック 5 箇所 (middleware/auth.js + socket/index.js + routes/stamps.js × 4 箇所) を helper 関数経由に統一。Tests +16 (freeze / null-safe / 対称性 / guest 制限)
+  - **Phase C** — route-level access control (commit `a7a102a`): POST /api/rooms + POST /api/rooms/direct に `canCreateRoom` guard、GET /api/users + GET /api/users/online に `canSearchUsers` guard、guest → 403。Tests +11 (guest 4 endpoint 403 + admin/user 既存挙動 + guest 自分情報取得可)
+  - 累計 **+33 test cases / 全 38 suite / 414 tests pass、regression ゼロ**、production deploy 完了 (migration 022 適用 + 本体 server restart、user 実施)
+  - **3 層構造の正典化**: Layer 1 schema (`users.role IN ('admin','user','guest')`) / Layer 2 logic (`isAdmin/isUser/isGuest` + ability) / Layer 3 route (guard) = Tealus 根幹原則 (= [#124](https://github.com/gamasenninn/tealus/issues/124) 4/15 comment「AI と人間を区別する仕組みが最小限」) を外部 user にも適用
+  - **#124 ゲストルーム構想からの pivot**: 5/19 [#124 pivot 提案 comment](https://github.com/gamasenninn/tealus/issues/124#issuecomment-4485524063) → 独立 Issue 起票 → 同日実装、旧 #124 案 (Web ウィジェット → ゲストルーム → AI 一次対応 一括) の **5 設計課題のうち 3 件が user 機構で吸収、2 件 (widget / 専用 security 設計) が後段 phase 降下**
+  - **Phase 5 narrative core 候補**: 採用者 #2 voice trigger 解除 candidate (= 「外部問い合わせ機能?」と聞かれた瞬間に Phase 1 MVP が dep ゼロで提示可能)、AI = 同僚思想の外部 user 拡張、multi-agent dock vision ([#275](https://github.com/gamasenninn/tealus/issues/275)) との同心円
+  - Phase D (UI 制限) + Phase E (Admin tooling) は organon cycle 完了後の本体 linter MVP ([#280](https://github.com/gamasenninn/tealus/issues/280)) 着手と同期 path
 
 - **client: チャット画面の RoomSettings に「エージェント設定」section 追加** ([#156](https://github.com/gamasenninn/tealus/issues/156) Phase 1、5/15、commit `6ac122f`)
   - チャットルームの「ルームメニュー → 設定」から応答モード (auto / all / mention / off) と Light Agent / Deep Agent prompt を変更可能に (既存 agent-server endpoint を使用、API 変更なし)
