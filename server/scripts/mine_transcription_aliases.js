@@ -2,6 +2,26 @@
 /**
  * mine_transcription_aliases.js — voice_transcriptions の編集履歴から alias 候補を mining する
  *
+ * ⚠️ **DEPRECATION NOTE (2026-05-24 Day 8)**:
+ * 本 script は `tealus-mcp v0.14.0` (= `get_message_edit_history` MCP tool 追加) で
+ * **organon daily cycle で direct fetch** に代替された (= 「organic ontology paradigm の
+ * simplicity = 1 instrument 主義」5/24 user 提案起源)。
+ *
+ * 旧運用 (= 5/12 〜 5/24): 月次 / 週次 cron で本 script を run、output report を organon が consume
+ * 新運用 (= 5/24 〜): organon class が daily cycle 内で MCP tool 経由 edit pair を direct fetch、
+ *                     context-based reasoning で alias / hazard 候補抽出
+ *
+ * 本 script の位置付け shift:
+ *   - active operational tool → **archive / safety net** (= organon が見落とした pair の
+ *     retroactive audit 用、月次 or 必要時 trigger driven run)
+ *   - mining script v2 (= GPT-4o-mini prompt 改善で false positive ~50% 解消) work は **deprecated**
+ *     (= organon class context-based reasoning が prompt より sophisticated)
+ *
+ * 構築背景: Issue #206 (5/4 起源) + #208 (by-term モード追加) で構築、両 CLOSED。
+ * 関連: tealus-mcp v0.14.0 release (= commit `b514a83`)、tealus #281 follow-up (= commit `c8afcb4`)。
+ *
+ * ---
+ *
  * AI が生成した formatted_text と人間が訂正した formatted_text のペアを GPT-4o-mini に投げ、
  * 固有名詞・専門用語の (誤転写, 正解) ペアを抽出する。
  *
