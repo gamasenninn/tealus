@@ -959,4 +959,94 @@ describe('Bot API', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  // ============================================
+  // GET /api/bot/messages/:id/edit-history
+  // (= 5/24 user 提案、organon daily cycle で edit history 観察用、別 mining script の代替)
+  // ============================================
+  describe('GET /api/bot/messages/:id/edit-history', () => {
+    let textMsgId, voiceMsgId;
+
+    beforeEach(async () => {
+      const pool = getTestPool();
+      // text message (edited)
+      const textMsg = await request(app)
+        .post('/api/bot/push')
+        .set('Authorization', `Bearer ${bot.token}`)
+        .send({ room_id: roomId, content: 'original text' });
+      textMsgId = textMsg.body.message.id;
+      // simulate edit (= insert into message_edits + flip is_edited)
+      await pool.query(
+        'INSERT INTO message_edits (message_id, version, content, edited_by) VALUES ($1, 1, $2, $3)',
+        [textMsgId, 'original text', bot.user.id]
+      );
+      await pool.query("UPDATE messages SET content = $1, is_edited = true WHERE id = $2", ['edited text', textMsgId]);
+
+      // voice message with multi-version transcription
+      const voiceMsg = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'voice', '') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      voiceMsgId = voiceMsg.rows[0].id;
+      await pool.query(
+        `INSERT INTO voice_transcriptions (message_id, version, raw_text, formatted_text, status, edited_by)
+         VALUES ($1, 1, 'raw v1', 'formatted v1', 'done', $2),
+                ($1, 2, 'raw v1', 'user corrected', 'done', $3)`,
+        [voiceMsgId, user1.user.id, user1.user.id]
+      );
+    });
+
+    it('returns text edit history for edited text message', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages/${textMsgId}/edit-history`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.message_id).toBe(textMsgId);
+      expect(res.body.type).toBe('text');
+      expect(res.body.is_edited).toBe(true);
+      expect(res.body.current_content).toBe('edited text');
+      expect(res.body.text_edit_history).toHaveLength(1);
+      expect(res.body.text_edit_history[0].content).toBe('original text');
+      expect(res.body.voice_transcription_versions).toEqual([]);
+    });
+
+    it('returns voice transcription versions for voice message', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages/${voiceMsgId}/edit-history`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.type).toBe('voice');
+      expect(res.body.voice_transcription_versions).toHaveLength(2);
+      expect(res.body.voice_transcription_versions[0].version).toBe(1);
+      expect(res.body.voice_transcription_versions[0].raw_text).toBe('raw v1');
+      expect(res.body.voice_transcription_versions[0].formatted_text).toBe('formatted v1');
+      expect(res.body.voice_transcription_versions[1].version).toBe(2);
+      expect(res.body.voice_transcription_versions[1].formatted_text).toBe('user corrected');
+      expect(res.body.text_edit_history).toEqual([]);
+    });
+
+    it('returns 404 for nonexistent message', async () => {
+      const fakeId = '00000000-0000-0000-0000-000000000000';
+      const res = await request(app)
+        .get(`/api/bot/messages/${fakeId}/edit-history`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 403 when bot is not a member of the room', async () => {
+      const pool = getTestPool();
+      const otherRoom = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '別ルーム', member_ids: [] });
+      const otherMsg = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'private') RETURNING id`,
+        [otherRoom.body.room.id, user1.user.id]
+      );
+      const res = await request(app)
+        .get(`/api/bot/messages/${otherMsg.rows[0].id}/edit-history`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(403);
+    });
+  });
 });

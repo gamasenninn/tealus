@@ -699,6 +699,87 @@ router.post('/messages/:id/transcribe', async (req, res) => {
 });
 
 /**
+ * GET /api/bot/messages/:id/edit-history
+ * メッセージの編集履歴 (text edits + voice/video transcription versions) を統合返却。
+ *
+ * 動機: organon class の daily cycle で raw STT vs user-corrected pair を直接観察できるようにする
+ * (= 5/24 user 提案、別 mining script (= server/scripts/mine_transcription_aliases.js) の自動化代替)。
+ *
+ * Response:
+ *   {
+ *     message_id, type, is_edited, room_id, sender_id, created_at,
+ *     current_content,                        // 現 message.content (text/file 系)
+ *     text_edit_history: [                    // message_edits table、新しい順
+ *       { version, content, edited_by, created_at }, ...
+ *     ],
+ *     voice_transcription_versions: [         // voice_transcriptions table、version 昇順
+ *       { version, raw_text, formatted_text, status, edited_by, created_at }, ...
+ *     ]
+ *   }
+ *
+ * 認可: Bot が message の room の member であること (= 他 bot endpoint と同 pattern)。
+ */
+router.get('/messages/:id/edit-history', async (req, res) => {
+  const messageId = req.params.id;
+  const userId = req.user.id;
+
+  try {
+    // メッセージ + ルーム所属を一括チェック
+    const msgResult = await pool.query(`
+      SELECT id, type, room_id, sender_id, content, is_edited, is_deleted, created_at
+      FROM messages
+      WHERE id = $1
+    `, [messageId]);
+    if (msgResult.rows.length === 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+    const msg = msgResult.rows[0];
+    if (msg.is_deleted) {
+      return res.status(410).json({ error: 'メッセージは削除されています' });
+    }
+
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [msg.room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
+
+    // text edit history (message_edits table、新しい順)
+    const editsResult = await pool.query(`
+      SELECT version, content, edited_by, created_at
+      FROM message_edits
+      WHERE message_id = $1
+      ORDER BY version DESC
+    `, [messageId]);
+
+    // voice/video transcription versions (voice_transcriptions table、version 昇順)
+    const transResult = await pool.query(`
+      SELECT version, raw_text, formatted_text, status, edited_by, created_at
+      FROM voice_transcriptions
+      WHERE message_id = $1
+      ORDER BY version ASC
+    `, [messageId]);
+
+    res.json({
+      message_id: msg.id,
+      type: msg.type,
+      room_id: msg.room_id,
+      sender_id: msg.sender_id,
+      is_edited: msg.is_edited,
+      created_at: msg.created_at,
+      current_content: msg.content,
+      text_edit_history: editsResult.rows,
+      voice_transcription_versions: transResult.rows,
+    });
+  } catch (err) {
+    logger.error('Bot edit-history error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/bot/search
  * AI / MCP クライアント向けの横断検索 endpoint。
  *
