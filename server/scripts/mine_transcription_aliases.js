@@ -23,6 +23,7 @@
  *   --mode=pair|by-term       集計モード (default 'pair')。by-term は同じ to に集まる
  *                             散発 alias を救う (#208)
  *   --require-high-confidence by-term モード時、high 1 件以上含む term のみ採用
+ *   --model=MODEL             OpenAI model 指定 (default 'gpt-4o-mini'、gpt-5* 系も可)
  *
  * 必要な環境変数:
  *   OPENAI_API_KEY (必須)
@@ -49,6 +50,7 @@ function parseArgs(argv) {
     reportPath: path.join(__dirname, '../config/mining_report.json'),
     mode: 'pair',
     requireHighConfidence: false,
+    model: null,
   };
   for (const arg of argv.slice(2)) {
     const m = arg.match(/^--([\w-]+)(?:=(.*))?$/);
@@ -77,6 +79,9 @@ function parseArgs(argv) {
           console.error(`[mine] WARN: unknown mode "${value}", using default 'pair'`);
         }
         break;
+      case 'model':
+        args.model = value;
+        break;
       case 'require-high-confidence':
         args.requireHighConfidence = true;
         break;
@@ -100,6 +105,7 @@ Options:
   --report-path=PATH        出力 report のパス
   --mode=pair|by-term       集計モード (default 'pair')
   --require-high-confidence by-term モード時、high 信頼度を含む term のみ採用
+  --model=MODEL             OpenAI model 指定 (default gpt-4o-mini、gpt-5* 系も可)
   --help                    このメッセージ
 
 集計モードの違い:
@@ -178,7 +184,7 @@ async function main() {
     for (let i = 0; i < targetPairs.length; i++) {
       const pair = targetPairs[i];
       console.log(`[mine] [${i + 1}/${targetPairs.length}] Analyzing ${pair.messageId}...`);
-      const aliases = await aliasMiner.extractAliases(pair, openai);
+      const aliases = await aliasMiner.extractAliases(pair, openai, args.model ? { model: args.model } : {});
       if (aliases.length > 0) {
         const summary = aliases.map(a => `${a.from}→${a.to}`).join(', ');
         console.log(`[mine]   → ${aliases.length} alias(es): ${summary}`);

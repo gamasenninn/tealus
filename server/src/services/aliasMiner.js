@@ -61,7 +61,7 @@ async function extractAliases(pair, openai, options = {}) {
         { role: 'user', content: `AI: ${pair.aiText}\nUser: ${pair.userText}` },
       ],
       temperature: 0.1,
-      max_tokens: 500,
+      max_completion_tokens: 500,
     });
     const text = response.choices[0].message.content.trim();
     const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
