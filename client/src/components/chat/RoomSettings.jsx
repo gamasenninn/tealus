@@ -2,6 +2,20 @@ import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import './RoomSettings.css';
 
+const TTS_MODELS = [
+  { uuid: '', name: 'デフォルト（環境変数）' },
+  { uuid: 'f5017410-fbb5-49e1-97cb-e785f42e15f5', name: '凛音エル（青年女性）' },
+  { uuid: 'a59cb814-0083-4369-8542-f51a29e72af7', name: 'まお（青年女性）' },
+  { uuid: '6d11c6c2-f4a4-4435-887e-23dd60f8b8dd', name: 'にせ（青年男性）' },
+  { uuid: 'e9339137-2ae3-4d41-9394-fb757a7e61e6', name: 'まい（青年女性）' },
+  { uuid: '47e53151-a378-46f3-abee-ce13aa07feb1', name: '阿井田 茂（中年男性）' },
+  { uuid: '71e72188-2726-4739-9aa9-39567396fb2a', name: 'fumifumi（成人男性）' },
+  { uuid: 'baaae3c0-7b22-4605-8ba5-80c959b41a48', name: 'morioki（成人女性）' },
+  { uuid: '696c98a2-c0b7-4fe7-8cf2-c7e9b8a9bd82', name: 'ろてじん/長老ボイス（老年男性）' },
+  { uuid: 'a670e6b8-0852-45b2-8704-1bc9862f2fe6', name: '花音（青年女性）' },
+  { uuid: '22e8ed77-94fe-4ef2-871f-a86f94e9a579', name: 'コハク（青年女性）' },
+];
+
 function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) {
   const [transcriptionEdit, setTranscriptionEdit] = useState(currentRoom?.allow_member_transcription_edit ? 'member' : 'sender');
   const [messageEditPolicy, setMessageEditPolicy] = useState(currentRoom?.message_edit_policy || 'none');
@@ -17,6 +31,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
   const canEditAgent = currentRoom?.type === 'direct' || isAdmin;
   const [responseMode, setResponseMode] = useState('auto');
   const [agentEnabled, setAgentEnabled] = useState(true);
+  const [ttsModelUuid, setTtsModelUuid] = useState('');
   const [lightPrompt, setLightPrompt] = useState('');
   const [claudeMd, setClaudeMd] = useState('');
 
@@ -35,6 +50,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
         if (cancelled) return;
         setResponseMode(s?.settings?.response_mode || 'auto');
         setAgentEnabled(s?.settings?.enabled !== false);
+        setTtsModelUuid(s?.settings?.tts_model_uuid || '');
         setLightPrompt(lp?.content || '');
         setClaudeMd(cm?.content || '');
       } catch (err) {
@@ -45,8 +61,16 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
   }, [roomId, canEditAgent]);
 
   const handleResponseModeChange = async (value) => {
-    const next = { response_mode: value, enabled: agentEnabled };
+    const next = { response_mode: value, enabled: agentEnabled, tts_model_uuid: ttsModelUuid };
     setResponseMode(value);
+    try {
+      await api.updateRoomAgentSettings(roomId, next);
+    } catch (err) { showError(err.message); }
+  };
+
+  const handleTtsModelChange = async (value) => {
+    const next = { response_mode: responseMode, enabled: agentEnabled, tts_model_uuid: value };
+    setTtsModelUuid(value);
     try {
       await api.updateRoomAgentSettings(roomId, next);
     } catch (err) { showError(err.message); }
@@ -261,6 +285,18 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }) 
               <option value="all">全メッセージ</option>
               <option value="mention">メンション時のみ</option>
               <option value="off">停止</option>
+            </select>
+          </div>
+          <div className="room-setting-select">
+            <label htmlFor="agent-tts-model">音声モデル</label>
+            <select
+              id="agent-tts-model"
+              value={ttsModelUuid}
+              onChange={e => handleTtsModelChange(e.target.value)}
+            >
+              {TTS_MODELS.map(m => (
+                <option key={m.uuid || 'default'} value={m.uuid}>{m.name}</option>
+              ))}
             </select>
           </div>
           <div className="room-setting-textarea">
