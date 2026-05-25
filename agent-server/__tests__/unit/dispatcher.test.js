@@ -376,4 +376,63 @@ describe('Dispatcher', () => {
       expect(prompt).not.toMatch(/対象 message ここまで/);
     });
   });
+
+  // #270: enqueueForRoom にルーム内処理キューの外側タイムアウトを追加。
+  // Light v1/v2 path が SDK 内部でハングして Promise が永久 pending になっても、
+  // キュー層が一定時間で強制 resolve し、以降のメッセージがデッドロックしないことを担保する。
+  describe('enqueueForRoom outer timeout (#270)', () => {
+    const { enqueueForRoom } = require('../../src/webhook/dispatcher');
+    const logger = require('../../src/lib/logger');
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    test('T1: 正常完了する fn は実行され、enqueueForRoom が解決する', async () => {
+      const fn = jest.fn().mockResolvedValue('ok');
+      await enqueueForRoom('room-t1', fn, 1000);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    test('T2: 同一 room の連続タスクは登録順に直列実行される', async () => {
+      const order = [];
+      const task1 = jest.fn(async () => {
+        await new Promise(r => setTimeout(r, 20));
+        order.push(1);
+      });
+      const task2 = jest.fn(async () => {
+        order.push(2);
+      });
+      await enqueueForRoom('room-t2', task1, 1000);
+      await enqueueForRoom('room-t2', task2, 1000);
+      expect(order).toEqual([1, 2]);
+    });
+
+    test('T3: 永久 pending な fn はタイムアウトで unblock され、次のタスクが走る', async () => {
+      const hanging = jest.fn(() => new Promise(() => {})); // 永久 pending
+      const next = jest.fn().mockResolvedValue('ok');
+
+      // ハングするタスク: timeout=50ms で強制 resolve されるはず
+      await enqueueForRoom('room-t3', hanging, 50);
+      // 直前のタスクがハングしていても、次は実行できる
+      await enqueueForRoom('room-t3', next, 1000);
+
+      expect(hanging).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Room queue task timeout')
+      );
+    });
+
+    test('T4: fn が throw してもキューは止まらず次が走る (既存挙動の維持)', async () => {
+      const failing = jest.fn().mockRejectedValue(new Error('boom'));
+      const next = jest.fn().mockResolvedValue('ok');
+
+      await enqueueForRoom('room-t4', failing, 1000);
+      await enqueueForRoom('room-t4', next, 1000);
+
+      expect(failing).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
 });

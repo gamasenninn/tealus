@@ -79,6 +79,10 @@ module.exports = {
 
   // Limits
   DEEP_TIMEOUT: parseInt(process.env.DEEP_TIMEOUT || '300000'),  // 5分
+  // #270: ルーム処理キューの外側タイムアウト。Light v1/v2 path が SDK 内部でハングして
+  // Promise が永久 pending になっても、この時間でキューを強制 unblock する最終防衛線。
+  // DEEP_TIMEOUT(5分) + Deep safety net(10秒) より長く取り、正常な Deep 処理は切らない。
+  QUEUE_TASK_TIMEOUT: parseInt(process.env.QUEUE_TASK_TIMEOUT || '360000'),  // 6分
   DEEP_MAX_BUFFER: parseInt(process.env.DEEP_MAX_BUFFER || '10485760'),  // 10MB
   // LIGHT_CONTEXT_MESSAGES: #230 で削除 (TealusSession 不要、agent が自分で get_messages を呼ぶ)
   // LIGHT_MAX_TURNS: D4 哲学下で multi-step tool chain (get_messages → get_message_media → 応答) が必要、
