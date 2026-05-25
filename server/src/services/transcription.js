@@ -10,9 +10,16 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// #217: gpt-4o-transcribe を default 採用 (whisper-1 比 hallucination 軽減、コスト同等)。
-// env で whisper-1 / gpt-4o-mini-transcribe にも切替可能。
-const WHISPER_MODEL = process.env.WHISPER_MODEL || 'gpt-4o-transcribe';
+// #284 (2026-05-25): default を gpt-4o-mini-transcribe に切替。
+// 理由: gpt-4o-transcribe は無音/ノイズに「業務無線文を組み立てる幻覚」(= prompt-conditioned
+// content hallucination) を出し、既存フィルタ isWhisperPromptHallucination() をすり抜けていた。
+// gpt-4o-mini-transcribe は同条件で「prompt をそのまま返す」(= prompt echo) ため、既存フィルタが
+// 捕捉して空化できる。3 モデル比較実験 (捏造6件+正常15件) で:
+//   - 捏造6/6 が既存フィルタで空化、正常15/15 は誤って空化されず文字起こし継続
+//   - トレードオフ: 固有名詞の崩れ方が変わる (mini はカナ/別字になりやすい)、organon 名寄せ+辞書 alias でカバー
+// env WHISPER_MODEL で whisper-1 / gpt-4o-transcribe にも切替可能。
+// (旧 #217: gpt-4o-transcribe を default 採用していた、whisper-1 比 hallucination 軽減目的)
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'gpt-4o-mini-transcribe';
 const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../media');
 
 /**

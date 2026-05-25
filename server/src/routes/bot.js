@@ -630,7 +630,7 @@ router.post('/messages/:id/transcribe', async (req, res) => {
           raw_text: cached.rows[0].raw_text,
           language: 'ja',
           cached: true,
-          model: process.env.WHISPER_MODEL || 'gpt-4o-transcribe',
+          model: process.env.WHISPER_MODEL || 'gpt-4o-mini-transcribe',
           version: cached.rows[0].version,
         });
       }
@@ -689,7 +689,7 @@ router.post('/messages/:id/transcribe', async (req, res) => {
       raw_text: final.raw_text || null,
       language: 'ja',
       cached: false,
-      model: process.env.WHISPER_MODEL || 'gpt-4o-transcribe',
+      model: process.env.WHISPER_MODEL || 'gpt-4o-mini-transcribe',
       version: newVersion,
     });
   } catch (err) {
