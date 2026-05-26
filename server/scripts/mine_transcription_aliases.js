@@ -2,31 +2,27 @@
 /**
  * mine_transcription_aliases.js — voice_transcriptions の編集履歴から alias 候補を mining する
  *
- * ⚠️ **DEPRECATION CANDIDATE NOTE (2026-05-24 Day 8 PM、暫定 status)**:
- * 本 script は `tealus-mcp v0.14.0` (= `get_message_edit_history` MCP tool 追加) で
- * **organon daily cycle で direct fetch** に代替できる path 確立 (= 「organic ontology paradigm の
- * simplicity = 1 instrument 主義」5/24 user 提案起源)。
+ * 🛑 **DEPRECATED (2026-05-26 Day 10、正式 deprecation)**:
+ * 本 script は `tealus-mcp v0.14.0` の `get_message_edit_history` MCP tool により
+ * **organon daily cycle 内 direct fetch** に代替された (= 「1 instrument 主義」5/24 user 提案起源)。
+ * Day 9-10 の parallel observation で Path A operational evidence N=2 達成 (= organon Day 9 + Day 10
+ * 連続で edit pair fetch 成功、「クボタ / ビレッジ / イセキ」を ground-truth で再現 + false positive 解消)。
+ * これを trigger に、Day 8 の暫定 candidate note を正式 deprecation に確定。
  *
- * ★ 段階的 archive timeline (= organon-side 提案、msg `fb504290`):
- *   - **Day 8 末 (= 5/24、本 commit 時点)**: **active 状態維持** (= rollback option preserve)
- *   - **Day 9-10**: parallel observation 期間 (= organon direct fetch vs mining script reference 比較)
- *   - **Day 10+** (= Path A operational maturity N=2 confirm 後): DEPRECATION 正式付与 + cron 停止
- *   - **Day 14+** (= structural mature): 完全 archive (= server/scripts/archive/ 移動候補)
+ * 現行運用: organon class が daily cycle 内で MCP tool 経由 edit pair を direct fetch し、
+ *   context-based reasoning で alias / hazard 候補を抽出 (= 本 script の GPT-4o-mini structured
+ *   extraction より sophisticated、false positive ~50% を解消)。
  *
- * 旧運用 (= 5/12 〜 5/24): 月次 / 週次 cron で本 script を run、output report を organon が consume
- * 新運用 candidate (= 5/24 〜 Day 9-10 parallel observation 経由): organon class が daily cycle 内で
- *   MCP tool 経由 edit pair を direct fetch、context-based reasoning で alias / hazard 候補抽出
- *
- * 本 script の暫定位置付け (= Day 10+ で finalize):
- *   - active operational tool → **archive candidate / safety net** (= organon が見落とした pair の
- *     retroactive audit 用、月次 or 必要時 trigger driven run、Day 10+ で deprecation 判断)
- *   - mining script v2 (= GPT-4o-mini prompt 改善で false positive ~50% 解消) work も Path A
- *     operational maturity 達成後判断 (= Day 10+、organon class context-based reasoning が prompt
- *     より sophisticated と判明すれば v2 work も deprecation)
+ * 本 script の位置付け:
+ *   - **定期実行なし** (= 元々 cron 未設定の手動 CLI、regular cycle から外れた)。
+ *   - 残置理由 = safety net (= organon が見落とした pair の retroactive audit 用、必要時のみ手動 run)。
+ *   - **Day 14+ で完全 archive 候補** (= server/scripts/archive/ 移動)。
+ *   - mining script v2 (= prompt 改善で false positive 解消) work は **不要と判断** (= Path A の
+ *     context-based reasoning が prompt extraction より優れるため)。
  *
  * 構築背景: Issue #206 (5/4 起源) + #208 (by-term モード追加) で構築、両 CLOSED。
  * 関連: tealus-mcp v0.14.0 release (= commit `b514a83`)、tealus #281 follow-up (= commit `c8afcb4`)、
- * 本 candidate note 起源 commit `1c85073` (= 早期 DEPRECATION NOTE inflation、organon timing 提案で softening)。
+ * Path A N=2 達成 = organon Day 10 報告 (2026-05-26、AI班連絡)。
  *
  * ---
  *
