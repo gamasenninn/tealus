@@ -17,5 +17,6 @@ router.use('/', require('./portal-links'));
 router.use('/', require('./webhooks'));
 router.use('/', require('./agent-stats'));
 router.use('/', require('./rooms'));
+router.use('/', require('./transcription'));
 
 module.exports = router;
