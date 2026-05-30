@@ -4,18 +4,38 @@
  * Phase A (= 本 file、5/22 Day 6 (i) skeleton):
  *   - load + format のみ (= core path)
  *   - YAML parse は LLM 推論層に委ねる (= raw text inject、schema evolution に robust)
- *   - 3 cycle (= 月次 cron / ad-hoc trigger / 週次 hazard log review) は Day 7+ で activate
+ *   - 10 unit test green (= __tests__/unit/organonReloader.test.js、isAvailable / loadPolysemeEntries
+ *     / formatForPrompt / invalidate 全 method cover)
  *
- * Phase B (= Day 7+):
- *   - schema-aware parsing (= js-yaml dep 追加 or 内蔵 parser、type field 別 routing)
- *   - 3 cycle 自動化
- *   - PoC 効果測定 metric 連動
+ * ★ Phase B (= 5/30 Day 14 時点で **凍結**、整合性ある Phase B re-trigger 待ち):
  *
- * 関連: Issue #283 (= SQL bridge thesis、5/21 (d) 起票) Phase A 着手 (= 5/22 Day 6 (i) PoC evidence 5 dimension 達成後の dep 解除 trigger)
+ *   1. agent-server は claude -p 経由で prompt 素通し pattern、systemPrompt 構築 layer なし
+ *      → 本 reloader を agent-server で inject する選択肢 4 候補のうち、(D) Claude Code 側
+ *      skill での参照が cleanest と Day 14 で評価、本 agent-server 経由は overengineering
+ *      risk。utilization 層は tealus-organon repo の Claude Code skill (= 議事録 skill /
+ *      DB-grounded skill 等の family) で対応する方向。
+ *
+ *   2. 構築層 = polyseme.sql_mapping field 蓄積 cycle が動いていない状態 (Day 14 時点
+ *      polyseme = 5 件、sql_mapping field 0 件、5/16 ground truth「納品/流れ/店長確認」
+ *      entry 不在)。Phase B integrate を本 agent-server で行うべき trigger は、(a)
+ *      DB-grounded skill の operational evidence 蓄積後、(b) 構築層 polyseme.sql_mapping
+ *      が一定量に達した時点、(c) agent-server 経由 inject の clear need が surface した時、
+ *      のいずれか。
+ *
+ *   3. それまで本 file = Phase A skeleton + test green の凍結 reference として保持
+ *      (= deprecate しない、削除しない、本日時点で動作 verified)。
+ *
+ * 関連:
+ *   - Issue #283 (= SQL bridge thesis、5/21 (d) 起票) Phase A 着手 (= 5/22 Day 6 (i) PoC
+ *     evidence 5 dimension 達成後の dep 解除 trigger)
+ *   - Day 14 (= 5/30) organon-side AI 班連絡 msg `b1619286` (= DB-grounded skill 提案)
+ *   - Day 14 議事録 skill 議論 reset (= 利用層 skill = Claude Code 側で済む構造、本体班
+ *     agent-server 実装は overengineering リスク認識)
  *
  * organon 側 schema (= 5/22 Day 6 時点、v0.5.x):
  *   - kind: polyseme (= 業務語 ↔ DB column 値 mapping、Day 6 (g) で 4 件 grounded)
  *   - sql_mapping field の 2 type 確定 (= simple + fuzzy_match、composite 撤回 Day 6 (g))
+ *   - ★ ただし Day 14 時点で sql_mapping field を持つ entry は 0 件、schema candidate 段階
  *
  * 注意: organon repo は **別 git repo** (= `C:/app/tealus-organon/`)、本体 repo 外。
  * ORGANON_REPO_PATH env で上書き可能、default は ../../tealus-organon (= relative)。
