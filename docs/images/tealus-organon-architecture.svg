@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 760" font-family="-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#5F6368"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#188038"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#E37400"/>
+    </marker>
+  </defs>
+
+  <rect width="1100" height="760" fill="#FFFFFF"/>
+
+  <!-- Title -->
+  <text x="550" y="36" text-anchor="middle" font-size="22" font-weight="700" fill="#202124">Tealus + Organon アーキテクチャ全体図</text>
+  <text x="550" y="60" text-anchor="middle" font-size="13" fill="#5F6368">業務会話 + 業務 DB ↔ オントロジー基盤 ↔ 利用層 の三角データフロー</text>
+
+  <!-- ============ DataBase (top) ============ -->
+  <rect x="425" y="92" width="250" height="78" rx="8" fill="#E8F0FE" stroke="#1A73E8" stroke-width="1.8"/>
+  <text x="550" y="123" text-anchor="middle" font-size="16" font-weight="700" fill="#174EA6">業務 DataBase</text>
+  <text x="550" y="146" text-anchor="middle" font-size="11" fill="#5F6368">店長確認 / 入金 / 商品 / 仕切書 / ...</text>
+  <text x="550" y="162" text-anchor="middle" font-size="10" fill="#80868B">(基幹業務 RDB)</text>
+
+  <!-- DB ↔ Organon arrows -->
+  <line x1="495" y1="172" x2="495" y2="258" stroke="#5F6368" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="488" y="200" text-anchor="end" font-size="11" fill="#5F6368" font-weight="600">polyseme</text>
+  <text x="488" y="215" text-anchor="end" font-size="11" fill="#5F6368">source</text>
+  <text x="488" y="232" text-anchor="end" font-size="10" fill="#80868B">(例: 売上 4 解釈)</text>
+
+  <line x1="605" y1="258" x2="605" y2="172" stroke="#188038" stroke-width="2.2" marker-end="url(#arrowGreen)"/>
+  <text x="615" y="200" font-size="11" fill="#188038" font-weight="700">★ 正確な</text>
+  <text x="615" y="215" font-size="11" fill="#188038" font-weight="700">クエリ翻訳</text>
+  <text x="615" y="232" font-size="10" fill="#188038">(業務語彙↔列値)</text>
+
+  <!-- ============ Organon (center) ============ -->
+  <rect x="280" y="258" width="540" height="218" rx="12" fill="#FEF7E0" stroke="#F9AB00" stroke-width="2.5"/>
+  <text x="550" y="290" text-anchor="middle" font-size="22" font-weight="700" fill="#5F4400">Tealus Organon</text>
+  <text x="550" y="312" text-anchor="middle" font-size="12" fill="#7B5F00">オントロジー基盤(= organic ontology repo、別 repo 所有)</text>
+
+  <line x1="305" y1="328" x2="795" y2="328" stroke="#F9AB00" stroke-width="0.6" opacity="0.5"/>
+
+  <!-- 3-column content inside Organon -->
+  <text x="310" y="356" font-size="13" font-weight="700" fill="#202124">▸ entries(54+ 件)</text>
+  <text x="310" y="375" font-size="11" fill="#5F6368">role / organization / polyseme / shared-kernel</text>
+  <text x="310" y="390" font-size="10" fill="#80868B">人物 / 組織 / 業務多義語 / 現場指示語</text>
+
+  <text x="310" y="418" font-size="13" font-weight="700" fill="#202124">▸ hazard log(25 軸)</text>
+  <text x="310" y="437" font-size="11" fill="#5F6368">STT 揺らぎ family / disambiguation patterns</text>
+
+  <text x="560" y="356" font-size="13" font-weight="700" fill="#202124">▸ principles(4 件)</text>
+  <text x="560" y="375" font-size="11" fill="#5F6368">verbatim / inductive / scope / 1 instrument</text>
+
+  <text x="560" y="403" font-size="13" font-weight="700" fill="#202124">▸ 構築(daily cycle)</text>
+  <text x="560" y="422" font-size="11" fill="#5F6368">★ frontier LLM + 人間 Q0(意味判断)</text>
+
+  <text x="560" y="448" font-size="13" font-weight="700" fill="#202124">▸ data 層</text>
+  <text x="560" y="467" font-size="11" fill="#5F6368">YAML files(~670KB、portable)</text>
+
+  <!-- ============ Left: input sources ============ -->
+  <rect x="40" y="290" width="160" height="160" rx="8" fill="#F8F9FA" stroke="#80868B" stroke-width="1.5"/>
+  <text x="120" y="315" text-anchor="middle" font-size="13" font-weight="700" fill="#202124">業務会話 source</text>
+  <line x1="55" y1="326" x2="185" y2="326" stroke="#80868B" stroke-width="0.5"/>
+  <text x="55" y="348" font-size="12" fill="#202124">▸ 朝礼(動画)</text>
+  <text x="55" y="370" font-size="12" fill="#202124">▸ 終礼(動画)</text>
+  <text x="55" y="392" font-size="12" fill="#202124">▸ トランシーバー</text>
+  <text x="68" y="408" font-size="10" fill="#5F6368">(voice、業務無線)</text>
+  <text x="55" y="430" font-size="12" fill="#202124">▸ 業務メモ(text)</text>
+
+  <!-- MCP intermediate (input side) -->
+  <rect x="218" y="334" width="60" height="78" rx="6" fill="#F1F3F4" stroke="#80868B" stroke-width="1.2"/>
+  <text x="248" y="358" text-anchor="middle" font-size="11" font-weight="700" fill="#202124">Tealus</text>
+  <text x="248" y="374" text-anchor="middle" font-size="11" font-weight="700" fill="#202124">MCP</text>
+  <text x="248" y="394" text-anchor="middle" font-size="9" fill="#5F6368">取得側</text>
+
+  <line x1="201" y1="373" x2="216" y2="373" stroke="#5F6368" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="278" y1="373" x2="295" y2="373" stroke="#5F6368" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <text x="248" y="430" text-anchor="middle" font-size="10" fill="#80868B">get_messages /</text>
+  <text x="248" y="444" text-anchor="middle" font-size="10" fill="#80868B">edit_history</text>
+
+  <!-- ============ Right: utilization layer ============ -->
+  <!-- Vocab box -->
+  <rect x="860" y="270" width="200" height="78" rx="8" fill="#E6F4EA" stroke="#188038" stroke-width="1.8"/>
+  <text x="960" y="295" text-anchor="middle" font-size="14" font-weight="700" fill="#0F5132">Vocab</text>
+  <text x="960" y="315" text-anchor="middle" font-size="11" fill="#0F5132">transcription_guideline.json</text>
+  <text x="960" y="334" text-anchor="middle" font-size="10" fill="#5F6368">term + aliases(自動同期)</text>
+
+  <line x1="822" y1="305" x2="858" y2="305" stroke="#5F6368" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <!-- 議事録生成 box -->
+  <rect x="860" y="358" width="200" height="60" rx="8" fill="#E6F4EA" stroke="#188038" stroke-width="1.8"/>
+  <text x="960" y="382" text-anchor="middle" font-size="14" font-weight="700" fill="#0F5132">議事録生成</text>
+  <text x="960" y="402" text-anchor="middle" font-size="10" fill="#5F6368">organon-aware(selective load)</text>
+
+  <line x1="822" y1="388" x2="858" y2="388" stroke="#5F6368" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <!-- DB検索結果(organon-augmented)box -->
+  <rect x="860" y="428" width="200" height="60" rx="8" fill="#E6F4EA" stroke="#188038" stroke-width="1.8"/>
+  <text x="960" y="452" text-anchor="middle" font-size="14" font-weight="700" fill="#0F5132">DB 検索結果</text>
+  <text x="960" y="472" text-anchor="middle" font-size="10" fill="#5F6368">organon 参照で語彙翻訳が正確</text>
+
+  <line x1="822" y1="458" x2="858" y2="458" stroke="#5F6368" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <!-- ============ Vocab → STT feedback loop (dashed) ============ -->
+  <path d="M 960 348 Q 960 510 120 510 L 120 452"
+        stroke="#188038" stroke-width="1.5" stroke-dasharray="6,4" fill="none" marker-end="url(#arrowGreen)"/>
+  <rect x="395" y="500" width="310" height="22" rx="3" fill="#FFFFFF"/>
+  <text x="550" y="516" text-anchor="middle" font-size="11" fill="#188038" font-style="italic" font-weight="600">
+    ★ Vocab → 文字起こし精度 ↑ = closed feedback cycle
+  </text>
+
+  <!-- ============ Bottom annotation panel ============ -->
+  <rect x="40" y="555" width="1020" height="185" rx="8" fill="#FAFAFA" stroke="#DADCE0" stroke-width="1"/>
+
+  <text x="60" y="582" font-size="14" font-weight="700" fill="#202124">★ Organon の役割 — 業務会話 + DB を「育つオントロジー」として中央化、各ツールの精度を同時に底上げ</text>
+
+  <!-- 3 numbered points -->
+  <circle cx="72" cy="610" r="10" fill="#1A73E8"/>
+  <text x="72" y="615" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">1</text>
+  <text x="92" y="610" font-size="12" font-weight="700" fill="#202124">入力側(構築層)</text>
+  <text x="92" y="628" font-size="11" fill="#5F6368">業務会話 source(朝礼/終礼/トランシーバー/業務メモ)を MCP 経由で daily fetch → 名寄せ・hazard 分類・identity 推論 → 構造化 entries に crystallize(人間 Q0 が判断 checkpoint)</text>
+
+  <circle cx="72" cy="657" r="10" fill="#F9AB00"/>
+  <text x="72" y="662" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">2</text>
+  <text x="92" y="657" font-size="12" font-weight="700" fill="#202124">DB 連携(オントロジー × データ)</text>
+  <text x="92" y="675" font-size="11" fill="#5F6368">DB の業務語彙(列値、polyseme「売上」4 解釈等)を organon に取り込み、<tspan font-weight="700" fill="#188038">逆に organon が DB クエリの語彙翻訳を提供 → 単純な DB クエリより正確な検索</tspan></text>
+
+  <circle cx="72" cy="704" r="10" fill="#188038"/>
+  <text x="72" y="709" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">3</text>
+  <text x="92" y="704" font-size="12" font-weight="700" fill="#202124">出力側(利用層)</text>
+  <text x="92" y="722" font-size="11" fill="#5F6368">entries → Vocab(transcription_guideline.json)で Whisper bias 強化 → 文字起こし精度 ↑、議事録 / DB 検索も organon を参照して正確化、結果が次サイクルの input 品質を改善する <tspan font-weight="700" fill="#188038">閉ループ</tspan></text>
+
+</svg>
