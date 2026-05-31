@@ -44,6 +44,33 @@ logger.info(
     : 'disabled (claude CLI not found — Light のみで動作)'}`
 );
 
+// Codex CLI availability — #276 Deep Codex 用の Claude MAX 代替候補。
+// 起動時に 1 回だけ検出し、不在なら Router が「Codex CLI + ChatGPT subscription 必要」
+// message を返す。テスト用に AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE=true|false で強制 override 可能。
+function detectCodexCli() {
+  if (process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE === 'true') return true;
+  if (process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE === 'false') return false;
+  try {
+    const cmd = process.platform === 'win32' ? 'codex.cmd' : 'codex';
+    const result = spawnSync(cmd, ['--version'], {
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+      timeout: 5000,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+const DEEP_CODEX_AVAILABLE = detectCodexCli();
+
+logger.info(
+  `Deep Codex agent: ${DEEP_CODEX_AVAILABLE
+    ? 'enabled (codex CLI found)'
+    : 'disabled (codex CLI not found — DEEP_AGENT_PROVIDER=codex 時は要 install)'}`
+);
+
 module.exports = {
   // Server
   PORT: parseInt(process.env.AGENT_PORT || '4000'),
@@ -63,6 +90,19 @@ module.exports = {
   // - 'subscription': apiKey 渡さず ~/.codex/auth.json (codex login 済) で auth
   //   ChatGPT Plus/Pro/Team 持ちで dogfood / dev 用、API cost 0、Fast Mode access 可
   LIGHTV2_AUTH: process.env.LIGHTV2_AUTH,
+
+  // Deep Agent Provider (#276): 'claude' (default) | 'codex'
+  // - 'claude': claude -p 経由 (= Claude MAX 契約必須、既存挙動維持)
+  // - 'codex':  codex exec 経由 (= ChatGPT subscription or API key)
+  DEEP_AGENT_PROVIDER: process.env.DEEP_AGENT_PROVIDER || 'claude',
+
+  // Deep Codex auth (#276): 'subscription' (default) | 'api-key'
+  // - 'subscription': OPENAI_API_KEY を渡さず ~/.codex/auth.json で auth (★ 安全 default、API cost 0)
+  // - 'api-key':      OPENAI_API_KEY を渡す (★ 課金注意、Deep mode は 12-50k tokens × call)
+  DEEP_CODEX_AUTH: process.env.DEEP_CODEX_AUTH || 'subscription',
+
+  // Deep Codex model (#276): codex exec の -m 引数
+  AGENT_DEEP_CODEX_MODEL: process.env.AGENT_DEEP_CODEX_MODEL || 'gpt-5.4',
 
   // Tavily
   TAVILY_API_KEY: process.env.TAVILY_API_KEY,
@@ -95,4 +135,7 @@ module.exports = {
 
   // Deep agent CLI availability
   DEEP_AVAILABLE,
+
+  // Deep Codex CLI availability (#276)
+  DEEP_CODEX_AVAILABLE,
 };
