@@ -18,8 +18,21 @@ jest.mock('../../src/agents/light', () => ({
   processLight: jest.fn().mockResolvedValue(),
 }));
 
+// ★ dotenv mock (= user .env の DEEP_AGENT_PROVIDER=codex contaminate 回避)
+jest.mock('dotenv', () => ({ config: jest.fn() }));
+
 jest.mock('../../src/agents/deep', () => ({
   processDeep: jest.fn().mockResolvedValue(),
+}));
+
+jest.mock('../../src/agents/deepCodex', () => ({
+  processDeepCodex: jest.fn().mockResolvedValue(),
+}));
+
+// #276 follow-up: organon polyseme inject を test では no-op 化
+jest.mock('../../src/lib/organonContext', () => ({
+  loadOrganonPolysemeForPrompt: () => '',
+  isAvailable: () => false,
 }));
 
 jest.mock('../../src/mcp/roomMcpManager', () => ({

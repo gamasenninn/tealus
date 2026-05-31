@@ -10,6 +10,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
+const { loadOrganonPolysemeForPrompt } = require('../lib/organonContext');
 const { createTools } = require('./lightTools');
 const { getSetting } = require('../context/settingsManager');
 
@@ -71,6 +72,8 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
       if (memory) {
         prompt += `\n\n## 記憶\n${memory}`;
       }
+      // #276 follow-up: organon polyseme.sql_mapping を DB 検索精度向上のため inject
+      prompt += loadOrganonPolysemeForPrompt();
       logger.debug(`[Light] System prompt: ${prompt.length} chars`);
       return prompt;
     },

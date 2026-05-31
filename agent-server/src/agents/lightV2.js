@@ -17,6 +17,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
+const { loadOrganonPolysemeForPrompt } = require('../lib/organonContext');
 
 // codex-sdk は ESM のみ。CommonJS から動的 import で読む
 let CodexCtor = null;
@@ -201,6 +202,8 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
     }
     const memory = loadMemoryForPrompt(workspacePath);
     if (memory) systemPrompt += `\n\n## 記憶\n${memory}`;
+    // #276 follow-up: organon polyseme.sql_mapping を DB 検索精度向上のため inject
+    systemPrompt += loadOrganonPolysemeForPrompt();
     if (workspacePath) {
       const normalizedPath = workspacePath.replace(/\\/g, '/');
       systemPrompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のパスを使ってください:\n${normalizedPath}`;

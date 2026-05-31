@@ -13,6 +13,10 @@ jest.mock('../../src/router/index', () => ({
   route: jest.fn(),
 }));
 
+// ★ dotenv は実環境 .env を load して process.env を上書きするため、test 内で no-op 化
+// (= user .env の DEEP_AGENT_PROVIDER=codex 等の dogfood 設定が test 期待値と衝突する事を回避)
+jest.mock('dotenv', () => ({ config: jest.fn() }));
+
 jest.mock('../../src/agents/light', () => ({
   processLight: jest.fn(),
 }));
@@ -23,6 +27,16 @@ jest.mock('../../src/agents/lightV2', () => ({
 
 jest.mock('../../src/agents/deep', () => ({
   processDeep: jest.fn(),
+}));
+
+jest.mock('../../src/agents/deepCodex', () => ({
+  processDeepCodex: jest.fn(),
+}));
+
+// #276 follow-up: organon polyseme inject を test では no-op 化 (= prompt 内容比較を安定化)
+jest.mock('../../src/lib/organonContext', () => ({
+  loadOrganonPolysemeForPrompt: () => '',
+  isAvailable: () => false,
 }));
 
 jest.mock('../../src/media/messageAdapter', () => ({
