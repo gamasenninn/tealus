@@ -14,6 +14,10 @@ jest.mock('../../src/lib/logger', () => ({
   error: jest.fn(),
 }));
 
+// ★ dotenv は実環境 .env を load して process.env を上書きするため、
+// test での process.env 操作と衝突する。test 内では no-op 化。
+jest.mock('dotenv', () => ({ config: jest.fn() }));
+
 describe('config: DEEP_CODEX_AVAILABLE 検出', () => {
   const originalOverride = process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE;
 
