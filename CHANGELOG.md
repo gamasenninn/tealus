@@ -10,7 +10,51 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-01
+
+★ ★ ★ **「組織記憶辞書が動作する道具に転化した release」** — Phase 4 organon paradigm operational realization 完成。Day 14-15-16 で Codex Deep agent + organon polyseme inject pipeline + 5/16 4 round → 0 round transition + 4 Issue cluster 連続 close を達成、organon が業務 DB を upstream rectification する thesis が ★ structural に完成。
+
+### Added
+
+- **agent-server: Codex Deep agent (deepCodex.js) 追加 + DEEP_AGENT_PROVIDER で切替** ([#276](https://github.com/gamasenninn/tealus/issues/276)、5/31 Day 15、commit `41b0f55`)
+  - 既存 Deep agent (= `agents/deep.js`、`claude -p` spawn) と並列で `agents/deepCodex.js` 新規追加 (= `codex exec` spawn、Light v2 #258 で確立した Codex SDK / subscription auth pattern を CLI mode で再現)
+  - env `DEEP_AGENT_PROVIDER=claude|codex` (default=claude、既存維持) で `dispatcher.js` の `case 'deep'` で switch、`router/index.js` も provider-aware に拡張
+  - env `DEEP_CODEX_AUTH=subscription|api-key` (default=subscription) で `~/.codex/auth.json` 経由 ChatGPT subscription 認証 (= API cost 0、★ Deep mode の 12-50k tokens × call 課金爆発 risk 回避 default)
+  - `CODEX_HOME` 動的切替 = workspace 配下 `.codex_home/` に `auth.json` copy + `config.toml` 動的生成、room-specific MCP config 完全制御
+  - `AGENTS.md` (= Codex 自動 read project context file、上限 32 KB) = `CLAUDE.md` literal copy で起動
+  - TDD test 34 件追加 (= `config-codex-detection.test.js` 7 + `deepCodex.test.js` 27)、全 305 → 317 Green
+  - 5/31 17:35-17:36 dogfood 第 1 例 success (= subscription auth confirmed、1m38s / 1060 chars 応答、4 mcp_servers active)
+  - → ★ Claude MAX 契約必須を超えた選択肢拡大、Anthropic / OpenAI 両 provider Deep mode 同等運用可能化
+
+- **agent-server: organon polyseme.sql_mapping を全 agent system prompt に自動 inject pipeline** ([#276 follow-up](https://github.com/gamasenninn/tealus/issues/276)、5/31 Day 15、commit `8f28279`)
+  - 共通 utility `lib/organonContext.js` 新規追加 (= polyseme entries から sql_mapping 持つ entries 抽出 + prompt block 整形、per-request fs.readFileSync で organon 更新即時反映、cache なし)
+  - 全 4 agent (= Light v1 / v2 / Deep / Deep Codex) の system prompt build に `loadOrganonPolysemeForPrompt()` を 1 行 inject (= dispatcher.js / light.js / lightV2.js)
+  - env `INJECT_ORGANON_POLYSEME=true` (default) で inject 有効、`ORGANON_REPO_PATH` で organon repo path override (= organonReloader.js #283 と共有)
+  - organon repo 不在環境 silent skip (= isAvailable check)、★ ★ **agent-server restart 不要** (= organon entries 更新 → 次 request で即反映)、organon-side cycle 1 度回せば 全 agent operational value 即享受
+  - test fix: dotenv mock + organonContext mock を関連 test に追加 (= user .env の DEEP_AGENT_PROVIDER=codex 等の dogfood 設定 contaminate 回避)
+  - unit test 12 件追加、全 317/317 Green
+  - 5/31 18:46-18:48 dogfood 第 2 例 success (= Deep Codex 5818 chars / Light system prompt 31756 chars、両 agent で 5/16 4 round → 0 round 正解 transition N=2 evidence、「オントロジー対応として `未納品 = 店長確認 IS NULL OR 店長確認 = ''`」と明示宣言 + 正確 SQL 生成 + user 訂正 0 round)
+  - → ★ ★ ★ **構築 → data → middleware → 利用 → 業務 自動 pipeline 完成**、organon-side が polyseme.sql_mapping を蓄積するだけで全 AI agent が同時に賢くなる architecture realized
+
+- **AGENTS.md (project root) 新規** = `CLAUDE.md` literal copy (= Codex CLI 自動 read project context file、#276) (5/31 Day 15、commit `41b0f55`)
+
+### Docs
+
+- **docs/03 / 04 に Day 15 進展反映** ([#276](https://github.com/gamasenninn/tealus/issues/276)、6/1 Day 16、commit `a358613`)
+  - docs/03 Phase 5 候補 section 前に「Day 15 進展」section 新規追加: Codex Deep agent 仕様 + organon polyseme inject pipeline 図 + 5/16 ground truth pattern 解消 evidence (= TDD test 34 件 / 全 317 Green + dogfood 動作実証 2 例)
+  - docs/04 Day 14 entry 後に Day 15 entry 追記 (=「整備段階」→「動作する道具」transition narrative + 3 軸成果 (Codex Deep / polyseme inject / 5/16 4→0 round) + 構築 → data → middleware → 利用 → 業務 自動 pipeline 図 + self-state verify deficit 7 件累積 honest 留保)
+
+### Closed (= Phase 4 organon paradigm cluster structural completion marker)
+
+- **[#286](https://github.com/gamasenninn/tealus/issues/286): organon 日次サイクル workflow 化** (= 2026-05-30 Day 14 close、構築層 skill 化境界設計、tealus-organon repo `.claude/skills/organon-daily/SKILL.md`、Day 11-13 dogfood 3 cycle で operational evidence 蓄積)
+- **[#276](https://github.com/gamasenninn/tealus/issues/276): Codex Deep agent + spike** (= 2026-05-31 Day 15 close、本 release 主軸成果、N=2 dogfood で vision lock 条件 (a)(b)(c) 全 Green)
+- **[#283](https://github.com/gamasenninn/tealus/issues/283): organic ontology × DB bridge (= 6b SQL upstream rectification)** (= 2026-06-01 Day 16 close、5/16 ground truth pattern 解消 thesis 完全達成、`organonReloader.js` Phase A skeleton 凍結状態維持で別 path で実現)
+- **[#202](https://github.com/gamasenninn/tealus/issues/202): AI 協業基盤 / 班間情報非対称 (umbrella)** (= 2026-06-01 Day 16 close、handoff doc pattern + organon-side 自律 implementation + organon polyseme inject pipeline で structural completion marker、当初想定 candidate (2)(3)(4) は Day 14-15 evidence で必要性消失 or 別 layer 転換)
+
 ### Fixed
+
+- **config-codex-detection.test.js dotenv mock 漏れ補完** (#276 follow-up、6/1 Day 16、commit `124284b`)
+  - 8f28279 で dispatcher.test.js / webhook-to-agent.test.js に dotenv mock 追加したが、config-codex-detection.test.js も同 fix 必要だった (= test 単独 run では pass、全 test run で user .env の DEEP_AGENT_PROVIDER=codex contaminate を回避するため)、test 環境 isolation 完成
 
 - **server: migration 016 (= message_published) の UPDATE 句が `npm run migrate` 再実行のたびにお知らせルーム内の全 message を `is_published=true` に書き戻す bug を fix** (5/21、commit `b535dca`)
   - 症状: 5/19 #282 migration 022 適用のため migrate 再実行 → 016 UPDATE が走り、全 announcement message が誤公開 (= ピックアップしていないメッセージが全部お知らせ欄に見える)
