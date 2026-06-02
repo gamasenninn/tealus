@@ -81,6 +81,7 @@ const botRoutes = require('./routes/bot');
 const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes, globalRouter: tagGlobalRoutes } = require('./routes/tags');
 const stampRoutes = require('./routes/stamps');
 const configRoutes = require('./routes/config');
+const lineRoutes = require('./routes/line');
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -99,6 +100,8 @@ app.use('/api/rooms/:id/tags', tagRoomRoutes);
 app.use('/api/messages/:id/tags', tagMessageRoutes);
 app.use('/api/tags', tagGlobalRoutes);
 app.use('/api/stamps', stampRoutes);
+// LINE Bridge Phase 1 (#XXX、Inbound 受信のみ、隠し endpoint = LINE_WEBHOOK_SECRET_PATH 環境変数で path 制御)
+app.use('/api/line', lineRoutes);
 
 // Static media files
 app.use('/media', express.static(process.env.MEDIA_ROOT || path.join(__dirname, '../../media')));
