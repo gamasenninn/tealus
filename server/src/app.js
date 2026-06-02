@@ -50,6 +50,10 @@ app.use('/mcp', createProxyMiddleware({
   pathRewrite: (path) => '/mcp' + path,
 }));
 
+// ★ ★ ★ LINE Bridge (#288) は signature verify 用に raw body 必須、express.json() より前に register
+// (= json parser が global で先に走ると req.body が parsed object 化、raw bytes 失われて HMAC 計算 fail)
+app.use('/api/line', express.raw({ type: 'application/json' }), require('./routes/line'));
+
 app.use(express.json());
 
 // API リクエストログ
@@ -81,11 +85,7 @@ const botRoutes = require('./routes/bot');
 const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes, globalRouter: tagGlobalRoutes } = require('./routes/tags');
 const stampRoutes = require('./routes/stamps');
 const configRoutes = require('./routes/config');
-const lineRoutes = require('./routes/line');
-
-// ★ LINE Bridge (#288) は signature verify 用に raw body 必須、express.json() より前に register
-// (= json parser が global で先に走ると req.body が parsed object 化、raw bytes 失われて HMAC 計算 fail)
-app.use('/api/line', express.raw({ type: 'application/json' }), lineRoutes);
+// (LINE route は app.use(express.json()) より前に登録済、上部参照)
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
