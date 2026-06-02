@@ -124,7 +124,6 @@ async function dispatchEvent(event, options = {}) {
  */
 router.post(
   '/webhook/:secret',
-  express.raw({ type: 'application/json' }),
   async (req, res) => {
     // (1) secret path check
     if (!SECRET_PATH || req.params.secret !== SECRET_PATH) {

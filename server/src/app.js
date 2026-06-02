@@ -82,6 +82,10 @@ const { roomRouter: tagRoomRoutes, messageRouter: tagMessageRoutes, globalRouter
 const stampRoutes = require('./routes/stamps');
 const configRoutes = require('./routes/config');
 const lineRoutes = require('./routes/line');
+
+// ★ LINE Bridge (#288) は signature verify 用に raw body 必須、express.json() より前に register
+// (= json parser が global で先に走ると req.body が parsed object 化、raw bytes 失われて HMAC 計算 fail)
+app.use('/api/line', express.raw({ type: 'application/json' }), lineRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -100,8 +104,6 @@ app.use('/api/rooms/:id/tags', tagRoomRoutes);
 app.use('/api/messages/:id/tags', tagMessageRoutes);
 app.use('/api/tags', tagGlobalRoutes);
 app.use('/api/stamps', stampRoutes);
-// LINE Bridge Phase 1 (#XXX、Inbound 受信のみ、隠し endpoint = LINE_WEBHOOK_SECRET_PATH 環境変数で path 制御)
-app.use('/api/line', lineRoutes);
 
 // Static media files
 app.use('/media', express.static(process.env.MEDIA_ROOT || path.join(__dirname, '../../media')));
