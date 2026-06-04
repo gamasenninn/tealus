@@ -7,6 +7,8 @@
  *   - events[] iterate + dispatch (= text / image / audio)
  *   - LINE group → Tealus room mapping (= env LINE_GROUP_TO_ROOM、未登録 silent skip)
  *   - sender = LINE bot user (= env LINE_BOT_USER_ID)
+ *   - ★ ★ ★ LINE 公式 spec 準拠: secret path/signature verify 失敗でも 200 silent return + log warn のみ
+ *     (= 6/4 Day 19 fix、non-2xx で webhook auto-suspend 防止 + security 観点で URL/sig 情報 leak 防止)
  *   - ★ 200 OK 即返却 + background event dispatch (= LINE 公式 timeout 回避)
  *
  * @module routes/line
@@ -58,6 +60,10 @@ async function dispatchEvent(event, options = {}) {
   const channelToken = cfg.channelToken || CHANNEL_TOKEN;
   const mediaRoot = cfg.mediaRoot || MEDIA_ROOT;
   const io = options.io;
+
+  // entry log: silent skip ('not-group' 等) でも「届いた事実」を log で binary 残す
+  // (= memory feedback_silent_skip_log_distinction.md、AI session が「届かない」誤判断するのを構造的に防止する device、恒久)
+  logger.info(`[LINE Bridge] dispatchEvent: type=${event?.type}, source=${event?.source?.type}, msg=${event?.message?.type}`);
 
   if (!event || event.type !== 'message') return { skipped: 'not-message' };
   if (!event.source || event.source.type !== 'group') return { skipped: 'not-group' };
@@ -126,16 +132,21 @@ router.post(
   '/webhook/:secret',
   async (req, res) => {
     // (1) secret path check
+    // LINE 公式 spec: webhook は常に 2xx 必須 (= non-2xx で webhook auto-suspend、6/4 Day 19 真犯人特定)
+    // secret path mismatch でも 200 silent return + log warn のみ (= memory feedback_line_webhook_200_required.md)
+    // security side benefit: 攻撃者に「URL exists」情報を leak しない
     if (!SECRET_PATH || req.params.secret !== SECRET_PATH) {
-      logger.warn('[LINE Bridge] secret path mismatch');
-      return res.status(404).json({ error: 'Not Found' });
+      logger.warn(`[LINE Bridge] secret path mismatch`);
+      return res.status(200).json({ ok: true });
     }
 
     // (2) signature verify
+    // LINE 公式 spec: webhook は常に 2xx 必須、signature verify failed でも 200 silent return + log warn のみ
+    // security side benefit: 攻撃者に「signature verify status」情報を leak しない
     const signature = req.headers['x-line-signature'] || '';
     if (!verifyLineSignature(CHANNEL_SECRET, req.body, signature)) {
       logger.warn('[LINE Bridge] signature verify failed');
-      return res.status(401).json({ error: 'Invalid signature' });
+      return res.status(200).json({ ok: true });
     }
 
     // (3) parse body

@@ -50,8 +50,9 @@ app.use('/mcp', createProxyMiddleware({
   pathRewrite: (path) => '/mcp' + path,
 }));
 
-// ★ ★ ★ LINE Bridge (#288) は signature verify 用に raw body 必須、express.json() より前に register
+// LINE Bridge (#288 Phase 1): signature verify 用に raw body 必須、express.json() より前に register
 // (= json parser が global で先に走ると req.body が parsed object 化、raw bytes 失われて HMAC 計算 fail)
+// routes/line.js は LINE 公式 spec 準拠で常に 2xx 返却 (= 6/4 200 fix、webhook auto-suspend 防止)
 app.use('/api/line', express.raw({ type: 'application/json' }), require('./routes/line'));
 
 app.use(express.json());
