@@ -32,14 +32,31 @@
 
 ★ Channel secret + access token は ★ ★ ★ **絶対に公開しない** (= リポジトリにコミット禁止、`.env` で管理し `.gitignore` 済み確認)。
 
-## Step 3. LINE 公式設定 (= グループ参加 + auto-reply OFF)
+## Step 3. LINE 公式設定 (= 2 つの管理画面で個別設定が必要)
 
-LINE Developers Console の Messaging API タブで:
+★ ★ 注意: LINE 公式アカウントは ★ ★ ★ **2 つの管理画面で別レイヤーの設定** がある。両方で正しく設定しないと webhook が動作しない (= 6/2 Day 17 dogfood で判明した罠)。
+
+### 3-1. LINE Developers Console (= [developers.line.biz/console/](https://developers.line.biz/console/))
+
+Messaging API タブで:
 
 - **Use webhook** = ★ ON
-- **Auto-reply messages** = ★ OFF (= bot が勝手に「定型応答」を送らない設定)
+- **Auto-reply messages** = ★ OFF
 - **Greeting messages** = OFF 推奨
 - **Allow bot to join group chats** = ★ ON (= グループ招待を受け付ける)
+
+### 3-2. LINE Official Account Manager (= [manager.line.biz](https://manager.line.biz/))
+
+★ ★ ★ user の声 (= 6/2 Day 17 で判明):
+
+> 「Developers Console だけ設定しても webhook が動かない、Official Account Manager 側の応答設定で 『チャット』 が ON だと webhook 完全停止する罠あり」
+
+該当アカウント選択 → 設定 → **応答設定**:
+
+- ★ ★ **チャット** = ★ ★ ★ ★ ★ **OFF 必須** (= ON だと user message が「人間オペレーター用 chat box」に蓄積され webhook 飛ばない LINE 仕様)
+- **あいさつメッセージ** = OFF 推奨
+- ★ **Webhook** = ★ ON
+- **応答メッセージ** = OFF
 
 webhook URL は Step 8 で設定するので、今は空でも OK。
 
@@ -139,11 +156,26 @@ https://<your-domain>/api/line/webhook/<LINE_WEBHOOK_SECRET_PATH>
 
 ★ **Use webhook** = ON 再確認。
 
-## Step 9. LINE グループに bot を招待
+## Step 9. LINE グループに bot を招待 (= ★ ★ ★ 新規グループ作成必須)
 
-1. LINE アプリで対象グループを開く
-2. メンバー追加 → bot の LINE ID (= Step 2 で取得した bot の友達追加 URL / QR コード) で招待
-3. bot がグループに参加完了
+★ ★ ★ ★ ★ ★ 重要: ★ ★ **既存グループへの bot 招待は ★ ★ LINE 仕様で「招待中」のまま stuck し、★ webhook event を受信できません** (= 6/4 Day 19 dogfood で確定)。
+
+理由:
+- LINE 公式アカウント (bot) は ★ acceptInvitation API が ★ 公式に提供されていない (= bot 側で承認不可)
+- 既存グループは ★ ★ 「友だちをグループに自動で追加」設定が ★ OFF (= default、★ 後から ON にできない LINE 仕様)
+- 「自動追加 OFF」 のグループに招待された bot は ★ ★ ★ 「招待中」 stuck → ★ ★ event 飛ばない
+
+### 解決策 = ★ ★ 新規グループ作成 + 自動追加 ON
+
+1. LINE アプリ → ホーム → 「グループ作成」
+2. メンバー選択画面で:
+   - ★ Step 4 で friend 追加した bot (= 「LINE Bridge」 等の表示名) を選択
+   - 通常メンバー (= 業務メンバー) も同時選択
+3. ★ ★ ★ ★ ★ **「友だちをグループに自動で追加」 = ON** で作成 (= default ON、念のため確認)
+4. グループ名入力 → 作成完了
+5. → ★ ★ bot は ★ ★ 即時 join 完了 (= 「招待中」 stuck にならない)
+
+★ scope 制約: 業務で運用中の既存グループを そのまま Phase 1 に使うことは ★ ★ LINE 仕様で不可。既存グループ受信は Phase 1.5 (= Android 通知 forward 等、別 angle) で別途検討。
 
 ## Step 10. LINE グループ ID を取得
 
@@ -153,9 +185,10 @@ https://<your-domain>/api/line/webhook/<LINE_WEBHOOK_SECRET_PATH>
 2. server log を確認:
 
 ```bash
-# server ログから group ID を grep
-grep "unmapped group" /path/to/server.log | tail -5
-# → "[LINE Bridge] unmapped group: C1234abcd..." のような log が出る
+# server ログから 確認 (= 2 件の log が出るのが正常)
+grep "LINE Bridge" /path/to/server.log | tail -5
+# → "[LINE Bridge] dispatchEvent: type=message, source=group, msg=text" ← ★ ★ 届いた事実
+# → "[LINE Bridge] unmapped group: C1234abcd..." ← ★ ★ group ID 取得
 ```
 
 3. `LINE Bridge unmapped group:` の後ろの ID (= `C` で始まる文字列) を `LINE_GROUP_TO_ROOM` に追加:
@@ -192,16 +225,34 @@ psql -U tealus -d tealus -c "SELECT vt.message_id, vt.status, vt.transcription F
 
 ## Troubleshooting
 
+### Verify は成功するが実 message event が届かない
+
+★ ★ ★ ★ 最頻出の落とし穴。Console UI の Verify ボタンは「成功」表示するのに、★ 実 message を送っても webhook log に何も来ない症状。
+
+★ 切り分け step:
+
+1. ★ **Manager.line.biz の 応答設定 「チャット」 が ON でないか確認** (= ON だと webhook 完全停止)
+2. **新規グループで bot が正式参加しているか確認** (= 「招待中」 stuck では event 飛ばない、Step 9 参照)
+3. ★ ★ **新規グループでも届かない場合**: bot が friend list から削除/block されていないか確認
+
 ### signature verify failed (= log で `[LINE Bridge] signature verify failed`)
 
 - `LINE_CHANNEL_SECRET` が LINE 公式 console と一致しているか確認
 - 環境変数が server に正しく読み込まれているか (= server 再起動済か)
 - LINE 公式 console と Tealus が同じ channel を見ているか (= 複数 channel ある場合に混同)
 
-### 404 Not Found (= secret path 不一致)
+★ ★ ★ 注: 6/4 Day 19 以降、★ ★ Tealus 元 code は ★ secret path mismatch / signature verify failed でも HTTP **200 silent return** + log warn のみ (= LINE 公式 spec「webhook は常に 2xx」 準拠、★ ★ webhook auto-suspend 防止 + security 観点で URL/sig 情報 leak 防止)。HTTP status が 200 でも log に warn 出ていれば正常設計。
+
+### webhook 自滅 (= Day 17 末まで存在した bug、Day 19 fix 後は再発しない)
+
+★ ★ history: Day 17 では `routes/line.js` が secret path mismatch → 404、signature verify failed → 401 を返す設計だったため、★ 401 連続 17 件で LINE 公式が **webhook auto-suspend** trigger。
+
+★ ★ Day 19 fix 後 (= 6/4 commit `cec0e50` 以降): ★ 200 silent return 設計に変更、★ ★ webhook 自滅 trigger 構造的にゼロ。
+
+### 404 Not Found (= secret path 不一致、6/4 以降は出ない)
 
 - `LINE_WEBHOOK_SECRET_PATH` と webhook URL の最後の path が一致しているか
-- 例: env が `abc123` なら URL は `/api/line/webhook/abc123`、`/api/line/webhook/xyz` だと 404
+- 例: env が `abc123` なら URL は `/api/line/webhook/abc123`、`/api/line/webhook/xyz` だと ★ log に warn 出る (= ★ HTTP response は 200 silent)
 
 ### unmapped group (= Tealus に投影されない)
 
@@ -222,10 +273,23 @@ psql -U tealus -d tealus -c "SELECT vt.message_id, vt.status, vt.transcription F
 
 ## scope 外 (= 別 Phase / 別 Issue)
 
+### Phase 1 では受信しない message type
+
+| user 操作 | LINE webhook event type | 動作 |
+|---|---|---|
+| ★ 「写真を選択」 (= 標準画像送信、カメラ/アルバム button) | `image` | ✓ Phase 1 で投影 |
+| ★ ★ 「ファイル」 (= 画像/動画/PDF 等をファイル添付として送信) | `file` | ✗ Phase 2 scope、Phase 1 では silent skip |
+| ★ ★ 「動画を選択」 (= 動画送信) | `video` | ✗ Phase 2 scope、Phase 1 では silent skip |
+| sticker / location | `sticker` / `location` | ✗ Phase 2 scope、Phase 1 では silent skip |
+
+★ ★ ★ ★ ★ 「LINE 標準画像送信 (= 写真 button 経由)」 と 「ファイル添付の画像」 は ★ LINE webhook で event type が ★ ★ 異なる (= 6/4 Day 19 で確定)。「ファイル添付の画像」 は Phase 1 では受信しないので注意。
+
+### その他 Phase 2 scope
+
 - **Outbound (= Tealus → LINE post)**: 別 Phase
 - **管理画面 UI** (= mapping CRUD): 別 Phase
-- **video / sticker / file / location**: 別 Phase
 - **送信者 filter / 時間帯 filter**: 別 Phase
+- **既存 LINE 業務グループ受信** (= Phase 1.5、Android 通知 forward 等の別 angle): Day 17 末 + Day 19 で LINE 仕様の壁確定、別 angle で別途検討
 
 ## 関連
 
@@ -233,6 +297,7 @@ psql -U tealus -d tealus -c "SELECT vt.message_id, vt.status, vt.transcription F
 - 起点: 2026-06-02 業務メモ 10:47-10:49 (= 4 連続 voice memo)
 - 親 vision: organon paradigm 自動 pipeline (= v0.3.0 release marker) の外部 channel 拡張第 1 例
 - 関連 release: [v0.3.0](https://github.com/gamasenninn/tealus/releases/tag/v0.3.0)
+- 完成日: 2026-06-04 Day 19 (= 200 fix + path 復権 + Phase 1 全 scope 動作確認、commit `cec0e50`)
 
 ## 参考リンク
 
