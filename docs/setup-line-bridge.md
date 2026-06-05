@@ -204,11 +204,34 @@ LINE_GROUP_TO_ROOM={"C1234abcd567efgh890":"<対応する Tealus room の uuid>"}
 
 LINE グループで以下を 1 件ずつ発信、Tealus ルームに投影されることを確認:
 
-| message 種別 | 検証ポイント |
+| message 種別 | 検証ポイント | Phase |
+|---|---|---|
+| text | 文字がそのまま Tealus に表示される | 1 |
+| 画像 (= 標準) | 画像が Tealus に表示 (= サムネイル + クリックで拡大) | 1 |
+| 音声 | 音声が Tealus に表示 + ★ ★ 自動で文字起こし完了 (= 既存 Whisper + organon polyseme inject 自動連動) | 1 |
+| 動画 (= 動画選択 button) | 動画が Tealus に表示 + ★ ffmpeg 1sec frame thumbnail preview | 2.1 |
+| ファイル添付 (= 「+」→「ファイル」) | 原ファイル名 + 原拡張子 で投影 (= MD/JSON/CSV/任意 file) | 2.1 |
+| スタンプ | LINE 公式 sticker PNG が ★ image として投影 (= 既存 image grid に表示) | 2.2 |
+| 位置情報 (= 「+」→「位置情報」) | 「📍 場所名 / 緯度経度 / [地図 link]」 markdown 投影 + tap で Google Maps 起動 | 2.2 |
+
+### ★ Tealus client 側 file preview (= Phase 2.1 TextFilePreview component)
+
+★ Tealus 「LINEブリッジ」 room 内の添付 file (= ファイル添付経由) には ★ 「📎 file_name」 link の下に ★ ★ **「▶ プレビューを開く」** button が表示されます (= MD/TXT/JSON/CSV/source code 等の text file 対象)。
+
+★ tap で expand → inline preview:
+
+| file 種別 | preview 動作 |
 |---|---|
-| text | 文字がそのまま Tealus に表示される |
-| 画像 | 画像が Tealus に表示される (= サムネイル + クリックで拡大) |
-| 音声 | 音声が Tealus に表示 + ★ ★ 自動で文字起こし完了 (= 既存 Whisper + organon polyseme inject 自動連動) |
+| `.md` / `.markdown` | ★ ★ react-markdown + remarkGfm + remarkBreaks で ★ ★ Tealus 内 message text と同 quality の markdown rendering (= 見出し / 段落 / リンク / コード等) |
+| `.json` | ★ JSON auto-indent (= minify file でも自動成形 2 space indent)、★ parse 失敗時は raw fallback |
+| `.csv` / `.tsv` | ★ ★ `<table>` rendering (= 簡易 RFC 4180 parser、header + body 分離 + zebra)、★ separator は拡張子から自動切り替え |
+| `.txt` / `.log` / source code (= .js/.py/.ts 等) | ★ `<pre>` raw 表示 (= 等幅 font、UTF-8 decode、★ Chrome Android 等の charset 認識問題回避) |
+
+★ ★ design 特徴:
+- ★ ★ ★ UTF-8 で fetch.text() decode = Chrome Android 等の charset 認識問題回避 (= 6/5 Day 20 確立)
+- 折り畳み default = chat flow を切らない UX
+- expand 後の content は cache (= 折り畳み再 expand で再 fetch しない)
+- 256KB 超過 file は ★ truncate + 警告表示 (= 大 file でも軽量)
 
 ### 検証用コマンド
 
@@ -260,6 +283,17 @@ psql -U tealus -d tealus -c "SELECT vt.message_id, vt.status, vt.transcription F
 - グループ ID が正確にコピーされているか (= 大文字小文字 区別、空白なし)
 - server 再起動済か (= 環境変数は startup 時に load)
 
+### ファイル添付の display 名が `*.bin` になる / 原拡張子失われる (= 6/5 Day 20 fix 済)
+
+- ★ 6/5 commit `7355060` 以降は ★ ★ LINE webhook の `message.fileName` field を ★ `saveLineContentToFile` の `originalFileName` option で受け取り、★ display 名 = 原名 + physical 拡張子 = 原拡張子 で保存
+- ★ ★ もし古い version で動作している場合は ★ 最新 main に update + server restart
+
+### Chrome Android で MD file 文字化け (= 6/5 Day 20 fix 済)
+
+- ★ server 側は ★ `text/markdown; charset=UTF-8` で正しく配信、★ ★ Chrome Android が charset header 無視 or default encoding 優先で文字化け
+- ★ ★ 解決 = ★ ★ ★ Tealus client 内蔵 TextFilePreview component で inline preview (= `<a download>` link 経由で external app に渡さず、Tealus 内で fetch.text() UTF-8 decode + react-markdown rendering)
+- ★ 利用方法: 「📎 file_name」 link の下の 「▶ プレビューを開く」 button tap
+
 ### Content API fetch failed (= 画像 / 音声 受信時 エラー)
 
 - `LINE_CHANNEL_ACCESS_TOKEN` の有効期限 (= long-lived は expire しない、ただし console で revoke 可能)
@@ -271,33 +305,50 @@ psql -U tealus -d tealus -c "SELECT vt.message_id, vt.status, vt.transcription F
 - 既存 Whisper pipeline が動作中か (= 既存 朝礼動画文字起こしが動いていれば LINE 音声も同 pipeline)
 - 既存 `OPENAI_API_KEY` 設定確認
 
+## 対応 message type 一覧 (= Phase 2.2 時点)
+
+| user 操作 | LINE webhook event type | 動作 | Phase |
+|---|---|---|---|
+| text | `text` | ✓ 投影 | 1 |
+| 「写真を選択」 (= 標準画像送信) | `image` | ✓ 投影 + サムネイル | 1 |
+| 音声 メッセージ | `audio` | ✓ 投影 + 自動文字起こし | 1 |
+| 「動画を選択」 | `video` | ✓ 投影 + ffmpeg thumbnail | 2.1 |
+| 「ファイル」 添付 (= 画像/動画/PDF/MD 等) | `file` | ✓ 原名 + 原拡張子で投影 + TextFilePreview | 2.1 |
+| スタンプ | `sticker` | ✓ LINE 公式 sticker PNG を image type で投影 | 2.2 |
+| 「位置情報」 | `location` | ✓ text + markdown で投影 + Google Maps link | 2.2 |
+
+★ ★ 「写真を選択」 (= 標準画像送信) と 「ファイル添付の画像」 は ★ LINE webhook で event type が ★ 異なる (= image vs file)。Phase 2.1 以降は両方 受信対応。
+
 ## scope 外 (= 別 Phase / 別 Issue)
 
-### Phase 1 では受信しない message type
-
-| user 操作 | LINE webhook event type | 動作 |
-|---|---|---|
-| ★ 「写真を選択」 (= 標準画像送信、カメラ/アルバム button) | `image` | ✓ Phase 1 で投影 |
-| ★ ★ 「ファイル」 (= 画像/動画/PDF 等をファイル添付として送信) | `file` | ✗ Phase 2 scope、Phase 1 では silent skip |
-| ★ ★ 「動画を選択」 (= 動画送信) | `video` | ✗ Phase 2 scope、Phase 1 では silent skip |
-| sticker / location | `sticker` / `location` | ✗ Phase 2 scope、Phase 1 では silent skip |
-
-★ ★ ★ ★ ★ 「LINE 標準画像送信 (= 写真 button 経由)」 と 「ファイル添付の画像」 は ★ LINE webhook で event type が ★ ★ 異なる (= 6/4 Day 19 で確定)。「ファイル添付の画像」 は Phase 1 では受信しないので注意。
-
-### その他 Phase 2 scope
-
-- **Outbound (= Tealus → LINE post)**: 別 Phase
-- **管理画面 UI** (= mapping CRUD): 別 Phase
-- **送信者 filter / 時間帯 filter**: 別 Phase
-- **既存 LINE 業務グループ受信** (= Phase 1.5、Android 通知 forward 等の別 angle): Day 17 末 + Day 19 で LINE 仕様の壁確定、別 angle で別途検討
+- **Phase 2.3 outbound** (= Tealus → LINE post): LINE API 高額のため需要 surface 待ち
+- **Phase 2.4 mapping CRUD UI** (= 管理画面): 現状 `.env` で十分、複数 group 運用後判断
+- **送信者 filter / 時間帯 filter**: 必要なら Phase 2.5
+- **Phase 1.5 既存 LINE 業務グループ受信** (= Android 通知 forward 等の別 angle): Day 17 末 + Day 19 で LINE 仕様の壁確定 (= 既存 group bot 招待中 stuck)、別 angle で別途検討
+- **Phase 3 sticker 専用 type 追加**: user dogfood 後の認識次第で type 分離検討 (= 現状 image type 流用)
+- **Phase 3 location 専用 type + map component**: 現状 text + markdown 投影、map preview component 要望時実装
+- **Phase 3 ANIMATION / SOUND sticker 動的表示**: 現状静止画 first frame 投影、完全動作は別 task
+- **Phase 3 private sticker** (= 自作スタンプパック): LINE 公式 type='sticker' event 非対応、別 dispatch 要
 
 ## 関連
 
-- 実装 Issue: [#288](https://github.com/gamasenninn/tealus/issues/288)
-- 起点: 2026-06-02 業務メモ 10:47-10:49 (= 4 連続 voice memo)
+### 実装 Issue (= 時系列)
+
+- [#288 Phase 1](https://github.com/gamasenninn/tealus/issues/288) (= text + image + audio、close 済): 2026-06-02 Day 17 実装 → 2026-06-04 Day 19 真犯人解決 + close
+- [#289 Phase 2.1](https://github.com/gamasenninn/tealus/issues/289) (= file + video + TextFilePreview、close 済): 2026-06-05 Day 20 完成
+- [#290 Phase 2.2](https://github.com/gamasenninn/tealus/issues/290) (= sticker + location): 2026-06-05 Day 20 実装
+
+### 完成日 + 主要 commit
+
+- ★ Phase 1 完成: 2026-06-04 Day 19 (= 200 fix + path 復権、commit `cec0e50`)
+- ★ Phase 2.1 完成: 2026-06-05 Day 20 (= file/video + TextFilePreview、commit `950e101` / `7355060` / `1c1b383` / `5517671`)
+- ★ Phase 2.2 完成: 2026-06-05 Day 20 (= sticker/location、commit `0d00558`)
+
+### 背景
+
+- 起点: 2026-06-02 業務メモ 10:47-10:49 (= 4 連続 voice memo) by 小野哲
 - 親 vision: organon paradigm 自動 pipeline (= v0.3.0 release marker) の外部 channel 拡張第 1 例
 - 関連 release: [v0.3.0](https://github.com/gamasenninn/tealus/releases/tag/v0.3.0)
-- 完成日: 2026-06-04 Day 19 (= 200 fix + path 復権 + Phase 1 全 scope 動作確認、commit `cec0e50`)
 
 ## 参考リンク
 
