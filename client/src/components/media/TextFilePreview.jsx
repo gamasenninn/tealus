@@ -39,6 +39,70 @@ export function isMarkdownFile(media) {
   return MARKDOWN_EXTENSIONS.some((ext) => fileName.endsWith(ext));
 }
 
+/**
+ * media が JSON 対象か判定 (= 拡張子 .json or mime application/json)
+ */
+export function isJsonFile(media) {
+  if (!media) return false;
+  const mime = (media.mime_type || '').toLowerCase();
+  if (mime === 'application/json') return true;
+  const fileName = (media.file_name || '').toLowerCase();
+  return fileName.endsWith('.json');
+}
+
+/**
+ * media が CSV / TSV 対象か判定 (= 拡張子 .csv/.tsv or mime text/csv)
+ */
+export function isCsvFile(media) {
+  if (!media) return false;
+  const mime = (media.mime_type || '').toLowerCase();
+  if (mime === 'text/csv' || mime === 'text/tab-separated-values') return true;
+  const fileName = (media.file_name || '').toLowerCase();
+  return fileName.endsWith('.csv') || fileName.endsWith('.tsv');
+}
+
+/**
+ * JSON を自動成形 (= parse → stringify with indent 2)、parse fail なら raw text 返す
+ */
+export function formatJson(text) {
+  try {
+    const obj = JSON.parse(text);
+    return { formatted: JSON.stringify(obj, null, 2), ok: true };
+  } catch {
+    return { formatted: text, ok: false };
+  }
+}
+
+/**
+ * CSV/TSV を rows 2D array に parse (= 簡易 RFC 4180、" escape 対応)
+ * separator は ',' or '\t'、空行は skip
+ */
+export function parseCsv(text, separator = ',') {
+  const rows = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    if (line === '') continue;
+    const cells = [];
+    let cur = '';
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuote = !inQuote;
+      } else if (ch === separator && !inQuote) {
+        cells.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur);
+    rows.push(cells);
+  }
+  return rows;
+}
+
 const MAX_PREVIEW_BYTES = 256 * 1024; // 256KB 超過は警告 + 切り捨て
 
 /**
@@ -86,6 +150,54 @@ export default function TextFilePreview({ media }) {
   }, [expanded, media.file_path, content]);
 
   const isMd = isMarkdownFile(media);
+  const isJson = isJsonFile(media);
+  const isCsv = isCsvFile(media);
+
+  // CSV/TSV 自動 separator 判定 (= .tsv なら tab、それ以外 ,)
+  const csvSeparator = (media.file_name || '').toLowerCase().endsWith('.tsv') ? '\t' : ',';
+
+  const renderBody = () => {
+    if (isMd) {
+      return (
+        <div className="text-file-preview__markdown">
+          <Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{content}</Markdown>
+        </div>
+      );
+    }
+    if (isJson) {
+      const { formatted, ok } = formatJson(content);
+      return (
+        <>
+          <pre className="text-file-preview__pre">{formatted}</pre>
+          {!ok && (
+            <div className="text-file-preview__notice">
+              ⚠ JSON parse 失敗 (= 不正な形式)、raw text で表示
+            </div>
+          )}
+        </>
+      );
+    }
+    if (isCsv) {
+      const rows = parseCsv(content, csvSeparator);
+      if (rows.length === 0) return <pre className="text-file-preview__pre">{content}</pre>;
+      const [header, ...body] = rows;
+      return (
+        <div className="text-file-preview__table-wrapper">
+          <table className="text-file-preview__table">
+            <thead>
+              <tr>{header.map((cell, i) => <th key={i}>{cell}</th>)}</tr>
+            </thead>
+            <tbody>
+              {body.map((row, ri) => (
+                <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    return <pre className="text-file-preview__pre">{content}</pre>;
+  };
 
   return (
     <div className="text-file-preview">
@@ -103,13 +215,7 @@ export default function TextFilePreview({ media }) {
           {error && <span className="text-file-preview__error">エラー: {error}</span>}
           {content !== null && (
             <>
-              {isMd ? (
-                <div className="text-file-preview__markdown">
-                  <Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{content}</Markdown>
-                </div>
-              ) : (
-                <pre className="text-file-preview__pre">{content}</pre>
-              )}
+              {renderBody()}
               {truncated && (
                 <div className="text-file-preview__truncated">
                   ⚠ 大きすぎるため先頭 {MAX_PREVIEW_BYTES / 1024}KB のみ表示。全体を見るにはダウンロードしてください。
