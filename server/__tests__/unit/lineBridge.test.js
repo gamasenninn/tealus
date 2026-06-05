@@ -6,8 +6,10 @@ const path = require('path');
 const os = require('os');
 const {
   fetchLineContent,
+  fetchLineStickerImage,
   saveLineContentToFile,
   extensionForMime,
+  LINE_STICKER_CDN_BASE,
 } = require('../../src/services/lineBridge');
 
 function makeMockResponse({ ok = true, status = 200, statusText = 'OK', mimeType = 'image/jpeg', body = Buffer.from('binary-content') }) {
@@ -80,6 +82,33 @@ describe('fetchLineContent', () => {
     } finally {
       globalThis.fetch = orig;
     }
+  });
+});
+
+describe('fetchLineStickerImage (= LINE 公式 sticker CDN、Phase 2.2)', () => {
+  test('LINE sticker CDN URL から PNG fetch + buffer + mime 返す', async () => {
+    const png = Buffer.from('fake-png-bytes');
+    const fetchMock = jest.fn().mockResolvedValue(makeMockResponse({ mimeType: 'image/png', body: png }));
+
+    const result = await fetchLineStickerImage('52002734', { fetchImpl: fetchMock });
+
+    expect(result.buffer.equals(png)).toBe(true);
+    expect(result.mimeType).toBe('image/png');
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${LINE_STICKER_CDN_BASE}/52002734/android/sticker.png`,
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  test('stickerId 未指定で throw', async () => {
+    await expect(fetchLineStickerImage('')).rejects.toThrow(/stickerId/);
+    await expect(fetchLineStickerImage(null)).rejects.toThrow(/stickerId/);
+    await expect(fetchLineStickerImage(undefined)).rejects.toThrow(/stickerId/);
+  });
+
+  test('CDN 404 等で throw', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' }));
+    await expect(fetchLineStickerImage('99999', { fetchImpl: fetchMock })).rejects.toThrow(/404/);
   });
 });
 

@@ -16,7 +16,7 @@
 const express = require('express');
 const path = require('path');
 const { verifyLineSignature } = require('../services/lineSignature');
-const { fetchLineContent, saveLineContentToFile } = require('../services/lineBridge');
+const { fetchLineContent, fetchLineStickerImage, saveLineContentToFile } = require('../services/lineBridge');
 const {
   postTextToTealus,
   postImageToTealus,
@@ -150,9 +150,10 @@ async function dispatchEvent(event, options = {}) {
     }
 
     case 'sticker': {
-      // ★ Phase 2.2: sticker は LINE 公式 sticker PNG を fetch + Tealus 既存 image type 流用で投影
-      // (= migration 不要、Tealus 既存 image grid で自然表示、user dogfood 後の認識次第で Phase 3 で type 分離検討)
-      const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
+      // ★ Phase 2.2: sticker は LINE 公式 sticker shop CDN から直接 PNG fetch
+      // (= LINE Content API は sticker 非対応 = 400、★ 6/5 Day 20 dogfood で判明)
+      // Tealus 既存 image type 流用で投影 (= migration 不要、image grid で自然表示)
+      const { buffer, mimeType } = await fetchLineStickerImage(message.stickerId);
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-stickers' });
       await postImageToTealus({
         roomId,

@@ -23,10 +23,12 @@ jest.mock('../../src/services/lineMessageBridge', () => ({
 }));
 
 const mockFetchContent = jest.fn();
+const mockFetchStickerImage = jest.fn();
 const mockSaveContent = jest.fn();
 
 jest.mock('../../src/services/lineBridge', () => ({
   fetchLineContent: (...args) => mockFetchContent(...args),
+  fetchLineStickerImage: (...args) => mockFetchStickerImage(...args),
   saveLineContentToFile: (...args) => mockSaveContent(...args),
 }));
 
@@ -60,6 +62,7 @@ beforeEach(() => {
   mockPostVideo.mockClear();
   mockPostLocation.mockClear();
   mockFetchContent.mockReset();
+  mockFetchStickerImage.mockReset();
   mockSaveContent.mockReset();
 });
 
@@ -220,8 +223,9 @@ describe('dispatchEvent', () => {
     }));
   });
 
-  test('sticker message → fetchLineContent + saveLineContentToFile(subdir=line-stickers) + postImageToTealus (= Phase 2.2、image type 流用)', async () => {
-    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('png-bytes'), mimeType: 'image/png' });
+  test('sticker message → fetchLineStickerImage (= LINE sticker CDN) + saveLineContentToFile(subdir=line-stickers) + postImageToTealus (= Phase 2.2、image type 流用)', async () => {
+    // ★ sticker は LINE Content API 非対応、★ LINE 公式 sticker CDN から直接 PNG fetch
+    mockFetchStickerImage.mockResolvedValue({ buffer: Buffer.from('png-bytes'), mimeType: 'image/png' });
     mockSaveContent.mockResolvedValue({
       filePath: '/tmp/media-test/line-stickers/s.png',
       relativePath: 'line-stickers/s.png',
@@ -238,7 +242,9 @@ describe('dispatchEvent', () => {
     const result = await dispatchEvent(event, { config: TEST_CONFIG });
 
     expect(result).toEqual({ posted: 'sticker' });
-    expect(mockFetchContent).toHaveBeenCalledWith('m-stk', 'channel-token-xyz');
+    // ★ fetchLineContent ではなく fetchLineStickerImage が呼ばれる (= LINE 仕様)
+    expect(mockFetchStickerImage).toHaveBeenCalledWith('52002734');
+    expect(mockFetchContent).not.toHaveBeenCalled();
     expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', '/tmp/media-test', { subdir: 'line-stickers' });
     expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-X',

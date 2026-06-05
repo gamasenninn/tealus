@@ -15,6 +15,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const LINE_CONTENT_API_BASE = 'https://api-data.line.me/v2/bot/message';
+const LINE_STICKER_CDN_BASE = 'https://stickershop.line-scdn.net/stickershop/v1/sticker';
 
 /**
  * MIME type → file extension の最小 mapping
@@ -120,9 +121,44 @@ async function saveLineContentToFile(buffer, mimeType, baseDir, options = {}) {
   };
 }
 
+/**
+ * LINE 公式 sticker shop CDN から sticker image を fetch
+ *
+ * LINE Content API (= fetchLineContent) は ★ ★ sticker 非対応 (= 400 Bad Request)、
+ * sticker は ★ ★ ★ 公式 sticker shop CDN から直接 fetch する別仕様 (= LINE Messaging API doc)。
+ * webhook event の stickerId を URL に組み立てて PNG 取得。
+ *
+ * @param {string|number} stickerId - LINE webhook event の message.stickerId
+ * @param {Object} [options]
+ * @param {Function} [options.fetchImpl] - test 用 fetch mock (= default global fetch)
+ * @returns {Promise<{ buffer: Buffer, mimeType: string }>}
+ * @throws Error - response not ok 等
+ */
+async function fetchLineStickerImage(stickerId, options = {}) {
+  if (stickerId === null || stickerId === undefined || stickerId === '') {
+    throw new Error('stickerId is required');
+  }
+
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  if (!fetchImpl) throw new Error('fetch implementation not available');
+
+  const url = `${LINE_STICKER_CDN_BASE}/${encodeURIComponent(stickerId)}/android/sticker.png`;
+  const response = await fetchImpl(url, { method: 'GET' });
+
+  if (!response.ok) {
+    throw new Error(`LINE Sticker CDN responded ${response.status} ${response.statusText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return { buffer, mimeType: 'image/png' };
+}
+
 module.exports = {
   fetchLineContent,
+  fetchLineStickerImage,
   saveLineContentToFile,
   extensionForMime,
   LINE_CONTENT_API_BASE,
+  LINE_STICKER_CDN_BASE,
 };
