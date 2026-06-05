@@ -181,8 +181,122 @@ async function postVoiceToTealus({ roomId, senderUserId, mediaInfo, replyTo, io 
   }
 }
 
+/**
+ * file message を Tealus に post (= Phase 2.1、bot.js /push-file 同型)
+ *
+ * 一般 file (= 画像/動画/PDF 等の任意添付) を file type で投影。thumbnail なし、width/height なし、
+ * transcribe trigger なし。LINE webhook の type=file event 用。
+ *
+ * @param {Object} params
+ * @param {string} params.roomId
+ * @param {string} params.senderUserId
+ * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
+ * @param {string} [params.content]
+ * @param {string} [params.replyTo]
+ * @param {Object} [params.io]
+ * @returns {Promise<{ message: Object, media: Object }>}
+ */
+async function postFileToTealus({ roomId, senderUserId, mediaInfo, content, replyTo, io }) {
+  if (!roomId) throw new Error('roomId is required');
+  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!mediaInfo) throw new Error('mediaInfo is required');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const msgResult = await client.query(
+      `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
+       VALUES ($1, $2, $3, 'file', $4) RETURNING *`,
+      [roomId, senderUserId, content || null, replyTo || null]
+    );
+    const message = msgResult.rows[0];
+
+    const mediaResult = await client.query(
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize]
+    );
+    await client.query('COMMIT');
+
+    if (io) {
+      io.to(roomId).emit('message:new', { ...message, media: [mediaResult.rows[0]] });
+    }
+
+    logger.info(`[lineMessageBridge] file post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
+    return { message, media: mediaResult.rows[0] };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * video message を Tealus に post (= Phase 2.1、bot.js /push-image video 同型 + ffmpeg thumbnail)
+ *
+ * video type で投影。thumbnail は generateThumbnail (= ffmpeg 既存) で 1sec frame extract。
+ * width/height は null 固定 (= video metadata 取得は Phase 3 課題、ffprobe dependency 必要)。
+ * transcribe trigger なし (= voice 専用)。
+ *
+ * @param {Object} params
+ * @param {string} params.roomId
+ * @param {string} params.senderUserId
+ * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
+ * @param {string} [params.content]
+ * @param {string} [params.replyTo]
+ * @param {Object} [params.io]
+ * @returns {Promise<{ message: Object, media: Object }>}
+ */
+async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, replyTo, io }) {
+  if (!roomId) throw new Error('roomId is required');
+  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!mediaInfo) throw new Error('mediaInfo is required');
+
+  // thumbnail 生成 (= 既存 generateThumbnail、失敗時は null fallback)
+  let thumbnailPath = null;
+  try {
+    const { generateThumbnail } = require('./thumbnail');
+    thumbnailPath = await generateThumbnail(mediaInfo.filePath, mediaInfo.mimeType);
+  } catch (e) {
+    logger.warn(`[lineMessageBridge] generateThumbnail failed for video: ${e.message}`);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const msgResult = await client.query(
+      `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
+       VALUES ($1, $2, $3, 'video', $4) RETURNING *`,
+      [roomId, senderUserId, content || null, replyTo || null]
+    );
+    const message = msgResult.rows[0];
+
+    const mediaResult = await client.query(
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, thumbnail_path)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, thumbnailPath]
+    );
+    await client.query('COMMIT');
+
+    if (io) {
+      io.to(roomId).emit('message:new', { ...message, media: [mediaResult.rows[0]] });
+    }
+
+    logger.info(`[lineMessageBridge] video post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName} thumb=${thumbnailPath || 'null'}`);
+    return { message, media: mediaResult.rows[0] };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   postTextToTealus,
   postImageToTealus,
   postVoiceToTealus,
+  postFileToTealus,
+  postVideoToTealus,
 };

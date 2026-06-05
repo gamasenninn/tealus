@@ -9,11 +9,15 @@
 const mockPostText = jest.fn(() => Promise.resolve({ message: { id: 'msg-text' } }));
 const mockPostImage = jest.fn(() => Promise.resolve({ message: { id: 'msg-image' } }));
 const mockPostVoice = jest.fn(() => Promise.resolve({ message: { id: 'msg-voice' } }));
+const mockPostFile = jest.fn(() => Promise.resolve({ message: { id: 'msg-file' } }));
+const mockPostVideo = jest.fn(() => Promise.resolve({ message: { id: 'msg-video' } }));
 
 jest.mock('../../src/services/lineMessageBridge', () => ({
   postTextToTealus: (...args) => mockPostText(...args),
   postImageToTealus: (...args) => mockPostImage(...args),
   postVoiceToTealus: (...args) => mockPostVoice(...args),
+  postFileToTealus: (...args) => mockPostFile(...args),
+  postVideoToTealus: (...args) => mockPostVideo(...args),
 }));
 
 const mockFetchContent = jest.fn();
@@ -50,6 +54,8 @@ beforeEach(() => {
   mockPostText.mockClear();
   mockPostImage.mockClear();
   mockPostVoice.mockClear();
+  mockPostFile.mockClear();
+  mockPostVideo.mockClear();
   mockFetchContent.mockReset();
   mockSaveContent.mockReset();
 });
@@ -153,7 +159,61 @@ describe('dispatchEvent', () => {
     expect(result).toEqual({ skipped: 'not-message' });
   });
 
-  test('unsupported message type (= sticker / video 等) → skip', async () => {
+  test('file message → fetchLineContent + saveLineContentToFile + postFileToTealus (= Phase 2.1)', async () => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('pdf-bytes'), mimeType: 'application/pdf' });
+    mockSaveContent.mockResolvedValue({
+      filePath: '/tmp/media-test/line-files/doc.pdf',
+      relativePath: 'line-files/doc.pdf',
+      fileName: 'doc.pdf',
+      fileSize: 2048,
+      mimeType: 'application/pdf',
+    });
+
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'file', id: 'm-file' },
+    };
+    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+
+    expect(result).toEqual({ posted: 'file' });
+    expect(mockFetchContent).toHaveBeenCalledWith('m-file', 'channel-token-xyz');
+    expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'application/pdf', '/tmp/media-test', { subdir: 'line-files' });
+    expect(mockPostFile).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-X',
+      senderUserId: 'bot-user-uuid',
+      mediaInfo: expect.objectContaining({ relativePath: 'line-files/doc.pdf' }),
+    }));
+  });
+
+  test('video message → fetchLineContent + saveLineContentToFile + postVideoToTealus (= Phase 2.1)', async () => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('mp4-bytes'), mimeType: 'video/mp4' });
+    mockSaveContent.mockResolvedValue({
+      filePath: '/tmp/media-test/line-videos/clip.mp4',
+      relativePath: 'line-videos/clip.mp4',
+      fileName: 'clip.mp4',
+      fileSize: 102400,
+      mimeType: 'video/mp4',
+    });
+
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-Y' },
+      message: { type: 'video', id: 'm-vid' },
+    };
+    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+
+    expect(result).toEqual({ posted: 'video' });
+    expect(mockFetchContent).toHaveBeenCalledWith('m-vid', 'channel-token-xyz');
+    expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'video/mp4', '/tmp/media-test', { subdir: 'line-videos' });
+    expect(mockPostVideo).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-Y',
+      senderUserId: 'bot-user-uuid',
+      mediaInfo: expect.objectContaining({ relativePath: 'line-videos/clip.mp4' }),
+    }));
+  });
+
+  test('unsupported message type (= sticker / location 等) → skip', async () => {
     const event = {
       type: 'message',
       source: { type: 'group', groupId: 'group-X' },

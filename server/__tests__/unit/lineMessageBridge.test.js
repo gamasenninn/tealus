@@ -35,10 +35,18 @@ jest.mock('../../src/services/transcription', () => ({
   transcribeVoiceMessage: (...args) => mockTranscribeFn(...args),
 }));
 
+// Mock thumbnail (= Phase 2.1 video 用、ffmpeg dependency 排除)
+const mockGenerateThumbnail = jest.fn(() => Promise.resolve('thumbnails/x_thumb.jpg'));
+jest.mock('../../src/services/thumbnail', () => ({
+  generateThumbnail: (...args) => mockGenerateThumbnail(...args),
+}));
+
 const {
   postTextToTealus,
   postImageToTealus,
   postVoiceToTealus,
+  postFileToTealus,
+  postVideoToTealus,
 } = require('../../src/services/lineMessageBridge');
 
 function makeMockIo() {
@@ -61,6 +69,8 @@ beforeEach(() => {
   mockClient.query.mockReset();
   mockClient.release.mockReset();
   mockTranscribeFn.mockReset();
+  mockGenerateThumbnail.mockReset();
+  mockGenerateThumbnail.mockResolvedValue('thumbnails/x_thumb.jpg');
 });
 
 describe('postTextToTealus', () => {
@@ -227,5 +237,120 @@ describe('postVoiceToTealus', () => {
 
   test('mediaInfo 未指定で throw', async () => {
     await expect(postVoiceToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+  });
+});
+
+describe('postFileToTealus (= Phase 2.1)', () => {
+  test('SQL: messages (type=file) + media INSERT (thumbnail/width/height 全部 null) + Socket.IO emit', async () => {
+    const newMsg = { id: 'msg-file', room_id: 'room-1', type: 'file' };
+    const newMedia = { id: 'media-f', message_id: 'msg-file', file_path: 'line-files/doc.pdf' };
+    setupSqlSequence([
+      {},                       // BEGIN
+      { rows: [newMsg] },       // INSERT INTO messages
+      { rows: [newMedia] },     // INSERT INTO message_media
+      {},                       // COMMIT
+    ]);
+
+    const { io, emit } = makeMockIo();
+    const result = await postFileToTealus({
+      roomId: 'room-1',
+      senderUserId: 'bot-1',
+      mediaInfo: {
+        filePath: '/tmp/doc.pdf',
+        relativePath: 'line-files/doc.pdf',
+        fileName: 'doc.pdf',
+        fileSize: 2048,
+        mimeType: 'application/pdf',
+      },
+      io,
+    });
+
+    expect(result.message).toEqual(newMsg);
+    expect(result.media).toEqual(newMedia);
+    expect(emit).toHaveBeenCalledWith('message:new', expect.objectContaining({
+      id: 'msg-file',
+      media: [newMedia],
+    }));
+  });
+
+  test('mediaInfo 未指定で throw', async () => {
+    await expect(postFileToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+  });
+
+  test('transcribe trigger 呼ばれない (= file は transcribe 対象外、回帰防止)', async () => {
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
+    await postFileToTealus({
+      roomId: 'r',
+      senderUserId: 'b',
+      mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'application/octet-stream' },
+    });
+    expect(mockTranscribeFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('postVideoToTealus (= Phase 2.1)', () => {
+  test('SQL: messages (type=video) + media INSERT (thumbnail_path 含む) + Socket.IO emit', async () => {
+    const newMsg = { id: 'msg-video', room_id: 'room-1', type: 'video' };
+    const newMedia = { id: 'media-v', message_id: 'msg-video', file_path: 'line-videos/clip.mp4' };
+    setupSqlSequence([
+      {},                       // BEGIN
+      { rows: [newMsg] },       // INSERT INTO messages
+      { rows: [newMedia] },     // INSERT INTO message_media (thumbnail_path 含む)
+      {},                       // COMMIT
+    ]);
+
+    const { io, emit } = makeMockIo();
+    const result = await postVideoToTealus({
+      roomId: 'room-1',
+      senderUserId: 'bot-1',
+      mediaInfo: {
+        filePath: '/tmp/clip.mp4',
+        relativePath: 'line-videos/clip.mp4',
+        fileName: 'clip.mp4',
+        fileSize: 102400,
+        mimeType: 'video/mp4',
+      },
+      io,
+    });
+
+    expect(result.message).toEqual(newMsg);
+    expect(result.media).toEqual(newMedia);
+    expect(emit).toHaveBeenCalledWith('message:new', expect.objectContaining({
+      id: 'msg-video',
+      media: [newMedia],
+    }));
+  });
+
+  test('generateThumbnail が filePath + mimeType で呼ばれる', async () => {
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
+    await postVideoToTealus({
+      roomId: 'r',
+      senderUserId: 'b',
+      mediaInfo: {
+        filePath: '/tmp/clip.mp4',
+        relativePath: 'line-videos/clip.mp4',
+        fileName: 'clip.mp4',
+        fileSize: 100,
+        mimeType: 'video/mp4',
+      },
+    });
+    expect(mockGenerateThumbnail).toHaveBeenCalledWith('/tmp/clip.mp4', 'video/mp4');
+  });
+
+  test('generateThumbnail reject 時も message INSERT 成功 (= thumbnail null fallback)', async () => {
+    mockGenerateThumbnail.mockReset();
+    mockGenerateThumbnail.mockRejectedValue(new Error('ffmpeg failed'));
+    setupSqlSequence([{}, { rows: [{ id: 'm', type: 'video' }] }, { rows: [{ id: 'media' }] }, {}]);
+
+    const result = await postVideoToTealus({
+      roomId: 'r',
+      senderUserId: 'b',
+      mediaInfo: { filePath: '/tmp/x.mp4', relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'video/mp4' },
+    });
+    expect(result.message.id).toBe('m');
+  });
+
+  test('mediaInfo 未指定で throw', async () => {
+    await expect(postVideoToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
   });
 });

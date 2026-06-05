@@ -21,6 +21,8 @@ const {
   postTextToTealus,
   postImageToTealus,
   postVoiceToTealus,
+  postFileToTealus,
+  postVideoToTealus,
 } = require('../services/lineMessageBridge');
 const logger = require('../utils/logger');
 
@@ -115,6 +117,30 @@ async function dispatchEvent(event, options = {}) {
         io,
       });
       return { posted: 'voice' };
+    }
+
+    case 'file': {
+      const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
+      const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-files' });
+      await postFileToTealus({
+        roomId,
+        senderUserId: botUserId,
+        mediaInfo,
+        io,
+      });
+      return { posted: 'file' };
+    }
+
+    case 'video': {
+      const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
+      const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-videos' });
+      await postVideoToTealus({
+        roomId,
+        senderUserId: botUserId,
+        mediaInfo,
+        io,
+      });
+      return { posted: 'video' };
     }
 
     default:
