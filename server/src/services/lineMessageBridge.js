@@ -293,10 +293,58 @@ async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, rep
   }
 }
 
+/**
+ * location message を Tealus に post (= Phase 2.2)
+ *
+ * LINE webhook の location event を ★ text type + markdown で Tealus 投影。
+ * 内部で postTextToTealus を呼び出し、★ Tealus 既存 MessageBubble の markdown rendering で
+ * 「📍 + 緯度経度 + Google Maps link」 が自動表示される (= messages schema 変更なし)。
+ *
+ * @param {Object} params
+ * @param {string} params.roomId
+ * @param {string} params.senderUserId
+ * @param {Object} params.location - LINE webhook の location event fields
+ *   - title: string|null (= 場所名、user 任意)
+ *   - address: string|null (= 住所、user 任意)
+ *   - latitude: number (= 緯度)
+ *   - longitude: number (= 経度)
+ * @param {string} [params.replyTo]
+ * @param {Object} [params.io]
+ * @returns {Promise<{ message: Object }>}
+ */
+async function postLocationToTealus({ roomId, senderUserId, location, replyTo, io }) {
+  if (!roomId) throw new Error('roomId is required');
+  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!location) throw new Error('location is required');
+
+  const { title, address, latitude, longitude } = location;
+
+  // 全 field null (= 緯度経度すらない) は throw、★ 緯度経度のみあれば OK
+  const hasCoords = latitude !== null && latitude !== undefined && longitude !== null && longitude !== undefined;
+  const hasLabel = title || address;
+  if (!hasCoords && !hasLabel) {
+    throw new Error('location must have at least latitude/longitude or title/address');
+  }
+
+  const label = title || address || '位置情報';
+  const coordsLine = hasCoords ? `緯度: ${latitude}, 経度: ${longitude}` : '';
+  const mapsUrl = hasCoords ? `https://maps.google.com/?q=${latitude},${longitude}` : null;
+
+  // markdown format (= Tealus MessageBubble で remarkGfm + remarkBreaks 自動 rendering)
+  const lines = [`📍 ${label}`];
+  if (address && address !== label) lines.push(address);
+  if (coordsLine) lines.push(coordsLine);
+  if (mapsUrl) lines.push('', `[地図を開く](${mapsUrl})`);
+  const content = lines.join('\n');
+
+  return postTextToTealus({ roomId, senderUserId, content, replyTo, io });
+}
+
 module.exports = {
   postTextToTealus,
   postImageToTealus,
   postVoiceToTealus,
   postFileToTealus,
   postVideoToTealus,
+  postLocationToTealus,
 };

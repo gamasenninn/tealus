@@ -11,6 +11,7 @@ const mockPostImage = jest.fn(() => Promise.resolve({ message: { id: 'msg-image'
 const mockPostVoice = jest.fn(() => Promise.resolve({ message: { id: 'msg-voice' } }));
 const mockPostFile = jest.fn(() => Promise.resolve({ message: { id: 'msg-file' } }));
 const mockPostVideo = jest.fn(() => Promise.resolve({ message: { id: 'msg-video' } }));
+const mockPostLocation = jest.fn(() => Promise.resolve({ message: { id: 'msg-location' } }));
 
 jest.mock('../../src/services/lineMessageBridge', () => ({
   postTextToTealus: (...args) => mockPostText(...args),
@@ -18,6 +19,7 @@ jest.mock('../../src/services/lineMessageBridge', () => ({
   postVoiceToTealus: (...args) => mockPostVoice(...args),
   postFileToTealus: (...args) => mockPostFile(...args),
   postVideoToTealus: (...args) => mockPostVideo(...args),
+  postLocationToTealus: (...args) => mockPostLocation(...args),
 }));
 
 const mockFetchContent = jest.fn();
@@ -56,6 +58,7 @@ beforeEach(() => {
   mockPostVoice.mockClear();
   mockPostFile.mockClear();
   mockPostVideo.mockClear();
+  mockPostLocation.mockClear();
   mockFetchContent.mockReset();
   mockSaveContent.mockReset();
 });
@@ -217,11 +220,59 @@ describe('dispatchEvent', () => {
     }));
   });
 
-  test('unsupported message type (= sticker / location 等) → skip', async () => {
+  test('sticker message → fetchLineContent + saveLineContentToFile(subdir=line-stickers) + postImageToTealus (= Phase 2.2、image type 流用)', async () => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('png-bytes'), mimeType: 'image/png' });
+    mockSaveContent.mockResolvedValue({
+      filePath: '/tmp/media-test/line-stickers/s.png',
+      relativePath: 'line-stickers/s.png',
+      fileName: 's.png',
+      fileSize: 8,
+      mimeType: 'image/png',
+    });
+
     const event = {
       type: 'message',
       source: { type: 'group', groupId: 'group-X' },
-      message: { type: 'sticker', id: 's1' },
+      message: { type: 'sticker', id: 'm-stk', packageId: '11537', stickerId: '52002734' },
+    };
+    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+
+    expect(result).toEqual({ posted: 'sticker' });
+    expect(mockFetchContent).toHaveBeenCalledWith('m-stk', 'channel-token-xyz');
+    expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', '/tmp/media-test', { subdir: 'line-stickers' });
+    expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-X',
+      senderUserId: 'bot-user-uuid',
+      mediaInfo: expect.objectContaining({ relativePath: 'line-stickers/s.png' }),
+    }));
+  });
+
+  test('location message → postLocationToTealus (= 緯度経度 + 地図 link、Phase 2.2)', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-Y' },
+      message: { type: 'location', id: 'm-loc', title: '東京駅', address: '東京都千代田区', latitude: 35.6812, longitude: 139.7671 },
+    };
+    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+
+    expect(result).toEqual({ posted: 'location' });
+    expect(mockPostLocation).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-Y',
+      senderUserId: 'bot-user-uuid',
+      location: expect.objectContaining({
+        title: '東京駅',
+        address: '東京都千代田区',
+        latitude: 35.6812,
+        longitude: 139.7671,
+      }),
+    }));
+  });
+
+  test('unsupported message type (= imagemap 等) → skip', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'imagemap', id: 'im1' },
     };
     const result = await dispatchEvent(event, { config: TEST_CONFIG });
     expect(result.skipped).toMatch(/^unsupported-type-/);

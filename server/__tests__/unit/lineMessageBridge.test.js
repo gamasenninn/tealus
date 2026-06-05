@@ -47,6 +47,7 @@ const {
   postVoiceToTealus,
   postFileToTealus,
   postVideoToTealus,
+  postLocationToTealus,
 } = require('../../src/services/lineMessageBridge');
 
 function makeMockIo() {
@@ -352,5 +353,53 @@ describe('postVideoToTealus (= Phase 2.1)', () => {
 
   test('mediaInfo 未指定で throw', async () => {
     await expect(postVideoToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+  });
+});
+
+describe('postLocationToTealus (= Phase 2.2)', () => {
+  test('postTextToTealus 経由で markdown 投影 (= 📍 + 緯度経度 + Google Maps link)', async () => {
+    setupSqlSequence([{}, { rows: [{ id: 'msg-loc', type: 'text' }] }, {}]);
+    const { io, emit } = makeMockIo();
+
+    const result = await postLocationToTealus({
+      roomId: 'room-1',
+      senderUserId: 'bot-1',
+      location: { title: '東京駅', address: '東京都千代田区', latitude: 35.6812, longitude: 139.7671 },
+      io,
+    });
+
+    expect(result.message.id).toBe('msg-loc');
+    // ★ INSERT INTO messages の SQL 呼び出し時の content arg を確認
+    const insertCall = mockClient.query.mock.calls.find((c) =>
+      typeof c[0] === 'string' && c[0].includes('INSERT INTO messages'));
+    expect(insertCall).toBeDefined();
+    const contentArg = insertCall[1][2]; // 3rd arg = content
+    expect(contentArg).toContain('📍');
+    expect(contentArg).toContain('東京駅');
+    expect(contentArg).toContain('35.6812');
+    expect(contentArg).toContain('139.7671');
+    expect(contentArg).toMatch(/maps\.google\.com\/\?q=35\.6812,139\.7671/);
+    expect(emit).toHaveBeenCalled();
+  });
+
+  test('title/address 両方 null でも 緯度経度のみで OK', async () => {
+    setupSqlSequence([{}, { rows: [{ id: 'm', type: 'text' }] }, {}]);
+    const result = await postLocationToTealus({
+      roomId: 'r',
+      senderUserId: 'b',
+      location: { title: null, address: null, latitude: 0, longitude: 0 },
+    });
+    expect(result.message.id).toBe('m');
+    const insertCall = mockClient.query.mock.calls.find((c) =>
+      typeof c[0] === 'string' && c[0].includes('INSERT INTO messages'));
+    expect(insertCall[1][2]).toContain('📍');
+  });
+
+  test('全 field null (= 緯度経度なし) で throw', async () => {
+    await expect(postLocationToTealus({
+      roomId: 'r',
+      senderUserId: 'b',
+      location: { title: null, address: null, latitude: null, longitude: null },
+    })).rejects.toThrow(/location/);
   });
 });

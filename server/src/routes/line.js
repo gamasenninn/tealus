@@ -23,6 +23,7 @@ const {
   postVoiceToTealus,
   postFileToTealus,
   postVideoToTealus,
+  postLocationToTealus,
 } = require('../services/lineMessageBridge');
 const logger = require('../utils/logger');
 
@@ -146,6 +147,33 @@ async function dispatchEvent(event, options = {}) {
         io,
       });
       return { posted: 'video' };
+    }
+
+    case 'sticker': {
+      // ★ Phase 2.2: sticker は LINE 公式 sticker PNG を fetch + Tealus 既存 image type 流用で投影
+      // (= migration 不要、Tealus 既存 image grid で自然表示、user dogfood 後の認識次第で Phase 3 で type 分離検討)
+      const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
+      const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-stickers' });
+      await postImageToTealus({
+        roomId,
+        senderUserId: botUserId,
+        mediaInfo,
+        io,
+      });
+      return { posted: 'sticker' };
+    }
+
+    case 'location': {
+      // ★ Phase 2.2: location は text + markdown で投影 (= 既存 MessageBubble の markdown rendering で
+      // 自動的に 「📍 + 緯度経度 + Google Maps link」 表示、messages schema 拡張なし)
+      const { title, address, latitude, longitude } = message;
+      await postLocationToTealus({
+        roomId,
+        senderUserId: botUserId,
+        location: { title, address, latitude, longitude },
+        io,
+      });
+      return { posted: 'location' };
     }
 
     default:
