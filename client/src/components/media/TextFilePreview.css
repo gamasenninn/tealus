@@ -1,0 +1,92 @@
+.text-file-preview {
+  margin-top: 4px;
+}
+
+.text-file-preview__toggle {
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.text-file-preview__toggle:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.text-file-preview__body {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  max-height: 480px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.text-file-preview__status,
+.text-file-preview__error {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.text-file-preview__error {
+  color: #c62828;
+}
+
+.text-file-preview__pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.text-file-preview__markdown {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.text-file-preview__markdown h1,
+.text-file-preview__markdown h2,
+.text-file-preview__markdown h3 {
+  margin: 0.5em 0 0.3em;
+}
+
+.text-file-preview__markdown p {
+  margin: 0.4em 0;
+}
+
+.text-file-preview__markdown code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.text-file-preview__markdown pre {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.text-file-preview__markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.text-file-preview__truncated {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 193, 7, 0.15);
+  border-left: 3px solid #ffc107;
+  font-size: 12px;
+}

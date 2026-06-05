@@ -1,4 +1,5 @@
 import { Download } from 'lucide-react';
+import TextFilePreview, { isTextFile } from './TextFilePreview';
 import './ImageGrid.css';
 
 function ImageGrid({ media, onImageClick }) {
@@ -65,14 +66,18 @@ function ImageGrid({ media, onImageClick }) {
         //   `<a download={file_name}>` で原本名で DL する native 挙動に変更。
         //   stopPropagation のみ keep (parent click 干渉防止)。
         return (
-          <a key={m.id}
-             href={`/media/${m.file_path}`}
-             download={m.file_name}
-             rel="noopener noreferrer"
-             className="media-file"
-             onClick={(e) => e.stopPropagation()}>
-            📎 {m.file_name}
-          </a>
+          <div key={m.id} className="media-file-wrapper">
+            <a href={`/media/${m.file_path}`}
+               download={m.file_name}
+               rel="noopener noreferrer"
+               className="media-file"
+               onClick={(e) => e.stopPropagation()}>
+              📎 {m.file_name}
+            </a>
+            {/* text file (= MD / .txt / .json / source code 等) は inline preview 折り畳み (= #289 Phase 2.1)
+                Chrome Android 等で download → external app の encoding 認識問題回避 */}
+            {isTextFile(m) && <TextFilePreview media={m} />}
+          </div>
         );
       })}
     </div>
