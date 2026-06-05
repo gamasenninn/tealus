@@ -81,6 +81,9 @@ async function fetchLineContent(messageId, accessToken, options = {}) {
  * @param {string} baseDir - 保存先 directory (= 既存 media/ 配下推奨)
  * @param {Object} [options]
  * @param {string} [options.subdir] - subdirectory (= e.g. 'line-images', 'line-voices')
+ * @param {string} [options.originalFileName] - user が LINE で送った元ファイル名 (= type=file 時の webhook message.fileName)
+ *   - 指定時: display 名 (= 返却 fileName) は原名、physical 拡張子は原名拡張子優先 → MIME 推測の順
+ *   - 未指定時: display 名 = physical 名 = `${timestamp}-${random}${MIME 拡張子}`
  * @returns {Promise<{ filePath: string, relativePath: string, fileName: string, fileSize: number, mimeType: string }>}
  */
 async function saveLineContentToFile(buffer, mimeType, baseDir, options = {}) {
@@ -91,18 +94,27 @@ async function saveLineContentToFile(buffer, mimeType, baseDir, options = {}) {
   const dir = path.join(baseDir, subdir);
   await fs.mkdir(dir, { recursive: true });
 
-  const ext = extensionForMime(mimeType);
+  // 拡張子: originalFileName 優先 (= MIME type 不明な file に強い)、なければ MIME 推測
+  const originalExt = options.originalFileName ? path.extname(options.originalFileName) : '';
+  const ext = originalExt || extensionForMime(mimeType);
+
   const random = crypto.randomBytes(12).toString('hex');
-  const fileName = `${Date.now()}-${random}${ext}`;
-  const filePath = path.join(dir, fileName);
-  const relativePath = path.join(subdir, fileName).replace(/\\/g, '/');
+  const physicalFileName = `${Date.now()}-${random}${ext}`;
+
+  // display 名: originalFileName あれば原名 (= file system 危険文字 sanitize)、なければ physical 名
+  const displayFileName = options.originalFileName
+    ? options.originalFileName.replace(/[\/\\:*?"<>|]/g, '_')
+    : physicalFileName;
+
+  const filePath = path.join(dir, physicalFileName);
+  const relativePath = path.join(subdir, physicalFileName).replace(/\\/g, '/');
 
   await fs.writeFile(filePath, buffer);
 
   return {
     filePath,
     relativePath,
-    fileName,
+    fileName: displayFileName,
     fileSize: buffer.length,
     mimeType,
   };

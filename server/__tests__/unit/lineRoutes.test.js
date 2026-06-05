@@ -172,13 +172,17 @@ describe('dispatchEvent', () => {
     const event = {
       type: 'message',
       source: { type: 'group', groupId: 'group-X' },
-      message: { type: 'file', id: 'm-file' },
+      message: { type: 'file', id: 'm-file', fileName: 'doc.pdf', fileSize: 2048 },
     };
     const result = await dispatchEvent(event, { config: TEST_CONFIG });
 
     expect(result).toEqual({ posted: 'file' });
     expect(mockFetchContent).toHaveBeenCalledWith('m-file', 'channel-token-xyz');
-    expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'application/pdf', '/tmp/media-test', { subdir: 'line-files' });
+    // ★ originalFileName が webhook event.message.fileName から saveLineContentToFile に渡される
+    expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'application/pdf', '/tmp/media-test', {
+      subdir: 'line-files',
+      originalFileName: 'doc.pdf',
+    });
     expect(mockPostFile).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-X',
       senderUserId: 'bot-user-uuid',

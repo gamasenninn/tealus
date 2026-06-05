@@ -126,4 +126,33 @@ describe('saveLineContentToFile', () => {
   test('baseDir 未指定で throw', async () => {
     await expect(saveLineContentToFile(Buffer.from('x'), 'image/png', '')).rejects.toThrow(/baseDir/);
   });
+
+  test('originalFileName 指定 → display 名 = 原名、physical 拡張子 = 原拡張子 (= Phase 2.1 MD file fix)', async () => {
+    const buf = Buffer.from('# Markdown content');
+    const result = await saveLineContentToFile(buf, 'application/octet-stream', tmpDir, {
+      subdir: 'line-files',
+      originalFileName: 'notes.md',
+    });
+    expect(result.fileName).toBe('notes.md');                  // display 名 = 原名
+    expect(result.filePath).toMatch(/\.md$/);                  // physical file は .md 拡張子
+    expect(result.relativePath).toMatch(/^line-files\//);
+    expect(fs.existsSync(result.filePath)).toBe(true);
+  });
+
+  test('originalFileName 指定 + 危険文字を sanitize', async () => {
+    const buf = Buffer.from('x');
+    const result = await saveLineContentToFile(buf, 'application/pdf', tmpDir, {
+      subdir: 'line-files',
+      originalFileName: 'a/b\\c:d*.pdf',
+    });
+    expect(result.fileName).toBe('a_b_c_d_.pdf');              // unsafe chars replaced
+    expect(result.filePath).toMatch(/\.pdf$/);
+  });
+
+  test('originalFileName 未指定 = 既存挙動維持 (= physical 名 = display 名)', async () => {
+    const buf = Buffer.from('x');
+    const result = await saveLineContentToFile(buf, 'image/png', tmpDir, { subdir: 'line-images' });
+    expect(result.fileName).toMatch(/\.png$/);
+    expect(result.filePath).toMatch(new RegExp(result.fileName + '$'));  // physical = display
+  });
 });

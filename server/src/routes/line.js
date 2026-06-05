@@ -121,7 +121,12 @@ async function dispatchEvent(event, options = {}) {
 
     case 'file': {
       const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
-      const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-files' });
+      // ★ LINE webhook の file event は message.fileName を含む (= LINE Messaging API spec)
+      // 元ファイル名で投影することで「.bin になってしまう」問題回避 (= 6/5 Day 20 user dogfood で判明)
+      const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, {
+        subdir: 'line-files',
+        originalFileName: message.fileName,
+      });
       await postFileToTealus({
         roomId,
         senderUserId: botUserId,
