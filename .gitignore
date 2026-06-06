@@ -15,6 +15,10 @@ agent-server/logs/
 server/config/transcription_guideline.json
 server/config/mining_report.json
 
+# LINE Bridge Phase 2.3 (= 6/6 Day 21 確立、2 file 案): example はコミット、実運用 file は ignored
+server/config/line-groups.json
+server/config/line-group-mappings.json
+
 # Marp 生成物 (markdown source からビルド可能、commit 不要)
 docs/presentation/*.html
 docs/presentation/*.pdf

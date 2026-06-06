@@ -25,21 +25,12 @@ const {
   postVideoToTealus,
   postLocationToTealus,
 } = require('../services/lineMessageBridge');
+const { loadGroupToRoomMap } = require('../services/lineGroupMappings');
+const { upsertGroupEntry } = require('../services/lineGroupCatalog');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// Environment at startup
-function loadGroupToRoomMap() {
-  try {
-    return JSON.parse(process.env.LINE_GROUP_TO_ROOM || '{}');
-  } catch (e) {
-    logger.warn(`[LINE Bridge] LINE_GROUP_TO_ROOM JSON parse failed: ${e.message}`);
-    return {};
-  }
-}
-
-const groupToRoomMap = loadGroupToRoomMap();
 const SECRET_PATH = process.env.LINE_WEBHOOK_SECRET_PATH;
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const CHANNEL_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -58,7 +49,9 @@ const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../medi
  */
 async function dispatchEvent(event, options = {}) {
   const cfg = options.config || {};
-  const map = cfg.groupToRoomMap || groupToRoomMap;
+  // ★ Phase 2.3: cfg.groupToRoomMap (= test 用 override) があればそれ、なければ file/env から webhook 毎 load
+  // (= file 編集後 restart 不要、次 webhook で即反映)
+  const map = cfg.groupToRoomMap || loadGroupToRoomMap();
   const botUserId = cfg.botUserId || BOT_USER_ID;
   const channelToken = cfg.channelToken || CHANNEL_TOKEN;
   const mediaRoot = cfg.mediaRoot || MEDIA_ROOT;
@@ -72,6 +65,20 @@ async function dispatchEvent(event, options = {}) {
   if (!event.source || event.source.type !== 'group') return { skipped: 'not-group' };
 
   const groupId = event.source.groupId;
+
+  // ★ Phase 2.3: catalog update (= group name 自動収集、unmapped/mapped 関係なく upsert)
+  // user は server/config/line-groups.json で group name ↔ ID 対応を確認、★ ★ ID コピペで line-group-mappings.json 編集
+  // catalog 失敗は silent (= dispatchEvent を阻害しない、200 OK 最優先)
+  if (!cfg.skipCatalog) {
+    const snippet = event.message?.text || (event.message?.type ? `[${event.message.type}]` : null);
+    upsertGroupEntry(groupId, {
+      sender: event.source.userId || null,
+      snippet,
+      timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
+    }, { accessToken: channelToken }).catch((e) => {
+      logger.warn(`[LINE Bridge] catalog upsert failed: ${e.message}`);
+    });
+  }
   const roomId = map[groupId];
   if (!roomId) {
     logger.debug(`[LINE Bridge] unmapped group: ${groupId}`);
@@ -244,6 +251,6 @@ router.post(
 
 // Export dispatchEvent for unit testing
 router.dispatchEvent = dispatchEvent;
-router.loadGroupToRoomMap = loadGroupToRoomMap;
+router.loadGroupToRoomMap = loadGroupToRoomMap; // ★ re-export from lineGroupMappings for backward compat
 
 module.exports = router;

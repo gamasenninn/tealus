@@ -45,7 +45,6 @@ jest.mock('../../src/utils/logger', () => ({
 
 const lineRouter = require('../../src/routes/line');
 const dispatchEvent = lineRouter.dispatchEvent;
-const loadGroupToRoomMap = lineRouter.loadGroupToRoomMap;
 
 const TEST_CONFIG = {
   groupToRoomMap: { 'group-X': 'room-X', 'group-Y': 'room-Y' },
@@ -73,7 +72,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-X' },
       message: { type: 'text', id: 'm1', text: 'hello' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'text' });
     expect(mockPostText).toHaveBeenCalledWith({
@@ -99,7 +98,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-X' },
       message: { type: 'image', id: 'm-img' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'image' });
     expect(mockFetchContent).toHaveBeenCalledWith('m-img', 'channel-token-xyz');
@@ -126,7 +125,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-Y' },
       message: { type: 'audio', id: 'm-aud' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'voice' });
     expect(mockFetchContent).toHaveBeenCalledWith('m-aud', 'channel-token-xyz');
@@ -144,7 +143,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'unmapped-group-Z' },
       message: { type: 'text', id: 'm1', text: 'hello' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
     expect(result).toEqual({ skipped: 'unmapped-group' });
     expect(mockPostText).not.toHaveBeenCalled();
   });
@@ -155,13 +154,13 @@ describe('dispatchEvent', () => {
       source: { type: 'user', userId: 'U123' },
       message: { type: 'text', text: 'dm' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
     expect(result).toEqual({ skipped: 'not-group' });
   });
 
   test('non-message event (= follow / unfollow 等) → skip', async () => {
     const event = { type: 'follow', source: { type: 'group', groupId: 'group-X' } };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
     expect(result).toEqual({ skipped: 'not-message' });
   });
 
@@ -180,7 +179,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-X' },
       message: { type: 'file', id: 'm-file', fileName: 'doc.pdf', fileSize: 2048 },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'file' });
     expect(mockFetchContent).toHaveBeenCalledWith('m-file', 'channel-token-xyz');
@@ -211,7 +210,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-Y' },
       message: { type: 'video', id: 'm-vid' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'video' });
     expect(mockFetchContent).toHaveBeenCalledWith('m-vid', 'channel-token-xyz');
@@ -239,7 +238,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-X' },
       message: { type: 'sticker', id: 'm-stk', packageId: '11537', stickerId: '52002734' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'sticker' });
     // ★ fetchLineContent ではなく fetchLineStickerImage が呼ばれる (= LINE 仕様)
@@ -259,7 +258,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-Y' },
       message: { type: 'location', id: 'm-loc', title: '東京駅', address: '東京都千代田区', latitude: 35.6812, longitude: 139.7671 },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
 
     expect(result).toEqual({ posted: 'location' });
     expect(mockPostLocation).toHaveBeenCalledWith(expect.objectContaining({
@@ -280,7 +279,7 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-X' },
       message: { type: 'imagemap', id: 'im1' },
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
     expect(result.skipped).toMatch(/^unsupported-type-/);
   });
 
@@ -302,30 +301,10 @@ describe('dispatchEvent', () => {
       source: { type: 'group', groupId: 'group-X' },
       // message なし
     };
-    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
     expect(result).toEqual({ skipped: 'no-message' });
   });
 });
 
-describe('loadGroupToRoomMap', () => {
-  const orig = process.env.LINE_GROUP_TO_ROOM;
-  afterEach(() => {
-    if (orig === undefined) delete process.env.LINE_GROUP_TO_ROOM;
-    else process.env.LINE_GROUP_TO_ROOM = orig;
-  });
-
-  test('有効 JSON → object', () => {
-    process.env.LINE_GROUP_TO_ROOM = '{"g1":"r1","g2":"r2"}';
-    expect(loadGroupToRoomMap()).toEqual({ g1: 'r1', g2: 'r2' });
-  });
-
-  test('invalid JSON → 空 object (= silent fallback、startup 阻害しない)', () => {
-    process.env.LINE_GROUP_TO_ROOM = 'not json';
-    expect(loadGroupToRoomMap()).toEqual({});
-  });
-
-  test('未設定 → 空 object', () => {
-    delete process.env.LINE_GROUP_TO_ROOM;
-    expect(loadGroupToRoomMap()).toEqual({});
-  });
-});
+// loadGroupToRoomMap の test は 6/6 Day 21 で services/lineGroupMappings.js に移管
+// (= 新 test: __tests__/unit/lineGroupMappings.test.js)

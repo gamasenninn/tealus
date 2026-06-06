@@ -177,28 +177,58 @@ https://<your-domain>/api/line/webhook/<LINE_WEBHOOK_SECRET_PATH>
 
 ★ scope 制約: 業務で運用中の既存グループを そのまま Phase 1 に使うことは ★ ★ LINE 仕様で不可。既存グループ受信は Phase 1.5 (= Android 通知 forward 等、別 angle) で別途検討。
 
-## Step 10. LINE グループ ID を取得
+## Step 10. LINE グループ ID を取得 (= Phase 2.3、6/6 Day 21 確立)
 
-★ LINE グループ ID は招待後の webhook event から取得します:
+★ Phase 2.3 で 「2 file 案」 を確立: ★ ★ user は ★ ★ ★ ★ ★ ★ ★ Tealus が自動収集する catalog file を open するだけで、group name ↔ ID 対応一覧を確認できる。server log grep 不要。
 
-1. グループ内で **任意のメッセージを 1 件発信** (= bot に届けば OK)
-2. server log を確認:
+### file 構成
 
-```bash
-# server ログから 確認 (= 2 件の log が出るのが正常)
-grep "LINE Bridge" /path/to/server.log | tail -5
-# → "[LINE Bridge] dispatchEvent: type=message, source=group, msg=text" ← ★ ★ 届いた事実
-# → "[LINE Bridge] unmapped group: C1234abcd..." ← ★ ★ group ID 取得
-```
+- ★ ★ **`server/config/line-groups.json`** (= 自動更新、★ Tealus が webhook 毎に書き換え)
+- ★ ★ **`server/config/line-group-mappings.json`** (= 手動編集、user が ID コピペで投影設定)
 
-3. `LINE Bridge unmapped group:` の後ろの ID (= `C` で始まる文字列) を `LINE_GROUP_TO_ROOM` に追加:
+両 file は ★ ★ .gitignored (= 実運用 file、sample は `.example.json` でコミット)。
 
+### 動作 flow
+
+1. ★ ★ グループ内で **任意のメッセージを 1 件発信** (= bot に届けば OK)
+2. ★ ★ Tealus が自動的に `server/config/line-groups.json` 更新:
+   ```json
+   {
+     "C1234abcd567efgh890": {
+       "name": "営業部 LINE",
+       "last_seen_at": "2026-06-06T10:00:00Z",
+       "last_sender": "<user-id>",
+       "last_message_snippet": "テスト",
+       "first_seen_at": "2026-06-06T10:00:00Z"
+     }
+   }
+   ```
+3. ★ ★ user が file を open し、★ ★ ★ group name から ID を確認 + コピー
+4. ★ ★ `server/config/line-group-mappings.json` を手動編集:
+   ```json
+   {
+     "C1234abcd567efgh890": {
+       "room_id": "<対応する Tealus room の uuid>",
+       "description": "営業部 LINEブリッジ"
+     }
+   }
+   ```
+5. ★ ★ 保存 → ★ ★ ★ ★ ★ ★ ★ **次の webhook で即反映** (= restart 不要)
+
+### 後方互換
+
+- ★ pure string form (= `{ "groupId": "roomId" }`) も accept (= 旧 env LINE_GROUP_TO_ROOM 形式移行 path)
+- ★ file なし + env LINE_GROUP_TO_ROOM あり時は env fallback (= 既存運用そのまま動く)
+- ★ migration path: env → file への移行は ★ user 任意 timing で可能
+
+### 旧方式 (= 後方互換、新規採用は file 推奨)
+
+旧 env 編集方式 = restart 必要:
 ```bash
 # .env を編集
 LINE_GROUP_TO_ROOM={"C1234abcd567efgh890":"<対応する Tealus room の uuid>"}
+# → server 再起動 (= 環境変数 reload)
 ```
-
-4. server 再起動 (= 環境変数 reload)
 
 ## Step 11. 実機 verify (= 受信テスト)
 

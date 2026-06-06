@@ -1,0 +1,20 @@
+{
+  "_comment": "このファイルは Tealus が自動更新する LINE group catalog の sample です (= 6/6 Day 21 確立)。実運用 file は server/config/line-groups.json (= gitignored、Tealus 起動後に webhook 受信で自動生成 + 更新)。読み取り専用 (= user が編集する必要なし)、group ID 確認用 view として使う。",
+  "_format": "groupId (= C で始まる 32 文字 hex) を key、name + last_seen_at + last_sender + last_message_snippet + first_seen_at を value object として持つ。entry は LINE webhook 受信時に upsert (= name は LINE API getGroupSummary で取得、既取得 group は API call skip)。",
+  "_usage": "user は ★ ★ この file を cat / VSCode で open するだけで、★ ★ ★ LINE group の name と ID 対応一覧を確認できる。group ID を copy → line-group-mappings.json に手動登録 (= 投影開始)。",
+
+  "C27f15608521c6fd053840f92a8853325": {
+    "name": "営業部 LINE",
+    "last_seen_at": "2026-06-06T10:00:00Z",
+    "last_sender": "山田太郎",
+    "last_message_snippet": "テスト",
+    "first_seen_at": "2026-06-04T15:28:57Z"
+  },
+  "Cabcd1234567890abcd1234567890abcd": {
+    "name": "技術部 雑談",
+    "last_seen_at": "2026-06-05T18:30:00Z",
+    "last_sender": "佐藤花子",
+    "last_message_snippet": "今日の進捗ですが...",
+    "first_seen_at": "2026-06-05T09:00:00Z"
+  }
+}

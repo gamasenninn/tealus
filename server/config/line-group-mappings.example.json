@@ -1,0 +1,15 @@
+{
+  "_comment": "このファイルは LINE group ID → Tealus room mapping の sample です (= 6/6 Day 21 確立、D2 object form)。実運用 file は server/config/line-group-mappings.json (= gitignored、user が手動編集)。webhook 毎に file 読み込み (= restart 不要、保存後 次 webhook で即反映)。",
+  "_format": "groupId を key、room_id (= Tealus room UUID 必須) + description (= optional 注記) を value object として持つ。後方互換: pure string form ({ groupId: roomId }) も accept (= 旧 env LINE_GROUP_TO_ROOM 移行 path)。",
+  "_workflow": "1. server/config/line-groups.json (= 自動 catalog) で group name + ID 確認、2. ID を本 file に追加 + room_id + description 設定、3. 保存、4. 次 webhook で自動反映",
+  "_priority": "本 file 存在時は file 優先、★ file 空 or なし + env LINE_GROUP_TO_ROOM あり時は env fallback (= 既存運用そのまま動く)",
+
+  "C27f15608521c6fd053840f92a8853325": {
+    "room_id": "a368e06d-dcb4-4a49-ba7c-a0866895011c",
+    "description": "営業部 LINEブリッジ"
+  },
+  "Cabcd1234567890abcd1234567890abcd": {
+    "room_id": "55555555-5555-5555-5555-555555555555",
+    "description": "技術部連絡"
+  }
+}
