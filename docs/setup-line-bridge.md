@@ -1,6 +1,70 @@
-# LINE Bridge セットアップ手順 (Phase 1 — Inbound 受信のみ)
+# LINE Bridge セットアップ手順 (Phase 1 〜 2.3 完成、★ ★ 6/6 Day 21 凍結宣言)
 
-[#288](https://github.com/gamasenninn/tealus/issues/288) で実装した LINE Bridge Phase 1 (= LINE グループ → Tealus 投影、text + 画像 + 音声) の **dogfood 準備手順**。
+★ Tealus の **外部 channel 拡張第 1 例** として 2026-06-02 〜 06-06 の 5 日間で実装、★ ★ ★ ★ ★ user 判断で UI 化保留 (= YAGNI、user voice surface まで) のうえ ★ ★ structural foundation 完成として scope 凍結。
+
+## ★ ★ 完成 feature 一覧
+
+### 受信 (= Inbound) 主要 7 type 完全対応
+
+| user 操作 | event type | 投影先 Tealus type | Phase |
+|---|---|---|---|
+| text | `text` | text | 1 |
+| 「写真を選択」 | `image` | image + サムネイル | 1 |
+| 音声 | `audio` | voice + 自動文字起こし + organon polyseme inject | 1 |
+| 「動画を選択」 | `video` | video + ffmpeg thumbnail | 2.1 |
+| 「ファイル」 添付 | `file` | file (原名 + 原拡張子保持) + TextFilePreview (= MD/JSON/CSV/TXT inline preview) | 2.1 |
+| スタンプ | `sticker` | image (= LINE 公式 sticker CDN 経由) | 2.2 |
+| 「位置情報」 | `location` | text + markdown (= 緯度経度 + Google Maps link) | 2.2 |
+
+### 設定方式 (= Phase 2.3 確立 2 file 案)
+
+- **catalog file** (= `server/config/line-groups.json`、自動更新): webhook 受信時 LINE API で group name 自動取得 + atomic write
+- **mappings file** (= `server/config/line-group-mappings.json`、手動編集): D2 object form + pure string form 後方互換、★ ★ ★ file 編集後 ★ 次 webhook で即反映 (= restart 不要)
+
+### LINE 公式 spec 準拠
+
+- 200 silent return (= secret path mismatch / signature verify failed でも 200 + log warn のみ、★ webhook auto-suspend 構造的にゼロ)
+- security: 攻撃者に URL / verify status 情報 leak しない
+
+### Tealus client (= PWA) 内蔵 file preview
+
+- TextFilePreview component で MD / TXT / JSON / CSV / source code 等の inline preview
+- UTF-8 decode (= Chrome Android 文字化け回避)、cache + truncate (= 256KB 上限)、★ react-markdown + remarkGfm + remarkBreaks (= Tealus 内 markdown 統一感)
+
+## ★ ★ Phase 2.x scope 外 (= 別 Phase / 別 Issue 候補、将来 user voice surface 待ち)
+
+- **Phase 2.3 UI** (= mapping CRUD 画面): YAGNI で凍結、★ 業務担当者編集 use case surface まで保留 (= 2 file 案がそのまま UI data source として再利用可能)
+- **Phase 2.4 outbound** (= Tealus → LINE post): LINE API 高額のため需要 surface 待ち
+- **Phase 1.5 既存 LINE 業務グループ受信** (= Android 通知 forward 等): 別 angle、user 業務必要度次第
+- **Phase 3 sticker 専用 type 追加 / location map / animated sticker / private sticker**: enhancement 候補
+
+## ★ 完成 commit history
+
+| commit | 内容 | Phase |
+|---|---|---|
+| `4603a4a` | Phase 1 初期実装 | 1 |
+| `cec0e50` | 200 fix (= 真犯人解決) | 1 |
+| `d2851a5` | docs update Day 19 | 1 |
+| `950e101` | Phase 2.1 file/video 実装 | 2.1 |
+| `7355060` | MD/.bin 問題 fix (= originalFileName) | 2.1 |
+| `1c1b383` | TextFilePreview component | 2.1 |
+| `5517671` | JSON auto-indent + CSV table | 2.1 |
+| `0d00558` | Phase 2.2 sticker + location | 2.2 |
+| `c8f678f` | docs Day 20 update | 2.2 |
+| `c315703` | sticker 400 fix (= LINE sticker CDN) | 2.2 |
+| `5612771` | Phase 2.3 2 file 案 + catalog + mappings | 2.3 |
+| `959b71e` | test isolation fix (= 本番 file 上書き防止) | 2.3 |
+
+## 関連 Issue (= 完成 close 済)
+
+- [#288 Phase 1](https://github.com/gamasenninn/tealus/issues/288) (= text + image + audio)
+- [#289 Phase 2.1](https://github.com/gamasenninn/tealus/issues/289) (= file + video + TextFilePreview)
+- [#290 Phase 2.2](https://github.com/gamasenninn/tealus/issues/290) (= sticker + location)
+- [#291 Phase 2.3](https://github.com/gamasenninn/tealus/issues/291) (= 2 file 案 + 凍結宣言)
+
+---
+
+以下、★ 採用者向け **dogfood 準備手順 / セットアップ完全 guide**。
 
 ## 前提
 
@@ -9,7 +73,7 @@
 - LINE 公式アカウント (Official Account) を作成できる権限
 - 対象の LINE グループに bot を招待できる
 
-★ scope 確認: 本手順は **受信のみ** (= LINE → Tealus)。Tealus から LINE への送信は API 高額のため Phase 1 では実装していない。
+★ scope 確認: 本手順は **受信のみ** (= LINE → Tealus)。Tealus から LINE への送信は API 高額のため Phase 2.x では実装していない (= Phase 2.4 outbound として残置)。
 
 ## Step 1. LINE Official Account を作成
 
