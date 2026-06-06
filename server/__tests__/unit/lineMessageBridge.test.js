@@ -58,17 +58,17 @@ function makeMockIo() {
 
 function setupSqlSequence(rows) {
   // rows = array of result rows for sequential queries (BEGIN + INSERTs + COMMIT)
-  // ★ sender info SELECT (= 6/6 Day 21 fix) は ★ ★ 自動 handle (= 各 test の配列に明示不要)
+  // ★ Option D refactor (= Day 21 PM): helper 内 sender info SELECT 削除、★ ★ sender object 引数で受け取る (= 既存 socket.user / req.user pattern 1:1 整合)
   mockClient.query.mockReset();
   let i = 0;
-  mockClient.query.mockImplementation((sql) => {
-    if (typeof sql === 'string' && sql.includes('SELECT display_name, avatar_url FROM users')) {
-      return Promise.resolve({ rows: [{ display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' }] });
-    }
+  mockClient.query.mockImplementation(() => {
     const r = rows[i++];
     return Promise.resolve(r || { rows: [] });
   });
 }
+
+// ★ Option D: 全 helper test で再利用する sender object (= 既存 socket.user / req.user 同型)
+const TEST_SENDER = { id: 'bot-1', display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' };
 
 beforeEach(() => {
   mockClient.query.mockReset();
@@ -79,19 +79,18 @@ beforeEach(() => {
 });
 
 describe('postTextToTealus', () => {
-  test('SQL INSERT + Socket.IO emit + sender info 含む (= 6/6 Day 21 fix)', async () => {
+  test('SQL INSERT + Socket.IO emit + sender object 直接 fill (= Option D pattern、Day 21 PM)', async () => {
     const newMsg = { id: 'msg-1', room_id: 'room-1', type: 'text', content: 'hello', sender_id: 'bot-1' };
     setupSqlSequence([
       { rows: [] },           // BEGIN
       { rows: [newMsg] },     // INSERT INTO messages
-      { rows: [{ display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' }] }, // SELECT sender info
       { rows: [] },           // COMMIT
     ]);
 
     const { io, emit } = makeMockIo();
     const result = await postTextToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       content: 'hello',
       io,
     });
@@ -108,11 +107,11 @@ describe('postTextToTealus', () => {
   });
 
   test('roomId 未指定で throw', async () => {
-    await expect(postTextToTealus({ senderUserId: 'bot-1', content: 'x' })).rejects.toThrow(/roomId/);
+    await expect(postTextToTealus({ sender: TEST_SENDER, content: 'x' })).rejects.toThrow(/roomId/);
   });
 
-  test('senderUserId 未指定で throw', async () => {
-    await expect(postTextToTealus({ roomId: 'r', content: 'x' })).rejects.toThrow(/senderUserId/);
+  test('sender 未指定で throw', async () => {
+    await expect(postTextToTealus({ roomId: 'r', content: 'x' })).rejects.toThrow(/sender/);
   });
 
   test('SQL error で ROLLBACK + release + rethrow', async () => {
@@ -126,7 +125,7 @@ describe('postTextToTealus', () => {
 
     await expect(postTextToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       content: 'x',
     })).rejects.toThrow(/db down/);
 
@@ -138,7 +137,7 @@ describe('postTextToTealus', () => {
     setupSqlSequence([{}, { rows: [{ id: 'm', room_id: 'r' }] }, {}]);
     const result = await postTextToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       content: 'x',
     });
     expect(result.message.id).toBe('m');
@@ -159,7 +158,7 @@ describe('postImageToTealus', () => {
     const { io, emit } = makeMockIo();
     const result = await postImageToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       content: 'a photo',
       mediaInfo: {
         filePath: '/tmp/x.jpg',
@@ -180,7 +179,7 @@ describe('postImageToTealus', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postImageToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+    await expect(postImageToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
   });
 });
 
@@ -199,7 +198,7 @@ describe('postVoiceToTealus', () => {
     const { io, emit } = makeMockIo();
     const result = await postVoiceToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       mediaInfo: {
         filePath: '/tmp/x.m4a',
         relativePath: 'line-voices/x.m4a',
@@ -237,7 +236,7 @@ describe('postVoiceToTealus', () => {
 
     await postVoiceToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'audio/m4a' },
     });
 
@@ -247,7 +246,7 @@ describe('postVoiceToTealus', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postVoiceToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+    await expect(postVoiceToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
   });
 });
 
@@ -265,7 +264,7 @@ describe('postFileToTealus (= Phase 2.1)', () => {
     const { io, emit } = makeMockIo();
     const result = await postFileToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       mediaInfo: {
         filePath: '/tmp/doc.pdf',
         relativePath: 'line-files/doc.pdf',
@@ -285,14 +284,14 @@ describe('postFileToTealus (= Phase 2.1)', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postFileToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+    await expect(postFileToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
   });
 
   test('transcribe trigger 呼ばれない (= file は transcribe 対象外、回帰防止)', async () => {
     setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
     await postFileToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'application/octet-stream' },
     });
     expect(mockTranscribeFn).not.toHaveBeenCalled();
@@ -313,7 +312,7 @@ describe('postVideoToTealus (= Phase 2.1)', () => {
     const { io, emit } = makeMockIo();
     const result = await postVideoToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       mediaInfo: {
         filePath: '/tmp/clip.mp4',
         relativePath: 'line-videos/clip.mp4',
@@ -336,7 +335,7 @@ describe('postVideoToTealus (= Phase 2.1)', () => {
     setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
     await postVideoToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       mediaInfo: {
         filePath: '/tmp/clip.mp4',
         relativePath: 'line-videos/clip.mp4',
@@ -355,14 +354,14 @@ describe('postVideoToTealus (= Phase 2.1)', () => {
 
     const result = await postVideoToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       mediaInfo: { filePath: '/tmp/x.mp4', relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'video/mp4' },
     });
     expect(result.message.id).toBe('m');
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postVideoToTealus({ roomId: 'r', senderUserId: 'b' })).rejects.toThrow(/mediaInfo/);
+    await expect(postVideoToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
   });
 });
 
@@ -373,7 +372,7 @@ describe('postLocationToTealus (= Phase 2.2)', () => {
 
     const result = await postLocationToTealus({
       roomId: 'room-1',
-      senderUserId: 'bot-1',
+      sender: TEST_SENDER,
       location: { title: '東京駅', address: '東京都千代田区', latitude: 35.6812, longitude: 139.7671 },
       io,
     });
@@ -396,7 +395,7 @@ describe('postLocationToTealus (= Phase 2.2)', () => {
     setupSqlSequence([{}, { rows: [{ id: 'm', type: 'text' }] }, {}]);
     const result = await postLocationToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       location: { title: null, address: null, latitude: 0, longitude: 0 },
     });
     expect(result.message.id).toBe('m');
@@ -408,7 +407,7 @@ describe('postLocationToTealus (= Phase 2.2)', () => {
   test('全 field null (= 緯度経度なし) で throw', async () => {
     await expect(postLocationToTealus({
       roomId: 'r',
-      senderUserId: 'b',
+      sender: TEST_SENDER,
       location: { title: null, address: null, latitude: null, longitude: null },
     })).rejects.toThrow(/location/);
   });

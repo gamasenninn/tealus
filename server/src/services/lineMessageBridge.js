@@ -16,35 +16,26 @@
 const pool = require('../db/pool');
 const logger = require('../utils/logger');
 
-// ★ 6/6 Day 21 fix: Socket.IO emit 時 sender info (= display_name + avatar_url) を含める
-// (= 既存 bug、Phase 1 から存在、client が reload なしで bubble に icon + name 表示するため必要)
-// ★ 毎回 query (= bot user 単一 + pool 接続単発、★ webhook 頻度低で負荷 negligible)
-async function getSenderInfo(client, senderUserId) {
-  const res = await client.query(
-    `SELECT display_name, avatar_url FROM users WHERE id = $1`,
-    [senderUserId]
-  );
-  const info = res.rows[0] || {};
-  return {
-    sender_display_name: info.display_name || null,
-    sender_avatar_url: info.avatar_url || null,
-  };
-}
+// ★ ★ Option D refactor (= Day 21 PM): sender info は ★ ★ ★ helper 内で query せず、
+// ★ ★ caller (= routes/line.js dispatchEvent) で context object として渡される。
+// ★ socket/handlers/message.js (= socket.user) + routes/bot.js (= req.user) + routes/voice.js と 1:1 整合。
+// helper 内 DB query ゼロ + module level state ゼロ = test isolation 構造的保証。
+// sender = { id, display_name, avatar_url } object form
 
 /**
  * text message を Tealus に post
  *
  * @param {Object} params
  * @param {string} params.roomId
- * @param {string} params.senderUserId - LINE bot user の Tealus user id
+ * @param {Object} params.sender - sender context object (= { id, display_name, avatar_url }、socket.user / req.user 同型)
  * @param {string} params.content - LINE message.text
  * @param {string} [params.replyTo]
  * @param {Object} [params.io] - Socket.IO instance (= broadcast、optional)
  * @returns {Promise<{ message: Object }>}
  */
-async function postTextToTealus({ roomId, senderUserId, content, replyTo, io }) {
+async function postTextToTealus({ roomId, sender, content, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
-  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!sender) throw new Error('sender is required');
 
   const client = await pool.connect();
   try {
@@ -52,14 +43,17 @@ async function postTextToTealus({ roomId, senderUserId, content, replyTo, io }) 
     const msgResult = await client.query(
       `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
        VALUES ($1, $2, $3, 'text', $4) RETURNING *`,
-      [roomId, senderUserId, content || '', replyTo || null]
+      [roomId, sender.id, content || '', replyTo || null]
     );
     const message = msgResult.rows[0];
-    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, ...senderInfo });
+      io.to(roomId).emit('message:new', {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
+      });
     }
 
     logger.info(`[lineMessageBridge] text post: room=${roomId} msg=${message.id}`);
@@ -77,16 +71,16 @@ async function postTextToTealus({ roomId, senderUserId, content, replyTo, io }) 
  *
  * @param {Object} params
  * @param {string} params.roomId
- * @param {string} params.senderUserId
+ * @param {Object} params.sender
  * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
  * @param {string} [params.content]
  * @param {string} [params.replyTo]
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object, media: Object }>}
  */
-async function postImageToTealus({ roomId, senderUserId, mediaInfo, content, replyTo, io }) {
+async function postImageToTealus({ roomId, sender, mediaInfo, content, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
-  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!sender) throw new Error('sender is required');
   if (!mediaInfo) throw new Error('mediaInfo is required');
 
   const client = await pool.connect();
@@ -95,7 +89,7 @@ async function postImageToTealus({ roomId, senderUserId, mediaInfo, content, rep
     const msgResult = await client.query(
       `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
        VALUES ($1, $2, $3, 'image', $4) RETURNING *`,
-      [roomId, senderUserId, content || null, replyTo || null]
+      [roomId, sender.id, content || null, replyTo || null]
     );
     const message = msgResult.rows[0];
 
@@ -116,11 +110,15 @@ async function postImageToTealus({ roomId, senderUserId, mediaInfo, content, rep
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height]
     );
-    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
+        media: [mediaResult.rows[0]],
+      });
     }
 
     logger.info(`[lineMessageBridge] image post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
@@ -138,15 +136,15 @@ async function postImageToTealus({ roomId, senderUserId, mediaInfo, content, rep
  *
  * @param {Object} params
  * @param {string} params.roomId
- * @param {string} params.senderUserId
+ * @param {Object} params.sender
  * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
  * @param {string} [params.replyTo]
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object, media: Object }>}
  */
-async function postVoiceToTealus({ roomId, senderUserId, mediaInfo, replyTo, io }) {
+async function postVoiceToTealus({ roomId, sender, mediaInfo, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
-  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!sender) throw new Error('sender is required');
   if (!mediaInfo) throw new Error('mediaInfo is required');
 
   const client = await pool.connect();
@@ -155,7 +153,7 @@ async function postVoiceToTealus({ roomId, senderUserId, mediaInfo, replyTo, io 
     const msgResult = await client.query(
       `INSERT INTO messages (room_id, sender_id, type, reply_to)
        VALUES ($1, $2, 'voice', $3) RETURNING *`,
-      [roomId, senderUserId, replyTo || null]
+      [roomId, sender.id, replyTo || null]
     );
     const message = msgResult.rows[0];
 
@@ -171,11 +169,15 @@ async function postVoiceToTealus({ roomId, senderUserId, mediaInfo, replyTo, io 
       [message.id]
     );
 
-    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
+        media: [mediaResult.rows[0]],
+      });
     }
 
     // ★ ★ ★ Background transcription trigger (= voice.js line 116-118 同型)
@@ -207,16 +209,16 @@ async function postVoiceToTealus({ roomId, senderUserId, mediaInfo, replyTo, io 
  *
  * @param {Object} params
  * @param {string} params.roomId
- * @param {string} params.senderUserId
+ * @param {Object} params.sender
  * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
  * @param {string} [params.content]
  * @param {string} [params.replyTo]
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object, media: Object }>}
  */
-async function postFileToTealus({ roomId, senderUserId, mediaInfo, content, replyTo, io }) {
+async function postFileToTealus({ roomId, sender, mediaInfo, content, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
-  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!sender) throw new Error('sender is required');
   if (!mediaInfo) throw new Error('mediaInfo is required');
 
   const client = await pool.connect();
@@ -225,7 +227,7 @@ async function postFileToTealus({ roomId, senderUserId, mediaInfo, content, repl
     const msgResult = await client.query(
       `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
        VALUES ($1, $2, $3, 'file', $4) RETURNING *`,
-      [roomId, senderUserId, content || null, replyTo || null]
+      [roomId, sender.id, content || null, replyTo || null]
     );
     const message = msgResult.rows[0];
 
@@ -234,11 +236,15 @@ async function postFileToTealus({ roomId, senderUserId, mediaInfo, content, repl
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize]
     );
-    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
+        media: [mediaResult.rows[0]],
+      });
     }
 
     logger.info(`[lineMessageBridge] file post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
@@ -260,16 +266,16 @@ async function postFileToTealus({ roomId, senderUserId, mediaInfo, content, repl
  *
  * @param {Object} params
  * @param {string} params.roomId
- * @param {string} params.senderUserId
+ * @param {Object} params.sender
  * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
  * @param {string} [params.content]
  * @param {string} [params.replyTo]
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object, media: Object }>}
  */
-async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, replyTo, io }) {
+async function postVideoToTealus({ roomId, sender, mediaInfo, content, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
-  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!sender) throw new Error('sender is required');
   if (!mediaInfo) throw new Error('mediaInfo is required');
 
   // thumbnail 生成 (= 既存 generateThumbnail、失敗時は null fallback)
@@ -287,7 +293,7 @@ async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, rep
     const msgResult = await client.query(
       `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
        VALUES ($1, $2, $3, 'video', $4) RETURNING *`,
-      [roomId, senderUserId, content || null, replyTo || null]
+      [roomId, sender.id, content || null, replyTo || null]
     );
     const message = msgResult.rows[0];
 
@@ -296,11 +302,15 @@ async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, rep
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, thumbnailPath]
     );
-    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
+        media: [mediaResult.rows[0]],
+      });
     }
 
     logger.info(`[lineMessageBridge] video post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName} thumb=${thumbnailPath || 'null'}`);
@@ -322,7 +332,7 @@ async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, rep
  *
  * @param {Object} params
  * @param {string} params.roomId
- * @param {string} params.senderUserId
+ * @param {Object} params.sender
  * @param {Object} params.location - LINE webhook の location event fields
  *   - title: string|null (= 場所名、user 任意)
  *   - address: string|null (= 住所、user 任意)
@@ -332,9 +342,9 @@ async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, rep
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object }>}
  */
-async function postLocationToTealus({ roomId, senderUserId, location, replyTo, io }) {
+async function postLocationToTealus({ roomId, sender, location, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
-  if (!senderUserId) throw new Error('senderUserId is required');
+  if (!sender) throw new Error('sender is required');
   if (!location) throw new Error('location is required');
 
   const { title, address, latitude, longitude } = location;
@@ -357,7 +367,7 @@ async function postLocationToTealus({ roomId, senderUserId, location, replyTo, i
   if (mapsUrl) lines.push('', `[地図を開く](${mapsUrl})`);
   const content = lines.join('\n');
 
-  return postTextToTealus({ roomId, senderUserId, content, replyTo, io });
+  return postTextToTealus({ roomId, sender, content, replyTo, io });
 }
 
 module.exports = {

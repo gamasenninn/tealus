@@ -15,6 +15,7 @@
  */
 const express = require('express');
 const path = require('path');
+const pool = require('../db/pool');
 const { verifyLineSignature } = require('../services/lineSignature');
 const { fetchLineContent, fetchLineStickerImage, saveLineContentToFile } = require('../services/lineBridge');
 const {
@@ -93,11 +94,34 @@ async function dispatchEvent(event, options = {}) {
   const message = event.message;
   if (!message) return { skipped: 'no-message' };
 
+  // ★ Option D (= Day 21 PM): bot user info を context object として取得 + 6 helper に sender 渡し
+  // (= socket.user / req.user pattern 1:1 整合、helper 内 DB query ゼロ + module state ゼロ)
+  // ★ ★ test override: cfg.sender で test 用に直接 sender object 渡せる
+  let sender;
+  if (cfg.sender) {
+    sender = cfg.sender;
+  } else {
+    try {
+      const userRes = await pool.query(
+        `SELECT id, display_name, avatar_url FROM users WHERE id = $1`,
+        [botUserId]
+      );
+      if (userRes.rows.length === 0) {
+        logger.warn(`[LINE Bridge] bot user not found: ${botUserId}`);
+        return { skipped: 'bot-user-not-found' };
+      }
+      sender = userRes.rows[0];
+    } catch (err) {
+      logger.error(`[LINE Bridge] bot user fetch failed: ${err.message}`);
+      return { skipped: 'bot-user-fetch-error' };
+    }
+  }
+
   switch (message.type) {
     case 'text':
       await postTextToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         content: message.text || '',
         io,
       });
@@ -108,7 +132,7 @@ async function dispatchEvent(event, options = {}) {
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-images' });
       await postImageToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         mediaInfo,
         io,
       });
@@ -120,7 +144,7 @@ async function dispatchEvent(event, options = {}) {
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-voices' });
       await postVoiceToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         mediaInfo,
         io,
       });
@@ -137,7 +161,7 @@ async function dispatchEvent(event, options = {}) {
       });
       await postFileToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         mediaInfo,
         io,
       });
@@ -149,7 +173,7 @@ async function dispatchEvent(event, options = {}) {
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-videos' });
       await postVideoToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         mediaInfo,
         io,
       });
@@ -164,7 +188,7 @@ async function dispatchEvent(event, options = {}) {
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-stickers' });
       await postImageToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         mediaInfo,
         io,
       });
@@ -177,7 +201,7 @@ async function dispatchEvent(event, options = {}) {
       const { title, address, latitude, longitude } = message;
       await postLocationToTealus({
         roomId,
-        senderUserId: botUserId,
+        sender,
         location: { title, address, latitude, longitude },
         io,
       });

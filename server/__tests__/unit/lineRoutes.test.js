@@ -32,6 +32,13 @@ jest.mock('../../src/services/lineBridge', () => ({
   saveLineContentToFile: (...args) => mockSaveContent(...args),
 }));
 
+// ★ Option D: pool mock (= bot user fetch path、cfg.sender 経由でない default 経路 test 用)
+const mockPoolQuery = jest.fn();
+jest.mock('../../src/db/pool', () => ({
+  query: (...args) => mockPoolQuery(...args),
+  connect: jest.fn(),  // ★ helper test では mockClient 経由で別 mock、router test では未使用
+}));
+
 jest.mock('../../src/services/lineSignature', () => ({
   verifyLineSignature: jest.fn(() => true),
 }));
@@ -46,11 +53,14 @@ jest.mock('../../src/utils/logger', () => ({
 const lineRouter = require('../../src/routes/line');
 const dispatchEvent = lineRouter.dispatchEvent;
 
+// ★ Option D (= Day 21 PM): cfg.sender で test 用に直接 sender object 渡し (= pool query bypass)
+const TEST_SENDER = { id: 'bot-user-uuid', display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' };
 const TEST_CONFIG = {
   groupToRoomMap: { 'group-X': 'room-X', 'group-Y': 'room-Y' },
   botUserId: 'bot-user-uuid',
   channelToken: 'channel-token-xyz',
   mediaRoot: '/tmp/media-test',
+  sender: TEST_SENDER,  // ★ Option D test override
 };
 
 let origCatalogEnv;
@@ -67,6 +77,7 @@ beforeEach(() => {
   mockFetchContent.mockReset();
   mockFetchStickerImage.mockReset();
   mockSaveContent.mockReset();
+  mockPoolQuery.mockReset();
   // ★ ★ 本番 catalog file 上書き防止 (= memory feedback_test_file_guard.md 適用)
   // skipCatalog: true で catalog upsert は呼ばれないが、念のため env override で safety net
   tmpDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'line-routes-test-'));
@@ -93,7 +104,7 @@ describe('dispatchEvent', () => {
     expect(result).toEqual({ posted: 'text' });
     expect(mockPostText).toHaveBeenCalledWith({
       roomId: 'room-X',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       content: 'hello',
       io: undefined,
     });
@@ -121,7 +132,7 @@ describe('dispatchEvent', () => {
     expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'image/jpeg', '/tmp/media-test', { subdir: 'line-images' });
     expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-X',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       mediaInfo: expect.objectContaining({ relativePath: 'line-images/x.jpg' }),
     }));
   });
@@ -148,7 +159,7 @@ describe('dispatchEvent', () => {
     expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'audio/m4a', '/tmp/media-test', { subdir: 'line-voices' });
     expect(mockPostVoice).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-Y',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       mediaInfo: expect.objectContaining({ relativePath: 'line-voices/v.m4a' }),
     }));
   });
@@ -206,7 +217,7 @@ describe('dispatchEvent', () => {
     });
     expect(mockPostFile).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-X',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       mediaInfo: expect.objectContaining({ relativePath: 'line-files/doc.pdf' }),
     }));
   });
@@ -233,7 +244,7 @@ describe('dispatchEvent', () => {
     expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'video/mp4', '/tmp/media-test', { subdir: 'line-videos' });
     expect(mockPostVideo).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-Y',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       mediaInfo: expect.objectContaining({ relativePath: 'line-videos/clip.mp4' }),
     }));
   });
@@ -263,7 +274,7 @@ describe('dispatchEvent', () => {
     expect(mockSaveContent).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', '/tmp/media-test', { subdir: 'line-stickers' });
     expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-X',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       mediaInfo: expect.objectContaining({ relativePath: 'line-stickers/s.png' }),
     }));
   });
@@ -279,7 +290,7 @@ describe('dispatchEvent', () => {
     expect(result).toEqual({ posted: 'location' });
     expect(mockPostLocation).toHaveBeenCalledWith(expect.objectContaining({
       roomId: 'room-Y',
-      senderUserId: 'bot-user-uuid',
+      sender: TEST_SENDER,
       location: expect.objectContaining({
         title: '東京駅',
         address: '東京都千代田区',
@@ -319,6 +330,54 @@ describe('dispatchEvent', () => {
     };
     const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
     expect(result).toEqual({ skipped: 'no-message' });
+  });
+
+  test('bot user not found → skip (= Option D、Day 21 PM)', async () => {
+    // ★ cfg.sender なし → pool.query 経路、empty rows で skip
+    mockPoolQuery.mockResolvedValue({ rows: [] });
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', text: 'x' },
+    };
+    const config = { ...TEST_CONFIG, skipCatalog: true, sender: undefined };
+    const result = await dispatchEvent(event, { config });
+    expect(result).toEqual({ skipped: 'bot-user-not-found' });
+    expect(mockPostText).not.toHaveBeenCalled();
+  });
+
+  test('bot user fetch error → skip (= Option D、pool query throw)', async () => {
+    mockPoolQuery.mockRejectedValue(new Error('DB down'));
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', text: 'x' },
+    };
+    const config = { ...TEST_CONFIG, skipCatalog: true, sender: undefined };
+    const result = await dispatchEvent(event, { config });
+    expect(result).toEqual({ skipped: 'bot-user-fetch-error' });
+    expect(mockPostText).not.toHaveBeenCalled();
+  });
+
+  test('cfg.sender なし + bot user 存在 → pool.query 経路で sender 取得 (= Option D default 経路)', async () => {
+    mockPoolQuery.mockResolvedValue({
+      rows: [{ id: 'bot-user-uuid', display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' }],
+    });
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', text: 'hello' },
+    };
+    const config = { ...TEST_CONFIG, skipCatalog: true, sender: undefined };
+    const result = await dispatchEvent(event, { config });
+    expect(result).toEqual({ posted: 'text' });
+    expect(mockPoolQuery).toHaveBeenCalledWith(
+      expect.stringContaining('SELECT id, display_name, avatar_url FROM users'),
+      ['bot-user-uuid']
+    );
+    expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({
+      sender: expect.objectContaining({ id: 'bot-user-uuid', display_name: 'LINE Bridge' }),
+    }));
   });
 });
 
