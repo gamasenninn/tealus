@@ -16,6 +16,21 @@
 const pool = require('../db/pool');
 const logger = require('../utils/logger');
 
+// ★ 6/6 Day 21 fix: Socket.IO emit 時 sender info (= display_name + avatar_url) を含める
+// (= 既存 bug、Phase 1 から存在、client が reload なしで bubble に icon + name 表示するため必要)
+// ★ 毎回 query (= bot user 単一 + pool 接続単発、★ webhook 頻度低で負荷 negligible)
+async function getSenderInfo(client, senderUserId) {
+  const res = await client.query(
+    `SELECT display_name, avatar_url FROM users WHERE id = $1`,
+    [senderUserId]
+  );
+  const info = res.rows[0] || {};
+  return {
+    sender_display_name: info.display_name || null,
+    sender_avatar_url: info.avatar_url || null,
+  };
+}
+
 /**
  * text message を Tealus に post
  *
@@ -40,10 +55,11 @@ async function postTextToTealus({ roomId, senderUserId, content, replyTo, io }) 
       [roomId, senderUserId, content || '', replyTo || null]
     );
     const message = msgResult.rows[0];
+    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message });
+      io.to(roomId).emit('message:new', { ...message, ...senderInfo });
     }
 
     logger.info(`[lineMessageBridge] text post: room=${roomId} msg=${message.id}`);
@@ -100,10 +116,11 @@ async function postImageToTealus({ roomId, senderUserId, mediaInfo, content, rep
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height]
     );
+    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
     }
 
     logger.info(`[lineMessageBridge] image post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
@@ -154,10 +171,11 @@ async function postVoiceToTealus({ roomId, senderUserId, mediaInfo, replyTo, io 
       [message.id]
     );
 
+    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
     }
 
     // ★ ★ ★ Background transcription trigger (= voice.js line 116-118 同型)
@@ -216,10 +234,11 @@ async function postFileToTealus({ roomId, senderUserId, mediaInfo, content, repl
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize]
     );
+    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
     }
 
     logger.info(`[lineMessageBridge] file post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
@@ -277,10 +296,11 @@ async function postVideoToTealus({ roomId, senderUserId, mediaInfo, content, rep
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, thumbnailPath]
     );
+    const senderInfo = await getSenderInfo(client, senderUserId);
     await client.query('COMMIT');
 
     if (io) {
-      io.to(roomId).emit('message:new', { ...message, media: [mediaResult.rows[0]] });
+      io.to(roomId).emit('message:new', { ...message, ...senderInfo, media: [mediaResult.rows[0]] });
     }
 
     logger.info(`[lineMessageBridge] video post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName} thumb=${thumbnailPath || 'null'}`);

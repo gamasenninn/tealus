@@ -58,9 +58,13 @@ function makeMockIo() {
 
 function setupSqlSequence(rows) {
   // rows = array of result rows for sequential queries (BEGIN + INSERTs + COMMIT)
+  // ★ sender info SELECT (= 6/6 Day 21 fix) は ★ ★ 自動 handle (= 各 test の配列に明示不要)
   mockClient.query.mockReset();
   let i = 0;
-  mockClient.query.mockImplementation(() => {
+  mockClient.query.mockImplementation((sql) => {
+    if (typeof sql === 'string' && sql.includes('SELECT display_name, avatar_url FROM users')) {
+      return Promise.resolve({ rows: [{ display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' }] });
+    }
     const r = rows[i++];
     return Promise.resolve(r || { rows: [] });
   });
@@ -75,11 +79,12 @@ beforeEach(() => {
 });
 
 describe('postTextToTealus', () => {
-  test('SQL INSERT + Socket.IO emit', async () => {
+  test('SQL INSERT + Socket.IO emit + sender info 含む (= 6/6 Day 21 fix)', async () => {
     const newMsg = { id: 'msg-1', room_id: 'room-1', type: 'text', content: 'hello', sender_id: 'bot-1' };
     setupSqlSequence([
       { rows: [] },           // BEGIN
       { rows: [newMsg] },     // INSERT INTO messages
+      { rows: [{ display_name: 'LINE Bridge', avatar_url: 'avatars/line.png' }] }, // SELECT sender info
       { rows: [] },           // COMMIT
     ]);
 
@@ -93,7 +98,12 @@ describe('postTextToTealus', () => {
 
     expect(result.message).toEqual(newMsg);
     expect(io.to).toHaveBeenCalledWith('room-1');
-    expect(emit).toHaveBeenCalledWith('message:new', expect.objectContaining({ id: 'msg-1' }));
+    // ★ sender info が emit payload に含まれる (= client が reload なしで icon + name 表示)
+    expect(emit).toHaveBeenCalledWith('message:new', expect.objectContaining({
+      id: 'msg-1',
+      sender_display_name: 'LINE Bridge',
+      sender_avatar_url: 'avatars/line.png',
+    }));
     expect(mockClient.release).toHaveBeenCalled();
   });
 
@@ -109,7 +119,7 @@ describe('postTextToTealus', () => {
     mockClient.query.mockReset();
     mockClient.query.mockImplementation((sql) => {
       if (sql === 'BEGIN') return Promise.resolve();
-      if (sql.includes('INSERT INTO messages')) return Promise.reject(new Error('db down'));
+      if (typeof sql === 'string' && sql.includes('INSERT INTO messages')) return Promise.reject(new Error('db down'));
       if (sql === 'ROLLBACK') return Promise.resolve();
       return Promise.resolve({ rows: [] });
     });
