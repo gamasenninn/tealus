@@ -53,6 +53,10 @@ const TEST_CONFIG = {
   mediaRoot: '/tmp/media-test',
 };
 
+let origCatalogEnv;
+let tmpCatalog;
+let tmpDir;
+
 beforeEach(() => {
   mockPostText.mockClear();
   mockPostImage.mockClear();
@@ -63,6 +67,18 @@ beforeEach(() => {
   mockFetchContent.mockReset();
   mockFetchStickerImage.mockReset();
   mockSaveContent.mockReset();
+  // ★ ★ 本番 catalog file 上書き防止 (= memory feedback_test_file_guard.md 適用)
+  // skipCatalog: true で catalog upsert は呼ばれないが、念のため env override で safety net
+  tmpDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'line-routes-test-'));
+  tmpCatalog = require('path').join(tmpDir, 'catalog.json');
+  origCatalogEnv = process.env.LINE_GROUP_CATALOG_FILE;
+  process.env.LINE_GROUP_CATALOG_FILE = tmpCatalog;
+});
+
+afterEach(() => {
+  try { require('fs').rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  if (origCatalogEnv === undefined) delete process.env.LINE_GROUP_CATALOG_FILE;
+  else process.env.LINE_GROUP_CATALOG_FILE = origCatalogEnv;
 });
 
 describe('dispatchEvent', () => {

@@ -22,14 +22,20 @@ const {
 
 let tmpDir;
 let tmpFile;
+let origCatalogEnv;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'line-catalog-test-'));
   tmpFile = path.join(tmpDir, 'catalog.json');
+  // ★ ★ 本番 catalog file 上書き防止 (= memory feedback_test_file_guard.md 適用)
+  origCatalogEnv = process.env.LINE_GROUP_CATALOG_FILE;
+  process.env.LINE_GROUP_CATALOG_FILE = tmpFile;
 });
 
 afterEach(() => {
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  if (origCatalogEnv === undefined) delete process.env.LINE_GROUP_CATALOG_FILE;
+  else process.env.LINE_GROUP_CATALOG_FILE = origCatalogEnv;
 });
 
 describe('readCatalog', () => {

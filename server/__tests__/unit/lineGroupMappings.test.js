@@ -15,14 +15,25 @@ const { loadGroupToRoomMap, normalizeMap, getGroupMappingMeta } = require('../..
 
 let tmpDir;
 let tmpFile;
+let origMappingsEnv;
+let origEnvMap;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'line-mappings-test-'));
   tmpFile = path.join(tmpDir, 'mappings.json');
+  // ★ ★ 本番 mappings file / env 上書き防止 (= memory feedback_test_file_guard.md 適用)
+  origMappingsEnv = process.env.LINE_GROUP_TO_ROOM_FILE;
+  origEnvMap = process.env.LINE_GROUP_TO_ROOM;
+  process.env.LINE_GROUP_TO_ROOM_FILE = tmpFile;
+  delete process.env.LINE_GROUP_TO_ROOM; // 各 test で options.envValue で明示
 });
 
 afterEach(() => {
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  if (origMappingsEnv === undefined) delete process.env.LINE_GROUP_TO_ROOM_FILE;
+  else process.env.LINE_GROUP_TO_ROOM_FILE = origMappingsEnv;
+  if (origEnvMap === undefined) delete process.env.LINE_GROUP_TO_ROOM;
+  else process.env.LINE_GROUP_TO_ROOM = origEnvMap;
 });
 
 describe('normalizeMap', () => {
