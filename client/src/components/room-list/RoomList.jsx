@@ -11,6 +11,13 @@ import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import './RoomList.css';
 
+// ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
+const TAB_OPTIONS = [
+  { key: 'all', label: 'すべて' },
+  { key: 'direct', label: '1:1 ルーム' },
+  { key: 'group', label: 'グループ' },
+];
+
 function RoomList() {
   const { user } = useAuthStore();
   const { rooms, fetchRooms, error } = useRoomStore();
@@ -18,6 +25,7 @@ function RoomList() {
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [contextMenu, setContextMenu] = useState(null);
+  const [activeTab, setActiveTab] = useState('all');
   const longPressTimer = useRef(null);
   const navigate = useNavigate();
 
@@ -125,14 +133,33 @@ function RoomList() {
         {user?.display_name}（{user?.login_id}）
       </div>
 
+      {/* ★ 6/7 Day 22 PM: tab 切替 (= room.type direct/group filter、HomePage 同型 pattern) */}
+      <div className="room-list-tabs">
+        {TAB_OPTIONS.map((tab) => (
+          <button
+            key={tab.key}
+            className={`room-list-tab ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {(() => {
+        const filteredRooms = activeTab === 'all' ? rooms : rooms.filter((r) => r.type === activeTab);
+        return (
       <div className="room-list">
-        {rooms.length === 0 && (
+        {filteredRooms.length === 0 && (
           <div className="room-list-empty">
-            トークがありません。<br />
-            +ボタンから新しいトークを始めましょう。
+            {rooms.length === 0 ? (
+              <>トークがありません。<br />+ボタンから新しいトークを始めましょう。</>
+            ) : (
+              <>該当するトークがありません。</>
+            )}
           </div>
         )}
-        {rooms.map((room) => (
+        {filteredRooms.map((room) => (
           <div
             key={room.id}
             className="room-item"
@@ -186,6 +213,8 @@ function RoomList() {
           </div>
         ))}
       </div>
+        );
+      })()}
 
       {showCreate && <CreateRoom onClose={() => setShowCreate(false)} />}
 
