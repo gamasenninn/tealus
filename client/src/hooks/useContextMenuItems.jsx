@@ -50,8 +50,9 @@ export function buildContextMenuItems({
     onClick: onReply,
   });
 
-  // Forward (text messages only for MVP #166)
-  if (onForward && message.type === 'text' && !message.is_deleted) {
+  // Forward (text + image/video/file: media 種別は server 側 リンク方式で複製)
+  const FORWARDABLE_TYPES = ['text', 'image', 'video', 'file'];
+  if (onForward && FORWARDABLE_TYPES.includes(message.type) && !message.is_deleted) {
     items.push({
       icon: <Share2 size={16} />,
       label: '転送',

@@ -111,6 +111,12 @@ class ApiClient {
     });
   }
 
+  forwardMedia(targetRoomId, sourceMessageId) {
+    return this.request('POST', `/rooms/${targetRoomId}/media/forward`, {
+      source_message_id: sourceMessageId,
+    });
+  }
+
   /**
    * cc-queue から登録済 project 一覧を取得 (#253)
    * mention picker の virtual user 候補に使う。

@@ -64,17 +64,21 @@ function ForwardModal({ message, onClose }) {
     setSending(true);
     setError('');
     try {
-      // Socket.IO 経由で送信（リアルタイム配信のため）
-      const socket = getSocket();
-      if (socket?.connected) {
-        socket.emit('message:send', {
-          room_id: targetRoom.id,
-          content: message.content,
-          forwarded_from: message.id,
-        });
+      if (message.type === 'text') {
+        // text: 既存 socket 経路 (= fire-and-forget リアルタイム配信)
+        const socket = getSocket();
+        if (socket?.connected) {
+          socket.emit('message:send', {
+            room_id: targetRoom.id,
+            content: message.content,
+            forwarded_from: message.id,
+          });
+        } else {
+          await api.sendMessage(targetRoom.id, message.content, null, message.id);
+        }
       } else {
-        // フォールバック: REST API
-        await api.sendMessage(targetRoom.id, message.content, null, message.id);
+        // image / video / file: 新 REST 経路 (= リンク方式、server 側で file_path 共有)
+        await api.forwardMedia(targetRoom.id, message.id);
       }
       onClose();
       showToast(targetRoom);

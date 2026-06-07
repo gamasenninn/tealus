@@ -174,4 +174,126 @@ router.get('/gallery', authenticate, requireMember, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/rooms/:id/media/forward
+ * 既存 message (image / video / file) を別 room へリンク方式で転送
+ * (= file_path 共有、binary 重複なし、DB schema 変更なし)
+ *
+ * body: { source_message_id: UUID }
+ * response 201: { message: { ...full message with media + forwarded_from_message... } }
+ *
+ * 設計:
+ * - 元 message の type は image / video / file 限定 (= text は socket 経路、voice / stamp は後 phase)
+ * - 元 room の member check 必須 (= 自分が見れた message しか転送できない invariant)
+ * - message_media は INSERT-FROM-SELECT で全 row 複製、file_path 共有 (= disk binary 1 つ)
+ */
+const FORWARDABLE_MEDIA_TYPES = ['image', 'video', 'file'];
+router.post('/forward', authenticate, requireMember, async (req, res) => {
+  const targetRoomId = req.params.id;
+  const userId = req.user.id;
+  const { source_message_id } = req.body;
+
+  if (!source_message_id) {
+    return res.status(400).json({ error: 'source_message_id は必須です' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const srcResult = await client.query(
+      'SELECT id, room_id, type, content, is_deleted FROM messages WHERE id = $1',
+      [source_message_id]
+    );
+    if (srcResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: '元メッセージが見つかりません' });
+    }
+    const src = srcResult.rows[0];
+    if (src.is_deleted) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: '削除済みメッセージは転送できません' });
+    }
+    if (!FORWARDABLE_MEDIA_TYPES.includes(src.type)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'このメッセージ種別は転送できません' });
+    }
+
+    const memberCheck = await client.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [src.room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'メッセージへのアクセス権限がありません' });
+    }
+
+    const insertMsg = await client.query(
+      `INSERT INTO messages (room_id, sender_id, type, content, forwarded_from)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [targetRoomId, userId, src.type, src.content, source_message_id]
+    );
+    const newMessage = insertMsg.rows[0];
+
+    await client.query(
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+       SELECT $1, file_path, file_name, mime_type, file_size, width, height, thumbnail_path
+       FROM message_media WHERE message_id = $2`,
+      [newMessage.id, source_message_id]
+    );
+
+    await client.query('COMMIT');
+
+    const { attachMedia, attachForwards } = require('../services/messageAttachments');
+    const fullMessage = {
+      ...newMessage,
+      sender_display_name: req.user.display_name,
+      sender_avatar_url: req.user.avatar_url,
+    };
+    await attachMedia([fullMessage]);
+    await attachForwards([fullMessage]);
+
+    const { io } = require('../app');
+    io.to(targetRoomId).emit('message:new', fullMessage);
+
+    try {
+      const { sendPushToOfflineMembers } = require('../services/push');
+      const { getOnlineUserIds } = require('../socket');
+      const typeLabel = src.type === 'image' ? '画像' : src.type === 'video' ? '動画' : 'ファイル';
+      sendPushToOfflineMembers(targetRoomId, userId, {
+        title: req.user.display_name,
+        body: `📎 ${typeLabel}を転送`,
+        data: { roomId: targetRoomId, messageId: fullMessage.id },
+      }, new Set(getOnlineUserIds()));
+    } catch (e) {
+      logger.warn('Push notification failed: ' + e.message);
+    }
+
+    try {
+      const { fireWebhooks } = require('../services/webhook');
+      fireWebhooks('message.created', targetRoomId, {
+        room: { id: targetRoomId },
+        message: {
+          id: fullMessage.id,
+          type: src.type,
+          content: fullMessage.content,
+          forwarded_from: source_message_id,
+          sender: { id: userId, display_name: req.user.display_name },
+        },
+      });
+    } catch (e) {
+      logger.warn('Webhook fire failed: ' + e.message);
+    }
+
+    res.status(201).json({ message: fullMessage });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Media forward error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
