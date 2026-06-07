@@ -114,7 +114,9 @@
 .media-file {
   display: block;
   padding: 8px;
-  background: rgba(0, 0, 0, 0.05);
+  /* ★ 6/7 Day 22: media-only mode (= caption なし) で bubble transparent → room background (teal) 透過時の
+     contrast 改善のため、半透明 grey → 不透明白系に変更 (= user voice 6/7 01:38 「色変えた方が見やすい」) */
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
   text-decoration: none;
   color: inherit;
