@@ -21,7 +21,9 @@
 .text-file-preview__body {
   margin-top: 6px;
   padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.03);
+  /* ★ 6/7 Day 22: media-only mode (= caption なし) で bubble transparent → room background (teal) 透過時の
+     contrast 改善のため、半透明 grey → 不透明白系に変更 (= user voice、ImageGrid.css .media-file と同型 fix) */
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 6px;
   max-height: 480px;
