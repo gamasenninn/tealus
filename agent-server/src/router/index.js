@@ -63,6 +63,8 @@ function classifyByRules(content) {
   }
 
   // #258 /light2 コマンド (codex-sdk backed)
+  // TODO(#292): config 化 (AGENT_LIGHT_BACKEND=v2) で V2 動作可能になったため、staging 期間後 deprecation 候補。
+  // 現状はベータ user の習慣互換のため維持 (= /light2 は config と独立で常に V2 path に流れる)
   if (trimmed.startsWith('/light2 ')) {
     return { tier: 'light2', prompt: trimmed.slice(8).trim() };
   }

@@ -206,28 +206,35 @@ async function _dispatch({ message, room, agentId, agentName }) {
       break;
     }
 
-    case 'light':
-      // Light Agent
+    case 'light': {
+      // Light Agent (#292: AGENT_LIGHT_BACKEND config で V1/V2/自作 を動的解決)
+      const { loadLightBackend } = require('../agents/lightBackendLoader');
+      const backend = loadLightBackend(config.AGENT_LIGHT_BACKEND);
+
       await updateStatus(agentId, roomId, 'processing');
       try {
-        const mcpServers = await getOrCreateRoomMcp(agentId, roomId, context.workspace_path);
+        // V1 のみ MCPServerStdio instances を外側で構築、V2/自作 は内部 build で済むため skip
+        const mcpServers = backend.name === 'v1'
+          ? await getOrCreateRoomMcp(agentId, roomId, context.workspace_path)
+          : undefined;
         // Deep pattern を Light でも踏襲: room_id を user prompt に embed
-        // (詳細 instruction は system prompt 側に集約)
         const userPrompt = result.prompt || prompt;
         const lightPrompt = `現在のルーム ID: ${roomId}${buildReplyToHint(message)}
 
 ユーザーの質問: ${userPrompt}`;
 
-        await processLight({
+        await backend.processLight({
           roomId,
           prompt: lightPrompt,
           workspacePath: context.workspace_path,
+          agentId,
           mcpServers,
         });
       } finally {
         await updateStatus(agentId, roomId, 'idle');
       }
       break;
+    }
 
     case 'light2': {
       // #258 Light v2 Agent (codex-sdk backed、並列追加)

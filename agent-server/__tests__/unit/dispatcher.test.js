@@ -21,8 +21,20 @@ jest.mock('../../src/agents/light', () => ({
   processLight: jest.fn(),
 }));
 
-jest.mock('../../src/agents/lightV2', () => ({
-  processLightV2: jest.fn(),
+jest.mock('../../src/agents/lightV2', () => {
+  // #292: processLight alias export を mock 反映 (= V2 内部で processLightV2 と同 fn)
+  const processLightV2 = jest.fn();
+  return {
+    processLight: processLightV2,
+    processLightV2,
+  };
+});
+
+// #292: lightBackendLoader を mock、default で V1 mock 返却 (= 既存 test 互換)
+jest.mock('../../src/agents/lightBackendLoader', () => ({
+  loadLightBackend: jest.fn(),
+  resetForTest: jest.fn(),
+  KNOWN_BACKENDS: { v1: '../agents/light', v2: '../agents/lightV2' },
 }));
 
 jest.mock('../../src/agents/deep', () => ({
@@ -90,6 +102,9 @@ describe('Dispatcher', () => {
   describe('dispatch', () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      // #292: loadLightBackend を default で V1 mock 返却 (= 既存 test 互換)
+      const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
+      loadLightBackend.mockReturnValue({ name: 'v1', processLight });
     });
 
     test('DM（2名以下）は全メッセージに応答', async () => {
@@ -447,6 +462,66 @@ describe('Dispatcher', () => {
 
       expect(failing).toHaveBeenCalledTimes(1);
       expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // #292 Light backend config 化 (= AGENT_LIGHT_BACKEND 切替動作)
+  describe('Light backend config 化 (#292)', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
+      loadLightBackend.mockReturnValue({ name: 'v1', processLight });
+    });
+
+    test("AGENT_LIGHT_BACKEND='v1' で /light → V1 processLight 呼出 (= 既存挙動 retain)", async () => {
+      route.mockResolvedValueOnce({ tier: 'light', prompt: 'テスト' });
+
+      await dispatch({
+        message: { id: 'msg1', content: 'テスト', sender: { id: 'user1' } },
+        room: { id: 'room1', member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(processLight).toHaveBeenCalled();
+      const { processLight: v2ProcessLight } = require('../../src/agents/lightV2');
+      expect(v2ProcessLight).not.toHaveBeenCalled();
+    });
+
+    test("AGENT_LIGHT_BACKEND='v2' で /light → V2 processLight 呼出 (= alias 経由)", async () => {
+      const { processLight: v2ProcessLight } = require('../../src/agents/lightV2');
+      const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
+      loadLightBackend.mockReturnValue({ name: 'v2', processLight: v2ProcessLight });
+
+      route.mockResolvedValueOnce({ tier: 'light', prompt: 'テスト' });
+
+      await dispatch({
+        message: { id: 'msg1', content: 'テスト', sender: { id: 'user1' } },
+        room: { id: 'room1', member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(v2ProcessLight).toHaveBeenCalled();
+      expect(processLight).not.toHaveBeenCalled();
+    });
+
+    test('/light2 prefix は config と独立、常に V2 (= 既存挙動 retain、deprecation 段階)', async () => {
+      const { processLightV2 } = require('../../src/agents/lightV2');
+      const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
+
+      route.mockResolvedValueOnce({ tier: 'light2', prompt: 'テスト' });
+
+      await dispatch({
+        message: { id: 'msg1', content: 'テスト', sender: { id: 'user1' } },
+        room: { id: 'room1', member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(processLightV2).toHaveBeenCalled();
+      // /light2 path は loader 経由しない (= config と独立、router 直接 dispatch)
+      expect(loadLightBackend).not.toHaveBeenCalled();
     });
   });
 });
