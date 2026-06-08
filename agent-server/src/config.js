@@ -114,6 +114,13 @@ module.exports = {
   // path.resolve normalize で全 consumer (Deep / Light v2 / sessionManager) に絶対 path 伝播。
   WORKSPACE_ROOT: path.resolve(process.env.AGENT_WORKSPACE_ROOT || './agent-workspaces'),
 
+  // Light tier backend selector (#292、6/8 Day 23):
+  //   'v1' (default、staging): @openai/agents SDK (= 既存 Light v1、API key mode 友好)
+  //   'v2':                    codex-sdk (= ChatGPT subscription 反映、サブスク user voice)
+  //   /abs/path/to/file.js:    自作 backend (processLight export 義務)
+  // 不正値 / file 不在は silent fallback で 'v1' (= 起動止めない、log に warn)
+  AGENT_LIGHT_BACKEND: process.env.AGENT_LIGHT_BACKEND || 'v1',
+
   // Webhook
   WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
 

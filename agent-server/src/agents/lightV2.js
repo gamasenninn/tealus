@@ -344,4 +344,6 @@ function splitMessage(text, maxLength) {
   return chunks;
 }
 
-module.exports = { processLightV2, splitMessage, buildLightV2McpConfig };
+// #292 plug interface contract (= 統一 processLight 名で export、processLightV2 alias 維持で後方互換)
+const processLight = processLightV2;
+module.exports = { processLight, processLightV2, splitMessage, buildLightV2McpConfig };
