@@ -341,6 +341,68 @@ baseline は 5/6 PASS (S1 のみ LLM quality variance 検出 = 設計通り)。
 
 ---
 
+## ステップ 9.5. (任意) Light backend を設定で切替 — `/light` を V2 化 (#292)
+
+`/light` prefix + Router 自動振分で使う backend を設定で切替できます ([#292](https://github.com/gamasenninn/tealus/issues/292))。`/light2` prefix を覚えなくても、設定 1 つで V2 を default 化可能。
+
+### 9.5-1. 設定 (= 1 行)
+
+`agent-server/.env` に追加:
+
+```bash
+# サブスクなし → 'v1' 推奨 (default、@openai/agents SDK)
+AGENT_LIGHT_BACKEND=v1
+
+# ChatGPT Plus/Pro/Team 持ち + codex login 済 → 'v2' 推奨
+# AGENT_LIGHT_BACKEND=v2
+# LIGHTV2_AUTH=subscription
+```
+
+agent-server 再起動。これで `/light` / Router 自動振分は config 指定の backend で動きます。
+
+### 9.5-2. backend の選び分け
+
+| 状況 | 推奨 backend | 設定 |
+|---|---|---|
+| OpenAI API キーのみ (= 新規 OSS 採用者 default) | **v1** | 未設定 or `v1` |
+| ChatGPT Plus/Pro/Team 持ち、API cost 0 を活かしたい | **v2** + subscription | `v2` + `LIGHTV2_AUTH=subscription` |
+| 自作 backend で plug-in 実験 | 絶対 path | `/abs/path/to/file.js` |
+
+### 9.5-3. `/light2` prefix の扱い
+
+`/light2` prefix は **config と独立**、常に V2 path に流れます (= 既存挙動 retain、ベータ user 互換)。`AGENT_LIGHT_BACKEND=v1` でも `/light2 ...` と書けば V2 が動く、staging 期間中は両立運用。
+
+### 9.5-4. 自作 backend の plug interface
+
+OSS 拡張として自作 backend を持ち込む場合、`processLight` を export してください:
+
+```js
+// agents/lightCustom.js (= 自作 backend)
+async function processLight({ roomId, prompt, workspacePath, agentId, sessionId, mcpServers }) {
+  // input: prompt + workspace context
+  // output: botApi.pushMessage で roomId に応答 (副作用)、return Promise<void>
+  // error: catch + pushMessage('エラー: ...'), throw 推奨せず
+}
+module.exports = { processLight };
+```
+
+`.env` で `AGENT_LIGHT_BACKEND=/abs/path/to/lightCustom.js` を指定。
+
+sample skeleton: `agent-server/src/agents/lightCustomExample.js`
+
+### 9.5-5. 不正値時の挙動 + 注意
+
+- `AGENT_LIGHT_BACKEND=v99` (= 不正値) → silent fallback to 'v1' + log warn (= agent-server 起動止めない)
+- 自作 backend で `processLight` export なし → silent fallback to 'v1' + log error
+- 自作 backend file 不在 → silent fallback to 'v1' + log error
+- ★ ★ **絶対 path 自作 backend は agent-server 権限で任意コード実行**、env を信頼できる人以外に渡さない
+
+### 9.5-6. 関連 issue
+
+- [#292](https://github.com/gamasenninn/tealus/issues/292) Light backend config 化 議論集約 + 実装
+
+---
+
 ## 次のステップ (任意)
 
 | やりたいこと | 必要なもの | 参照 |
