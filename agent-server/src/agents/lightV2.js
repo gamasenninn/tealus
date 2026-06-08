@@ -18,6 +18,7 @@ const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
 const { loadOrganonPolysemeForPrompt } = require('../lib/organonContext');
+const { detectCodexAuthError, buildAuthFailUserMessage } = require('../lib/codexAuthError');
 
 // codex-sdk は ESM のみ。CommonJS から動的 import で読む
 let CodexCtor = null;
@@ -291,6 +292,14 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
           } else if (event.type === 'turn.failed') {
             logger.error(`[LightV2] turn failed: ${event.error?.message || 'unknown'}`);
           } else if (event.type === 'error') {
+            // pre-α (#292 follow-up): ChatGPT subscription auth 切れを検出し user に案内
+            const authResult = detectCodexAuthError(event.message);
+            if (authResult.isAuth) {
+              logger.error(`[LightV2] auth failed (${authResult.kind}): ${event.message}`);
+              await botApi.pushMessage(roomId, buildAuthFailUserMessage()).catch(() => {});
+              await botApi.pushStatus(roomId, 'idle').catch(() => {});
+              return;
+            }
             logger.error(`[LightV2] stream error: ${event.message}`);
           }
         } catch (eventErr) {
@@ -302,7 +311,8 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
       // 出力が JSONL stream に混入する codex SDK の既知の挙動) は応答に影響なし、
       // warn に格下げして flow 継続。turn 未完了で error 出た場合は throw する。
       if (turnCompleted) {
-        logger.warn(`[LightV2] post-turn stream error (ignored, response captured): ${streamErr.message}`);
+        // pre-α (#292 follow-up): post-turn の parse error は cleanup phase、auth check skip 明示
+        logger.warn(`[LightV2] post-turn stream error (ignored, response captured, auth check skipped): ${streamErr.message}`);
       } else {
         throw streamErr;
       }
@@ -324,6 +334,18 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
     }
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
   } catch (err) {
+    // pre-α (#292 follow-up): 外側 catch でも auth 切れを検出
+    const authResult = detectCodexAuthError(err.message);
+    if (authResult.isAuth) {
+      logger.error(`[LightV2] auth failed (${authResult.kind}): ${err.message}`);
+      await botApi.pushStatus(roomId, 'idle').catch(() => {});
+      try {
+        await botApi.pushMessage(roomId, buildAuthFailUserMessage());
+      } catch (pushErr) {
+        logger.error(`Failed to send auth error message: ${pushErr.message}`);
+      }
+      return;
+    }
     logger.error(`Light v2 Agent error: ${err.message}`);
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
     try {
