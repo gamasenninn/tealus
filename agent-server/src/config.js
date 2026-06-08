@@ -2,6 +2,7 @@
  * Agent Server 設定
  */
 require('dotenv').config();
+const path = require('path');
 const { spawnSync } = require('child_process');
 const logger = require('./lib/logger');
 
@@ -108,7 +109,10 @@ module.exports = {
   TAVILY_API_KEY: process.env.TAVILY_API_KEY,
 
   // Workspace
-  WORKSPACE_ROOT: process.env.AGENT_WORKSPACE_ROOT || './agent-workspaces',
+  // #292 follow-up (= 藤井さん環境 Deep Codex bug fix、6/8 Day 23):
+  // codex CLI は CODEX_HOME に絶対 path 要求、claude -p は相対容認。
+  // path.resolve normalize で全 consumer (Deep / Light v2 / sessionManager) に絶対 path 伝播。
+  WORKSPACE_ROOT: path.resolve(process.env.AGENT_WORKSPACE_ROOT || './agent-workspaces'),
 
   // Webhook
   WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
