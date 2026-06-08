@@ -1,6 +1,22 @@
 const logger = require('./utils/logger');
 require('dotenv').config();
 
+// 6/9 DoS crash fix: defense in depth global safety net
+// (= 個別 async handler の try/catch 漏れに対する Node.js default exit 抑止、
+//   socket/index.js の room:join での Postgres 22P02 unhandledRejection で process kill した
+//   事件に対する 2 層目の防御。root cause は個別 handler 側で fix 済)
+process.on('unhandledRejection', (reason) => {
+  const msg = (reason && reason.message) ? reason.message : String(reason);
+  logger.error(`[unhandledRejection] ${msg}`);
+  if (reason && reason.stack) logger.error(reason.stack);
+});
+process.on('uncaughtException', (err) => {
+  logger.error(`[uncaughtException] ${err.message}`);
+  if (err.stack) logger.error(err.stack);
+  // exit せず continuation (= memory leak / state inconsistency risk と引き換えに crash 回避、
+  //   root cause は 個別 handler 側で fix 必須、global は 観測 + last resort)
+});
+
 const express = require('express');
 const path = require('path');
 const http = require('http');

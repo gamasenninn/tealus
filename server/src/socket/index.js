@@ -11,6 +11,10 @@ const { registerCallHandler } = require('./handlers/call');
 // Online users: userId -> Set of socketIds
 const onlineUsers = new Map();
 
+// UUID validation (= 6/9 DoS crash fix、client から non-UUID で room:join 送られて
+// pool.query が Postgres 22P02 throw → unhandledRejection で process exit していた)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function getOnlineUserIds() {
   return Array.from(onlineUsers.keys());
 }
@@ -66,17 +70,29 @@ function setupSocketHandlers(io) {
 
     // Room join/leave
     socket.on('room:join', async (roomId) => {
-      const result = await pool.query(
-        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-        [roomId, socket.user.id]
-      );
-      if (result.rows.length > 0) {
-        socket.join(roomId);
-        logger.debug(`room:join user=${socket.user.display_name} room=${roomId}`);
+      // 6/9 DoS crash fix: 非 UUID は早期 reject (= Postgres 22P02 throw 防止)
+      if (typeof roomId !== 'string' || !UUID_REGEX.test(roomId)) {
+        logger.debug(`room:join reject: invalid uuid '${roomId}' from user=${socket.user.display_name}`);
+        return;
+      }
+      try {
+        const result = await pool.query(
+          'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+          [roomId, socket.user.id]
+        );
+        if (result.rows.length > 0) {
+          socket.join(roomId);
+          logger.debug(`room:join user=${socket.user.display_name} room=${roomId}`);
+        }
+      } catch (err) {
+        // 6/9 DoS crash fix: async handler 内 throw を catch (= 個別 safety net、global は app.js)
+        logger.error(`room:join error user=${socket.user.display_name} room=${roomId}: ${err.message}`);
       }
     });
 
     socket.on('room:leave', (roomId) => {
+      // 6/9 DoS crash fix: 非 UUID は silent skip (= socket.leave は throw しないが念のため early return)
+      if (typeof roomId !== 'string' || !UUID_REGEX.test(roomId)) return;
       socket.leave(roomId);
     });
 
