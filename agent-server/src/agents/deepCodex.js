@@ -22,6 +22,7 @@ const botApi = require('../lib/botApi');
 const deepRegistry = require('./deepRegistry');
 const config = require('../config');
 const { buildLightV2McpConfig } = require('./lightV2');
+const { detectCodexAuthError, buildAuthFailUserMessage } = require('../lib/codexAuthError');
 
 function getDefaultCodexHome() {
   return path.join(os.homedir(), '.codex');
@@ -362,6 +363,14 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
       }
 
       if (code !== 0 && !lastAgentMessage) {
+        // pre-α (#292 follow-up): subscription auth 切れを検出して user に案内
+        const authResult = detectCodexAuthError(stderr);
+        if (authResult.isAuth) {
+          logger.error(`[DeepCodex] auth failed (${authResult.kind}): ${stderr.slice(0, 500)}`);
+          await botApi.pushMessage(roomId, buildAuthFailUserMessage());
+          resolve();
+          return;
+        }
         logger.error(`Deep Codex Agent failed (code ${code}): ${stderr.slice(0, 200)}`);
         await botApi.pushMessage(roomId, `❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`);
         resolve();
@@ -390,6 +399,14 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
       clearTimeout(timer);
       deepRegistry.unregister(roomId);
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
+      // pre-α (#292 follow-up): spawn 段階で auth 切れも検出 (= まれ event)
+      const authResult = detectCodexAuthError(err.message);
+      if (authResult.isAuth) {
+        logger.error(`[DeepCodex] spawn auth failed (${authResult.kind}): ${err.message}`);
+        await botApi.pushMessage(roomId, buildAuthFailUserMessage());
+        resolve();
+        return;
+      }
       logger.error(`Deep Codex Agent spawn error: ${err.message}`);
       await botApi.pushMessage(roomId, `❌ Deep Codex Agent の起動に失敗しました: ${err.message}`);
       resolve();
