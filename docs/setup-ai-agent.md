@@ -448,6 +448,18 @@ sample skeleton: `agent-server/src/agents/lightCustomExample.js`
 
 → codex SDK の auth 失敗、または `LIGHTV2_AUTH=subscription` 設定時に `~/.codex/auth.json` が読めない可能性。`codex login` を再実行 → agent-server 再起動。default の API key path (`LIGHTV2_AUTH` 未設定) で動くか先に確認するのが切り分けに有効。
 
+### Q. user 画面に「ChatGPT のサインインが切れました」 と表示された (#292 follow-up)
+
+→ Codex SDK の subscription auth が切れている (= `~/.codex/auth.json` の token 期限切れ or refresh fail)。symptom は `/light` (AGENT_LIGHT_BACKEND=v2) / `/light2` / `/deep` (DEEP_AGENT_PROVIDER=codex) いずれでも同一。
+
+対処:
+
+1. agent-server ホストで **`codex login`** を再実行 (= browser auth flow、新 token 取得)
+2. agent-server を **再起動** (= `~/.codex/auth.json` の新 token 読み込み)
+3. 切り分けたい場合は `.env` で `LIGHTV2_AUTH` を unset (= default API key mode) で動くか先に確認
+
+注: subscription auth は token が定期的に refresh される設計だが、長期 idle や ChatGPT 側 session 終了で失効しうる。本 message が表示された場合は raw error は user に露出させず log にのみ記録 (= `[LightV2] auth failed (...)`)、user 体験を維持しつつ運用者は log で原因確認可能。
+
 ### Q. `/light2` で `generate_and_send_image` が「画像を生成しました」と言うだけで実際の画像が来ない
 
 → `OPENAI_API_KEY` が agent-server に未設定 / 不正、または DALL-E 3 access が billing 不足。subscription mode (`LIGHTV2_AUTH=subscription`) でも画像生成は **API 経由 (cost 別)** なので OPENAI_API_KEY 必須。agent-server log の `mcp_tool_call` で error 内容を確認。
