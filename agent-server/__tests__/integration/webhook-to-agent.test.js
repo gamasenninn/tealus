@@ -18,6 +18,14 @@ jest.mock('../../src/agents/light', () => ({
   processLight: jest.fn().mockResolvedValue(),
 }));
 
+// #292 6/9 Day 24 default flip ('v2'): test は V1 mock 期待で書かれているので
+// loader mock で 'v1' return を強制 (= dispatcher.test.js と同 pattern、test isolation)
+jest.mock('../../src/agents/lightBackendLoader', () => ({
+  loadLightBackend: jest.fn(),
+  resetForTest: jest.fn(),
+  KNOWN_BACKENDS: { v1: '../agents/light', v2: '../agents/lightV2' },
+}));
+
 // ★ dotenv mock (= user .env の DEEP_AGENT_PROVIDER=codex contaminate 回避)
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
@@ -108,6 +116,10 @@ const OTHER_ROOM = 'room-without-bot';
 beforeEach(() => {
   jest.clearAllMocks();
   mockRoomSettings = null;
+  // #292 6/9 Day 24 default flip ('v2'): loader mock を V1 mock 返却に設定
+  // (= test の V1 expect 期待を維持、isolation)
+  const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
+  loadLightBackend.mockReturnValue({ name: 'v1', processLight });
   // Bot 登録（参加ルーム付き）
   registerBotUserId(BOT_ID, BOT_NAME, [{ id: BOT_ROOM }]);
 });
