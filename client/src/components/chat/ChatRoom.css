@@ -38,11 +38,19 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  /* #292 follow-up: 狭幅 PWA (iPhone 12 等) で長 title が縦折返しして header 高さが伸びる
+     問題を防ぐ。min-width: 0 で flex 子要素の縮小を解放 (= default min-width: auto は
+     content size でクランプされ縮まない) */
+  min-width: 0;
 }
 
 .chat-header-title {
   font-size: 16px;
   font-weight: bold;
+  /* 1 行 + 「...」省略 (= 折返し防止) */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-header-count {
@@ -71,6 +79,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* button は flex 内で縮まないよう固定 */
+  flex-shrink: 0;
+}
+
+/* #292 follow-up: iPhone 12 等の狭画面で title 領域を広げるため button + gap を縮小
+   (= 36px → 32px、gap 8px → 6px、6 button で +24px + gaps +14px = ~38px 余裕確保) */
+@media (max-width: 430px) {
+  .chat-header {
+    gap: 6px;
+    padding: 10px 8px;
+  }
+  .chat-header-btn {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 .chat-header-btn:hover {
