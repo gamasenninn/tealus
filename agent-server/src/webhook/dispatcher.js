@@ -5,6 +5,7 @@
 const logger = require('../lib/logger');
 const config = require('../config');
 const botApi = require('../lib/botApi');
+const inflightRooms = require('./inflightRooms');
 const { route } = require('../router/index');
 const { processLight } = require('../agents/light');
 const { processLightV2 } = require('../agents/lightV2');
@@ -124,8 +125,16 @@ function extractPrompt(content, agentName) {
 async function dispatch({ message, room, agentId, agentName }) {
   const roomId = room.id;
 
-  // ルームごとにシリアライズ（並行実行防止）
-  await enqueueForRoom(roomId, () => _dispatch({ message, room, agentId, agentName }));
+  // #292 SPIKE: cross-room delegation 有効時、in-flight tracking で
+  // 同 room 自送 echo を block し別 room delegation post を通すための判別 source
+  const spikeEnabled = process.env.ENABLE_CROSS_ROOM_DELEGATION === 'true';
+  if (spikeEnabled) inflightRooms.add(roomId);
+  try {
+    // ルームごとにシリアライズ（並行実行防止）
+    await enqueueForRoom(roomId, () => _dispatch({ message, room, agentId, agentName }));
+  } finally {
+    if (spikeEnabled) inflightRooms.release(roomId);
+  }
 }
 
 async function _dispatch({ message, room, agentId, agentName }) {

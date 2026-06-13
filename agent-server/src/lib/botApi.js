@@ -5,6 +5,26 @@
 const fetch = require('node-fetch');
 const config = require('../config');
 const logger = require('./logger');
+const botSendThrottle = require('./botSendThrottle');
+
+/**
+ * #292 SPIKE safety: bot 送信 throttle check 共通化。
+ * checkAndRecord で window count + soft trip + hard cap を一括判定。
+ * - hard cap 抵触 → throw (= caller 側で catch、send 自体 abort)
+ * - soft trip 初回 → warn log (= subsequent call は handler.js が runtime で旧挙動 fallback)
+ * @param {string} roomId - log context 用
+ * @param {string} kind - 'message' / 'image' / 'file' / 'tts-audio'
+ */
+function _throttleCheck(roomId, kind) {
+  const r = botSendThrottle.checkAndRecord();
+  if (!r.ok) {
+    logger.error(`[SPIKE safety] HARD CAP (${botSendThrottle.HARD_CAP}/${botSendThrottle.WINDOW_MS / 1000}s) exceeded — rejecting ${kind} send to ${roomId} (windowCount=${r.windowCount})`);
+    throw new Error(`Bot send hard cap exceeded (${r.windowCount}/${botSendThrottle.HARD_CAP} in ${botSendThrottle.WINDOW_MS / 1000}s)`);
+  }
+  if (r.justTripped) {
+    logger.warn(`[SPIKE safety] SOFT TRIP (${botSendThrottle.SPIKE_TRIP_THRESHOLD}/${botSendThrottle.WINDOW_MS / 1000}s reached) — cross-room delegation disabled at runtime, restart agent-server to reset (windowCount=${r.windowCount})`);
+  }
+}
 
 let token = null;
 let botUser = null;
@@ -61,6 +81,7 @@ async function request(method, path, body = null) {
  * ルームにメッセージ送信
  */
 async function pushMessage(roomId, content) {
+  _throttleCheck(roomId, 'message');
   const result = await request('POST', '/bot/push', { room_id: roomId, content });
 
   // TTS 読み上げ（fire-and-forget — メッセージ送信をブロックしない）
@@ -86,6 +107,7 @@ async function pushStatus(roomId, status, message = '') {
  * ルームに画像メッセージ送信
  */
 async function pushImage(roomId, buffer, filename, content = '') {
+  _throttleCheck(roomId, 'image');
   const { token: t } = await login();
   const FormData = require('form-data');
   const form = new FormData();
@@ -117,6 +139,7 @@ async function pushImage(roomId, buffer, filename, content = '') {
  * @param {string} content - optional 添付メッセージ text
  */
 async function pushFile(roomId, buffer, filename, mimeType, content = '') {
+  _throttleCheck(roomId, 'file');
   const { token: t } = await login();
   const FormData = require('form-data');
   const form = new FormData();

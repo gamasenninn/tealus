@@ -5,6 +5,8 @@
 const logger = require('../lib/logger');
 const { dispatch } = require('./dispatcher');
 const botApi = require('../lib/botApi');
+const inflightRooms = require('./inflightRooms');
+const botSendThrottle = require('../lib/botSendThrottle');
 const { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds } = require('./ccQueue');
 
 // #213 Phase A polish: 自己ループ防止用 sender skip set (env CC_SKIP_SENDER_IDS、CSV)
@@ -68,10 +70,22 @@ async function handleMessageCreated(payload) {
   }
 
   // 無限ループ防止: Botが送信したメッセージは無視
+  // #292 SPIKE (ENABLE_CROSS_ROOM_DELEGATION=true): in-flight tracking で
+  //   同 room 自送 echo は block、別 room delegation post は通す。
+  //   safety net: botSendThrottle.isSpikeTripped 時は runtime で旧挙動 fallback。
+  //   暴走時は env=false で旧挙動 / サーバー停止で kill。
   const senderId = message.sender?.id;
   if (senderId && botUserIds.has(senderId)) {
-    logger.debug(`Skipped bot message from ${senderId}`);
-    return;
+    const spikeOff = process.env.ENABLE_CROSS_ROOM_DELEGATION !== 'true' || botSendThrottle.isSpikeTripped();
+    if (spikeOff) {
+      logger.debug(`Skipped bot message from ${senderId}`);
+      return;
+    }
+    if (inflightRooms.isInflight(room.id)) {
+      logger.debug(`[SPIKE] Skipped same-room bot echo: ${senderId} in ${room.name || room.id}`);
+      return;
+    }
+    logger.info(`[SPIKE] cross-room delegation accepted: ${senderId} in ${room.name || room.id}`);
   }
 
   // #213 Phase A: cc-queue routing — `@cc-{project}` mention を file beacon に追記。
@@ -148,10 +162,19 @@ async function handleTranscriptionCompleted(payload) {
     return;
   }
 
+  // #292 SPIKE: bot transcription も message と同条件 (in-flight + spike trip 両判定)
   const senderId = message.sender?.id;
   if (senderId && botUserIds.has(senderId)) {
-    logger.debug(`Skipped bot transcription from ${senderId}`);
-    return;
+    const spikeOff = process.env.ENABLE_CROSS_ROOM_DELEGATION !== 'true' || botSendThrottle.isSpikeTripped();
+    if (spikeOff) {
+      logger.debug(`Skipped bot transcription from ${senderId}`);
+      return;
+    }
+    if (inflightRooms.isInflight(room.id)) {
+      logger.debug(`[SPIKE] Skipped same-room bot transcription echo: ${senderId} in ${room.id}`);
+      return;
+    }
+    logger.info(`[SPIKE] cross-room delegation transcription accepted: ${senderId} in ${room.id}`);
   }
 
   if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
