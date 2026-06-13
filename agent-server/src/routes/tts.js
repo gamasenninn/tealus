@@ -54,8 +54,10 @@ router.post('/synthesize', async (req, res) => {
   }
   // synthesize() itself falls back to env default when resolvedModel is null
 
-  // Markdown 除去・URL 変換・長文切り詰め（#155 の自動読み上げと同じ前処理）
-  const cleaned = preprocessText(text);
+  // Markdown 除去・URL 変換 (= #155 共通)。
+  // truncate: false (= 個人 button TTS は user 明示 click、全文読み上げが期待される、
+  // 6/13 14:56 業務メモ user voice 確定)
+  const cleaned = preprocessText(text, { truncate: false });
   if (!cleaned) {
     return res.status(400).json({ error: 'text is empty after preprocessing' });
   }

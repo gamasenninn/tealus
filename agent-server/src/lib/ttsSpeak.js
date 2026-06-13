@@ -32,7 +32,11 @@ const SSRC = 1111;
  *  - リスト記号 - / * / 数字. → 除去
  *  - 連続改行 → 1 つに
  */
-function preprocessText(content) {
+function preprocessText(content, opts = {}) {
+  // #292 follow-up (6/13 14:56 業務メモ user voice 「バブルボタンによる読上は全文読上でもいい」):
+  // truncate=true (= default、auto-read / 自動読み上げ用): 500 文字超は「以下省略。」付加
+  // truncate=false (= 個人 button 経由 routes/tts.js): 全文をそのまま synthesize
+  const { truncate = true } = opts;
   if (!content) return null;
 
   let text = content
@@ -62,7 +66,7 @@ function preprocessText(content) {
     .replace(/\n{2,}/g, "\n")
     .trim();
 
-  if (text.length > MAX_LENGTH) {
+  if (truncate && text.length > MAX_LENGTH) {
     text = text.substring(0, MAX_LENGTH) + "。以下省略。";
   }
 
