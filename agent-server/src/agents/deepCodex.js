@@ -231,6 +231,31 @@ function extractAgentMessageText(event) {
 }
 
 /**
+ * #292 follow-up (6/13 19:08 テスト（自動) dogfood で Deep Codex も LightV2 と同 pattern
+ * の duplicate 確認):
+ * LLM が send_message tool で自 room へ post した event か判定 → 真なら最終 auto-post
+ * を skip して 2 件返信を防止する flag を立てる。
+ *
+ * codex CLI JSON event は LightV2 codex SDK と同形式想定:
+ * `{ type: 'item.completed', item: { type: 'mcp_tool_call', tool: 'send_message',
+ *   status: 'completed', result: { content: [{ type: 'text', text: '{"message":{"room_id":...}}' }] }}}`
+ */
+function isToolCallSendMessageToOwnRoom(event, roomId) {
+  if (!event || event.type !== 'item.completed' || !event.item) return false;
+  if (event.item.type !== 'mcp_tool_call') return false;
+  if (event.item.tool !== 'send_message') return false;
+  if (event.item.status && event.item.status !== 'completed') return false;
+  try {
+    const text = event.item.result?.content?.[0]?.text;
+    if (!text) return false;
+    const parsed = JSON.parse(text);
+    return parsed?.message?.room_id === roomId;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 長いメッセージを分割 (= deep.js 同型)
  */
 function splitMessage(text, maxLength) {
@@ -286,6 +311,8 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
 
     const lineBuffer = new JsonlLineBuffer();
     let lastAgentMessage = null;
+    // #292 follow-up: LLM が自 room へ send_message tool で post した場合、最終 auto-post を skip (= 2 件返信防止)
+    let llmSentToOwnRoom = false;
     let stderr = '';
     let timedOut = false;
 
@@ -322,6 +349,11 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
             lastAgentMessage = text;
           }
         }
+        // #292 follow-up: 自 room send_message tool 検出 (= 2 件返信防止 flag)
+        if (!llmSentToOwnRoom && isToolCallSendMessageToOwnRoom(event, roomId)) {
+          llmSentToOwnRoom = true;
+          logger.info(`[DeepCodex] LLM sent_message to own room ${roomId} (= 2 件返信防止 flag、最終 auto-post skip)`);
+        }
       }
     });
 
@@ -340,6 +372,10 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
         if (isAgentMessageEvent(event)) {
           const text = extractAgentMessageText(event);
           if (text && text.trim()) lastAgentMessage = text;
+        }
+        if (!llmSentToOwnRoom && isToolCallSendMessageToOwnRoom(event, roomId)) {
+          llmSentToOwnRoom = true;
+          logger.info(`[DeepCodex] LLM sent_message to own room ${roomId} (= 2 件返信防止 flag、最終 auto-post skip)`);
         }
       }
 
@@ -378,16 +414,21 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
       }
 
       if (lastAgentMessage) {
-        const content = lastAgentMessage;
-        if (content.length > 4000) {
-          const chunks = splitMessage(content, 4000);
-          for (const chunk of chunks) {
-            await botApi.pushMessage(roomId, chunk);
-          }
+        if (llmSentToOwnRoom) {
+          // #292 follow-up: LLM が tool で自 room へ既に投函済の場合 auto-post を skip (= 2 件返信防止)
+          logger.info(`[DeepCodex] skip auto-post: LLM already sent_message to own room ${roomId} (final response ${lastAgentMessage.length} chars skipped)`);
         } else {
-          await botApi.pushMessage(roomId, content);
+          const content = lastAgentMessage;
+          if (content.length > 4000) {
+            const chunks = splitMessage(content, 4000);
+            for (const chunk of chunks) {
+              await botApi.pushMessage(roomId, chunk);
+            }
+          } else {
+            await botApi.pushMessage(roomId, content);
+          }
+          logger.info(`Deep Codex Agent response sent (${content.length} chars)`);
         }
-        logger.info(`Deep Codex Agent response sent (${content.length} chars)`);
       } else {
         logger.warn(`Deep Codex Agent close without agent_message (code ${code}), stderr: ${stderr.slice(0, 200)}`);
         await botApi.pushMessage(roomId, '応答が取得できませんでした。');
