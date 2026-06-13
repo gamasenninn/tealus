@@ -170,6 +170,10 @@ function mapToolToStatus(item) {
  */
 async function processLightV2({ roomId, prompt, workspacePath }) {
   let lastAgentMessage = null;
+  // #292 follow-up: LLM が同 room へ send_message tool を call した場合は、
+  // 最終 response auto-post を skip (= cross-room delegation の「2 件返信」防止、
+  // 6/13 12:40 業務メモ dogfood で観察)
+  let llmSentToOwnRoom = false;
   try {
     const Codex = await getCodex();
 
@@ -278,6 +282,23 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
                   : '(no result)';
                 logger.info(`[LightV2] mcp_tool_call OK: server=${server} tool=${tool} status=${status} result=${resultPreview}`);
               }
+              // #292 follow-up: LLM が send_message tool で自 room へ投函していたら、
+              // 最終 response auto-post の重複を skip するため flag を立てる
+              if (tool === 'send_message' && status === 'completed' && event.item.result) {
+                try {
+                  const text = event.item.result?.content?.[0]?.text;
+                  if (text) {
+                    const parsed = JSON.parse(text);
+                    const sentRoomId = parsed?.message?.room_id;
+                    if (sentRoomId === roomId) {
+                      llmSentToOwnRoom = true;
+                      logger.info(`[LightV2] LLM sent_message to own room ${roomId} (= 2 件返信防止 flag、最終 auto-post skip)`);
+                    }
+                  }
+                } catch (parseErr) {
+                  logger.debug(`[LightV2] send_message result parse skipped: ${parseErr.message}`);
+                }
+              }
               await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
             } else {
               const mapped = mapToolToStatus(event.item);
@@ -320,14 +341,19 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
 
     // 最終 response 送信
     if (lastAgentMessage) {
-      const content = lastAgentMessage;
-      if (content.length > 4000) {
-        const chunks = splitMessage(content, 4000);
-        for (const chunk of chunks) await botApi.pushMessage(roomId, chunk);
+      if (llmSentToOwnRoom) {
+        // #292 follow-up: LLM が tool で自 room へ既に投函済の場合 auto-post を skip (= 2 件返信防止)
+        logger.info(`[LightV2] skip auto-post: LLM already sent_message to own room ${roomId} (final response ${lastAgentMessage.length} chars skipped)`);
       } else {
-        await botApi.pushMessage(roomId, content);
+        const content = lastAgentMessage;
+        if (content.length > 4000) {
+          const chunks = splitMessage(content, 4000);
+          for (const chunk of chunks) await botApi.pushMessage(roomId, chunk);
+        } else {
+          await botApi.pushMessage(roomId, content);
+        }
+        logger.info(`Light v2 response sent to room ${roomId} (${content.length} chars)`);
       }
-      logger.info(`Light v2 response sent to room ${roomId} (${content.length} chars)`);
     } else {
       logger.warn(`[LightV2] no final agent message captured for room ${roomId}`);
       await botApi.pushMessage(roomId, '応答が取得できませんでした。再度お試しください。');
