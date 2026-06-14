@@ -122,6 +122,35 @@ function extractPrompt(content, agentName) {
 }
 
 /**
+ * Light/Light2 用 prompt 構築 (#295: 通常 dispatch と委譲 runAgent で共有)
+ */
+function buildLightPrompt(roomId, userPrompt, replyHint = '') {
+  return `現在のルーム ID: ${roomId}${replyHint}
+
+ユーザーの質問: ${userPrompt}`;
+}
+
+/**
+ * Deep 用 prompt 構築 (#295: 通常 dispatch と委譲 runAgent で共有)
+ */
+function buildDeepPrompt(roomId, userPrompt, replyHint = '') {
+  return `あなたは Tealus メッセンジャーの AI アシスタントです。
+Tealus MCP ツール（tealus サーバー）を使って情報を取得し、ユーザーの質問に回答してください。
+
+現在のルーム ID: ${roomId}${replyHint}
+まず get_messages ツールでこのルームの直近の会話を確認してから回答してください。
+
+議事録 / 業務記録 生成時は、後述する organon polyseme entries (= 業務語彙 + alias + mapping) を参照し、以下の方針で **必ず** 出力してください:
+
+1. **alias 訂正 (= 確信度高)**: 既知 entry の alias 完全一致は正規名に訂正 (例: 「マサ→山崎整備長」「ソートメ→五月女」「三平→三瓶」)。元音声を残す必要なし。
+2. **推測可能 alias (= 確信度中)**: organon entry に類似 alias / sub-family pattern (= 「マ」prefix / 漢字頭部置換 / 業務句 hallucination 等) があれば、本文に **[要確認: 推測正規名 か、音声上は「元音声」]** 形式で記載 (例: 「[要確認: 山崎整備長 か、音声上は「上山」]」「[要確認: 三瓶 か、音声上は「三平」]」)。
+3. **未登録 / 確信度低**: 本文に **[要確認: 音声上「元音声」]** marker のみ (= 推測なし)。
+4. **末尾 section 必須**: 本文に [要確認] が 1 つでもあれば、議事録末尾に **「## organon 記法 注意事項」** section を **必ず** 追加してください。各 [要確認] 項目の reasoning (= 該当 organon entry / alias family / sub-family pattern / 揺らぎ pattern / 推測根拠 等) を集約。[要確認] が 0 件なら section 省略 OK。
+
+ユーザーの質問: ${userPrompt}${loadOrganonPolysemeForPrompt()}`;
+}
+
+/**
  * メッセージをディスパッチ
  */
 async function dispatch({ message, room, agentId, agentName }) {
@@ -215,26 +244,43 @@ async function _dispatch({ message, room, agentId, agentName }) {
       const deps = {
         runAgent: async (targetRoomId, task) => {
           const tctx = await getOrCreateContext(agentId, targetRoomId);
+          // route() ベース backend 選択 (#295): 委譲先が「普段どおり」答える。
+          // task に /deep が付けば deep、無印なら light。
+          const r = await route(task);
+          const userPrompt = r.prompt || task;
+          const useDeepCodex = r.tier === 'deep' && config.DEEP_AGENT_PROVIDER === 'codex';
+          // Fix B (#295 dogfood): 委譲先 agent が自室へ回答投稿しないよう明示。
+          // suppressAutoPost は dispatcher auto-post のみ抑制し LLM 自身の send_message
+          // tool は止められないため (将来は委譲 run で send_message tool 自体を外す B2 が堅い)。
+          const noPostPrefix = '**重要**: あなたは別のルームからの委譲依頼に回答しています。回答は本文として述べるだけにし、send_message ツールでこのルームに投稿しないでください（投稿は委譲元が行います）。\n\n';
           let out = null;
           // Fix A (#295 dogfood): 委譲先を inflight に。委譲先 agent が自室へ send_message
-          // tool を呼んでも echo block され、委譲先での冗長な再 dispatch (2 回目起動) を防ぐ。
+          // tool を呼んでも echo block され、委譲先での冗長な再 dispatch を防ぐ。
           inflightRooms.add(targetRoomId);
           try {
             await enqueueForRoom(targetRoomId, async () => {
-              out = await processLightV2({
-                // Fix B (#295 dogfood): 委譲先 agent が自室へ回答を投稿しないよう明示。
-                // suppressAutoPost は dispatcher auto-post のみ抑制し、LLM 自身の
-                // send_message tool は止められないため、プロンプトで指示する
-                // (将来は委譲 run で send_message tool 自体を外す B2 がより堅い)。
-                roomId: targetRoomId,
-                prompt: `あなたは別のルームからの委譲依頼に回答しています。通常どおりツールで調査し、回答は本文として述べてください。\n**重要**: この回答を send_message ツールでこのルームに投稿しないでください。投稿は委譲元が行います。\n\n現在のルーム ID: ${targetRoomId}\n\nユーザーの質問: ${task}`,
-                workspacePath: tctx.workspace_path,
-                suppressAutoPost: true,
-              });
+              if (useDeepCodex) {
+                out = await processDeepCodex({
+                  roomId: targetRoomId,
+                  prompt: noPostPrefix + buildDeepPrompt(targetRoomId, userPrompt),
+                  workspacePath: tctx.workspace_path,
+                  agentId,
+                  sessionId: tctx.session_id,
+                  suppressAutoPost: true,
+                });
+              } else {
+                out = await processLightV2({
+                  roomId: targetRoomId,
+                  prompt: noPostPrefix + buildLightPrompt(targetRoomId, userPrompt),
+                  workspacePath: tctx.workspace_path,
+                  suppressAutoPost: true,
+                });
+              }
             });
           } finally {
             inflightRooms.release(targetRoomId);
           }
+          logger.info(`[delegator] runAgent target=${targetRoomId} tier=${useDeepCodex ? 'deep-codex' : 'light'}`);
           return out;
         },
         postToRoom: (rid, text) => botApi.pushMessage(rid, text),
@@ -282,9 +328,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
           : undefined;
         // Deep pattern を Light でも踏襲: room_id を user prompt に embed
         const userPrompt = result.prompt || prompt;
-        const lightPrompt = `現在のルーム ID: ${roomId}${buildReplyToHint(message)}
-
-ユーザーの質問: ${userPrompt}`;
+        const lightPrompt = buildLightPrompt(roomId, userPrompt, buildReplyToHint(message));
 
         await backend.processLight({
           roomId,
@@ -305,9 +349,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
       await updateStatus(agentId, roomId, 'processing');
       try {
         const userPrompt = result.prompt || prompt;
-        const lightPrompt = `現在のルーム ID: ${roomId}${buildReplyToHint(message)}
-
-ユーザーの質問: ${userPrompt}`;
+        const lightPrompt = buildLightPrompt(roomId, userPrompt, buildReplyToHint(message));
 
         await processLightV2({
           roomId,
@@ -327,20 +369,7 @@ async function _dispatch({ message, room, agentId, agentName }) {
       await updateStatus(agentId, roomId, 'processing');
       try {
         const userPrompt = result.prompt || prompt;
-        const deepPrompt = `あなたは Tealus メッセンジャーの AI アシスタントです。
-Tealus MCP ツール（tealus サーバー）を使って情報を取得し、ユーザーの質問に回答してください。
-
-現在のルーム ID: ${roomId}${buildReplyToHint(message)}
-まず get_messages ツールでこのルームの直近の会話を確認してから回答してください。
-
-議事録 / 業務記録 生成時は、後述する organon polyseme entries (= 業務語彙 + alias + mapping) を参照し、以下の方針で **必ず** 出力してください:
-
-1. **alias 訂正 (= 確信度高)**: 既知 entry の alias 完全一致は正規名に訂正 (例: 「マサ→山崎整備長」「ソートメ→五月女」「三平→三瓶」)。元音声を残す必要なし。
-2. **推測可能 alias (= 確信度中)**: organon entry に類似 alias / sub-family pattern (= 「マ」prefix / 漢字頭部置換 / 業務句 hallucination 等) があれば、本文に **[要確認: 推測正規名 か、音声上は「元音声」]** 形式で記載 (例: 「[要確認: 山崎整備長 か、音声上は「上山」]」「[要確認: 三瓶 か、音声上は「三平」]」)。
-3. **未登録 / 確信度低**: 本文に **[要確認: 音声上「元音声」]** marker のみ (= 推測なし)。
-4. **末尾 section 必須**: 本文に [要確認] が 1 つでもあれば、議事録末尾に **「## organon 記法 注意事項」** section を **必ず** 追加してください。各 [要確認] 項目の reasoning (= 該当 organon entry / alias family / sub-family pattern / 揺らぎ pattern / 推測根拠 等) を集約。[要確認] が 0 件なら section 省略 OK。
-
-ユーザーの質問: ${userPrompt}${loadOrganonPolysemeForPrompt()}`;
+        const deepPrompt = buildDeepPrompt(roomId, userPrompt, buildReplyToHint(message));
 
         if (config.DEEP_AGENT_PROVIDER === 'codex') {
           // MCP servers は deepCodex 内部で Light v2 同型 builder で構築 (= mcpServers 未指定)

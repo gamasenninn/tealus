@@ -271,8 +271,11 @@ function splitMessage(text, maxLength) {
 /**
  * Deep Codex Agent でメッセージを処理 (= deep.js processDeep の Codex 版 mirror)
  */
-async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessionId, mcpServers }) {
+async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessionId, mcpServers, suppressAutoPost = false }) {
   return new Promise((resolve) => {
+    // #295: 委譲 (runAgent) 経由は suppressAutoPost=true。自室へ投稿/エラー通知せず本文を
+    //       resolve で返し、デリゲーターが委譲元へ機械配送する (委譲先に残さない)。
+    const postTarget = (txt) => (suppressAutoPost ? Promise.resolve() : botApi.pushMessage(roomId, txt));
     // MCP servers: 明示指定なければ Light v2 同型 builder で構築 (= tealus + workspace-fs + room/global merge)
     const finalMcpServers = mcpServers || buildLightV2McpConfig(workspacePath);
 
@@ -320,7 +323,7 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
       timedOut = true;
       logger.warn(`Deep Codex Agent timeout (${config.DEEP_TIMEOUT}ms)`);
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
-      await botApi.pushMessage(roomId, `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`).catch(() => {});
+      await postTarget(`⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`).catch(() => {});
       try { proc.kill('SIGTERM'); } catch {}
       if (process.platform === 'win32' && proc.pid) {
         try { spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { shell: true }); } catch {}
@@ -403,18 +406,21 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
         const authResult = detectCodexAuthError(stderr);
         if (authResult.isAuth) {
           logger.error(`[DeepCodex] auth failed (${authResult.kind}): ${stderr.slice(0, 500)}`);
-          await botApi.pushMessage(roomId, buildAuthFailUserMessage());
-          resolve();
+          await postTarget(buildAuthFailUserMessage());
+          resolve(null);
           return;
         }
         logger.error(`Deep Codex Agent failed (code ${code}): ${stderr.slice(0, 200)}`);
-        await botApi.pushMessage(roomId, `❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`);
-        resolve();
+        await postTarget(`❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`);
+        resolve(null);
         return;
       }
 
       if (lastAgentMessage) {
-        if (llmSentToOwnRoom) {
+        // #295: 委譲経由は自室投稿せず本文を return (デリゲーターが委譲元へ配送)
+        if (suppressAutoPost) {
+          logger.info(`[DeepCodex] suppressAutoPost: return ${lastAgentMessage.length} chars without posting to room ${roomId} (delegation)`);
+        } else if (llmSentToOwnRoom) {
           // #292 follow-up: LLM が tool で自 room へ既に投函済の場合 auto-post を skip (= 2 件返信防止)
           logger.info(`[DeepCodex] skip auto-post: LLM already sent_message to own room ${roomId} (final response ${lastAgentMessage.length} chars skipped)`);
         } else {
@@ -431,9 +437,9 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
         }
       } else {
         logger.warn(`Deep Codex Agent close without agent_message (code ${code}), stderr: ${stderr.slice(0, 200)}`);
-        await botApi.pushMessage(roomId, '応答が取得できませんでした。');
+        await postTarget('応答が取得できませんでした。');
       }
-      resolve();
+      resolve(lastAgentMessage || null);
     });
 
     proc.on('error', async (err) => {
@@ -444,13 +450,13 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
       const authResult = detectCodexAuthError(err.message);
       if (authResult.isAuth) {
         logger.error(`[DeepCodex] spawn auth failed (${authResult.kind}): ${err.message}`);
-        await botApi.pushMessage(roomId, buildAuthFailUserMessage());
-        resolve();
+        await postTarget(buildAuthFailUserMessage());
+        resolve(null);
         return;
       }
       logger.error(`Deep Codex Agent spawn error: ${err.message}`);
-      await botApi.pushMessage(roomId, `❌ Deep Codex Agent の起動に失敗しました: ${err.message}`);
-      resolve();
+      await postTarget(`❌ Deep Codex Agent の起動に失敗しました: ${err.message}`);
+      resolve(null);
     });
   });
 }
