@@ -7,6 +7,8 @@ const config = require('../config');
 const botApi = require('../lib/botApi');
 const inflightRooms = require('./inflightRooms');
 const { route } = require('../router/index');
+const { parseDelegation } = require('./delegationParser');
+const { handleDelegation, parseErrorMessage } = require('./delegator');
 const { processLight } = require('../agents/light');
 const { processLightV2 } = require('../agents/lightV2');
 const { processDeep } = require('../agents/deep');
@@ -189,6 +191,47 @@ async function _dispatch({ message, room, agentId, agentName }) {
       return;
     }
     prompt = extractPrompt(prompt, agentName);
+  }
+
+  // #295: `%<room> <task>` 委譲検出 (mention 処理後・route 前)。
+  // ENABLE_CROSS_ROOM_DELEGATION フラグ配下、先頭 `%` のメッセージのみ getRooms を引く。
+  const delegationEnabled = process.env.ENABLE_CROSS_ROOM_DELEGATION === 'true';
+  if (delegationEnabled && prompt.trimStart().startsWith('%')) {
+    let rooms = [];
+    try {
+      const roomData = await botApi.getRooms();
+      rooms = roomData.rooms || [];
+    } catch (err) {
+      logger.warn(`[delegator] getRooms failed, skip delegation: ${err.message}`);
+    }
+    const parsed = parseDelegation(prompt, rooms);
+    if (parsed) {
+      // 先頭 `%` = 委譲試行。route() へは流さない。
+      if (!parsed.ok) {
+        logger.info(`[delegator] parse failed: reason=${parsed.reason} input="${(parsed.input || '').slice(0, 40)}" room ${roomId}`);
+        await botApi.pushMessage(roomId, parseErrorMessage(parsed.reason));
+        return;
+      }
+      const deps = {
+        runAgent: async (targetRoomId, task) => {
+          const tctx = await getOrCreateContext(agentId, targetRoomId);
+          let out = null;
+          await enqueueForRoom(targetRoomId, async () => {
+            out = await processLightV2({
+              roomId: targetRoomId,
+              prompt: `現在のルーム ID: ${targetRoomId}\n\nユーザーの質問: ${task}`,
+              workspacePath: tctx.workspace_path,
+              suppressAutoPost: true,
+            });
+          });
+          return out;
+        },
+        postToRoom: (rid, text) => botApi.pushMessage(rid, text),
+      };
+      logger.info(`[delegator] % delegation: origin=${roomId} target=${parsed.room.name} task="${parsed.task.slice(0, 40)}"`);
+      await handleDelegation({ originRoomId: roomId, targetRoom: parsed.room, task: parsed.task }, deps);
+      return;
+    }
   }
 
   // Router で振り分け

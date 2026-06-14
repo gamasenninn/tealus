@@ -30,6 +30,17 @@ function blockMessage(reason) {
   return `⚠️ ${BLOCK_MESSAGE[reason] || '委譲できませんでした。'}`;
 }
 
+// parseDelegation の {ok:false} (構文解決失敗) を委譲元へ返す日本語通知 (#295)
+const PARSE_ERROR_MESSAGE = {
+  room_not_found: '指定したルームが見つかりませんでした。ルーム名を確認してください。',
+  empty_task: '委譲する内容が空です。`%ルーム名 依頼内容` の形式で指定してください。',
+  ambiguous: '同名のルームが複数あり特定できませんでした。',
+};
+
+function parseErrorMessage(reason) {
+  return `⚠️ ${PARSE_ERROR_MESSAGE[reason] || '委譲先を解決できませんでした。'}`;
+}
+
 /**
  * 委譲 1 件を実行する。
  * @param {{originRoomId:string, targetRoom:{id:string,name:string}, task:string}} param
@@ -70,4 +81,4 @@ async function handleDelegation({ originRoomId, targetRoom, task }, deps) {
   return { ok: true, text };
 }
 
-module.exports = { handleDelegation, blockMessage };
+module.exports = { handleDelegation, blockMessage, parseErrorMessage };

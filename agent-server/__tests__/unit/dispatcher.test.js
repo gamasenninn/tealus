@@ -71,6 +71,12 @@ jest.mock('../../src/lib/logger', () => ({
   error: jest.fn(),
 }));
 
+// #295: delegator は handleDelegation を spy 化、parseErrorMessage は実物を使う (通知文の照合用)
+jest.mock('../../src/webhook/delegator', () => {
+  const actual = jest.requireActual('../../src/webhook/delegator');
+  return { ...actual, handleDelegation: jest.fn() };
+});
+
 const { isMentioned, dispatch } = require('../../src/webhook/dispatcher');
 const { route } = require('../../src/router/index');
 const { processLight } = require('../../src/agents/light');
@@ -403,6 +409,93 @@ describe('Dispatcher', () => {
       expect(prompt).toMatch(/get_messages/);
       // 「対象 message ここまで」は出ない (content embed mode ではない)
       expect(prompt).not.toMatch(/対象 message ここまで/);
+    });
+  });
+
+  // #295: `%` 委譲検出の dispatcher 結線
+  describe('% delegation 結線 (#295)', () => {
+    const { handleDelegation } = require('../../src/webhook/delegator');
+    const ORIG_FLAG = process.env.ENABLE_CROSS_ROOM_DELEGATION;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      process.env.ENABLE_CROSS_ROOM_DELEGATION = 'true';
+      botApi.getRooms.mockResolvedValue({
+        rooms: [
+          { id: 'r-db', name: '社内DB検索' },
+          { id: 'r-sales', name: '営業' },
+        ],
+      });
+      const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
+      loadLightBackend.mockReturnValue({ name: 'v2', processLight });
+    });
+
+    afterEach(() => {
+      if (ORIG_FLAG === undefined) delete process.env.ENABLE_CROSS_ROOM_DELEGATION;
+      else process.env.ENABLE_CROSS_ROOM_DELEGATION = ORIG_FLAG;
+    });
+
+    test('(a) @mention + %room task → handleDelegation 呼出、route は呼ばない', async () => {
+      handleDelegation.mockResolvedValueOnce({ ok: true, text: 'x' });
+
+      await dispatch({
+        message: { id: 'm1', content: '@アシスタント %社内DB検索 集計して', sender: { id: 'u1' } },
+        room: { id: 'room1', name: 'テスト', member_count: 5 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(handleDelegation).toHaveBeenCalledTimes(1);
+      const arg = handleDelegation.mock.calls[0][0];
+      expect(arg.originRoomId).toBe('room1');
+      expect(arg.targetRoom).toEqual({ id: 'r-db', name: '社内DB検索' });
+      expect(arg.task).toBe('集計して');
+      expect(route).not.toHaveBeenCalled();
+    });
+
+    test('(b) %未登録室 → 委譲元へエラー通知、handleDelegation/route 呼ばない', async () => {
+      await dispatch({
+        message: { id: 'm2', content: '%存在しない室 なにか', sender: { id: 'u1' } },
+        room: { id: 'room1', name: null, member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(handleDelegation).not.toHaveBeenCalled();
+      expect(route).not.toHaveBeenCalled();
+      expect(botApi.pushMessage).toHaveBeenCalledTimes(1);
+      const [rid, text] = botApi.pushMessage.mock.calls[0];
+      expect(rid).toBe('room1');
+      expect(text).toMatch(/見つかりませんでした/);
+    });
+
+    test('(c) フラグ off では %room でも従来どおり route に流れる', async () => {
+      process.env.ENABLE_CROSS_ROOM_DELEGATION = 'false';
+      route.mockResolvedValueOnce({ tier: 'light', prompt: '%社内DB検索 集計して' });
+
+      await dispatch({
+        message: { id: 'm3', content: '%社内DB検索 集計して', sender: { id: 'u1' } },
+        room: { id: 'room1', name: null, member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(handleDelegation).not.toHaveBeenCalled();
+      expect(route).toHaveBeenCalled();
+    });
+
+    test('(d) 先頭 % でない通常文は route 呼出 (回帰防止)', async () => {
+      route.mockResolvedValueOnce({ tier: 'light', prompt: '集計して' });
+
+      await dispatch({
+        message: { id: 'm4', content: '集計して', sender: { id: 'u1' } },
+        room: { id: 'room1', name: null, member_count: 2 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(handleDelegation).not.toHaveBeenCalled();
+      expect(route).toHaveBeenCalled();
     });
   });
 

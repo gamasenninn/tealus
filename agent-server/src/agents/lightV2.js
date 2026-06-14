@@ -168,7 +168,7 @@ function mapToolToStatus(item) {
 /**
  * Light v2 でメッセージを処理
  */
-async function processLightV2({ roomId, prompt, workspacePath }) {
+async function processLightV2({ roomId, prompt, workspacePath, suppressAutoPost = false }) {
   let lastAgentMessage = null;
   // #292 follow-up: LLM が同 room へ send_message tool を call した場合は、
   // 最終 response auto-post を skip (= cross-room delegation の「2 件返信」防止、
@@ -319,7 +319,7 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
               logger.error(`[LightV2] auth failed (${authResult.kind}): ${event.message}`);
               await botApi.pushMessage(roomId, buildAuthFailUserMessage()).catch(() => {});
               await botApi.pushStatus(roomId, 'idle').catch(() => {});
-              return;
+              return null;
             }
             logger.error(`[LightV2] stream error: ${event.message}`);
           }
@@ -341,7 +341,11 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
 
     // 最終 response 送信
     if (lastAgentMessage) {
-      if (llmSentToOwnRoom) {
+      // #295: 委譲 (runAgent) からの呼出は suppressAutoPost=true。自室投稿せず本文を return し、
+      //       デリゲーターが委譲元へ機械配送する (委譲先には残さない)。
+      if (suppressAutoPost) {
+        logger.info(`[LightV2] suppressAutoPost: return ${lastAgentMessage.length} chars without posting to room ${roomId} (delegation)`);
+      } else if (llmSentToOwnRoom) {
         // #292 follow-up: LLM が tool で自 room へ既に投函済の場合 auto-post を skip (= 2 件返信防止)
         logger.info(`[LightV2] skip auto-post: LLM already sent_message to own room ${roomId} (final response ${lastAgentMessage.length} chars skipped)`);
       } else {
@@ -356,9 +360,12 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
       }
     } else {
       logger.warn(`[LightV2] no final agent message captured for room ${roomId}`);
-      await botApi.pushMessage(roomId, '応答が取得できませんでした。再度お試しください。');
+      if (!suppressAutoPost) {
+        await botApi.pushMessage(roomId, '応答が取得できませんでした。再度お試しください。');
+      }
     }
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
+    return lastAgentMessage || null;
   } catch (err) {
     // pre-α (#292 follow-up): 外側 catch でも auth 切れを検出
     const authResult = detectCodexAuthError(err.message);
@@ -370,15 +377,21 @@ async function processLightV2({ roomId, prompt, workspacePath }) {
       } catch (pushErr) {
         logger.error(`Failed to send auth error message: ${pushErr.message}`);
       }
-      return;
+      return null;
     }
     logger.error(`Light v2 Agent error: ${err.message}`);
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
+    // #295: 委譲経由 (suppressAutoPost) の時はエラー文を委譲先に残さない。デリゲーターが
+    //       runAgent の throw として捕捉し委譲元へ通知する。throw して呼出元に伝える。
+    if (suppressAutoPost) {
+      throw err;
+    }
     try {
       await botApi.pushMessage(roomId, `Light v2 でエラーが発生しました: ${err.message}`);
     } catch (pushErr) {
       logger.error(`Failed to send error message: ${pushErr.message}`);
     }
+    return null;
   }
 }
 
