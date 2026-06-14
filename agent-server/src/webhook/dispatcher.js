@@ -286,7 +286,14 @@ async function _dispatch({ message, room, agentId, agentName }) {
         postToRoom: (rid, text) => botApi.pushMessage(rid, text),
       };
       logger.info(`[delegator] % delegation: origin=${roomId} target=${parsed.room.name} task="${parsed.task.slice(0, 40)}"`);
-      await handleDelegation({ originRoomId: roomId, targetRoom: parsed.room, task: parsed.task }, deps);
+      // 依頼元へ「問い合わせ中」ステータスを出す (#295 dogfood: 委譲中は委譲先にしか status が
+      // 出ず依頼元が無音 = deep の数分待ちが「壊れて見える」問題の解消)。relay 完了後 idle で clear。
+      await botApi.pushStatus(roomId, 'processing', `${parsed.room.name} に問い合わせ中...`).catch(() => {});
+      try {
+        await handleDelegation({ originRoomId: roomId, targetRoom: parsed.room, task: parsed.task }, deps);
+      } finally {
+        await botApi.pushStatus(roomId, 'idle').catch(() => {});
+      }
       return;
     }
   }

@@ -7,6 +7,7 @@ jest.mock('../../src/lib/botApi', () => ({
   getMessages: jest.fn(),
   pushMessage: jest.fn(),
   getRooms: jest.fn(),
+  pushStatus: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../src/router/index', () => ({
@@ -451,6 +452,9 @@ describe('Dispatcher', () => {
       expect(arg.targetRoom).toEqual({ id: 'r-db', name: '社内DB検索' });
       expect(arg.task).toBe('集計して');
       expect(route).not.toHaveBeenCalled();
+      // 依頼元へ「問い合わせ中」ステータス → idle で clear (#295 dogfood UX fix)
+      expect(botApi.pushStatus).toHaveBeenCalledWith('room1', 'processing', expect.stringContaining('社内DB検索'));
+      expect(botApi.pushStatus).toHaveBeenCalledWith('room1', 'idle');
     });
 
     test('(b) %未登録室 → 委譲元へエラー通知、handleDelegation/route 呼ばない', async () => {
