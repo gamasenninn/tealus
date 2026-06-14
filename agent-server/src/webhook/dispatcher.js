@@ -216,14 +216,25 @@ async function _dispatch({ message, room, agentId, agentName }) {
         runAgent: async (targetRoomId, task) => {
           const tctx = await getOrCreateContext(agentId, targetRoomId);
           let out = null;
-          await enqueueForRoom(targetRoomId, async () => {
-            out = await processLightV2({
-              roomId: targetRoomId,
-              prompt: `現在のルーム ID: ${targetRoomId}\n\nユーザーの質問: ${task}`,
-              workspacePath: tctx.workspace_path,
-              suppressAutoPost: true,
+          // Fix A (#295 dogfood): 委譲先を inflight に。委譲先 agent が自室へ send_message
+          // tool を呼んでも echo block され、委譲先での冗長な再 dispatch (2 回目起動) を防ぐ。
+          inflightRooms.add(targetRoomId);
+          try {
+            await enqueueForRoom(targetRoomId, async () => {
+              out = await processLightV2({
+                // Fix B (#295 dogfood): 委譲先 agent が自室へ回答を投稿しないよう明示。
+                // suppressAutoPost は dispatcher auto-post のみ抑制し、LLM 自身の
+                // send_message tool は止められないため、プロンプトで指示する
+                // (将来は委譲 run で send_message tool 自体を外す B2 がより堅い)。
+                roomId: targetRoomId,
+                prompt: `あなたは別のルームからの委譲依頼に回答しています。通常どおりツールで調査し、回答は本文として述べてください。\n**重要**: この回答を send_message ツールでこのルームに投稿しないでください。投稿は委譲元が行います。\n\n現在のルーム ID: ${targetRoomId}\n\nユーザーの質問: ${task}`,
+                workspacePath: tctx.workspace_path,
+                suppressAutoPost: true,
+              });
             });
-          });
+          } finally {
+            inflightRooms.release(targetRoomId);
+          }
           return out;
         },
         postToRoom: (rid, text) => botApi.pushMessage(rid, text),
