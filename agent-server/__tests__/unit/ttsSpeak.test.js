@@ -143,3 +143,26 @@ describe('ttsSpeak speakMessage', () => {
     expect(mockPushTtsSpeak).not.toHaveBeenCalled();
   });
 });
+
+describe('preprocessText hard cap (Aivis 3000 文字上限)', () => {
+  const { preprocessText } = require('../../src/lib/ttsSpeak');
+
+  test('truncate=true: 500 文字超は「以下省略」で短縮 (既存挙動)', () => {
+    const out = preprocessText('あ'.repeat(800), { truncate: true });
+    expect(out.length).toBeLessThanOrEqual(520);
+    expect(out.endsWith('以下省略。')).toBe(true);
+  });
+
+  test('truncate=false でも API 上限 (3000) は必ず enforce (422 防止)', () => {
+    const out = preprocessText('あ'.repeat(5000), { truncate: false });
+    expect(out.length).toBeLessThanOrEqual(3000);
+    expect(out.endsWith('以下省略。')).toBe(true);
+  });
+
+  test('truncate=false で 3000 字以内ならそのまま全文 (短縮しない)', () => {
+    const body = 'これはテストです。'.repeat(100); // 900 文字程度
+    const out = preprocessText(body, { truncate: false });
+    expect(out.endsWith('以下省略。')).toBe(false);
+    expect(out.length).toBeLessThanOrEqual(3000);
+  });
+});

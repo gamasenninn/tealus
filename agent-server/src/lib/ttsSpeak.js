@@ -15,6 +15,9 @@ const MODEL_UUID = process.env.AIVIS_MODEL_UUID || "f5017410-fbb5-49e1-97cb-e785
 const RTC_PORT = process.env.RTC_PORT || 3100;
 const TTS_ENABLED = process.env.TTS_ENABLED !== "false"; // デフォルト ON
 const MAX_LENGTH = parseInt(process.env.TTS_MAX_LENGTH || "500", 10);
+// Aivis Cloud TTS API の文字数上限 (超過すると 422 string_too_long で合成失敗)。
+// truncate 設定に関わらず常に enforce する hard cap。
+const HARD_LIMIT = parseInt(process.env.TTS_HARD_LIMIT || "3000", 10);
 const SSRC = 1111;
 
 /**
@@ -68,6 +71,13 @@ function preprocessText(content, opts = {}) {
 
   if (truncate && text.length > MAX_LENGTH) {
     text = text.substring(0, MAX_LENGTH) + "。以下省略。";
+  }
+
+  // Aivis TTS API の硬い上限 (3000 文字) は truncate 設定に関わらず常に enforce。
+  // これを超えると 422 string_too_long で全失敗するため (= 終礼など長文議事録の
+  // ボタン読み上げ failure の根治、#286/#292 follow-up)。少し余裕を見て cap。
+  if (text.length > HARD_LIMIT) {
+    text = text.substring(0, HARD_LIMIT - 20) + "。以下省略。";
   }
 
   return text || null;
