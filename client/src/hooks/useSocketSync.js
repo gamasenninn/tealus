@@ -20,6 +20,12 @@ export function useSocketSync(roomId, targetMsgId = null) {
   const [agentStatus, setAgentStatus] = useState(null);
 
   useEffect(() => {
+    // room 切替時に前ルームの stale な状態をリセット (考え中/入力中が残り続ける bug 防止)。
+    // socket は全所属 room に join しているため、別ルーム宛ての idle を取りこぼすと
+    // agentStatus/typingUsers が消えないまま room 切替後も表示され続ける問題があった。
+    setAgentStatus(null);
+    setTypingUsers({});
+
     selectRoom(roomId);
     fetchMessages(roomId, targetMsgId || null);
 
@@ -42,6 +48,8 @@ export function useSocketSync(roomId, targetMsgId = null) {
     const handleMessageNew = (msg) => {
       if (msg.room_id !== roomId) return; // 自分のルームのメッセージのみ処理
       addMessage(msg);
+      // 考え中だった agent 自身の返信が届いたら「考え中」を解除 (idle 取りこぼしの保険、agent_id 一致のみ)
+      setAgentStatus(prev => (prev && prev.agent_id === msg.sender_id ? null : prev));
       if (msg.sender_id !== user.id) {
         api.markRead(roomId, [msg.id]).catch(() => {});
         socket.emit('message:read', { room_id: roomId, message_ids: [msg.id] });
