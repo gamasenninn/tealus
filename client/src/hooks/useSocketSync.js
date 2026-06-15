@@ -95,11 +95,13 @@ export function useSocketSync(roomId, targetMsgId = null) {
     };
 
     const handleTypingStart = (data) => {
+      if (data.room_id && data.room_id !== roomId) return; // 他ルームの入力中は表示しない (socket は全所属 room に join しているため)
       if (data.user_id === user.id) return;
       setTypingUsers(prev => ({ ...prev, [data.user_id]: data.display_name }));
     };
 
     const handleTypingStop = (data) => {
+      if (data.room_id && data.room_id !== roomId) return;
       if (data.user_id === user.id) return;
       setTypingUsers(prev => {
         const next = { ...prev };
