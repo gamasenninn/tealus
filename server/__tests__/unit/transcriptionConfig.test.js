@@ -56,6 +56,39 @@ describe('loadGuideline', () => {
     expect(config.guidelines).toEqual([]);
   });
 
+  // #286 follow-up: ファイル更新を mtime で自動検知し reload (admin token / endpoint 不要に)
+  test('auto-reloads when file mtime changes (no resetCache / endpoint needed)', () => {
+    fs.writeFileSync(tmpFile, JSON.stringify({ version: 1, vocabulary: [{ term: 'A' }], guidelines: [] }));
+    expect(configModule.loadGuideline().vocabulary).toHaveLength(1);
+
+    // ファイル更新 + mtime を確実に進める (FS の mtime 解像度に依存しないよう明示)
+    fs.writeFileSync(tmpFile, JSON.stringify({ version: 2, vocabulary: [{ term: 'A' }, { term: 'B' }], guidelines: ['r'] }));
+    const future = new Date(Date.now() + 5000);
+    fs.utimesSync(tmpFile, future, future);
+
+    const reloaded = configModule.loadGuideline();
+    expect(reloaded.vocabulary).toHaveLength(2);
+    expect(reloaded.version).toBe(2);
+  });
+
+  test('does not re-read file when mtime unchanged (caching retained)', () => {
+    fs.writeFileSync(tmpFile, JSON.stringify({ version: 1, vocabulary: [], guidelines: [] }));
+    const spy = jest.spyOn(fs, 'readFileSync');
+    configModule.loadGuideline();
+    configModule.loadGuideline();
+    const guidelineReads = spy.mock.calls.filter((c) => String(c[0]) === tmpFile);
+    expect(guidelineReads.length).toBe(1);
+    spy.mockRestore();
+  });
+
+  test('picks up a file that appears after first (missing) load', () => {
+    // 最初はファイル無し → EMPTY
+    expect(configModule.loadGuideline().vocabulary).toEqual([]);
+    // 後からファイル出現 → 次の load で反映
+    fs.writeFileSync(tmpFile, JSON.stringify({ version: 1, vocabulary: [{ term: 'X' }], guidelines: [] }));
+    expect(configModule.loadGuideline().vocabulary).toHaveLength(1);
+  });
+
   test('coerces non-array vocabulary/guidelines to empty arrays', () => {
     fs.writeFileSync(tmpFile, JSON.stringify({
       vocabulary: 'not-an-array',

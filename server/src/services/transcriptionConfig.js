@@ -8,14 +8,21 @@ const CONFIG_PATH = process.env.TRANSCRIPTION_GUIDELINE_PATH
 const EMPTY = { version: 1, whisper_context: '', vocabulary: [], guidelines: [] };
 
 let cached = null;
+// #286 follow-up: ファイル mtime を保持し、変化時のみ再読込 (= admin token / reload endpoint
+// なしでファイル更新を自動反映。7 日ごとの JWT 失効 + curl 不可の運用摩擦を構造的に解消)。
+let cachedMtimeMs = null;
 
 function loadGuideline() {
-  if (cached) return cached;
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       cached = EMPTY;
+      cachedMtimeMs = null;
       return cached;
     }
+    const mtimeMs = fs.statSync(CONFIG_PATH).mtimeMs;
+    // cache 済 かつ mtime 不変 → そのまま返す (1 文字起こしあたり statSync 1 回のみ)
+    if (cached && cachedMtimeMs === mtimeMs) return cached;
+
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
     const parsed = JSON.parse(raw);
     cached = {
@@ -24,17 +31,20 @@ function loadGuideline() {
       vocabulary: Array.isArray(parsed.vocabulary) ? parsed.vocabulary : [],
       guidelines: Array.isArray(parsed.guidelines) ? parsed.guidelines : [],
     };
+    cachedMtimeMs = mtimeMs;
     logger.info(`Loaded transcription guideline: ${cached.vocabulary.length} vocab, ${cached.guidelines.length} rules`);
     return cached;
   } catch (err) {
     logger.error('Failed to load transcription guideline, using empty:', err.message);
     cached = EMPTY;
+    cachedMtimeMs = null;
     return cached;
   }
 }
 
 function resetCache() {
   cached = null;
+  cachedMtimeMs = null;
 }
 
 function buildWhisperPrompt(config, model = null) {
