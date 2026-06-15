@@ -1297,4 +1297,40 @@ router.post('/rooms/:id/join', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/bot/rooms/:id/membership?user_id=<X>
+ * 指定 user が room のメンバーか返す (#282: 委譲の権限チェック用)。
+ * least privilege: bot 自身がメンバーのルームのみ照会可 (= 非メンバールームは 403)。
+ */
+router.get('/rooms/:id/membership', async (req, res) => {
+  const roomId = req.params.id;
+  const botUserId = req.user.id;
+  const targetUserId = req.query.user_id;
+
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'user_id は必須です' });
+  }
+
+  try {
+    // bot 自身が当該ルームのメンバーか (least privilege)
+    const botMember = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [roomId, botUserId]
+    );
+    if (botMember.rows.length === 0) {
+      return res.status(403).json({ error: E.ROOM_ACCESS_DENIED });
+    }
+
+    // 対象 user の在籍確認
+    const target = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [roomId, targetUserId]
+    );
+    res.json({ is_member: target.rows.length > 0 });
+  } catch (err) {
+    logger.error('Bot membership check error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 module.exports = router;

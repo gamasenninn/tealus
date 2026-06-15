@@ -961,6 +961,55 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/rooms/:id/membership (#282: 委譲の権限チェック)
+  // ============================================
+  describe('GET /api/bot/rooms/:id/membership', () => {
+    it('should return is_member:true for a member of the room', async () => {
+      const res = await request(app)
+        .get(`/api/bot/rooms/${roomId}/membership`)
+        .query({ user_id: user1.user.id })
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.is_member).toBe(true);
+    });
+
+    it('should return is_member:false for a non-member', async () => {
+      const user2 = await createTestUser({ login_id: 'EMP010', display_name: '非メンバー' });
+      const res = await request(app)
+        .get(`/api/bot/rooms/${roomId}/membership`)
+        .query({ user_id: user2.user.id })
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.is_member).toBe(false);
+    });
+
+    it('should 400 without user_id', async () => {
+      const res = await request(app)
+        .get(`/api/bot/rooms/${roomId}/membership`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should 403 when bot is not a member of the room (least privilege)', async () => {
+      const user2 = await createTestUser({ login_id: 'EMP011', display_name: '佐藤' });
+      const botlessRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'bot不在ルーム', member_ids: [user2.user.id] });
+
+      const res = await request(app)
+        .get(`/api/bot/rooms/${botlessRes.body.room.id}/membership`)
+        .query({ user_id: user1.user.id })
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages/:id/edit-history
   // (= 5/24 user 提案、organon daily cycle で edit history 観察用、別 mining script の代替)
   // ============================================
