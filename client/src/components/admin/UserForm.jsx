@@ -49,7 +49,7 @@ function UserForm({ user, onSubmit, onCancel }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="user-form">
+    <form onSubmit={handleSubmit} className="user-form" autoComplete="off">
       <h2>{isEdit ? 'ユーザー編集' : 'ユーザー追加'}</h2>
 
       {error && <div className="form-error">{error}</div>}
@@ -63,6 +63,7 @@ function UserForm({ user, onSubmit, onCancel }) {
           disabled={isEdit}
           required={!isEdit}
           placeholder="例: EMP001"
+          autoComplete="off"
         />
       </div>
 
@@ -86,6 +87,7 @@ function UserForm({ user, onSubmit, onCancel }) {
           onChange={handleChange}
           required={!isEdit}
           placeholder={isEdit ? '未入力なら変更なし' : 'パスワード'}
+          autoComplete="new-password"
         />
       </div>
 
