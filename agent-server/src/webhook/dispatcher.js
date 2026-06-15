@@ -7,8 +7,8 @@ const config = require('../config');
 const botApi = require('../lib/botApi');
 const inflightRooms = require('./inflightRooms');
 const { route } = require('../router/index');
-const { parseDelegation } = require('./delegationParser');
-const { handleDelegation, parseErrorMessage } = require('./delegator');
+const { parseMultiDelegation } = require('./delegationParser');
+const { handleDelegation, handleMultiDelegation, parseErrorMessage } = require('./delegator');
 const { processLight } = require('../agents/light');
 const { processLightV2 } = require('../agents/lightV2');
 const { processDeep } = require('../agents/deep');
@@ -233,81 +233,91 @@ async function _dispatch({ message, room, agentId, agentName }) {
     } catch (err) {
       logger.warn(`[delegator] getRooms failed, skip delegation: ${err.message}`);
     }
-    const parsed = parseDelegation(prompt, rooms);
+    const parsed = parseMultiDelegation(prompt, rooms);
     if (parsed) {
       // 先頭 `%` = 委譲試行。route() へは流さない。
       if (!parsed.ok) {
-        logger.info(`[delegator] parse failed: reason=${parsed.reason} input="${(parsed.input || '').slice(0, 40)}" room ${roomId}`);
-        await botApi.pushMessage(roomId, parseErrorMessage(parsed.reason));
+        logger.info(`[delegator] parse failed: reason=${parsed.reason} room ${roomId}`);
+        await botApi.pushMessage(roomId, parseErrorMessage(parsed.reason)).catch(() => {});
         return;
       }
-      // #282 権限チェック: 委譲先ルームのメンバーである人のみ委譲できる (= 6/15 user voice)。
-      // 既定 ON、DELEGATION_REQUIRE_MEMBERSHIP=false で実験的に無効化可。fail-closed。
-      if (process.env.DELEGATION_REQUIRE_MEMBERSHIP !== 'false') {
-        const senderId = message.sender?.id;
+
+      // #282 権限チェック: 委譲先ルームのメンバーのみ。target ごとに判定 (fail-closed)。
+      const senderId = message.sender?.id;
+      const requireMembership = process.env.DELEGATION_REQUIRE_MEMBERSHIP !== 'false';
+      const permitted = [];
+      const skipped = [];
+      for (const t of parsed.targets) {
+        if (!requireMembership) { permitted.push(t); continue; }
         let allowed = false;
         try {
-          allowed = senderId ? await botApi.isRoomMember(parsed.room.id, senderId) : false;
+          allowed = senderId ? await botApi.isRoomMember(t.id, senderId) : false;
         } catch (err) {
-          logger.warn(`[delegator] membership check failed (fail-closed): ${err.message}`);
+          logger.warn(`[delegator] membership check failed (fail-closed) for ${t.id}: ${err.message}`);
           allowed = false;
         }
-        if (!allowed) {
-          logger.info(`[delegator] permission denied: sender=${senderId} not member of ${parsed.room.name}`);
-          await botApi.pushMessage(roomId, `⚠️ 「${parsed.room.name}」のメンバーではないため委譲できません。`).catch(() => {});
-          return;
-        }
+        if (allowed) permitted.push(t);
+        else skipped.push(t.name);
       }
-      const deps = {
-        runAgent: async (targetRoomId, task) => {
-          const tctx = await getOrCreateContext(agentId, targetRoomId);
-          // route() ベース backend 選択 (#295): 委譲先が「普段どおり」答える。
-          // task に /deep が付けば deep、無印なら light。
-          const r = await route(task);
-          const userPrompt = r.prompt || task;
-          const useDeepCodex = r.tier === 'deep' && config.DEEP_AGENT_PROVIDER === 'codex';
-          // Fix B (#295 dogfood): 委譲先 agent が自室へ回答投稿しないよう明示。
-          // suppressAutoPost は dispatcher auto-post のみ抑制し LLM 自身の send_message
-          // tool は止められないため (将来は委譲 run で send_message tool 自体を外す B2 が堅い)。
-          const noPostPrefix = '**重要**: あなたは別のルームからの委譲依頼に回答しています。回答は本文として述べるだけにし、send_message ツールでこのルームに投稿しないでください（投稿は委譲元が行います）。\n\n';
-          let out = null;
-          // Fix A (#295 dogfood): 委譲先を inflight に。委譲先 agent が自室へ send_message
-          // tool を呼んでも echo block され、委譲先での冗長な再 dispatch を防ぐ。
-          inflightRooms.add(targetRoomId);
-          try {
-            await enqueueForRoom(targetRoomId, async () => {
-              if (useDeepCodex) {
-                out = await processDeepCodex({
-                  roomId: targetRoomId,
-                  prompt: noPostPrefix + buildDeepPrompt(targetRoomId, userPrompt),
-                  workspacePath: tctx.workspace_path,
-                  agentId,
-                  sessionId: tctx.session_id,
-                  suppressAutoPost: true,
-                });
-              } else {
-                out = await processLightV2({
-                  roomId: targetRoomId,
-                  prompt: noPostPrefix + buildLightPrompt(targetRoomId, userPrompt),
-                  workspacePath: tctx.workspace_path,
-                  suppressAutoPost: true,
-                });
-              }
-            });
-          } finally {
-            inflightRooms.release(targetRoomId);
-          }
-          logger.info(`[delegator] runAgent target=${targetRoomId} tier=${useDeepCodex ? 'deep-codex' : 'light'}`);
-          return out;
-        },
-        postToRoom: (rid, text) => botApi.pushMessage(rid, text),
+      if (permitted.length === 0) {
+        logger.info(`[delegator] permission denied: sender=${senderId} not member of any target`);
+        await botApi.pushMessage(roomId, `⚠️ 「${parsed.targets.map((t) => t.name).join('・')}」のメンバーではないため委譲できません。`).catch(() => {});
+        return;
+      }
+      if (skipped.length > 0) {
+        await botApi.pushMessage(roomId, `⚠️ 権限がないため除外: ${skipped.join('・')}`).catch(() => {});
+      }
+
+      // 委譲先で「普段どおり」回答 (route ベース tier 選択 + suppressAutoPost + inflight + no-post prefix)。
+      const runAgent = async (targetRoomId, task) => {
+        const tctx = await getOrCreateContext(agentId, targetRoomId);
+        const r = await route(task);
+        const userPrompt = r.prompt || task;
+        const useDeepCodex = r.tier === 'deep' && config.DEEP_AGENT_PROVIDER === 'codex';
+        const noPostPrefix = '**重要**: あなたは別のルームからの委譲依頼に回答しています。回答は本文として述べるだけにし、send_message ツールでこのルームに投稿しないでください（投稿は委譲元が行います）。\n\n';
+        let out = null;
+        inflightRooms.add(targetRoomId);
+        try {
+          await enqueueForRoom(targetRoomId, async () => {
+            if (useDeepCodex) {
+              out = await processDeepCodex({ roomId: targetRoomId, prompt: noPostPrefix + buildDeepPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, agentId, sessionId: tctx.session_id, suppressAutoPost: true });
+            } else {
+              out = await processLightV2({ roomId: targetRoomId, prompt: noPostPrefix + buildLightPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, suppressAutoPost: true });
+            }
+          });
+        } finally {
+          inflightRooms.release(targetRoomId);
+        }
+        logger.info(`[delegator] runAgent target=${targetRoomId} tier=${useDeepCodex ? 'deep-codex' : 'light'}`);
+        return out;
       };
-      logger.info(`[delegator] % delegation: origin=${roomId} target=${parsed.room.name} task="${parsed.task.slice(0, 40)}"`);
-      // 依頼元へ「問い合わせ中」ステータスを出す (#295 dogfood: 委譲中は委譲先にしか status が
-      // 出ず依頼元が無音 = deep の数分待ちが「壊れて見える」問題の解消)。relay 完了後 idle で clear。
-      await botApi.pushStatus(roomId, 'processing', `${parsed.room.name} に問い合わせ中...`).catch(() => {});
+
+      // synthesize: origin で N 室結果を統合。origin queue 内なので enqueueForRoom せず直接実行 (再入防止)。
+      const synthesize = async (task, sections) => {
+        const octx = await getOrCreateContext(agentId, roomId);
+        const r = await route(task);
+        const useDeepCodex = r.tier === 'deep' && config.DEEP_AGENT_PROVIDER === 'codex';
+        const sectionText = sections.map((s) => `【${s.name} より】\n${s.text}`).join('\n\n');
+        const synthPrompt = `あなたは複数ルームから集めた結果を、ユーザの依頼に従って1つに統合します。\nユーザの依頼: ${r.prompt || task}\n\n以下は各ルームからの結果です。依頼に沿って統合してください（「(応答なし)」は無理に補完しない）。\n\n${sectionText}`;
+        if (useDeepCodex) {
+          return processDeepCodex({ roomId, prompt: synthPrompt, workspacePath: octx.workspace_path, agentId, sessionId: octx.session_id, suppressAutoPost: true });
+        }
+        return processLightV2({ roomId, prompt: synthPrompt, workspacePath: octx.workspace_path, suppressAutoPost: true });
+      };
+
+      const deps = { runAgent, synthesize, postToRoom: (rid, text) => botApi.pushMessage(rid, text) };
+
+      const statusMsg = permitted.length === 1
+        ? `${permitted[0].name} に問い合わせ中...`
+        : `${permitted.length}室に問い合わせ中...`;
+      await botApi.pushStatus(roomId, 'processing', statusMsg).catch(() => {});
+      logger.info(`[delegator] % delegation: origin=${roomId} targets=[${permitted.map((t) => t.name).join(',')}] task="${parsed.task.slice(0, 40)}"`);
       try {
-        await handleDelegation({ originRoomId: roomId, targetRoom: parsed.room, task: parsed.task }, deps);
+        if (permitted.length === 1) {
+          await handleDelegation({ originRoomId: roomId, targetRoom: permitted[0], task: parsed.task }, deps);
+        } else {
+          await handleMultiDelegation({ originRoomId: roomId, targets: permitted, task: parsed.task }, deps);
+        }
       } finally {
         await botApi.pushStatus(roomId, 'idle').catch(() => {});
       }

@@ -35,6 +35,7 @@ const PARSE_ERROR_MESSAGE = {
   room_not_found: '指定したルームが見つかりませんでした。ルーム名を確認してください。',
   empty_task: '委譲する内容が空です。`%ルーム名 依頼内容` の形式で指定してください。',
   ambiguous: '同名のルームが複数あり特定できませんでした。',
+  too_many_targets: '一度に委譲できるルーム数の上限を超えています。数を減らしてください。',
 };
 
 function parseErrorMessage(reason) {
@@ -81,4 +82,55 @@ async function handleDelegation({ originRoomId, targetRoom, task }, deps) {
   return { ok: true, text };
 }
 
-module.exports = { handleDelegation, blockMessage, parseErrorMessage };
+/**
+ * 複数室 fan-out + 統合 (#295 真の多重委譲)。
+ * 各 target へ並列に runAgent → 成功結果を synthesize で1本化 → 委譲元のみへ post。
+ * @param {{originRoomId:string, targets:[{id,name}], task:string}} param
+ * @param {{runAgent:Function, synthesize:Function, postToRoom:Function}} deps
+ *   synthesize(task, sections) → text  sections=[{name, text, ok}]
+ * @returns {Promise<{ok:true, text:string}|{ok:false, reason:string}>}
+ */
+async function handleMultiDelegation({ originRoomId, targets, task }, deps) {
+  const { runAgent, synthesize, postToRoom } = deps;
+
+  // 自室 (origin) は除外 (= 自己委譲は無意味 / cycle)
+  const list = targets.filter((t) => t.id !== originRoomId);
+  if (list.length === 0) {
+    await postToRoom(originRoomId, '⚠️ 委譲先がありません。');
+    return { ok: false, reason: 'no_targets' };
+  }
+
+  // 並列 fan-out (各室は別 room queue で並行)。throw / 空応答は ok:false に正規化。
+  const sections = await Promise.all(list.map(async (t) => {
+    try {
+      const text = await runAgent(t.id, task);
+      const ok = !!(text && text.trim());
+      return { name: t.name, text: ok ? text : '(応答なし)', ok };
+    } catch (err) {
+      logger.warn(`[delegator] multi: target ${t.id} failed: ${err.message}`);
+      return { name: t.name, text: '(応答なし)', ok: false };
+    }
+  }));
+
+  const okCount = sections.filter((s) => s.ok).length;
+  if (okCount === 0) {
+    logger.warn(`[delegator] multi: all ${list.length} targets failed (origin=${originRoomId})`);
+    await postToRoom(originRoomId, '⚠️ どのルームからも応答が得られませんでした。');
+    return { ok: false, reason: 'all_failed' };
+  }
+
+  let synthesized;
+  try {
+    synthesized = await synthesize(task, sections);
+  } catch (err) {
+    logger.error(`[delegator] multi: synthesize failed: ${err.message}`);
+    await postToRoom(originRoomId, '⚠️ 統合中にエラーが発生しました。');
+    return { ok: false, reason: 'synthesize_error' };
+  }
+
+  await postToRoom(originRoomId, synthesized);
+  logger.info(`[delegator] multi relayed: ${okCount}/${list.length} rooms → ${originRoomId}`);
+  return { ok: true, text: synthesized };
+}
+
+module.exports = { handleDelegation, handleMultiDelegation, blockMessage, parseErrorMessage };

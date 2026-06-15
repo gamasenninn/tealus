@@ -5,7 +5,7 @@
 
 jest.mock('../../src/lib/botApi', () => ({
   getMessages: jest.fn(),
-  pushMessage: jest.fn(),
+  pushMessage: jest.fn().mockResolvedValue({}),
   getRooms: jest.fn(),
   pushStatus: jest.fn().mockResolvedValue(undefined),
   isRoomMember: jest.fn().mockResolvedValue(true),
@@ -76,7 +76,7 @@ jest.mock('../../src/lib/logger', () => ({
 // #295: delegator は handleDelegation を spy 化、parseErrorMessage は実物を使う (通知文の照合用)
 jest.mock('../../src/webhook/delegator', () => {
   const actual = jest.requireActual('../../src/webhook/delegator');
-  return { ...actual, handleDelegation: jest.fn() };
+  return { ...actual, handleDelegation: jest.fn(), handleMultiDelegation: jest.fn() };
 });
 
 const { isMentioned, dispatch } = require('../../src/webhook/dispatcher');
@@ -539,6 +539,60 @@ describe('Dispatcher', () => {
 
       expect(botApi.isRoomMember).not.toHaveBeenCalled();
       expect(handleDelegation).toHaveBeenCalledTimes(1);
+    });
+
+    test('(g) 複数 %room → handleMultiDelegation 呼出 (単室 handleDelegation でない)', async () => {
+      const { handleMultiDelegation } = require('../../src/webhook/delegator');
+      botApi.getRooms.mockResolvedValue({
+        rooms: [
+          { id: 'r-asa', name: '朝礼' },
+          { id: 'r-shu', name: '終礼' },
+        ],
+      });
+      handleMultiDelegation.mockResolvedValueOnce({ ok: true });
+
+      await dispatch({
+        message: { id: 'm7', content: '@アシスタント %朝礼 %終礼 日報にまとめて', sender: { id: 'u1' } },
+        room: { id: 'room1', name: 'テスト', member_count: 5 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(handleMultiDelegation).toHaveBeenCalledTimes(1);
+      const arg = handleMultiDelegation.mock.calls[0][0];
+      expect(arg.originRoomId).toBe('room1');
+      expect(arg.targets.map((t) => t.name)).toEqual(['朝礼', '終礼']);
+      expect(arg.task).toBe('日報にまとめて');
+      expect(handleDelegation).not.toHaveBeenCalled();
+      expect(route).not.toHaveBeenCalled();
+    });
+
+    test('(h) 多室で一部が非メンバー → 除外注記、許可1室なら単室 handleDelegation', async () => {
+      const { handleMultiDelegation } = require('../../src/webhook/delegator');
+      botApi.getRooms.mockResolvedValue({
+        rooms: [
+          { id: 'r-asa', name: '朝礼' },
+          { id: 'r-shu', name: '終礼' },
+        ],
+      });
+      // 朝礼=メンバー, 終礼=非メンバー → 許可は朝礼のみ (1室 → 単室パス)
+      botApi.isRoomMember.mockImplementation((rid) => Promise.resolve(rid === 'r-asa'));
+      handleDelegation.mockResolvedValueOnce({ ok: true });
+
+      await dispatch({
+        message: { id: 'm8', content: '@アシスタント %朝礼 %終礼 日報にまとめて', sender: { id: 'u1' } },
+        room: { id: 'room1', name: 'テスト', member_count: 5 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      // 許可1室 → 単室 handleDelegation（multi でなく）
+      expect(handleDelegation).toHaveBeenCalledTimes(1);
+      expect(handleDelegation.mock.calls[0][0].targetRoom.name).toBe('朝礼');
+      expect(handleMultiDelegation).not.toHaveBeenCalled();
+      // 除外注記が委譲元へ
+      const skipNote = botApi.pushMessage.mock.calls.find(([, text]) => /権限がないため除外/.test(text));
+      expect(skipNote).toBeTruthy();
     });
   });
 

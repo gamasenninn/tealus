@@ -9,7 +9,7 @@
  * 副作用 (agent 実行 / room 投稿) は deps で注入し、実 SDK 無しで test する。
  */
 const chain = require('../../src/webhook/delegationChain');
-const { handleDelegation } = require('../../src/webhook/delegator');
+const { handleDelegation, handleMultiDelegation } = require('../../src/webhook/delegator');
 
 function makeDeps(overrides = {}) {
   return {
@@ -91,5 +91,94 @@ describe('delegator.handleDelegation (#295)', () => {
     expect(r.reason).toBe('empty_response');
     expect(deps.postToRoom).toHaveBeenCalledTimes(1);
     expect(deps.postToRoom.mock.calls[0][0]).toBe('A');
+  });
+});
+
+function makeMultiDeps(overrides = {}) {
+  return {
+    runAgent: jest.fn((roomId) => Promise.resolve(`result-${roomId}`)),
+    synthesize: jest.fn().mockResolvedValue('SYNTHESIZED REPORT'),
+    postToRoom: jest.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+describe('delegator.handleMultiDelegation (#295 fan-out + 統合)', () => {
+  const TARGETS = [
+    { id: 'A', name: '朝礼' },
+    { id: 'B', name: '終礼' },
+  ];
+
+  test('正常系: 各室へ並列 fan-out → synthesize → 委譲元へ1本だけ post', async () => {
+    const deps = makeMultiDeps();
+    const r = await handleMultiDelegation({ originRoomId: 'O', targets: TARGETS, task: '日報にまとめて' }, deps);
+
+    expect(r.ok).toBe(true);
+    // 各 target で runAgent が task 付きで呼ばれる
+    expect(deps.runAgent).toHaveBeenCalledWith('A', '日報にまとめて');
+    expect(deps.runAgent).toHaveBeenCalledWith('B', '日報にまとめて');
+    // synthesize は task + 成功 sections で1回
+    expect(deps.synthesize).toHaveBeenCalledTimes(1);
+    const [synTask, sections] = deps.synthesize.mock.calls[0];
+    expect(synTask).toBe('日報にまとめて');
+    expect(sections).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '朝礼', text: 'result-A' }),
+      expect.objectContaining({ name: '終礼', text: 'result-B' }),
+    ]));
+    // 委譲元のみへ1回 post（synthesize の結果）
+    expect(deps.postToRoom).toHaveBeenCalledTimes(1);
+    expect(deps.postToRoom.mock.calls[0][0]).toBe('O');
+    expect(deps.postToRoom.mock.calls[0][1]).toContain('SYNTHESIZED REPORT');
+    // 委譲先には post しない
+    expect(deps.postToRoom.mock.calls.filter(([rid]) => rid === 'A' || rid === 'B')).toHaveLength(0);
+  });
+
+  test('部分失敗: 空応答の室は除外/注記し、成功室で統合して post', async () => {
+    const deps = makeMultiDeps({
+      runAgent: jest.fn((roomId) => Promise.resolve(roomId === 'B' ? '   ' : `result-${roomId}`)),
+    });
+    const r = await handleMultiDelegation({ originRoomId: 'O', targets: TARGETS, task: 'まとめて' }, deps);
+
+    expect(r.ok).toBe(true);
+    expect(deps.synthesize).toHaveBeenCalledTimes(1);
+    const sections = deps.synthesize.mock.calls[0][1];
+    // 朝礼は成功 text、終礼は応答なし扱い
+    const asa = sections.find((s) => s.name === '朝礼');
+    const shu = sections.find((s) => s.name === '終礼');
+    expect(asa.text).toBe('result-A');
+    expect(shu.ok).toBe(false);
+    expect(deps.postToRoom).toHaveBeenCalledTimes(1);
+    expect(deps.postToRoom.mock.calls[0][0]).toBe('O');
+  });
+
+  test('全室失敗: synthesize 呼ばず委譲元へ通知し ok:false', async () => {
+    const deps = makeMultiDeps({ runAgent: jest.fn().mockResolvedValue('') });
+    const r = await handleMultiDelegation({ originRoomId: 'O', targets: TARGETS, task: 'まとめて' }, deps);
+
+    expect(r.ok).toBe(false);
+    expect(deps.synthesize).not.toHaveBeenCalled();
+    expect(deps.postToRoom).toHaveBeenCalledTimes(1);
+    expect(deps.postToRoom.mock.calls[0][0]).toBe('O');
+    expect(deps.postToRoom.mock.calls[0][1]).toMatch(/応答が得られません/);
+  });
+
+  test('runAgent が throw した室も失敗扱い（他室で続行）', async () => {
+    const deps = makeMultiDeps({
+      runAgent: jest.fn((roomId) => (roomId === 'B' ? Promise.reject(new Error('boom')) : Promise.resolve('ok-A'))),
+    });
+    const r = await handleMultiDelegation({ originRoomId: 'O', targets: TARGETS, task: 'まとめて' }, deps);
+
+    expect(r.ok).toBe(true);
+    expect(deps.synthesize).toHaveBeenCalledTimes(1);
+    expect(deps.postToRoom).toHaveBeenCalledTimes(1);
+  });
+
+  test('自室 (origin) が target に混ざっていたら除外', async () => {
+    const deps = makeMultiDeps();
+    const targets = [{ id: 'O', name: '自室' }, { id: 'A', name: '朝礼' }];
+    await handleMultiDelegation({ originRoomId: 'O', targets, task: 'まとめて' }, deps);
+    // origin へ runAgent しない
+    expect(deps.runAgent).not.toHaveBeenCalledWith('O', expect.anything());
+    expect(deps.runAgent).toHaveBeenCalledWith('A', 'まとめて');
   });
 });

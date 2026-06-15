@@ -9,7 +9,7 @@
  *   - 先頭 `%` だが解決不能 → { ok: false, reason } (silent fail せず委譲元へ返すため)
  *       reason: 'room_not_found' | 'empty_task' | 'ambiguous'
  */
-const { parseDelegation } = require('../../src/webhook/delegationParser');
+const { parseDelegation, parseMultiDelegation } = require('../../src/webhook/delegationParser');
 
 const ROOMS = [
   { id: 'r-db', name: '社内DB検索' },
@@ -17,6 +17,13 @@ const ROOMS = [
   { id: 'r-ono', name: '小野哲 ↔ アシスタント' },
   { id: 'r-sales', name: '営業' },
   { id: 'r-sales-dept', name: '営業部' },
+];
+
+const MULTI_ROOMS = [
+  { id: 'r-asa', name: '朝礼' },
+  { id: 'r-shu', name: '終礼' },
+  { id: 'r-trans', name: 'トランシーバー履歴' },
+  { id: 'r-db', name: '社内DB検索' },
 ];
 
 describe('parseDelegation (#295 `%` 委譲構文)', () => {
@@ -112,5 +119,57 @@ describe('parseDelegation (#295 `%` 委譲構文)', () => {
     expect(parseDelegation(null, ROOMS)).toBeNull();
     expect(parseDelegation(undefined, ROOMS)).toBeNull();
     expect(parseDelegation(123, ROOMS)).toBeNull();
+  });
+});
+
+describe('parseMultiDelegation (#295 複数室 fan-out)', () => {
+  test('先頭 % でなければ null', () => {
+    expect(parseMultiDelegation('日報を作って', MULTI_ROOMS)).toBeNull();
+    expect(parseMultiDelegation('進捗は50%です', MULTI_ROOMS)).toBeNull();
+  });
+
+  test('単室: targets 1 件 + task', () => {
+    const r = parseMultiDelegation('%社内DB検索 売上集計', MULTI_ROOMS);
+    expect(r.ok).toBe(true);
+    expect(r.targets).toEqual([{ id: 'r-db', name: '社内DB検索' }]);
+    expect(r.task).toBe('売上集計');
+  });
+
+  test('複数室: 先頭の連続 %room を全部 target に、残りを共通 task に', () => {
+    const r = parseMultiDelegation('%朝礼 %終礼 %トランシーバー履歴 から今日の日報をまとめて', MULTI_ROOMS);
+    expect(r.ok).toBe(true);
+    expect(r.targets.map((t) => t.name)).toEqual(['朝礼', '終礼', 'トランシーバー履歴']);
+    expect(r.task).toBe('から今日の日報をまとめて');
+  });
+
+  test('重複 target は dedup', () => {
+    const r = parseMultiDelegation('%朝礼 %朝礼 %終礼 まとめて', MULTI_ROOMS);
+    expect(r.ok).toBe(true);
+    expect(r.targets.map((t) => t.name)).toEqual(['朝礼', '終礼']);
+  });
+
+  test('未登録室が混ざると room_not_found', () => {
+    const r = parseMultiDelegation('%朝礼 %存在しない室 まとめて', MULTI_ROOMS);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('room_not_found');
+  });
+
+  test('task 空は empty_task', () => {
+    const r = parseMultiDelegation('%朝礼 %終礼', MULTI_ROOMS);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('empty_task');
+  });
+
+  test('MAX_TARGETS (5) 超過は too_many_targets', () => {
+    const rooms = Array.from({ length: 7 }, (_, i) => ({ id: `r${i}`, name: `室${i}` }));
+    const text = '%室0 %室1 %室2 %室3 %室4 %室5 まとめて';
+    const r = parseMultiDelegation(text, rooms);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('too_many_targets');
+  });
+
+  test('不正入力 (null / 非文字列) は null', () => {
+    expect(parseMultiDelegation(null, MULTI_ROOMS)).toBeNull();
+    expect(parseMultiDelegation(123, MULTI_ROOMS)).toBeNull();
   });
 });
