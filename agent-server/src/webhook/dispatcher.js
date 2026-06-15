@@ -241,6 +241,23 @@ async function _dispatch({ message, room, agentId, agentName }) {
         await botApi.pushMessage(roomId, parseErrorMessage(parsed.reason));
         return;
       }
+      // #282 権限チェック: 委譲先ルームのメンバーである人のみ委譲できる (= 6/15 user voice)。
+      // 既定 ON、DELEGATION_REQUIRE_MEMBERSHIP=false で実験的に無効化可。fail-closed。
+      if (process.env.DELEGATION_REQUIRE_MEMBERSHIP !== 'false') {
+        const senderId = message.sender?.id;
+        let allowed = false;
+        try {
+          allowed = senderId ? await botApi.isRoomMember(parsed.room.id, senderId) : false;
+        } catch (err) {
+          logger.warn(`[delegator] membership check failed (fail-closed): ${err.message}`);
+          allowed = false;
+        }
+        if (!allowed) {
+          logger.info(`[delegator] permission denied: sender=${senderId} not member of ${parsed.room.name}`);
+          await botApi.pushMessage(roomId, `⚠️ 「${parsed.room.name}」のメンバーではないため委譲できません。`).catch(() => {});
+          return;
+        }
+      }
       const deps = {
         runAgent: async (targetRoomId, task) => {
           const tctx = await getOrCreateContext(agentId, targetRoomId);

@@ -8,6 +8,7 @@ jest.mock('../../src/lib/botApi', () => ({
   pushMessage: jest.fn(),
   getRooms: jest.fn(),
   pushStatus: jest.fn().mockResolvedValue(undefined),
+  isRoomMember: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock('../../src/router/index', () => ({
@@ -417,6 +418,7 @@ describe('Dispatcher', () => {
   describe('% delegation 結線 (#295)', () => {
     const { handleDelegation } = require('../../src/webhook/delegator');
     const ORIG_FLAG = process.env.ENABLE_CROSS_ROOM_DELEGATION;
+    const ORIG_MEMBER_FLAG = process.env.DELEGATION_REQUIRE_MEMBERSHIP;
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -427,6 +429,7 @@ describe('Dispatcher', () => {
           { id: 'r-sales', name: '営業' },
         ],
       });
+      botApi.isRoomMember.mockResolvedValue(true); // default: sender はメンバー
       const { loadLightBackend } = require('../../src/agents/lightBackendLoader');
       loadLightBackend.mockReturnValue({ name: 'v2', processLight });
     });
@@ -434,6 +437,8 @@ describe('Dispatcher', () => {
     afterEach(() => {
       if (ORIG_FLAG === undefined) delete process.env.ENABLE_CROSS_ROOM_DELEGATION;
       else process.env.ENABLE_CROSS_ROOM_DELEGATION = ORIG_FLAG;
+      if (ORIG_MEMBER_FLAG === undefined) delete process.env.DELEGATION_REQUIRE_MEMBERSHIP;
+      else process.env.DELEGATION_REQUIRE_MEMBERSHIP = ORIG_MEMBER_FLAG;
     });
 
     test('(a) @mention + %room task → handleDelegation 呼出、route は呼ばない', async () => {
@@ -500,6 +505,40 @@ describe('Dispatcher', () => {
 
       expect(handleDelegation).not.toHaveBeenCalled();
       expect(route).toHaveBeenCalled();
+    });
+
+    test('(e) 委譲先の非メンバーは委譲拒否、委譲元へ通知 (#282 権限チェック)', async () => {
+      botApi.isRoomMember.mockResolvedValueOnce(false);
+
+      await dispatch({
+        message: { id: 'm5', content: '@アシスタント %社内DB検索 集計して', sender: { id: 'u-outsider' } },
+        room: { id: 'room1', name: 'テスト', member_count: 5 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(botApi.isRoomMember).toHaveBeenCalledWith('r-db', 'u-outsider');
+      expect(handleDelegation).not.toHaveBeenCalled();
+      expect(route).not.toHaveBeenCalled();
+      const denial = botApi.pushMessage.mock.calls.find(([rid]) => rid === 'room1');
+      expect(denial).toBeTruthy();
+      expect(denial[1]).toMatch(/メンバーではない/);
+    });
+
+    test('(f) DELEGATION_REQUIRE_MEMBERSHIP=false で権限チェックを skip', async () => {
+      process.env.DELEGATION_REQUIRE_MEMBERSHIP = 'false';
+      botApi.isRoomMember.mockResolvedValue(false); // 非メンバーでも
+      handleDelegation.mockResolvedValueOnce({ ok: true, text: 'x' });
+
+      await dispatch({
+        message: { id: 'm6', content: '@アシスタント %社内DB検索 集計して', sender: { id: 'u-outsider' } },
+        room: { id: 'room1', name: 'テスト', member_count: 5 },
+        agentId: 'agent1',
+        agentName: 'アシスタント',
+      });
+
+      expect(botApi.isRoomMember).not.toHaveBeenCalled();
+      expect(handleDelegation).toHaveBeenCalledTimes(1);
     });
   });
 

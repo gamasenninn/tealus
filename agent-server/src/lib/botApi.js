@@ -180,6 +180,15 @@ async function joinRoom(roomId) {
 }
 
 /**
+ * 指定 user が room のメンバーか確認する (#282: 委譲の権限チェック用)
+ * bot 自身が非メンバーのルームは server 側で 403 → request が throw する。
+ */
+async function isRoomMember(roomId, userId) {
+  const r = await request('GET', `/bot/rooms/${roomId}/membership?user_id=${encodeURIComponent(userId)}`);
+  return r.is_member === true;
+}
+
+/**
  * メッセージを既読にする
  */
 async function markRead(messageIds) {
@@ -233,6 +242,7 @@ module.exports = {
   getMessages,
   getRooms,
   joinRoom,
+  isRoomMember,
   markRead,
   pushTtsSpeak,
   pushTtsAudio,
