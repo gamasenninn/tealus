@@ -67,8 +67,13 @@ async function enqueueForRoom(roomId, fn, timeoutMs = config.QUEUE_TASK_TIMEOUT)
  * @メンションを検知
  */
 function isMentioned(content, agentName) {
-  const pattern = new RegExp(`@${agentName}`, 'i');
-  return pattern.test(content);
+  if (typeof content !== 'string' || !agentName) return false;
+  // 先頭メンションのみ反応する (先行空白は許容)。
+  // 文中・例示・引用・末尾の @mention では誤発火しないようにする (cc-tealus #215 と同方針)。
+  // 「明示的に呼び出す意識」がある先頭メンションだけを応答 trigger とする。
+  const escaped = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^@${escaped}`, 'i');
+  return pattern.test(content.replace(/^\s+/, ''));
 }
 
 /**

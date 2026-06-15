@@ -88,15 +88,27 @@ const sessionManager = require('../../src/context/sessionManager');
 describe('Dispatcher', () => {
 
   describe('isMentioned', () => {
-    test('@エージェント名 を検知する', () => {
-      expect(isMentioned('こんにちは @アシスタント 在庫教えて', 'アシスタント')).toBe(true);
+    test('先頭の @エージェント名 を検知する', () => {
+      expect(isMentioned('@アシスタント 在庫教えて', 'アシスタント')).toBe(true);
+    });
+
+    test('先行空白があっても先頭メンションは検知する', () => {
+      expect(isMentioned('  @アシスタント 在庫教えて', 'アシスタント')).toBe(true);
+      expect(isMentioned('\n@アシスタント やあ', 'アシスタント')).toBe(true);
+    });
+
+    test('文中メンションには反応しない (誤発火防止・先頭限定)', () => {
+      // 例示・引用・末尾メンション等
+      expect(isMentioned('こんにちは @アシスタント 在庫教えて', 'アシスタント')).toBe(false);
+      expect(isMentioned('使い方: `@アシスタント %室A` のように書く', 'アシスタント')).toBe(false);
+      expect(isMentioned('@藤井律男 さん、これは @アシスタント の例です', 'アシスタント')).toBe(false);
     });
 
     test('@なしはメンションではない', () => {
       expect(isMentioned('こんにちは アシスタント', 'アシスタント')).toBe(false);
     });
 
-    test('大文字小文字を区別しない', () => {
+    test('大文字小文字を区別しない (先頭)', () => {
       expect(isMentioned('@Assistant help', 'assistant')).toBe(true);
     });
 
