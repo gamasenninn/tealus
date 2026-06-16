@@ -6,6 +6,7 @@ import { useConfirm } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import { Pencil } from 'lucide-react';
 import RoomSettings from './RoomSettings';
+import { canInviteToRoom } from '../../utils/permissions';
 import './MemberList.css';
 
 function MemberList({ roomId, onClose }) {
@@ -179,7 +180,9 @@ function MemberList({ roomId, onClose }) {
         </div>
 
         <div className="member-actions">
-          <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>
+          {canInviteToRoom(user) && (
+            <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>
+          )}
           <button className="member-leave-btn" onClick={handleLeave}>このグループを退会</button>
         </div>
 

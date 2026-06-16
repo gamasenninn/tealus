@@ -141,6 +141,36 @@ describe('Guest restrictions (#282 Phase C)', () => {
     });
   });
 
+  describe('POST /api/rooms/:id/members (メンバー招待)', () => {
+    // guest が member の group を作っておく (作成は normalUser が行う)
+    async function makeGroupWithGuest() {
+      const res = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${normalUser.token}`)
+        .send({ name: '招待テストG', member_ids: [guest.user.id] });
+      return res.body.room.id;
+    }
+
+    test('guest は member でも 403 (招待不可、サーバー側 fail-closed)', async () => {
+      const roomId = await makeGroupWithGuest();
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/members`)
+        .set('Authorization', `Bearer ${guest.token}`)
+        .send({ user_id: admin.user.id });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toMatch(/ゲスト|guest|権限/i);
+    });
+
+    test('normal user (member) は招待可 (既存挙動)', async () => {
+      const roomId = await makeGroupWithGuest();
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/members`)
+        .set('Authorization', `Bearer ${normalUser.token}`)
+        .send({ user_id: admin.user.id });
+      expect([200, 201]).toContain(res.status);
+    });
+  });
+
   describe('既存 admin endpoint (= /api/auth/me 等) は guest でも自分の情報取得可 (= breaking change なし)', () => {
     test('guest が GET /api/auth/me で自分の情報取得可', async () => {
       const res = await request(app)

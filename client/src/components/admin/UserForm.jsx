@@ -96,6 +96,7 @@ function UserForm({ user, onSubmit, onCancel }) {
         <select name="role" value={formData.role} onChange={handleChange}>
           <option value="user">一般</option>
           <option value="admin">管理者</option>
+          <option value="guest">ゲスト</option>
         </select>
       </div>
 

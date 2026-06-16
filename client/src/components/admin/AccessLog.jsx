@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { roleLabel } from '../../utils/permissions';
 
 // 日時整形 (null は「—」)
 function fmt(ts) {
@@ -16,11 +17,6 @@ function latest(a, b) {
   const tb = b ? new Date(b).getTime() : 0;
   const t = Math.max(ta, tb);
   return t === 0 ? null : (ta >= tb ? a : b);
-}
-
-function roleLabel(u) {
-  if (u.is_bot) return 'BOT';
-  return u.role === 'admin' ? '管理者' : '一般';
 }
 
 function AccessLog() {

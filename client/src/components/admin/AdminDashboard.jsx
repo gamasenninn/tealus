@@ -6,6 +6,7 @@ import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
 import PortalManager from './PortalManager';
 import AccessLog from './AccessLog';
+import { roleLabel } from '../../utils/permissions';
 import ContextMenu from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
 import './AdminDashboard.css';
@@ -132,7 +133,7 @@ function AdminDashboard() {
               <tr key={u.id} className={!u.is_active ? 'inactive-row' : ''}>
                 <td>{u.login_id}</td>
                 <td>{u.display_name}</td>
-                <td><span className={`role-badge ${u.role}`}>{u.role === 'admin' ? '管理者' : '一般'}</span></td>
+                <td><span className={`role-badge ${u.role}`}>{roleLabel(u)}</span></td>
                 <td><span className={`status-badge ${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? '有効' : '無効'}</span></td>
                 <td>{new Date(u.created_at).toLocaleDateString('ja-JP')}</td>
                 <td className="admin-actions">

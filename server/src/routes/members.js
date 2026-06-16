@@ -4,6 +4,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember, requireGroup } = require('../middleware/roomAccess');
+const { canInviteToRoom } = require('../utils/permissions');
 
 const router = express.Router({ mergeParams: true });
 
@@ -31,6 +32,11 @@ async function insertSystemMessage(roomId, content, io) {
  * Add a member to the group (any member can invite)
  */
 router.post('/', authenticate, requireGroup, requireMember, async (req, res) => {
+  // #282: guest は member であっても他 user を招待できない (fail-closed)。
+  // client は招待ボタンを隠すが、API 直叩きもサーバーで弾く。
+  if (!canInviteToRoom(req.user)) {
+    return res.status(403).json({ error: 'ゲストユーザはメンバーを招待できません' });
+  }
   const roomId = req.params.id;
   const { user_id } = req.body;
 

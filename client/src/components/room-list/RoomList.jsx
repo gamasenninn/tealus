@@ -7,6 +7,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
+import { canCreateRoom } from '../../utils/permissions';
 import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import './RoomList.css';
@@ -117,9 +118,11 @@ function RoomList() {
           <button className="icon-button" onClick={() => navigate('/search')} title="検索">
             <Search size={20} />
           </button>
-          <button className="icon-button" onClick={() => setShowCreate(true)} title="新規作成">
-            <Plus size={20} />
-          </button>
+          {canCreateRoom(user) && (
+            <button className="icon-button" onClick={() => setShowCreate(true)} title="新規作成">
+              <Plus size={20} />
+            </button>
+          )}
         </div>
       </header>
 
