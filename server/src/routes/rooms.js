@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } = require('../middleware/roomAccess');
-const { canCreateRoom } = require('../utils/permissions');
+const { canCreateRoom, isGuest } = require('../utils/permissions');
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -31,6 +31,10 @@ router.use(authenticate);
  * Get active portal links for home screen
  */
 router.get('/portal-links', async (req, res) => {
+  // #282: ポータルリンクは社内システムURL。外部ゲストには見せない (fail-closed)。
+  if (isGuest(req.user)) {
+    return res.json({ links: [] });
+  }
   try {
     const result = await pool.query(
       'SELECT id, title, url, icon FROM portal_links WHERE is_active = true ORDER BY sort_order, created_at'
@@ -48,6 +52,13 @@ router.get('/portal-links', async (req, res) => {
  */
 router.get('/announcements', async (req, res) => {
   const { limit = 20 } = req.query;
+
+  // #282: お知らせはグローバル配信 (membership 無関係) のため、外部ゲストには
+  // 社内お知らせが漏れる。fail-closed で guest には空を返す。将来マニュアル等を
+  // 見せる場合は guest_visible フラグで出し分ける。
+  if (isGuest(req.user)) {
+    return res.json({ messages: [] });
+  }
 
   try {
     // Find announcement rooms

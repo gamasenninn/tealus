@@ -171,6 +171,57 @@ describe('Guest restrictions (#282 Phase C)', () => {
     });
   });
 
+  describe('ホーム surface (お知らせ / ポータル) は guest に社内情報を漏らさない', () => {
+    async function seedHomeSurface() {
+      const r = await pool.query(
+        "INSERT INTO rooms (type, name, is_announcement) VALUES ('group', '社内お知らせ', true) RETURNING id"
+      );
+      await pool.query(
+        "INSERT INTO messages (room_id, sender_id, content, type, is_published) VALUES ($1, $2, '社内限定の連絡', 'text', true)",
+        [r.rows[0].id, normalUser.user.id]
+      );
+      await pool.query(
+        "INSERT INTO portal_links (title, url, is_active) VALUES ('勤怠システム', 'https://intra.example.com', true)"
+      );
+    }
+
+    test('guest の お知らせ取得は空 (社内お知らせを見せない)', async () => {
+      await seedHomeSurface();
+      const res = await request(app)
+        .get('/api/rooms/announcements')
+        .set('Authorization', `Bearer ${guest.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.messages).toEqual([]);
+    });
+
+    test('一般 user の お知らせ取得は中身あり (既存挙動)', async () => {
+      await seedHomeSurface();
+      const res = await request(app)
+        .get('/api/rooms/announcements')
+        .set('Authorization', `Bearer ${normalUser.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBeGreaterThan(0);
+    });
+
+    test('guest の ポータルリンク取得は空 (社内ツールURLを見せない)', async () => {
+      await seedHomeSurface();
+      const res = await request(app)
+        .get('/api/rooms/portal-links')
+        .set('Authorization', `Bearer ${guest.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.links).toEqual([]);
+    });
+
+    test('一般 user の ポータルリンク取得は中身あり (既存挙動)', async () => {
+      await seedHomeSurface();
+      const res = await request(app)
+        .get('/api/rooms/portal-links')
+        .set('Authorization', `Bearer ${normalUser.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.links.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('既存 admin endpoint (= /api/auth/me 等) は guest でも自分の情報取得可 (= breaking change なし)', () => {
     test('guest が GET /api/auth/me で自分の情報取得可', async () => {
       const res = await request(app)
