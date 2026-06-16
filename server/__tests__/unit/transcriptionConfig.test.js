@@ -99,10 +99,14 @@ describe('loadGuideline', () => {
     expect(config.guidelines).toEqual([]);
   });
 
-  test('caches result across multiple calls', () => {
+  test('caches result across multiple calls (ファイル不変 → 同一 cache オブジェクト)', () => {
+    // 注: #296 で mtime 変化時は reload する仕様になったため、「ファイルを書き換えても
+    // 古い値を返す」という旧前提のテストは機能と矛盾し、かつ 2 回の書き込みが同一ミリ秒に
+    // 収まるかどうかという timing 依存の flake 源だった。caching の正しい意味は
+    // 「ファイルが変わらなければ同じ cache オブジェクトを返す」なので、ファイルを
+    // 書き換えずに複数回呼んで検証する (決定的)。mtime 変化時の reload は別テストで担保。
     fs.writeFileSync(tmpFile, JSON.stringify({ vocabulary: [{ term: 'A' }] }));
     const a = configModule.loadGuideline();
-    fs.writeFileSync(tmpFile, JSON.stringify({ vocabulary: [{ term: 'B' }] }));
     const b = configModule.loadGuideline();
     expect(a).toBe(b);
     expect(b.vocabulary[0].term).toBe('A');
