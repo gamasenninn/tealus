@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
 import PortalManager from './PortalManager';
+import AccessLog from './AccessLog';
 import ContextMenu from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
 import './AdminDashboard.css';
@@ -82,12 +83,15 @@ function AdminDashboard() {
         <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>ユーザー</button>
         <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
         <button className={`admin-tab ${activeTab === 'portal' ? 'active' : ''}`} onClick={() => setActiveTab('portal')}>ポータル</button>
+        <button className={`admin-tab ${activeTab === 'access-log' ? 'active' : ''}`} onClick={() => setActiveTab('access-log')}>アクセスログ</button>
       </div>
 
       {activeTab === 'webhooks' ? (
         <WebhookManager />
       ) : activeTab === 'portal' ? (
         <PortalManager />
+      ) : activeTab === 'access-log' ? (
+        <AccessLog />
       ) : (
       <>
       <div className="admin-section-header">

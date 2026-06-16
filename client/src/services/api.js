@@ -449,6 +449,11 @@ class ApiClient {
     return this.request('PATCH', `/admin/users/${id}/status`, { is_active });
   }
 
+  // Access log (admin) — 最終投稿/最終閲覧の集計
+  getAdminAccessLog() {
+    return this.request('GET', '/admin/access-log');
+  }
+
   // Portal Links (admin)
   getAdminPortalLinks() {
     return this.request('GET', '/admin/portal-links');
