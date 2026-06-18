@@ -113,6 +113,45 @@ function prepareCodexHome(workspacePath, mcp_servers, options = {}) {
 }
 
 /**
+ * #307: codex が rotation した auth.json を source (= ~/.codex) に書き戻す。
+ *
+ * codex は CODEX_HOME(=workspace/.codex_home) 配下の auth.json に refresh 後の新トークンを
+ * 書き戻すが、prepareCodexHome は起動毎に source からコピー上書きするため rotation 結果が
+ * 失われ、使用済み refresh token を引き戻して refresh_token_reused で失敗する。これを防ぐため
+ * exec 完了後に workspace 側 auth.json を source へ書き戻す。
+ *
+ * 安全策:
+ * - workspace 側が無い → 何もしない
+ * - JSON として壊れている → 書き戻さない (cancel/kill 時の partial write 保護)
+ * - source と内容一致 → no-op (rotation していない)
+ * - 並列 Deep 実行中の clobber 回避は呼び出し側の sole-running guard に委ねる
+ *
+ * @returns {boolean} 書き戻したら true
+ */
+function writeBackCodexAuth(codexHomePath, codexHomeSrcDir) {
+  try {
+    const wsAuth = path.join(codexHomePath, 'auth.json');
+    if (!fs.existsSync(wsAuth)) return false;
+    const wsContent = fs.readFileSync(wsAuth, 'utf8');
+    try {
+      JSON.parse(wsContent);
+    } catch {
+      logger.warn(`[deepCodex] auth.json writeback skipped: workspace auth.json is not valid JSON (partial write?)`);
+      return false;
+    }
+    const srcAuth = path.join(codexHomeSrcDir, 'auth.json');
+    const srcContent = fs.existsSync(srcAuth) ? fs.readFileSync(srcAuth, 'utf8') : null;
+    if (wsContent === srcContent) return false;
+    fs.writeFileSync(srcAuth, wsContent);
+    logger.info(`[deepCodex] auth.json rotated → wrote back to ${srcAuth}`);
+    return true;
+  } catch (err) {
+    logger.warn(`[deepCodex] auth.json writeback failed: ${err.message}`);
+    return false;
+  }
+}
+
+/**
  * codex exec の spawn args を構築 (= claude -p - 同型の Codex 版)
  *
  * @param {Object} params
@@ -382,6 +421,12 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
         }
       }
 
+      // #307: codex が rotation した auth.json を source (~/.codex) に書き戻す。並列 Deep 実行中の
+      //       clobber を避けるため sole-running 時 (他室の Deep が無い) のみ。内容不変/壊れた時は no-op。
+      if (deepRegistry.count() === 0) {
+        writeBackCodexAuth(codexHomePath, getDefaultCodexHome());
+      }
+
       if (proc._tealusCancelled) {
         logger.info(`Deep Codex Agent close after cancel (code ${code}) — skip post-processing`);
         resolve();
@@ -470,6 +515,7 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
 
 module.exports = {
   prepareCodexHome,
+  writeBackCodexAuth,
   serializeMcpServersToToml,
   tomlEscape,
   getDefaultCodexHome,

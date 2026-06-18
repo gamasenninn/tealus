@@ -24,6 +24,11 @@ function isRunning(roomId) {
   return runningProcesses.has(roomId);
 }
 
+// #307: 現在走行中の Deep process 数 (= sole-running 判定で auth.json 書き戻しの clobber を防ぐ)
+function count() {
+  return runningProcesses.size;
+}
+
 /**
  * Windows で workspace path を CommandLine に含む process を全 kill する。
  *
@@ -94,4 +99,4 @@ function cancel(roomId) {
   return { success: true, was_running: true, pid };
 }
 
-module.exports = { register, unregister, isRunning, cancel, sweepByWorkspacePath };
+module.exports = { register, unregister, isRunning, count, cancel, sweepByWorkspacePath };

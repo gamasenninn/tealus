@@ -29,6 +29,7 @@ jest.mock('../../src/agents/deepRegistry', () => ({
 
 const {
   prepareCodexHome,
+  writeBackCodexAuth,
   serializeMcpServersToToml,
   tomlEscape,
   buildCodexExecArgs,
@@ -165,6 +166,52 @@ describe('prepareCodexHome', () => {
     } finally {
       fs.rmSync(noCodex, { recursive: true, force: true });
     }
+  });
+});
+
+describe('writeBackCodexAuth (#307 codex token rotation 書き戻し)', () => {
+  let codexHome;   // workspace 側 (.codex_home 相当)
+  let srcDir;      // source (~/.codex 相当)
+
+  beforeEach(() => {
+    codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cdx-ws-'));
+    srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cdx-src-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(codexHome, { recursive: true, force: true });
+    fs.rmSync(srcDir, { recursive: true, force: true });
+  });
+
+  test('(a) workspace auth が src と相違 (rotation 済) → 書き戻し true、src 更新', () => {
+    fs.writeFileSync(path.join(srcDir, 'auth.json'), '{"tokens":{"refresh_token":"v1"}}');
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"tokens":{"refresh_token":"v2"}}');
+
+    const result = writeBackCodexAuth(codexHome, srcDir);
+    expect(result).toBe(true);
+    expect(fs.readFileSync(path.join(srcDir, 'auth.json'), 'utf8')).toBe('{"tokens":{"refresh_token":"v2"}}');
+  });
+
+  test('(b) workspace auth が src と同一 → 書き戻さず false', () => {
+    const same = '{"tokens":{"refresh_token":"v1"}}';
+    fs.writeFileSync(path.join(srcDir, 'auth.json'), same);
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), same);
+
+    expect(writeBackCodexAuth(codexHome, srcDir)).toBe(false);
+  });
+
+  test('(c) workspace auth が存在しない → false (src 不変)', () => {
+    fs.writeFileSync(path.join(srcDir, 'auth.json'), '{"tokens":{"refresh_token":"v1"}}');
+    expect(writeBackCodexAuth(codexHome, srcDir)).toBe(false);
+    expect(fs.readFileSync(path.join(srcDir, 'auth.json'), 'utf8')).toBe('{"tokens":{"refresh_token":"v1"}}');
+  });
+
+  test('(d) workspace auth が壊れた JSON → 書き戻さず false、src 不変 (partial write 保護)', () => {
+    fs.writeFileSync(path.join(srcDir, 'auth.json'), '{"tokens":{"refresh_token":"v1"}}');
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{ broken json');
+
+    expect(writeBackCodexAuth(codexHome, srcDir)).toBe(false);
+    expect(fs.readFileSync(path.join(srcDir, 'auth.json'), 'utf8')).toBe('{"tokens":{"refresh_token":"v1"}}');
   });
 });
 
