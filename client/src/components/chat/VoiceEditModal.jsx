@@ -1,33 +1,53 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
+import { useRoomStore } from '../../stores/roomStore';
+import { useAuthStore } from '../../stores/authStore';
+import { voiceNav, transcriptionText } from '../../utils/voiceNav';
 
 /**
- * 文字起こし編集 modal — textarea の上に音声再生 slider を配置 (#248)
+ * 文字起こし編集 modal — 連続編集対応 (前/次で隣の音声へ移動、戻るで閉じる)。
  *
- * user の編集中に再生位置を自由に control できるよう、VoiceBubble の
- * 既存 slider UI と同じ機構を modal 内に再現する。Phase 1 MVP として
- * 既存 logic を直書き、3 例目の重複が来たら共通 component 化検討 (yagni)。
- *
- * audioUrl 未指定でも動作 (slider 非表示で旧 modal と同等)。
+ * モーダルを開いたまま、ルームの編集可能な音声メッセージ (status=done) を
+ * 前/次 で送りながら連続編集できる。未保存の編集は移動/閉じる時に自動保存する。
+ * 音声プレイヤー (#248) は対象切替時に reset。ナビ判定は utils/voiceNav に分離。
  */
-function VoiceEditModal({ messageId, initialText, audioUrl, onClose }) {
-  const [editText, setEditText] = useState(initialText);
+function VoiceEditModal({ messageId, onClose }) {
+  const messages = useMessageStore((s) => s.messages);
+  const currentRoom = useRoomStore((s) => s.currentRoom);
+  const userId = useAuthStore((s) => s.user?.id);
+  const allowMemberEdit = !!currentRoom?.allow_member_transcription_edit;
+
+  const [currentId, setCurrentId] = useState(messageId);
+  const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // 音声再生 state (VoiceBubble から logic 移植)
+  // 音声再生 state (#248)
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
-  // user voiceVolume 設定を反映
+  const nav = voiceNav(messages, currentId, userId, allowMemberEdit);
+  const current = nav.current;
+  const originalText = transcriptionText(current);
+  const filePath = current?.media?.[0]?.file_path;
+  const audioUrl = filePath ? `/media/${filePath}` : null;
+  const dirty = editText.trim() !== originalText.trim();
+
+  // 対象切替 (初期表示含む) でテキストと音声 state を読み直す
   useEffect(() => {
+    setEditText(originalText);
+    setIsPlaying(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
     if (audioRef.current) {
       audioRef.current.volume = (parseInt(localStorage.getItem('voiceVolume') || '80', 10)) / 100;
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId]);
 
   const handlePlayPause = () => {
     const audio = audioRef.current;
@@ -82,17 +102,18 @@ function VoiceEditModal({ messageId, initialText, audioUrl, onClose }) {
     return `${min}:${String(sec).padStart(2, '0')}`;
   };
 
-  const handleSave = async () => {
-    if (!editText.trim()) return;
+  // 現在の編集を保存 (変更が無ければ no-op、無駄な version 増加を防ぐ)
+  const saveCurrent = async () => {
+    const text = editText.trim();
+    if (!text || text === originalText.trim()) return;
     setSaving(true);
     try {
-      const data = await api.editTranscription(messageId, editText.trim());
-      useMessageStore.getState().updateTranscription(messageId, {
+      const data = await api.editTranscription(currentId, text);
+      useMessageStore.getState().updateTranscription(currentId, {
         formatted_text: data.transcription.formatted_text,
         version: data.transcription.version,
         status: 'done',
       });
-      onClose();
     } catch (err) {
       console.error('Edit error:', err);
     } finally {
@@ -100,15 +121,44 @@ function VoiceEditModal({ messageId, initialText, audioUrl, onClose }) {
     }
   };
 
+  // 前/次へ移動 (未保存は自動保存してから)
+  const goTo = async (targetId) => {
+    if (!targetId || saving) return;
+    await saveCurrent();
+    setCurrentId(targetId);
+  };
+
+  // 確定: 保存して開いたまま (連続編集前提)
+  const handleConfirm = async () => {
+    await saveCurrent();
+  };
+
+  // 戻る: 未保存なら保存してから閉じる
+  const handleBack = async () => {
+    await saveCurrent();
+    onClose();
+  };
+
+  if (!current) {
+    // 対象が見つからない (削除等) → 閉じる
+    return null;
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box voice-edit-modal" onClick={e => e.stopPropagation()}>
-        <h3>文字起こしを編集</h3>
+    <div className="modal-overlay" onClick={handleBack}>
+      <div className="modal-box voice-edit-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="voice-edit-header">
+          <h3>文字起こしを編集</h3>
+          {nav.total > 1 && (
+            <span className="voice-edit-position">{nav.index + 1} / {nav.total}</span>
+          )}
+        </div>
 
         {/* #248: textarea の上に再生 slider を配置、編集しながら音声を seek 可能に */}
         {audioUrl && (
           <div className="voice-edit-player">
             <audio
+              key={currentId}
               ref={audioRef}
               src={audioUrl}
               onTimeUpdate={handleTimeUpdate}
@@ -137,14 +187,36 @@ function VoiceEditModal({ messageId, initialText, audioUrl, onClose }) {
         )}
 
         <textarea
+          key={currentId}
           value={editText}
-          onChange={e => setEditText(e.target.value)}
+          onChange={(e) => setEditText(e.target.value)}
           rows={6}
           autoFocus
         />
+
+        {/* 連続編集ナビ: 前/次 で隣の音声へ (未保存は自動保存) */}
+        <div className="voice-edit-nav">
+          <button
+            type="button"
+            className="btn-nav"
+            onClick={() => goTo(nav.prevId)}
+            disabled={!nav.prevId || saving}
+          >
+            ← 前
+          </button>
+          <button
+            type="button"
+            className="btn-nav"
+            onClick={() => goTo(nav.nextId)}
+            disabled={!nav.nextId || saving}
+          >
+            次 →
+          </button>
+        </div>
+
         <div className="voice-edit-buttons">
-          <button className="btn-cancel" onClick={onClose}>キャンセル</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+          <button className="btn-cancel" onClick={handleBack}>戻る</button>
+          <button className="btn-primary" onClick={handleConfirm} disabled={saving || !dirty}>
             {saving ? '保存中...' : '確定'}
           </button>
         </div>

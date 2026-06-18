@@ -240,8 +240,6 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
       {isEditing && (
         <VoiceEditModal
           messageId={message.id}
-          initialText={transcription?.formatted_text || transcription?.raw_text || ''}
-          audioUrl={`/media/${filePath}`}
           onClose={() => setIsEditing(false)}
         />
       )}
