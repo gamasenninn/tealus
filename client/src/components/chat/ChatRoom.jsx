@@ -18,6 +18,7 @@ import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall, Radio } from 'l
 import CallConfirmModal from '../call/CallConfirmModal';
 import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
+import MessageErrorBoundary from './MessageErrorBoundary';
 import DeepCancelButton from './DeepCancelButton';
 import { useCapabilityStore } from '../../stores/capabilityStore';
 import './ChatRoom.css';
@@ -179,7 +180,9 @@ function ChatRoom() {
             <div key={msg.id} data-date={showDate ? msg.created_at : undefined} data-msg-id={msg.id}>
               {showDate && <DateSeparator date={msg.created_at} />}
               {showUnread && <UnreadSeparator />}
-              <MessageBubble message={msg} isOwn={msg.sender_id === user.id} searchKeyword={searchKeyword} />
+              <MessageErrorBoundary messageId={msg.id}>
+                <MessageBubble message={msg} isOwn={msg.sender_id === user.id} searchKeyword={searchKeyword} />
+              </MessageErrorBoundary>
             </div>
           );
         })}
