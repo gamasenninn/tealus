@@ -184,14 +184,17 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
 
       if (timedOut) {
-        await botApi.pushMessage(roomId, `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`);
+        // #303: pushMessage は失敗時 throw。close ハンドラ内なので resolve 到達前の throw を防ぐ
+        await botApi.pushMessage(roomId, `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`)
+          .catch((err) => logger.error(`[Deep] timeout notice NOT delivered to room ${roomId}: ${err.message}`));
         resolve();
         return;
       }
 
       if (code !== 0 && !stdout) {
         logger.error(`Deep Agent failed (code ${code}): ${stderr.slice(0, 200)}`);
-        await botApi.pushMessage(roomId, `❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`);
+        await botApi.pushMessage(roomId, `❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`)
+          .catch((err) => logger.error(`[Deep] error notice NOT delivered to room ${roomId}: ${err.message}`));
         resolve();
         return;
       }
@@ -199,16 +202,20 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       // 応答を送信
       const response = stdout.trim();
       if (response) {
-        // 長い応答は分割
-        if (response.length > 4000) {
-          const chunks = splitMessage(response, 4000);
-          for (const chunk of chunks) {
-            await botApi.pushMessage(roomId, chunk);
+        // #303: throw でハングしないよう try/catch、成功時のみ sent ログ
+        try {
+          if (response.length > 4000) {
+            const chunks = splitMessage(response, 4000);
+            for (const chunk of chunks) {
+              await botApi.pushMessage(roomId, chunk);
+            }
+          } else {
+            await botApi.pushMessage(roomId, response);
           }
-        } else {
-          await botApi.pushMessage(roomId, response);
+          logger.info(`Deep Agent response sent (${response.length} chars)`);
+        } catch (err) {
+          logger.error(`[Deep] response NOT delivered to room ${roomId} (${response.length} chars): ${err.message}`);
         }
-        logger.info(`Deep Agent response sent (${response.length} chars)`);
       }
 
       resolve();
@@ -219,7 +226,8 @@ async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }
       deepRegistry.unregister(roomId);
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
       logger.error(`Deep Agent spawn error: ${err.message}`);
-      await botApi.pushMessage(roomId, `❌ Deep Agent の起動に失敗しました: ${err.message}`);
+      await botApi.pushMessage(roomId, `❌ Deep Agent の起動に失敗しました: ${err.message}`)
+        .catch((e) => logger.error(`[Deep] spawn-error notice NOT delivered to room ${roomId}: ${e.message}`));
       resolve();
     });
   });

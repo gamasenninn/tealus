@@ -335,9 +335,13 @@ async function _dispatch({ message, room, agentId, agentName }) {
 
   switch (result.tier) {
     case 'router':
-      // Router直接応答（挨拶等）
-      await botApi.pushMessage(roomId, result.response);
-      logger.info(`Router direct: "${result.response.slice(0, 30)}..." → room ${roomId}`);
+      // Router直接応答（挨拶等）。#303: 失敗時は偽の成功ログを残さず error log。
+      try {
+        await botApi.pushMessage(roomId, result.response);
+        logger.info(`Router direct: "${result.response.slice(0, 30)}..." → room ${roomId}`);
+      } catch (err) {
+        logger.error(`[dispatcher] router direct NOT delivered to room ${roomId}: ${err.message}`);
+      }
       break;
 
     case 'unavailable': {
@@ -349,8 +353,12 @@ async function _dispatch({ message, room, agentId, agentName }) {
         : 'ℹ️ Deep agent は Claude Code CLI（Claude MAX 契約）が必要です。\n'
           + 'セットアップ方法は README の Tier 表を参照ください。\n'
           + '通常の質問は Light で対応できます（`/deep` を付けないでください）。';
-      await botApi.pushMessage(roomId, unavailMsg);
-      logger.info(`Router: unavailable response → room ${roomId} (${result.provider || 'claude'} CLI not found)`);
+      try {
+        await botApi.pushMessage(roomId, unavailMsg);
+        logger.info(`Router: unavailable response → room ${roomId} (${result.provider || 'claude'} CLI not found)`);
+      } catch (err) {
+        logger.error(`[dispatcher] unavailable notice NOT delivered to room ${roomId}: ${err.message}`);
+      }
       break;
     }
 

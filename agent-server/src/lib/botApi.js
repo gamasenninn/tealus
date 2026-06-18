@@ -33,6 +33,12 @@ function getBotUserId() {
   return botUser?.id;
 }
 
+// #303: bot JWT 失効時に cache を破棄して再ログインさせるため
+function _clearAuth() {
+  token = null;
+  botUser = null;
+}
+
 /**
  * Bot認証してトークンを取得
  */
@@ -62,7 +68,7 @@ async function login() {
 /**
  * 認証付きリクエスト
  */
-async function request(method, path, body = null) {
+async function _doRequest(method, path, body) {
   const { token: t } = await login();
   const options = {
     method,
@@ -72,8 +78,37 @@ async function request(method, path, body = null) {
     },
   };
   if (body) options.body = JSON.stringify(body);
+  return fetch(`${config.TEALUS_API_URL}/api${path}`, options);
+}
 
-  const res = await fetch(`${config.TEALUS_API_URL}/api${path}`, options);
+/**
+ * 認証付きリクエスト (#303)
+ *
+ * 旧実装は res.ok を見ず res.json() を返していたため、/bot/push 等の失敗を握り潰し、
+ * agent-server が「sent」とログするのに実際は届かない事故を招いていた。
+ * - 2xx: 従来どおり JSON を返す
+ * - 401: bot JWT 失効とみなし token cache を破棄して 1 回だけ再ログイン retry
+ * - 非2xx (401 retry 後含む): method/path/status/body を error log し、status/body 付き Error を throw
+ */
+async function request(method, path, body = null) {
+  let res = await _doRequest(method, path, body);
+
+  // 401 → token 失効。cache を破棄して 1 回だけ再ログイン retry (直線・再入なし)
+  if (res.status === 401) {
+    logger.warn(`[botApi] 401 on ${method} ${path} — clearing bot token and re-logging in (retry once)`);
+    _clearAuth();
+    res = await _doRequest(method, path, body);
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    logger.error(`[botApi] ${method} ${path} -> ${res.status} ${res.statusText}: ${text.slice(0, 300)}`);
+    const err = new Error(`Bot API ${method} ${path} failed: ${res.status} ${res.statusText}`);
+    err.status = res.status;
+    err.body = text;
+    throw err;
+  }
+
   return res.json();
 }
 

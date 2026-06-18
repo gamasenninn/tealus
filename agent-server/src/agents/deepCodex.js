@@ -425,15 +425,22 @@ async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessio
           logger.info(`[DeepCodex] skip auto-post: LLM already sent_message to own room ${roomId} (final response ${lastAgentMessage.length} chars skipped)`);
         } else {
           const content = lastAgentMessage;
-          if (content.length > 4000) {
-            const chunks = splitMessage(content, 4000);
-            for (const chunk of chunks) {
-              await botApi.pushMessage(roomId, chunk);
+          // #303: pushMessage は失敗時に throw する。close ハンドラ内で握らず throw すると
+          //       resolve に到達せず Promise がハングするため try/catch で封じ込め、
+          //       成功時のみ「sent」、失敗時は「NOT delivered」を明示ログ (偽 sent 防止)。
+          try {
+            if (content.length > 4000) {
+              const chunks = splitMessage(content, 4000);
+              for (const chunk of chunks) {
+                await botApi.pushMessage(roomId, chunk);
+              }
+            } else {
+              await botApi.pushMessage(roomId, content);
             }
-          } else {
-            await botApi.pushMessage(roomId, content);
+            logger.info(`Deep Codex Agent response sent (${content.length} chars)`);
+          } catch (err) {
+            logger.error(`[DeepCodex] response NOT delivered to room ${roomId} (${content.length} chars): ${err.message}`);
           }
-          logger.info(`Deep Codex Agent response sent (${content.length} chars)`);
         }
       } else {
         logger.warn(`Deep Codex Agent close without agent_message (code ${code}), stderr: ${stderr.slice(0, 200)}`);
