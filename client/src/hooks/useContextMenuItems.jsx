@@ -1,4 +1,4 @@
-import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2 } from 'lucide-react';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2, TextCursorInput } from 'lucide-react';
 import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
 import { useConfirmStore } from '../stores/confirmStore';
@@ -9,7 +9,7 @@ import { useConfirmStore } from '../stores/confirmStore';
 export function buildContextMenuItems({
   message, isOwn, roomId, currentRoom,
   onEdit, onShowEditHistory,
-  onReply, onShowTagModal, onShowTodoMenu, onForward,
+  onReply, onShowTagModal, onShowTodoMenu, onForward, onSelectText,
 }) {
   const items = [];
 
@@ -20,6 +20,14 @@ export function buildContextMenuItems({
       label: 'コピー',
       onClick: () => navigator.clipboard.writeText(message.content),
     });
+    // 部分コピー: バブルは user-select:none なので専用オーバーレイで部分選択 (#部分コピー)
+    if (onSelectText) {
+      items.push({
+        icon: <TextCursorInput size={16} />,
+        label: '部分コピー',
+        onClick: () => onSelectText(message.content),
+      });
+    }
   }
 
   // Edit message / Add caption
@@ -82,6 +90,13 @@ export function buildContextMenuItems({
       label: '文字起こしをコピー',
       onClick: () => navigator.clipboard.writeText(transText),
     });
+    if (onSelectText) {
+      items.push({
+        icon: <TextCursorInput size={16} />,
+        label: '文字起こしを部分コピー',
+        onClick: () => onSelectText(transText),
+      });
+    }
   }
 
   // Voice transcription actions

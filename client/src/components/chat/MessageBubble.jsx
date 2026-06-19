@@ -11,6 +11,7 @@ import LinkPreview from './LinkPreview';
 import TagModal from '../tags/TagModal';
 import TodoMenu from '../todo/TodoMenu';
 import ForwardModal from './ForwardModal';
+import TextSelectModal from './TextSelectModal';
 import TtsButton from './TtsButton';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
@@ -30,6 +31,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
   const [showTagModal, setShowTagModal] = useState(false);
   const [showTodoMenu, setShowTodoMenu] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
+  const [selectTextValue, setSelectTextValue] = useState(null);
   const [tags, setTags] = useState(message.tags || []);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
   const [editText, setEditText] = useState('');
@@ -167,6 +169,7 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
       onShowTagModal: () => setShowTagModal(true),
       onShowTodoMenu: () => setShowTodoMenu(true),
       onForward: () => setShowForwardModal(true),
+      onSelectText: (t) => setSelectTextValue(t),
     });
     setContextMenu({ x, y, items, onReaction });
   };
@@ -413,6 +416,12 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
         <ForwardModal
           message={message}
           onClose={() => setShowForwardModal(false)}
+        />
+      )}
+      {selectTextValue !== null && (
+        <TextSelectModal
+          text={selectTextValue}
+          onClose={() => setSelectTextValue(null)}
         />
       )}
       {showTagModal && (
