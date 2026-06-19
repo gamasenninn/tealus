@@ -2,7 +2,7 @@
  * Organon Context (#276 follow-up) unit test
  *
  * scope: organon repo (= tmp fixture) からの polyseme.sql_mapping 抽出 + prompt block 整形
- * + INJECT_ORGANON_POLYSEME env toggle + silent skip 動作
+ * + ORGANON_INJECT env opt-in (#304、default OFF) + silent skip 動作 + 起動時 state ログ
  */
 const fs = require('fs');
 const path = require('path');
@@ -15,10 +15,12 @@ jest.mock('../../src/lib/logger', () => ({
   error: jest.fn(),
 }));
 
+const logger = require('../../src/lib/logger');
 const {
   loadOrganonPolysemeForPrompt,
   loadSqlMappingEntries,
   isAvailable,
+  logOrganonInjectState,
 } = require('../../src/lib/organonContext');
 
 /**
@@ -116,16 +118,19 @@ describe('loadSqlMappingEntries', () => {
   });
 });
 
-describe('loadOrganonPolysemeForPrompt', () => {
-  const originalInject = process.env.INJECT_ORGANON_POLYSEME;
+describe('loadOrganonPolysemeForPrompt (opt-in、#304)', () => {
+  const originalInject = process.env.ORGANON_INJECT;
+  const originalOld = process.env.INJECT_ORGANON_POLYSEME;
 
   afterEach(() => {
-    if (originalInject === undefined) delete process.env.INJECT_ORGANON_POLYSEME;
-    else process.env.INJECT_ORGANON_POLYSEME = originalInject;
+    if (originalInject === undefined) delete process.env.ORGANON_INJECT;
+    else process.env.ORGANON_INJECT = originalInject;
+    if (originalOld === undefined) delete process.env.INJECT_ORGANON_POLYSEME;
+    else process.env.INJECT_ORGANON_POLYSEME = originalOld;
   });
 
-  test('entries あり時、prompt block 整形 (= ## 業務 DB 検索時の参考 含む)', () => {
-    delete process.env.INJECT_ORGANON_POLYSEME;
+  test('ORGANON_INJECT=true + entries あり → prompt block 整形 (= ## 業務 DB 検索時の参考 含む)', () => {
+    process.env.ORGANON_INJECT = 'true';
     const tmpDir = setupFixture({
       '納品.yaml': 'term: 納品\nsql_mapping:\n  db_column: 店長確認\n  db_value: OK\n',
     });
@@ -140,8 +145,8 @@ describe('loadOrganonPolysemeForPrompt', () => {
     }
   });
 
-  test('INJECT_ORGANON_POLYSEME=false で 空文字', () => {
-    process.env.INJECT_ORGANON_POLYSEME = 'false';
+  test('ORGANON_INJECT 未設定 (default) で 空文字 (= opt-in OFF)', () => {
+    delete process.env.ORGANON_INJECT;
     const tmpDir = setupFixture({
       '納品.yaml': 'term: 納品\nsql_mapping:\n  x: y\n',
     });
@@ -152,13 +157,38 @@ describe('loadOrganonPolysemeForPrompt', () => {
     }
   });
 
-  test('organon 不在で 空文字 (= silent skip、agent prompt 影響なし)', () => {
-    delete process.env.INJECT_ORGANON_POLYSEME;
+  test('ORGANON_INJECT=false で 空文字', () => {
+    process.env.ORGANON_INJECT = 'false';
+    const tmpDir = setupFixture({
+      '納品.yaml': 'term: 納品\nsql_mapping:\n  x: y\n',
+    });
+    try {
+      expect(loadOrganonPolysemeForPrompt({ organonPath: tmpDir })).toBe('');
+    } finally {
+      cleanupFixture(tmpDir);
+    }
+  });
+
+  test('旧 INJECT_ORGANON_POLYSEME=true は無視 (= opt-in は ORGANON_INJECT のみ、fallback なし)', () => {
+    delete process.env.ORGANON_INJECT;
+    process.env.INJECT_ORGANON_POLYSEME = 'true';
+    const tmpDir = setupFixture({
+      'foo.yaml': 'term: foo\nsql_mapping:\n  x: y\n',
+    });
+    try {
+      expect(loadOrganonPolysemeForPrompt({ organonPath: tmpDir })).toBe('');
+    } finally {
+      cleanupFixture(tmpDir);
+    }
+  });
+
+  test('ORGANON_INJECT=true でも organon 不在で 空文字 (= silent skip、agent prompt 影響なし)', () => {
+    process.env.ORGANON_INJECT = 'true';
     expect(loadOrganonPolysemeForPrompt({ organonPath: '/nonexistent' })).toBe('');
   });
 
-  test('sql_mapping 持つ entries 0 件で 空文字', () => {
-    delete process.env.INJECT_ORGANON_POLYSEME;
+  test('ORGANON_INJECT=true でも sql_mapping 持つ entries 0 件で 空文字', () => {
+    process.env.ORGANON_INJECT = 'true';
     const tmpDir = setupFixture({
       'foo.yaml': 'term: foo\ncontext: x\n', // sql_mapping なし
     });
@@ -168,17 +198,37 @@ describe('loadOrganonPolysemeForPrompt', () => {
       cleanupFixture(tmpDir);
     }
   });
+});
 
-  test('INJECT_ORGANON_POLYSEME=true 明示でも default と同動作', () => {
-    process.env.INJECT_ORGANON_POLYSEME = 'true';
+describe('logOrganonInjectState (起動時 state ログ、#304)', () => {
+  const originalInject = process.env.ORGANON_INJECT;
+
+  afterEach(() => {
+    if (originalInject === undefined) delete process.env.ORGANON_INJECT;
+    else process.env.ORGANON_INJECT = originalInject;
+    logger.info.mockClear();
+  });
+
+  test('ORGANON_INJECT=true で ON ログ (= entries 数を含む)', () => {
+    process.env.ORGANON_INJECT = 'true';
     const tmpDir = setupFixture({
-      'foo.yaml': 'term: foo\nsql_mapping:\n  x: y\n',
+      '納品.yaml': 'term: 納品\nsql_mapping:\n  x: y\n',
+      'foo.yaml': 'term: foo\ncontext: x\n', // sql_mapping なし → entries に含まれない
     });
     try {
-      const prompt = loadOrganonPolysemeForPrompt({ organonPath: tmpDir });
-      expect(prompt).toContain('### foo');
+      logOrganonInjectState({ organonPath: tmpDir });
+      const msg = logger.info.mock.calls.map((c) => c[0]).join('\n');
+      expect(msg).toContain('organon inject: ON');
+      expect(msg).toContain('entries=1');
     } finally {
       cleanupFixture(tmpDir);
     }
+  });
+
+  test('ORGANON_INJECT 未設定で OFF ログ', () => {
+    delete process.env.ORGANON_INJECT;
+    logOrganonInjectState();
+    const msg = logger.info.mock.calls.map((c) => c[0]).join('\n');
+    expect(msg).toContain('organon inject: OFF');
   });
 });

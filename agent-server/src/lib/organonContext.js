@@ -11,7 +11,9 @@
  * env:
  *   - ORGANON_REPO_PATH: organon repo の root path (= default C:/app/tealus-organon 想定、
  *     organonReloader.js と共有)
- *   - INJECT_ORGANON_POLYSEME: 'true' (default) | 'false' (= toggle、test / 旧挙動用)
+ *   - ORGANON_INJECT: 'true' で inject 有効化 (= opt-in、#304)。未設定 / 'true' 以外は無効 (default OFF)。
+ *     organon は Tealus 本体と分離可能なサブシステムなので、使う deployment だけが明示的に opt-in する。
+ *     旧 INJECT_ORGANON_POLYSEME (default ON の opt-out) は廃止、fallback も無し。
  *
  * 関連:
  *   - #276 (= Codex Deep agent) follow-up: 全 agent 共通の organon context inject
@@ -24,6 +26,13 @@ const logger = require('./logger');
 
 const DEFAULT_ORGANON_PATH = process.env.ORGANON_REPO_PATH
   || path.resolve(__dirname, '../../../../tealus-organon');
+
+/**
+ * organon inject が opt-in されているか (= ORGANON_INJECT==='true'、default OFF)
+ */
+function isInjectEnabled() {
+  return process.env.ORGANON_INJECT === 'true';
+}
 
 /**
  * organon repo が存在するか check (= polyseme dir まで)
@@ -64,7 +73,7 @@ function loadSqlMappingEntries(organonPath = DEFAULT_ORGANON_PATH) {
 /**
  * loadSqlMappingEntries() 結果を prompt 用 text block に整形
  *
- * - INJECT_ORGANON_POLYSEME=false → 空文字
+ * - ORGANON_INJECT!=='true' (= 未設定含む default) → 空文字 (opt-in OFF)
  * - organon 不在 → 空文字 (silent skip)
  * - sql_mapping 持つ entries 0 件 → 空文字
  * - それ以外 → "## 業務 DB 検索時の参考..." block を返す
@@ -74,8 +83,7 @@ function loadSqlMappingEntries(organonPath = DEFAULT_ORGANON_PATH) {
  * @returns {string} prompt 末尾に concat する text (= 空文字 or 整形済 block)
  */
 function loadOrganonPolysemeForPrompt(options = {}) {
-  const inject = (process.env.INJECT_ORGANON_POLYSEME || 'true') !== 'false';
-  if (!inject) return '';
+  if (!isInjectEnabled()) return '';
 
   const organonPath = options.organonPath || DEFAULT_ORGANON_PATH;
   const entries = loadSqlMappingEntries(organonPath);
@@ -98,9 +106,30 @@ function loadOrganonPolysemeForPrompt(options = {}) {
   ].join('\n');
 }
 
+/**
+ * 起動時に organon inject の ON/OFF を 1 行ログ (= silent regression 防止、検証可能化)
+ *
+ * default OFF への flip (#304) で、本番が ORGANON_INJECT を明示し忘れると inject が黙って止まる。
+ * 起動ログで状態 (+ 有効時は entries 数) を残し、ON/OFF を log で binary 確認できるようにする。
+ *
+ * @param {Object} [options]
+ * @param {string} [options.organonPath] - test 用 override
+ */
+function logOrganonInjectState(options = {}) {
+  if (!isInjectEnabled()) {
+    logger.info('[organonContext] organon inject: OFF (set ORGANON_INJECT=true to enable)');
+    return;
+  }
+  const organonPath = options.organonPath || DEFAULT_ORGANON_PATH;
+  const entries = loadSqlMappingEntries(organonPath);
+  logger.info(`[organonContext] organon inject: ON (entries=${entries.length}, path=${organonPath})`);
+}
+
 module.exports = {
   loadOrganonPolysemeForPrompt,
   loadSqlMappingEntries,
   isAvailable,
+  isInjectEnabled,
+  logOrganonInjectState,
   DEFAULT_ORGANON_PATH,
 };

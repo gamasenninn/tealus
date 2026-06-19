@@ -7,6 +7,7 @@ const logger = require('./lib/logger');
 const { app } = require('./app');
 const { initializeAgent } = require('./setup/register');
 const { closeAllRoomMcp } = require('./mcp/roomMcpManager');
+const { logOrganonInjectState } = require('./lib/organonContext');
 
 // Start server
 const server = app.listen(config.PORT, async () => {
@@ -14,6 +15,7 @@ const server = app.listen(config.PORT, async () => {
   logger.info(`Tealus API: ${config.TEALUS_API_URL}`);
   logger.info(`Light model: ${config.AGENT_LIGHT_MODEL}`);
   // TTS provider のログは config.js の load 時に出力済み（責務分離）
+  logOrganonInjectState(); // organon inject の ON/OFF を起動時に明示（#304、default OFF）
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   await initializeAgent();
