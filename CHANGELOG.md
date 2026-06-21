@@ -10,6 +10,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **クリップボード貼り付け(Ctrl+V)で画像/ファイルをアップロード** ([#311](https://github.com/gamasenninn/tealus/issues/311)): textarea への paste で ＋ボタンと同じ経路に流して即アップロード。テキスト貼り付けは従来どおり。PC 向け（Android 等モバイルは paste イベントが画像を渡さないプラットフォーム制約のため対象外、モバイルは ＋ボタンが標準経路）
+
+### Changed
+
+- **ルーム内アプリの表示トグルをタブ帯右端に移設** ([#310](https://github.com/gamasenninn/tealus/issues/310)): ヘッダーの📱アイコンを撤去し、アプリのあるルームはタブ帯を常時表示。タブ帯右端のシェブロンでその場で開閉（畳むとタブ帯のみ残る）
+
 ## [0.4.0] - 2026-06-21
 
 ★ ★ ★ **「組織の境界を越える release」** — Phase 5。Tealus が **外部チャネル（LINE）とつながり**、**AI が room を越えて協働する**段階に到達。LINE Bridge（受信 7 種別 + 送信者名）と `%` room 間委譲 primitive を二本柱に、Light v2 の標準化、採用者環境で発覚した silent-fail チェーンの恒久修正、ゲスト role / アクセスログ等の運用機能を加えた、v0.3.0 以降 69 コミットの集成。
