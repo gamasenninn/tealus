@@ -185,12 +185,34 @@
   border-top: 2px solid var(--primary);
 }
 
+/* 畳んだ時はタブ帯の高さだけ（iframe 非表示、メッセージ欄がほぼ全画面） */
+.app-panel.collapsed {
+  flex: 0 0 auto;
+}
+
 .app-panel-tabs {
   display: flex;
   gap: 0;
   background: white;
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
+}
+
+/* タブ帯右端の開閉トグル */
+.app-panel-toggle {
+  margin-left: auto;
+  padding: 0 12px;
+  border: none;
+  background: white;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.app-panel-toggle:hover {
+  color: var(--primary);
 }
 
 .app-panel-tab {

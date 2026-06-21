@@ -14,7 +14,7 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image, Smartphone, Phone, PhoneCall, Radio } from 'lucide-react';
+import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio } from 'lucide-react';
 import CallConfirmModal from '../call/CallConfirmModal';
 import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
@@ -150,9 +150,6 @@ function ChatRoom() {
         ) : (
           <button className="chat-header-btn" onClick={() => setShowCallConfirm(true)} title="通話"><Phone size={18} /></button>
         ))}
-        {appUrls.length > 0 && (
-          <button className={`chat-header-btn ${showAppPanel ? 'active' : ''}`} onClick={() => setShowAppPanel(!showAppPanel)} title="アプリ"><Smartphone size={18} /></button>
-        )}
         <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル"><Image size={18} /></button>
         <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}><Search size={18} /></button>
         {currentRoom?.type === 'group' && (
@@ -216,27 +213,38 @@ function ChatRoom() {
         </div>
       )}
 
-      {showAppPanel && appUrls.length > 0 && (
-        <div className="app-panel" style={{ flex: appUrls[activeAppIndex]?.ratio || 50 }}>
-          {appUrls.length > 1 && (
-            <div className="app-panel-tabs">
-              {appUrls.map((app, i) => (
-                <button
-                  key={i}
-                  className={`app-panel-tab ${activeAppIndex === i ? 'active' : ''}`}
-                  onClick={() => setActiveAppIndex(i)}
-                >
-                  {app.title}
-                </button>
-              ))}
-            </div>
+      {appUrls.length > 0 && (
+        <div
+          className={`app-panel ${showAppPanel ? 'expanded' : 'collapsed'}`}
+          style={showAppPanel ? { flex: appUrls[activeAppIndex]?.ratio || 50 } : undefined}
+        >
+          <div className="app-panel-tabs">
+            {appUrls.map((app, i) => (
+              <button
+                key={i}
+                className={`app-panel-tab ${activeAppIndex === i ? 'active' : ''}`}
+                onClick={() => { setActiveAppIndex(i); setShowAppPanel(true); }}
+              >
+                {app.title}
+              </button>
+            ))}
+            <button
+              className="app-panel-toggle"
+              onClick={() => setShowAppPanel(!showAppPanel)}
+              title={showAppPanel ? 'アプリを閉じる' : 'アプリを開く'}
+              aria-label={showAppPanel ? 'アプリを閉じる' : 'アプリを開く'}
+            >
+              {showAppPanel ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            </button>
+          </div>
+          {showAppPanel && (
+            <iframe
+              className="app-panel-iframe"
+              src={appUrls[activeAppIndex]?.url}
+              title={appUrls[activeAppIndex]?.title}
+              allow="microphone; camera; autoplay; fullscreen"
+            />
           )}
-          <iframe
-            className="app-panel-iframe"
-            src={appUrls[activeAppIndex]?.url}
-            title={appUrls[activeAppIndex]?.title}
-            allow="microphone; camera; autoplay; fullscreen"
-          />
         </div>
       )}
 
