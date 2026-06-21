@@ -10,6 +10,57 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-21
+
+★ ★ ★ **「組織の境界を越える release」** — Phase 5。Tealus が **外部チャネル（LINE）とつながり**、**AI が room を越えて協働する**段階に到達。LINE Bridge（受信 7 種別 + 送信者名）と `%` room 間委譲 primitive を二本柱に、Light v2 の標準化、採用者環境で発覚した silent-fail チェーンの恒久修正、ゲスト role / アクセスログ等の運用機能を加えた、v0.3.0 以降 69 コミットの集成。
+
+### Added
+
+- **LINE Bridge — 外部チャネル連携（受信）** ([#288](https://github.com/gamasenninn/tealus/issues/288) / [#289](https://github.com/gamasenninn/tealus/issues/289) / [#290](https://github.com/gamasenninn/tealus/issues/290) / [#291](https://github.com/gamasenninn/tealus/issues/291) / [#309](https://github.com/gamasenninn/tealus/issues/309))
+  - LINE 公式アカウントを LINE グループに招待し、グループ投稿を Tealus ルームへ投影。**text / 画像 / 音声（自動文字起こし）/ 動画（サムネイル）/ ファイル（原名・原拡張子保持）/ スタンプ / 位置情報** の 7 種別に対応
+  - **2 ファイル方式の設定**（自動 catalog `line-groups.json` + 手動 mappings `line-group-mappings.json`、ファイル編集後 **再起動不要で次 webhook 反映**）
+  - **TextFilePreview**: MD / TXT / JSON（自動整形）/ CSV（テーブル化）/ ソースコードの inline preview（UTF-8 decode で Chrome Android 文字化け回避）
+  - **送信者名の付与**（#309）: 投影本文の先頭に `[氏名@グループ名]` を添え、グループ内の誰の発言か判別可能に（LINE 表示名を取得し cache、取得不可時は degrade）
+  - LINE 公式 spec 準拠（webhook は常に 2xx、auto-suspend 防止）、`docs/setup-line-bridge.md` に採用者向けセットアップ手順
+- **`%` room 間委譲 primitive — AI が room を越えて協働** ([#295](https://github.com/gamasenninn/tealus/issues/295) / [#292](https://github.com/gamasenninn/tealus/issues/292))
+  - `%<room> <task>` 構文で、別ルームに常駐する AI へタスクを委譲（専用デリゲーター + 予算付き封筒 + 4 段ガード、複数 `%room` の fan-out → 統合も対応）
+  - **委譲の権限チェック**（[#282](https://github.com/gamasenninn/tealus/issues/282)）: 委譲先ルームのメンバーのみ許可（fail-closed）、bot membership 確認エンドポイント新設
+  - DeepCodex backend 対応、依頼元ルームへ「問い合わせ中」ステータス表示、in-flight tracking / throttle の暴走防止 safety net
+- **Light backend の設定化 + Light v2 標準化** ([#292](https://github.com/gamasenninn/tealus/issues/292)): `AGENT_LIGHT_BACKEND` env で v1/v2 切替、default を `v1` → `v2`（codex SDK backed、サブスク認証で cost 0、user voice 反映）
+- **アクセスログ MVP**（#301）: 管理ダッシュボードに最終投稿/最終閲覧の集計ビュー（新規テーブルなし）
+- **ゲスト role の運用可能化（Phase D/E）**（#282）: 外部問い合わせ者向け strict/fail-closed persona
+- **メッセージの部分コピー**（#308）: 専用選択オーバーレイで本文の一部だけコピー（ジェスチャ衝突回避）
+- **文字起こしの連続編集**（#302）: 編集モーダルに前/次ナビ、隣の音声へ送りながら編集
+- **image/video/file 転送（リンク方式、binary 重複なし）**（#293、tealus-mcp v0.14.1 連動）
+- **transcription vocab の mtime 自動リロード**（#286）: ファイル更新だけで次の文字起こしに反映（admin token 運用摩擦を解消）
+- **Codex 認証エラー検出（pre-α）**: lightV2 / deepCodex で認証切れを検出し user に案内
+- **RoomList のタブ切替**（すべて / 1:1 / グループ）
+
+### Changed
+
+- **`AGENT_LIGHT_BACKEND` の default を `v1` → `v2`** にフリップ（#292）
+- **organon polyseme inject を opt-in 化**（[#304](https://github.com/gamasenninn/tealus/issues/304)）: env を `ORGANON_INJECT`（default OFF）にリネーム、起動時に状態ログ。organon を使う deployment のみ明示有効化
+- **@アシスタント メンションを先頭限定に**（文中・例示の誤発火を防止）
+- LINE Bridge の送信者ラベルを太字 `**..**` → 角括弧 `[..]` に（視認性、dogfood feedback）
+
+### Fixed
+
+- **botApi.request の HTTP ステータス握り潰しを修正**（[#303](https://github.com/gamasenninn/tealus/issues/303)）: 非2xx を握り潰して偽「sent」を出す欠陥を解消（401 自動再ログイン + 診断ログ）。tealus-mcp 側の同型 silent-fail も併せて修正（v0.14.2）
+- **deepCodex: rotation 済 auth.json の上書き破棄を修正**（[#307](https://github.com/gamasenninn/tealus/issues/307)）: codex が更新したトークンを書き戻し、recurring `refresh_token_reused` を解消
+- **メッセージ単位の error boundary**（#306）: 1 件の描画例外がチャット全体を白紙化しないように局所化
+- **socket `room:join` の DoS crash 対処** + global unhandledRejection safety net
+- **ゲストへのホーム surface 漏洩を fail-closed 修正**（#282、お知らせ/ポータルリンク）
+- LINE Bridge 各種: 200 spec 準拠 + path 復権、signature/raw body middleware、sticker CDN（400 fix）、ファイル名・拡張子保持（.bin 問題）
+- 委譲の重複送信防止（LightV2 / DeepCodex の自 room send_message → 最終 auto-post 重複）
+- TTS: Aivis 3000 文字 hard cap、bubble button からの個人 TTS は全文読上げ
+- client: 入力中/考え中インジケータの他ルーム漏れ・残留、管理フォームの ID/パスワード自動入力、iPhone 狭画面の header 折返し、TextFilePreview/media-file 背景の視認性
+- agent-server `config.js` の `WORKSPACE_ROOT` を `path.resolve` 正規化（採用者環境の Deep Codex bug）
+
+### 関連
+
+- tealus-mcp は別リポジトリで独立採番（本リリース期間に v0.13.2 → **v0.14.2**）
+- ドキュメント: `docs/setup-line-bridge.md`（LINE Bridge セットアップ手順）
+
 ## [0.3.0] - 2026-06-01
 
 ★ ★ ★ **「組織記憶辞書が動作する道具に転化した release」** — Phase 4 organon paradigm operational realization 完成。Day 14-15-16 で Codex Deep agent + organon polyseme inject pipeline + 5/16 4 round → 0 round transition + 4 Issue cluster 連続 close を達成、organon が業務 DB を upstream rectification する thesis が ★ structural に完成。
