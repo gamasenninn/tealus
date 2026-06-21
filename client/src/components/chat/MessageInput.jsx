@@ -94,9 +94,9 @@ function MessageInput({ roomId, transceiver }) {
     textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
   };
 
-  const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+  // ＋ボタン / 貼り付け 共用のアップロード処理
+  const uploadFiles = async (files) => {
+    if (!files || files.length === 0) return;
 
     // Client-side file size check
     const limits = FILE_SIZE_LIMITS;
@@ -104,9 +104,8 @@ function MessageInput({ roomId, transceiver }) {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'default';
       const maxMB = limits[type];
       if (file.size > maxMB * 1024 * 1024) {
-        setUploadError(`${file.name} のサイズが上限（${maxMB}MB）を超えています`);
+        setUploadError(`${file.name || 'ファイル'} のサイズが上限（${maxMB}MB）を超えています`);
         setTimeout(() => setUploadError(''), 5000);
-        fileInputRef.current.value = '';
         return;
       }
     }
@@ -131,8 +130,32 @@ function MessageInput({ roomId, transceiver }) {
     } finally {
       setIsSending(false);
       setUploadProgress(null);
-      fileInputRef.current.value = '';
     }
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files);
+    await uploadFiles(files);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // クリップボード貼り付け (Ctrl+V) で画像/ファイルを ＋ボタンと同じ経路でアップロード
+  const handlePaste = (e) => {
+    if (isSending) return;
+    const files = Array.from(e.clipboardData?.items || [])
+      .filter((it) => it.kind === 'file')
+      .map((it) => it.getAsFile())
+      .filter(Boolean);
+    if (files.length === 0) return; // テキスト等の貼り付けは従来どおり通す
+
+    e.preventDefault();
+    // スクショ等は name が無いことがあるので合成 (拡張子は mime から)
+    const named = files.map((f, i) => {
+      if (f.name) return f;
+      const ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      return new File([f], `pasted-${Date.now()}-${i}.${ext}`, { type: f.type });
+    });
+    uploadFiles(named);
   };
 
   const handleMicClick = async () => {
@@ -291,6 +314,7 @@ function MessageInput({ roomId, transceiver }) {
           }}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={window.innerWidth >= 768 ? 'メッセージを入力（Ctrl+Enterで送信）' : 'メッセージを入力'}
           rows={1}
           disabled={isSending}
