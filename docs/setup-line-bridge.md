@@ -20,6 +20,16 @@
 
 - **catalog file** (= `server/config/line-groups.json`、自動更新): webhook 受信時 LINE API で group name 自動取得 + atomic write
 - **mappings file** (= `server/config/line-group-mappings.json`、手動編集): D2 object form + pure string form 後方互換、★ ★ ★ file 編集後 ★ 次 webhook で即反映 (= restart 不要)
+- **members file** (= `server/config/line-members.json`、自動更新、#309 案A): 後述「送信者名の付与」用。userId → 表示名の cache (= atomic write、既取得は API skip)。LINE 表示名 = 個人情報のため .gitignored
+
+### 送信者名の付与 (= #309 案A MVP、2026-06-21)
+
+LINE グループは複数人が発言するため、投影メッセージの本文先頭に **`氏名@グループ名`**（太字）を添えて「誰の発言か」を示す。
+
+- 送信者名は webhook の `source.userId` から LINE API `GET /v2/bot/group/{groupId}/member/{userId}` で取得し `line-members.json` に cache（group name 取得と同型）。
+- バブルのヘッダー送信者名は引き続き「LINE Bridge」（投稿は単一 bot user のため）。氏名は**本文の先頭行**に出る（ライブ/再読込で一貫）。
+- text / image / voice / file / video / sticker / location 全 type に付与。userId 取得不可 / member profile 取得失敗時はラベル無しで degrade（従来どおり「LINE Bridge」のみ）。
+- ★ MVP のため content 先頭に文字列として埋め込む方式。将来 per-message ラベル列（案B）/ LINE ユーザー別 bot user（案C）へ移行余地あり（[#309](https://github.com/gamasenninn/tealus/issues/309)）。
 
 ### LINE 公式 spec 準拠
 

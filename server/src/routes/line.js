@@ -27,10 +27,50 @@ const {
   postLocationToTealus,
 } = require('../services/lineMessageBridge');
 const { loadGroupToRoomMap } = require('../services/lineGroupMappings');
-const { upsertGroupEntry } = require('../services/lineGroupCatalog');
+const { upsertGroupEntry, readGroupName } = require('../services/lineGroupCatalog');
+const { getMemberDisplayName } = require('../services/lineMemberCatalog');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+
+/**
+ * 送信者ラベル「氏名@グループ名」を解決する (= #309 案A MVP)
+ *
+ * - cfg.senderLabel が明示指定されていればそれを使う (= test override、null も可)
+ * - source.userId + channelToken が揃えば member profile (cache) で氏名を取得
+ * - 氏名取得不可 (userId 無 / token 無 / API fail) は null → caller 側でラベルなし degrade
+ * - group 名は catalog (= line-groups.json) から読む。未収集なら「氏名」のみ
+ *
+ * @returns {Promise<string|null>} 「氏名@グループ名」 or 「氏名」 or null
+ */
+async function resolveSenderLabel(event, groupId, channelToken, cfg = {}) {
+  if (Object.prototype.hasOwnProperty.call(cfg, 'senderLabel')) return cfg.senderLabel;
+
+  const userId = event.source && event.source.userId;
+  if (!userId || !channelToken) return null;
+
+  let name = null;
+  try {
+    name = await getMemberDisplayName(groupId, userId, channelToken, { fetchImpl: cfg.memberFetchImpl });
+  } catch (e) {
+    logger.warn(`[LINE Bridge] sender name resolve failed: ${e.message}`);
+  }
+  if (!name) return null;
+
+  const groupName = readGroupName(groupId);
+  return groupName ? `${name}@${groupName}` : name;
+}
+
+/**
+ * content 先頭に「**ラベル**」を付与する (= #309 案A)。
+ * - label が null/空 → body をそのまま返す (= 従来挙動、body は undefined もあり得る)
+ * - body あり → 「**label**\n本文」、body 無し (= media caption) → 「**label**」
+ */
+function applyContentLabel(label, body) {
+  if (!label) return body;
+  const head = `**${label}**`;
+  return (body && body.length > 0) ? `${head}\n${body}` : head;
+}
 
 const SECRET_PATH = process.env.LINE_WEBHOOK_SECRET_PATH;
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
@@ -117,12 +157,16 @@ async function dispatchEvent(event, options = {}) {
     }
   }
 
+  // ★ #309 案A: LINE 送信者名 + group 名を「**氏名@グループ名**」として content 先頭に添える (MVP)
+  // 取得不可 (userId 無 / token 無 / API fail) は null → ラベルなしで従来どおり「LINE Bridge」表示に degrade
+  const senderLabel = await resolveSenderLabel(event, groupId, channelToken, cfg);
+
   switch (message.type) {
     case 'text':
       await postTextToTealus({
         roomId,
         sender,
-        content: message.text || '',
+        content: applyContentLabel(senderLabel, message.text || ''),
         io,
       });
       return { posted: 'text' };
@@ -134,6 +178,7 @@ async function dispatchEvent(event, options = {}) {
         roomId,
         sender,
         mediaInfo,
+        content: applyContentLabel(senderLabel, undefined),
         io,
       });
       return { posted: 'image' };
@@ -146,6 +191,7 @@ async function dispatchEvent(event, options = {}) {
         roomId,
         sender,
         mediaInfo,
+        content: applyContentLabel(senderLabel, undefined),
         io,
       });
       return { posted: 'voice' };
@@ -163,6 +209,7 @@ async function dispatchEvent(event, options = {}) {
         roomId,
         sender,
         mediaInfo,
+        content: applyContentLabel(senderLabel, undefined),
         io,
       });
       return { posted: 'file' };
@@ -175,6 +222,7 @@ async function dispatchEvent(event, options = {}) {
         roomId,
         sender,
         mediaInfo,
+        content: applyContentLabel(senderLabel, undefined),
         io,
       });
       return { posted: 'video' };
@@ -190,6 +238,7 @@ async function dispatchEvent(event, options = {}) {
         roomId,
         sender,
         mediaInfo,
+        content: applyContentLabel(senderLabel, undefined),
         io,
       });
       return { posted: 'sticker' };
@@ -203,6 +252,7 @@ async function dispatchEvent(event, options = {}) {
         roomId,
         sender,
         location: { title, address, latitude, longitude },
+        senderLabel,
         io,
       });
       return { posted: 'location' };

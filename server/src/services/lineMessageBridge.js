@@ -138,11 +138,12 @@ async function postImageToTealus({ roomId, sender, mediaInfo, content, replyTo, 
  * @param {string} params.roomId
  * @param {Object} params.sender
  * @param {Object} params.mediaInfo - lineBridge.saveLineContentToFile の return value
+ * @param {string} [params.content] - caption (= #309 案A の sender label 等、null 可)
  * @param {string} [params.replyTo]
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object, media: Object }>}
  */
-async function postVoiceToTealus({ roomId, sender, mediaInfo, replyTo, io }) {
+async function postVoiceToTealus({ roomId, sender, mediaInfo, content, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
   if (!sender) throw new Error('sender is required');
   if (!mediaInfo) throw new Error('mediaInfo is required');
@@ -151,9 +152,9 @@ async function postVoiceToTealus({ roomId, sender, mediaInfo, replyTo, io }) {
   try {
     await client.query('BEGIN');
     const msgResult = await client.query(
-      `INSERT INTO messages (room_id, sender_id, type, reply_to)
-       VALUES ($1, $2, 'voice', $3) RETURNING *`,
-      [roomId, sender.id, replyTo || null]
+      `INSERT INTO messages (room_id, sender_id, content, type, reply_to)
+       VALUES ($1, $2, $3, 'voice', $4) RETURNING *`,
+      [roomId, sender.id, content || null, replyTo || null]
     );
     const message = msgResult.rows[0];
 
@@ -338,11 +339,12 @@ async function postVideoToTealus({ roomId, sender, mediaInfo, content, replyTo, 
  *   - address: string|null (= 住所、user 任意)
  *   - latitude: number (= 緯度)
  *   - longitude: number (= 経度)
+ * @param {string} [params.senderLabel] - 送信者ラベル「氏名@グループ名」(= #309 案A、先頭行に太字で付与)
  * @param {string} [params.replyTo]
  * @param {Object} [params.io]
  * @returns {Promise<{ message: Object }>}
  */
-async function postLocationToTealus({ roomId, sender, location, replyTo, io }) {
+async function postLocationToTealus({ roomId, sender, location, senderLabel, replyTo, io }) {
   if (!roomId) throw new Error('roomId is required');
   if (!sender) throw new Error('sender is required');
   if (!location) throw new Error('location is required');
@@ -361,7 +363,10 @@ async function postLocationToTealus({ roomId, sender, location, replyTo, io }) {
   const mapsUrl = hasCoords ? `https://maps.google.com/?q=${latitude},${longitude}` : null;
 
   // markdown format (= Tealus MessageBubble で remarkGfm + remarkBreaks 自動 rendering)
-  const lines = [`📍 ${label}`];
+  // #309 案A: senderLabel があれば先頭行に「**氏名@グループ名**」を付与
+  const lines = [];
+  if (senderLabel) lines.push(`**${senderLabel}**`);
+  lines.push(`📍 ${label}`);
   if (address && address !== label) lines.push(address);
   if (coordsLine) lines.push(coordsLine);
   if (mapsUrl) lines.push('', `[地図を開く](${mapsUrl})`);

@@ -149,11 +149,27 @@ async function upsertGroupEntry(groupId, eventContext = {}, options = {}) {
   }
 }
 
+/**
+ * cache 済 group name を読む (= #309 案A、sender label の「@グループ名」用)
+ *
+ * @param {string} groupId
+ * @param {Object} [options]
+ * @param {string} [options.filePath] - file path override
+ * @returns {string|null} group name (= 未取得 / 未収集は null)
+ */
+function readGroupName(groupId, options = {}) {
+  if (!groupId) return null;
+  const filePath = options.filePath || process.env.LINE_GROUP_CATALOG_FILE || DEFAULT_CATALOG_FILE;
+  const entry = readCatalog(filePath)[groupId];
+  return (entry && entry.name) || null;
+}
+
 module.exports = {
   readCatalog,
   writeCatalogAtomic,
   fetchGroupSummary,
   upsertGroupEntry,
+  readGroupName,
   DEFAULT_CATALOG_FILE,
   LINE_GROUP_SUMMARY_BASE,
   MAX_SNIPPET_CHARS,

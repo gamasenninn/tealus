@@ -18,6 +18,8 @@ server/config/mining_report.json
 # LINE Bridge Phase 2.3 (= 6/6 Day 21 確立、2 file 案): example はコミット、実運用 file は ignored
 server/config/line-groups.json
 server/config/line-group-mappings.json
+# LINE Bridge #309 案A: 送信者名 cache (= LINE 表示名 = 個人情報、runtime 生成)
+server/config/line-members.json
 
 # Marp 生成物 (markdown source からビルド可能、commit 不要)
 docs/presentation/*.html

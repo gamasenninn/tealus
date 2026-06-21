@@ -381,5 +381,101 @@ describe('dispatchEvent', () => {
   });
 });
 
+describe('dispatchEvent — sender label (#309 案A)', () => {
+  let origMemberEnv;
+  beforeEach(() => {
+    origMemberEnv = process.env.LINE_MEMBER_CATALOG_FILE;
+    process.env.LINE_MEMBER_CATALOG_FILE = require('path').join(tmpDir, 'members.json');
+  });
+  afterEach(() => {
+    if (origMemberEnv === undefined) delete process.env.LINE_MEMBER_CATALOG_FILE;
+    else process.env.LINE_MEMBER_CATALOG_FILE = origMemberEnv;
+  });
+
+  test('cfg.senderLabel 指定 → text content に **ラベル** prefix', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X', userId: 'U1' },
+      message: { type: 'text', id: 'm1', text: 'hello' },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
+    expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({
+      content: '**小野仙人@営業**\nhello',
+    }));
+  });
+
+  test('cfg.senderLabel + image → caption に **ラベル**', async () => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('x'), mimeType: 'image/jpeg' });
+    mockSaveContent.mockResolvedValue({ relativePath: 'line-images/x.jpg', fileName: 'x.jpg', fileSize: 1, mimeType: 'image/jpeg' });
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X', userId: 'U1' },
+      message: { type: 'image', id: 'mi' },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
+    expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({ content: '**小野仙人@営業**' }));
+  });
+
+  test('cfg.senderLabel + voice → content に **ラベル**', async () => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('x'), mimeType: 'audio/m4a' });
+    mockSaveContent.mockResolvedValue({ relativePath: 'line-voices/x.m4a', fileName: 'x.m4a', fileSize: 1, mimeType: 'audio/m4a' });
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X', userId: 'U1' },
+      message: { type: 'audio', id: 'ma' },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
+    expect(mockPostVoice).toHaveBeenCalledWith(expect.objectContaining({ content: '**小野仙人@営業**' }));
+  });
+
+  test('cfg.senderLabel + location → postLocation に senderLabel 渡る', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X', userId: 'U1' },
+      message: { type: 'location', title: '東京駅', latitude: 35.68, longitude: 139.76 },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
+    expect(mockPostLocation).toHaveBeenCalledWith(expect.objectContaining({ senderLabel: '小野仙人@営業' }));
+  });
+
+  test('実解決: userId + memberFetchImpl + group catalog name → 「氏名@グループ名」', async () => {
+    require('fs').writeFileSync(tmpCatalog, JSON.stringify({ 'group-X': { name: '営業部LINE' } }));
+    const memberFetchImpl = jest.fn(async () => ({
+      ok: true, status: 200, statusText: 'OK', json: async () => ({ displayName: '小野仙人' }),
+    }));
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X', userId: 'U1' },
+      message: { type: 'text', id: 'm1', text: 'やあ' },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, memberFetchImpl } });
+    expect(memberFetchImpl).toHaveBeenCalled();
+    expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({
+      content: '**小野仙人@営業部LINE**\nやあ',
+    }));
+  });
+
+  test('userId 無し → ラベルなし (= 従来どおり、content 素のまま)', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', id: 'm1', text: 'hello' },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
+    expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({ content: 'hello' }));
+  });
+
+  test('member fetch 失敗 → ラベルなし degrade (content 素のまま)', async () => {
+    const memberFetchImpl = jest.fn(async () => ({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({}) }));
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X', userId: 'U1' },
+      message: { type: 'text', id: 'm1', text: 'hello' },
+    };
+    await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, memberFetchImpl } });
+    expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({ content: 'hello' }));
+  });
+});
+
 // loadGroupToRoomMap の test は 6/6 Day 21 で services/lineGroupMappings.js に移管
 // (= 新 test: __tests__/unit/lineGroupMappings.test.js)
