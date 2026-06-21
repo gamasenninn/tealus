@@ -400,7 +400,7 @@ describe('dispatchEvent — sender label (#309 案A)', () => {
     };
     await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
     expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({
-      content: '**小野仙人@営業**\nhello',
+      content: '[小野仙人@営業]\nhello',
     }));
   });
 
@@ -413,7 +413,7 @@ describe('dispatchEvent — sender label (#309 案A)', () => {
       message: { type: 'image', id: 'mi' },
     };
     await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
-    expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({ content: '**小野仙人@営業**' }));
+    expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({ content: '[小野仙人@営業]' }));
   });
 
   test('cfg.senderLabel + voice → content に **ラベル**', async () => {
@@ -425,7 +425,7 @@ describe('dispatchEvent — sender label (#309 案A)', () => {
       message: { type: 'audio', id: 'ma' },
     };
     await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, senderLabel: '小野仙人@営業' } });
-    expect(mockPostVoice).toHaveBeenCalledWith(expect.objectContaining({ content: '**小野仙人@営業**' }));
+    expect(mockPostVoice).toHaveBeenCalledWith(expect.objectContaining({ content: '[小野仙人@営業]' }));
   });
 
   test('cfg.senderLabel + location → postLocation に senderLabel 渡る', async () => {
@@ -451,7 +451,7 @@ describe('dispatchEvent — sender label (#309 案A)', () => {
     await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true, memberFetchImpl } });
     expect(memberFetchImpl).toHaveBeenCalled();
     expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({
-      content: '**小野仙人@営業部LINE**\nやあ',
+      content: '[小野仙人@営業部LINE]\nやあ',
     }));
   });
 

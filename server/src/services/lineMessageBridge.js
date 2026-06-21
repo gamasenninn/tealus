@@ -363,9 +363,9 @@ async function postLocationToTealus({ roomId, sender, location, senderLabel, rep
   const mapsUrl = hasCoords ? `https://maps.google.com/?q=${latitude},${longitude}` : null;
 
   // markdown format (= Tealus MessageBubble で remarkGfm + remarkBreaks 自動 rendering)
-  // #309 案A: senderLabel があれば先頭行に「**氏名@グループ名**」を付与
+  // #309 案A: senderLabel があれば先頭行に「[氏名@グループ名]」を付与
   const lines = [];
-  if (senderLabel) lines.push(`**${senderLabel}**`);
+  if (senderLabel) lines.push(`[${senderLabel}]`);
   lines.push(`📍 ${label}`);
   if (address && address !== label) lines.push(address);
   if (coordsLine) lines.push(coordsLine);

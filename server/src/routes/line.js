@@ -68,7 +68,7 @@ async function resolveSenderLabel(event, groupId, channelToken, cfg = {}) {
  */
 function applyContentLabel(label, body) {
   if (!label) return body;
-  const head = `**${label}**`;
+  const head = `[${label}]`;
   return (body && body.length > 0) ? `${head}\n${body}` : head;
 }
 
