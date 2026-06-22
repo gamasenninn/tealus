@@ -11,6 +11,7 @@ const logger = require('../lib/logger');
 const botApi = require('../lib/botApi');
 const { loadMemoryForPrompt } = require('../memory/fileMemory');
 const { loadOrganonPolysemeForPrompt } = require('../lib/organonContext');
+const { loadVocabForPrompt } = require('../lib/vocabContext');
 const { createTools } = require('./lightTools');
 const { getSetting } = require('../context/settingsManager');
 
@@ -74,6 +75,8 @@ function createLightAgent(workspacePath, mcpServers = [], roomId = null) {
       }
       // #276 follow-up: organon polyseme.sql_mapping を DB 検索精度向上のため inject
       prompt += loadOrganonPolysemeForPrompt();
+      // vocab inject: STT vocab (別名→正規名) を OCR/文章読みの正規化用に inject (opt-in)
+      prompt += loadVocabForPrompt();
       logger.debug(`[Light] System prompt: ${prompt.length} chars`);
       return prompt;
     },

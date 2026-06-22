@@ -8,6 +8,7 @@ const { app } = require('./app');
 const { initializeAgent } = require('./setup/register');
 const { closeAllRoomMcp } = require('./mcp/roomMcpManager');
 const { logOrganonInjectState } = require('./lib/organonContext');
+const { logVocabInjectState } = require('./lib/vocabContext');
 
 // Start server
 const server = app.listen(config.PORT, async () => {
@@ -16,6 +17,7 @@ const server = app.listen(config.PORT, async () => {
   logger.info(`Light model: ${config.AGENT_LIGHT_MODEL}`);
   // TTS provider のログは config.js の load 時に出力済み（責務分離）
   logOrganonInjectState(); // organon inject の ON/OFF を起動時に明示（#304、default OFF）
+  logVocabInjectState();   // STT vocab inject の ON/OFF を起動時に明示（default OFF、opt-in）
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   await initializeAgent();
