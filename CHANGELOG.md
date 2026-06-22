@@ -13,10 +13,18 @@
 ### Added
 
 - **クリップボード貼り付け(Ctrl+V)で画像/ファイルをアップロード** ([#311](https://github.com/gamasenninn/tealus/issues/311)): textarea への paste で ＋ボタンと同じ経路に流して即アップロード。テキスト貼り付けは従来どおり。PC 向け（Android 等モバイルは paste イベントが画像を渡さないプラットフォーム制約のため対象外、モバイルは ＋ボタンが標準経路）
+- **STT vocab を agent prompt にも inject — 画像 OCR/帳票の正規化** ([#315](https://github.com/gamasenninn/tealus/issues/315)): organon 由来の業務語彙辞書（別名→正規名）は従来 STT(Whisper) のみに効き vision/OCR に未接続だった。`vocabContext` で `transcription_guideline.json` の vocabulary を Light/Deep の prompt に inject し、画像・帳票読み取りで人名/メーカー/業務語の表記揺れを正規化。env `VOCAB_INJECT`（opt-in、default OFF）。出品票 OCR で効果確認。
+- **複数画像（複数添付メッセージ）の一括取得** ([#316](https://github.com/gamasenninn/tealus/issues/316)、tealus-mcp v0.14.5 連動): 1メッセージに複数画像があると `get_message_media` が1枚目しか返さなかった（server endpoint の rows[0]）。`GET /bot/messages/:id/media?index=N` + `media_count` + `media[]` メタ対応とし、index 逐次取得（4枚=base64 約10.4MB のため全枚一括は非現実的）。出品票4枚一括→MD化→保存の dogfood 成功。
 
 ### Changed
 
 - **ルーム内アプリの表示トグルをタブ帯右端に移設** ([#310](https://github.com/gamasenninn/tealus/issues/310)): ヘッダーの📱アイコンを撤去し、アプリのあるルームはタブ帯を常時表示。タブ帯右端のシェブロンでその場で開閉（畳むとタブ帯のみ残る）
+- **Deep のタイムアウトを 5分→8分に引き上げ** ([#314](https://github.com/gamasenninn/tealus/issues/314)): 画像生成+保存や organon prompt 込みの重い Deep が5分で切れる件。`DEEP_TIMEOUT` 480000 / `QUEUE_TASK_TIMEOUT` 540000、env 上書き可。
+
+### Fixed
+
+- **画像生成（`generate_and_send_image`）の復活** ([#313](https://github.com/gamasenninn/tealus/issues/313)、tealus-mcp v0.14.3/v0.14.4 連動): `response_format` が現行 OpenAI Images API で拒否され全失敗 → 除去 + b64_json/url 両対応。さらに `dall-e-3` がアカウントで廃止のため `gpt-image-1` へ移行（env `OPENAI_IMAGE_MODEL` で上書き可）。
+- **Deep Codex がタイムアウト後もプロセス生存し遅延応答する bug** ([#312](https://github.com/gamasenninn/tealus/issues/312)): timeout 時の sweep の Name filter が `claude.exe/cmd.exe` 限定で Deep Codex の `codex.exe` にマッチせず空振りだった。`codex.exe` + `node.exe` を追加（codex は `-C <workspace>` 引数を持つため CommandLine 一致）。
 
 ## [0.4.0] - 2026-06-21
 
