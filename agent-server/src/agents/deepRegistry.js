@@ -47,15 +47,19 @@ function sweepByWorkspacePath(workspacePath, roomId) {
   //   '  → ''  (SQL string escape)
   //   \  → \\  (default escape char in LIKE)
   //   [, _, %  → bracket char class (literal match)
-  // Name filter で claude.exe / cmd.exe に限定 — sweep を実行する powershell.exe 自身は
-  // workspace path を含んでも別 Name なので self-kill しない
+  // Name filter で対象プロセスに限定 — sweep を実行する powershell.exe 自身は
+  // workspace path を含んでも別 Name なので self-kill しない。
+  // - claude.exe / cmd.exe: Deep (claude CLI) の tree
+  // - codex.exe: ★ #312 Deep Codex の native worker (codex.cmd → node → codex.exe、
+  //   引数に `-C <workspacePath>` を持つため CommandLine LIKE で一致)
+  // - node.exe: codex.js launcher / node 製 MCP 子プロセス (workspace path を含む room-unique のみ一致)
   const safe = workspacePath
     .replace(/'/g, "''")
     .replace(/\\/g, '\\\\')
     .replace(/\[/g, '[[]')
     .replace(/_/g, '[_]')
     .replace(/%/g, '[%]');
-  const filter = `(Name='claude.exe' OR Name='cmd.exe') AND CommandLine LIKE '%${safe}%'`;
+  const filter = `(Name='claude.exe' OR Name='cmd.exe' OR Name='codex.exe' OR Name='node.exe') AND CommandLine LIKE '%${safe}%'`;
   const script = `Get-CimInstance Win32_Process -Filter "${filter}" -ErrorAction SilentlyContinue | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }`;
   try {
     const sweep = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {

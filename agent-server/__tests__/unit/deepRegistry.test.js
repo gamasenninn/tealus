@@ -140,9 +140,12 @@ describe('deepRegistry', () => {
       expect(script).toContain('Stop-Process');
       // workspace path が WQL LIKE で含まれる
       expect(script).toContain('C:/app/tealus-workspaces/agent1/room1');
-      // Name filter で claude.exe / cmd.exe に限定 (self-kill 防止)
+      // Name filter で claude.exe / cmd.exe / codex.exe / node.exe に限定 (self-kill 防止)
       expect(script).toContain("Name='claude.exe'");
       expect(script).toContain("Name='cmd.exe'");
+      // #312: Deep Codex の native worker (codex.exe) + launcher (node.exe) も対象
+      expect(script).toContain("Name='codex.exe'");
+      expect(script).toContain("Name='node.exe'");
     });
 
     test('WQL escape: ' + "\\ ' [ _ % を含む path を正しく escape", () => {
