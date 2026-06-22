@@ -459,6 +459,76 @@ describe('Bot API', () => {
         .get('/api/bot/messages/00000000-0000-0000-0000-000000000000/media');
       expect(res.status).toBe(401);
     });
+
+    // #316: 複数添付メッセージの index 取得
+    async function insertMultiImageMessage(senderId, rid, contents) {
+      const pool = getTestPool();
+      const msgRes = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'image', NULL) RETURNING id`,
+        [rid, senderId]
+      );
+      const messageId = msgRes.rows[0].id;
+      const filenames = [];
+      for (let i = 0; i < contents.length; i++) {
+        const filename = `multi-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}.png`;
+        fs.writeFileSync(path.join(TEST_FIXTURE_PATH, filename), contents[i]);
+        // 個別 query (autocommit) で created_at を分け、ORDER BY created_at が挿入順になる
+        await pool.query(
+          `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
+           VALUES ($1, $2, $3, 'image/png', $4)`,
+          [messageId, `${TEST_FIXTURE_DIR}/${filename}`, filename, contents[i].length]
+        );
+        filenames.push(filename);
+      }
+      return { messageId, filenames };
+    }
+
+    it('#316: returns media_count + media metadata array for multi-attachment', async () => {
+      const { messageId } = await insertMultiImageMessage(user1.user.id, roomId, ['IMG-A', 'IMG-B', 'IMG-C']);
+      const res = await request(app)
+        .get(`/api/bot/messages/${messageId}/media`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.media_count).toBe(3);
+      expect(Array.isArray(res.body.media)).toBe(true);
+      expect(res.body.media).toHaveLength(3);
+      expect(res.body.media[0]).toMatchObject({ index: 0, mime_type: 'image/png' });
+      // 既定 (index 省略) は 1 枚目を返す = 後方互換
+      expect(res.body.index).toBe(0);
+      expect(Buffer.from(res.body.data_base64, 'base64').toString()).toBe('IMG-A');
+    });
+
+    it('#316: ?index=N returns the N-th media (stable order)', async () => {
+      const { messageId } = await insertMultiImageMessage(user1.user.id, roomId, ['IMG-A', 'IMG-B', 'IMG-C']);
+      const res1 = await request(app)
+        .get(`/api/bot/messages/${messageId}/media?index=1`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res1.status).toBe(200);
+      expect(res1.body.index).toBe(1);
+      expect(Buffer.from(res1.body.data_base64, 'base64').toString()).toBe('IMG-B');
+      const res2 = await request(app)
+        .get(`/api/bot/messages/${messageId}/media?index=2`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(Buffer.from(res2.body.data_base64, 'base64').toString()).toBe('IMG-C');
+    });
+
+    it('#316: out-of-range index returns 400', async () => {
+      const { messageId } = await insertMultiImageMessage(user1.user.id, roomId, ['IMG-A', 'IMG-B']);
+      const res = await request(app)
+        .get(`/api/bot/messages/${messageId}/media?index=5`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(400);
+    });
+
+    it('#316: single-media message still returns media_count=1 (backward compat)', async () => {
+      const { messageId } = await insertImageMessage(user1.user.id, roomId);
+      const res = await request(app)
+        .get(`/api/bot/messages/${messageId}/media`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.media_count).toBe(1);
+      expect(res.body.data_base64).toBeTruthy();
+    });
   });
 
   // ============================================

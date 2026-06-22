@@ -490,56 +490,82 @@ router.get('/messages/:id/media', async (req, res) => {
   const userId = req.user.id;
 
   try {
-    // メッセージ + メディア + ルーム所属を一括チェック
-    const result = await pool.query(`
-      SELECT m.id, m.type, m.room_id, m.is_deleted,
-             mm.file_path, mm.file_name, mm.mime_type, mm.file_size
-      FROM messages m
-      LEFT JOIN message_media mm ON mm.message_id = m.id
-      WHERE m.id = $1
-    `, [messageId]);
-    if (result.rows.length === 0) {
+    // 1. メッセージ meta
+    const msgRes = await pool.query(
+      'SELECT id, type, room_id, is_deleted FROM messages WHERE id = $1',
+      [messageId]
+    );
+    if (msgRes.rows.length === 0) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
-    const row = result.rows[0];
-    if (row.is_deleted) {
+    const msg = msgRes.rows[0];
+    if (msg.is_deleted) {
       return res.status(410).json({ error: 'メッセージは削除されています' });
     }
-    if (!row.file_path) {
-      return res.status(404).json({ error: 'このメッセージにメディアはありません' });
-    }
 
-    // Bot のルーム所属確認
+    // 2. Bot のルーム所属確認
     const memberCheck = await pool.query(
       'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-      [row.room_id, userId]
+      [msg.room_id, userId]
     );
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ error: 'このルームのメンバーではありません' });
     }
 
-    const filePath = path.join(MEDIA_ROOT, row.file_path);
+    // 3. media 一覧 (#316: 複数添付対応)。
+    // 安定順 = created_at, id。message_media.id は random UUID、複数アップロードは単一
+    // transaction で created_at も同一のため「真の挿入順」は復元不可（position カラムが要る）。
+    // ここでは「安定した順序」を保証（全枚を index で逐次取得できれば要件は満たす）。
+    const mediaRes = await pool.query(
+      `SELECT file_path, file_name, mime_type, file_size
+       FROM message_media WHERE message_id = $1
+       ORDER BY created_at ASC, id ASC`,
+      [messageId]
+    );
+    if (mediaRes.rows.length === 0) {
+      return res.status(404).json({ error: 'このメッセージにメディアはありません' });
+    }
+    const mediaCount = mediaRes.rows.length;
+
+    // 4. index 解釈 (default 0、範囲外は 400 で honest に返す)
+    const parsed = parseInt(req.query.index, 10);
+    const idx = Number.isNaN(parsed) ? 0 : parsed;
+    if (idx < 0 || idx >= mediaCount) {
+      return res.status(400).json({ error: `index が範囲外です (0..${mediaCount - 1})` });
+    }
+    const sel = mediaRes.rows[idx];
+
+    const filePath = path.join(MEDIA_ROOT, sel.file_path);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'ファイルが存在しません' });
     }
 
     const response = {
-      message_id: row.id,
-      type: row.type,
-      mime_type: row.mime_type,
-      file_name: row.file_name,
-      file_size: parseInt(row.file_size),
+      message_id: msg.id,
+      type: msg.type,
+      // #316: 複数添付の総数 + 全件メタ (base64 なし)。index で逐次本体取得。
+      media_count: mediaCount,
+      media: mediaRes.rows.map((m, i) => ({
+        index: i,
+        file_name: m.file_name,
+        mime_type: m.mime_type,
+        file_size: parseInt(m.file_size),
+      })),
+      index: idx,
+      mime_type: sel.mime_type,
+      file_name: sel.file_name,
+      file_size: parseInt(sel.file_size),
     };
 
-    if (parseInt(row.file_size) > BOT_MEDIA_MAX_SIZE) {
+    if (parseInt(sel.file_size) > BOT_MEDIA_MAX_SIZE) {
       response.error = `ファイルサイズが上限 (${BOT_MEDIA_MAX_SIZE / 1024 / 1024}MB) を超えています。data_base64 は省略。`;
     } else {
       const buffer = fs.readFileSync(filePath);
       response.data_base64 = buffer.toString('base64');
     }
 
-    // 音声メッセージは文字起こしも一緒に返す (MCP 側でメタとして使える)
-    if (row.type === 'voice') {
+    // 音声メッセージは文字起こしも一緒に返す (voice は単一 media)
+    if (msg.type === 'voice') {
       const trans = await pool.query(
         'SELECT raw_text, formatted_text, status FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
         [messageId]
