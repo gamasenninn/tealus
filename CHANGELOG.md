@@ -26,6 +26,7 @@
 - **アップロードファイル名の文字化け** ([#319](https://github.com/gamasenninn/tealus/issues/319)): multer/busboy が multipart の filename を latin1 デコードするため、日本語を含むファイル名（出品票 MD・スクリーンショット等）が `message_media.file_name` に UTF-8→latin1 mojibake で保存されていた（ASCII 名は無害、ディスク実体は `timestamp-random` 名のため影響なし）。`decodeFileName()`（latin1→UTF8 再デコード、非 UTF-8 名は原文フォールバック）を保存 4 経路（bot 画像/ファイル・media UIアップロード・voice）に適用。既存の化けた 78 行も DB 上で一括復元済。新規反映には server 再起動が必要。
 - **画像生成（`generate_and_send_image`）の復活** ([#313](https://github.com/gamasenninn/tealus/issues/313)、tealus-mcp v0.14.3/v0.14.4 連動): `response_format` が現行 OpenAI Images API で拒否され全失敗 → 除去 + b64_json/url 両対応。さらに `dall-e-3` がアカウントで廃止のため `gpt-image-1` へ移行（env `OPENAI_IMAGE_MODEL` で上書き可）。
 - **Deep Codex がタイムアウト後もプロセス生存し遅延応答する bug** ([#312](https://github.com/gamasenninn/tealus/issues/312)): timeout 時の sweep の Name filter が `claude.exe/cmd.exe` 限定で Deep Codex の `codex.exe` にマッチせず空振りだった。`codex.exe` + `node.exe` を追加（codex は `-C <workspace>` 引数を持つため CommandLine 一致）。
+- **複数画像OCRで古い画像メッセージを読んでしまう取り違え** ([#320](https://github.com/gamasenninn/tealus/issues/320)): `reply_to` の無い「これらの画像から抽出して」依頼で、LightV2 が最新の添付ではなく前のメッセージの古い画像を読み、履歴の前回抽出結果に引きずられていた（サーバー/MCP/index 出し分けは正常、エージェントの対象選びの問題）。`default_system_prompt.md` に画像・ファイルの対象選びルールを追加（reply_to 優先 / 無ければ最新の画像メッセージ / 過去の抽出に引きずられない / `media_count`≥2 は index で全枚取得）。再起動不要、名刺入れで dogfood 確認済。
 
 ## [0.4.0] - 2026-06-21
 
