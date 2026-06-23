@@ -72,7 +72,7 @@ function buildLightV2McpConfig(workspacePath) {
   if (config.TEALUS_BOT_ID && config.TEALUS_BOT_PASS) {
     mcp_servers.tealus = {
       command: 'npx',
-      args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.5'],
+      args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.6'],
       env: {
         TEALUS_API_URL: config.TEALUS_API_URL,
         TEALUS_USER_ID: config.TEALUS_BOT_ID,

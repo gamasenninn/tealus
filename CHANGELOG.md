@@ -15,6 +15,7 @@
 - **クリップボード貼り付け(Ctrl+V)で画像/ファイルをアップロード** ([#311](https://github.com/gamasenninn/tealus/issues/311)): textarea への paste で ＋ボタンと同じ経路に流して即アップロード。テキスト貼り付けは従来どおり。PC 向け（Android 等モバイルは paste イベントが画像を渡さないプラットフォーム制約のため対象外、モバイルは ＋ボタンが標準経路）
 - **STT vocab を agent prompt にも inject — 画像 OCR/帳票の正規化** ([#315](https://github.com/gamasenninn/tealus/issues/315)): organon 由来の業務語彙辞書（別名→正規名）は従来 STT(Whisper) のみに効き vision/OCR に未接続だった。`vocabContext` で `transcription_guideline.json` の vocabulary を Light/Deep の prompt に inject し、画像・帳票読み取りで人名/メーカー/業務語の表記揺れを正規化。env `VOCAB_INJECT`（opt-in、default OFF）。出品票 OCR で効果確認。
 - **複数画像（複数添付メッセージ）の一括取得** ([#316](https://github.com/gamasenninn/tealus/issues/316)、tealus-mcp v0.14.5 連動): 1メッセージに複数画像があると `get_message_media` が1枚目しか返さなかった（server endpoint の rows[0]）。`GET /bot/messages/:id/media?index=N` + `media_count` + `media[]` メタ対応とし、index 逐次取得（4枚=base64 約10.4MB のため全枚一括は非現実的）。出品票4枚一括→MD化→保存の dogfood 成功。
+- **複数文書の一括取得（`read_document` の index 対応）** ([#317](https://github.com/gamasenninn/tealus/issues/317)、tealus-mcp v0.14.6 連動): #316 の文書版。1メッセージに複数の PDF/DOCX/XLSX が添付されても `read_document` が先頭1件しか text 化しなかった（#316 と同型の silent drop）。`read_document(message_id, index?)` に `index` を追加し、`media_count`≥2 のとき逐次取得を促す案内を付与。server endpoint は #316 の実装を流用、後方互換。
 
 ### Changed
 
