@@ -8,6 +8,7 @@ const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
 const { transcribeVoiceMessage } = require('../services/transcription');
+const { decodeFileName } = require('../middleware/upload');
 const { fetchReplyMessage } = require('../socket/handlers/message');
 
 const router = express.Router({ mergeParams: true });
@@ -71,7 +72,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
       `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [message.id, relativePath, req.file.originalname, req.file.mimetype, req.file.size]
+      [message.id, relativePath, decodeFileName(req.file.originalname), req.file.mimetype, req.file.size]
     );
 
     // Create pending transcription record (for Step B)

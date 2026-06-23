@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
-const { upload, MEDIA_ROOT, getMessageType, getSubdir } = require('../middleware/upload');
+const { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload');
 const { generateThumbnail } = require('../services/thumbnail');
 
 const router = express.Router();
@@ -289,7 +289,7 @@ router.post('/push-image', upload.single('image'), async (req, res) => {
       `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [message.id, relativePath, file.originalname, file.mimetype, file.size, width, height, thumbnailPath]
+      [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size, width, height, thumbnailPath]
     );
 
     await client.query('COMMIT');
@@ -365,7 +365,7 @@ router.post('/push-file', upload.single('file'), async (req, res) => {
       `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [message.id, relativePath, file.originalname, file.mimetype, file.size]
+      [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size]
     );
 
     await client.query('COMMIT');
@@ -378,7 +378,7 @@ router.post('/push-file', upload.single('file'), async (req, res) => {
       media: [mediaResult.rows[0]],
     });
 
-    logger.info(`Bot push-file: ${req.user.display_name} → room ${room_id} (${file.originalname})`);
+    logger.info(`Bot push-file: ${req.user.display_name} → room ${room_id} (${decodeFileName(file.originalname)})`);
     res.status(201).json({ message, media: [mediaResult.rows[0]] });
   } catch (err) {
     await client.query('ROLLBACK');

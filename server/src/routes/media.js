@@ -6,7 +6,7 @@ const fs = require('fs');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const { requireMember } = require('../middleware/roomAccess');
-const { upload, getMessageType, getSubdir } = require('../middleware/upload');
+const { upload, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload');
 const { generateThumbnail } = require('../services/thumbnail');
 const { MAX_UPLOAD_FILES } = require('../constants/config');
 
@@ -80,7 +80,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
         `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [message.id, relativePath, file.originalname, file.mimetype, file.size, width, height, thumbnailPath]
+        [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size, width, height, thumbnailPath]
       );
       mediaRecords.push(mediaResult.rows[0]);
     }

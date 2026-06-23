@@ -11,6 +11,18 @@ const SIZE_LIMITS = {
   default: 100 * 1024 * 1024, // 100MB
 };
 
+// multer/busboy decodes the multipart `filename` header as latin1, so multibyte
+// (UTF-8) filenames arrive mojibake'd (e.g. 出品票.md → åºå...).
+// Re-interpret the bytes as UTF-8 to recover the original name. If the bytes are
+// not valid UTF-8 (a genuine latin1 name), keep the original instead of emitting
+// replacement chars.
+function decodeFileName(name) {
+  if (!name || typeof name !== 'string') return name;
+  const reinterpreted = Buffer.from(name, 'latin1').toString('utf8');
+  if (reinterpreted.includes('�')) return name;
+  return reinterpreted;
+}
+
 // Determine subdirectory based on MIME type
 function getSubdir(mimetype) {
   if (mimetype.startsWith('image/')) return 'images';
@@ -45,4 +57,4 @@ const upload = multer({
   },
 });
 
-module.exports = { upload, getSubdir, getMessageType, MEDIA_ROOT, SIZE_LIMITS };
+module.exports = { upload, getSubdir, getMessageType, decodeFileName, MEDIA_ROOT, SIZE_LIMITS };
