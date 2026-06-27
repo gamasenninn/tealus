@@ -1,8 +1,18 @@
 const API_BASE = '/api';
 
+// #322: transport 層の間欠失敗（Cloudflare↔オリジン↔回線のストール）に対する client 耐性。
+// GET のみ transient 失敗を限定リトライ + 全 method にタイムアウト。POST/PUT/DELETE は
+// 二重送信回避のためリトライしない。
+const RETRY_STATUS = new Set([408, 429, 502, 503, 504]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const withJitter = (ms) => ms + Math.floor(Math.random() * 150);
+
 class ApiClient {
   constructor() {
     this.token = localStorage.getItem('token');
+    // #322 リトライ/タイムアウト設定（テストで上書き可能）
+    this.requestTimeoutMs = 10000;
+    this.retryBackoffMs = [300, 800]; // GET transient retry の待ち時間（length = 最大リトライ回数）
   }
 
   /**
@@ -56,13 +66,59 @@ class ApiClient {
       opts.body = JSON.stringify(body);
     }
 
-    const res = await fetch(`${API_BASE}${path}`, opts);
-    const data = await res.json();
+    // GET のみ transient 失敗をリトライ（非冪等 method は二重送信回避で 1 回のみ実行）。
+    const isGet = method === 'GET';
+    const maxAttempts = isGet ? this.retryBackoffMs.length + 1 : 1;
+    let lastError;
 
-    if (!res.ok) {
-      throw new Error(data.error || 'リクエストに失敗しました');
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        const backoff = withJitter(this.retryBackoffMs[attempt - 1]);
+        // 無言で握り潰さない: リトライ痕跡を残し、根本（transport）悪化の検知材料にする。
+        console.warn(`[api] ${method} ${path} transient 失敗、リトライ ${attempt}/${maxAttempts - 1}（${Math.round(backoff)}ms 待機）: ${lastError?.message || lastError}`);
+        await sleep(backoff);
+      }
+
+      // 全 method に AbortController でタイムアウトを付与（従来は無限待ちだった）。
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      try {
+        const res = await fetch(`${API_BASE}${path}`, { ...opts, signal: controller.signal });
+
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          // 非JSON応答（プロキシの HTML エラーページ等）。GET の transient status のみリトライ。
+          if (isGet && RETRY_STATUS.has(res.status)) {
+            lastError = new Error(`非JSON応答 (status ${res.status})`);
+            continue;
+          }
+          throw new Error(res.ok ? '応答の解析に失敗しました' : `リクエストに失敗しました (${res.status})`);
+        }
+
+        if (!res.ok) {
+          if (isGet && RETRY_STATUS.has(res.status)) {
+            lastError = new Error(data?.error || `status ${res.status}`);
+            continue;
+          }
+          throw new Error(data?.error || 'リクエストに失敗しました');
+        }
+        return data;
+      } catch (err) {
+        // ネットワーク断（TypeError）/ タイムアウト（AbortError）は GET のみ transient 扱い。
+        const isTransient = err.name === 'AbortError' || err instanceof TypeError;
+        if (isGet && isTransient) {
+          lastError = err.name === 'AbortError' ? new Error(`タイムアウト (${this.requestTimeoutMs}ms)`) : err;
+          continue;
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
     }
-    return data;
+
+    throw lastError instanceof Error ? lastError : new Error('リクエストに失敗しました');
   }
 
   // Auth
