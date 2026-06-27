@@ -340,12 +340,12 @@ function MessageBubble({ message, isOwn, searchKeyword }) {
 
       {isEditingMessage && (
         <div className="modal-overlay" onClick={() => setIsEditingMessage(false)}>
-          <div className="modal-box voice-edit-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-box voice-edit-modal message-edit-modal" onClick={e => e.stopPropagation()}>
             <h3>メッセージを編集</h3>
             <textarea
               value={editText}
               onChange={e => setEditText(e.target.value)}
-              rows={6}
+              rows={12}
               autoFocus
             />
             <div className="voice-edit-buttons">

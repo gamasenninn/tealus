@@ -469,3 +469,11 @@
   margin: 0.5em 0;
 }
 
+/* メッセージ編集モーダル: textarea を縦に広げる（業務メモ 6/27 小野さん要望）。
+   voice-edit-modal の共有スタイルは活かしつつ、テキスト編集だけ高さを拡張。
+   .modal-box.message-edit-modal で specificity を上げ、バンドル順に依らず override。
+   .modal-box は max-height:80vh + overflow-y:auto なので 50vh でも収まる。resize:vertical で更にドラッグ可。 */
+.modal-box.message-edit-modal textarea {
+  min-height: 50vh;
+}
+
