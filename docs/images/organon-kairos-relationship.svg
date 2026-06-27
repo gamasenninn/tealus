@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="11" markerHeight="11" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L0,6.4 L9,3.2 z" fill="#546E7A"/>
+    </marker>
+    <marker id="arw-supply" markerWidth="11" markerHeight="11" refX="8" refY="3.2" orient="auto">
+      <path d="M0,0 L0,6.4 L9,3.2 z" fill="#00897B"/>
+    </marker>
+    <marker id="arw-loop" markerWidth="12" markerHeight="12" refX="8" refY="3.4" orient="auto">
+      <path d="M0,0 L0,6.8 L9.5,3.4 z" fill="#6A1B9A"/>
+    </marker>
+    <marker id="arw-obs" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8.5,3 z" fill="#26A69A"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="800" fill="#FAFAFA"/>
+
+  <!-- Title -->
+  <text x="600" y="46" text-anchor="middle" font-size="27" font-weight="700" fill="#263238">organon × Kairos — 組織の「記憶」と「注意」</text>
+  <text x="600" y="79" text-anchor="middle" font-size="15.5" fill="#546E7A">organon＝<tspan font-weight="700" fill="#1565C0">知っている（記憶）</tspan>　／　Kairos＝<tspan font-weight="700" fill="#EF6C00">気づく（注意）</tspan>　—　両輪で「自分が何者かを覚え、現実がそこからズレた瞬間に気づく」</text>
+
+  <!-- ===== organon box (記憶・静的) ===== -->
+  <rect x="64" y="116" width="452" height="252" rx="14" fill="#E3F2FD" stroke="#1565C0" stroke-width="2.5"/>
+  <text x="90" y="150" font-size="21" font-weight="700" fill="#1565C0">organon</text>
+  <text x="200" y="150" font-size="14" fill="#1565C0">記憶 ・ 静的（ゆっくり変わる辞書＝正典）</text>
+  <line x1="90" y1="162" x2="490" y2="162" stroke="#90CAF9" stroke-width="1.5"/>
+  <text x="90" y="190" font-size="15" fill="#263238">誰が誰か・取引先・機種・業務ルール・失敗パターン</text>
+  <text x="90" y="224" font-size="14" font-weight="700" fill="#1565C0">供給するもの</text>
+  <text x="104" y="250" font-size="14" fill="#37474F">• <tspan font-weight="700">正規化</tspan>：崩れた表記・別名 → 正しい1つに束ねる</text>
+  <text x="104" y="276" font-size="14" fill="#37474F">　（例「田口長」→「草野部長」、同一人物の連結）</text>
+  <text x="104" y="302" font-size="14" fill="#37474F">• <tspan font-weight="700">norm（当たり前）</tspan>：「折り返しは当日中」等の</text>
+  <text x="104" y="324" font-size="14" fill="#37474F">　暗黙の期限・規範を供給</text>
+  <text x="90" y="354" font-size="12.5" fill="#78909C">＝ 何が「あるべき」か（should）を覚えている層</text>
+
+  <!-- ===== Kairos box (注意・動的) ===== -->
+  <rect x="684" y="116" width="452" height="252" rx="14" fill="#FFF3E0" stroke="#EF6C00" stroke-width="2.5"/>
+  <text x="710" y="150" font-size="21" font-weight="700" fill="#EF6C00">Kairos</text>
+  <text x="800" y="150" font-size="14" fill="#EF6C00">注意 ・ 動的（日々動く観測者）</text>
+  <line x1="710" y1="162" x2="1110" y2="162" stroke="#FFCC80" stroke-width="1.5"/>
+  <text x="710" y="190" font-size="15" fill="#263238">今どうなっているか・期待×現実のズレ・矛盾</text>
+  <text x="710" y="214" font-size="15" font-weight="700" fill="#E65100">★ 沈黙（起きるはずが、起きていない）</text>
+  <text x="710" y="244" font-size="14" font-weight="700" fill="#EF6C00">すること</text>
+  <text x="724" y="270" font-size="14" fill="#37474F">• 観測 → 暗黙の約束を割り出す</text>
+  <text x="724" y="296" font-size="14" fill="#37474F">• 沈黙を検知（10日動かない／折り返し未履行）</text>
+  <text x="724" y="322" font-size="14" fill="#37474F">• <tspan font-weight="700">高確信を1〜2件だけ</tspan>、そっと問う</text>
+  <text x="710" y="354" font-size="12.5" fill="#8D6E63">＝ 現実が今どう「である」か（is）に気づく層・read-only</text>
+
+  <!-- supply arrow organon -> Kairos (top) -->
+  <line x1="516" y1="186" x2="682" y2="186" stroke="#00897B" stroke-width="2.5" marker-end="url(#arw-supply)"/>
+  <rect x="520" y="150" width="158" height="28" rx="6" fill="#E0F2F1" stroke="#00897B" stroke-width="1"/>
+  <text x="599" y="169" text-anchor="middle" font-size="12.5" fill="#00695C">供給：正規化＋“当たり前の期限”</text>
+
+  <!-- ===== 学習フライホイール（複利ループ） ===== -->
+  <!-- 人(curator) node -->
+  <rect x="478" y="452" width="244" height="70" rx="12" fill="#E8F5E9" stroke="#2E7D32" stroke-width="2.5"/>
+  <text x="600" y="484" text-anchor="middle" font-size="17" font-weight="700" fill="#2E7D32">人（curator）が確定</text>
+  <text x="600" y="507" text-anchor="middle" font-size="12.5" fill="#388E3C">AIは提案、決めるのは人</text>
+
+  <!-- Kairos -> 人 (① 問う) -->
+  <path d="M 910 370 C 910 430, 770 440, 724 472" fill="none" stroke="#6A1B9A" stroke-width="2.5" marker-end="url(#arw-loop)"/>
+  <rect x="772" y="392" width="210" height="28" rx="6" fill="#F3E5F5" stroke="#6A1B9A" stroke-width="1"/>
+  <text x="877" y="411" text-anchor="middle" font-size="12.5" fill="#6A1B9A">① 高確信だけ問う（Q0板）</text>
+
+  <!-- 人 -> organon (② 正典化 書き戻し) -->
+  <path d="M 478 484 C 330 480, 290 430, 290 372" fill="none" stroke="#6A1B9A" stroke-width="2.5" marker-end="url(#arw-loop)"/>
+  <rect x="150" y="430" width="278" height="46" rx="6" fill="#F3E5F5" stroke="#6A1B9A" stroke-width="1"/>
+  <text x="289" y="450" text-anchor="middle" font-size="12.5" fill="#6A1B9A">② 確定した暗黙ルールを organon に正典化</text>
+  <text x="289" y="468" text-anchor="middle" font-size="12.5" font-weight="700" fill="#6A1B9A">→ 次の期待が鋭くなる ＝ 複利</text>
+
+  <!-- 一方向依存ラベル -->
+  <text x="600" y="556" text-anchor="middle" font-size="13" fill="#78909C">依存は一方向（Kairos → organon を read-only で参照）。organon は Kairos を知らなくても単体で成り立つ。</text>
+
+  <!-- ===== Tealus substrate ===== -->
+  <rect x="64" y="584" width="1072" height="96" rx="14" fill="#E0F2F1" stroke="#00897B" stroke-width="2.5"/>
+  <text x="90" y="614" font-size="18" font-weight="700" fill="#00695C">Tealus（土台・データの担体）</text>
+  <rect x="92" y="626" width="470" height="40" rx="8" fill="#FFFFFF" stroke="#4DB6AC" stroke-width="1.3"/>
+  <text x="327" y="651" text-anchor="middle" font-size="13.5" fill="#00695C">チャネルセット：朝礼／終礼／トランシーバー／通話</text>
+  <rect x="582" y="626" width="270" height="40" rx="8" fill="#FFFFFF" stroke="#4DB6AC" stroke-width="1.3"/>
+  <text x="717" y="651" text-anchor="middle" font-size="13.5" fill="#00695C">社内DB（v0.2〜・検算用）</text>
+  <text x="872" y="641" font-size="12.5" fill="#00796B">organon も Kairos も、ここから</text>
+  <text x="872" y="660" font-size="12.5" font-weight="700" fill="#00796B">観測する（read-only）</text>
+
+  <!-- observe arrows (Tealus -> boxes, outer routing, dashed) -->
+  <path d="M 150 584 L 150 370" fill="none" stroke="#26A69A" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arw-obs)"/>
+  <path d="M 1050 584 L 1050 370" fill="none" stroke="#26A69A" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arw-obs)"/>
+  <text x="158" y="408" font-size="11.5" fill="#26A69A" transform="rotate(-90 158 408)">観測</text>
+  <text x="1058" y="408" font-size="11.5" fill="#26A69A" transform="rotate(-90 1058 408)">観測</text>
+
+  <!-- ===== Guardrails footer ===== -->
+  <rect x="64" y="700" width="1072" height="74" rx="12" fill="#ECEFF1" stroke="#B0BEC5" stroke-width="1.5"/>
+  <text x="90" y="726" font-size="14" font-weight="700" fill="#455A64">両輪に共通する規律（暴走しないための芯）</text>
+  <text x="90" y="751" font-size="13" fill="#37474F">• AIは提案・人が確定　　• 出典必須（引けない兆しは出さない）　　• 数値化しない（高・中・低）</text>
+  <text x="90" y="769" font-size="13" fill="#37474F">• 1:1のDMは見ない（業務ルームのみ）　　• 件数の“集計”でなく、期待との“ズレ”だけを差し出す（BIにしない）</text>
+</svg>
