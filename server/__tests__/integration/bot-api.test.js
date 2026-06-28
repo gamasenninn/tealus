@@ -299,6 +299,64 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/search — has_reaction フィルタ (#325)
+  // ============================================
+  describe('GET /api/bot/search — has_reaction (#325)', () => {
+    let reactedId, plainId;
+
+    beforeEach(async () => {
+      const pool = getTestPool();
+      const r1 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '完了マークあり') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      reactedId = r1.rows[0].id;
+      const r2 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', 'まだ未処理') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      plainId = r2.rows[0].id;
+      await pool.query(
+        `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, '✅')`,
+        [reactedId, user1.user.id]
+      );
+    });
+
+    it('has_reaction=false はリアクション無しのものだけ返す', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?room_id=${roomId}&has_reaction=false`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const ids = res.body.results.map(r => r.message_id);
+      expect(ids).toContain(plainId);
+      expect(ids).not.toContain(reactedId);
+    });
+
+    it('has_reaction=true はリアクション有りのものだけ返す', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?room_id=${roomId}&has_reaction=true`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const ids = res.body.results.map(r => r.message_id);
+      expect(ids).toContain(reactedId);
+      expect(ids).not.toContain(plainId);
+    });
+
+    it('has_reaction 未指定なら両方返る（後方互換）', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const ids = res.body.results.map(r => r.message_id);
+      expect(ids).toContain(reactedId);
+      expect(ids).toContain(plainId);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages — transcription verbosity (#219)
   // ============================================
   describe('GET /api/bot/messages — transcription verbosity (#219)', () => {

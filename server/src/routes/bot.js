@@ -865,7 +865,7 @@ function buildSnippet(text, query, contextChars = 100) {
 router.get('/search', async (req, res) => {
   const {
     q, room_id, sender_id, type, tag_names, is_done,
-    since, until, limit = 10, offset = 0,
+    since, until, has_reaction, limit = 10, offset = 0,
   } = req.query;
   const userId = req.user.id;
   const tagNameList = tag_names
@@ -916,6 +916,14 @@ router.get('/search', async (req, res) => {
     if (until) {
       params.push(until);
       filtersSQL.push(`m.created_at <= $${paramIdx++}`);
+    }
+    // #325: リアクション有無で SQL フィルタ（agent が大量 message をスキャンせず
+    // 「✅(完了)が付いていないもの」等を決定論的に絞れる）。param 不要の EXISTS 述語。
+    if (has_reaction !== undefined && has_reaction !== '') {
+      const wantReaction = has_reaction === 'true' || has_reaction === true;
+      filtersSQL.push(
+        `${wantReaction ? 'EXISTS' : 'NOT EXISTS'} (SELECT 1 FROM message_reactions mr WHERE mr.message_id = m.id)`
+      );
     }
 
     // tag_match CTE (tag_names 指定時のみ)
