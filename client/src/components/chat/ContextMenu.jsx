@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import './ContextMenu.css';
 
-const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀', '🙏'];
+// ✅ = 完了マーカー（業務メモ 6/27 小野さん要望）。先頭で押しやすく。
+const REACTION_EMOJIS = ['✅', '👍', '❤️', '😂', '🎉', '👀', '🙏'];
 
 function ContextMenu({ items, position, onClose, onReaction }) {
   const menuRef = useRef(null);
