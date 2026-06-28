@@ -246,6 +246,59 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/messages — reactions (#324)
+  // ============================================
+  describe('GET /api/bot/messages — reactions (#324)', () => {
+    it('各メッセージに reactions 集約を付与（無リアクションは空配列）', async () => {
+      const pool = getTestPool();
+      const r1 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '完了したやつ') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      const reactedId = r1.rows[0].id;
+      const r2 = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '未処理のやつ') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      const plainId = r2.rows[0].id;
+      await pool.query(
+        `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, '✅')`,
+        [reactedId, user1.user.id]
+      );
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const byId = Object.fromEntries(res.body.messages.map(m => [m.id, m]));
+      expect(byId[reactedId].reactions).toEqual([{ emoji: '✅', count: 1 }]);
+      expect(byId[plainId].reactions).toEqual([]);
+    });
+
+    it('同一 emoji の複数リアクションは count に集約される', async () => {
+      const pool = getTestPool();
+      const user2 = await createTestUser({ login_id: 'EMP002', display_name: '佐藤花子' });
+      const r = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '人気') RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      const id = r.rows[0].id;
+      await pool.query(
+        `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, '👍'), ($1, $3, '👍')`,
+        [id, user1.user.id, user2.user.id]
+      );
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      const msg = res.body.messages.find(m => m.id === id);
+      expect(msg.reactions).toEqual([{ emoji: '👍', count: 2 }]);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages — transcription verbosity (#219)
   // ============================================
   describe('GET /api/bot/messages — transcription verbosity (#219)', () => {

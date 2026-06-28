@@ -448,6 +448,28 @@ router.get('/messages', async (req, res) => {
     const result = await pool.query(query, params);
     const messages = result.rows;
 
+    // リアクションを集約して各メッセージに付与 (#324: agent が reaction 有無で絞れるように)。
+    // 1 クエリでまとめて取得 (N+1 回避)。形は client と同じ emoji 集約 [{emoji, count}]。
+    if (messages.length > 0) {
+      const ids = messages.map(m => m.id);
+      const rx = await pool.query(
+        `SELECT message_id, emoji, COUNT(*)::int AS count
+         FROM message_reactions
+         WHERE message_id = ANY($1::uuid[])
+         GROUP BY message_id, emoji
+         ORDER BY MIN(created_at)`,
+        [ids]
+      );
+      const byMsg = new Map();
+      for (const r of rx.rows) {
+        if (!byMsg.has(r.message_id)) byMsg.set(r.message_id, []);
+        byMsg.get(r.message_id).push({ emoji: r.emoji, count: r.count });
+      }
+      for (const m of messages) {
+        m.reactions = byMsg.get(m.id) || [];
+      }
+    }
+
     // 音声メッセージに文字起こしを付加 (verbosity 制御 #219)
     const transcriptionCols = ['id', 'status', 'version'];
     if (includeTranscription) transcriptionCols.push('formatted_text');
