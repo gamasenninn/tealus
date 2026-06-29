@@ -16,11 +16,15 @@
 - **STT vocab を agent prompt にも inject — 画像 OCR/帳票の正規化** ([#315](https://github.com/gamasenninn/tealus/issues/315)): organon 由来の業務語彙辞書（別名→正規名）は従来 STT(Whisper) のみに効き vision/OCR に未接続だった。`vocabContext` で `transcription_guideline.json` の vocabulary を Light/Deep の prompt に inject し、画像・帳票読み取りで人名/メーカー/業務語の表記揺れを正規化。env `VOCAB_INJECT`（opt-in、default OFF）。出品票 OCR で効果確認。
 - **複数画像（複数添付メッセージ）の一括取得** ([#316](https://github.com/gamasenninn/tealus/issues/316)、tealus-mcp v0.14.5 連動): 1メッセージに複数画像があると `get_message_media` が1枚目しか返さなかった（server endpoint の rows[0]）。`GET /bot/messages/:id/media?index=N` + `media_count` + `media[]` メタ対応とし、index 逐次取得（4枚=base64 約10.4MB のため全枚一括は非現実的）。出品票4枚一括→MD化→保存の dogfood 成功。
 - **複数文書の一括取得（`read_document` の index 対応）** ([#317](https://github.com/gamasenninn/tealus/issues/317)、tealus-mcp v0.14.6 連動): #316 の文書版。1メッセージに複数の PDF/DOCX/XLSX が添付されても `read_document` が先頭1件しか text 化しなかった（#316 と同型の silent drop）。`read_document(message_id, index?)` に `index` を追加し、`media_count`≥2 のとき逐次取得を促す案内を付与。server endpoint は #316 の実装を流用、後方互換。
+- **リアクション候補に「完了」を表す ✅ を追加** ([#323](https://github.com/gamasenninn/tealus/issues/323)): リアクション候補が `👍❤️😂🎉👀🙏` で「完了」を表すものが無かった（👍 は"良い"であって完了ではない）。`ContextMenu` の `REACTION_EMOJIS` 先頭に ✅ を追加（押しやすく）。全ルーム共通。
+- **bot `get_messages` の応答に reactions を付与** ([#324](https://github.com/gamasenninn/tealus/issues/324)): `GET /api/bot/messages` が reactions を返しておらず、エージェントがリアクション有無を参照できなかった。各メッセージに `reactions: [{emoji, count}]` を付与（1クエリ集約・N+1回避、無リアクションは `[]`）。tealus-mcp は素通しのため MCP 変更不要。
+- **`search_messages` に `has_reaction` フィルタ** ([#325](https://github.com/gamasenninn/tealus/issues/325)、tealus-mcp v0.14.7 連動): リアクション基準の抽出（「✅完了が付いていないもの一覧」等）を SQL 側で決定論的に絞る。`/bot/search` に `has_reaction`（`(NOT) EXISTS(message_reactions)`、後方互換）を追加し、since/until + offset ページングと組み合わせ全件対応。広いレンジで agent が大量メッセージを自前スキャンして取りこぼす問題を解消。`default_system_prompt.md` に「リアクション抽出は `search_messages(has_reaction=false)` を使う」と明記。
 
 ### Changed
 
 - **ルーム内アプリの表示トグルをタブ帯右端に移設** ([#310](https://github.com/gamasenninn/tealus/issues/310)): ヘッダーの📱アイコンを撤去し、アプリのあるルームはタブ帯を常時表示。タブ帯右端のシェブロンでその場で開閉（畳むとタブ帯のみ残る）
 - **Deep のタイムアウトを 5分→8分に引き上げ** ([#314](https://github.com/gamasenninn/tealus/issues/314)): 画像生成+保存や organon prompt 込みの重い Deep が5分で切れる件。`DEEP_TIMEOUT` 480000 / `QUEUE_TASK_TIMEOUT` 540000、env 上書き可。
+- **メッセージ編集モーダルの textarea を縦に拡張** ([#321](https://github.com/gamasenninn/tealus/issues/321)): 編集欄が `rows=6` のみで縦に狭かった。`message-edit-modal` クラスに `min-height:50vh`（rows も 12 へ）。音声編集と共有の `voice-edit-modal` スタイルは維持＝テキスト編集だけ拡張。`resize:vertical` 継続で手動可変も両立。
 
 ### Fixed
 
@@ -28,6 +32,7 @@
 - **画像生成（`generate_and_send_image`）の復活** ([#313](https://github.com/gamasenninn/tealus/issues/313)、tealus-mcp v0.14.3/v0.14.4 連動): `response_format` が現行 OpenAI Images API で拒否され全失敗 → 除去 + b64_json/url 両対応。さらに `dall-e-3` がアカウントで廃止のため `gpt-image-1` へ移行（env `OPENAI_IMAGE_MODEL` で上書き可）。
 - **Deep Codex がタイムアウト後もプロセス生存し遅延応答する bug** ([#312](https://github.com/gamasenninn/tealus/issues/312)): timeout 時の sweep の Name filter が `claude.exe/cmd.exe` 限定で Deep Codex の `codex.exe` にマッチせず空振りだった。`codex.exe` + `node.exe` を追加（codex は `-C <workspace>` 引数を持つため CommandLine 一致）。
 - **複数画像OCRで古い画像メッセージを読んでしまう取り違え** ([#320](https://github.com/gamasenninn/tealus/issues/320)): `reply_to` の無い「これらの画像から抽出して」依頼で、LightV2 が最新の添付ではなく前のメッセージの古い画像を読み、履歴の前回抽出結果に引きずられていた（サーバー/MCP/index 出し分けは正常、エージェントの対象選びの問題）。`default_system_prompt.md` に画像・ファイルの対象選びルールを追加（reply_to 優先 / 無ければ最新の画像メッセージ / 過去の抽出に引きずられない / `media_count`≥2 は index で全枚取得）。再起動不要、名刺入れで dogfood 確認済。
+- **ルーム取得の間欠失敗に client 耐性（リトライ + タイムアウト）** ([#322](https://github.com/gamasenninn/tealus/issues/322)): 「ルーム情報の取得に失敗しました」が頻発。真因はアプリでなく transport 層の間欠ストール（Cloudflare↔オリジン、公開パスで ~8% が15秒超ハング・同時刻ローカルは5ms）。`api.request()` がタイムアウトもリトライも無く1回の瞬間ストールで即エラー表示していた。GET のみ transient リトライ（最大2回・300/800ms+jitter、二重送信回避で非冪等は除外）＋ 全 method に AbortController 10s タイムアウト ＋ リトライ痕跡を `console.warn`。
 
 ## [0.4.0] - 2026-06-21
 
