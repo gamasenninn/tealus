@@ -4,7 +4,8 @@ const path = require('path');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
 const { formatTranscription } = require('./formatting');
-const { loadGuideline, buildWhisperPrompt, isWhisperPromptHallucination } = require('./transcriptionConfig');
+const { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination } = require('./transcriptionConfig');
+const { transcribeAudio } = require('./sttBackend');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -111,24 +112,18 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       }
     }
 
-    // Call Whisper API — use File object with correct name for content-type detection
-    const fileBuffer = fs.readFileSync(inputPath);
-    const file = new File([fileBuffer], `audio.${ext}`, {
-      type: ext === 'mp3' ? 'audio/mpeg'
-          : ext === 'mp4' ? 'audio/mp4'
-          : ext === 'ogg' ? 'audio/ogg'
-          : `audio/${ext}`,
-    });
-
-    const whisperPrompt = buildWhisperPrompt(loadGuideline(), WHISPER_MODEL);
-    const transcription = await openai.audio.transcriptions.create({
-      file: file,
+    // 音声 -> raw text (#自ホストSTT: STT_BACKEND で openai(default)/local 切替)。
+    // local = 常駐 Qwen3-ASR ワーカー、障害時は openai へ fail-open (sttBackend 内)。
+    const guideline = loadGuideline();
+    const whisperPrompt = buildWhisperPrompt(guideline, WHISPER_MODEL);
+    let rawText = await transcribeAudio({
+      inputPath,
+      ext,
+      whisperPrompt,
       model: WHISPER_MODEL,
-      language: 'ja',
-      ...(whisperPrompt ? { prompt: whisperPrompt } : {}),
+      glossary: buildGlossary(guideline),
+      openaiClient: openai,
     });
-
-    let rawText = transcription.text || '';
     const trimmedRaw = rawText.trim();
 
     // Bug 1 fix: Whisper prompt hallucination 検出 (#269 follow-up、5/12 user 発見)

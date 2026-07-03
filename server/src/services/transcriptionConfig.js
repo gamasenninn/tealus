@@ -121,6 +121,37 @@ function buildFormattingExtension(config) {
 }
 
 /**
+ * local STT backend (Qwen3-ASR 常駐ワーカー) 用の固有名詞 glossary を構築 (#自ホストSTT)。
+ *
+ * Whisper の prompt bias (buildWhisperPrompt) とは別軸で、audio-LLM ASR の system prompt に
+ * 固有名詞を渡して decode 時に canonical 表記へ snap させる (2026-07-03 実験で miss 4/4 回収)。
+ * organon 由来の vocabulary が「ASR glossary」という新しい下流用途を持つ。
+ *
+ * - term を 、 区切りで連結。reading があれば「term（reading）」で読みを併記 (音→表記の橋渡し)。
+ * - 重複 / 空 term は除去。
+ * - glossary の soft-bias は非対象 span へ bleed する副作用があるため (memory 既知)、
+ *   STT_GLOSSARY_MAX_TERMS で語数上限を掛けられる (default 無制限)。
+ *
+ * @param {object} config - loadGuideline() の戻り (vocabulary を参照)
+ * @returns {string} glossary (空なら '')
+ */
+function buildGlossary(config) {
+  const vocabulary = (config && Array.isArray(config.vocabulary)) ? config.vocabulary : [];
+  const seen = new Set();
+  const terms = [];
+  for (const v of vocabulary) {
+    const term = v && typeof v.term === 'string' ? v.term.trim() : '';
+    if (!term || seen.has(term)) continue;
+    seen.add(term);
+    const reading = v.reading && typeof v.reading === 'string' ? v.reading.trim() : '';
+    terms.push(reading ? `${term}（${reading}）` : term);
+  }
+  const max = Number(process.env.STT_GLOSSARY_MAX_TERMS || 0);
+  const limited = max > 0 ? terms.slice(0, max) : terms;
+  return limited.join('、');
+}
+
+/**
  * Whisper prompt hallucination 検出
  *
  * Whisper API は音声内容が薄い (無音 / ノイズ / 短すぎる発話) 場合、
@@ -171,6 +202,7 @@ module.exports = {
   loadGuideline,
   resetCache,
   buildWhisperPrompt,
+  buildGlossary,
   buildFormattingExtension,
   isWhisperPromptHallucination,
   isMetaEmptyLiteral,

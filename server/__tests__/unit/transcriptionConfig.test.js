@@ -379,3 +379,40 @@ describe('buildFormattingExtension', () => {
     expect(ext).toContain('追加ガイドライン');
   });
 });
+
+describe('buildGlossary (#自ホストSTT: local backend の固有名詞 biasing)', () => {
+  test('vocabulary が空なら空文字', () => {
+    expect(configModule.buildGlossary({ vocabulary: [] })).toBe('');
+    expect(configModule.buildGlossary({})).toBe('');
+  });
+
+  test('term を 、 区切りで連結する', () => {
+    const g = configModule.buildGlossary({
+      vocabulary: [{ term: 'JU愛知' }, { term: '畦塗機' }, { term: 'ガマ' }],
+    });
+    expect(g).toBe('JU愛知、畦塗機、ガマ');
+  });
+
+  test('reading があれば term（reading）形式で読みを併記する', () => {
+    const g = configModule.buildGlossary({
+      vocabulary: [{ term: '畦塗機', reading: 'あぜぬりき' }],
+    });
+    expect(g).toBe('畦塗機（あぜぬりき）');
+  });
+
+  test('重複 term と空 term を除去する', () => {
+    const g = configModule.buildGlossary({
+      vocabulary: [{ term: 'ガマ' }, { term: '' }, { term: 'ガマ' }, { term: null }],
+    });
+    expect(g).toBe('ガマ');
+  });
+
+  test('STT_GLOSSARY_MAX_TERMS で語数を上限できる (bleed 抑制)', () => {
+    process.env.STT_GLOSSARY_MAX_TERMS = '2';
+    const g = configModule.buildGlossary({
+      vocabulary: [{ term: 'A' }, { term: 'B' }, { term: 'C' }],
+    });
+    expect(g).toBe('A、B');
+    delete process.env.STT_GLOSSARY_MAX_TERMS;
+  });
+});
