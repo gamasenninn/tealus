@@ -112,11 +112,13 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       }
     }
 
-    // 音声 -> raw text。TRANSCRIPTION_MODE で方式を束ねる (Day48 スパイク):
-    //   legacy (既定): Whisper(openai) + vocab-inject prompt + 現行整形。出力完全同一 = 後方互換。
-    //   organon      : Qwen生(local, 障害時 openai へ fail-open) + vocab-inject 無し + organon 補正段。
-    //                  → organon は「音響stageのbias」でなく「補正stageの知識源」で効かせるので、
-    //                    STT には vocab prompt / glossary を渡さず Qwen生をクリーンに取る (Exp6 の知見)。
+    // 音声 -> raw text。★ 2 軸を直交させる (Day48):
+    //   軸1 補正ステージ = TRANSCRIPTION_MODE: legacy(vocab-inject + 現行整形、出力完全同一=後方互換)
+    //                                         / organon(vocab-inject 無し + organon 補正段)
+    //   軸2 STT エンジン = STT_BACKEND: openai(Whisper、既定・GPU不要) / local(Qwen) / 将来の別エンジン
+    // → organon 補正段は STT エンジンに依存せず効く (Exp9: Whisper生 + organon補正 = legacy比 +3)。
+    //   Qwen は「訂正可能な誤り方」で更に上を取る品質アップグレード (Exp6)、GPU があれば STT_BACKEND=local。
+    //   organon は「音響stageのbias」でなく「補正stageの知識源」で効かせるので vocab prompt / glossary は渡さない。
     const guideline = loadGuideline();
     const mode = getTranscriptionMode();
     const isOrganon = mode === 'organon';
@@ -127,7 +129,7 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       whisperPrompt,
       model: WHISPER_MODEL,
       glossary: isOrganon ? '' : buildGlossary(guideline),
-      backend: isOrganon ? 'local' : undefined,
+      // backend は指定しない = 両モードとも STT_BACKEND env を尊重 (軸2 を独立させる)。
       openaiClient: openai,
     });
     const trimmedRaw = rawText.trim();
