@@ -216,6 +216,27 @@ function getTranscriptionMode(env = process.env) {
 }
 
 /**
+ * mode 別の補正モデルを返す (Exp8 2026-07-04):
+ *   legacy  : AI_MODEL (既定 gpt-4o-mini)。現行と同一 = 後方互換。
+ *   organon : ORGANON_AI_MODEL (既定 gpt-5.4-mini)。gpt-4o-mini の stochastic 天井
+ *             (整理室長→整備長 / 田中勤寿 flicker) を上位 mini で堅牢化 (4/5、しかも現行より速い)。
+ */
+function getCorrectionModel(mode, env = process.env) {
+  if (mode === 'organon') return (env && env.ORGANON_AI_MODEL) || 'gpt-5.4-mini';
+  return (env && env.AI_MODEL) || 'gpt-4o-mini';
+}
+
+/**
+ * モデル世代別の Chat Completions パラメータ。
+ * 新世代 (gpt-5* / o*) は max_completion_tokens 必須・temperature 非対応 (default のみ)。
+ * 旧世代 (gpt-4o* / gpt-4.1*) は従来どおり temperature + max_tokens = 現行互換。
+ */
+function completionParams(model) {
+  const newGen = /^(gpt-5|o\d)/.test(model || '');
+  return newGen ? { max_completion_tokens: 4000 } : { temperature: 0.3, max_tokens: 1000 };
+}
+
+/**
  * organon 補正段 (AI 整形の代替) の system prompt を構築する (TRANSCRIPTION_MODE=organon 用)。
  *
  * Day48 実験の勝ち筋: vocab-inject(音響stageのbias)でなく、organon を「補正stageの知識源」として
@@ -276,4 +297,6 @@ module.exports = {
   META_EMPTY_LITERALS,
   getTranscriptionMode,
   buildOrganonCorrectionPrompt,
+  getCorrectionModel,
+  completionParams,
 };

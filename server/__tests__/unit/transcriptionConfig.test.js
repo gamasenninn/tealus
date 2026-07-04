@@ -445,6 +445,44 @@ describe('getTranscriptionMode (方式スイッチ)', () => {
   });
 });
 
+// mode 別 補正モデル (Exp8: gpt-4o-mini の stochastic 天井を gpt-5.4-mini で解消)。
+describe('getCorrectionModel (mode 別 補正モデル)', () => {
+  afterEach(() => { delete process.env.AI_MODEL; delete process.env.ORGANON_AI_MODEL; });
+
+  test('legacy は AI_MODEL (既定 gpt-4o-mini) = 後方互換', () => {
+    expect(configModule.getCorrectionModel('legacy', {})).toBe('gpt-4o-mini');
+    expect(configModule.getCorrectionModel('legacy', { AI_MODEL: 'gpt-4o' })).toBe('gpt-4o');
+  });
+
+  test('organon は ORGANON_AI_MODEL (既定 gpt-5.4-mini)', () => {
+    expect(configModule.getCorrectionModel('organon', {})).toBe('gpt-5.4-mini');
+    expect(configModule.getCorrectionModel('organon', { ORGANON_AI_MODEL: 'gpt-5.4' })).toBe('gpt-5.4');
+  });
+
+  test('引数省略時は process.env を読む', () => {
+    process.env.ORGANON_AI_MODEL = 'gpt-4.1-mini';
+    expect(configModule.getCorrectionModel('organon')).toBe('gpt-4.1-mini');
+  });
+});
+
+describe('completionParams (モデル世代別 API パラメータ)', () => {
+  test('新世代 (gpt-5*/o*) は max_completion_tokens・temperature/max_tokens 無し', () => {
+    const p = configModule.completionParams('gpt-5.4-mini');
+    expect(p).toHaveProperty('max_completion_tokens');
+    expect('temperature' in p).toBe(false);
+    expect('max_tokens' in p).toBe(false);
+    expect(configModule.completionParams('o4-mini')).toHaveProperty('max_completion_tokens');
+  });
+
+  test('旧世代 (gpt-4o-mini / gpt-4.1-mini) は temperature + max_tokens = 現行互換', () => {
+    const p = configModule.completionParams('gpt-4o-mini');
+    expect(p.temperature).toBe(0.3);
+    expect(p.max_tokens).toBe(1000);
+    expect('max_completion_tokens' in p).toBe(false);
+    expect(configModule.completionParams('gpt-4.1-mini').max_tokens).toBe(1000);
+  });
+});
+
 describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', () => {
   test('vocab 空でも base 補正 prompt を返す (指示 + 過補正ガード)', () => {
     const p = configModule.buildOrganonCorrectionPrompt({ vocabulary: [] });

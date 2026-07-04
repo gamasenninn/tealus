@@ -1,13 +1,11 @@
 const logger = require('../utils/logger');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
-const { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt } = require('./transcriptionConfig');
+const { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams } = require('./transcriptionConfig');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
 
 const BASE_SYSTEM_PROMPT = `あなたは音声文字起こしテキストを自然な日本語に整形するアシスタントです。
 以下のルールに従ってください：
@@ -67,15 +65,15 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       io.to(roomId).emit('voice:status', { message_id: messageId, status: 'formatting' });
     }
 
-    // Call AI API
+    // Call AI API (mode 別モデル + モデル世代別パラメータ)
+    const model = getCorrectionModel(mode);
     const response = await openai.chat.completions.create({
-      model: AI_MODEL,
+      model,
       messages: [
         { role: 'system', content: systemPromptForMode(mode) },
         { role: 'user', content: rawText },
       ],
-      temperature: 0.3,
-      max_tokens: 1000,
+      ...completionParams(model),
     });
 
     let formattedText = response.choices[0].message.content.trim();
