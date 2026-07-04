@@ -34,6 +34,8 @@ function contentTypeFor(ext) {
  * @param {string} p.model       - openai model 名 (WHISPER_MODEL)
  * @param {string} [p.glossary]  - local backend の固有名詞 glossary (system prompt biasing)
  * @param {object} p.openaiClient - OpenAI SDK instance (openai.audio.transcriptions.create)
+ * @param {string} [p.backend]   - backend override ('openai'|'local')。未指定なら STT_BACKEND env を読む
+ *                                 (TRANSCRIPTION_MODE=organon が STT を local に束ねるため)
  * @param {function} [p.fetchImpl=globalThis.fetch] - local backend の HTTP (test で注入)
  * @param {object} [p.log=logger]
  * @returns {Promise<string>} raw text
@@ -45,12 +47,13 @@ async function transcribeAudio({
   model,
   glossary,
   openaiClient,
+  backend,
   fetchImpl = globalThis.fetch,
   log = defaultLogger,
 }) {
-  const backend = (process.env.STT_BACKEND || 'openai').toLowerCase();
+  const effectiveBackend = (backend || process.env.STT_BACKEND || 'openai').toLowerCase();
 
-  if (backend === 'local') {
+  if (effectiveBackend === 'local') {
     try {
       return await transcribeLocal({ inputPath, glossary, fetchImpl });
     } catch (err) {

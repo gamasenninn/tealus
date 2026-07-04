@@ -1,7 +1,7 @@
 const logger = require('../utils/logger');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
-const { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral } = require('./transcriptionConfig');
+const { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt } = require('./transcriptionConfig');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -30,6 +30,17 @@ function buildSystemPrompt() {
 }
 
 /**
+ * 整形段の system prompt を mode で選択する (TRANSCRIPTION_MODE スパイク、Day48)。
+ *   legacy  : 現行の汎用整形 + 組織固有語彙リスト (buildSystemPrompt)。出力互換。
+ *   organon : organon を「補正の知識源」として使う専用 prompt (buildOrganonCorrectionPrompt)。
+ */
+function systemPromptForMode(mode) {
+  return mode === 'organon'
+    ? buildOrganonCorrectionPrompt(loadGuideline())
+    : buildSystemPrompt();
+}
+
+/**
  * Format transcribed text using AI
  * Runs asynchronously after transcription completes
  *
@@ -40,7 +51,7 @@ function buildSystemPrompt() {
  * @param {number|null} version
  * @param {string} [messageType='voice'] - webhook fire 時の type ('voice' | 'video' | 'audio')
  */
-async function formatTranscription(messageId, rawText, io, roomId, version = null, messageType = 'voice') {
+async function formatTranscription(messageId, rawText, io, roomId, version = null, messageType = 'voice', mode = getTranscriptionMode()) {
   // #216: version 指定があれば対象 version、無ければ MAX(version) を使う (旧挙動互換)
   const versionWhereClause = version !== null
     ? 'AND version = $2'
@@ -60,7 +71,7 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
     const response = await openai.chat.completions.create({
       model: AI_MODEL,
       messages: [
-        { role: 'system', content: buildSystemPrompt() },
+        { role: 'system', content: systemPromptForMode(mode) },
         { role: 'user', content: rawText },
       ],
       temperature: 0.3,

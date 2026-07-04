@@ -4,7 +4,7 @@ const path = require('path');
 const OpenAI = require('openai');
 const pool = require('../db/pool');
 const { formatTranscription } = require('./formatting');
-const { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination } = require('./transcriptionConfig');
+const { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination, getTranscriptionMode } = require('./transcriptionConfig');
 const { transcribeAudio } = require('./sttBackend');
 
 const openai = new OpenAI({
@@ -112,16 +112,22 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       }
     }
 
-    // 音声 -> raw text (#自ホストSTT: STT_BACKEND で openai(default)/local 切替)。
-    // local = 常駐 Qwen3-ASR ワーカー、障害時は openai へ fail-open (sttBackend 内)。
+    // 音声 -> raw text。TRANSCRIPTION_MODE で方式を束ねる (Day48 スパイク):
+    //   legacy (既定): Whisper(openai) + vocab-inject prompt + 現行整形。出力完全同一 = 後方互換。
+    //   organon      : Qwen生(local, 障害時 openai へ fail-open) + vocab-inject 無し + organon 補正段。
+    //                  → organon は「音響stageのbias」でなく「補正stageの知識源」で効かせるので、
+    //                    STT には vocab prompt / glossary を渡さず Qwen生をクリーンに取る (Exp6 の知見)。
     const guideline = loadGuideline();
-    const whisperPrompt = buildWhisperPrompt(guideline, WHISPER_MODEL);
+    const mode = getTranscriptionMode();
+    const isOrganon = mode === 'organon';
+    const whisperPrompt = isOrganon ? null : buildWhisperPrompt(guideline, WHISPER_MODEL);
     let rawText = await transcribeAudio({
       inputPath,
       ext,
       whisperPrompt,
       model: WHISPER_MODEL,
-      glossary: buildGlossary(guideline),
+      glossary: isOrganon ? '' : buildGlossary(guideline),
+      backend: isOrganon ? 'local' : undefined,
       openaiClient: openai,
     });
     const trimmedRaw = rawText.trim();
@@ -194,8 +200,8 @@ async function transcribeMessage(messageId, filePath, options = {}) {
         });
       }
     } else {
-      // 通常: AI formatting
-      await formatTranscription(messageId, rawText, io, roomId, version, messageType);
+      // 通常: AI formatting (mode を渡す: organon なら organon 補正段、legacy なら現行整形)
+      await formatTranscription(messageId, rawText, io, roomId, version, messageType, mode);
     }
 
     return rawText;

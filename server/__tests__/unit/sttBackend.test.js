@@ -131,3 +131,40 @@ describe('transcribeAudio - local backend', () => {
     expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
   });
 });
+
+// backend override 引数 (TRANSCRIPTION_MODE スパイク): mode=organon が STT を local に束ねる。
+describe('transcribeAudio - backend override 引数', () => {
+  test('backend 引数で env を上書きし local worker を叩く (env 未設定でも)', async () => {
+    delete process.env.STT_BACKEND;
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: 'ワーカー結果' }));
+    const openaiClient = fakeOpenAI('should-not-be-used');
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', backend: 'local', openaiClient, fetchImpl,
+    });
+    expect(text).toBe('ワーカー結果');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
+  });
+
+  test('backend=openai で env=local を上書きして openai を叩く', async () => {
+    process.env.STT_BACKEND = 'local';
+    const fetchImpl = jest.fn();
+    const openaiClient = fakeOpenAI('openai-text');
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', backend: 'openai', openaiClient, fetchImpl,
+    });
+    expect(text).toBe('openai-text');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('backend 未指定なら従来どおり env を読む (後方互換)', async () => {
+    process.env.STT_BACKEND = 'local';
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: 'env local' }));
+    const openaiClient = fakeOpenAI('x');
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient, fetchImpl,
+    });
+    expect(text).toBe('env local');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});

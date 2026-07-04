@@ -198,6 +198,73 @@ function isMetaEmptyLiteral(text) {
   return META_EMPTY_LITERALS.includes(trimmed);
 }
 
+/**
+ * 文字起こし方式スイッチ (TRANSCRIPTION_MODE スパイク、Day48)
+ *
+ *   legacy (既定) : 現行 = Whisper(openai) + vocab-inject prompt + 現行 AI 整形。出力完全同一 = 後方互換。
+ *   organon       : Qwen生(local, 障害時 openai へ fail-open) + vocab-inject 無し + organon 補正段。
+ *
+ * 未設定 / 未知値は安全側で legacy にフォールバック。
+ *
+ * @param {object} [env=process.env]
+ * @returns {'legacy'|'organon'}
+ */
+const TRANSCRIPTION_MODES = ['legacy', 'organon'];
+function getTranscriptionMode(env = process.env) {
+  const raw = env && env.TRANSCRIPTION_MODE ? String(env.TRANSCRIPTION_MODE).trim().toLowerCase() : '';
+  return TRANSCRIPTION_MODES.includes(raw) ? raw : 'legacy';
+}
+
+/**
+ * organon 補正段 (AI 整形の代替) の system prompt を構築する (TRANSCRIPTION_MODE=organon 用)。
+ *
+ * Day48 実験の勝ち筋: vocab-inject(音響stageのbias)でなく、organon を「補正stageの知識源」として
+ * 渡す。term/aliases に加え、reading(音→表記の橋渡し) / description(何屋か=文脈補正の手がかり) を併記。
+ * garble を alias 登録すると役職語崩れ等を lookup で拾える (Exp5 V4)。ただし短/曖昧 surface の
+ * フルネーム過補正 (Exp7: 小川→小川朱美) を防ぐガード指示を入れる。
+ *
+ * 汎用語 (category='term': お客様/売上 等) は distractor になるので知識ブロックから除外し、
+ * 固有名詞カテゴリ (person/organization/vendor/place/product/role) のみを載せる。
+ *
+ * @param {object} config - loadGuideline() の戻り (vocabulary を参照)
+ * @returns {string} system prompt (vocab 空でも base 補正 prompt を返す)
+ */
+const CORRECTION_CATEGORIES = ['person', 'organization', 'vendor', 'place', 'product', 'role'];
+const ORGANON_CORRECTION_BASE = `あなたは業務用トランシーバー等の音声認識(生テキスト)を整形し、組織の固有名詞を文脈から正しい表記に直すアシスタントです。
+以下のルールに従ってください：
+- 意味を変えず読みやすく整える。句読点を補い、フィラー(えーと、あのー等)を除去する。
+- 下記「組織固有名詞リスト」を参照し、音は近いが表記が崩れた固有名詞を正規表記に直す。別名(転写ブレ例)・読み・説明も手がかりにする。
+- リストに無い固有名詞(未知の顧客名・場所・人名)は勝手に変えない。推測で新しい名前を作らない。
+- 単独の一般的な姓・地名を、文脈が明確に支持しない限りフルネーム(人物の正式名)へ展開しない。
+- 文脈(誰への呼びかけか・何屋か・何の作業か)から固有名詞を推論する。役職語の聞き崩れも文脈で戻す。
+- 整形後のテキストのみを返す。説明や注釈は不要。質問文はそのまま質問文として整形する(質問に回答しない)。
+- **絶対禁止**: 空文字やメタ表現(「空文字」「内容なし」「無音」「empty」「null」「none」等)を返さない。content があれば必ず整形して返す。`;
+
+function buildOrganonCorrectionPrompt(config) {
+  const vocabulary = (config && Array.isArray(config.vocabulary)) ? config.vocabulary : [];
+  const seen = new Set();
+  const lines = [];
+  for (const v of vocabulary) {
+    const term = v && typeof v.term === 'string' ? v.term.trim() : '';
+    if (!term || seen.has(term)) continue;
+    if (!CORRECTION_CATEGORIES.includes(v && v.category)) continue; // 汎用 term 等は除外
+    seen.add(term);
+    let line = `- [${v.category}] ${term}`;
+    if (Array.isArray(v.aliases) && v.aliases.length) {
+      line += `（転写ブレ例: ${v.aliases.join('、')}）`;
+    }
+    if (v.reading && typeof v.reading === 'string' && v.reading.trim()) {
+      line += `〔読み: ${v.reading.trim()}〕`;
+    }
+    if (v.description && typeof v.description === 'string' && v.description.trim()) {
+      line += ` … ${v.description.trim()}`;
+    }
+    lines.push(line);
+  }
+  if (!lines.length) return ORGANON_CORRECTION_BASE;
+  return `${ORGANON_CORRECTION_BASE}\n\n# 組織固有名詞リスト\n${lines.join('\n')}`;
+}
+
 module.exports = {
   loadGuideline,
   resetCache,
@@ -207,4 +274,6 @@ module.exports = {
   isWhisperPromptHallucination,
   isMetaEmptyLiteral,
   META_EMPTY_LITERALS,
+  getTranscriptionMode,
+  buildOrganonCorrectionPrompt,
 };

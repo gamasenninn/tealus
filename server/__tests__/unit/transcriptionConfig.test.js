@@ -416,3 +416,78 @@ describe('buildGlossary (#自ホストSTT: local backend の固有名詞 biasing
     delete process.env.STT_GLOSSARY_MAX_TERMS;
   });
 });
+
+// TRANSCRIPTION_MODE スパイク (Day48): legacy(既定) と organon の 2 方式を env で切替。
+// 既定 legacy は現行と完全同一 = 後方互換。organon は Qwen生 + organon補正。
+describe('getTranscriptionMode (方式スイッチ)', () => {
+  afterEach(() => { delete process.env.TRANSCRIPTION_MODE; });
+
+  test('未設定なら legacy (後方互換)', () => {
+    expect(configModule.getTranscriptionMode({})).toBe('legacy');
+  });
+
+  test('TRANSCRIPTION_MODE=organon で organon', () => {
+    expect(configModule.getTranscriptionMode({ TRANSCRIPTION_MODE: 'organon' })).toBe('organon');
+  });
+
+  test('大文字小文字と前後空白を正規化する', () => {
+    expect(configModule.getTranscriptionMode({ TRANSCRIPTION_MODE: ' Organon ' })).toBe('organon');
+    expect(configModule.getTranscriptionMode({ TRANSCRIPTION_MODE: 'LEGACY' })).toBe('legacy');
+  });
+
+  test('未知の値は legacy にフォールバック (安全側)', () => {
+    expect(configModule.getTranscriptionMode({ TRANSCRIPTION_MODE: 'foo' })).toBe('legacy');
+  });
+
+  test('引数省略時は process.env を読む', () => {
+    process.env.TRANSCRIPTION_MODE = 'organon';
+    expect(configModule.getTranscriptionMode()).toBe('organon');
+  });
+});
+
+describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', () => {
+  test('vocab 空でも base 補正 prompt を返す (指示 + 過補正ガード)', () => {
+    const p = configModule.buildOrganonCorrectionPrompt({ vocabulary: [] });
+    expect(typeof p).toBe('string');
+    expect(p.length).toBeGreaterThan(0);
+    expect(p).toContain('固有名詞');       // 補正の役割
+    expect(p).toContain('リストに無い');    // 未登録は変えないガード
+    expect(p).toContain('フルネーム');      // 単独姓/地名をフルネーム化しないガード (Exp7: 小川→小川朱美)
+  });
+
+  test('proper-noun term と aliases を知識ブロックに含める', () => {
+    const p = configModule.buildOrganonCorrectionPrompt({
+      vocabulary: [{ term: '整備長', category: 'role', aliases: ['セビ調', 'セービチョー'] }],
+    });
+    expect(p).toContain('整備長');
+    expect(p).toContain('セビ調');
+    expect(p).toContain('セービチョー');
+  });
+
+  test('reading があれば併記する (音→表記の橋渡し)', () => {
+    const p = configModule.buildOrganonCorrectionPrompt({
+      vocabulary: [{ term: '畦塗機', category: 'product', reading: 'あぜぬりき' }],
+    });
+    expect(p).toContain('畦塗機');
+    expect(p).toContain('あぜぬりき');
+  });
+
+  test('description があれば併記する (何屋か = 文脈補正の知識源、Exp5 田中勤寿)', () => {
+    const p = configModule.buildOrganonCorrectionPrompt({
+      vocabulary: [{ term: '田中勤寿', category: 'vendor', description: 'トマト農家' }],
+    });
+    expect(p).toContain('田中勤寿');
+    expect(p).toContain('トマト農家');
+  });
+
+  test('汎用 term カテゴリは知識ブロックから除外する (お客様/売上 等のノイズ回避)', () => {
+    const p = configModule.buildOrganonCorrectionPrompt({
+      vocabulary: [
+        { term: 'お客様', category: 'term' },
+        { term: 'ガマ', category: 'person' },
+      ],
+    });
+    expect(p).toContain('ガマ');
+    expect(p).not.toContain('お客様');
+  });
+});
