@@ -168,3 +168,55 @@ describe('transcribeAudio - backend override 引数', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
+
+// 言語誤検出ガード (2026-07-04 dogfood: Qwen が短クリップ「高梨さん取れますか」→「حسن」アラビア語)。
+// prompt では回避不能と判明したので、日本語音声で出るはずのない外来スクリプトを検出 → openai へ fallback。
+describe('looksLikeForeignScript', () => {
+  test('アラビア/キリル/ハングル/タイ/デーヴァナーガリー を検出', () => {
+    expect(mod.looksLikeForeignScript('حسن')).toBe(true);      // Arabic
+    expect(mod.looksLikeForeignScript('Привет')).toBe(true);   // Cyrillic
+    expect(mod.looksLikeForeignScript('안녕하세요')).toBe(true); // Hangul
+    expect(mod.looksLikeForeignScript('สวัสดี')).toBe(true);   // Thai
+  });
+  test('日本語 / ラテン頭字語 / 空 は false (誤検出しない)', () => {
+    expect(mod.looksLikeForeignScript('整備長、取れますか')).toBe(false);
+    expect(mod.looksLikeForeignScript('はい、了解です')).toBe(false);
+    expect(mod.looksLikeForeignScript('OK NTS 44')).toBe(false);
+    expect(mod.looksLikeForeignScript('')).toBe(false);
+    expect(mod.looksLikeForeignScript(null)).toBe(false);
+  });
+});
+
+describe('transcribeAudio - local 言語誤検出 → openai fallback', () => {
+  test('local が Arabic を返したら openai に fallback (高梨→حسن dogfood)', async () => {
+    process.env.STT_BACKEND = 'local';
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: 'حسن' }));
+    const openaiClient = fakeOpenAI('高梨さん、高梨さん取れますか');
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('高梨さん、高梨さん取れますか');
+    expect(openaiClient.audio.transcriptions.create).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  test('日本語出力はそのまま採用 (fallback しない)', async () => {
+    process.env.STT_BACKEND = 'local';
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: '整備長、取れますか' }));
+    const openaiClient = fakeOpenAI('should-not-be-used');
+    const text = await mod.transcribeAudio({ inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient, fetchImpl });
+    expect(text).toBe('整備長、取れますか');
+    expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
+  });
+
+  test('STT_LOCAL_STRICT なら誤検出時も fallback せず throw', async () => {
+    process.env.STT_BACKEND = 'local';
+    process.env.STT_LOCAL_STRICT = '1';
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: 'حسن' }));
+    const openaiClient = fakeOpenAI('x');
+    await expect(mod.transcribeAudio({ inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient, fetchImpl }))
+      .rejects.toThrow();
+    expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
+  });
+});

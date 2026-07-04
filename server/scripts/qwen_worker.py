@@ -97,7 +97,10 @@ class H(BaseHTTPRequestHandler):
         if self.path != "/transcribe":
             return self._send(404, {"error": "not found"})
         n = int(self.headers.get("Content-Length", "0"))
-        req = json.loads(self.rfile.read(n) or b"{}")
+        try:
+            req = json.loads(self.rfile.read(n) or b"{}")
+        except (json.JSONDecodeError, ValueError) as e:
+            return self._send(400, {"error": f"bad json: {e}"})
         path = req.get("path")
         glossary = req.get("glossary", "")  # ★ default 空 = 素の認識
         if not path or not os.path.exists(path):

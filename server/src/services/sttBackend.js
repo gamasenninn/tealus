@@ -26,6 +26,18 @@ function contentTypeFor(ext) {
   return CONTENT_TYPE[ext] || `audio/${ext}`;
 }
 
+// 言語誤検出ガード (2026-07-04 dogfood): 多言語 audio-LLM (Qwen3-ASR 等) は短いクリップで
+// 言語を誤検出し、別言語を出すことがある (「高梨さん取れますか」→「حسن」アラビア語、決定論的で
+// prompt では回避不能と判明)。日本語業務音声で出るはずのない外来スクリプト (アラビア/キリル/
+// ハングル/タイ/デーヴァナーガリー等) を検出したら STT 失敗扱いにして openai へ fallback する。
+// ラテン頭字語 (OK/NTS 等) や日本語は許容 = 誤検出しない。
+// Cyrillic Ѐ-ԯ / Arabic+Syriac ؀-ݏ / Devanagari ऀ-ॿ /
+// Thai ฀-๿ / Hangul syllables 가-힯
+const FOREIGN_SCRIPT_RE = /[Ѐ-ԯ؀-ݏऀ-ॿ฀-๿가-힯]/;
+function looksLikeForeignScript(text) {
+  return typeof text === 'string' && FOREIGN_SCRIPT_RE.test(text);
+}
+
 /**
  * @param {object} p
  * @param {string} p.inputPath   - 変換済み音声ファイルの絶対 path (worker/openai 双方が使う)
@@ -55,7 +67,11 @@ async function transcribeAudio({
 
   if (effectiveBackend === 'local') {
     try {
-      return await transcribeLocal({ inputPath, glossary, fetchImpl });
+      const text = await transcribeLocal({ inputPath, glossary, fetchImpl });
+      if (looksLikeForeignScript(text)) {
+        throw new Error(`worker returned foreign-script text (language misdetection): "${text.slice(0, 20)}"`);
+      }
+      return text;
     } catch (err) {
       const strict = !!process.env.STT_LOCAL_STRICT && process.env.STT_LOCAL_STRICT !== '0';
       if (strict) {
@@ -108,4 +124,4 @@ async function transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiCl
   return transcription.text || '';
 }
 
-module.exports = { transcribeAudio, contentTypeFor };
+module.exports = { transcribeAudio, contentTypeFor, looksLikeForeignScript };
