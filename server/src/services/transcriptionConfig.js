@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const dictionaryRepo = require('./dictionaryRepo');
 
 const CONFIG_PATH = process.env.TRANSCRIPTION_GUIDELINE_PATH
   || path.join(__dirname, '../../config/transcription_guideline.json');
@@ -12,7 +13,13 @@ let cached = null;
 // なしでファイル更新を自動反映。7 日ごとの JWT 失効 + curl 不可の運用摩擦を構造的に解消)。
 let cachedMtimeMs = null;
 
-function loadGuideline() {
+// #327: 実行時 source of truth は dictionary テーブル。ただし loadGuideline() は同期契約
+// (buildSystemPrompt 等の同期関数から呼ばれる) なので、テーブル vocab は「非同期で更新する
+// in-memory オーバーレイ」で持つ。null / 空 のときは file の vocabulary にフォールバック
+// (= 未 seed / DB 不達でも従来どおり動く非破壊)。whisper_context / guidelines は file 継続。
+let tableVocab = null;
+
+function loadFileGuideline() {
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       cached = EMPTY;
@@ -45,6 +52,49 @@ function loadGuideline() {
 function resetCache() {
   cached = null;
   cachedMtimeMs = null;
+}
+
+/**
+ * #327: dictionary テーブルの active vocabulary を in-memory オーバーレイに読み込む (非同期)。
+ * 起動時・admin reload・辞書書込 (hook/UI/import) 後に呼ぶ。テーブルが空 / DB 不達なら
+ * tableVocab を null に落とし、loadGuideline() は file にフォールバックする (非破壊)。
+ * @returns {Promise<number>} オーバーレイに載った term 数 (0 = file フォールバック)
+ */
+async function refreshVocabFromTable() {
+  try {
+    const rows = await dictionaryRepo.listActiveVocabulary();
+    if (Array.isArray(rows) && rows.length) {
+      // 消費側 (buildFormattingExtension / buildOrganonCorrectionPrompt / buildGlossary) は
+      // term / category / aliases を使う。reading / description は superset として温存。
+      tableVocab = rows.map((r) => ({
+        term: r.term,
+        category: r.category,
+        aliases: Array.isArray(r.aliases) ? r.aliases : [],
+        reading: r.reading || null,
+        description: r.description || null,
+      }));
+      logger.info(`[dictionary] vocab overlay from table: ${tableVocab.length} terms`);
+      return tableVocab.length;
+    }
+    tableVocab = null; // 空テーブル → file フォールバック
+    return 0;
+  } catch (err) {
+    tableVocab = null; // DB 不達 → file フォールバック (非破壊)
+    logger.warn(`[dictionary] table vocab refresh failed, falling back to file: ${err.message}`);
+    return 0;
+  }
+}
+
+/**
+ * 整形/文字起こしが参照する guideline。whisper_context / guidelines は file、vocabulary は
+ * テーブルオーバーレイ (あれば) → 無ければ file。同期契約を維持 (呼び出し側は同期のまま)。
+ */
+function loadGuideline() {
+  const fileConfig = loadFileGuideline();
+  if (tableVocab && tableVocab.length) {
+    return { ...fileConfig, vocabulary: tableVocab };
+  }
+  return fileConfig;
 }
 
 function buildWhisperPrompt(config, model = null) {
@@ -289,6 +339,7 @@ function buildOrganonCorrectionPrompt(config) {
 module.exports = {
   loadGuideline,
   resetCache,
+  refreshVocabFromTable,
   buildWhisperPrompt,
   buildGlossary,
   buildFormattingExtension,
