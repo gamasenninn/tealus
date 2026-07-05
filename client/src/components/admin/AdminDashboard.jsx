@@ -6,6 +6,7 @@ import UserForm from './UserForm';
 import WebhookManager from './WebhookManager';
 import PortalManager from './PortalManager';
 import AccessLog from './AccessLog';
+import DictionaryCultivation from './DictionaryCultivation';
 import { roleLabel } from '../../utils/permissions';
 import ContextMenu from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
@@ -85,6 +86,7 @@ function AdminDashboard() {
         <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
         <button className={`admin-tab ${activeTab === 'portal' ? 'active' : ''}`} onClick={() => setActiveTab('portal')}>ポータル</button>
         <button className={`admin-tab ${activeTab === 'access-log' ? 'active' : ''}`} onClick={() => setActiveTab('access-log')}>アクセスログ</button>
+        <button className={`admin-tab ${activeTab === 'dictionary' ? 'active' : ''}`} onClick={() => setActiveTab('dictionary')}>辞書育成</button>
       </div>
 
       {activeTab === 'webhooks' ? (
@@ -93,6 +95,8 @@ function AdminDashboard() {
         <PortalManager />
       ) : activeTab === 'access-log' ? (
         <AccessLog />
+      ) : activeTab === 'dictionary' ? (
+        <DictionaryCultivation />
       ) : (
       <>
       <div className="admin-section-header">

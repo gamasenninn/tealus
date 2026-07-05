@@ -547,6 +547,25 @@ class ApiClient {
   testWebhook(id) {
     return this.request('POST', `/admin/webhooks/${id}/test`);
   }
+
+  // Dictionary cultivation (辞書育成, admin)
+  getDictionaryAliases(scope = 'auto', search = '') {
+    const q = new URLSearchParams({ scope });
+    if (search) q.set('search', search);
+    return this.request('GET', `/admin/dictionary/aliases?${q.toString()}`);
+  }
+
+  approveDictionaryAlias(id) {
+    return this.request('POST', `/admin/dictionary/aliases/${id}/approve`);
+  }
+
+  rejectDictionaryAlias(id) {
+    return this.request('POST', `/admin/dictionary/aliases/${id}/reject`);
+  }
+
+  setDictionaryReading(termId, reading) {
+    return this.request('PATCH', `/admin/dictionary/terms/${termId}/reading`, { reading });
+  }
 }
 
 export const api = new ApiClient();
