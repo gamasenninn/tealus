@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS dictionary_terms (
     term        TEXT NOT NULL,
     category    VARCHAR(32) NOT NULL DEFAULT 'other',
     reading     TEXT,                                   -- ひらがな読み(pykakasi自動+手動上書き)。音韻ゲートが使う。NULL可
+    description TEXT,                                    -- 人間レビュー用の文脈補助(誰/何・同名区別)。補正段には流さない
+                                                        -- (実験: description を補正に入れても変換は改善せず)。organon 由来メタの受け皿。NULL可
     source      VARCHAR(16) NOT NULL DEFAULT 'manual'
                 CHECK (source IN ('organon', 'manual', 'auto')),
     status      VARCHAR(16) NOT NULL DEFAULT 'active'

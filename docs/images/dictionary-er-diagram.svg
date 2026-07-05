@@ -44,17 +44,18 @@
 
   <!-- ===== 中央: 2 テーブル ===== -->
   <!-- dictionary_terms -->
-  <rect x="430" y="150" width="300" height="196" rx="6" fill="#00B4A0" fill-opacity="0.14" stroke="#00695C" stroke-width="2"/>
+  <rect x="430" y="150" width="300" height="222" rx="6" fill="#00B4A0" fill-opacity="0.14" stroke="#00695C" stroke-width="2"/>
   <rect x="430" y="150" width="300" height="30" rx="6" fill="#00B4A0" fill-opacity="0.42" stroke="#00695C" stroke-width="2"/>
   <text x="580" y="171" text-anchor="middle" font-size="14.5" font-weight="700" fill="#004D40">dictionary_terms</text>
   <text x="446" y="202" font-size="10.5" fill="#004D40" font-weight="700">PK  id (UUID)</text>
   <text x="446" y="222" font-size="10.5" fill="#004D40" font-weight="700">UQ  term  — 出力される確定表記</text>
   <text x="446" y="242" font-size="10.5" fill="#004D40">category</text>
   <text x="446" y="262" font-size="10.5" fill="#004D40">reading  — ひらがな読み（音韻ゲートが使う）</text>
-  <text x="446" y="282" font-size="10.5" fill="#004D40">source   organon / manual / auto</text>
-  <text x="446" y="302" font-size="10.5" fill="#004D40">status   active / rejected</text>
-  <text x="446" y="322" font-size="10.5" fill="#607d8b">created_at, updated_at</text>
-  <text x="446" y="340" font-size="9.5" font-style="italic" fill="#00695C">正準エンティティ（term 文字列で一意）</text>
+  <text x="446" y="282" font-size="10.5" fill="#004D40">description  — <tspan fill="#00695C">人間レビュー用の文脈補助</tspan></text>
+  <text x="446" y="298" font-size="9" fill="#78909c">　　　（補正段には流さない・同名区別・organon メタ受け皿）</text>
+  <text x="446" y="320" font-size="10.5" fill="#004D40">source   organon / manual / auto</text>
+  <text x="446" y="340" font-size="10.5" fill="#004D40">status   active / rejected</text>
+  <text x="446" y="360" font-size="10.5" fill="#607d8b">created_at, updated_at</text>
 
   <!-- dictionary_aliases -->
   <rect x="430" y="430" width="300" height="214" rx="6" fill="#80CBC4" fill-opacity="0.3" stroke="#00897B" stroke-width="2"/>
@@ -71,9 +72,9 @@
   <text x="446" y="639" font-size="9.5" font-style="italic" fill="#00897B">各行が自分の来歴を持つ → 衝突を解決可能</text>
 
   <!-- 1:N relationship -->
-  <path d="M580,346 V430" fill="none" stroke="#546E7A" stroke-width="1.6" marker-start="url(#one)" marker-end="url(#crow)"/>
-  <rect x="596" y="378" width="196" height="22" rx="4" fill="#eceff1" stroke="#b0bec5"/>
-  <text x="694" y="393" text-anchor="middle" font-size="10" fill="#455a64">1 term : N aliases（ON DELETE CASCADE）</text>
+  <path d="M580,372 V430" fill="none" stroke="#546E7A" stroke-width="1.6" marker-start="url(#one)" marker-end="url(#crow)"/>
+  <rect x="596" y="390" width="196" height="22" rx="4" fill="#eceff1" stroke="#b0bec5"/>
+  <text x="694" y="405" text-anchor="middle" font-size="10" fill="#455a64">1 term : N aliases（ON DELETE CASCADE）</text>
 
   <!-- ===== 右: 補正段 ===== -->
   <rect x="820" y="230" width="350" height="150" rx="10" fill="#e8f0fe" stroke="#1967d2" stroke-width="2"/>
