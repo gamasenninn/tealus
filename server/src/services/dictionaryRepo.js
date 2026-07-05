@@ -88,10 +88,70 @@ async function listActiveVocabulary() {
   return rows;
 }
 
+// --- #327 辞書育成UI (admin レビュー) 用 ------------------------------------
+
+/**
+ * 辞書育成レビュー用の別名一覧（term 情報を join）。pending を先頭に。
+ * @param {object} [opts]
+ * @param {'auto'|'all'|'rejected'} [opts.scope='auto'] - auto=自己成長分 / all=全部 / rejected=却下済
+ * @param {string} [opts.search] - term/alias 部分一致
+ */
+async function listAliasesForReview({ scope = 'auto', search = '' } = {}) {
+  const where = [];
+  const params = [];
+  if (scope === 'auto') where.push("a.source = 'auto'");
+  else if (scope === 'rejected') where.push("a.status = 'rejected'");
+  if (search) {
+    params.push(`%${search}%`);
+    where.push(`(t.term ILIKE $${params.length} OR a.alias ILIKE $${params.length})`);
+  }
+  const { rows } = await pool.query(
+    `SELECT a.id AS alias_id, a.alias, a.source, a.status, a.count, a.updated_at,
+            t.id AS term_id, t.term, t.category, t.reading
+       FROM dictionary_aliases a JOIN dictionary_terms t ON t.id = a.term_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY (a.status = 'pending') DESC, a.updated_at DESC
+       LIMIT 500`,
+    params,
+  );
+  return rows;
+}
+
+/** 人間が承認 → active に昇格 + source='manual'(請け合い=最上位・import が触れない) */
+async function approveAlias(aliasId) {
+  const { rows } = await pool.query(
+    "UPDATE dictionary_aliases SET status = 'active', source = 'manual', updated_at = NOW() WHERE id = $1 RETURNING *",
+    [aliasId],
+  );
+  return rows[0] || null;
+}
+
+/** 人間が却下 → rejected(tombstone。source は来歴として保持) */
+async function rejectAlias(aliasId) {
+  const { rows } = await pool.query(
+    "UPDATE dictionary_aliases SET status = 'rejected', updated_at = NOW() WHERE id = $1 RETURNING *",
+    [aliasId],
+  );
+  return rows[0] || null;
+}
+
+/** term の読みを上書き(自動 backfill の人間修正。次回以降の音韻ゲートに効く) */
+async function setTermReading(termId, reading) {
+  const { rows } = await pool.query(
+    'UPDATE dictionary_terms SET reading = $2, updated_at = NOW() WHERE id = $1 RETURNING *',
+    [termId, reading],
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   upsertTerm,
   getTermByName,
   upsertAlias,
   setAliasStatus,
   listActiveVocabulary,
+  listAliasesForReview,
+  approveAlias,
+  rejectAlias,
+  setTermReading,
 };

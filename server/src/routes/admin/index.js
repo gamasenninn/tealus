@@ -19,5 +19,6 @@ router.use('/', require('./agent-stats'));
 router.use('/', require('./access-log'));
 router.use('/', require('./rooms'));
 router.use('/', require('./transcription'));
+router.use('/', require('./dictionary'));
 
 module.exports = router;
