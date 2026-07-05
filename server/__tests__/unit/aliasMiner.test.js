@@ -352,6 +352,52 @@ describe('buildMergeCandidates', () => {
 });
 
 // #327 Phase1 安全ゲート: 音韻近接 + コーパス精度 で「変換して壊れない」garble→term だけ通す
+describe('extractAliasPairs (#327 決定論 char-LCS 抽出、LLM不要)', () => {
+  test('崩れ→既知term を抽出 (ホタカ→保坂)', () => {
+    const r = aliasMiner.extractAliasPairs('ホタカさん取れますか', '保坂さん取れますか', ['保坂']);
+    expect(r).toEqual([{ from: 'ホタカ', to: '保坂' }]);
+  });
+
+  test('話者名の前置 (削除なしの挿入) は無視する', () => {
+    // 人間が「ガマ」を頭に足しただけ = garbleを置換していない
+    const r = aliasMiner.extractAliasPairs('休憩戻りました', 'ガマ休憩戻りました', ['ガマ']);
+    expect(r).toEqual([]);
+  });
+
+  test('全文書き換え (変更>50%) は棄却する', () => {
+    const r = aliasMiner.extractAliasPairs(
+      'AIの短い文', '田部井さんと下野新聞と黒瀬が全部違う長い別の内容に書き換わった文章です',
+      ['田部井', '下野新聞', '黒瀬']);
+    expect(r).toEqual([]);
+  });
+
+  test('挿入側に既知termが無ければ拾わない', () => {
+    const r = aliasMiner.extractAliasPairs('あいうさん', 'かきくさん', ['保坂']);
+    expect(r).toEqual([]);
+  });
+
+  test('AIと人間が同一なら空', () => {
+    expect(aliasMiner.extractAliasPairs('同じ', '同じ', ['保坂'])).toEqual([]);
+  });
+
+  test('複数の置換を抽出する', () => {
+    const r = aliasMiner.extractAliasPairs(
+      'サビーが岡崎に戻る。フェビト取れますか',
+      '田部井が岡崎に戻る。整備長取れますか',
+      ['田部井', '整備長']);
+    expect(r).toEqual(expect.arrayContaining([
+      { from: 'サビー', to: '田部井' },
+      { from: 'フェビト', to: '整備長' },
+    ]));
+  });
+
+  test('長すぎる削除(=文章)は garble として拾わない', () => {
+    const r = aliasMiner.extractAliasPairs(
+      'これはとても長い崩れた文章がここに入りますよねさん', '保坂さん', ['保坂'], { maxGarbleLen: 8 });
+    expect(r).toEqual([]);
+  });
+});
+
 describe('moraDistance (音韻近接ゲートの土台)', () => {
   test('同一読みは 0', () => {
     expect(aliasMiner.moraDistance('ほさか', 'ほさか')).toBe(0);

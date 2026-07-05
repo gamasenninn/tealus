@@ -206,6 +206,63 @@ function buildMergeCandidates(aggregated, existingVocabulary = []) {
   return { newTerms, aliasAdditions };
 }
 
+// --- #327 決定論 char-LCS 抽出 (LLM不要) ----------------------------------
+// AI版 vs 人間版を文字レベル LCS 差分し、「削除された崩れ + 挿入された既知term」の
+// ペアを取る。全文書き換えは棄却、話者名前置(削除なし挿入)は無視。extractAliases(LLM)
+// の代替 = 無料・決定論・organon非依存 (Tealus単体で回る)。
+
+// 文字レベル LCS 差分 → change block 配列 [{del, ins}]。長すぎる入力は null。
+function diffBlocks(a, b, maxLen = 400) {
+  const n = a.length, m = b.length;
+  if (n > maxLen || m > maxLen) return null;
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+    dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  }
+  const blocks = []; let i = 0, j = 0, del = '', ins = '';
+  const flush = () => { if (del || ins) { blocks.push({ del, ins }); del = ''; ins = ''; } };
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { flush(); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { del += a[i++]; }
+    else { ins += b[j++]; }
+  }
+  while (i < n) del += a[i++];
+  while (j < m) ins += b[j++];
+  flush();
+  return blocks;
+}
+
+/**
+ * AI版 vs 人間版から garble→既知term の置換ペアを決定論抽出する。
+ * @param {string} aiText   - AI整形版
+ * @param {string} userText - 人間編集版
+ * @param {string[]} terms  - 既知の固有名詞term (挿入側に現れたら採用)
+ * @param {object} [opts]
+ * @param {number} [opts.maxRewriteFraction=0.5] - 変更率がこれ超なら全文書換とみなし棄却
+ * @param {number} [opts.maxGarbleLen=12] - 削除(崩れ)の最大長。超は文章とみなし無視
+ * @returns {Array<{from:string,to:string}>}
+ */
+function extractAliasPairs(aiText, userText, terms = [], opts = {}) {
+  const { maxRewriteFraction = 0.5, maxGarbleLen = 12 } = opts;
+  const a = String(aiText || ''), b = String(userText || '');
+  if (!a || !b || a === b) return [];
+  const blocks = diffBlocks(a, b);
+  if (blocks === null) return [];
+  const changed = blocks.reduce((s, bl) => s + Math.max(bl.del.length, bl.ins.length), 0);
+  if (changed / Math.max(a.length, 1) > maxRewriteFraction) return [];
+  const sorted = [...terms].sort((x, y) => y.length - x.length); // 長いtermを優先マッチ
+  const out = [];
+  for (const { del, ins } of blocks) {
+    const from = del.trim();
+    if (!from || from.length > maxGarbleLen) continue; // 削除なし(=挿入のみ) or 文章 → 無視
+    const to = sorted.find((t) => ins.includes(t));
+    if (!to) continue;
+    if (from === to || from.includes(to) || to.includes(from)) continue;
+    out.push({ from, to });
+  }
+  return out;
+}
+
 // --- #327 Phase1 安全ゲート ------------------------------------------------
 // 集約済み garble→term に「音韻近接」「コーパス精度」の2ゲートを掛け、変換して他を
 // 壊さない候補だけを 自動追加 / 人間確認 に振り分ける。読み・出現数は呼び出し側から
@@ -302,6 +359,7 @@ module.exports = {
   aggregateAliases,
   buildMergeCandidates,
   SYSTEM_PROMPT,
+  extractAliasPairs,
   moraDistance,
   corpusPrecision,
   filterSafeAliases,
