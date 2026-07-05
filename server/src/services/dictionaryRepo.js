@@ -33,20 +33,21 @@ async function getTermByName(term) {
 }
 
 /**
- * (term_id, alias) を upsert。既存 active なら count を加算。
+ * (term_id, alias) を upsert。既存 active/pending なら count を加算（status は保持）。
  * status='rejected'(tombstone) の行は尊重して no-op（却下が学習で復活しない）。
+ * status は INSERT 時のみ適用（既定 'active'。自己成長 hook は 'pending' で入れて後で昇格）。
  * @returns {{row: object|null, applied: boolean}}
  */
-async function upsertAlias({ termId, alias, source = 'auto', count = 1 }) {
+async function upsertAlias({ termId, alias, source = 'auto', count = 1, status = 'active' }) {
   const { rows } = await pool.query(
     `INSERT INTO dictionary_aliases (term_id, alias, source, count, status)
-     VALUES ($1, $2, $3, $4, 'active')
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (term_id, alias) DO UPDATE SET
        count      = dictionary_aliases.count + EXCLUDED.count,
        updated_at = NOW()
      WHERE dictionary_aliases.status <> 'rejected'
      RETURNING *`,
-    [termId, alias, source, count],
+    [termId, alias, source, count, status],
   );
   if (rows[0]) return { row: rows[0], applied: true };
   // DO UPDATE の WHERE が false = tombstone に当たった。現行を返して applied=false

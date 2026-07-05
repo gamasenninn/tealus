@@ -52,12 +52,13 @@ router.put('/', authenticate, async (req, res) => {
     );
     const newVersion = (versionResult.rows[0].max_version || 0) + 1;
 
-    // Get raw_text from latest version
+    // Get raw_text + prior formatted_text from latest version
     const latestResult = await pool.query(
-      'SELECT raw_text FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+      'SELECT raw_text, formatted_text FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
       [messageId]
     );
     const rawText = latestResult.rows[0]?.raw_text || '';
+    const priorFormatted = latestResult.rows[0]?.formatted_text || '';
 
     // Insert new version
     const result = await pool.query(
@@ -68,6 +69,13 @@ router.put('/', authenticate, async (req, res) => {
     );
 
     const transcription = result.rows[0];
+
+    // #327 自己成長: 人間編集(AI版→人間版)から garble→term を学習し辞書テーブルを育てる。
+    // fire-and-forget（応答をブロックしない・失敗は編集を妨げない）。
+    require('../services/dictionaryLearner')
+      .learnFromEdit({ priorFormatted, newFormatted: text.trim() })
+      .then((r) => { if (r.learned) logger.info(`[dictionary] learned from edit ${messageId}: +${r.promoted} active / +${r.pending} pending`); })
+      .catch((err) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${err.message}`));
 
     // Broadcast update
     const { io } = require('../app');
