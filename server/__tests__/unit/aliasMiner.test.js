@@ -350,3 +350,83 @@ describe('buildMergeCandidates', () => {
     expect(result.aliasAdditions[0].new_aliases).toEqual(['カナ']);
   });
 });
+
+// #327 Phase1 安全ゲート: 音韻近接 + コーパス精度 で「変換して壊れない」garble→term だけ通す
+describe('moraDistance (音韻近接ゲートの土台)', () => {
+  test('同一読みは 0', () => {
+    expect(aliasMiner.moraDistance('ほさか', 'ほさか')).toBe(0);
+  });
+  test('ほたか vs ほさか は ~0.33 (1モーラ差/3)', () => {
+    expect(aliasMiner.moraDistance('ほたか', 'ほさか')).toBeCloseTo(1/3, 5);
+  });
+  test('どうも vs がま は遠い (>0.5)', () => {
+    expect(aliasMiner.moraDistance('どうも', 'がま')).toBeGreaterThan(0.5);
+  });
+  test('カタカナ読みも内部で正規化して比較する', () => {
+    expect(aliasMiner.moraDistance('ホサカ', 'ほさか')).toBe(0);
+  });
+  test('空文字は距離1 (無効)', () => {
+    expect(aliasMiner.moraDistance('', 'ほさか')).toBe(1);
+  });
+});
+
+describe('corpusPrecision (常用語ガードの土台)', () => {
+  test('P = 修正回数 / 出現数', () => {
+    expect(aliasMiner.corpusPrecision(7, 9)).toBeCloseTo(0.78, 2);
+    expect(aliasMiner.corpusPrecision(1, 30)).toBeCloseTo(0.033, 3);
+  });
+  test('出現数 < 修正回数 でも 1 を超えない (guard)', () => {
+    expect(aliasMiner.corpusPrecision(3, 1)).toBe(1);
+    expect(aliasMiner.corpusPrecision(2, 0)).toBe(1);
+  });
+});
+
+describe('filterSafeAliases (#327 Phase1: 2ゲート + 自動/確認分岐)', () => {
+  // 依存注入: 読み・コーパス出現数はスタブ (DB非依存 = テスト可能)
+  const READ = { 'ホタカ':'ほたか', '保坂':'ほさか', 'タベイソン':'たべいそん', '田部井':'たべい',
+    'どうも':'どうも', 'ガマ':'がま', 'まさか':'まさか', '小川':'おがわ', '小川朱美':'おがわあけみ' };
+  const OCC = { 'ホタカ':9, 'タベイソン':1, 'どうも':500, 'まさか':8, '小川':40 };
+  const opts = { getReading: t => READ[t] || '', getOccurrence: g => OCC[g] || 1 };
+
+  test('音韻近 + 高P + freq≥2 → 自動追加 (ホタカ→保坂)', () => {
+    const r = aliasMiner.filterSafeAliases([{ from:'ホタカ', to:'保坂', count:7 }], opts);
+    expect(r.auto).toHaveLength(1);
+    expect(r.auto[0].from).toBe('ホタカ');
+    expect(r.confirm).toEqual([]);
+    expect(r.rejected).toEqual([]);
+  });
+
+  test('音韻近 + 高P + freq=1 → 人間確認 (タベイソン→田部井)', () => {
+    const r = aliasMiner.filterSafeAliases([{ from:'タベイソン', to:'田部井', count:1 }], opts);
+    expect(r.confirm).toHaveLength(1);
+    expect(r.auto).toEqual([]);
+  });
+
+  test('音韻遠 → 棄却 reason=phonetic (どうも→ガマ)', () => {
+    const r = aliasMiner.filterSafeAliases([{ from:'どうも', to:'ガマ', count:9 }], opts);
+    expect(r.auto).toEqual([]);
+    expect(r.confirm).toEqual([]);
+    expect(r.rejected[0].reason).toBe('phonetic');
+  });
+
+  test('★低P (常用語) → 棄却 reason=common-word (まさか→保坂)', () => {
+    // まさか(3字) vs ほさか は音韻的に近い(短別名・音韻ゲート通過)が、
+    // コーパス精度 P=1/8 で棄却 = 常用語ガードが効く
+    const r = aliasMiner.filterSafeAliases([{ from:'まさか', to:'保坂', count:1 }], opts);
+    expect(r.auto).toEqual([]);
+    expect(r.confirm).toEqual([]);
+    expect(r.rejected[0].reason).toBe('common-word');
+  });
+
+  test('≤2字の裸の garble → 棄却 reason=short (小川→小川朱美)', () => {
+    const r = aliasMiner.filterSafeAliases([{ from:'小川', to:'小川朱美', count:3 }], opts);
+    expect(r.rejected[0].reason).toBe('short');
+  });
+
+  test('閾値はオプションで調整可能', () => {
+    // autoFreq=3 なら freq=2 は confirm 行き (タベイソン=出現1でPは通る)
+    const r = aliasMiner.filterSafeAliases([{ from:'タベイソン', to:'田部井', count:2 }], { ...opts, autoFreq:3 });
+    expect(r.confirm).toHaveLength(1);
+    expect(r.auto).toEqual([]);
+  });
+});

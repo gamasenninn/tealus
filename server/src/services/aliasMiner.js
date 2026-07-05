@@ -206,10 +206,103 @@ function buildMergeCandidates(aggregated, existingVocabulary = []) {
   return { newTerms, aliasAdditions };
 }
 
+// --- #327 Phase1 安全ゲート ------------------------------------------------
+// 集約済み garble→term に「音韻近接」「コーパス精度」の2ゲートを掛け、変換して他を
+// 壊さない候補だけを 自動追加 / 人間確認 に振り分ける。読み・出現数は呼び出し側から
+// 注入する (pykakasi/DB 非依存 = 純関数・テスト可能)。抽出→集約は既存関数を再利用。
+
+const HONORIFIC = /(さん|さま|様|くん|君|ちゃん)$/;
+function stripHonorific(s) { return String(s || '').replace(HONORIFIC, ''); }
+
+const SMALL_KANA = new Set('ぁぃぅぇぉゃゅょゎっー');
+function toHiragana(s) {
+  return [...String(s || '')].map((ch) => {
+    const o = ch.codePointAt(0);
+    return (o >= 0x30A1 && o <= 0x30F6) ? String.fromCodePoint(o - 0x60) : ch;
+  }).join('');
+}
+function toMoras(s) {
+  const out = [];
+  for (const c of toHiragana(s)) {
+    if (SMALL_KANA.has(c) && out.length) out[out.length - 1] += c;
+    else out.push(c);
+  }
+  return out;
+}
+
+/**
+ * 正規化モーラ編集距離 [0,1]。garble読み ≈ term読み の近さ (本物の崩れは音を保つ)。
+ * カタカナ/ひらがな どちらの読みでも内部で正規化して比較する。空入力は 1 (無効)。
+ */
+function moraDistance(a, b) {
+  const x = toMoras(a), y = toMoras(b);
+  const n = x.length, m = y.length;
+  if (!n || !m) return 1;
+  const dp = Array.from({ length: m + 1 }, (_, j) => j);
+  for (let i = 1; i <= n; i++) {
+    let prev = dp[0]; dp[0] = i;
+    for (let j = 1; j <= m; j++) {
+      const cur = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (x[i - 1] === y[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+  }
+  return dp[m] / Math.max(n, m);
+}
+
+/**
+ * コーパス精度 P = 修正回数 / garble総出現。低P = その garble は他用途でも使われる
+ * = alias化して変換すると他を壊す (どうも/たま 等の常用語ガード)。出現数<回数は 1 に丸め。
+ */
+function corpusPrecision(count, occurrence) {
+  return count / Math.max(occurrence || 0, count);
+}
+
+/**
+ * 集約済み alias 候補に 2 ゲートを適用し 自動追加 / 人間確認 / 棄却 に振り分ける。
+ * @param {Array} aggregated - aggregateAliases の戻り ({from, to, count, ...})
+ * @param {object} opts
+ * @param {(text:string)=>string} opts.getReading    - ひらがな読み (kanji含む、注入)
+ * @param {(garble:string)=>number} opts.getOccurrence - コーパス総出現数 (注入)
+ * @param {number} [opts.minGarbleLen=3] - garble(honorific除去後)の最小長。≤2 は棄却 (Exp7過補正)
+ * @param {number} [opts.moraMax=0.5]    - 音韻近接の許容モーラ距離
+ * @param {number} [opts.pMin=0.5]       - コーパス精度の下限
+ * @param {number} [opts.autoFreq=2]     - この回数以上で自動追加、未満は人間確認
+ * @returns {{auto:Array, confirm:Array, rejected:Array}}
+ */
+function filterSafeAliases(aggregated, opts = {}) {
+  const {
+    getReading = () => '',
+    getOccurrence = () => 1,
+    minGarbleLen = 3,
+    moraMax = 0.5,
+    pMin = 0.5,
+    autoFreq = 2,
+  } = opts;
+  const auto = [], confirm = [], rejected = [];
+  for (const a of (aggregated || [])) {
+    const garble = String(a.from || '');
+    // ゲート1: 短別名 (≤2字の裸の姓/地名) → 過補正源なので棄却
+    if (stripHonorific(garble).length < minGarbleLen) { rejected.push({ ...a, reason: 'short' }); continue; }
+    // ゲート2: 音韻近接 (読みが遠い = 誤整列/話者前置アーティファクト)
+    const dist = moraDistance(getReading(garble), getReading(a.to));
+    if (dist > moraMax) { rejected.push({ ...a, reason: 'phonetic', dist }); continue; }
+    // ゲート3: コーパス精度 (低P = 常用語 = 変換で他を壊す)
+    const P = corpusPrecision(a.count, getOccurrence(garble));
+    if (P < pMin) { rejected.push({ ...a, reason: 'common-word', P }); continue; }
+    // 通過 → 頻度で 自動追加 / 人間確認 に分岐
+    (a.count >= autoFreq ? auto : confirm).push({ ...a, dist, P });
+  }
+  return { auto, confirm, rejected };
+}
+
 module.exports = {
   buildPairsFromRows,
   extractAliases,
   aggregateAliases,
   buildMergeCandidates,
   SYSTEM_PROMPT,
+  moraDistance,
+  corpusPrecision,
+  filterSafeAliases,
 };
