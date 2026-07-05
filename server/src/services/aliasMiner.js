@@ -206,59 +206,89 @@ function buildMergeCandidates(aggregated, existingVocabulary = []) {
   return { newTerms, aliasAdditions };
 }
 
-// --- #327 決定論 char-LCS 抽出 (LLM不要) ----------------------------------
-// AI版 vs 人間版を文字レベル LCS 差分し、「削除された崩れ + 挿入された既知term」の
-// ペアを取る。全文書き換えは棄却、話者名前置(削除なし挿入)は無視。extractAliases(LLM)
-// の代替 = 無料・決定論・organon非依存 (Tealus単体で回る)。
+// --- #327 決定論 term アンカー整列 抽出 (LLM不要) --------------------------
+// 「どこが変わったか」を汎用に探すのでなく、「この既知 term は元テキストのどこから来たか」を
+// 逆に引く。人間版 (new) 中の既知 term を見つけ、LCS 整列で AI版 (old) 側の対応スパンを読む
+// = それが崩れ (garble)。char-LCS の block 方式が「崩れと正解が文字を共有すると差分が収縮して
+// term を含まなくなる」盲点 (ママ→ガマ 等) を、term に錨を打つことで構造的に回避する。
+// 「○○さん」の "さん" が右アンカーとなり「その手前は名前」という意味的足場を与える。
+// extractAliases(LLM) の代替 = 無料・決定論・organon非依存 (Tealus単体で回る)。
 
-// 文字レベル LCS 差分 → change block 配列 [{del, ins}]。長すぎる入力は null。
-function diffBlocks(a, b, maxLen = 400) {
+// LCS の一致ペア列 [[oldIdx, newIdx], ...] (両方増加) = 変わらなかった錨。長すぎる入力は null。
+function lcsAnchors(a, b, maxLen = 400) {
   const n = a.length, m = b.length;
   if (n > maxLen || m > maxLen) return null;
   const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
     dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
   }
-  const blocks = []; let i = 0, j = 0, del = '', ins = '';
-  const flush = () => { if (del || ins) { blocks.push({ del, ins }); del = ''; ins = ''; } };
+  const anchors = []; let i = 0, j = 0;
   while (i < n && j < m) {
-    if (a[i] === b[j]) { flush(); i++; j++; }
-    else if (dp[i + 1][j] >= dp[i][j + 1]) { del += a[i++]; }
-    else { ins += b[j++]; }
+    if (a[i] === b[j]) { anchors.push([i, j]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { i++; }
+    else { j++; }
   }
-  while (i < n) del += a[i++];
-  while (j < m) ins += b[j++];
-  flush();
-  return blocks;
+  return anchors;
+}
+
+// text 中の既知 term を最長一致・非重複で検出 → [{i, j, term}] (i..j が term のスパン)。
+function findTermSpans(text, terms) {
+  const sorted = [...new Set(terms.filter(Boolean))].sort((x, y) => y.length - x.length);
+  const claimed = new Array(text.length).fill(false);
+  const spans = [];
+  for (const term of sorted) {
+    let from = 0;
+    for (;;) {
+      const idx = text.indexOf(term, from);
+      if (idx < 0) break;
+      let free = true;
+      for (let k = idx; k < idx + term.length; k++) if (claimed[k]) { free = false; break; }
+      if (free) {
+        for (let k = idx; k < idx + term.length; k++) claimed[k] = true;
+        spans.push({ i: idx, j: idx + term.length, term });
+      }
+      from = idx + 1;
+    }
+  }
+  return spans.sort((x, y) => x.i - y.i);
 }
 
 /**
- * AI版 vs 人間版から garble→既知term の置換ペアを決定論抽出する。
- * @param {string} aiText   - AI整形版
- * @param {string} userText - 人間編集版
- * @param {string[]} terms  - 既知の固有名詞term (挿入側に現れたら採用)
+ * AI版 vs 人間版から garble→既知term の置換ペアを決定論抽出する (term アンカー整列)。
+ * @param {string} aiText   - AI整形版 (old)
+ * @param {string} userText - 人間編集版 (new)
+ * @param {string[]} terms  - 既知の固有名詞term (new に現れたものを逆引き)
  * @param {object} [opts]
- * @param {number} [opts.maxRewriteFraction=0.5] - 変更率がこれ超なら全文書換とみなし棄却
- * @param {number} [opts.maxGarbleLen=12] - 削除(崩れ)の最大長。超は文章とみなし無視
+ * @param {number} [opts.maxRewriteFraction=0.5] - new の未一致率がこれ超なら全文書換とみなし棄却
+ * @param {number} [opts.maxGarbleLen=12] - 崩れの最大長。超は文章とみなし無視
  * @returns {Array<{from:string,to:string}>}
  */
 function extractAliasPairs(aiText, userText, terms = [], opts = {}) {
   const { maxRewriteFraction = 0.5, maxGarbleLen = 12 } = opts;
   const a = String(aiText || ''), b = String(userText || '');
   if (!a || !b || a === b) return [];
-  const blocks = diffBlocks(a, b);
-  if (blocks === null) return [];
-  const changed = blocks.reduce((s, bl) => s + Math.max(bl.del.length, bl.ins.length), 0);
-  if (changed / Math.max(a.length, 1) > maxRewriteFraction) return [];
-  const sorted = [...terms].sort((x, y) => y.length - x.length); // 長いtermを優先マッチ
+  const anchors = lcsAnchors(a, b);
+  if (anchors === null) return [];
+  // 全文書換ガード: 人間版のうち元テキストと一致しない割合が高すぎたら錨が信用できない
+  if ((b.length - anchors.length) / Math.max(b.length, 1) > maxRewriteFraction) return [];
+
   const out = [];
-  for (const { del, ins } of blocks) {
-    const from = del.trim();
-    if (!from || from.length > maxGarbleLen) continue; // 削除なし(=挿入のみ) or 文章 → 無視
-    const to = sorted.find((t) => ins.includes(t));
-    if (!to) continue;
-    if (from === to || from.includes(to) || to.includes(from)) continue;
-    out.push({ from, to });
+  const seen = new Set();
+  for (const { i, j, term } of findTermSpans(b, terms)) {
+    // term スパン [i,j) の左右の錨 → old 側の対応スパン = 崩れ。
+    // スパン内側の偶然の一致 (共有文字) は n<i / n>=j の条件で自動的に無視される。
+    let oL = -1;             // 左錨の oldIdx (無ければ -1 = 先頭)
+    let oR = a.length;       // 右錨の oldIdx (無ければ末尾)
+    for (const [o, n] of anchors) { if (n < i) oL = o; else break; }
+    for (const [o, n] of anchors) { if (n >= j) { oR = o; break; } }
+    const from = a.slice(oL + 1, oR).trim();
+    if (!from || from === term) continue;           // 純挿入(前置) / 変化なし
+    if (from.length > maxGarbleLen) continue;        // 文章 → 無視
+    if (from.includes(term) || term.includes(from)) continue;
+    const key = `${from} ${term}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ from, to: term });
   }
   return out;
 }

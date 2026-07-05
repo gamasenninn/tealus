@@ -358,6 +358,24 @@ describe('extractAliasPairs (#327 決定論 char-LCS 抽出、LLM不要)', () =>
     expect(r).toEqual([{ from: 'ホタカ', to: '保坂' }]);
   });
 
+  test('★共有文字の崩れも抽出する (ミコガエ→ミコガイ、char-LCS 盲点の解消)', () => {
+    // 崩れ ミコガエ と 正解 ミコガイ は「ミコガ」を共有。旧 char-LCS は差分が エ→イ に収縮し
+    // term を含まず取れなかった。term アンカーなら「さん」を右錨に崩れ全体を復元する。
+    const r = aliasMiner.extractAliasPairs('ミコガエさん取れますか', 'ミコガイさん取れますか', ['ミコガイ']);
+    expect(r).toEqual([{ from: 'ミコガエ', to: 'ミコガイ' }]);
+  });
+
+  test('★共有文字2字 (ママ→ガマ) も抽出できる (抽出責務。短別名の可否はゲート側)', () => {
+    const r = aliasMiner.extractAliasPairs('ママさん取れますか', 'ガマさん取れますか', ['ガマ']);
+    expect(r).toEqual([{ from: 'ママ', to: 'ガマ' }]);
+  });
+
+  test('★term が末尾にも別出現しても先頭の崩れを正しく取る (LCS 繰り返し耐性)', () => {
+    // 末尾の「ガマ」は old/new 共通(変化なし) → skip。先頭 ママ→ガマ のみ抽出。
+    const r = aliasMiner.extractAliasPairs('ママさん。ではガマ', 'ガマさん。ではガマ', ['ガマ']);
+    expect(r).toEqual([{ from: 'ママ', to: 'ガマ' }]);
+  });
+
   test('話者名の前置 (削除なしの挿入) は無視する', () => {
     // 人間が「ガマ」を頭に足しただけ = garbleを置換していない
     const r = aliasMiner.extractAliasPairs('休憩戻りました', 'ガマ休憩戻りました', ['ガマ']);
