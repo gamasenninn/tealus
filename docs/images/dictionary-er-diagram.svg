@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 940" font-family="'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif">
+  <defs>
+    <marker id="crow" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto">
+      <path d="M2,8 L13,2 M2,8 L13,8 M2,8 L13,14" stroke="#546E7A" stroke-width="1.3" fill="none"/>
+    </marker>
+    <marker id="one" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <line x1="5" y1="2" x2="5" y2="10" stroke="#546E7A" stroke-width="1.6"/>
+    </marker>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5f6368"/>
+    </marker>
+  </defs>
+
+  <rect width="1240" height="940" fill="#ffffff"/>
+  <text x="620" y="36" text-anchor="middle" font-size="21" font-weight="700" fill="#263238">Tealus 変換辞書 ER 図 (#327) — 実行時 source of truth はテーブル</text>
+  <text x="620" y="60" text-anchor="middle" font-size="12.5" fill="#546E7A">organon(可変軸=正規オントロジー)は file のまま任意 import。手動・自己成長と同じテーブルに source で同居し、merge ロジックは消える</text>
+
+  <!-- ===== 左: 3つの供給源 (source) ===== -->
+  <text x="70" y="104" font-size="12.5" font-weight="700" fill="#455a64">供給源（source 列で区別）</text>
+
+  <!-- organon.yaml (file) -->
+  <path d="M70,120 h230 v70 l-14,14 h-216 z" fill="#f3e8fd" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="185" y="144" text-anchor="middle" font-size="13" font-weight="700" fill="#6a1b9a">organon export (YAML file)</text>
+  <text x="185" y="163" text-anchor="middle" font-size="10.5" fill="#7b3fa0">可変軸の正規オントロジー・git管理</text>
+  <text x="185" y="180" text-anchor="middle" font-size="10.5" fill="#7b3fa0">任意の一方向 import → source='organon'</text>
+
+  <!-- 手動編集 -->
+  <rect x="70" y="220" width="230" height="66" rx="8" fill="#e0f2f1" stroke="#00695C" stroke-width="1.8"/>
+  <text x="185" y="244" text-anchor="middle" font-size="13" font-weight="700" fill="#00695C">辞書編集 UI（人間）</text>
+  <text x="185" y="263" text-anchor="middle" font-size="10.5" fill="#00796b">追加・却下・読み修正 → source='manual'</text>
+  <text x="185" y="279" text-anchor="middle" font-size="10.5" fill="#00796b">人間の明示行為 = 常に最優先</text>
+
+  <!-- auto 学習 -->
+  <rect x="70" y="316" width="230" height="80" rx="8" fill="#e6f4ea" stroke="#188038" stroke-width="1.8"/>
+  <text x="185" y="340" text-anchor="middle" font-size="13" font-weight="700" fill="#188038">自己成長（#327 aliasMiner）</text>
+  <text x="185" y="359" text-anchor="middle" font-size="10.5" fill="#2b7a3e">人間の文字起こし編集 → 決定論抽出</text>
+  <text x="185" y="375" text-anchor="middle" font-size="10.5" fill="#2b7a3e">→ 3安全ゲート → source='auto'</text>
+  <text x="185" y="390" text-anchor="middle" font-size="10.5" fill="#2b7a3e">（count = 直された頻度）</text>
+
+  <!-- source arrows into tables -->
+  <path d="M300,158 C360,158 380,210 428,222" fill="none" stroke="#6a1b9a" stroke-width="1.6" marker-end="url(#arw)"/>
+  <path d="M300,253 H428" fill="none" stroke="#00695C" stroke-width="1.6" marker-end="url(#arw)"/>
+  <path d="M300,356 C360,356 380,430 428,452" fill="none" stroke="#188038" stroke-width="1.6" marker-end="url(#arw)"/>
+
+  <!-- ===== 中央: 2 テーブル ===== -->
+  <!-- dictionary_terms -->
+  <rect x="430" y="150" width="300" height="196" rx="6" fill="#00B4A0" fill-opacity="0.14" stroke="#00695C" stroke-width="2"/>
+  <rect x="430" y="150" width="300" height="30" rx="6" fill="#00B4A0" fill-opacity="0.42" stroke="#00695C" stroke-width="2"/>
+  <text x="580" y="171" text-anchor="middle" font-size="14.5" font-weight="700" fill="#004D40">dictionary_terms</text>
+  <text x="446" y="202" font-size="10.5" fill="#004D40" font-weight="700">PK  id (UUID)</text>
+  <text x="446" y="222" font-size="10.5" fill="#004D40" font-weight="700">UQ  term  — 出力される確定表記</text>
+  <text x="446" y="242" font-size="10.5" fill="#004D40">category</text>
+  <text x="446" y="262" font-size="10.5" fill="#004D40">reading  — ひらがな読み（音韻ゲートが使う）</text>
+  <text x="446" y="282" font-size="10.5" fill="#004D40">source   organon / manual / auto</text>
+  <text x="446" y="302" font-size="10.5" fill="#004D40">status   active / rejected</text>
+  <text x="446" y="322" font-size="10.5" fill="#607d8b">created_at, updated_at</text>
+  <text x="446" y="340" font-size="9.5" font-style="italic" fill="#00695C">正準エンティティ（term 文字列で一意）</text>
+
+  <!-- dictionary_aliases -->
+  <rect x="430" y="430" width="300" height="214" rx="6" fill="#80CBC4" fill-opacity="0.3" stroke="#00897B" stroke-width="2"/>
+  <rect x="430" y="430" width="300" height="30" rx="6" fill="#80CBC4" fill-opacity="0.5" stroke="#00897B" stroke-width="2"/>
+  <text x="580" y="451" text-anchor="middle" font-size="14.5" font-weight="700" fill="#004D40">dictionary_aliases</text>
+  <text x="446" y="482" font-size="10.5" fill="#004D40" font-weight="700">PK  id (UUID)</text>
+  <text x="446" y="502" font-size="10.5" fill="#004D40" font-weight="700">FK  term_id → dictionary_terms.id</text>
+  <text x="446" y="522" font-size="10.5" fill="#004D40" font-weight="700">UQ  (term_id, alias)</text>
+  <text x="446" y="542" font-size="10.5" fill="#004D40">alias  — 転写ブレ / 崩れ (garble)</text>
+  <text x="446" y="562" font-size="10.5" fill="#004D40">source   organon / manual / auto</text>
+  <text x="446" y="582" font-size="10.5" fill="#004D40">status   active / <tspan fill="#c5221f" font-weight="700">rejected = tombstone</tspan></text>
+  <text x="446" y="602" font-size="10.5" fill="#004D40">count  — 学習頻度（auto の確信度）</text>
+  <text x="446" y="622" font-size="10.5" fill="#607d8b">created_at, updated_at</text>
+  <text x="446" y="639" font-size="9.5" font-style="italic" fill="#00897B">各行が自分の来歴を持つ → 衝突を解決可能</text>
+
+  <!-- 1:N relationship -->
+  <path d="M580,346 V430" fill="none" stroke="#546E7A" stroke-width="1.6" marker-start="url(#one)" marker-end="url(#crow)"/>
+  <rect x="596" y="378" width="196" height="22" rx="4" fill="#eceff1" stroke="#b0bec5"/>
+  <text x="694" y="393" text-anchor="middle" font-size="10" fill="#455a64">1 term : N aliases（ON DELETE CASCADE）</text>
+
+  <!-- ===== 右: 補正段 ===== -->
+  <rect x="820" y="230" width="350" height="150" rx="10" fill="#e8f0fe" stroke="#1967d2" stroke-width="2"/>
+  <text x="995" y="256" text-anchor="middle" font-size="14" font-weight="700" fill="#1967d2">補正段（文字起こしの誤変換を直す）</text>
+  <text x="995" y="282" text-anchor="middle" font-size="11" fill="#3c4043">active 行だけを引く（rejected は除外）</text>
+  <text x="995" y="304" text-anchor="middle" font-size="11" fill="#3c4043">同一 alias が衝突したら precedence 順:</text>
+  <text x="995" y="326" text-anchor="middle" font-size="12" font-weight="700" fill="#b06000">manual &gt; auto &gt; imported(organon)</text>
+  <text x="995" y="350" text-anchor="middle" font-size="11" fill="#3c4043">→ alias「ホタカ」を term「保坂」に変換</text>
+  <text x="995" y="370" text-anchor="middle" font-size="10" font-style="italic" fill="#5f6368">別ストア＋merge 不要（1テーブル query）</text>
+  <path d="M730,400 C770,430 790,330 818,318" fill="none" stroke="#1967d2" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#arw)"/>
+  <text x="770" y="440" font-size="10" fill="#1967d2">aliases を lookup</text>
+
+  <!-- ===== 下: パラダイム選択 + 2層衝突解決 ===== -->
+  <rect x="70" y="700" width="1100" height="200" rx="12" fill="#fffdf5" stroke="#f9a825" stroke-width="1.5"/>
+  <text x="90" y="728" font-size="14" font-weight="700" fill="#b06000">★ 衝突の裁定は「正規化」でなく「選択」— 使用者に選択責任が移る（我々はコードに焼き込まない）</text>
+
+  <text x="90" y="758" font-size="12" font-weight="700" fill="#455a64">2 層で閉じる:</text>
+  <text x="110" y="780" font-size="11.5" fill="#3c4043">① 人間の明示行為（source='manual' の追加 / status='rejected' の却下）は<tspan font-weight="700"> 常に最優先</tspan> — それ自体が使用者の選択行使</text>
+  <text x="110" y="800" font-size="11.5" fill="#3c4043">② 人間が何も言っていない <tspan font-weight="700">auto vs organon の衝突だけ</tspan> を、下のパラダイムモード（常設方針）が裁く</text>
+
+  <text x="90" y="832" font-size="12" font-weight="700" fill="#455a64">パラダイムモード（使用者が選ぶ・既定 = organon あれば organon優先 / 無ければ Tealus単体）:</text>
+  <rect x="110" y="846" width="330" height="40" rx="8" fill="#f3e8fd" stroke="#8430ce" stroke-width="1.2"/>
+  <text x="120" y="864" font-size="10.5" font-weight="700" fill="#6a1b9a">Tealus単体</text>
+  <text x="120" y="879" font-size="10" fill="#7b3fa0">簡易オントロジーのみ。import しない＝standalone</text>
+  <rect x="450" y="846" width="330" height="40" rx="8" fill="#e8f0fe" stroke="#1967d2" stroke-width="1.2"/>
+  <text x="460" y="864" font-size="10.5" font-weight="700" fill="#1967d2">organon優先</text>
+  <text x="460" y="879" font-size="10" fill="#3c4043">正規が権威。auto は空白を埋めるだけ、衝突は organon</text>
+  <rect x="790" y="846" width="330" height="40" rx="8" fill="#e6f4ea" stroke="#188038" stroke-width="1.2"/>
+  <text x="800" y="864" font-size="10.5" font-weight="700" fill="#188038">organon種＋現場優先</text>
+  <text x="800" y="879" font-size="10" fill="#2b7a3e">organon を初期語彙に取り込み、以後は現場修正が上書き</text>
+</svg>
