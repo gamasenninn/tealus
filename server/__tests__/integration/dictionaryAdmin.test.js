@@ -91,6 +91,45 @@ describe('語(term)ビュー', () => {
     expect(res.body.term.description).toBe('難読姓');
   });
 
+  test('PATCH で分類(category)を更新', async () => {
+    const t = await repo.upsertTerm({ term: '五月女', category: 'other', source: 'organon' });
+    const res = await request(app)
+      .patch(`/api/admin/dictionary/terms/${t.id}`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ category: 'person' });
+    expect(res.status).toBe(200);
+    expect(res.body.term.category).toBe('person');
+  });
+
+  test('POST /dictionary/terms で新規語を登録（読みは指定 or pykakasi）', async () => {
+    const res = await request(app)
+      .post('/api/admin/dictionary/terms')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ term: '新人名', reading: 'しんじんめい', category: 'person', description: '新入社員' });
+    expect(res.status).toBe(201);
+    expect(res.body.term.term).toBe('新人名');
+    expect(res.body.term.source).toBe('manual');
+    expect(res.body.term.category).toBe('person');
+    expect(res.body.term.reading).toBe('しんじんめい');
+  });
+
+  test('既存の語を POST すると 409', async () => {
+    await repo.upsertTerm({ term: '五月女', source: 'organon' });
+    const res = await request(app)
+      .post('/api/admin/dictionary/terms')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ term: '五月女', reading: 'そうとめ' });
+    expect(res.status).toBe(409);
+  });
+
+  test('語が空の POST は 400', async () => {
+    const res = await request(app)
+      .post('/api/admin/dictionary/terms')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ reading: 'x' });
+    expect(res.status).toBe(400);
+  });
+
   test('更新項目が無ければ 400', async () => {
     const t = await repo.upsertTerm({ term: '五月女', source: 'organon' });
     const res = await request(app)

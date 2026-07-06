@@ -579,6 +579,10 @@ class ApiClient {
   updateDictionaryTerm(id, fields) {
     return this.request('PATCH', `/admin/dictionary/terms/${id}`, fields);
   }
+
+  createDictionaryTerm(fields) {
+    return this.request('POST', '/admin/dictionary/terms', fields);
+  }
 }
 
 export const api = new ApiClient();

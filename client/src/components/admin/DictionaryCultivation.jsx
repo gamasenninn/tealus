@@ -13,6 +13,17 @@ const SCOPES = [
 const STATUS_LABEL = { pending: '確認待ち', active: '有効', rejected: '却下' };
 const STATUS_COLOR = { pending: '#b06000', active: '#188038', rejected: '#c5221f' };
 const SOURCE_LABEL = { auto: '自己成長', manual: '手動', organon: 'organon' };
+const CATEGORIES = [
+  { key: 'person', label: '人名' },
+  { key: 'organization', label: '組織' },
+  { key: 'vendor', label: '業者' },
+  { key: 'place', label: '場所' },
+  { key: 'product', label: '製品' },
+  { key: 'role', label: '役職' },
+  { key: 'term', label: '用語' },
+  { key: 'other', label: 'その他' },
+];
+const catLabel = (c) => (CATEGORIES.find((x) => x.key === c) || {}).label || c;
 
 function DictionaryCultivation() {
   const [view, setView] = useState('aliases');
@@ -126,7 +137,8 @@ function TermView() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [editing, setEditing] = useState(null); // { id, reading, description }
+  const [editing, setEditing] = useState(null); // { id, reading, description, category }
+  const [nt, setNt] = useState({ term: '', reading: '', category: 'person', description: '' });
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
@@ -140,17 +152,43 @@ function TermView() {
   const save = async () => {
     if (!editing) return;
     try {
-      await api.updateDictionaryTerm(editing.id, { reading: editing.reading.trim(), description: editing.description });
+      await api.updateDictionaryTerm(editing.id, {
+        reading: editing.reading.trim(), description: editing.description, category: editing.category,
+      });
       setEditing(null); await load();
+    } catch (err) { setError(err.message); }
+  };
+  const createTerm = async (e) => {
+    e.preventDefault();
+    if (!nt.term.trim()) return;
+    try {
+      await api.createDictionaryTerm({
+        term: nt.term.trim(), reading: nt.reading.trim(), category: nt.category, description: nt.description.trim(),
+      });
+      setNt({ term: '', reading: '', category: 'person', description: '' });
+      await load();
     } catch (err) { setError(err.message); }
   };
 
   return (
     <div>
       <p style={{ color: '#888', fontSize: '13px', margin: '0 0 12px' }}>
-        正しい語（term）の編集です。読みは音韻マッチ（自動学習）に使われます（pykakasi の自動読みが誤って
-        いれば直してください）。description は人物・区別のメモ（補正には使いません）。
+        正しい語（term）の編集・新規登録です。読みは音韻マッチ（自動学習）に使われます（pykakasi の自動
+        読みが誤っていれば直してください）。分類は補正の文脈に、description は人物・区別のメモ（補正には
+        使いません）。
       </p>
+
+      <form onSubmit={createTerm} style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '0 0 12px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: '#555' }}>新規語:</span>
+        <input value={nt.term} onChange={(e) => setNt({ ...nt, term: e.target.value })} placeholder="語（例 五月女）" style={{ padding: '6px 10px', fontSize: 14 }} />
+        <input value={nt.reading} onChange={(e) => setNt({ ...nt, reading: e.target.value })} placeholder="読み（空なら自動）" style={{ padding: '6px 10px', fontSize: 14, width: 130 }} />
+        <select value={nt.category} onChange={(e) => setNt({ ...nt, category: e.target.value })} style={{ padding: '6px 8px', fontSize: 14 }}>
+          {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <input value={nt.description} onChange={(e) => setNt({ ...nt, description: e.target.value })} placeholder="メモ（任意）" style={{ padding: '6px 10px', fontSize: 14 }} />
+        <button type="submit" className="admin-create-btn" disabled={!nt.term.trim()}>登録</button>
+      </form>
+
       <form onSubmit={(e) => { e.preventDefault(); load(); }} style={{ marginBottom: 12 }}>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="語で検索" style={{ padding: '6px 10px', fontSize: 14 }} />
       </form>
@@ -171,7 +209,13 @@ function TermView() {
               return (
                 <tr key={t.id}>
                   <td>{t.term}</td>
-                  <td style={{ color: '#888' }}>{t.category}</td>
+                  <td style={{ color: '#888' }}>
+                    {ed ? (
+                      <select value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} style={{ padding: '4px 6px' }}>
+                        {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                      </select>
+                    ) : catLabel(t.category)}
+                  </td>
                   <td>
                     {ed ? (
                       <input value={editing.reading} onChange={(e) => setEditing({ ...editing, reading: e.target.value })} style={{ width: 110, padding: '4px 6px' }} autoFocus />
@@ -190,7 +234,7 @@ function TermView() {
                         <button className="kebab-btn" onClick={() => setEditing(null)}>×</button>
                       </span>
                     ) : (
-                      <button className="kebab-btn" onClick={() => setEditing({ id: t.id, reading: t.reading || '', description: t.description || '' })}>編集</button>
+                      <button className="kebab-btn" onClick={() => setEditing({ id: t.id, reading: t.reading || '', description: t.description || '', category: t.category || 'other' })}>編集</button>
                     )}
                   </td>
                 </tr>

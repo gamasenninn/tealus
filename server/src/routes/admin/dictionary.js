@@ -94,6 +94,31 @@ router.get('/dictionary/terms', async (req, res) => {
   }
 });
 
+// 新規語(term)登録。読み未指定なら pykakasi で当てる。source=manual。別名は無くてよい
+// (登録済の名前として補正プロンプトに載る、崩れは後で自動学習/手動追加で付く)。
+router.post('/dictionary/terms', async (req, res) => {
+  try {
+    const term = typeof req.body.term === 'string' ? req.body.term.trim() : '';
+    if (!term) return res.status(400).json({ error: '語を入力してください' });
+    if (await repo.getTermByName(term)) return res.status(409).json({ error: 'この語は既にあります（語タブで編集してください）' });
+    const reading = (typeof req.body.reading === 'string' && req.body.reading.trim())
+      || (await getReadings([term])).get(term) || '';
+    const row = await repo.upsertTerm({
+      term,
+      reading,
+      category: req.body.category || 'other',
+      description: (typeof req.body.description === 'string' && req.body.description.trim()) || null,
+      source: 'manual',
+    });
+    await refreshVocabFromTable();
+    logger.info(`[dictionary] term created ${term} by ${req.user.login_id}`);
+    res.status(201).json({ term: row });
+  } catch (err) {
+    logger.error('[dictionary] create term error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 // 語(term)の部分更新（reading / description / category）
 router.patch('/dictionary/terms/:id', async (req, res) => {
   try {
