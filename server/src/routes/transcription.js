@@ -74,7 +74,8 @@ router.put('/', authenticate, async (req, res) => {
     // fire-and-forget（応答をブロックしない・失敗は編集を妨げない）。
     require('../services/dictionaryLearner')
       .learnFromEdit({ priorFormatted, newFormatted: text.trim() })
-      .then((r) => { if (r.learned) logger.info(`[dictionary] learned from edit ${messageId}: +${r.promoted} active / +${r.pending} pending`); })
+      // 発火を常に記録 (learned=0 でも「届いた+ゲート棄却」と「不発」を log で区別する)
+      .then((r) => logger.info(`[dictionary] edit ${messageId}: extracted ${r.extracted} → +${r.promoted} active / +${r.pending} pending / ${r.gateRejected} gate-rejected`))
       .catch((err) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${err.message}`));
 
     // Broadcast update
