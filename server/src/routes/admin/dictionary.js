@@ -8,6 +8,7 @@
 const express = require('express');
 const repo = require('../../services/dictionaryRepo');
 const { refreshVocabFromTable } = require('../../services/transcriptionConfig');
+const { getReadings } = require('../../services/reading');
 const logger = require('../../utils/logger');
 const E = require('../../constants/errors');
 
@@ -22,6 +23,33 @@ router.get('/dictionary/aliases', async (req, res) => {
     res.json({ aliases });
   } catch (err) {
     logger.error('[dictionary] list error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+// 手動追加（garble→term を人間が明示追加）。term が無ければ pykakasi 読み付きで作成。
+// source=manual + active（最上位・import 不可侵、tombstone も override）＝難読名など自動で拾えない語の経路。
+router.post('/dictionary/aliases', async (req, res) => {
+  try {
+    const term = typeof req.body.term === 'string' ? req.body.term.trim() : '';
+    const alias = typeof req.body.alias === 'string' ? req.body.alias.trim() : '';
+    if (!term || !alias) return res.status(400).json({ error: '語と別名を入力してください' });
+    if (term === alias) return res.status(400).json({ error: '語と別名が同一です' });
+
+    let t = await repo.getTermByName(term);
+    if (!t) {
+      const reading = (typeof req.body.reading === 'string' && req.body.reading.trim())
+        || (await getReadings([term])).get(term) || '';
+      t = await repo.upsertTerm({ term, category: req.body.category || 'other', reading, source: 'manual' });
+    }
+    const { row } = await repo.upsertAlias({ termId: t.id, alias, source: 'manual', count: 0, status: 'active' });
+    // 人間の明示追加 = active + source=manual を保証（既存 pending の昇格・tombstone の override 含む）
+    const finalRow = await repo.approveAlias(row.id);
+    await refreshVocabFromTable();
+    logger.info(`[dictionary] manual add ${alias}→${term} by ${req.user.login_id}`);
+    res.status(201).json({ alias: finalRow, term: t });
+  } catch (err) {
+    logger.error('[dictionary] manual add error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

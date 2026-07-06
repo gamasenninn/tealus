@@ -20,6 +20,8 @@ function DictionaryCultivation() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // { termId, value }
+  const [addTerm, setAddTerm] = useState('');
+  const [addAlias, setAddAlias] = useState('');
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [scope]);
 
@@ -44,6 +46,14 @@ function DictionaryCultivation() {
       setEditing(null); await load();
     } catch (err) { setError(err.message); }
   };
+  const submitAdd = async (e) => {
+    e.preventDefault();
+    if (!addTerm.trim() || !addAlias.trim()) return;
+    try {
+      await api.addDictionaryAlias(addTerm.trim(), addAlias.trim());
+      setAddTerm(''); setAddAlias(''); await load();
+    } catch (err) { setError(err.message); }
+  };
 
   return (
     <div>
@@ -54,7 +64,16 @@ function DictionaryCultivation() {
       <p style={{ color: '#888', fontSize: '13px', margin: '0 0 12px' }}>
         文字起こしの修正から自動で育つ辞書です。自動学習された変換を承認（有効化）・却下・読み修正できます。
         「確認待ち」は累積中でまだ補正に使われていません。承認すると次回の文字起こしから効きます。
+        自動で拾えない語（難読名など）は下のフォームから手動追加できます。
       </p>
+
+      <form onSubmit={submitAdd} style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '0 0 12px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: '#555' }}>手動追加:</span>
+        <input value={addTerm} onChange={(e) => setAddTerm(e.target.value)} placeholder="正しい語（例 五月女）" style={{ padding: '6px 10px', fontSize: 14 }} />
+        <span style={{ color: '#888' }}>←</span>
+        <input value={addAlias} onChange={(e) => setAddAlias(e.target.value)} placeholder="崩れ（例 ソフトメイ）" style={{ padding: '6px 10px', fontSize: 14 }} />
+        <button type="submit" className="admin-create-btn" disabled={!addTerm.trim() || !addAlias.trim()}>追加</button>
+      </form>
 
       <div className="admin-tabs" style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
         {SCOPES.map((s) => (

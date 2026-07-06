@@ -62,6 +62,62 @@ describe('GET /dictionary/aliases', () => {
   });
 });
 
+describe('手動追加 POST /dictionary/aliases', () => {
+  test('既存 term に別名を追加（source=manual, active）', async () => {
+    const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', source: 'organon' });
+    const res = await request(app)
+      .post('/api/admin/dictionary/aliases')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ term: '五月女', alias: 'ソフトメイ' });
+    expect(res.status).toBe(201);
+    expect(res.body.alias.alias).toBe('ソフトメイ');
+    expect(res.body.alias.source).toBe('manual');
+    expect(res.body.alias.status).toBe('active');
+    expect(res.body.term.id).toBe(t.id);
+  });
+
+  test('term が無ければ作成して別名を追加（読みは pykakasi 経由でも空でも可）', async () => {
+    const res = await request(app)
+      .post('/api/admin/dictionary/aliases')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ term: '新規語X', alias: 'シンキゴエックス', reading: 'しんきご' });
+    expect(res.status).toBe(201);
+    const t = await repo.getTermByName('新規語X');
+    expect(t).toBeTruthy();
+    expect(t.source).toBe('manual');
+    expect(t.reading).toBe('しんきご');
+  });
+
+  test('tombstone(却下済) を手動追加で復活できる（人間の明示は最上位）', async () => {
+    const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', source: 'organon' });
+    const { row } = await repo.upsertAlias({ termId: t.id, alias: 'ソフトメイ', source: 'auto', count: 1, status: 'pending' });
+    await repo.setAliasStatus(row.id, 'rejected');
+    const res = await request(app)
+      .post('/api/admin/dictionary/aliases')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ term: '五月女', alias: 'ソフトメイ' });
+    expect(res.status).toBe(201);
+    expect(res.body.alias.status).toBe('active');
+    expect(res.body.alias.source).toBe('manual');
+  });
+
+  test('語 or 別名が空なら 400', async () => {
+    const res = await request(app)
+      .post('/api/admin/dictionary/aliases')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ term: '五月女', alias: '  ' });
+    expect(res.status).toBe(400);
+  });
+
+  test('非 admin は 403', async () => {
+    const res = await request(app)
+      .post('/api/admin/dictionary/aliases')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ term: '五月女', alias: 'ソフトメイ' });
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('承認 / 却下 / 読み修正', () => {
   test('承認 → active + source=manual', async () => {
     const { pendingAliasId } = await seed();

@@ -566,6 +566,10 @@ class ApiClient {
   setDictionaryReading(termId, reading) {
     return this.request('PATCH', `/admin/dictionary/terms/${termId}/reading`, { reading });
   }
+
+  addDictionaryAlias(term, alias, reading = '') {
+    return this.request('POST', '/admin/dictionary/aliases', { term, alias, ...(reading ? { reading } : {}) });
+  }
 }
 
 export const api = new ApiClient();
