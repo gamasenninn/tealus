@@ -82,7 +82,38 @@ router.post('/dictionary/aliases/:id/reject', async (req, res) => {
   }
 });
 
-// 読み修正（term.reading 上書き）
+// 語(term)一覧 — 「語」ビュー用（読み/description/category 編集）
+router.get('/dictionary/terms', async (req, res) => {
+  try {
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const terms = await repo.listTerms({ search });
+    res.json({ terms });
+  } catch (err) {
+    logger.error('[dictionary] list terms error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+// 語(term)の部分更新（reading / description / category）
+router.patch('/dictionary/terms/:id', async (req, res) => {
+  try {
+    const fields = {};
+    if (typeof req.body.reading === 'string') fields.reading = req.body.reading.trim();
+    if (typeof req.body.description === 'string') fields.description = req.body.description.trim() || null;
+    if (typeof req.body.category === 'string' && req.body.category.trim()) fields.category = req.body.category.trim();
+    if (!Object.keys(fields).length) return res.status(400).json({ error: '更新する項目がありません' });
+    const row = await repo.updateTerm(req.params.id, fields);
+    if (!row) return res.status(404).json({ error: '語が見つかりません' });
+    await refreshVocabFromTable();
+    logger.info(`[dictionary] term updated ${row.term} by ${req.user.login_id}`);
+    res.json({ term: row });
+  } catch (err) {
+    logger.error('[dictionary] update term error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+// 読み修正（term.reading 上書き）— 後方互換で残置
 router.patch('/dictionary/terms/:id/reading', async (req, res) => {
   try {
     const reading = typeof req.body.reading === 'string' ? req.body.reading.trim() : '';

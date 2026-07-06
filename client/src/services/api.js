@@ -570,6 +570,15 @@ class ApiClient {
   addDictionaryAlias(term, alias, reading = '') {
     return this.request('POST', '/admin/dictionary/aliases', { term, alias, ...(reading ? { reading } : {}) });
   }
+
+  getDictionaryTerms(search = '') {
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    return this.request('GET', `/admin/dictionary/terms${q}`);
+  }
+
+  updateDictionaryTerm(id, fields) {
+    return this.request('PATCH', `/admin/dictionary/terms/${id}`, fields);
+  }
 }
 
 export const api = new ApiClient();

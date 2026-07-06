@@ -144,6 +144,40 @@ async function setTermReading(termId, reading) {
   return rows[0] || null;
 }
 
+/** 語(term)一覧。読み/description/category 編集の「語」ビュー用。別名数も返す。 */
+async function listTerms({ search = '' } = {}) {
+  const params = [];
+  let where = '';
+  if (search) { params.push(`%${search}%`); where = 'WHERE t.term ILIKE $1'; }
+  const { rows } = await pool.query(
+    `SELECT t.id, t.term, t.category, t.reading, t.description, t.source, t.status,
+            COUNT(a.id) FILTER (WHERE a.status <> 'rejected')::int AS alias_count
+       FROM dictionary_terms t
+       LEFT JOIN dictionary_aliases a ON a.term_id = t.id
+       ${where}
+       GROUP BY t.id
+       ORDER BY t.term
+       LIMIT 1000`,
+    params,
+  );
+  return rows;
+}
+
+/** term の部分更新(reading/description/category)。指定されたフィールドだけ書く。 */
+async function updateTerm(termId, fields = {}) {
+  const sets = [];
+  const params = [termId];
+  for (const key of ['reading', 'description', 'category']) {
+    if (fields[key] !== undefined) { params.push(fields[key]); sets.push(`${key} = $${params.length}`); }
+  }
+  if (!sets.length) return null;
+  const { rows } = await pool.query(
+    `UPDATE dictionary_terms SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+    params,
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   upsertTerm,
   getTermByName,
@@ -154,4 +188,6 @@ module.exports = {
   approveAlias,
   rejectAlias,
   setTermReading,
+  listTerms,
+  updateTerm,
 };
