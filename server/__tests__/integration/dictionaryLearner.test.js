@@ -108,3 +108,25 @@ test('★漢字 garble に読みが無いと音韻ゲートで棄却される（
   expect(r.extracted).toBe(1);       // 抽出はできている
   expect(r.gateRejected).toBe(1);    // が音韻ゲートで落ちる
 });
+
+test('★2字の漢字姓も読みが3モーラなら学習する（小坂→保坂、②モーラ数ゲート）', async () => {
+  await seedTerm('保坂', 'ほさか');
+  const r = await learner.learnFromEdit(
+    { priorFormatted: '小坂さん取れますか', newFormatted: '保坂さん取れますか' },
+    { getOccurrence: async () => 5, getReadings: async () => new Map([['小坂', 'こさか']]) });
+  // こさか(3モーラ) → モーラ数ゲート通過、こさか≈ほさか(d=0.33) → 音韻通過、count1/occ5 P=0.2 → pending
+  expect(r.learned).toBe(1);
+  expect(r.pending).toBe(1);
+  const t = await repo.getTermByName('保坂');
+  expect((await alias(t.id, '小坂')).status).toBe('pending');
+});
+
+test('★読みが2モーラの短い garble はモーラ数ゲートで棄却（コサ→保坂）', async () => {
+  await seedTerm('保坂', 'ほさか');
+  const r = await learner.learnFromEdit(
+    { priorFormatted: 'コサさん取れますか', newFormatted: '保坂さん取れますか' },
+    { getOccurrence: async () => 5, getReadings: NO_PYKAKASI }); // コサ→こさ(kata2hira, 2モーラ)
+  expect(r.learned).toBe(0);
+  expect(r.extracted).toBe(1);
+  expect(r.gateRejected).toBe(1);
+});

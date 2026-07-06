@@ -13,15 +13,14 @@
 const pool = require('../db/pool');
 const repo = require('./dictionaryRepo');
 const readingService = require('./reading');
-const { extractAliasPairs, moraDistance, corpusPrecision } = require('./aliasMiner');
+const { extractAliasPairs, toMoras, moraDistance, corpusPrecision } = require('./aliasMiner');
 
 const { kata2hira } = readingService;
-const SHORT_MIN = 3;   // ≤2字の裸の姓/地名は過補正するので除外
+// ① で garble の読みが取れる前提で、短別名判定を「文字数」でなく「読みのモーラ数」に。
+// 小坂(こさか=3モーラ) のような2字の漢字姓を通しつつ、たま/こさ(2モーラ=音が短く曖昧)は棄却する。
+const MIN_MORAS = 3;   // 読みが3モーラ未満は過補正リスクで除外
 const MORA_MAX = 0.5;  // 読みのモーラ距離。本物の崩れは音を保つ
 const P_MIN = 0.5;     // corpus-precision 昇格閾値
-const HONORIFIC = /(さん|さま|様|くん|君|ちゃん)$/;
-
-function stripHonorific(s) { return String(s || '').replace(HONORIFIC, ''); }
 
 /** garble がコーパス(文字起こし)全体に現れる件数（corpus-precision の分母） */
 async function occurrenceFromDb(garble) {
@@ -72,7 +71,7 @@ async function learnFromEdit({ priorFormatted, newFormatted }, opts = {}) {
   let promoted = 0; let pending = 0; let gateRejected = 0;
   for (const { from: garble, to: term } of uniquePairs) {
     // --- 安価ゲート（書込前）---
-    if (stripHonorific(garble).length < SHORT_MIN) { gateRejected += 1; continue; }          // 短別名
+    if (toMoras(getReading(garble)).length < MIN_MORAS) { gateRejected += 1; continue; }      // 短別名(モーラ数)
     if (moraDistance(getReading(garble), getReading(term)) > MORA_MAX) { gateRejected += 1; continue; } // 音韻
 
     const termId = termIdByTerm.get(term);

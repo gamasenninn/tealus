@@ -285,7 +285,7 @@ function extractAliasPairs(aiText, userText, terms = [], opts = {}) {
     if (!from || from === term) continue;           // 純挿入(前置) / 変化なし
     if (from.length > maxGarbleLen) continue;        // 文章 → 無視
     if (from.includes(term) || term.includes(from)) continue;
-    const key = `${from} ${term}`;
+    const key = `${from} ${term}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ from, to: term });
@@ -390,6 +390,7 @@ module.exports = {
   buildMergeCandidates,
   SYSTEM_PROMPT,
   extractAliasPairs,
+  toMoras,
   moraDistance,
   corpusPrecision,
   filterSafeAliases,
