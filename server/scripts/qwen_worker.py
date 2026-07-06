@@ -33,6 +33,9 @@ from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
 
 MODEL = os.environ.get("QWEN_MODEL", "Qwen/Qwen3-ASR-0.6B-hf")
 PORT = int(os.environ.get("QWEN_WORKER_PORT", "8123"))
+# 生成トークン上限。短クリップは EOS で早く止まるので無害、長尺(朝礼動画等)の末尾切れ対策で
+# 引き上げ (旧 256 は数秒 VOX 用で、数分の動画は 256 tok≈400字で後半欠落していた)。
+MAX_NEW_TOKENS = int(os.environ.get("QWEN_MAX_NEW_TOKENS", "1024"))
 
 print(f"[worker] cuda={torch.cuda.is_available()} "
       f"({torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}) model={MODEL}", flush=True)
@@ -56,7 +59,7 @@ def transcribe(path, glossary):
         torch.cuda.synchronize()
     t_gen = time.perf_counter()
     with torch.inference_mode():
-        out = model.generate(**inputs, max_new_tokens=256)
+        out = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     gen_ms = (time.perf_counter() - t_gen) * 1000
