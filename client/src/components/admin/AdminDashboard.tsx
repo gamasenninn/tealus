@@ -1,0 +1,190 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/authStore';
+import { api } from '../../services/api';
+import UserForm from './UserForm';
+import WebhookManager from './WebhookManager';
+import PortalManager from './PortalManager';
+import AccessLog from './AccessLog';
+import DictionaryCultivation from './DictionaryCultivation';
+import { roleLabel } from '../../utils/permissions';
+import ContextMenu from '../chat/ContextMenu';
+import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
+import type { User } from '../../types';
+import './AdminDashboard.css';
+
+interface ContextMenuItem {
+  icon?: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+}
+
+// UserForm が組み立てる送信 payload (作成時 login_id/password 必須、編集時差分のみ)
+type AdminUserPayload = Partial<User> & { password?: string };
+
+function AdminDashboard() {
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('users');
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [error, setError] = useState('');
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  useEffect(() => {
+    if (user?.role !== 'admin') {
+      navigate('/');
+      return;
+    }
+    loadUsers();
+  }, [user, navigate]);
+
+  const loadUsers = async () => {
+    try {
+      const data = await api.getAdminUsers();
+      setUsers(data.users);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreate = async (formData: AdminUserPayload) => {
+    try {
+      await api.createAdminUser(formData);
+      setShowCreateForm(false);
+      await loadUsers();
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleUpdate = async (formData: AdminUserPayload) => {
+    try {
+      await api.updateAdminUser(editingUser!.id, formData);
+      setEditingUser(null);
+      await loadUsers();
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleToggleActive = async (targetUser: User) => {
+    try {
+      await api.updateAdminUserStatus(targetUser.id, !targetUser.is_active);
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  if (loading) return <div className="admin-loading">読み込み中...</div>;
+
+  return (
+    <div className="admin-container">
+      <header className="admin-header">
+        <div className="admin-header-left">
+          <button className="admin-back-btn" onClick={() => navigate('/')}><ArrowLeft size={22} /></button>
+          <h1>管理ダッシュボード</h1>
+        </div>
+      </header>
+      <div className="admin-tabs">
+        <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>ユーザー</button>
+        <button className={`admin-tab ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>Webhook</button>
+        <button className={`admin-tab ${activeTab === 'portal' ? 'active' : ''}`} onClick={() => setActiveTab('portal')}>ポータル</button>
+        <button className={`admin-tab ${activeTab === 'access-log' ? 'active' : ''}`} onClick={() => setActiveTab('access-log')}>アクセスログ</button>
+        <button className={`admin-tab ${activeTab === 'dictionary' ? 'active' : ''}`} onClick={() => setActiveTab('dictionary')}>辞書育成</button>
+      </div>
+
+      {activeTab === 'webhooks' ? (
+        <WebhookManager />
+      ) : activeTab === 'portal' ? (
+        <PortalManager />
+      ) : activeTab === 'access-log' ? (
+        <AccessLog />
+      ) : activeTab === 'dictionary' ? (
+        <DictionaryCultivation />
+      ) : (
+      <>
+      <div className="admin-section-header">
+        <h2>ユーザー管理</h2>
+        <button className="admin-create-btn" onClick={() => { setShowCreateForm(true); setEditingUser(null); }}>
+          + ユーザー追加
+        </button>
+      </div>
+
+      {error && <div className="admin-error">{error}</div>}
+
+      {(showCreateForm || editingUser) && (
+        <div className="admin-modal-overlay" onClick={() => { setShowCreateForm(false); setEditingUser(null); }}>
+          <div className="admin-modal" onClick={e => e.stopPropagation()}>
+            <UserForm
+              user={editingUser}
+              onSubmit={editingUser ? handleUpdate : handleCreate}
+              onCancel={() => { setShowCreateForm(false); setEditingUser(null); }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="admin-user-list">
+        <table>
+          <thead>
+            <tr>
+              <th>ユーザーID</th>
+              <th>表示名</th>
+              <th>権限</th>
+              <th>状態</th>
+              <th>作成日</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} className={!u.is_active ? 'inactive-row' : ''}>
+                <td>{u.login_id}</td>
+                <td>{u.display_name}</td>
+                <td><span className={`role-badge ${u.role}`}>{roleLabel(u)}</span></td>
+                <td><span className={`status-badge ${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? '有効' : '無効'}</span></td>
+                <td>{new Date(u.created_at!).toLocaleDateString('ja-JP')}</td>
+                <td className="admin-actions">
+                  <button className="kebab-btn" onClick={(e) => {
+                    setContextMenu({
+                      x: e.clientX, y: e.clientY,
+                      items: [
+                        { icon: <Pencil size={16} />, label: '編集', onClick: () => { setEditingUser(u); setShowCreateForm(false); } },
+                        { icon: u.is_active ? <Ban size={16} /> : <CheckCircle size={16} />, label: u.is_active ? '無効化' : '有効化', onClick: () => handleToggleActive(u), danger: u.is_active },
+                      ],
+                    });
+                  }}>⋮</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      </>
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenu.items}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default AdminDashboard;

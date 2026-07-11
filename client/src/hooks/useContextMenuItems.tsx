@@ -1,0 +1,197 @@
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2, TextCursorInput } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { api } from '../services/api';
+import { useMessageStore } from '../stores/messageStore';
+import { useConfirmStore } from '../stores/confirmStore';
+import type { Message, Room } from '../types';
+
+export interface ContextMenuItem {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}
+
+// Room (types.ts) に allow_member_transcription_edit が無いため local 補完
+type RoomWithTranscriptionEdit = Room & { allow_member_transcription_edit?: boolean };
+
+export interface BuildContextMenuItemsParams {
+  message: Message;
+  isOwn: boolean;
+  roomId: string;
+  currentRoom: RoomWithTranscriptionEdit | null;
+  onEdit: () => void;
+  onShowEditHistory: () => void;
+  onReply: () => void;
+  onShowTagModal: () => void;
+  onShowTodoMenu: () => void;
+  onForward?: () => void;
+  onSelectText?: (text: string) => void;
+}
+
+export interface ContextMenuItemsResult {
+  items: ContextMenuItem[];
+  onReaction: (emoji: string) => Promise<void>;
+}
+
+/**
+ * メッセージのコンテキストメニュー項目を生成するhook
+ */
+export function buildContextMenuItems({
+  message, isOwn, roomId, currentRoom,
+  onEdit, onShowEditHistory,
+  onReply, onShowTagModal, onShowTodoMenu, onForward, onSelectText,
+}: BuildContextMenuItemsParams): ContextMenuItemsResult {
+  const items: ContextMenuItem[] = [];
+
+  // Copy (text messages only)
+  if (message.content && message.type === 'text') {
+    items.push({
+      icon: <Copy size={16} />,
+      label: 'コピー',
+      onClick: () => navigator.clipboard.writeText(message.content!),
+    });
+    // 部分コピー: バブルは user-select:none なので専用オーバーレイで部分選択 (#部分コピー)
+    if (onSelectText) {
+      items.push({
+        icon: <TextCursorInput size={16} />,
+        label: '部分コピー',
+        onClick: () => onSelectText(message.content!),
+      });
+    }
+  }
+
+  // Edit message / Add caption
+  const editPolicy = currentRoom?.message_edit_policy || 'none';
+  const isFirstCaption = !message.content && isOwn && message.type !== 'system' && message.type !== 'stamp';
+  const canEditMessage = !message.is_deleted && message.type !== 'system' && message.type !== 'stamp' && (
+    isFirstCaption || (editPolicy === 'sender' && isOwn) || editPolicy === 'member'
+  );
+  if (canEditMessage) {
+    items.push({
+      icon: <Pencil size={16} />,
+      label: message.content ? 'メッセージを編集' : 'テキストを追加',
+      onClick: onEdit,
+    });
+  }
+  if (message.is_edited) {
+    items.push({
+      icon: <History size={16} />,
+      label: '編集履歴',
+      onClick: onShowEditHistory,
+    });
+  }
+
+  // Reply
+  items.push({
+    icon: <Reply size={16} />,
+    label: 'リプライ',
+    onClick: onReply,
+  });
+
+  // Forward (text + image/video/file: media 種別は server 側 リンク方式で複製)
+  const FORWARDABLE_TYPES = ['text', 'image', 'video', 'file'];
+  if (onForward && FORWARDABLE_TYPES.includes(message.type) && !message.is_deleted) {
+    items.push({
+      icon: <Share2 size={16} />,
+      label: '転送',
+      onClick: onForward,
+    });
+  }
+
+  // Tag
+  items.push({
+    icon: <Tag size={16} />,
+    label: 'タグを追加',
+    onClick: onShowTagModal,
+  });
+
+  // TODO
+  items.push({
+    icon: <CheckSquare size={16} />,
+    label: 'TODO',
+    onClick: onShowTodoMenu,
+  });
+
+  // Copy voice transcription text
+  const transText = message.transcription?.formatted_text || message.transcription?.raw_text;
+  if (message.type === 'voice' && message.transcription?.status === 'done' && transText) {
+    items.push({
+      icon: <Copy size={16} />,
+      label: '文字起こしをコピー',
+      onClick: () => navigator.clipboard.writeText(transText),
+    });
+    if (onSelectText) {
+      items.push({
+        icon: <TextCursorInput size={16} />,
+        label: '文字起こしを部分コピー',
+        onClick: () => onSelectText(transText),
+      });
+    }
+  }
+
+  // Voice transcription actions
+  const canEditTranscription = isOwn || currentRoom?.allow_member_transcription_edit;
+  if (canEditTranscription && message.type === 'voice' && message.transcription?.status === 'done') {
+    items.push({
+      icon: <Pencil size={16} />,
+      label: '文字起こしを編集',
+      onClick: () => {
+        window.dispatchEvent(new CustomEvent('voice:edit', { detail: { messageId: message.id } }));
+      },
+    });
+    if ((message.transcription?.version ?? 0) > 1) {
+      items.push({
+        icon: <ClipboardList size={16} />,
+        label: '編集履歴',
+        onClick: () => {
+          window.dispatchEvent(new CustomEvent('voice:history', { detail: { messageId: message.id } }));
+        },
+      });
+    }
+  }
+
+  // Publish/Unpublish (announcement rooms only)
+  if (currentRoom?.is_announcement && !message.is_deleted && message.type !== 'system') {
+    items.push({
+      icon: <Megaphone size={16} />,
+      label: message.is_published ? 'お知らせから非公開' : 'お知らせに公開',
+      onClick: async () => {
+        try {
+          await api.togglePublish(roomId, message.id, !message.is_published);
+        } catch (err) { console.error(err); }
+      },
+    });
+  }
+
+  // Delete (own messages only)
+  if (isOwn) {
+    items.push({
+      icon: <Trash2 size={16} />,
+      label: '削除',
+      danger: true,
+      onClick: async () => {
+        const ok = await useConfirmStore.getState().confirm({
+          body: 'このメッセージを削除しますか？',
+          okLabel: '削除',
+          danger: true,
+        });
+        if (ok) {
+          try {
+            await api.deleteMessage(roomId, message.id);
+            useMessageStore.getState().markDeleted(message.id);
+          } catch (err) { console.error('Delete error:', err); }
+        }
+      },
+    });
+  }
+
+  // Reaction handler
+  const onReaction = async (emoji: string) => {
+    try {
+      await api.toggleReaction(roomId, message.id, emoji);
+    } catch (err) { console.error('Reaction error:', err); }
+  };
+
+  return { items, onReaction };
+}

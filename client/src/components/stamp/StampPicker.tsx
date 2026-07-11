@@ -1,0 +1,242 @@
+import { useState, useEffect, useRef } from 'react';
+import { useAuthStore } from '../../stores/authStore';
+import { useConfirm } from '../../stores/confirmStore';
+import { api } from '../../services/api';
+import StampGenerator from './StampGenerator';
+import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
+import { Pencil, Trash2 } from 'lucide-react';
+import type { Stamp, StampPack } from '../../types';
+import './StampPicker.css';
+
+// server 応答は file_path / thumbnail_path を持つ (types.ts の image_url とは別系統)
+type StampItem = Stamp & { file_path?: string };
+type StampPackItem = StampPack & { thumbnail_path?: string | null };
+
+interface StampContextMenuState {
+  type: 'pack' | 'stamp';
+  pack?: StampPackItem;
+  stamp?: StampItem;
+  x?: number;
+  y?: number;
+}
+
+interface StampPickerProps {
+  onSelect: (stamp: Stamp) => void;
+  onClose: () => void;
+}
+
+function StampPicker({ onSelect, onClose }: StampPickerProps) {
+  const { user } = useAuthStore();
+  const confirm = useConfirm();
+  const [packs, setPacks] = useState<StampPackItem[]>([]);
+  const [selectedPack, setSelectedPack] = useState<string | null>(null);
+  const [stamps, setStamps] = useState<StampItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [contextMenu, setContextMenu] = useState<StampContextMenuState | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    loadPacks();
+  }, []);
+
+  const loadPacks = async () => {
+    try {
+      const res = await api.getStampPacks();
+      setPacks(res.packs);
+      if (res.packs.length > 0) {
+        selectPack(res.packs[0]);
+      }
+    } catch (err) {
+      console.error('Load packs error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectPack = async (pack: StampPackItem) => {
+    setSelectedPack(pack.id);
+    try {
+      const res = await api.getStampPack(pack.id);
+      setStamps((res as unknown as { stamps: StampItem[] }).stamps);
+    } catch (err) {
+      console.error('Load stamps error:', err);
+    }
+  };
+
+  const handleStampClick = (stamp: StampItem) => {
+    if (contextMenu) return;
+    onSelect(stamp);
+    onClose();
+  };
+
+  const canEdit = (pack: StampPackItem | null | undefined) => {
+    return pack?.created_by === user?.id || user?.role === 'admin';
+  };
+
+  const currentPack = packs.find(p => p.id === selectedPack);
+
+  // Pack context menu (long press on pack tab)
+  const showPackMenu = (e: React.MouseEvent | React.TouchEvent, pack: StampPackItem) => {
+    if (!canEdit(pack)) return;
+    e.preventDefault();
+    const ev = e as React.MouseEvent & { touches?: React.TouchList };
+    setContextMenu({ type: 'pack', pack, x: ev.clientX || ev.touches?.[0]?.clientX, y: ev.clientY || ev.touches?.[0]?.clientY });
+  };
+
+  // Stamp context menu (long press on individual stamp)
+  const showStampMenu = (e: React.MouseEvent | React.TouchEvent, stamp: StampItem) => {
+    if (!canEdit(currentPack)) return;
+    e.preventDefault();
+    const ev = e as React.MouseEvent & { touches?: React.TouchList };
+    setContextMenu({ type: 'stamp', stamp, x: ev.clientX || ev.touches?.[0]?.clientX, y: ev.clientY || ev.touches?.[0]?.clientY });
+  };
+
+  const handleDeletePack = async () => {
+    const pack = contextMenu!.pack!;
+    setContextMenu(null);
+    const ok = await confirm({
+      body: `スタンプパック「${pack.name}」を削除しますか？\n過去のトークでは表示されなくなります。`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteStampPack(pack.id);
+      loadPacks();
+    } catch (err) {
+      console.error('Delete pack error:', err);
+    }
+  };
+
+  const handleRenamePack = async () => {
+    const pack = contextMenu!.pack!;
+    setContextMenu(null);
+    const newName = prompt('新しいパック名を入力', pack.name);
+    if (!newName || !newName.trim() || newName.trim() === pack.name) return;
+    try {
+      await api.renameStampPack(pack.id, newName.trim());
+      loadPacks();
+    } catch (err) {
+      console.error('Rename pack error:', err);
+    }
+  };
+
+  const handleDeleteStamp = async () => {
+    const stamp = contextMenu!.stamp!;
+    setContextMenu(null);
+    const ok = await confirm({
+      body: `スタンプ「${stamp.label}」を削除しますか？`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteStamp(stamp.id);
+      // Reload current pack
+      const res = await api.getStampPack(selectedPack!);
+      setStamps((res as unknown as { stamps: StampItem[] }).stamps);
+    } catch (err) {
+      console.error('Delete stamp error:', err);
+    }
+  };
+
+  if (showGenerator) {
+    return <StampGenerator onClose={() => { setShowGenerator(false); loadPacks(); }} />;
+  }
+
+  return (
+    <div className="stamp-picker">
+      <div className="stamp-picker-header">
+        <span>スタンプ</span>
+        <button className="stamp-picker-add" onClick={() => setShowGenerator(true)} title="スタンプを作成">
+          +
+        </button>
+        <button className="stamp-picker-close" onClick={onClose}>✕</button>
+      </div>
+
+      {loading ? (
+        <div className="stamp-picker-loading">読み込み中...</div>
+      ) : packs.length === 0 ? (
+        <div className="stamp-picker-empty">
+          <p>スタンプがありません</p>
+          <button className="stamp-picker-create-btn" onClick={() => setShowGenerator(true)}>
+            AIでスタンプを作成
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="stamp-grid">
+            {stamps.map(stamp => (
+              <div
+                key={stamp.id}
+                className="stamp-grid-item"
+                onClick={() => handleStampClick(stamp)}
+                onContextMenu={(e) => showStampMenu(e, stamp)}
+                onTouchStart={(e) => {
+                  longPressTimer.current = setTimeout(() => showStampMenu(e, stamp), LONG_PRESS_TIMEOUT);
+                }}
+                onTouchEnd={() => { clearTimeout(longPressTimer.current); }}
+                onTouchMove={() => { clearTimeout(longPressTimer.current); }}
+                title={stamp.label ?? undefined}
+              >
+                <img src={`/media/${stamp.file_path}`} alt={stamp.label ?? undefined} loading="lazy" />
+              </div>
+            ))}
+          </div>
+
+          <div className="stamp-pack-tabs">
+            {packs.map(pack => (
+              <button
+                key={pack.id}
+                className={`stamp-pack-tab ${selectedPack === pack.id ? 'active' : ''}`}
+                onClick={() => selectPack(pack)}
+                onContextMenu={(e) => showPackMenu(e, pack)}
+                onTouchStart={(e) => {
+                  longPressTimer.current = setTimeout(() => showPackMenu(e, pack), LONG_PRESS_TIMEOUT);
+                }}
+                onTouchEnd={() => { clearTimeout(longPressTimer.current); }}
+                onTouchMove={() => { clearTimeout(longPressTimer.current); }}
+                title={pack.name}
+              >
+                {pack.thumbnail_path ? (
+                  <img src={`/media/${pack.thumbnail_path}`} alt={pack.name} />
+                ) : (
+                  <span>📦</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {contextMenu && (
+        <div className="stamp-context-overlay" onClick={() => setContextMenu(null)}>
+          <div
+            className="stamp-context-menu"
+            style={{ bottom: 60, right: 10 }}
+            onClick={e => e.stopPropagation()}
+          >
+            {contextMenu.type === 'pack' && (
+              <>
+                <button className="stamp-context-item" onClick={handleRenamePack}>
+                  <Pencil size={14} /> 名前を変更
+                </button>
+                <button className="stamp-context-item danger" onClick={handleDeletePack}>
+                  <Trash2 size={14} /> パックを削除
+                </button>
+              </>
+            )}
+            {contextMenu.type === 'stamp' && (
+              <button className="stamp-context-item danger" onClick={handleDeleteStamp}>
+                <Trash2 size={14} /> このスタンプを削除
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default StampPicker;

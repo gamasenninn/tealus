@@ -34,22 +34,37 @@ export interface Room {
   member_count?: number;
   unread_count?: number;
   last_message?: string | null;
+  /** RoomList のプレビューが消費する実応答フィールド */
+  last_message_content?: string | null;
   last_message_type?: string | null;
   last_message_at?: string | null;
   message_edit_policy?: 'none' | 'sender' | 'member';
+  allow_member_transcription_edit?: boolean;
+  app_urls?: AppUrl[];
   is_announcement?: boolean;
   my_role?: string;
 }
 
 export interface RoomMember extends User {
+  /** server の members 応答は id と user_id の両方を持つ */
+  user_id?: string;
   room_role?: string;
   joined_at?: string;
+}
+
+/** ルームに紐づく外部アプリ URL (useAppPanel / ChatRoom が消費) */
+export interface AppUrl {
+  url: string;
+  title?: string;
+  auto_open?: boolean;
+  wake_lock?: boolean;
+  ratio?: number;
 }
 
 export type MessageType = 'text' | 'image' | 'video' | 'file' | 'voice' | 'system' | 'stamp';
 
 export interface Transcription {
-  status: 'pending' | 'processing' | 'done' | 'error';
+  status: 'pending' | 'processing' | 'transcribing' | 'formatting' | 'done' | 'error';
   raw_text?: string | null;
   formatted_text?: string | null;
   version?: number;
@@ -58,7 +73,10 @@ export interface Transcription {
 
 export interface MediaItem {
   id: string;
-  url: string;
+  url?: string;
+  /** server 実応答は file_path / thumbnail_path (gallery / bubble 系が消費) */
+  file_path?: string;
+  thumbnail_path?: string | null;
   mime_type: string;
   file_name?: string | null;
   file_size?: string | number | null;
@@ -70,9 +88,12 @@ export interface Reaction {
   count: number;
   users?: Array<{ id: string; display_name: string }>;
   reacted?: boolean;
+  /** server は me という名でも返す (MessageBubble が消費) */
+  me?: boolean;
 }
 
 export interface MessageTag {
+  id?: string;
   tag_id: string;
   name: string;
   is_todo?: boolean;
@@ -113,6 +134,17 @@ export interface Message {
   forwarded_from_message?: QuotedMessage | null;
   tags?: MessageTag[];
   link_previews?: LinkPreview[];
+  /** socket 'link:preview' event で注入される単数形 (messageStore / MessageBubble が消費) */
+  link_preview?: LinkPreview | null;
+  /** お知らせ API (#announcements) */
+  is_unread?: boolean;
+  /** 検索結果で付与される (SearchPage が消費) */
+  room_name?: string | null;
+  tag_id?: string;
+  is_done?: boolean | null;
+  priority?: number | null;
+  /** type='stamp' の展開済みスタンプ (MessageBubble が消費) */
+  stamp?: { file_path: string; label?: string | null } | null;
 }
 
 export interface LinkPreview {
@@ -128,12 +160,14 @@ export interface Tag {
   is_todo: boolean;
   room_id?: string;
   usage_count?: number;
+  total_usage?: number;
 }
 
 export interface Stamp {
   id: string;
   pack_id: string;
-  image_url: string;
+  image_url?: string;
+  file_path?: string;
   label?: string | null;
 }
 
@@ -141,6 +175,7 @@ export interface StampPack {
   id: string;
   name: string;
   created_by?: string;
+  thumbnail_path?: string | null;
   stamps?: Stamp[];
 }
 
@@ -150,6 +185,7 @@ export interface PortalLink {
   url: string;
   icon?: string | null;
   sort_order?: number;
+  is_active?: boolean;
 }
 
 export interface Webhook {
@@ -157,6 +193,7 @@ export interface Webhook {
   url: string;
   events: string[];
   room_id?: string | null;
+  room_name?: string | null;
   secret?: string | null;
   is_active?: boolean;
 }
@@ -168,16 +205,22 @@ export interface DictionaryTerm {
   category?: string | null;
   source?: string;
   status?: string;
+  description?: string | null;
+  alias_count?: number;
 }
 
 export interface DictionaryAlias {
-  id: string;
+  id?: string;
+  alias_id?: string;
   term_id?: string;
   term?: string;
   alias: string;
-  status: string;
+  status?: string;
+  source?: string;
+  reading?: string | null;
   confidence?: string | null;
   occurrence_count?: number;
+  count?: number;
 }
 
 export interface ClientConfig {

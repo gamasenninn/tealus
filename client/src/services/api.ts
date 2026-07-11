@@ -22,7 +22,7 @@ export interface RoomResponse { room: Room; members: RoomMember[]; last_read_mes
 export interface MessagesResponse { messages: Message[]; has_more?: boolean }
 export interface MessageResponse { message: Message }
 export interface UsersResponse { users: User[] }
-export interface OnlineUsersResponse { user_ids: string[] }
+export interface OnlineUsersResponse { online: string[] }
 export interface TagsResponse { tags: Tag[] }
 export interface MessageTagsResponse { tags: MessageTag[] }
 export interface SearchResponse { messages: Message[]; total?: number; has_more?: boolean }
