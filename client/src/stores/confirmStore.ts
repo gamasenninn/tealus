@@ -12,10 +12,28 @@
  */
 import { create } from 'zustand';
 
-export const useConfirmStore = create((set, get) => ({
-  state: null, // null | { title?, body, okLabel?, cancelLabel?, danger?, resolve }
+export interface ConfirmOptions {
+  title?: string;
+  body: string;
+  okLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
 
-  confirm: (opts) => new Promise((resolve) => {
+interface ConfirmModalState extends ConfirmOptions {
+  resolve: (value: boolean) => void;
+}
+
+interface ConfirmState {
+  state: ConfirmModalState | null;
+  confirm: (opts: ConfirmOptions) => Promise<boolean>;
+  _resolve: (value: boolean) => void;
+}
+
+export const useConfirmStore = create<ConfirmState>()((set, get) => ({
+  state: null,
+
+  confirm: (opts) => new Promise<boolean>((resolve) => {
     const prev = get().state;
     if (prev) prev.resolve(false);
     set({ state: { ...opts, resolve } });

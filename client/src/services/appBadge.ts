@@ -8,8 +8,9 @@
  *   1. foreground: Socket.IO `message:new` → roomStore.fetchRooms → syncBadgeFromRooms
  *   2. background: Service Worker push event → navigator.setAppBadge (custom-sw.js)
  */
+import type { Room } from '../types';
 
-export function setBadge(count) {
+export function setBadge(count: number): void {
   if (typeof navigator === 'undefined') return;
   if (!('setAppBadge' in navigator)) return;
   try {
@@ -23,7 +24,7 @@ export function setBadge(count) {
   }
 }
 
-export function syncBadgeFromRooms(rooms) {
+export function syncBadgeFromRooms(rooms: Room[] | null | undefined): void {
   const total = (rooms || []).reduce((sum, r) => sum + (Number(r.unread_count) || 0), 0);
   setBadge(total);
 }

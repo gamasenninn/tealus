@@ -7,19 +7,25 @@
  *
  * fetch 失敗時は FALLBACK で起動継続（aivis-cloud は手動リロードで復旧可能）。
  */
+import type { ClientConfig } from '../types';
 
-const FALLBACK = Object.freeze({ tts_provider: 'browser', vapid_public_key: '' });
+export interface RuntimeConfig extends ClientConfig {
+  tts_provider?: string;
+  vapid_public_key?: string;
+}
 
-let cached = null;
-let inflight = null;
+const FALLBACK: RuntimeConfig = Object.freeze({ tts_provider: 'browser', vapid_public_key: '' });
 
-export function loadConfig() {
+let cached: RuntimeConfig | null = null;
+let inflight: Promise<RuntimeConfig> | null = null;
+
+export function loadConfig(): Promise<RuntimeConfig> {
   if (cached) return Promise.resolve(cached);
   if (inflight) return inflight;
   inflight = fetch('/api/config')
     .then((r) => (r.ok ? r.json() : FALLBACK))
     .catch(() => FALLBACK)
-    .then((c) => {
+    .then((c: RuntimeConfig) => {
       cached = c;
       inflight = null;
       return c;
@@ -27,6 +33,6 @@ export function loadConfig() {
   return inflight;
 }
 
-export function getConfig() {
+export function getConfig(): RuntimeConfig {
   return cached || FALLBACK;
 }

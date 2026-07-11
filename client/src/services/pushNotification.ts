@@ -1,7 +1,7 @@
 import { api } from './api';
 import { getConfig } from './clientConfig';
 
-function urlBase64ToUint8Array(base64String) {
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = atob(base64);
@@ -12,7 +12,7 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-export async function registerPushNotification() {
+export async function registerPushNotification(): Promise<void> {
   const VAPID_PUBLIC_KEY = getConfig().vapid_public_key;
   if (!VAPID_PUBLIC_KEY) {
     console.warn('[push] vapid_public_key not provided by /api/config');
@@ -35,12 +35,12 @@ export async function registerPushNotification() {
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
       });
     }
 
-    const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh'))));
-    const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth'))));
+    const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!)));
+    const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!)));
 
     await api.subscribePush({
       endpoint: subscription.endpoint,

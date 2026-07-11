@@ -9,7 +9,12 @@
  */
 import { create } from 'zustand';
 
-export const useTtsStore = create((set) => ({
+interface TtsState {
+  isPlaying: boolean;
+  setPlaying: (v: boolean) => void;
+}
+
+export const useTtsStore = create<TtsState>()((set) => ({
   isPlaying: false,
   setPlaying: (v) => set({ isPlaying: !!v }),
 }));

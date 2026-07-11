@@ -4,9 +4,19 @@
  * ルームのメッセージ一覧から「編集可能な音声メッセージ (status=done)」を順序付きで抽出し、
  * 現在の対象を中心に 前/次 の messageId を返す。store / React に依存しないので Vitest 可能。
  */
+import type { Message } from '../types';
+
+export interface VoiceNavInfo {
+  list: Message[];
+  index: number;
+  total: number;
+  current: Message | null;
+  prevId: string | null;
+  nextId: string | null;
+}
 
 /** その user が編集可能な、文字起こし完了済みの音声メッセージを順序付きで返す。 */
-export function editableVoiceMessages(messages, userId, allowMemberEdit) {
+export function editableVoiceMessages(messages: Message[] | null | undefined, userId: string, allowMemberEdit: boolean): Message[] {
   if (!Array.isArray(messages)) return [];
   return messages.filter(
     (m) =>
@@ -19,7 +29,7 @@ export function editableVoiceMessages(messages, userId, allowMemberEdit) {
 }
 
 /** currentId を中心としたナビ情報 (list / index / total / prevId / nextId / current)。 */
-export function voiceNav(messages, currentId, userId, allowMemberEdit) {
+export function voiceNav(messages: Message[] | null | undefined, currentId: string, userId: string, allowMemberEdit: boolean): VoiceNavInfo {
   const list = editableVoiceMessages(messages, userId, allowMemberEdit);
   const index = list.findIndex((m) => m.id === currentId);
   return {
@@ -33,6 +43,6 @@ export function voiceNav(messages, currentId, userId, allowMemberEdit) {
 }
 
 /** メッセージの文字起こし表示テキスト (整形済み優先、無ければ生テキスト)。 */
-export function transcriptionText(msg) {
+export function transcriptionText(msg: Message | null | undefined): string {
   return msg?.transcription?.formatted_text || msg?.transcription?.raw_text || '';
 }

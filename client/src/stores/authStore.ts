@@ -1,9 +1,20 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
+import type { AuthResponse } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import { registerPushNotification } from '../services/pushNotification';
+import type { User } from '../types';
 
-export const useAuthStore = create((set, get) => ({
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  initialize: () => Promise<void>;
+  login: (login_id: string, password: string) => Promise<AuthResponse>;
+  logout: () => void;
+}
+
+export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   token: localStorage.getItem('token'),
   isLoading: true,
