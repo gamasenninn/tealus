@@ -1,9 +1,9 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { isAdmin } = require('../utils/permissions');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { isAdmin } = require('../utils/permissions.mts');
 const { generateStampPack, saveStampFiles, checkDailyLimit } = require('../services/stamp');
 
 const router = express.Router();
@@ -223,7 +223,7 @@ router.delete('/packs/:id', async (req, res) => {
 
     // Move files to deleted folder
     const packName = (await pool.query('SELECT name FROM stamp_packs WHERE id = $1', [packId])).rows[0]?.name || '';
-    const { MEDIA_ROOT } = require('../middleware/upload');
+    const { MEDIA_ROOT } = require('../middleware/upload.mts');
     const path = require('path');
     const fs = require('fs');
     const srcDir = path.join(MEDIA_ROOT, 'stamps', packId);

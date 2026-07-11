@@ -1,10 +1,10 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireMember, requireGroup } = require('../middleware/roomAccess');
-const { canInviteToRoom } = require('../utils/permissions');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { requireMember, requireGroup } = require('../middleware/roomAccess.mts');
+const { canInviteToRoom } = require('../utils/permissions.mts');
 
 const router = express.Router({ mergeParams: true });
 

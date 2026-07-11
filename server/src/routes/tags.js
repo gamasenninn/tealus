@@ -1,9 +1,9 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireMember } = require('../middleware/roomAccess');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { requireMember } = require('../middleware/roomAccess.mts');
 
 // ============================================
 // Room-scoped tag routes: /api/rooms/:id/tags

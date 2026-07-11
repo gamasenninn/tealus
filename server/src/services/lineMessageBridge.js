@@ -13,8 +13,8 @@
  *
  * @module services/lineMessageBridge
  */
-const pool = require('../db/pool');
-const logger = require('../utils/logger');
+const { pool } = require('../db/pool.mts');
+const { logger } = require('../utils/logger.mts');
 
 // ★ ★ Option D refactor (= Day 21 PM): sender info は ★ ★ ★ helper 内で query せず、
 // ★ ★ caller (= routes/line.js dispatchEvent) で context object として渡される。

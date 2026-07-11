@@ -17,7 +17,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 
 const DEFAULT_MAPPINGS_FILE = path.join(__dirname, '../../config/line-group-mappings.json');
 

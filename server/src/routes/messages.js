@@ -1,10 +1,10 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireMember } = require('../middleware/roomAccess');
-const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { requireMember } = require('../middleware/roomAccess.mts');
+const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config.mts');
 const { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments');
 
 const router = express.Router({ mergeParams: true });

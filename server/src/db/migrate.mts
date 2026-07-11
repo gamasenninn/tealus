@@ -2,12 +2,13 @@
  * Simple migration runner
  * Reads SQL files from migrations/ and executes them in order.
  */
-const fs = require('fs');
-const path = require('path');
-const { Pool } = require('pg');
+import fs from 'node:fs';
+import path from 'node:path';
+import pg from 'pg';
+import dotenv from 'dotenv';
 
-async function migrate(config) {
-  const pool = new Pool(config || {
+export async function migrate(config?: pg.PoolConfig): Promise<void> {
+  const pool = new pg.Pool(config || {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
     database: process.env.DB_NAME || 'tealus',
@@ -15,7 +16,7 @@ async function migrate(config) {
     password: process.env.DB_PASSWORD || 'tealus_dev',
   });
 
-  const migrationsDir = path.join(__dirname, 'migrations');
+  const migrationsDir = path.join(import.meta.dirname, 'migrations');
   const files = fs.readdirSync(migrationsDir)
     .filter(f => f.endsWith('.sql'))
     .sort();
@@ -36,12 +37,10 @@ async function migrate(config) {
 }
 
 // Run directly
-if (require.main === module) {
-  require('dotenv').config();
+if (import.meta.main) {
+  dotenv.config();
   migrate().catch(err => {
     console.error('Migration failed:', err);
     process.exit(1);
   });
 }
-
-module.exports = migrate;

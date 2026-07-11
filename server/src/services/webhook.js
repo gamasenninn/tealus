@@ -3,8 +3,8 @@
  * イベント発生時に登録済みWebhookへHTTP POSTで通知する
  */
 const crypto = require('crypto');
-const pool = require('../db/pool');
-const logger = require('../utils/logger');
+const { pool } = require('../db/pool.mts');
+const { logger } = require('../utils/logger.mts');
 
 /**
  * HMAC-SHA256署名を生成する

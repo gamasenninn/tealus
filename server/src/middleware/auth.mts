@@ -1,8 +1,10 @@
-const jwt = require('jsonwebtoken');
-const pool = require('../db/pool');
-const { isAdmin } = require('../utils/permissions');
+import jwt from 'jsonwebtoken';
+import type { Request, Response, NextFunction } from 'express';
+import { pool } from '../db/pool.mts';
+import { isAdmin } from '../utils/permissions.mts';
+import type { AuthUser } from '../types.mts';
 
-const JWT_SECRET = (() => {
+export const JWT_SECRET = (() => {
   const secret = process.env.JWT_SECRET;
   if (secret) return secret;
   if (process.env.NODE_ENV === 'production') {
@@ -15,7 +17,7 @@ const JWT_SECRET = (() => {
 /**
  * Generate JWT token for a user
  */
-function generateToken(user) {
+export function generateToken(user: Pick<AuthUser, 'id' | 'login_id'>): string {
   return jwt.sign(
     { id: user.id, login_id: user.login_id },
     JWT_SECRET,
@@ -27,7 +29,7 @@ function generateToken(user) {
  * JWT authentication middleware
  * Sets req.user with the authenticated user's info
  */
-async function authenticate(req, res, next) {
+export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: '認証トークンがありません' });
@@ -36,8 +38,8 @@ async function authenticate(req, res, next) {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const result = await pool.query(
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+    const result = await pool.query<AuthUser>(
       'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, created_at FROM users WHERE id = $1 AND is_active = true',
       [decoded.id]
     );
@@ -48,7 +50,7 @@ async function authenticate(req, res, next) {
 
     req.user = result.rows[0];
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: 'トークンが無効です' });
   }
 }
@@ -57,11 +59,9 @@ async function authenticate(req, res, next) {
  * Admin authorization middleware
  * Must be used after authenticate
  */
-function requireAdmin(req, res, next) {
+export function requireAdmin(req: Request, res: Response, next: NextFunction): Response | void {
   if (!isAdmin(req.user)) {
     return res.status(403).json({ error: '管理者権限が必要です' });
   }
   next();
 }
-
-module.exports = { generateToken, authenticate, requireAdmin, JWT_SECRET };

@@ -34,21 +34,21 @@ jest.mock('../../src/services/lineBridge', () => ({
 
 // ★ Option D: pool mock (= bot user fetch path、cfg.sender 経由でない default 経路 test 用)
 const mockPoolQuery = jest.fn();
-jest.mock('../../src/db/pool', () => ({
+jest.mock('../../src/db/pool', () => ({ pool: {
   query: (...args) => mockPoolQuery(...args),
   connect: jest.fn(),  // ★ helper test では mockClient 経由で別 mock、router test では未使用
-}));
+} }));
 
 jest.mock('../../src/services/lineSignature', () => ({
   verifyLineSignature: jest.fn(() => true),
 }));
 
-jest.mock('../../src/utils/logger', () => ({
+jest.mock('../../src/utils/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 const lineRouter = require('../../src/routes/line');
 const dispatchEvent = lineRouter.dispatchEvent;

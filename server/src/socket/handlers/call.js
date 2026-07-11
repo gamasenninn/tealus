@@ -1,5 +1,5 @@
-const logger = require('../../utils/logger');
-const pool = require('../../db/pool');
+const { logger } = require('../../utils/logger.mts');
+const { pool } = require('../../db/pool.mts');
 const { sendPushToUser } = require('../../services/push');
 const capabilityWatcher = require('../../services/capabilityWatcher');
 

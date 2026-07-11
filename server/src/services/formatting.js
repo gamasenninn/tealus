@@ -1,6 +1,6 @@
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const OpenAI = require('openai');
-const pool = require('../db/pool');
+const { pool } = require('../db/pool.mts');
 const { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams } = require('./transcriptionConfig');
 
 const openai = new OpenAI({

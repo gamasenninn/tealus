@@ -1,10 +1,10 @@
-const logger = require('../../utils/logger');
-const E = require('../../constants/errors');
+const { logger } = require('../../utils/logger.mts');
+const E = require('../../constants/errors.mts');
 const express = require('express');
 const bcrypt = require('bcrypt');
-const pool = require('../../db/pool');
+const { pool } = require('../../db/pool.mts');
 
-const { SALT_ROUNDS } = require('../../constants/config');
+const { SALT_ROUNDS } = require('../../constants/config.mts');
 
 const router = express.Router();
 

@@ -1,6 +1,6 @@
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const webpush = require('web-push');
-const pool = require('../db/pool');
+const { pool } = require('../db/pool.mts');
 
 // Configure VAPID keys (set in .env)
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {

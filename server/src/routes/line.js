@@ -15,7 +15,7 @@
  */
 const express = require('express');
 const path = require('path');
-const pool = require('../db/pool');
+const { pool } = require('../db/pool.mts');
 const { verifyLineSignature } = require('../services/lineSignature');
 const { fetchLineContent, fetchLineStickerImage, saveLineContentToFile } = require('../services/lineBridge');
 const {
@@ -29,7 +29,7 @@ const {
 const { loadGroupToRoomMap } = require('../services/lineGroupMappings');
 const { upsertGroupEntry, readGroupName } = require('../services/lineGroupCatalog');
 const { getMemberDisplayName } = require('../services/lineMemberCatalog');
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 
 const router = express.Router();
 

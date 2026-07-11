@@ -1,6 +1,6 @@
-const { Pool } = require('pg');
+import pg from 'pg';
 
-const pool = new Pool({
+export const pool = new pg.Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'tealus',
@@ -10,5 +10,3 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
-
-module.exports = pool;

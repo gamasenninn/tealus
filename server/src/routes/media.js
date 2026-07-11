@@ -1,14 +1,14 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireMember } = require('../middleware/roomAccess');
-const { upload, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { requireMember } = require('../middleware/roomAccess.mts');
+const { upload, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload.mts');
 const { generateThumbnail } = require('../services/thumbnail');
-const { MAX_UPLOAD_FILES } = require('../constants/config');
+const { MAX_UPLOAD_FILES } = require('../constants/config.mts');
 
 const router = express.Router({ mergeParams: true });
 

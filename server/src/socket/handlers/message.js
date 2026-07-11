@@ -1,5 +1,5 @@
-const logger = require('../../utils/logger');
-const pool = require('../../db/pool');
+const { logger } = require('../../utils/logger.mts');
+const { pool } = require('../../db/pool.mts');
 const { processLinkPreviews } = require('../../services/linkPreview');
 const { sendPushToOfflineMembers } = require('../../services/push');
 

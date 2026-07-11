@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const dictionaryRepo = require('./dictionaryRepo');
 
 const CONFIG_PATH = process.env.TRANSCRIPTION_GUIDELINE_PATH

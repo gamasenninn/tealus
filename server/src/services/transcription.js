@@ -1,8 +1,8 @@
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
-const pool = require('../db/pool');
+const { pool } = require('../db/pool.mts');
 const { formatTranscription } = require('./formatting');
 const { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination, getTranscriptionMode } = require('./transcriptionConfig');
 const { transcribeAudio } = require('./sttBackend');

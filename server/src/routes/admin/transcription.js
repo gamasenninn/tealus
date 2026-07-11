@@ -1,5 +1,5 @@
-const logger = require('../../utils/logger');
-const E = require('../../constants/errors');
+const { logger } = require('../../utils/logger.mts');
+const E = require('../../constants/errors.mts');
 const express = require('express');
 const { resetCache, loadGuideline, refreshVocabFromTable } = require('../../services/transcriptionConfig');
 

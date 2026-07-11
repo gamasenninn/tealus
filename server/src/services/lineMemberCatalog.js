@@ -13,7 +13,7 @@
  * @module services/lineMemberCatalog
  */
 const path = require('path');
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const { readCatalog, writeCatalogAtomic } = require('./lineGroupCatalog');
 
 const DEFAULT_MEMBER_CATALOG_FILE = path.join(__dirname, '../../config/line-members.json');

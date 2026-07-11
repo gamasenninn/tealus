@@ -1,5 +1,5 @@
 const fs = require('fs');
-const defaultLogger = require('../utils/logger');
+const { logger: defaultLogger } = require('../utils/logger.mts');
 
 /**
  * STT backend strategy (#自ホストSTT)

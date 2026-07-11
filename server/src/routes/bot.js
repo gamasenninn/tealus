@@ -1,13 +1,13 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload.mts');
 const { generateThumbnail } = require('../services/thumbnail');
 
 const router = express.Router();

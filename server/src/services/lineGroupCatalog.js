@@ -17,7 +17,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 
 const DEFAULT_CATALOG_FILE = path.join(__dirname, '../../config/line-groups.json');
 const LINE_GROUP_SUMMARY_BASE = 'https://api.line.me/v2/bot/group';

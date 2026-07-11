@@ -12,7 +12,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const repo = require('../src/services/dictionaryRepo');
-const pool = require('../src/db/pool');
+const { pool } = require('../src/db/pool.mts');
 
 const GUIDELINE_PATH = process.env.TRANSCRIPTION_GUIDELINE_PATH
   || path.join(__dirname, '../config/transcription_guideline.json');

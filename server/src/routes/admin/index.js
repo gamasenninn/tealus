@@ -5,7 +5,7 @@
  * これにより既存エンドポイントパスを変えずに責務別ファイルに分割できる。
  */
 const express = require('express');
-const { authenticate, requireAdmin } = require('../../middleware/auth');
+const { authenticate, requireAdmin } = require('../../middleware/auth.mts');
 
 const router = express.Router();
 

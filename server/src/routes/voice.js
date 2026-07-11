@@ -1,14 +1,14 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const crypto = require('crypto');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireMember } = require('../middleware/roomAccess');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { requireMember } = require('../middleware/roomAccess.mts');
 const { transcribeVoiceMessage } = require('../services/transcription');
-const { decodeFileName } = require('../middleware/upload');
+const { decodeFileName } = require('../middleware/upload.mts');
 const { fetchReplyMessage } = require('../socket/handlers/message');
 
 const router = express.Router({ mergeParams: true });

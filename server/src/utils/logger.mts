@@ -1,8 +1,8 @@
-const { createLogger, format, transports } = require('winston');
-require('winston-daily-rotate-file');
-const path = require('path');
+import { createLogger, format, transports } from 'winston';
+import 'winston-daily-rotate-file';
+import path from 'node:path';
 
-const logger = createLogger({
+export const logger = createLogger({
   level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   format: format.combine(
     format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -21,12 +21,10 @@ const logger = createLogger({
       ),
     }),
     new transports.DailyRotateFile({
-      dirname: path.join(__dirname, '../../logs'),
+      dirname: path.join(import.meta.dirname, '../../logs'),
       filename: 'tealus-server-%DATE%.log',
       datePattern: 'YYYY-MM-DD',
       maxFiles: '14d',
     }),
   ],
 });
-
-module.exports = logger;

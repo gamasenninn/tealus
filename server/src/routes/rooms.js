@@ -1,13 +1,13 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const crypto = require('crypto');
-const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } = require('../middleware/roomAccess');
-const { canCreateRoom, isGuest } = require('../utils/permissions');
+const { pool } = require('../db/pool.mts');
+const { authenticate } = require('../middleware/auth.mts');
+const { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } = require('../middleware/roomAccess.mts');
+const { canCreateRoom, isGuest } = require('../utils/permissions.mts');
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({

@@ -22,9 +22,9 @@ afterEach(() => {
 });
 
 // pool をモック（DB不要）
-jest.mock('../../src/db/pool', () => ({
+jest.mock('../../src/db/pool', () => ({ pool: {
   query: jest.fn(),
-}));
+} }));
 
 const { dispatchWithRetry, generateSignature } = require('../../src/services/webhook');
 

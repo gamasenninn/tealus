@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const REQUIRED_SUBDIRS = [
+export const REQUIRED_SUBDIRS = [
   'avatars',
   'icons',
   'images',
@@ -12,7 +12,7 @@ const REQUIRED_SUBDIRS = [
   'thumbnails',
 ];
 
-function ensureMediaDirs(mediaRoot) {
+export function ensureMediaDirs(mediaRoot: string): void {
   if (!fs.existsSync(mediaRoot)) {
     fs.mkdirSync(mediaRoot, { recursive: true });
   }
@@ -23,5 +23,3 @@ function ensureMediaDirs(mediaRoot) {
     }
   }
 }
-
-module.exports = { ensureMediaDirs, REQUIRED_SUBDIRS };

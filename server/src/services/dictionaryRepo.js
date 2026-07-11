@@ -4,7 +4,7 @@
  * 責務はデータアクセスに限定する。precedence(manual>auto>imported) やパラダイムモードの
  * 裁定は loader 段の責務（ここには焼き込まない）。肝は upsertAlias の tombstone 尊重 + count 加算。
  */
-const pool = require('../db/pool');
+const { pool } = require('../db/pool.mts');
 
 /**
  * term を term 文字列で upsert。reading / description は COALESCE で「null なら既存を消さない」。

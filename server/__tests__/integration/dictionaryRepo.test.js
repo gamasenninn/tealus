@@ -13,7 +13,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeTestDb();
-  await require('../../src/db/pool').end();
+  await require('../../src/db/pool').pool.end();
 });
 
 beforeEach(async () => {

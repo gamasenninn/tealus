@@ -9,8 +9,8 @@ const express = require('express');
 const repo = require('../../services/dictionaryRepo');
 const { refreshVocabFromTable } = require('../../services/transcriptionConfig');
 const { getReadings } = require('../../services/reading');
-const logger = require('../../utils/logger');
-const E = require('../../constants/errors');
+const { logger } = require('../../utils/logger.mts');
+const E = require('../../constants/errors.mts');
 
 const router = express.Router();
 

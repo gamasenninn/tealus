@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await closeTestDb();
-  await require('../../src/db/pool').end();
+  await require('../../src/db/pool').pool.end();
 });
 beforeEach(async () => {
   await getTestPool().query('TRUNCATE dictionary_aliases, dictionary_terms CASCADE');

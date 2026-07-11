@@ -1,8 +1,8 @@
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const jwt = require('jsonwebtoken');
-const pool = require('../db/pool');
-const { JWT_SECRET } = require('../middleware/auth');
-const { isAdmin } = require('../utils/permissions');
+const { pool } = require('../db/pool.mts');
+const { JWT_SECRET } = require('../middleware/auth.mts');
+const { isAdmin } = require('../utils/permissions.mts');
 const { registerMessageHandler } = require('./handlers/message');
 const { registerReadHandler } = require('./handlers/read');
 const { registerTypingHandler } = require('./handlers/typing');

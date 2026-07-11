@@ -1,12 +1,12 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
+const { logger } = require('../utils/logger.mts');
+const E = require('../constants/errors.mts');
 const express = require('express');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const multer = require('multer');
 const crypto = require('crypto');
-const pool = require('../db/pool');
-const { generateToken, authenticate } = require('../middleware/auth');
+const { pool } = require('../db/pool.mts');
+const { generateToken, authenticate } = require('../middleware/auth.mts');
 
 const AVATAR_DIR = path.join(process.env.MEDIA_ROOT || path.join(__dirname, '../../../media'), 'avatars');
 const avatarStorage = multer.diskStorage({
@@ -20,7 +20,7 @@ const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 10
 
 const router = express.Router();
 
-const { SALT_ROUNDS } = require('../constants/config');
+const { SALT_ROUNDS } = require('../constants/config.mts');
 
 /**
  * POST /api/auth/register

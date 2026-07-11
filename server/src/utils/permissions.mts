@@ -7,23 +7,24 @@
  * 関連: #282 Phase B (ゲストユーザ role 拡張)、#124 pivot
  *
  * 使い方:
- *   const { isAdmin, isGuest, canCreateRoom } = require('../utils/permissions');
+ *   const { isAdmin, isGuest, canCreateRoom } = require('../utils/permissions.mts');
  *   if (!isAdmin(req.user)) { return res.status(403)... }
  *   if (!canCreateRoom(req.user)) { return res.status(403)... }
  */
 
-const ROLES = Object.freeze({
+export const ROLES = Object.freeze({
   ADMIN: 'admin',
   USER: 'user',
   GUEST: 'guest',
 });
 
+/** role を持ちうる object (AuthUser のほか、テストの partial user も受ける) */
+export type UserLike = { role?: string | null } | null | undefined;
+
 /**
  * Get user's role with null-safe access
- * @param {object|null|undefined} user
- * @returns {string|null}
  */
-function getRole(user) {
+export function getRole(user: UserLike): string | null {
   if (!user || typeof user !== 'object') return null;
   return user.role || null;
 }
@@ -33,21 +34,21 @@ function getRole(user) {
 /**
  * Returns true if user.role === 'admin'
  */
-function isAdmin(user) {
+export function isAdmin(user: UserLike): boolean {
   return getRole(user) === ROLES.ADMIN;
 }
 
 /**
  * Returns true if user.role === 'user' (一般 user、admin / guest ではない)
  */
-function isUser(user) {
+export function isUser(user: UserLike): boolean {
   return getRole(user) === ROLES.USER;
 }
 
 /**
  * Returns true if user.role === 'guest'
  */
-function isGuest(user) {
+export function isGuest(user: UserLike): boolean {
   return getRole(user) === ROLES.GUEST;
 }
 
@@ -56,7 +57,7 @@ function isGuest(user) {
 /**
  * 新規 room 作成権限。admin / user は OK、guest は不可。
  */
-function canCreateRoom(user) {
+export function canCreateRoom(user: UserLike): boolean {
   return isAdmin(user) || isUser(user);
 }
 
@@ -65,11 +66,8 @@ function canCreateRoom(user) {
  * admin: any room、user: 自分が member の room (= 呼び出し側で member 判定して渡す)、guest: 不可。
  *
  * 本 helper は role-class レベルの判定のみ、room membership は呼び出し側で行う。
- *
- * @param {object} user
- * @returns {boolean}
  */
-function canInviteToRoom(user) {
+export function canInviteToRoom(user: UserLike): boolean {
   return isAdmin(user) || isUser(user);
 }
 
@@ -78,21 +76,7 @@ function canInviteToRoom(user) {
  * admin: any、user: 同 organization 内、guest: 自分自身のみ。
  *
  * 本 helper は role-class レベル、specific filter は呼び出し側で実装する。
- *
- * @param {object} user
- * @returns {boolean} true なら検索可、false なら 403
  */
-function canSearchUsers(user) {
+export function canSearchUsers(user: UserLike): boolean {
   return isAdmin(user) || isUser(user);
 }
-
-module.exports = {
-  ROLES,
-  getRole,
-  isAdmin,
-  isUser,
-  isGuest,
-  canCreateRoom,
-  canInviteToRoom,
-  canSearchUsers,
-};

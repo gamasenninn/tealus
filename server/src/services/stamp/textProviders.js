@@ -1,4 +1,4 @@
-const logger = require('../../utils/logger');
+const { logger } = require('../../utils/logger.mts');
 
 const STAMP_LABELS = [
   '了解です', 'おはよう', 'OK!', 'おやすみ',

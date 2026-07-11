@@ -4,11 +4,16 @@
  * 採用者を解決手順に誘導する。fail-fast はせず、起動は継続。
  */
 
-function isEmpty(value) {
+/** warn だけ使うので winston Logger に限定しない (テストは fake logger を渡せる) */
+export interface WarnLogger {
+  warn(message: string): unknown;
+}
+
+export function isEmpty(value: unknown): boolean {
   return value === undefined || value === null || String(value).trim() === '';
 }
 
-function checkOpenAIApiKey(logger, env = process.env) {
+export function checkOpenAIApiKey(logger: WarnLogger, env: NodeJS.ProcessEnv = process.env): boolean {
   if (!isEmpty(env.OPENAI_API_KEY)) return false;
   logger.warn('=================================================');
   logger.warn('OPENAI_API_KEY is not set in server/.env');
@@ -29,10 +34,8 @@ function checkOpenAIApiKey(logger, env = process.env) {
   return true;
 }
 
-function runStartupEnvCheck(logger, env = process.env) {
-  const warnings = [];
+export function runStartupEnvCheck(logger: WarnLogger, env: NodeJS.ProcessEnv = process.env): string[] {
+  const warnings: string[] = [];
   if (checkOpenAIApiKey(logger, env)) warnings.push('OPENAI_API_KEY');
   return warnings;
 }
-
-module.exports = { runStartupEnvCheck, checkOpenAIApiKey, isEmpty };

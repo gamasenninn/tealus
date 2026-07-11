@@ -10,7 +10,7 @@
 require('dotenv').config();
 const { spawnSync } = require('child_process');
 const path = require('path');
-const pool = require('../src/db/pool');
+const { pool } = require('../src/db/pool.mts');
 
 async function backfill() {
   const { rows } = await pool.query(

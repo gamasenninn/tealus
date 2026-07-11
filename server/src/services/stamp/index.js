@@ -1,10 +1,10 @@
-const logger = require('../../utils/logger');
+const { logger } = require('../../utils/logger.mts');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const { createTextProvider, STAMP_LABELS } = require('./textProviders');
 const { createImageProvider } = require('./imageProviders');
-const { MEDIA_ROOT } = require('../../middleware/upload');
+const { MEDIA_ROOT } = require('../../middleware/upload.mts');
 
 const STAMP_DIR = path.join(MEDIA_ROOT, 'stamps');
 const GRID_COLS = 4;

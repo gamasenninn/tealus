@@ -8,9 +8,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-jest.mock('../../src/utils/logger', () => ({
+jest.mock('../../src/utils/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 const {
   fetchMemberProfile,

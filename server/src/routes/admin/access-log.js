@@ -9,10 +9,10 @@
  *   - 閲覧は既読カーソル由来のため「最後に覗いた時刻」のスナップショット (履歴ではない)。
  *   - カーソルは新着を既読にしたときに進むため、純粋な「開いた時刻」とは多少ずれる。
  */
-const logger = require('../../utils/logger');
-const E = require('../../constants/errors');
+const { logger } = require('../../utils/logger.mts');
+const E = require('../../constants/errors.mts');
 const express = require('express');
-const pool = require('../../db/pool');
+const { pool } = require('../../db/pool.mts');
 
 const router = express.Router();
 

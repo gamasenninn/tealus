@@ -10,7 +10,7 @@
  * reading サービス(pykakasi)で読みを当てる(kata2hira はカタカナしか変換できず漢字 garble を全棄却していた)。
  * STT エンジン非依存(Whisper/Qwen どちらの崩れも吸収)。organon 非依存(Tealus 単体で育つ)。
  */
-const pool = require('../db/pool');
+const { pool } = require('../db/pool.mts');
 const repo = require('./dictionaryRepo');
 const readingService = require('./reading');
 const { extractAliasPairs, toMoras, moraDistance, corpusPrecision } = require('./aliasMiner');

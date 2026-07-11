@@ -1,17 +1,18 @@
-const logger = require('../utils/logger');
-const E = require('../constants/errors');
-const pool = require('../db/pool');
+import type { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger.mts';
+import * as E from '../constants/errors.mts';
+import { pool } from '../db/pool.mts';
 
 /**
  * Middleware: Require room membership
  * Sets req.params.id as roomId (mergeParams required on router)
  */
-async function requireMember(req, res, next) {
+export async function requireMember(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   const roomId = req.params.id;
-  const userId = req.user.id;
+  const userId = req.user!.id;
 
   try {
-    const result = await pool.query(
+    const result = await pool.query<{ role: string }>(
       'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2',
       [roomId, userId]
     );
@@ -30,7 +31,7 @@ async function requireMember(req, res, next) {
  * Middleware: Require room admin role
  * Must be used after requireMember
  */
-function requireRoomAdmin(req, res, next) {
+export function requireRoomAdmin(req: Request, res: Response, next: NextFunction): Response | void {
   if (req.memberRole !== 'admin') {
     return res.status(403).json({ error: E.GROUP_ADMIN_REQUIRED });
   }
@@ -40,10 +41,10 @@ function requireRoomAdmin(req, res, next) {
 /**
  * Middleware: Require room to be a group (not direct)
  */
-async function requireGroup(req, res, next) {
+export async function requireGroup(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   const roomId = req.params.id;
   try {
-    const room = await pool.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+    const room = await pool.query<{ type: string }>('SELECT type FROM rooms WHERE id = $1', [roomId]);
     if (room.rows.length === 0) {
       return res.status(404).json({ error: E.ROOM_NOT_FOUND });
     }
@@ -61,11 +62,11 @@ async function requireGroup(req, res, next) {
  * Middleware: Require the authenticated user to be the room creator
  * (rooms.created_by = req.user.id)
  */
-async function requireCreator(req, res, next) {
+export async function requireCreator(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   const roomId = req.params.id;
-  const userId = req.user.id;
+  const userId = req.user!.id;
   try {
-    const result = await pool.query('SELECT created_by FROM rooms WHERE id = $1', [roomId]);
+    const result = await pool.query<{ created_by: string }>('SELECT created_by FROM rooms WHERE id = $1', [roomId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: E.ROOM_NOT_FOUND });
     }
@@ -84,11 +85,11 @@ async function requireCreator(req, res, next) {
  * (no other room_members exist besides self)
  * Used for room deletion safety: forces "remove all other members first" workflow
  */
-async function requireSoloMember(req, res, next) {
+export async function requireSoloMember(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   const roomId = req.params.id;
-  const userId = req.user.id;
+  const userId = req.user!.id;
   try {
-    const result = await pool.query(
+    const result = await pool.query<{ n: number }>(
       'SELECT COUNT(*)::int AS n FROM room_members WHERE room_id = $1 AND user_id <> $2',
       [roomId, userId]
     );
@@ -101,5 +102,3 @@ async function requireSoloMember(req, res, next) {
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 }
-
-module.exports = { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember };

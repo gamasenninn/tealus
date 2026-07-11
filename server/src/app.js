@@ -1,4 +1,4 @@
-const logger = require('./utils/logger');
+const { logger } = require('./utils/logger.mts');
 require('dotenv').config();
 
 // 6/9 DoS crash fix: defense in depth global safety net
@@ -23,13 +23,13 @@ const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
 
-const { ensureMediaDirs } = require('./utils/mediaSetup');
-const { MEDIA_ROOT } = require('./middleware/upload');
+const { ensureMediaDirs } = require('./utils/mediaSetup.mts');
+const { MEDIA_ROOT } = require('./middleware/upload.mts');
 ensureMediaDirs(MEDIA_ROOT);
 logger.info(`Media dirs ensured at ${MEDIA_ROOT}`);
 
 // #228 採用者切り分け改善: OPENAI_API_KEY 等が空なら起動時に loud warn
-const { runStartupEnvCheck } = require('./utils/envCheck');
+const { runStartupEnvCheck } = require('./utils/envCheck.mts');
 runStartupEnvCheck(logger);
 
 const app = express();

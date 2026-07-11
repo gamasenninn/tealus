@@ -11,7 +11,7 @@
  *
  * /api/config からは getState() で現在値が読める。
  */
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 
 const FLAP_THRESHOLD = 2;
 const PING_TIMEOUT_MS = 2000;

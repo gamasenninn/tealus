@@ -1,9 +1,9 @@
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger.mts');
 const sharp = require('sharp');
 const path = require('path');
 const { execFile } = require('child_process');
 const fs = require('fs');
-const { MEDIA_ROOT } = require('../middleware/upload');
+const { MEDIA_ROOT } = require('../middleware/upload.mts');
 
 const THUMBNAIL_WIDTH = 300;
 
