@@ -5,15 +5,25 @@
  * Webhookの動作確認用。受信したペイロードをコンソールに表示する。
  *
  * Usage:
- *   node scripts/webhook-receiver.js
- *   node scripts/webhook-receiver.js --port 8888
- *   node scripts/webhook-receiver.js --secret my-secret-key
+ *   node scripts/webhook-receiver.ts
+ *   node scripts/webhook-receiver.ts --port 8888
+ *   node scripts/webhook-receiver.ts --secret my-secret-key
  *
  * 管理画面で以下のURLを登録:
  *   http://localhost:9999/webhook
  */
-const http = require('http');
-const crypto = require('crypto');
+import http from 'node:http';
+import crypto from 'node:crypto';
+
+interface WebhookPayload {
+  event?: string;
+  room?: { id?: string; name?: string | null };
+  message?: { id?: string; sender?: { display_name?: string }; type?: string; content?: string };
+  reaction?: { emoji?: string; user?: { display_name?: string } };
+  member?: { display_name?: string };
+  added_by?: { display_name?: string };
+  removed_by?: { display_name?: string };
+}
 
 // --- 引数パース ---
 const args = process.argv.slice(2);
@@ -38,18 +48,19 @@ const server = http.createServer((req, res) => {
     // 署名検証
     if (SECRET) {
       const expected = crypto.createHmac('sha256', SECRET).update(body).digest('hex');
-      const received = (req.headers['x-tealus-signature'] || '').replace('sha256=', '');
+      const sigHeader = req.headers['x-tealus-signature'];
+      const received = (typeof sigHeader === 'string' ? sigHeader : '').replace('sha256=', '');
       const valid = expected === received;
       console.log(`[${timestamp}] 署名: ${valid ? '✅ 有効' : '❌ 無効'}`);
       if (!valid) {
         console.log(`  期待: sha256=${expected}`);
-        console.log(`  受信: ${req.headers['x-tealus-signature'] || '(なし)'}`);
+        console.log(`  受信: ${sigHeader || '(なし)'}`);
       }
     }
 
     // ペイロード表示
     try {
-      const payload = JSON.parse(body);
+      const payload = JSON.parse(body) as WebhookPayload;
       console.log(`[${timestamp}] イベント: ${payload.event}`);
       if (payload.room) {
         console.log(`  ルーム: ${payload.room.name || '(名前なし)'} (${payload.room.id})`);
@@ -73,7 +84,7 @@ const server = http.createServer((req, res) => {
         if (payload.removed_by) console.log(`  除外者: ${payload.removed_by.display_name}`);
       }
       console.log('');
-    } catch (e) {
+    } catch {
       console.log(`[${timestamp}] 受信（JSON解析失敗）: ${body.slice(0, 200)}`);
       console.log('');
     }

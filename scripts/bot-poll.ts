@@ -2,36 +2,62 @@
  * Tealus Bot - Polling Example
  * 定期的にメッセージをチェックして返信するシンプルなBot
  *
- * Usage: node scripts/bot-poll.js
+ * Usage: node scripts/bot-poll.ts
  */
-const http = require('http');
+import http from 'node:http';
 
 const SERVER = 'http://localhost:3000';
 const BOT_ID = 'Claude';
 const BOT_PASS = '1234';
 const POLL_INTERVAL = 3000; // 3秒ごと
 
-let token = null;
-let botUserId = null;
-let lastChecked = {};  // roomId -> lastMessageId
+interface Message {
+  sender_id: string;
+  sender_display_name: string;
+  content?: string | null;
+  created_at: string;
+}
 
-function apiCall(method, path, body) {
+interface Room {
+  id: string;
+  name?: string | null;
+  partner_display_name?: string | null;
+}
+
+interface LoginResponse {
+  token?: string;
+  user?: { id: string; display_name: string };
+}
+
+interface RoomsResponse {
+  rooms?: Room[];
+}
+
+interface MessagesResponse {
+  messages?: Message[];
+}
+
+let token: string | null = null;
+let botUserId: string | null = null;
+const lastChecked: Record<string, string> = {};  // roomId -> lastMessageId
+
+function apiCall<T>(method: string, path: string, body?: unknown): Promise<T> {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string | number> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
     if (data) headers['Content-Length'] = Buffer.byteLength(data);
     const url = new URL(path, SERVER);
     const req = http.request({
       hostname: url.hostname, port: url.port, path: url.pathname, method, headers
-    }, res => { let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve({}); } }); });
+    }, res => { let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d) as T); } catch { resolve({} as T); } }); });
     req.on('error', reject);
     if (data) req.write(data);
     req.end();
   });
 }
 
-function generateReply(msg) {
+function generateReply(msg: Message): string | null {
   const text = (msg.content || '').toLowerCase();
 
   if (text.includes('こんにちは') || text.includes('hello')) {
@@ -50,13 +76,13 @@ function generateReply(msg) {
   return null;
 }
 
-async function pollAndReply() {
+async function pollAndReply(): Promise<void> {
   try {
-    const roomsData = await apiCall('GET', '/api/rooms');
+    const roomsData = await apiCall<RoomsResponse>('GET', '/api/rooms');
     if (!roomsData.rooms) return;
 
     for (const room of roomsData.rooms) {
-      const msgs = await apiCall('GET', `/api/rooms/${room.id}/messages?limit=5`);
+      const msgs = await apiCall<MessagesResponse>('GET', `/api/rooms/${room.id}/messages?limit=5`);
       if (!msgs.messages || msgs.messages.length === 0) continue;
 
       // Messages are newest-first from API, reverse to process oldest first
@@ -82,29 +108,33 @@ async function pollAndReply() {
       lastChecked[room.id] = messages[messages.length - 1].created_at;
     }
   } catch (err) {
-    console.error('Poll error:', err.message);
+    console.error('Poll error:', err instanceof Error ? err.message : String(err));
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   console.log('🤖 Tealus Bot starting...');
 
   // Login
-  const login = await apiCall('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
+  const login = await apiCall<LoginResponse>('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
+  if (!login.token || !login.user) {
+    throw new Error('ログイン失敗。BOT_IDとBOT_PASSを確認してください。');
+  }
   token = login.token;
   botUserId = login.user.id;
   console.log(`✅ Logged in as ${login.user.display_name}`);
 
   // Initialize last checked timestamps
-  const roomsData = await apiCall('GET', '/api/rooms');
-  for (const room of roomsData.rooms) {
-    const msgs = await apiCall('GET', `/api/rooms/${room.id}/messages?limit=1`);
+  const roomsData = await apiCall<RoomsResponse>('GET', '/api/rooms');
+  const rooms = roomsData.rooms || [];
+  for (const room of rooms) {
+    const msgs = await apiCall<MessagesResponse>('GET', `/api/rooms/${room.id}/messages?limit=1`);
     if (msgs.messages && msgs.messages.length > 0) {
       lastChecked[room.id] = msgs.messages[0].created_at;
     }
   }
 
-  console.log(`📌 Monitoring ${roomsData.rooms.length} rooms`);
+  console.log(`📌 Monitoring ${rooms.length} rooms`);
   console.log(`⏱  Polling every ${POLL_INTERVAL / 1000}s`);
   console.log('   (Ctrl+C to stop)\n');
 

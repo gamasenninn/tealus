@@ -2,21 +2,25 @@
  * ファイル監視ロジック
  * transcriber.py の wait_for_file_complete / WavHandler パターンをNode.jsに移植
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+
+export interface WaitOptions {
+  /** チェック間隔(ms) デフォルト1000 */
+  interval?: number;
+  /** 安定判定回数 デフォルト2 */
+  stableCount?: number;
+  /** タイムアウト(ms) デフォルト60000 */
+  timeout?: number;
+}
 
 /**
  * ファイルの書き込みが完了するまで待つ
  * サイズが一定回数連続で変化しなければ完了と判定
  *
- * @param {string} filePath - 監視対象ファイルパス
- * @param {object} opts - オプション
- * @param {number} opts.interval - チェック間隔(ms) デフォルト1000
- * @param {number} opts.stableCount - 安定判定回数 デフォルト2
- * @param {number} opts.timeout - タイムアウト(ms) デフォルト60000
- * @returns {Promise<boolean>} 完了したらtrue、タイムアウトでfalse
+ * @returns 完了したらtrue、タイムアウトでfalse
  */
-async function waitForFileComplete(filePath, opts = {}) {
+export async function waitForFileComplete(filePath: string, opts: WaitOptions = {}): Promise<boolean> {
   const interval = opts.interval || 1000;
   const stableCount = opts.stableCount || 2;
   const timeout = opts.timeout || 60000;
@@ -38,7 +42,7 @@ async function waitForFileComplete(filePath, opts = {}) {
         stable = 0;
       }
       lastSize = currentSize;
-    } catch (e) {
+    } catch {
       return false;
     }
 
@@ -53,14 +57,15 @@ async function waitForFileComplete(filePath, opts = {}) {
  * ディレクトリを監視し、新規ファイルをコールバックで通知
  * デバウンス処理付き（同一ファイルの短時間連続イベントを抑制）
  *
- * @param {string} dir - 監視ディレクトリ
- * @param {string[]} extensions - 対象拡張子 例: ['.wav', '.mp4']
- * @param {function} onFile - 新規ファイル検知時のコールバック (filePath) => void
- * @returns {function} 停止関数
+ * @returns 停止関数
  */
-function watchDirectory(dir, extensions, onFile) {
-  const sent = new Set();     // 送信済みファイル名（重複送信防止）
-  const seen = new Map();     // ファイル名 → タイムスタンプ（デバウンス用）
+export function watchDirectory(
+  dir: string,
+  extensions: string[],
+  onFile: (filePath: string) => void
+): () => void {
+  const sent = new Set<string>();         // 送信済みファイル名（重複送信防止）
+  const seen = new Map<string, number>(); // ファイル名 → タイムスタンプ（デバウンス用）
   const DEBOUNCE_MS = 2000;
 
   // 起動時に既存ファイルを送信済みとして記録
@@ -69,7 +74,7 @@ function watchDirectory(dir, extensions, onFile) {
       const ext = path.extname(f).toLowerCase();
       if (extensions.includes(ext)) sent.add(f);
     });
-  } catch (e) { /* ディレクトリが空の場合 */ }
+  } catch { /* ディレクトリが空の場合 */ }
 
   const watcher = fs.watch(dir, (eventType, filename) => {
     if (!filename) return;
@@ -109,7 +114,7 @@ function watchDirectory(dir, extensions, onFile) {
 /**
  * .last_sent ファイルから最終送信日時を読み取る
  */
-function readLastSent(dir) {
+export function readLastSent(dir: string): Date | null {
   const filePath = path.join(dir, '.last_sent');
   try {
     if (fs.existsSync(filePath)) {
@@ -122,19 +127,24 @@ function readLastSent(dir) {
 /**
  * .last_sent ファイルに最終送信日時を書き込む
  */
-function writeLastSent(dir, date) {
+export function writeLastSent(dir: string, date: Date): void {
   const filePath = path.join(dir, '.last_sent');
   fs.writeFileSync(filePath, date.toISOString());
+}
+
+export interface UnsentFile {
+  path: string;
+  mtime: number;
 }
 
 /**
  * 未送信ファイルを取得（.last_sent 以降のファイル）
  */
-function getUnsent(dir, extensions) {
+export function getUnsent(dir: string, extensions: string[]): UnsentFile[] {
   const lastSent = readLastSent(dir);
   // .last_sent がない場合は catch-up 対象なし（初回は全送信しない）
   if (!lastSent) return [];
-  const files = [];
+  const files: UnsentFile[] = [];
   try {
     for (const name of fs.readdirSync(dir)) {
       if (name === '.last_sent') continue;
@@ -151,5 +161,3 @@ function getUnsent(dir, extensions) {
   files.sort((a, b) => a.mtime - b.mtime);
   return files;
 }
-
-module.exports = { waitForFileComplete, watchDirectory, readLastSent, writeLastSent, getUnsent };

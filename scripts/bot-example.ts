@@ -2,37 +2,66 @@
  * Tealus Bot Example
  * Socket.IO経由でリアルタイムに会話するAIボットのサンプル
  *
- * Usage: node scripts/bot-example.js
+ * Usage: node scripts/bot-example.ts
  */
-require('dotenv').config({ path: require('path').join(__dirname, '../server/.env') });
+import path from 'node:path';
+import http from 'node:http';
+import dotenv from 'dotenv';
+import { io } from 'socket.io-client';
 
-const { io } = require('socket.io-client');
-const http = require('http');
+dotenv.config({ path: path.join(import.meta.dirname, '../server/.env') });
 
 const BOT_ID = 'Claude';
 const BOT_PASS = '1234';
 const SERVER = 'http://localhost:3000';
 
-function apiCall(method, path, body, token) {
+interface IncomingMessage {
+  room_id: string;
+  sender_id: string;
+  sender_display_name: string;
+  type?: string;
+  content?: string | null;
+}
+
+interface Room {
+  id: string;
+  type: 'group' | 'direct';
+  name?: string | null;
+  partner_display_name?: string | null;
+}
+
+interface LoginResponse {
+  token?: string;
+  user?: { id: string; display_name: string };
+}
+
+interface RoomsResponse {
+  rooms?: Room[];
+}
+
+function apiCall<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string | number> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
     if (data) headers['Content-Length'] = Buffer.byteLength(data);
     const url = new URL(path, SERVER);
     const req = http.request({
       hostname: url.hostname, port: url.port, path: url.pathname, method, headers
-    }, res => { let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(JSON.parse(d))); });
+    }, res => { let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(JSON.parse(d) as T)); });
     req.on('error', reject);
     if (data) req.write(data);
     req.end();
   });
 }
 
-async function main() {
+async function main(): Promise<void> {
   // 1. Login
   console.log('🤖 Logging in as', BOT_ID, '...');
-  const login = await apiCall('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
+  const login = await apiCall<LoginResponse>('POST', '/api/auth/login', { login_id: BOT_ID, password: BOT_PASS });
+  if (!login.token || !login.user) {
+    throw new Error('ログイン失敗。BOT_IDとBOT_PASSを確認してください。');
+  }
   const token = login.token;
   const botUserId = login.user.id;
   console.log('✅ Logged in as', login.user.display_name);
@@ -44,8 +73,8 @@ async function main() {
     console.log('🔌 Socket connected:', socket.id);
 
     // 3. Join all rooms
-    const roomsData = await apiCall('GET', '/api/rooms', null, token);
-    for (const room of roomsData.rooms) {
+    const roomsData = await apiCall<RoomsResponse>('GET', '/api/rooms', null, token);
+    for (const room of roomsData.rooms || []) {
       socket.emit('room:join', room.id);
       const name = room.type === 'group' ? room.name : room.partner_display_name;
       console.log('📌 Joined room:', name);
@@ -58,7 +87,7 @@ async function main() {
   });
 
   // 4. Listen for messages
-  socket.on('message:new', async (msg) => {
+  socket.on('message:new', async (msg: IncomingMessage) => {
     // Ignore own messages
     if (msg.sender_id === botUserId) return;
 
@@ -90,7 +119,7 @@ async function main() {
 /**
  * Simple reply logic — replace with AI (Claude API, etc.) for real use
  */
-function generateReply(msg) {
+function generateReply(msg: IncomingMessage): string | null {
   const text = (msg.content || '').toLowerCase();
 
   if (msg.type === 'voice') {

@@ -2,14 +2,14 @@
  * ファイル監視ロジックのテスト
  * TDD Red phase
  */
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
-const { waitForFileComplete, watchDirectory } = require('../watch');
+import { waitForFileComplete, watchDirectory } from '../watch.ts';
 
 // テスト用一時ディレクトリ
-let tmpDir;
+let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tealus-watch-test-'));
@@ -40,7 +40,7 @@ describe('waitForFileComplete', () => {
 
     // 200ms後に追記を止める（サイズが安定する）
     const appendInterval = setInterval(() => {
-      try { fs.appendFileSync(filePath, Buffer.alloc(50)); } catch(e) {}
+      try { fs.appendFileSync(filePath, Buffer.alloc(50)); } catch {}
     }, 50);
     setTimeout(() => clearInterval(appendInterval), 200);
 
@@ -56,7 +56,7 @@ describe('waitForFileComplete', () => {
 
 describe('watchDirectory', () => {
   test('新規ファイル作成を検知してコールバックを呼ぶ', (done) => {
-    const detected = [];
+    const detected: string[] = [];
 
     const stop = watchDirectory(tmpDir, ['.wav'], (filePath) => {
       detected.push(path.basename(filePath));
@@ -74,7 +74,7 @@ describe('watchDirectory', () => {
   }, 10000);
 
   test('対象外の拡張子は無視する', (done) => {
-    const detected = [];
+    const detected: string[] = [];
 
     const stop = watchDirectory(tmpDir, ['.wav'], (filePath) => {
       detected.push(path.basename(filePath));
@@ -98,7 +98,7 @@ describe('watchDirectory', () => {
   }, 10000);
 
   test('複数の拡張子を監視できる', (done) => {
-    const detected = [];
+    const detected: string[] = [];
 
     const stop = watchDirectory(tmpDir, ['.wav', '.mp4'], (filePath) => {
       detected.push(path.basename(filePath));
@@ -124,7 +124,7 @@ describe('watchDirectory', () => {
     // 先にファイルを作成
     fs.writeFileSync(path.join(tmpDir, 'existing.wav'), Buffer.alloc(1024));
 
-    const detected = [];
+    const detected: string[] = [];
     const stop = watchDirectory(tmpDir, ['.wav'], (filePath) => {
       detected.push(path.basename(filePath));
     });
@@ -148,7 +148,7 @@ describe('watchDirectory', () => {
   }, 10000);
 
   test('同一ファイルの重複イベントはデバウンスされる', (done) => {
-    const detected = [];
+    const detected: string[] = [];
 
     const stop = watchDirectory(tmpDir, ['.wav'], (filePath) => {
       detected.push(path.basename(filePath));

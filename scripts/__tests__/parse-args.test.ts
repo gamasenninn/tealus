@@ -3,34 +3,48 @@
  * TDD Red phase: まずテストを書く
  */
 
-const { parseSendArgs, parseGlobalArgs } = require('../parse-args');
+import { parseSendArgs, parseGlobalArgs } from '../parse-args.ts';
+import type { ParsedSendArgs, SendModeArgs, WatchModeArgs } from '../parse-args.ts';
+
+// union 型を mode で絞り込むテスト用ヘルパー
+function asSend(result: ParsedSendArgs): SendModeArgs {
+  expect(result.mode).toBe('send');
+  if (result.mode !== 'send') throw new Error('send モードではない');
+  return result;
+}
+
+function asWatch(result: ParsedSendArgs): WatchModeArgs {
+  expect(result.mode).toBe('watch');
+  if (result.mode !== 'watch') throw new Error('watch モードではない');
+  return result;
+}
 
 describe('parseSendArgs', () => {
   // 既存: 単発送信
   describe('単発送信（既存動作）', () => {
     test('--text でテキスト送信', () => {
-      const result = parseSendArgs(['Web部', '--text', 'こんにちは']);
+      const result = asSend(parseSendArgs(['Web部', '--text', 'こんにちは']));
       expect(result.target).toBe('Web部');
       expect(result.text).toBe('こんにちは');
       expect(result.mode).toBe('send');
     });
 
     test('--image で画像送信', () => {
-      const result = parseSendArgs(['Web部', '--image', './screenshot.png']);
+      const result = asSend(parseSendArgs(['Web部', '--image', './screenshot.png']));
       expect(result.target).toBe('Web部');
       expect(result.image).toBe('./screenshot.png');
       expect(result.mode).toBe('send');
     });
 
     test('--voice でファイル指定の音声送信', () => {
-      const result = parseSendArgs(['Web部', '--voice', './recording.wav']);
+      const result = asSend(parseSendArgs(['Web部', '--voice', './recording.wav']));
       expect(result.target).toBe('Web部');
       expect(result.voice).toBe('./recording.wav');
       expect(result.mode).toBe('send');
     });
 
     test('@ユーザー名 でDM送信', () => {
-      const result = parseSendArgs(['@田中太郎', '--text', 'メッセージ']);
+      const result = asSend(parseSendArgs(['@田中太郎', '--text', 'メッセージ']));
       expect(result.target).toBe('@田中太郎');
       expect(result.text).toBe('メッセージ');
     });
@@ -39,7 +53,7 @@ describe('parseSendArgs', () => {
   // 新規: 監視モード
   describe('--watch 監視モード', () => {
     test('--voice --watch <dir> で監視モード', () => {
-      const result = parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir']);
+      const result = asWatch(parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir']));
       expect(result.target).toBe('Web部');
       expect(result.mode).toBe('watch');
       expect(result.watchDir).toBe('/path/to/dir');
@@ -47,12 +61,12 @@ describe('parseSendArgs', () => {
     });
 
     test('--ext でカンマ区切りの拡張子指定', () => {
-      const result = parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir', '--ext', '.wav,.mp4,.mp3']);
+      const result = asWatch(parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir', '--ext', '.wav,.mp4,.mp3']));
       expect(result.extensions).toEqual(['.wav', '.mp4', '.mp3']);
     });
 
     test('--ext なしはデフォルト .wav', () => {
-      const result = parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir']);
+      const result = asWatch(parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir']));
       expect(result.extensions).toEqual(['.wav']);
     });
   });
@@ -60,7 +74,7 @@ describe('parseSendArgs', () => {
   // パースルール: --voice の次が -- で始まるか
   describe('--voice パース判定', () => {
     test('--voice の直後にファイルパス → 単発送信', () => {
-      const result = parseSendArgs(['Web部', '--voice', 'file.wav']);
+      const result = asSend(parseSendArgs(['Web部', '--voice', 'file.wav']));
       expect(result.mode).toBe('send');
       expect(result.voice).toBe('file.wav');
     });

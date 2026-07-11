@@ -7,6 +7,23 @@
   "description": "Tealus CLI — コマンドラインからTealusにメッセージ送信",
   "license": "MIT",
   "bin": {
-    "tealus": "./scripts/tealus-cli.js"
+    "tealus": "./scripts/tealus-cli.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "jest --config scripts/jest.config.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.43",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.1.1",
+    "jest": "^30.4.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "socket.io-client": "^4.8.3"
   }
 }

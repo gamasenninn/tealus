@@ -3,22 +3,70 @@
  * Tealus CLI — コマンドラインからTealusにメッセージを送信
  *
  * Usage:
- *   node scripts/tealus-cli.js send "Web部" --text "メッセージ"
- *   node scripts/tealus-cli.js send @田中太郎 --text "メッセージ"
- *   node scripts/tealus-cli.js send "Web部" --image ./screenshot.png
- *   node scripts/tealus-cli.js send "Web部" --voice ./recording.mp4
- *   node scripts/tealus-cli.js send "Web部" --voice --watch /path/to/dir --ext .wav,.mp4
- *   node scripts/tealus-cli.js rooms
+ *   node scripts/tealus-cli.ts send "Web部" --text "メッセージ"
+ *   node scripts/tealus-cli.ts send @田中太郎 --text "メッセージ"
+ *   node scripts/tealus-cli.ts send "Web部" --image ./screenshot.png
+ *   node scripts/tealus-cli.ts send "Web部" --voice ./recording.mp4
+ *   node scripts/tealus-cli.ts send "Web部" --voice --watch /path/to/dir --ext .wav,.mp4
+ *   node scripts/tealus-cli.ts rooms
  */
-const fs = require('fs');
-const path = require('path');
-const { parseSendArgs, parseGlobalArgs } = require('./parse-args');
-const { waitForFileComplete, watchDirectory, getUnsent, writeLastSent } = require('./watch');
-const http = require('http');
-const https = require('https');
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
+import { parseSendArgs, parseGlobalArgs } from './parse-args.ts';
+import { waitForFileComplete, watchDirectory, getUnsent, writeLastSent } from './watch.ts';
+
+// --- API response shapes ---
+
+interface LoginResponse {
+  token?: string;
+  error?: string;
+}
+
+interface UsersResponse {
+  users?: Array<{ id: string; display_name: string }>;
+}
+
+interface DirectRoomResponse {
+  room: { id: string };
+}
+
+interface BotRoom {
+  id: string;
+  name: string | null;
+  member_count?: number;
+}
+
+interface BotRoomsResponse {
+  rooms?: BotRoom[];
+}
+
+interface SendResult {
+  message?: { id?: string };
+  error?: string;
+}
+
+interface UnreadMessage {
+  id: string;
+  room_name?: string | null;
+  sender_display_name: string;
+  content?: string | null;
+  created_at: string;
+}
+
+interface UnreadResponse {
+  messages?: UnreadMessage[];
+}
+
+interface MarkReadResult {
+  success?: boolean;
+  count?: number;
+  error?: string;
+}
 
 // Load .env from scripts directory
-function loadEnvFile(filePath) {
+function loadEnvFile(filePath: string): void {
   if (fs.existsSync(filePath)) {
     fs.readFileSync(filePath, 'utf8').split('\n').forEach(line => {
       const [key, ...vals] = line.trim().split('=');
@@ -28,7 +76,7 @@ function loadEnvFile(filePath) {
 }
 
 // デフォルトの .env を読み込み
-loadEnvFile(path.join(__dirname, '.env'));
+loadEnvFile(path.join(import.meta.dirname, '.env'));
 
 const SERVER = process.env.TEALUS_SERVER || 'http://localhost:3000';
 let BOT_ID = process.env.TEALUS_BOT_ID;
@@ -36,12 +84,12 @@ let BOT_PASS = process.env.TEALUS_BOT_PASS;
 
 // --- HTTP helpers ---
 
-function request(method, urlPath, body, token) {
+function request<T>(method: string, urlPath: string, body?: unknown, token?: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
     const url = new URL(urlPath, SERVER);
     const proto = url.protocol === 'https:' ? https : http;
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string | number> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
     if (data) headers['Content-Length'] = Buffer.byteLength(data);
 
@@ -50,7 +98,8 @@ function request(method, urlPath, body, token) {
     }, res => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve({ raw: d }); } });
+      // JSON 以外の応答は raw として返す（境界での型保証は呼び出し側の interface に委ねる）
+      res.on('end', () => { try { resolve(JSON.parse(d) as T); } catch { resolve({ raw: d } as T); } });
     });
     req.on('error', reject);
     if (data) req.write(data);
@@ -58,7 +107,7 @@ function request(method, urlPath, body, token) {
   });
 }
 
-function uploadFile(token, endpoint, fieldName, filePath) {
+function uploadFile(token: string, endpoint: string, fieldName: string, filePath: string): Promise<SendResult> {
   return new Promise((resolve, reject) => {
     const url = new URL(endpoint, SERVER);
     const proto = url.protocol === 'https:' ? https : http;
@@ -66,7 +115,7 @@ function uploadFile(token, endpoint, fieldName, filePath) {
     const fileName = path.basename(filePath);
     const fileData = fs.readFileSync(filePath);
     const ext = path.extname(fileName).toLowerCase();
-    const mimeTypes = {
+    const mimeTypes: Record<string, string> = {
       '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
       '.mp4': 'audio/mp4', '.webm': 'audio/webm', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4',
       '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
@@ -91,7 +140,7 @@ function uploadFile(token, endpoint, fieldName, filePath) {
     }, res => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve({ raw: d }); } });
+      res.on('end', () => { try { resolve(JSON.parse(d) as SendResult); } catch { resolve({ raw: d } as SendResult); } });
     });
     req.on('error', reject);
     req.write(body);
@@ -101,13 +150,13 @@ function uploadFile(token, endpoint, fieldName, filePath) {
 
 // --- Auth ---
 
-async function login() {
+async function login(): Promise<string> {
   // #212: credentials は startup 時に Object.freeze() で capture した frozen object。
   // BOT_ID/BOT_PASS の途中欠落 (process.env clobber 等の suspected root cause) から守る。
   if (!credentials.login_id || !credentials.password) {
     console.error('[FATAL] credentials missing at login() entry. login_id present=', !!credentials.login_id, ', password present=', !!credentials.password);
   }
-  const data = await request('POST', '/api/auth/login', {
+  const data = await request<LoginResponse>('POST', '/api/auth/login', {
     login_id: credentials.login_id,
     password: credentials.password,
   });
@@ -126,22 +175,22 @@ async function login() {
 
 // --- Room resolution ---
 
-async function resolveRoom(token, target) {
+async function resolveRoom(token: string, target: string): Promise<{ id: string; name: string }> {
   if (target.startsWith('@')) {
     // Direct message to user
     const userName = target.slice(1);
-    const users = await request('GET', '/api/users', null, token);
+    const users = await request<UsersResponse>('GET', '/api/users', null, token);
     const user = users.users?.find(u => u.display_name === userName);
     if (!user) {
       console.error(`❌ ユーザー「${userName}」が見つかりません`);
       process.exit(1);
     }
     // Create or get direct room
-    const room = await request('POST', '/api/rooms/direct', { partner_id: user.id }, token);
+    const room = await request<DirectRoomResponse>('POST', '/api/rooms/direct', { partner_id: user.id }, token);
     return { id: room.room.id, name: userName };
   } else {
     // Group room by name
-    const rooms = await request('GET', '/api/bot/rooms', null, token);
+    const rooms = await request<BotRoomsResponse>('GET', '/api/bot/rooms', null, token);
     const room = rooms.rooms?.find(r => r.name === target);
     if (!room) {
       console.error(`❌ ルーム「${target}」が見つかりません`);
@@ -149,25 +198,29 @@ async function resolveRoom(token, target) {
       rooms.rooms?.forEach(r => console.error(`   - ${r.name || 'DM'}`));
       process.exit(1);
     }
-    return { id: room.id, name: room.name };
+    return { id: room.id, name: target };
   }
 }
 
 // --- Commands ---
 
-let currentToken = null;
+let currentToken: string | null = null;
 
-async function getToken() {
+async function getToken(): Promise<string> {
   if (!currentToken) currentToken = await login();
   return currentToken;
 }
 
-async function refreshToken() {
+async function refreshToken(): Promise<string> {
   currentToken = null;
   return getToken();
 }
 
-async function sendVoiceFile(roomId, roomName, filePath) {
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function sendVoiceFile(roomId: string, roomName: string, filePath: string): Promise<void> {
   let token = await getToken();
   let result = await uploadFile(token, `/api/rooms/${roomId}/voice`, 'voice', filePath);
 
@@ -185,12 +238,12 @@ async function sendVoiceFile(roomId, roomName, filePath) {
   }
 }
 
-async function cmdSend(args) {
+async function cmdSend(args: string[]): Promise<void> {
   let parsed;
   try {
     parsed = parseSendArgs(args);
   } catch (e) {
-    console.error(`❌ ${e.message}`);
+    console.error(`❌ ${errorMessage(e)}`);
     process.exit(1);
   }
 
@@ -223,7 +276,7 @@ async function cmdSend(args) {
             await sendVoiceFile(room.id, room.name, file.path);
             writeLastSent(parsed.watchDir, new Date(file.mtime));
           } catch (err) {
-            console.error(`❌ 送信失敗: ${err.message}`);
+            console.error(`❌ 送信失敗: ${errorMessage(err)}`);
           }
         }
         console.log('✅ catch-up 完了');
@@ -234,12 +287,13 @@ async function cmdSend(args) {
       }
     }
 
-    const stop = watchDirectory(parsed.watchDir, parsed.extensions, async (filePath) => {
+    const watchDir = parsed.watchDir;
+    const stop = watchDirectory(watchDir, parsed.extensions, async (filePath) => {
       console.log(`📁 検知: ${path.basename(filePath)}`);
       const complete = await waitForFileComplete(filePath);
       if (complete) {
         await sendVoiceFile(room.id, room.name, filePath);
-        writeLastSent(parsed.watchDir, new Date());
+        writeLastSent(watchDir, new Date());
       } else {
         console.error(`⚠️ ファイル書き込み未完了（スキップ）: ${path.basename(filePath)}`);
       }
@@ -256,7 +310,7 @@ async function cmdSend(args) {
 
   // 単発送信モード
   if (parsed.text) {
-    const result = await request('POST', '/api/bot/push', { room_id: room.id, content: parsed.text }, token);
+    const result = await request<SendResult>('POST', '/api/bot/push', { room_id: room.id, content: parsed.text }, token);
     if (result.message) {
       console.log(`✅ テキスト送信: ${room.name} ← "${parsed.text}"`);
     } else {
@@ -280,7 +334,7 @@ async function cmdSend(args) {
   }
 }
 
-async function cmdCheck(args) {
+async function cmdCheck(args: string[]): Promise<void> {
   const filteredArgs = args.filter(a => a !== '--json' && a !== '--mark-read');
   const target = filteredArgs[0];
   const jsonMode = args.includes('--json');
@@ -296,7 +350,7 @@ async function cmdCheck(args) {
     roomName = room.name;
   }
 
-  const data = await request('GET', url, null, token);
+  const data = await request<UnreadResponse>('GET', url, null, token);
   const messages = data.messages || [];
 
   if (jsonMode) {
@@ -318,7 +372,7 @@ async function cmdCheck(args) {
   // Mark as read
   if (markRead && messages.length > 0) {
     const ids = messages.map(m => m.id);
-    const result = await request('POST', '/api/bot/mark-read', { message_ids: ids }, token);
+    const result = await request<MarkReadResult>('POST', '/api/bot/mark-read', { message_ids: ids }, token);
     if (result.success) {
       console.log(`✅ ${result.count}件を既読にしました`);
     } else {
@@ -327,9 +381,9 @@ async function cmdCheck(args) {
   }
 }
 
-async function cmdRooms() {
+async function cmdRooms(): Promise<void> {
   const token = await login();
-  const rooms = await request('GET', '/api/bot/rooms', null, token);
+  const rooms = await request<BotRoomsResponse>('GET', '/api/bot/rooms', null, token);
   console.log('📌 参加中のルーム:');
   rooms.rooms?.forEach((r, i) => {
     console.log(`   ${i + 1}. ${r.name || 'DM'} (${r.member_count}人)`);
@@ -373,29 +427,29 @@ const [command, ...args] = globalParsed.rest;
 
 switch (command) {
   case 'send':
-    cmdSend(args).catch(err => { console.error('❌ エラー:', err.message); process.exit(1); });
+    cmdSend(args).catch(err => { console.error('❌ エラー:', errorMessage(err)); process.exit(1); });
     break;
   case 'check':
-    cmdCheck(args).catch(err => { console.error('❌ エラー:', err.message); process.exit(1); });
+    cmdCheck(args).catch(err => { console.error('❌ エラー:', errorMessage(err)); process.exit(1); });
     break;
   case 'rooms':
-    cmdRooms().catch(err => { console.error('❌ エラー:', err.message); process.exit(1); });
+    cmdRooms().catch(err => { console.error('❌ エラー:', errorMessage(err)); process.exit(1); });
     break;
   default:
     console.log('Tealus CLI — コマンドラインからTealusにメッセージ送信');
     console.log('');
     console.log('使い方:');
-    console.log('  node scripts/tealus-cli.js send "Web部" --text "メッセージ"');
-    console.log('  node scripts/tealus-cli.js send @田中太郎 --text "メッセージ"');
-    console.log('  node scripts/tealus-cli.js send "Web部" --image ./screenshot.png');
-    console.log('  node scripts/tealus-cli.js send "Web部" --voice ./recording.mp4');
-    console.log('  node scripts/tealus-cli.js send "Web部" --voice --watch /path/to/dir');
-    console.log('  node scripts/tealus-cli.js send "Web部" --voice --watch /path/to/dir --ext .wav,.mp4,.mp3');
-    console.log('  node scripts/tealus-cli.js check');
-    console.log('  node scripts/tealus-cli.js check "Web部"');
-    console.log('  node scripts/tealus-cli.js check --mark-read');
-    console.log('  node scripts/tealus-cli.js check --json');
-    console.log('  node scripts/tealus-cli.js rooms');
+    console.log('  node scripts/tealus-cli.ts send "Web部" --text "メッセージ"');
+    console.log('  node scripts/tealus-cli.ts send @田中太郎 --text "メッセージ"');
+    console.log('  node scripts/tealus-cli.ts send "Web部" --image ./screenshot.png');
+    console.log('  node scripts/tealus-cli.ts send "Web部" --voice ./recording.mp4');
+    console.log('  node scripts/tealus-cli.ts send "Web部" --voice --watch /path/to/dir');
+    console.log('  node scripts/tealus-cli.ts send "Web部" --voice --watch /path/to/dir --ext .wav,.mp4,.mp3');
+    console.log('  node scripts/tealus-cli.ts check');
+    console.log('  node scripts/tealus-cli.ts check "Web部"');
+    console.log('  node scripts/tealus-cli.ts check --mark-read');
+    console.log('  node scripts/tealus-cli.ts check --json');
+    console.log('  node scripts/tealus-cli.ts rooms');
     console.log('');
     console.log('監視モード:');
     console.log('  --voice --watch <dir>  ディレクトリを監視し、新規音声ファイルを自動送信');
