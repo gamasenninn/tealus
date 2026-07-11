@@ -2,15 +2,24 @@
  * Express Request の拡張 (#330 TS 移行で導入)
  * - req.user: authenticate middleware が設定
  * - req.memberRole: requireMember middleware が設定
+ * - req.messageRoomId: requireMessageAccess middleware (routes/tags.mts) が設定
  */
-import type { AuthUser } from './types.mts';
+import type { AuthUser, SocketUser } from './types.mts';
 
 declare global {
   namespace Express {
     interface Request {
       user?: AuthUser;
       memberRole?: string;
+      messageRoomId?: string;
     }
+  }
+}
+
+// Socket.IO: 認証 middleware (socket/index.mts の io.use) が全 handler より先に user を設定する
+declare module 'socket.io' {
+  interface Socket {
+    user: SocketUser;
   }
 }
 
