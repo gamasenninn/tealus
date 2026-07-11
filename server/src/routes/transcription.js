@@ -72,7 +72,7 @@ router.put('/', authenticate, async (req, res) => {
 
     // #327 自己成長: 人間編集(AI版→人間版)から garble→term を学習し辞書テーブルを育てる。
     // fire-and-forget（応答をブロックしない・失敗は編集を妨げない）。
-    require('../services/dictionaryLearner')
+    require('../services/dictionaryLearner.mts')
       .learnFromEdit({ priorFormatted, newFormatted: text.trim() })
       // 発火を常に記録 (learned=0 でも「届いた+ゲート棄却」と「不発」を log で区別する)
       .then((r) => logger.info(`[dictionary] edit ${messageId}: extracted ${r.extracted} → +${r.promoted} active / +${r.pending} pending / ${r.gateRejected} gate-rejected`))
@@ -206,7 +206,7 @@ router.post('/retranscribe', authenticate, async (req, res) => {
 
     // Async transcription on the new version
     const { io } = require('../app');
-    const { transcribeVoiceMessage } = require('../services/transcription');
+    const { transcribeVoiceMessage } = require('../services/transcription.mts');
     transcribeVoiceMessage(messageId, filePath, io, room_id, newVersion).catch(err => {
       logger.error('Retranscribe error:', err);
     });

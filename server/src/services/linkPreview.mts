@@ -1,13 +1,32 @@
-const { logger } = require('../utils/logger.mts');
-const { pool } = require('../db/pool.mts');
-const cheerio = require('cheerio');
+import { logger } from '../utils/logger.mts';
+import { pool } from '../db/pool.mts';
+import * as cheerio from 'cheerio';
+import type { Server } from 'socket.io';
 
 const URL_REGEX = /https?:\/\/[^\s<>"']+/g;
+
+/** OGPメタデータ */
+interface OgpData {
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+}
+
+/** link_previewsテーブルの行 */
+interface LinkPreviewRow {
+  id: string;
+  message_id: string;
+  url: string;
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+  created_at: Date;
+}
 
 /**
  * Extract URLs from message text
  */
-function extractUrls(text) {
+export function extractUrls(text: string | null | undefined): string[] {
   if (!text) return [];
   return text.match(URL_REGEX) || [];
 }
@@ -15,7 +34,7 @@ function extractUrls(text) {
 /**
  * Fetch OGP metadata from a URL
  */
-async function fetchOgp(url) {
+export async function fetchOgp(url: string): Promise<OgpData | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -49,7 +68,7 @@ async function fetchOgp(url) {
 
     return { title, description, image_url };
   } catch (err) {
-    logger.error('OGP fetch error:', url, err.message);
+    logger.error('OGP fetch error:', url, err instanceof Error ? err.message : String(err));
     return null;
   }
 }
@@ -57,7 +76,7 @@ async function fetchOgp(url) {
 /**
  * Process link previews for a message (async, non-blocking)
  */
-async function processLinkPreviews(messageId, text, io, roomId) {
+export async function processLinkPreviews(messageId: string, text: string | null | undefined, io: Server | null | undefined, roomId: string): Promise<void> {
   const urls = extractUrls(text);
   if (urls.length === 0) return;
 
@@ -68,7 +87,7 @@ async function processLinkPreviews(messageId, text, io, roomId) {
     const ogp = await fetchOgp(url);
     if (!ogp) return;
 
-    const result = await pool.query(
+    const result = await pool.query<LinkPreviewRow>(
       `INSERT INTO link_previews (message_id, url, title, description, image_url)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
@@ -85,5 +104,3 @@ async function processLinkPreviews(messageId, text, io, roomId) {
     logger.error('Link preview error:', err);
   }
 }
-
-module.exports = { extractUrls, fetchOgp, processLinkPreviews };

@@ -15,40 +15,47 @@
  *
  * @module services/lineGroupCatalog
  */
-const fs = require('fs');
-const path = require('path');
-const { logger } = require('../utils/logger.mts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger } from '../utils/logger.mts';
+import type { FetchLike } from './lineBridge.mts';
 
-const DEFAULT_CATALOG_FILE = path.join(__dirname, '../../config/line-groups.json');
-const LINE_GROUP_SUMMARY_BASE = 'https://api.line.me/v2/bot/group';
-const MAX_SNIPPET_CHARS = 100;
+export const DEFAULT_CATALOG_FILE = path.join(import.meta.dirname, '../../config/line-groups.json');
+export const LINE_GROUP_SUMMARY_BASE = 'https://api.line.me/v2/bot/group';
+export const MAX_SNIPPET_CHARS = 100;
+
+/** catalog file 全体 (= entry のほか _comment 等 meta key も混在するので値は unknown) */
+export type CatalogFile = Record<string, unknown>;
+
+/** group catalog の 1 entry */
+export interface GroupCatalogEntry {
+  name: string | null;
+  last_seen_at: string;
+  last_sender: string | null;
+  last_message_snippet: string | null;
+  first_seen_at: string;
+}
 
 /**
  * catalog file を読む (= 存在しない場合は空 object)
- *
- * @param {string} filePath
- * @returns {Object}
  */
-function readCatalog(filePath) {
+export function readCatalog(filePath: string): CatalogFile {
   try {
     const text = fs.readFileSync(filePath, 'utf8');
-    const raw = JSON.parse(text);
+    const raw = JSON.parse(text) as CatalogFile | null;
     // ★ _comment 等 meta key は読み取り時に保持 (= user の注記をそのまま残す)
     return raw || {};
   } catch (e) {
-    if (e.code === 'ENOENT') return {};
-    logger.warn(`[lineGroupCatalog] readCatalog failed: ${e.message}, treating as empty`);
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    logger.warn(`[lineGroupCatalog] readCatalog failed: ${e instanceof Error ? e.message : String(e)}, treating as empty`);
     return {};
   }
 }
 
 /**
  * catalog を atomic write (= temp file + rename) で書き出す
- *
- * @param {string} filePath
- * @param {Object} catalog
  */
-function writeCatalogAtomic(filePath, catalog) {
+export function writeCatalogAtomic(filePath: string, catalog: CatalogFile): void {
   const dir = path.dirname(filePath);
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -64,13 +71,13 @@ function writeCatalogAtomic(filePath, catalog) {
 /**
  * LINE API GET /v2/bot/group/{groupId}/summary で group name fetch
  *
- * @param {string} groupId
- * @param {string} accessToken
- * @param {Object} [options]
- * @param {Function} [options.fetchImpl] - test 用
- * @returns {Promise<{ groupName: string, pictureUrl: string|null }>}
+ * @param options.fetchImpl - test 用
  */
-async function fetchGroupSummary(groupId, accessToken, options = {}) {
+export async function fetchGroupSummary(
+  groupId: string,
+  accessToken: string,
+  options: { fetchImpl?: FetchLike } = {}
+): Promise<{ groupName: string | null; pictureUrl: string | null }> {
   if (!groupId) throw new Error('groupId is required');
   if (!accessToken) throw new Error('accessToken is required');
   const fetchImpl = options.fetchImpl || globalThis.fetch;
@@ -84,25 +91,25 @@ async function fetchGroupSummary(groupId, accessToken, options = {}) {
   if (!response.ok) {
     throw new Error(`LINE getGroupSummary responded ${response.status} ${response.statusText}`);
   }
-  const data = await response.json();
+  const data = await response.json() as { groupName?: string; pictureUrl?: string };
   return { groupName: data.groupName || null, pictureUrl: data.pictureUrl || null };
 }
 
 /**
  * catalog entry を upsert (= name 既取得 group は API call skip)
  *
- * @param {string} groupId
- * @param {Object} eventContext
- * @param {string} [eventContext.sender] - 送信者名 / userId
- * @param {string} [eventContext.snippet] - message text snippet (= 100 char に truncate)
- * @param {string} [eventContext.timestamp] - ISO timestamp (= default 現在時刻)
- * @param {Object} [options]
- * @param {string} [options.filePath] - file path override
- * @param {string} [options.accessToken] - env LINE_CHANNEL_ACCESS_TOKEN override
- * @param {Function} [options.fetchImpl] - test 用
- * @returns {Promise<{ updated: boolean, fetchedName: boolean }>}
+ * @param eventContext.sender - 送信者名 / userId
+ * @param eventContext.snippet - message text snippet (= 100 char に truncate)
+ * @param eventContext.timestamp - ISO timestamp (= default 現在時刻)
+ * @param options.filePath - file path override
+ * @param options.accessToken - env LINE_CHANNEL_ACCESS_TOKEN override
+ * @param options.fetchImpl - test 用
  */
-async function upsertGroupEntry(groupId, eventContext = {}, options = {}) {
+export async function upsertGroupEntry(
+  groupId: string,
+  eventContext: { sender?: string; snippet?: string; timestamp?: string } = {},
+  options: { filePath?: string; accessToken?: string; fetchImpl?: FetchLike } = {}
+): Promise<{ updated: boolean; fetchedName: boolean }> {
   if (!groupId) throw new Error('groupId is required');
 
   const filePath = options.filePath || process.env.LINE_GROUP_CATALOG_FILE || DEFAULT_CATALOG_FILE;
@@ -110,18 +117,18 @@ async function upsertGroupEntry(groupId, eventContext = {}, options = {}) {
   const timestamp = eventContext.timestamp || new Date().toISOString();
 
   const catalog = readCatalog(filePath);
-  const existing = catalog[groupId] || {};
+  const existing = (catalog[groupId] || {}) as Partial<GroupCatalogEntry>;
 
   // name 未取得時のみ LINE API call (= rate limit 配慮)
   let fetchedName = false;
-  let name = existing.name || null;
+  let name: string | null = existing.name || null;
   if (!name && accessToken) {
     try {
       const summary = await fetchGroupSummary(groupId, accessToken, { fetchImpl: options.fetchImpl });
       name = summary.groupName;
       fetchedName = true;
     } catch (e) {
-      logger.warn(`[lineGroupCatalog] fetchGroupSummary failed for ${groupId}: ${e.message}`);
+      logger.warn(`[lineGroupCatalog] fetchGroupSummary failed for ${groupId}: ${e instanceof Error ? e.message : String(e)}`);
       // name は null のまま、★ 次回 webhook で再 try
     }
   }
@@ -130,7 +137,7 @@ async function upsertGroupEntry(groupId, eventContext = {}, options = {}) {
     ? String(eventContext.snippet).slice(0, MAX_SNIPPET_CHARS)
     : (existing.last_message_snippet || null);
 
-  const entry = {
+  const entry: GroupCatalogEntry = {
     name: name || existing.name || null,
     last_seen_at: timestamp,
     last_sender: eventContext.sender || existing.last_sender || null,
@@ -144,7 +151,7 @@ async function upsertGroupEntry(groupId, eventContext = {}, options = {}) {
     writeCatalogAtomic(filePath, catalog);
     return { updated: true, fetchedName };
   } catch (e) {
-    logger.warn(`[lineGroupCatalog] writeCatalogAtomic failed: ${e.message}`);
+    logger.warn(`[lineGroupCatalog] writeCatalogAtomic failed: ${e instanceof Error ? e.message : String(e)}`);
     return { updated: false, fetchedName };
   }
 }
@@ -152,25 +159,15 @@ async function upsertGroupEntry(groupId, eventContext = {}, options = {}) {
 /**
  * cache 済 group name を読む (= #309 案A、sender label の「@グループ名」用)
  *
- * @param {string} groupId
- * @param {Object} [options]
- * @param {string} [options.filePath] - file path override
- * @returns {string|null} group name (= 未取得 / 未収集は null)
+ * @param options.filePath - file path override
+ * @returns group name (= 未取得 / 未収集は null)
  */
-function readGroupName(groupId, options = {}) {
+export function readGroupName(
+  groupId: string | null | undefined,
+  options: { filePath?: string } = {}
+): string | null {
   if (!groupId) return null;
   const filePath = options.filePath || process.env.LINE_GROUP_CATALOG_FILE || DEFAULT_CATALOG_FILE;
-  const entry = readCatalog(filePath)[groupId];
+  const entry = readCatalog(filePath)[groupId] as Partial<GroupCatalogEntry> | undefined;
   return (entry && entry.name) || null;
 }
-
-module.exports = {
-  readCatalog,
-  writeCatalogAtomic,
-  fetchGroupSummary,
-  upsertGroupEntry,
-  readGroupName,
-  DEFAULT_CATALOG_FILE,
-  LINE_GROUP_SUMMARY_BASE,
-  MAX_SNIPPET_CHARS,
-};

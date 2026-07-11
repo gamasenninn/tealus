@@ -1,5 +1,5 @@
-const fs = require('fs');
-const { logger: defaultLogger } = require('../utils/logger.mts');
+import fs from 'node:fs';
+import { logger as defaultLogger } from '../utils/logger.mts';
 
 /**
  * STT backend strategy (#自ホストSTT)
@@ -16,13 +16,13 @@ const { logger: defaultLogger } = require('../utils/logger.mts');
  * DB 非依存・グローバル state なし (test isolation は依存注入で担保)。
  */
 
-const CONTENT_TYPE = {
+const CONTENT_TYPE: Record<string, string> = {
   mp3: 'audio/mpeg',
   mp4: 'audio/mp4',
   ogg: 'audio/ogg',
 };
 
-function contentTypeFor(ext) {
+export function contentTypeFor(ext: string): string {
   return CONTENT_TYPE[ext] || `audio/${ext}`;
 }
 
@@ -34,25 +34,58 @@ function contentTypeFor(ext) {
 // Cyrillic Ѐ-ԯ / Arabic+Syriac ؀-ݏ / Devanagari ऀ-ॿ /
 // Thai ฀-๿ / Hangul syllables 가-힯
 const FOREIGN_SCRIPT_RE = /[Ѐ-ԯ؀-ݏऀ-ॿ฀-๿가-힯]/;
-function looksLikeForeignScript(text) {
+export function looksLikeForeignScript(text: unknown): boolean {
   return typeof text === 'string' && FOREIGN_SCRIPT_RE.test(text);
 }
 
+/** log 注入用の最小 logger 形 (既定は winston logger、テストで差し替え可) */
+interface SttLogger {
+  warn: (message: string) => unknown;
+  error: (message: string) => unknown;
+}
+
+/** openaiClient 注入用の最小 OpenAI client 形 (openai.audio.transcriptions.create) */
+export interface OpenAIAudioClient {
+  audio: {
+    transcriptions: {
+      create(params: {
+        file: File;
+        model: string;
+        language: string;
+        prompt?: string;
+      }): Promise<{ text?: string | null }>;
+    };
+  };
+}
+
+export interface TranscribeAudioParams {
+  /** 変換済み音声ファイルの絶対 path (worker/openai 双方が使う) */
+  inputPath: string;
+  /** 拡張子 (content-type 判定用) */
+  ext: string;
+  /** openai backend の prompt (bias)。空なら渡さない */
+  whisperPrompt: string | null;
+  /** openai model 名 (WHISPER_MODEL) */
+  model: string;
+  /** local backend の固有名詞 glossary (system prompt biasing) */
+  glossary?: string;
+  /** OpenAI SDK instance (openai.audio.transcriptions.create) */
+  openaiClient: OpenAIAudioClient;
+  /**
+   * backend override ('openai'|'local')。未指定なら STT_BACKEND env を読む
+   * (TRANSCRIPTION_MODE=organon が STT を local に束ねるため)
+   */
+  backend?: string;
+  /** local backend の HTTP (test で注入)。default globalThis.fetch */
+  fetchImpl?: typeof globalThis.fetch;
+  /** default logger */
+  log?: SttLogger;
+}
+
 /**
- * @param {object} p
- * @param {string} p.inputPath   - 変換済み音声ファイルの絶対 path (worker/openai 双方が使う)
- * @param {string} p.ext         - 拡張子 (content-type 判定用)
- * @param {string} p.whisperPrompt - openai backend の prompt (bias)。空なら渡さない
- * @param {string} p.model       - openai model 名 (WHISPER_MODEL)
- * @param {string} [p.glossary]  - local backend の固有名詞 glossary (system prompt biasing)
- * @param {object} p.openaiClient - OpenAI SDK instance (openai.audio.transcriptions.create)
- * @param {string} [p.backend]   - backend override ('openai'|'local')。未指定なら STT_BACKEND env を読む
- *                                 (TRANSCRIPTION_MODE=organon が STT を local に束ねるため)
- * @param {function} [p.fetchImpl=globalThis.fetch] - local backend の HTTP (test で注入)
- * @param {object} [p.log=logger]
- * @returns {Promise<string>} raw text
+ * @returns raw text
  */
-async function transcribeAudio({
+export async function transcribeAudio({
   inputPath,
   ext,
   whisperPrompt,
@@ -62,7 +95,7 @@ async function transcribeAudio({
   backend,
   fetchImpl = globalThis.fetch,
   log = defaultLogger,
-}) {
+}: TranscribeAudioParams): Promise<string> {
   const effectiveBackend = (backend || process.env.STT_BACKEND || 'openai').toLowerCase();
 
   if (effectiveBackend === 'local') {
@@ -73,12 +106,13 @@ async function transcribeAudio({
       }
       return text;
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       const strict = !!process.env.STT_LOCAL_STRICT && process.env.STT_LOCAL_STRICT !== '0';
       if (strict) {
-        log.error(`[stt] local backend failed (STT_LOCAL_STRICT): ${err.message}`);
+        log.error(`[stt] local backend failed (STT_LOCAL_STRICT): ${message}`);
         throw err;
       }
-      log.warn(`[stt] local backend failed, falling back to openai: ${err.message}`);
+      log.warn(`[stt] local backend failed, falling back to openai: ${message}`);
       // fall through to openai
     }
   }
@@ -86,7 +120,11 @@ async function transcribeAudio({
   return transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiClient });
 }
 
-async function transcribeLocal({ inputPath, glossary, fetchImpl }) {
+async function transcribeLocal({ inputPath, glossary, fetchImpl }: {
+  inputPath: string;
+  glossary?: string;
+  fetchImpl: typeof globalThis.fetch;
+}): Promise<string> {
   const url = process.env.QWEN_WORKER_URL || 'http://127.0.0.1:8123/transcribe';
   const timeoutMs = Number(process.env.STT_LOCAL_TIMEOUT_MS || 60000);
 
@@ -102,7 +140,7 @@ async function transcribeLocal({ inputPath, glossary, fetchImpl }) {
     if (!res.ok) {
       throw new Error(`worker HTTP ${res.status}`);
     }
-    const data = await res.json();
+    const data = (await res.json()) as { text?: unknown; error?: unknown } | null;
     if (data == null || typeof data.text !== 'string') {
       throw new Error(`worker returned no text (${data && data.error ? data.error : 'malformed'})`);
     }
@@ -112,7 +150,13 @@ async function transcribeLocal({ inputPath, glossary, fetchImpl }) {
   }
 }
 
-async function transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiClient }) {
+async function transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiClient }: {
+  inputPath: string;
+  ext: string;
+  whisperPrompt: string | null;
+  model: string;
+  openaiClient: OpenAIAudioClient;
+}): Promise<string> {
   const fileBuffer = fs.readFileSync(inputPath);
   const file = new File([fileBuffer], `audio.${ext}`, { type: contentTypeFor(ext) });
   const transcription = await openaiClient.audio.transcriptions.create({
@@ -123,5 +167,3 @@ async function transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiCl
   });
   return transcription.text || '';
 }
-
-module.exports = { transcribeAudio, contentTypeFor, looksLikeForeignScript };

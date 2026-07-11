@@ -10,18 +10,36 @@
  *
  * @module services/lineBridge
  */
-const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
 
-const LINE_CONTENT_API_BASE = 'https://api-data.line.me/v2/bot/message';
-const LINE_STICKER_CDN_BASE = 'https://stickershop.line-scdn.net/stickershop/v1/sticker';
+export const LINE_CONTENT_API_BASE = 'https://api-data.line.me/v2/bot/message';
+export const LINE_STICKER_CDN_BASE = 'https://stickershop.line-scdn.net/stickershop/v1/sticker';
+
+/** test 用 fetch mock を差し込める fetch 型 (= default global fetch) */
+export type FetchLike = typeof globalThis.fetch;
+
+/** fetchLineContent / fetchLineStickerImage の return value */
+export interface LineContentResult {
+  buffer: Buffer;
+  mimeType: string;
+}
+
+/** saveLineContentToFile の return value */
+export interface SavedLineContent {
+  filePath: string;
+  relativePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
 
 /**
  * MIME type → file extension の最小 mapping
  * (= LINE が返す典型的 MIME のみ、不明 type は 'bin')
  */
-const MIME_TO_EXT = {
+const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/gif': '.gif',
@@ -34,7 +52,7 @@ const MIME_TO_EXT = {
   'video/mp4': '.mp4',
 };
 
-function extensionForMime(mimeType) {
+export function extensionForMime(mimeType: string | null | undefined): string {
   if (!mimeType) return '.bin';
   const lower = mimeType.split(';')[0].trim().toLowerCase();
   return MIME_TO_EXT[lower] || '.bin';
@@ -43,14 +61,16 @@ function extensionForMime(mimeType) {
 /**
  * LINE Content API から binary を fetch
  *
- * @param {string} messageId - LINE webhook event の message.id
- * @param {string} accessToken - LINE channel access token
- * @param {Object} [options]
- * @param {Function} [options.fetchImpl] - test 用 fetch mock (= default global fetch)
- * @returns {Promise<{ buffer: Buffer, mimeType: string }>}
+ * @param messageId - LINE webhook event の message.id
+ * @param accessToken - LINE channel access token
+ * @param options.fetchImpl - test 用 fetch mock (= default global fetch)
  * @throws Error - response not ok, network error 等
  */
-async function fetchLineContent(messageId, accessToken, options = {}) {
+export async function fetchLineContent(
+  messageId: string,
+  accessToken: string,
+  options: { fetchImpl?: FetchLike } = {}
+): Promise<LineContentResult> {
   if (!messageId) throw new Error('messageId is required');
   if (!accessToken) throw new Error('accessToken is required');
 
@@ -77,17 +97,20 @@ async function fetchLineContent(messageId, accessToken, options = {}) {
 /**
  * LINE content buffer を local file に保存
  *
- * @param {Buffer} buffer - fetchLineContent 結果の buffer
- * @param {string} mimeType - fetchLineContent 結果の mimeType
- * @param {string} baseDir - 保存先 directory (= 既存 media/ 配下推奨)
- * @param {Object} [options]
- * @param {string} [options.subdir] - subdirectory (= e.g. 'line-images', 'line-voices')
- * @param {string} [options.originalFileName] - user が LINE で送った元ファイル名 (= type=file 時の webhook message.fileName)
+ * @param buffer - fetchLineContent 結果の buffer
+ * @param mimeType - fetchLineContent 結果の mimeType
+ * @param baseDir - 保存先 directory (= 既存 media/ 配下推奨)
+ * @param options.subdir - subdirectory (= e.g. 'line-images', 'line-voices')
+ * @param options.originalFileName - user が LINE で送った元ファイル名 (= type=file 時の webhook message.fileName)
  *   - 指定時: display 名 (= 返却 fileName) は原名、physical 拡張子は原名拡張子優先 → MIME 推測の順
  *   - 未指定時: display 名 = physical 名 = `${timestamp}-${random}${MIME 拡張子}`
- * @returns {Promise<{ filePath: string, relativePath: string, fileName: string, fileSize: number, mimeType: string }>}
  */
-async function saveLineContentToFile(buffer, mimeType, baseDir, options = {}) {
+export async function saveLineContentToFile(
+  buffer: Buffer,
+  mimeType: string,
+  baseDir: string,
+  options: { subdir?: string; originalFileName?: string } = {}
+): Promise<SavedLineContent> {
   if (!Buffer.isBuffer(buffer)) throw new Error('buffer must be Buffer');
   if (!baseDir) throw new Error('baseDir is required');
 
@@ -128,13 +151,14 @@ async function saveLineContentToFile(buffer, mimeType, baseDir, options = {}) {
  * sticker は ★ ★ ★ 公式 sticker shop CDN から直接 fetch する別仕様 (= LINE Messaging API doc)。
  * webhook event の stickerId を URL に組み立てて PNG 取得。
  *
- * @param {string|number} stickerId - LINE webhook event の message.stickerId
- * @param {Object} [options]
- * @param {Function} [options.fetchImpl] - test 用 fetch mock (= default global fetch)
- * @returns {Promise<{ buffer: Buffer, mimeType: string }>}
+ * @param stickerId - LINE webhook event の message.stickerId
+ * @param options.fetchImpl - test 用 fetch mock (= default global fetch)
  * @throws Error - response not ok 等
  */
-async function fetchLineStickerImage(stickerId, options = {}) {
+export async function fetchLineStickerImage(
+  stickerId: string | number | null | undefined,
+  options: { fetchImpl?: FetchLike } = {}
+): Promise<LineContentResult> {
   if (stickerId === null || stickerId === undefined || stickerId === '') {
     throw new Error('stickerId is required');
   }
@@ -153,12 +177,3 @@ async function fetchLineStickerImage(stickerId, options = {}) {
   const buffer = Buffer.from(arrayBuffer);
   return { buffer, mimeType: 'image/png' };
 }
-
-module.exports = {
-  fetchLineContent,
-  fetchLineStickerImage,
-  saveLineContentToFile,
-  extensionForMime,
-  LINE_CONTENT_API_BASE,
-  LINE_STICKER_CDN_BASE,
-};

@@ -1,25 +1,42 @@
-const fs = require('fs');
-const path = require('path');
-const { logger } = require('../utils/logger.mts');
-const dictionaryRepo = require('./dictionaryRepo');
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger } from '../utils/logger.mts';
+import * as dictionaryRepo from './dictionaryRepo.mts';
+
+/** guideline の vocabulary 1 エントリ (file JSON / テーブルオーバーレイ共通の形) */
+export interface VocabularyEntry {
+  term: string;
+  category?: string;
+  aliases?: string[];
+  reading?: string | null;
+  description?: string | null;
+}
+
+/** transcription_guideline.json / loadGuideline() の形 */
+export interface TranscriptionGuideline {
+  version: number;
+  whisper_context: string;
+  vocabulary: VocabularyEntry[];
+  guidelines: string[];
+}
 
 const CONFIG_PATH = process.env.TRANSCRIPTION_GUIDELINE_PATH
-  || path.join(__dirname, '../../config/transcription_guideline.json');
+  || path.join(import.meta.dirname, '../../config/transcription_guideline.json');
 
-const EMPTY = { version: 1, whisper_context: '', vocabulary: [], guidelines: [] };
+const EMPTY: TranscriptionGuideline = { version: 1, whisper_context: '', vocabulary: [], guidelines: [] };
 
-let cached = null;
+let cached: TranscriptionGuideline | null = null;
 // #286 follow-up: ファイル mtime を保持し、変化時のみ再読込 (= admin token / reload endpoint
 // なしでファイル更新を自動反映。7 日ごとの JWT 失効 + curl 不可の運用摩擦を構造的に解消)。
-let cachedMtimeMs = null;
+let cachedMtimeMs: number | null = null;
 
 // #327: 実行時 source of truth は dictionary テーブル。ただし loadGuideline() は同期契約
 // (buildSystemPrompt 等の同期関数から呼ばれる) なので、テーブル vocab は「非同期で更新する
 // in-memory オーバーレイ」で持つ。null / 空 のときは file の vocabulary にフォールバック
 // (= 未 seed / DB 不達でも従来どおり動く非破壊)。whisper_context / guidelines は file 継続。
-let tableVocab = null;
+let tableVocab: VocabularyEntry[] | null = null;
 
-function loadFileGuideline() {
+function loadFileGuideline(): TranscriptionGuideline {
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       cached = EMPTY;
@@ -31,7 +48,7 @@ function loadFileGuideline() {
     if (cached && cachedMtimeMs === mtimeMs) return cached;
 
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Partial<TranscriptionGuideline>;
     cached = {
       version: parsed.version || 1,
       whisper_context: typeof parsed.whisper_context === 'string' ? parsed.whisper_context : '',
@@ -42,14 +59,14 @@ function loadFileGuideline() {
     logger.info(`Loaded transcription guideline: ${cached.vocabulary.length} vocab, ${cached.guidelines.length} rules`);
     return cached;
   } catch (err) {
-    logger.error('Failed to load transcription guideline, using empty:', err.message);
+    logger.error('Failed to load transcription guideline, using empty:', err instanceof Error ? err.message : String(err));
     cached = EMPTY;
     cachedMtimeMs = null;
     return cached;
   }
 }
 
-function resetCache() {
+export function resetCache(): void {
   cached = null;
   cachedMtimeMs = null;
 }
@@ -58,9 +75,9 @@ function resetCache() {
  * #327: dictionary テーブルの active vocabulary を in-memory オーバーレイに読み込む (非同期)。
  * 起動時・admin reload・辞書書込 (hook/UI/import) 後に呼ぶ。テーブルが空 / DB 不達なら
  * tableVocab を null に落とし、loadGuideline() は file にフォールバックする (非破壊)。
- * @returns {Promise<number>} オーバーレイに載った term 数 (0 = file フォールバック)
+ * @returns オーバーレイに載った term 数 (0 = file フォールバック)
  */
-async function refreshVocabFromTable() {
+export async function refreshVocabFromTable(): Promise<number> {
   try {
     const rows = await dictionaryRepo.listActiveVocabulary();
     if (Array.isArray(rows) && rows.length) {
@@ -80,7 +97,7 @@ async function refreshVocabFromTable() {
     return 0;
   } catch (err) {
     tableVocab = null; // DB 不達 → file フォールバック (非破壊)
-    logger.warn(`[dictionary] table vocab refresh failed, falling back to file: ${err.message}`);
+    logger.warn(`[dictionary] table vocab refresh failed, falling back to file: ${err instanceof Error ? err.message : String(err)}`);
     return 0;
   }
 }
@@ -89,7 +106,7 @@ async function refreshVocabFromTable() {
  * 整形/文字起こしが参照する guideline。whisper_context / guidelines は file、vocabulary は
  * テーブルオーバーレイ (あれば) → 無ければ file。同期契約を維持 (呼び出し側は同期のまま)。
  */
-function loadGuideline() {
+export function loadGuideline(): TranscriptionGuideline {
   const fileConfig = loadFileGuideline();
   if (tableVocab && tableVocab.length) {
     return { ...fileConfig, vocabulary: tableVocab };
@@ -97,7 +114,7 @@ function loadGuideline() {
   return fileConfig;
 }
 
-function buildWhisperPrompt(config, model = null) {
+export function buildWhisperPrompt(config: TranscriptionGuideline, model: string | null = null): string | null {
   // Whisper の prompt parameter は style/spelling bias であって辞書ではない。
   // vocabulary を強く渡すと隣接音が歪む (例: 「ビレッジ側」→「ビレッジガン」)、
   // この特性は **model 依存** で、whisper-1 / gpt-4o-transcribe では bias 観測されたが、
@@ -144,11 +161,11 @@ function buildWhisperPrompt(config, model = null) {
   return prompt.length > MAX_CHARS ? prompt.slice(0, MAX_CHARS) : prompt;
 }
 
-function buildFormattingExtension(config) {
+export function buildFormattingExtension(config: TranscriptionGuideline): string {
   const { vocabulary, guidelines } = config;
   if (!vocabulary.length && !guidelines.length) return '';
 
-  const lines = [];
+  const lines: string[] = [];
   if (vocabulary.length) {
     lines.push('');
     lines.push('組織固有語彙 (正規表記、転写ブレがあれば置き換える):');
@@ -182,13 +199,13 @@ function buildFormattingExtension(config) {
  * - glossary の soft-bias は非対象 span へ bleed する副作用があるため (memory 既知)、
  *   STT_GLOSSARY_MAX_TERMS で語数上限を掛けられる (default 無制限)。
  *
- * @param {object} config - loadGuideline() の戻り (vocabulary を参照)
- * @returns {string} glossary (空なら '')
+ * @param config - loadGuideline() の戻り (vocabulary を参照)
+ * @returns glossary (空なら '')
  */
-function buildGlossary(config) {
+export function buildGlossary(config: TranscriptionGuideline | null | undefined): string {
   const vocabulary = (config && Array.isArray(config.vocabulary)) ? config.vocabulary : [];
-  const seen = new Set();
-  const terms = [];
+  const seen = new Set<string>();
+  const terms: string[] = [];
   for (const v of vocabulary) {
     const term = v && typeof v.term === 'string' ? v.term.trim() : '';
     if (!term || seen.has(term)) continue;
@@ -211,11 +228,10 @@ function buildGlossary(config) {
  * 検出: rawText が whisperPrompt 全体、または whisperPrompt の冒頭 (whisper_context 部分)
  * と完全一致する場合、prompt hallucination と判定。
  *
- * @param {string} rawText - Whisper API の出力
- * @param {string|null} whisperPrompt - Whisper に渡した prompt
- * @returns {boolean}
+ * @param rawText - Whisper API の出力
+ * @param whisperPrompt - Whisper に渡した prompt
  */
-function isWhisperPromptHallucination(rawText, whisperPrompt) {
+export function isWhisperPromptHallucination(rawText: string | null | undefined, whisperPrompt: string | null | undefined): boolean {
   if (!rawText || !whisperPrompt) return false;
   const raw = rawText.trim();
   const prompt = whisperPrompt.trim();
@@ -235,14 +251,14 @@ function isWhisperPromptHallucination(rawText, whisperPrompt) {
  * 「空文字」「空文字列」「(空)」等のメタ description を返してしまう挙動が観測された。
  * これを検出して raw_text に fallback する。
  */
-const META_EMPTY_LITERALS = [
+export const META_EMPTY_LITERALS: string[] = [
   '空文字', '空文字列', '空白', '空',
   '(空)', '（空）', '(空文字)', '（空文字）',
   '内容なし', '内容無し', '無音', '(無音)', '（無音）',
   '(none)', 'none', 'null', 'empty',
 ];
 
-function isMetaEmptyLiteral(text) {
+export function isMetaEmptyLiteral(text: string | null | undefined): boolean {
   if (!text) return false;
   const trimmed = text.trim();
   return META_EMPTY_LITERALS.includes(trimmed);
@@ -255,14 +271,12 @@ function isMetaEmptyLiteral(text) {
  *   organon       : Qwen生(local, 障害時 openai へ fail-open) + vocab-inject 無し + organon 補正段。
  *
  * 未設定 / 未知値は安全側で legacy にフォールバック。
- *
- * @param {object} [env=process.env]
- * @returns {'legacy'|'organon'}
  */
-const TRANSCRIPTION_MODES = ['legacy', 'organon'];
-function getTranscriptionMode(env = process.env) {
+export type TranscriptionMode = 'legacy' | 'organon';
+const TRANSCRIPTION_MODES: readonly string[] = ['legacy', 'organon'];
+export function getTranscriptionMode(env: NodeJS.ProcessEnv = process.env): TranscriptionMode {
   const raw = env && env.TRANSCRIPTION_MODE ? String(env.TRANSCRIPTION_MODE).trim().toLowerCase() : '';
-  return TRANSCRIPTION_MODES.includes(raw) ? raw : 'legacy';
+  return TRANSCRIPTION_MODES.includes(raw) ? (raw as TranscriptionMode) : 'legacy';
 }
 
 /**
@@ -271,7 +285,7 @@ function getTranscriptionMode(env = process.env) {
  *   organon : ORGANON_AI_MODEL (既定 gpt-5.4-mini)。gpt-4o-mini の stochastic 天井
  *             (整理室長→整備長 / 田中勤寿 flicker) を上位 mini で堅牢化 (4/5、しかも現行より速い)。
  */
-function getCorrectionModel(mode, env = process.env) {
+export function getCorrectionModel(mode: string, env: NodeJS.ProcessEnv = process.env): string {
   if (mode === 'organon') return (env && env.ORGANON_AI_MODEL) || 'gpt-5.4-mini';
   return (env && env.AI_MODEL) || 'gpt-4o-mini';
 }
@@ -281,7 +295,7 @@ function getCorrectionModel(mode, env = process.env) {
  * 新世代 (gpt-5* / o*) は max_completion_tokens 必須・temperature 非対応 (default のみ)。
  * 旧世代 (gpt-4o* / gpt-4.1*) は従来どおり temperature + max_tokens = 現行互換。
  */
-function completionParams(model) {
+export function completionParams(model: string | null | undefined): { max_completion_tokens: number } | { temperature: number; max_tokens: number } {
   const newGen = /^(gpt-5|o\d)/.test(model || '');
   return newGen ? { max_completion_tokens: 4000 } : { temperature: 0.3, max_tokens: 1000 };
 }
@@ -297,10 +311,10 @@ function completionParams(model) {
  * 汎用語 (category='term': お客様/売上 等) は distractor になるので知識ブロックから除外し、
  * 固有名詞カテゴリ (person/organization/vendor/place/product/role) のみを載せる。
  *
- * @param {object} config - loadGuideline() の戻り (vocabulary を参照)
- * @returns {string} system prompt (vocab 空でも base 補正 prompt を返す)
+ * @param config - loadGuideline() の戻り (vocabulary を参照)
+ * @returns system prompt (vocab 空でも base 補正 prompt を返す)
  */
-const CORRECTION_CATEGORIES = ['person', 'organization', 'vendor', 'place', 'product', 'role'];
+const CORRECTION_CATEGORIES: string[] = ['person', 'organization', 'vendor', 'place', 'product', 'role'];
 const ORGANON_CORRECTION_BASE = `あなたは業務用トランシーバー等の音声認識(生テキスト)を整形し、組織の固有名詞を文脈から正しい表記に直すアシスタントです。
 以下のルールに従ってください：
 - 意味を変えず読みやすく整える。句読点を補い、フィラー(えーと、あのー等)を除去する。
@@ -311,14 +325,14 @@ const ORGANON_CORRECTION_BASE = `あなたは業務用トランシーバー等�
 - 整形後のテキストのみを返す。説明や注釈は不要。質問文はそのまま質問文として整形する(質問に回答しない)。
 - **絶対禁止**: 空文字やメタ表現(「空文字」「内容なし」「無音」「empty」「null」「none」等)を返さない。content があれば必ず整形して返す。`;
 
-function buildOrganonCorrectionPrompt(config) {
+export function buildOrganonCorrectionPrompt(config: TranscriptionGuideline | null | undefined): string {
   const vocabulary = (config && Array.isArray(config.vocabulary)) ? config.vocabulary : [];
-  const seen = new Set();
-  const lines = [];
+  const seen = new Set<string>();
+  const lines: string[] = [];
   for (const v of vocabulary) {
     const term = v && typeof v.term === 'string' ? v.term.trim() : '';
     if (!term || seen.has(term)) continue;
-    if (!CORRECTION_CATEGORIES.includes(v && v.category)) continue; // 汎用 term 等は除外
+    if (!v.category || !CORRECTION_CATEGORIES.includes(v.category)) continue; // 汎用 term 等は除外
     seen.add(term);
     let line = `- [${v.category}] ${term}`;
     if (Array.isArray(v.aliases) && v.aliases.length) {
@@ -335,19 +349,3 @@ function buildOrganonCorrectionPrompt(config) {
   if (!lines.length) return ORGANON_CORRECTION_BASE;
   return `${ORGANON_CORRECTION_BASE}\n\n# 組織固有名詞リスト\n${lines.join('\n')}`;
 }
-
-module.exports = {
-  loadGuideline,
-  resetCache,
-  refreshVocabFromTable,
-  buildWhisperPrompt,
-  buildGlossary,
-  buildFormattingExtension,
-  isWhisperPromptHallucination,
-  isMetaEmptyLiteral,
-  META_EMPTY_LITERALS,
-  getTranscriptionMode,
-  buildOrganonCorrectionPrompt,
-  getCorrectionModel,
-  completionParams,
-};

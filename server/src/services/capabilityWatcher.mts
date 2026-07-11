@@ -11,7 +11,12 @@
  *
  * /api/config からは getState() で現在値が読める。
  */
-const { logger } = require('../utils/logger.mts');
+import { logger } from '../utils/logger.mts';
+
+/** emit だけ使う最小の Socket.IO server 型 (テストの mock も満たせる構造的型) */
+interface EmitTarget {
+  emit(event: string, ...args: unknown[]): unknown;
+}
 
 const FLAP_THRESHOLD = 2;
 const PING_TIMEOUT_MS = 2000;
@@ -19,10 +24,10 @@ const DEFAULT_INTERVAL_MS = 30_000;
 
 let _state = false;
 let _consecutiveFailures = 0;
-let _io = null;
-let _timer = null;
+let _io: EmitTarget | null = null;
+let _timer: NodeJS.Timeout | null = null;
 
-async function ping() {
+async function ping(): Promise<boolean> {
   const port = process.env.RTC_PORT || 3100;
   try {
     const ctrl = new AbortController();
@@ -35,7 +40,7 @@ async function ping() {
   }
 }
 
-async function checkAndEmit() {
+export async function checkAndEmit(): Promise<void> {
   const ok = await ping();
   _consecutiveFailures = ok ? 0 : _consecutiveFailures + 1;
 
@@ -59,7 +64,7 @@ async function checkAndEmit() {
  * Watcher を起動する。Socket.IO の `io` を渡すと状態変化時に emit する。
  * 初回 ping を即実行し、以降は定期 poll。
  */
-function start(io) {
+export function start(io: EmitTarget): void {
   _io = io;
   checkAndEmit();
   const interval = parseInt(process.env.RTC_HEALTH_INTERVAL || String(DEFAULT_INTERVAL_MS), 10);
@@ -69,7 +74,7 @@ function start(io) {
 /**
  * Watcher を停止する (テスト時の teardown 用)。
  */
-function stop() {
+export function stop(): void {
   if (_timer) {
     clearInterval(_timer);
     _timer = null;
@@ -83,12 +88,9 @@ function stop() {
 /**
  * 現在の状態を返す。/api/config 等から呼び出す。
  */
-function getState() {
+export function getState(): boolean {
   return _state;
 }
 
-/**
- * テスト用: 内部状態を直接書き換えずに ping 経由でだけ更新するため、
- * テストでは ping を mock する想定。
- */
-module.exports = { start, stop, getState, checkAndEmit };
+// テスト用: 内部状態を直接書き換えずに ping 経由でだけ更新するため、
+// テストでは ping を mock する想定。

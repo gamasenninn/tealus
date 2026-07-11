@@ -5,7 +5,7 @@ const { pool } = require('../db/pool.mts');
 const { authenticate } = require('../middleware/auth.mts');
 const { requireMember } = require('../middleware/roomAccess.mts');
 const { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } = require('../constants/config.mts');
-const { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments');
+const { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments.mts');
 
 const router = express.Router({ mergeParams: true });
 
@@ -290,7 +290,7 @@ router.put('/:msgId', async (req, res) => {
     });
 
     // Webhook
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('message.updated', roomId, {
       room: { id: roomId },
       message: {
@@ -375,7 +375,7 @@ router.delete('/:msgId', async (req, res) => {
     io.to(roomId).emit('message:deleted', { message_id: msgId });
 
     // Webhook notification
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('message.deleted', roomId, {
       room: { id: roomId },
       message: { id: msgId, sender: { id: userId, display_name: req.user.display_name } },
@@ -440,7 +440,7 @@ router.post('/:msgId/reactions', async (req, res) => {
 
     // Webhook notification (追加時のみ)
     if (existing.rows.length === 0) {
-      const { fireWebhooks } = require('../services/webhook');
+      const { fireWebhooks } = require('../services/webhook.mts');
       fireWebhooks('reaction.added', roomId, {
         room: { id: roomId },
         message: { id: msgId },

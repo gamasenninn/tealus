@@ -80,7 +80,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req, res) => 
     io.to(roomId).emit('member:added', { room_id: roomId, user_id, display_name: addedName });
 
     // Webhook notification
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('member.joined', roomId, {
       room: { id: roomId },
       member: { id: user_id, display_name: addedName },
@@ -133,7 +133,7 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req, res)
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: userId });
 
     // Webhook notification
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('member.left', roomId, {
       room: { id: roomId },
       member: { id: userId, display_name: req.user.display_name },
@@ -189,7 +189,7 @@ router.delete('/:userId', authenticate, requireGroup, requireMember, async (req,
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: targetUserId });
 
     // Webhook notification
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('member.left', roomId, {
       room: { id: roomId },
       member: { id: targetUserId, display_name: targetName },

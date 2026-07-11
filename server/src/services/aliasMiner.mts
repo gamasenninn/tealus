@@ -7,7 +7,9 @@
  * GPT-4o-mini を呼び出して整形差を除外しつつ固有名詞ペアのみ抽出する。
  */
 
-const SYSTEM_PROMPT = `あなたは音声文字起こしの編集ペアから、組織固有語の transcription alias を抽出するアシスタントです。
+import type OpenAI from 'openai';
+
+export const SYSTEM_PROMPT = `あなたは音声文字起こしの編集ペアから、組織固有語の transcription alias を抽出するアシスタントです。
 入力として AI が生成した formatted_text と、ユーザーが訂正した formatted_text を受け取り、
 ユーザーが訂正した固有名詞・専門用語のペアを JSON 配列で返してください。
 
@@ -23,14 +25,37 @@ const SYSTEM_PROMPT = `あなたは音声文字起こしの編集ペアから、
 出力形式 (JSON のみ、説明文不要):
 [{"from":"誤転写","to":"正解","category":"person","confidence":"high"}]`;
 
-function buildPairsFromRows(rows) {
-  const grouped = new Map();
+/** voice_transcriptions の 1 バージョン行 (buildPairsFromRows の入力) */
+export interface TranscriptionVersionRow {
+  message_id: string;
+  version: number;
+  edited_by: string | null | undefined;
+  formatted_text: string | null;
+}
+
+/** AI 版と人間編集版のペア */
+export interface EditPair {
+  messageId: string;
+  aiText: string;
+  userText: string;
+}
+
+/** extractAliases が LLM 出力から取り出す alias 候補 */
+export interface ExtractedAlias {
+  from: string;
+  to: string;
+  category?: string;
+  confidence?: string;
+}
+
+export function buildPairsFromRows(rows: TranscriptionVersionRow[]): EditPair[] {
+  const grouped = new Map<string, TranscriptionVersionRow[]>();
   for (const row of rows) {
     if (!grouped.has(row.message_id)) grouped.set(row.message_id, []);
-    grouped.get(row.message_id).push(row);
+    grouped.get(row.message_id)!.push(row);
   }
 
-  const pairs = [];
+  const pairs: EditPair[] = [];
   for (const [messageId, versions] of grouped.entries()) {
     const aiVersions = versions.filter(v => v.edited_by === null || v.edited_by === undefined);
     const userVersions = versions.filter(v => v.edited_by !== null && v.edited_by !== undefined);
@@ -51,7 +76,7 @@ function buildPairsFromRows(rows) {
   return pairs;
 }
 
-async function extractAliases(pair, openai, options = {}) {
+export async function extractAliases(pair: EditPair, openai: OpenAI, options: { model?: string } = {}): Promise<ExtractedAlias[]> {
   const model = options.model || 'gpt-4o-mini';
   try {
     const response = await openai.chat.completions.create({
@@ -63,17 +88,47 @@ async function extractAliases(pair, openai, options = {}) {
       temperature: 0.1,
       max_completion_tokens: 500,
     });
-    const text = response.choices[0].message.content.trim();
+    const text = response.choices[0].message.content!.trim();
     const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const parsed: unknown = JSON.parse(cleaned);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
+    return (parsed as ExtractedAlias[]).filter(
       a => a && typeof a.from === 'string' && typeof a.to === 'string'
         && a.from.length > 0 && a.to.length > 0 && a.from !== a.to
     );
   } catch (err) {
     return [];
   }
+}
+
+/** confidence 3 段階の件数 */
+export interface ConfidenceCounts {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+/** aggregateAliases の集約結果 1 件 */
+export interface AggregatedAlias {
+  from: string;
+  to: string;
+  category: string;
+  count: number;
+  confidences: ConfidenceCounts;
+}
+
+export interface AggregateOptions {
+  mode?: 'pair' | 'by-term';
+  threshold?: number;
+  requireHighConfidence?: boolean;
+}
+
+interface PairEntry {
+  from: string;
+  to: string;
+  count: number;
+  confidences: ConfidenceCounts;
+  categories: Map<string, number>;
 }
 
 /**
@@ -84,7 +139,7 @@ async function extractAliases(pair, openai, options = {}) {
  *
  * 互換性: 第 2 引数が number の場合 (legacy) は threshold として扱う
  */
-function aggregateAliases(allAliases, options = {}) {
+export function aggregateAliases(allAliases: ExtractedAlias[], options: AggregateOptions | number = {}): AggregatedAlias[] {
   if (typeof options === 'number') {
     options = { threshold: options };
   }
@@ -95,7 +150,7 @@ function aggregateAliases(allAliases, options = {}) {
   } = options;
 
   // Step 1: Build pair-level map
-  const pairMap = new Map();
+  const pairMap = new Map<string, PairEntry>();
   for (const alias of allAliases) {
     const key = `${alias.from}|${alias.to}`;
     if (!pairMap.has(key)) {
@@ -107,31 +162,31 @@ function aggregateAliases(allAliases, options = {}) {
         categories: new Map(),
       });
     }
-    const entry = pairMap.get(key);
+    const entry = pairMap.get(key)!;
     entry.count++;
     const conf = alias.confidence || 'medium';
-    if (entry.confidences[conf] !== undefined) entry.confidences[conf]++;
+    if (conf === 'high' || conf === 'medium' || conf === 'low') entry.confidences[conf]++;
     const cat = alias.category || 'term';
     entry.categories.set(cat, (entry.categories.get(cat) || 0) + 1);
   }
 
   // Step 2: Compute term-level totals (used in by-term mode)
-  const termTotals = new Map();
+  const termTotals = new Map<string, { totalCount: number; hasHigh: boolean }>();
   for (const entry of pairMap.values()) {
     if (!termTotals.has(entry.to)) {
       termTotals.set(entry.to, { totalCount: 0, hasHigh: false });
     }
-    const tt = termTotals.get(entry.to);
+    const tt = termTotals.get(entry.to)!;
     tt.totalCount += entry.count;
     if (entry.confidences.high > 0) tt.hasHigh = true;
   }
 
   // Step 3: Apply threshold and build result
-  const result = [];
+  const result: AggregatedAlias[] = [];
   for (const entry of pairMap.values()) {
-    let pass;
+    let pass: boolean;
     if (mode === 'by-term') {
-      const tt = termTotals.get(entry.to);
+      const tt = termTotals.get(entry.to)!;
       pass = tt.totalCount >= threshold;
       if (requireHighConfidence) pass = pass && tt.hasHigh;
     } else {
@@ -159,8 +214,30 @@ function aggregateAliases(allAliases, options = {}) {
   return result;
 }
 
-function buildMergeCandidates(aggregated, existingVocabulary = []) {
-  const existingByTerm = new Map();
+/** buildMergeCandidates が受ける既存語彙 (loadGuideline().vocabulary 互換) */
+export interface ExistingVocabularyEntry {
+  term?: string;
+  category?: string;
+  aliases?: string[];
+}
+
+export interface NewTermCandidate {
+  term: string;
+  category: string;
+  aliases: string[];
+  counts: Record<string, number>;
+}
+
+export interface AliasAdditionCandidate {
+  term: string;
+  existingTerm: true;
+  existingCategory: string | undefined;
+  new_aliases: string[];
+  counts: Record<string, number>;
+}
+
+export function buildMergeCandidates(aggregated: AggregatedAlias[], existingVocabulary: ExistingVocabularyEntry[] = []): { newTerms: NewTermCandidate[]; aliasAdditions: AliasAdditionCandidate[] } {
+  const existingByTerm = new Map<string, { term: string; category: string | undefined; aliases: string[] }>();
   for (const v of existingVocabulary) {
     if (v && v.term) {
       existingByTerm.set(v.term, {
@@ -171,14 +248,14 @@ function buildMergeCandidates(aggregated, existingVocabulary = []) {
     }
   }
 
-  const byTerm = new Map();
+  const byTerm = new Map<string, AggregatedAlias[]>();
   for (const a of aggregated) {
     if (!byTerm.has(a.to)) byTerm.set(a.to, []);
-    byTerm.get(a.to).push(a);
+    byTerm.get(a.to)!.push(a);
   }
 
-  const newTerms = [];
-  const aliasAdditions = [];
+  const newTerms: NewTermCandidate[] = [];
+  const aliasAdditions: AliasAdditionCandidate[] = [];
   for (const [term, aliases] of byTerm) {
     const existing = existingByTerm.get(term);
     if (existing) {
@@ -215,14 +292,14 @@ function buildMergeCandidates(aggregated, existingVocabulary = []) {
 // extractAliases(LLM) の代替 = 無料・決定論・organon非依存 (Tealus単体で回る)。
 
 // LCS の一致ペア列 [[oldIdx, newIdx], ...] (両方増加) = 変わらなかった錨。長すぎる入力は null。
-function lcsAnchors(a, b, maxLen = 400) {
+function lcsAnchors(a: string, b: string, maxLen = 400): Array<[number, number]> | null {
   const n = a.length, m = b.length;
   if (n > maxLen || m > maxLen) return null;
   const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
   for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
     dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
   }
-  const anchors = []; let i = 0, j = 0;
+  const anchors: Array<[number, number]> = []; let i = 0, j = 0;
   while (i < n && j < m) {
     if (a[i] === b[j]) { anchors.push([i, j]); i++; j++; }
     else if (dp[i + 1][j] >= dp[i][j + 1]) { i++; }
@@ -232,10 +309,10 @@ function lcsAnchors(a, b, maxLen = 400) {
 }
 
 // text 中の既知 term を最長一致・非重複で検出 → [{i, j, term}] (i..j が term のスパン)。
-function findTermSpans(text, terms) {
+function findTermSpans(text: string, terms: string[]): Array<{ i: number; j: number; term: string }> {
   const sorted = [...new Set(terms.filter(Boolean))].sort((x, y) => y.length - x.length);
-  const claimed = new Array(text.length).fill(false);
-  const spans = [];
+  const claimed: boolean[] = new Array(text.length).fill(false);
+  const spans: Array<{ i: number; j: number; term: string }> = [];
   for (const term of sorted) {
     let from = 0;
     for (;;) {
@@ -255,15 +332,13 @@ function findTermSpans(text, terms) {
 
 /**
  * AI版 vs 人間版から garble→既知term の置換ペアを決定論抽出する (term アンカー整列)。
- * @param {string} aiText   - AI整形版 (old)
- * @param {string} userText - 人間編集版 (new)
- * @param {string[]} terms  - 既知の固有名詞term (new に現れたものを逆引き)
- * @param {object} [opts]
- * @param {number} [opts.maxRewriteFraction=0.5] - new の未一致率がこれ超なら全文書換とみなし棄却
- * @param {number} [opts.maxGarbleLen=12] - 崩れの最大長。超は文章とみなし無視
- * @returns {Array<{from:string,to:string}>}
+ * @param aiText   - AI整形版 (old)
+ * @param userText - 人間編集版 (new)
+ * @param terms  - 既知の固有名詞term (new に現れたものを逆引き)
+ * @param opts.maxRewriteFraction - new の未一致率がこれ超なら全文書換とみなし棄却
+ * @param opts.maxGarbleLen - 崩れの最大長。超は文章とみなし無視
  */
-function extractAliasPairs(aiText, userText, terms = [], opts = {}) {
+export function extractAliasPairs(aiText: string | null | undefined, userText: string | null | undefined, terms: string[] = [], opts: { maxRewriteFraction?: number; maxGarbleLen?: number } = {}): Array<{ from: string; to: string }> {
   const { maxRewriteFraction = 0.5, maxGarbleLen = 12 } = opts;
   const a = String(aiText || ''), b = String(userText || '');
   if (!a || !b || a === b) return [];
@@ -272,8 +347,8 @@ function extractAliasPairs(aiText, userText, terms = [], opts = {}) {
   // 全文書換ガード: 人間版のうち元テキストと一致しない割合が高すぎたら錨が信用できない
   if ((b.length - anchors.length) / Math.max(b.length, 1) > maxRewriteFraction) return [];
 
-  const out = [];
-  const seen = new Set();
+  const out: Array<{ from: string; to: string }> = [];
+  const seen = new Set<string>();
   for (const { i, j, term } of findTermSpans(b, terms)) {
     // term スパン [i,j) の左右の錨 → old 側の対応スパン = 崩れ。
     // スパン内側の偶然の一致 (共有文字) は n<i / n>=j の条件で自動的に無視される。
@@ -299,17 +374,17 @@ function extractAliasPairs(aiText, userText, terms = [], opts = {}) {
 // 注入する (pykakasi/DB 非依存 = 純関数・テスト可能)。抽出→集約は既存関数を再利用。
 
 const HONORIFIC = /(さん|さま|様|くん|君|ちゃん)$/;
-function stripHonorific(s) { return String(s || '').replace(HONORIFIC, ''); }
+function stripHonorific(s: string): string { return String(s || '').replace(HONORIFIC, ''); }
 
 const SMALL_KANA = new Set('ぁぃぅぇぉゃゅょゎっー');
-function toHiragana(s) {
+function toHiragana(s: string): string {
   return [...String(s || '')].map((ch) => {
-    const o = ch.codePointAt(0);
+    const o = ch.codePointAt(0)!;
     return (o >= 0x30A1 && o <= 0x30F6) ? String.fromCodePoint(o - 0x60) : ch;
   }).join('');
 }
-function toMoras(s) {
-  const out = [];
+export function toMoras(s: string): string[] {
+  const out: string[] = [];
   for (const c of toHiragana(s)) {
     if (SMALL_KANA.has(c) && out.length) out[out.length - 1] += c;
     else out.push(c);
@@ -321,11 +396,11 @@ function toMoras(s) {
  * 正規化モーラ編集距離 [0,1]。garble読み ≈ term読み の近さ (本物の崩れは音を保つ)。
  * カタカナ/ひらがな どちらの読みでも内部で正規化して比較する。空入力は 1 (無効)。
  */
-function moraDistance(a, b) {
+export function moraDistance(a: string, b: string): number {
   const x = toMoras(a), y = toMoras(b);
   const n = x.length, m = y.length;
   if (!n || !m) return 1;
-  const dp = Array.from({ length: m + 1 }, (_, j) => j);
+  const dp: number[] = Array.from({ length: m + 1 }, (_, j) => j);
   for (let i = 1; i <= n; i++) {
     let prev = dp[0]; dp[0] = i;
     for (let j = 1; j <= m; j++) {
@@ -341,23 +416,37 @@ function moraDistance(a, b) {
  * コーパス精度 P = 修正回数 / garble総出現。低P = その garble は他用途でも使われる
  * = alias化して変換すると他を壊す (どうも/たま 等の常用語ガード)。出現数<回数は 1 に丸め。
  */
-function corpusPrecision(count, occurrence) {
+export function corpusPrecision(count: number, occurrence: number): number {
   return count / Math.max(occurrence || 0, count);
+}
+
+/** filterSafeAliases の振り分け結果 1 件 (ゲート計測値 / 棄却理由付き) */
+export interface GatedAlias extends AggregatedAlias {
+  reason?: string;
+  dist?: number;
+  P?: number;
+}
+
+export interface FilterSafeAliasesOptions {
+  /** ひらがな読み (kanji含む、注入) */
+  getReading?: (text: string) => string;
+  /** コーパス総出現数 (注入) */
+  getOccurrence?: (garble: string) => number;
+  /** garble(honorific除去後)の最小長。≤2 は棄却 (Exp7過補正) */
+  minGarbleLen?: number;
+  /** 音韻近接の許容モーラ距離 */
+  moraMax?: number;
+  /** コーパス精度の下限 */
+  pMin?: number;
+  /** この回数以上で自動追加、未満は人間確認 */
+  autoFreq?: number;
 }
 
 /**
  * 集約済み alias 候補に 2 ゲートを適用し 自動追加 / 人間確認 / 棄却 に振り分ける。
- * @param {Array} aggregated - aggregateAliases の戻り ({from, to, count, ...})
- * @param {object} opts
- * @param {(text:string)=>string} opts.getReading    - ひらがな読み (kanji含む、注入)
- * @param {(garble:string)=>number} opts.getOccurrence - コーパス総出現数 (注入)
- * @param {number} [opts.minGarbleLen=3] - garble(honorific除去後)の最小長。≤2 は棄却 (Exp7過補正)
- * @param {number} [opts.moraMax=0.5]    - 音韻近接の許容モーラ距離
- * @param {number} [opts.pMin=0.5]       - コーパス精度の下限
- * @param {number} [opts.autoFreq=2]     - この回数以上で自動追加、未満は人間確認
- * @returns {{auto:Array, confirm:Array, rejected:Array}}
+ * @param aggregated - aggregateAliases の戻り ({from, to, count, ...})
  */
-function filterSafeAliases(aggregated, opts = {}) {
+export function filterSafeAliases(aggregated: AggregatedAlias[] | null | undefined, opts: FilterSafeAliasesOptions = {}): { auto: GatedAlias[]; confirm: GatedAlias[]; rejected: GatedAlias[] } {
   const {
     getReading = () => '',
     getOccurrence = () => 1,
@@ -366,7 +455,7 @@ function filterSafeAliases(aggregated, opts = {}) {
     pMin = 0.5,
     autoFreq = 2,
   } = opts;
-  const auto = [], confirm = [], rejected = [];
+  const auto: GatedAlias[] = [], confirm: GatedAlias[] = [], rejected: GatedAlias[] = [];
   for (const a of (aggregated || [])) {
     const garble = String(a.from || '');
     // ゲート1: 短別名 (≤2字の裸の姓/地名) → 過補正源なので棄却
@@ -382,16 +471,3 @@ function filterSafeAliases(aggregated, opts = {}) {
   }
   return { auto, confirm, rejected };
 }
-
-module.exports = {
-  buildPairsFromRows,
-  extractAliases,
-  aggregateAliases,
-  buildMergeCandidates,
-  SYSTEM_PROMPT,
-  extractAliasPairs,
-  toMoras,
-  moraDistance,
-  corpusPrecision,
-  filterSafeAliases,
-};

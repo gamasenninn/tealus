@@ -7,7 +7,7 @@ const { pool } = require('../db/pool.mts');
 const { authenticate } = require('../middleware/auth.mts');
 const { requireMember } = require('../middleware/roomAccess.mts');
 const { upload, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload.mts');
-const { generateThumbnail } = require('../services/thumbnail');
+const { generateThumbnail } = require('../services/thumbnail.mts');
 const { MAX_UPLOAD_FILES } = require('../constants/config.mts');
 
 const router = express.Router({ mergeParams: true });
@@ -245,7 +245,7 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
 
     await client.query('COMMIT');
 
-    const { attachMedia, attachForwards } = require('../services/messageAttachments');
+    const { attachMedia, attachForwards } = require('../services/messageAttachments.mts');
     const fullMessage = {
       ...newMessage,
       sender_display_name: req.user.display_name,
@@ -258,7 +258,7 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
     io.to(targetRoomId).emit('message:new', fullMessage);
 
     try {
-      const { sendPushToOfflineMembers } = require('../services/push');
+      const { sendPushToOfflineMembers } = require('../services/push.mts');
       const { getOnlineUserIds } = require('../socket');
       const typeLabel = src.type === 'image' ? '画像' : src.type === 'video' ? '動画' : 'ファイル';
       sendPushToOfflineMembers(targetRoomId, userId, {
@@ -271,7 +271,7 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
     }
 
     try {
-      const { fireWebhooks } = require('../services/webhook');
+      const { fireWebhooks } = require('../services/webhook.mts');
       fireWebhooks('message.created', targetRoomId, {
         room: { id: targetRoomId },
         message: {

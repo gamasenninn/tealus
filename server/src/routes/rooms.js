@@ -21,7 +21,7 @@ const iconUpload = multer({ storage: iconStorage, limits: { fileSize: 5 * 1024 *
 
 const router = express.Router();
 
-const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments');
+const { attachMedia, attachReplies, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps } = require('../services/messageAttachments.mts');
 
 // All routes require authentication
 router.use(authenticate);

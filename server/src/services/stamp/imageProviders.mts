@@ -1,15 +1,24 @@
-const { logger } = require('../../utils/logger.mts');
+import { logger } from '../../utils/logger.mts';
+
+/** OpenAI Images API のレスポンス (外部 JSON 境界) */
+interface OpenAIImageResponse {
+  error?: { message?: string };
+  data: { b64_json?: string; url?: string }[];
+}
 
 /**
  * OpenAI image provider (GPT-Image-1 / DALL-E 3)
  */
 class OpenAIImageProvider {
-  constructor(apiKey, model) {
+  apiKey: string | undefined;
+  model: string;
+
+  constructor(apiKey: string | undefined, model?: string) {
     this.apiKey = apiKey;
     this.model = model || 'gpt-image-1';
   }
 
-  async generate(prompt) {
+  async generate(prompt: string): Promise<Buffer> {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {
@@ -25,7 +34,7 @@ class OpenAIImageProvider {
       }),
     });
 
-    const data = await res.json();
+    const data = await res.json() as OpenAIImageResponse;
     if (!res.ok) {
       throw new Error(data.error?.message || 'Image generation failed');
     }
@@ -47,7 +56,7 @@ class OpenAIImageProvider {
 /**
  * Factory function
  */
-function createImageProvider(provider) {
+export function createImageProvider(provider?: string): OpenAIImageProvider {
   const apiKey = process.env.STAMP_IMAGE_API_KEY || process.env.OPENAI_API_KEY;
   const model = process.env.STAMP_IMAGE_MODEL;
 
@@ -58,5 +67,3 @@ function createImageProvider(provider) {
       throw new Error(`Unknown image provider: ${provider}`);
   }
 }
-
-module.exports = { createImageProvider };

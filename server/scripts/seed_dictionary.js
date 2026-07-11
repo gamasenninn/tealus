@@ -11,7 +11,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const repo = require('../src/services/dictionaryRepo');
+const repo = require('../src/services/dictionaryRepo.mts');
 const { pool } = require('../src/db/pool.mts');
 
 const GUIDELINE_PATH = process.env.TRANSCRIPTION_GUIDELINE_PATH

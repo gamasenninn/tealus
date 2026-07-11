@@ -17,17 +17,30 @@
  */
 
 // 汎用役職・敬称 (これ単独では固有名詞でなく、person の alias でも頻度シグナルにしない)
-const DEFAULT_ROLE_ALIASES = [
+export const DEFAULT_ROLE_ALIASES: string[] = [
   '社長', '副社長', '会長', '専務', '常務', '部長', '次長', '課長', '係長', '主任',
   '店長', '所長', '専務取締役', 'ステージ社長',
 ];
 
+/** vocabulary の 1 entry (term + 別名 + explicit reading) */
+export interface RankerVocabEntry {
+  term: string;
+  aliases?: string[];
+  reading?: string | null;
+}
+
+/** rankByFrequency の 1 結果行 */
+export interface RankedTerm {
+  term: string;
+  reading?: string | null;
+  count: number;
+}
+
 /**
  * 1 メッセージテキストが vocab entry を言及しているか (term or 役職以外の alias を含むか)。
- * @param {object} [opts]
- * @param {Set<string>} [opts.roleSet] - 頻度マッチから除外する役職 alias
+ * @param opts.roleSet - 頻度マッチから除外する役職 alias
  */
-function mentions(text, entry, opts = {}) {
+export function mentions(text: string, entry: RankerVocabEntry, opts: { roleSet?: Set<string> } = {}): boolean {
   if (!text) return false;
   if (entry.term && text.includes(entry.term)) return true;
   const roleSet = opts.roleSet || new Set(DEFAULT_ROLE_ALIASES);
@@ -37,13 +50,15 @@ function mentions(text, entry, opts = {}) {
 
 /**
  * vocab を言及頻度 (document frequency) 降順にランクする。同数は元の vocab 順で安定。
- * @param {Array<{term, aliases?, reading?}>} vocabulary
- * @param {string[]} texts - 直近メッセージテキスト群
- * @param {object} [opts]
- * @param {string[]} [opts.roleAliases] - 頻度除外する役職 alias (default DEFAULT_ROLE_ALIASES)
- * @returns {Array<{term, reading?, count}>}
+ * @param vocabulary
+ * @param texts - 直近メッセージテキスト群
+ * @param opts.roleAliases - 頻度除外する役職 alias (default DEFAULT_ROLE_ALIASES)
  */
-function rankByFrequency(vocabulary, texts, opts = {}) {
+export function rankByFrequency(
+  vocabulary: RankerVocabEntry[],
+  texts: string[],
+  opts: { roleAliases?: string[] } = {},
+): RankedTerm[] {
   const list = Array.isArray(vocabulary) ? vocabulary : [];
   const msgs = Array.isArray(texts) ? texts : [];
   const roleSet = new Set(opts.roleAliases || DEFAULT_ROLE_ALIASES);
@@ -62,19 +77,19 @@ function rankByFrequency(vocabulary, texts, opts = {}) {
  *  - 頻度降順 (hot 先頭)。
  *  - 既定は 0 言及を除外 (履歴に出た entity のみ = そのチャンネルの常用コア)。
  *  - explicit reading フィールドがある語のみ term（reading）で読み併記。
- * @param {Array} vocabulary
- * @param {string[]} texts
- * @param {object} [opts]
- * @param {number} [opts.limit=40]
- * @param {boolean} [opts.includeZero=false] - 0 言及も含める (履歴が乏しい時の fallback)
- * @returns {string}
+ * @param vocabulary
+ * @param texts
+ * @param opts.limit - default 40
+ * @param opts.includeZero - 0 言及も含める (履歴が乏しい時の fallback)。default false
  */
-function buildHotGlossary(vocabulary, texts, opts = {}) {
+export function buildHotGlossary(
+  vocabulary: RankerVocabEntry[],
+  texts: string[],
+  opts: { limit?: number; includeZero?: boolean; roleAliases?: string[] } = {},
+): string {
   const { limit = 40, includeZero = false } = opts;
   const ranked = rankByFrequency(vocabulary, texts, opts)
     .filter((r) => r.term && (includeZero || r.count > 0))
     .slice(0, limit);
   return ranked.map((r) => (r.reading ? `${r.term}（${r.reading}）` : r.term)).join('、');
 }
-
-module.exports = { rankByFrequency, buildHotGlossary, mentions, DEFAULT_ROLE_ALIASES };

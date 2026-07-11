@@ -10,21 +10,25 @@
  *
  * @module services/lineSignature
  */
-const crypto = require('crypto');
+import crypto from 'node:crypto';
 
 /**
  * LINE webhook signature を verify する
  *
- * @param {string} channelSecret - LINE Developers console から取得した channel secret
- * @param {string|Buffer} body - request raw body (= JSON.parse 前の bytes、HMAC 計算に必須)
- * @param {string} signature - X-Line-Signature header の値 (= Base64-encoded HMAC-SHA256)
- * @returns {boolean} true = 本物の LINE Platform 発、false = 偽 or 計算 mismatch
+ * @param channelSecret - LINE Developers console から取得した channel secret
+ * @param body - request raw body (= JSON.parse 前の bytes、HMAC 計算に必須)
+ * @param signature - X-Line-Signature header の値 (= Base64-encoded HMAC-SHA256)
+ * @returns true = 本物の LINE Platform 発、false = 偽 or 計算 mismatch
  */
-function verifyLineSignature(channelSecret, body, signature) {
+export function verifyLineSignature(
+  channelSecret: string | null | undefined,
+  body: string | Buffer | null | undefined,
+  signature: string | null | undefined
+): boolean {
   if (!channelSecret || !signature) return false;
   if (body === undefined || body === null) return false;
 
-  let expected;
+  let expected: string;
   try {
     expected = crypto
       .createHmac('SHA256', channelSecret)
@@ -42,5 +46,3 @@ function verifyLineSignature(channelSecret, body, signature) {
 
   return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
 }
-
-module.exports = { verifyLineSignature };

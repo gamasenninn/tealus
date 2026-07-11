@@ -1,11 +1,14 @@
-const { logger } = require('../utils/logger.mts');
-const fs = require('fs');
-const path = require('path');
-const OpenAI = require('openai');
-const { pool } = require('../db/pool.mts');
-const { formatTranscription } = require('./formatting');
-const { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination, getTranscriptionMode } = require('./transcriptionConfig');
-const { transcribeAudio } = require('./sttBackend');
+import { logger } from '../utils/logger.mts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+import OpenAI from 'openai';
+import { pool } from '../db/pool.mts';
+import { formatTranscription } from './formatting.mts';
+import { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination, getTranscriptionMode } from './transcriptionConfig.mts';
+import { transcribeAudio } from './sttBackend.mts';
+import { fireWebhooks } from './webhook.mts';
+import type { Server } from 'socket.io';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -21,7 +24,24 @@ const openai = new OpenAI({
 // env WHISPER_MODEL で whisper-1 / gpt-4o-transcribe にも切替可能。
 // (旧 #217: gpt-4o-transcribe を default 採用していた、whisper-1 比 hallucination 軽減目的)
 const WHISPER_MODEL = process.env.WHISPER_MODEL || 'gpt-4o-mini-transcribe';
-const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../media');
+const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media');
+
+/** messages テーブルの sender 参照行 */
+interface SenderRow {
+  sender_id: string;
+}
+
+export interface TranscribeMessageOptions {
+  /** Socket.IO instance (null で emit 抑制、Bot endpoint 用) */
+  io?: Server | null;
+  roomId?: string | null;
+  /** voice_transcriptions の対象 version (#216 retranscribe 用、default=1 で初回 upload と互換) */
+  version?: number;
+  /** video 入力なら ffmpeg -vn で audio 抽出を強制 */
+  isVideo?: boolean;
+  /** webhook payload の type ('voice' | 'video' | 'audio') */
+  messageType?: string;
+}
 
 /**
  * Transcribe a media message (voice / video / audio) using OpenAI Whisper API
@@ -29,16 +49,15 @@ const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(__dirname, '../../../medi
  * Video の場合は ffmpeg -vn で audio 抽出 (16kHz mono opus 24k) してから Whisper に送る。
  * Whisper API の 25MB 上限内に大半の動画を収められる。
  *
- * @param {string} messageId
- * @param {string} filePath - MEDIA_ROOT 相対 path
- * @param {object} [options]
- * @param {object} [options.io] - Socket.IO instance (null で emit 抑制、Bot endpoint 用)
- * @param {string} [options.roomId]
- * @param {number} [options.version=1] - voice_transcriptions の対象 version (#216 retranscribe 用、default=1 で初回 upload と互換)
- * @param {boolean} [options.isVideo=false] - video 入力なら ffmpeg -vn で audio 抽出を強制
- * @param {string} [options.messageType='voice'] - webhook payload の type ('voice' | 'video' | 'audio')
+ * @param messageId
+ * @param filePath - MEDIA_ROOT 相対 path
+ * @param options
  */
-async function transcribeMessage(messageId, filePath, options = {}) {
+export async function transcribeMessage(
+  messageId: string,
+  filePath: string,
+  options: TranscribeMessageOptions = {},
+): Promise<string | null> {
   const {
     io = null,
     roomId = null,
@@ -47,7 +66,7 @@ async function transcribeMessage(messageId, filePath, options = {}) {
     messageType = 'voice',
   } = options;
   const fullPath = path.join(MEDIA_ROOT, filePath);
-  let tempPath = null;
+  let tempPath: string | null = null;
 
   try {
     // Update status to transcribing
@@ -62,7 +81,7 @@ async function transcribeMessage(messageId, filePath, options = {}) {
     }
 
     let inputPath = fullPath;
-    let ext;
+    let ext: string;
 
     if (isVideo) {
       // Video: ffmpeg -vn で audio 抽出 (Whisper API 25MB 上限対策)
@@ -71,7 +90,6 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       // codec=mp3 で Windows ffmpeg 標準ビルド互換 (libopus は build-dependent)
       tempPath = path.join(path.dirname(fullPath), `tealus-stt-${messageId}-v${version}.mp3`);
       try {
-        const { execSync } = require('child_process');
         execSync(
           `ffmpeg -i "${fullPath}" -y -vn -ar 16000 -ac 1 -q:a 4 "${tempPath}"`,
           { stdio: ['ignore', 'pipe', 'pipe'] }  // stderr 捕捉 (失敗時の debug 用)
@@ -86,12 +104,15 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       } catch (e) {
         if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
         tempPath = null;
-        const stderr = e.stderr ? e.stderr.toString() : '';
+        const message = e instanceof Error ? e.message : String(e);
+        const stderrRaw = (e as { stderr?: Buffer | string }).stderr;
+        const stderr = stderrRaw ? stderrRaw.toString() : '';
         const stderrTail = stderr ? `\nffmpeg stderr (last 500 chars): ${stderr.slice(-500)}` : '';
-        throw new Error(`ffmpeg video → audio extraction failed: ${e.message}${stderrTail}`);
+        throw new Error(`ffmpeg video → audio extraction failed: ${message}${stderrTail}`);
       }
     } else {
       // Voice / Audio: detect format, fallback to mp3 conversion if unknown
+      // file-type は ESM 専用 package のため動的 import を維持 (Jest の CJS transform で静的 import が壊れる)
       const { fileTypeFromFile } = await import('file-type');
       const fileInfo = await fileTypeFromFile(fullPath);
       ext = fileInfo ? fileInfo.ext : path.extname(fullPath).replace('.', '') || 'webm';
@@ -101,7 +122,6 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       if (!fileInfo) {
         tempPath = fullPath + '.converted.mp3';
         try {
-          const { execSync } = require('child_process');
           execSync(`ffmpeg -i "${fullPath}" -y -q:a 2 "${tempPath}" 2>/dev/null`);
           inputPath = tempPath;
           ext = 'mp3';
@@ -193,8 +213,7 @@ async function transcribeMessage(messageId, filePath, options = {}) {
       }
       // Webhook (roomId なしなら fire skip)
       if (roomId) {
-        const { fireWebhooks } = require('./webhook');
-        const msgRes = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+        const msgRes = await pool.query<SenderRow>('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
         fireWebhooks('voice.transcription_completed', roomId, {
           room: { id: roomId },
           message: { id: messageId, type: messageType, sender: { id: msgRes.rows[0]?.sender_id } },
@@ -229,8 +248,12 @@ async function transcribeMessage(messageId, filePath, options = {}) {
  * Legacy alias for transcribeMessage (voice 専用 signature 互換、既存 call site 用)
  * 新規 caller は transcribeMessage を直接使うこと。
  */
-async function transcribeVoiceMessage(messageId, filePath, io, roomId, version = 1) {
+export async function transcribeVoiceMessage(
+  messageId: string,
+  filePath: string,
+  io: Server | null | undefined,
+  roomId: string | null,
+  version: number = 1,
+): Promise<string | null> {
   return transcribeMessage(messageId, filePath, { io, roomId, version, isVideo: false, messageType: 'voice' });
 }
-
-module.exports = { transcribeMessage, transcribeVoiceMessage };

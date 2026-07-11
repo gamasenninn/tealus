@@ -1,9 +1,9 @@
-const { logger } = require('../utils/logger.mts');
-const sharp = require('sharp');
-const path = require('path');
-const { execFile } = require('child_process');
-const fs = require('fs');
-const { MEDIA_ROOT } = require('../middleware/upload.mts');
+import { logger } from '../utils/logger.mts';
+import sharp from 'sharp';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import { MEDIA_ROOT } from '../middleware/upload.mts';
 
 const THUMBNAIL_WIDTH = 300;
 
@@ -11,7 +11,7 @@ const THUMBNAIL_WIDTH = 300;
  * Generate a thumbnail for an image or video file.
  * Returns the thumbnail path relative to MEDIA_ROOT, or null if unsupported.
  */
-async function generateThumbnail(filePath, mimetype) {
+export async function generateThumbnail(filePath: string, mimetype: string): Promise<string | null> {
   if (mimetype.startsWith('image/')) {
     return generateImageThumbnail(filePath);
   }
@@ -21,7 +21,7 @@ async function generateThumbnail(filePath, mimetype) {
   return null;
 }
 
-async function generateImageThumbnail(filePath) {
+async function generateImageThumbnail(filePath: string): Promise<string | null> {
   try {
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
@@ -39,13 +39,13 @@ async function generateImageThumbnail(filePath) {
   }
 }
 
-async function generateVideoThumbnail(filePath) {
+async function generateVideoThumbnail(filePath: string): Promise<string | null> {
   try {
     const basename = path.basename(filePath, path.extname(filePath));
     const thumbnailFilename = `${basename}_thumb.jpg`;
     const thumbnailPath = path.join(MEDIA_ROOT, 'thumbnails', thumbnailFilename);
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       execFile('ffmpeg', [
         '-i', filePath,
         '-ss', '00:00:01',
@@ -68,5 +68,3 @@ async function generateVideoThumbnail(filePath) {
     return null;
   }
 }
-
-module.exports = { generateThumbnail };

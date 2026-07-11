@@ -1,7 +1,9 @@
-const { logger } = require('../utils/logger.mts');
-const OpenAI = require('openai');
-const { pool } = require('../db/pool.mts');
-const { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams } = require('./transcriptionConfig');
+import { logger } from '../utils/logger.mts';
+import OpenAI from 'openai';
+import { pool } from '../db/pool.mts';
+import { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams } from './transcriptionConfig.mts';
+import { fireWebhooks } from './webhook.mts';
+import type { Server } from 'socket.io';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -22,7 +24,7 @@ const BASE_SYSTEM_PROMPT = `あなたは音声文字起こしテキストを自�
   入力に何らかの content があれば必ず整形して返すこと。短い / 断片的な入力でも、その内容を尊重して整形する。
   「意味がない」「整形対象外」と判断して空文字やメタ表現を返してはならない。`;
 
-function buildSystemPrompt() {
+function buildSystemPrompt(): string {
   const extension = buildFormattingExtension(loadGuideline());
   return extension ? `${BASE_SYSTEM_PROMPT}\n${extension}` : BASE_SYSTEM_PROMPT;
 }
@@ -32,24 +34,37 @@ function buildSystemPrompt() {
  *   legacy  : 現行の汎用整形 + 組織固有語彙リスト (buildSystemPrompt)。出力互換。
  *   organon : organon を「補正の知識源」として使う専用 prompt (buildOrganonCorrectionPrompt)。
  */
-function systemPromptForMode(mode) {
+function systemPromptForMode(mode: ReturnType<typeof getTranscriptionMode>): string {
   return mode === 'organon'
     ? buildOrganonCorrectionPrompt(loadGuideline())
     : buildSystemPrompt();
+}
+
+/** messages テーブルの sender 参照行 */
+interface SenderRow {
+  sender_id: string;
 }
 
 /**
  * Format transcribed text using AI
  * Runs asynchronously after transcription completes
  *
- * @param {string} messageId
- * @param {string} rawText
- * @param {object} io - Socket.IO instance (nullable、Bot endpoint 経由など headless 経路で skip emit)
- * @param {string} roomId
- * @param {number|null} version
- * @param {string} [messageType='voice'] - webhook fire 時の type ('voice' | 'video' | 'audio')
+ * @param messageId
+ * @param rawText
+ * @param io - Socket.IO instance (nullable、Bot endpoint 経由など headless 経路で skip emit)
+ * @param roomId
+ * @param version
+ * @param messageType - webhook fire 時の type ('voice' | 'video' | 'audio')
  */
-async function formatTranscription(messageId, rawText, io, roomId, version = null, messageType = 'voice', mode = getTranscriptionMode()) {
+export async function formatTranscription(
+  messageId: string,
+  rawText: string,
+  io: Server | null | undefined,
+  roomId: string | null,
+  version: number | null = null,
+  messageType: string = 'voice',
+  mode: ReturnType<typeof getTranscriptionMode> = getTranscriptionMode(),
+): Promise<string | null> {
   // #216: version 指定があれば対象 version、無ければ MAX(version) を使う (旧挙動互換)
   const versionWhereClause = version !== null
     ? 'AND version = $2'
@@ -76,7 +91,7 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
       ...completionParams(model),
     });
 
-    let formattedText = response.choices[0].message.content.trim();
+    let formattedText = response.choices[0].message.content!.trim();
 
     // Defensive layer (Bug 3 fix、#269 follow-up、5/12 user 発見):
     // AI が「空文字」「空文字列」等のメタ literal を返した場合、raw_text に fallback。
@@ -113,8 +128,7 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
 
     // Webhook: 文字起こし完了通知 (roomId が null の場合 = headless 経路では fire しない)
     if (roomId) {
-      const { fireWebhooks } = require('./webhook');
-      const msgResult = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+      const msgResult = await pool.query<SenderRow>('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
       const senderId = msgResult.rows[0]?.sender_id;
       fireWebhooks('voice.transcription_completed', roomId, {
         room: { id: roomId },
@@ -148,9 +162,8 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
 
     // Webhook: 文字起こし完了通知（フォーマット失敗時、roomId なしなら fire skip）
     if (roomId) {
-      const { fireWebhooks: fireWh } = require('./webhook');
-      const msgRes = await pool.query('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
-      fireWh('voice.transcription_completed', roomId, {
+      const msgRes = await pool.query<SenderRow>('SELECT sender_id FROM messages WHERE id = $1', [messageId]);
+      fireWebhooks('voice.transcription_completed', roomId, {
         room: { id: roomId },
         message: { id: messageId, type: messageType, sender: { id: msgRes.rows[0]?.sender_id } },
         transcription: { raw_text: rawText, formatted_text: null },
@@ -160,5 +173,3 @@ async function formatTranscription(messageId, rawText, io, roomId, version = nul
     return null;
   }
 }
-
-module.exports = { formatTranscription };

@@ -2,28 +2,60 @@
  * Webhook Dispatcher
  * イベント発生時に登録済みWebhookへHTTP POSTで通知する
  */
-const crypto = require('crypto');
-const { pool } = require('../db/pool.mts');
-const { logger } = require('../utils/logger.mts');
+import crypto from 'node:crypto';
+import { pool } from '../db/pool.mts';
+import { logger } from '../utils/logger.mts';
+
+/** 送信先 Webhook (webhooksテーブルの行のうち送信に使うフィールド) */
+interface WebhookTarget {
+  url: string;
+  secret?: string | null;
+}
+
+/** webhooksテーブルの行 */
+interface WebhookRow extends WebhookTarget {
+  id: string;
+  events: string[];
+  room_id: string | null;
+  is_active: boolean;
+}
+
+/** 送信結果 */
+interface DispatchResult {
+  ok: boolean;
+  status: number;
+  attempts: number;
+  error?: string;
+}
+
+/** fireWebhooks に渡すペイロード (room はルーム情報で補完される) */
+interface WebhookPayload {
+  room?: {
+    name?: string | null;
+    type?: string;
+    member_count?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
 
 /**
  * HMAC-SHA256署名を生成する
- * @param {string} secret - シークレットキー
- * @param {string} body - ペイロード文字列
- * @returns {string} 16進数の署名
+ * @param secret - シークレットキー
+ * @param body - ペイロード文字列
+ * @returns 16進数の署名
  */
-function generateSignature(secret, body) {
+export function generateSignature(secret: string, body: string): string {
   return crypto.createHmac('sha256', secret).update(body).digest('hex');
 }
 
 /**
  * 単一のWebhookにペイロードを送信する（テスト送信用、リトライなし）
- * @param {object} webhook - webhooksテーブルの行
- * @param {string} body - JSON文字列のペイロード
- * @returns {Promise<{ok: boolean, status: number}>}
+ * @param webhook - webhooksテーブルの行
+ * @param body - JSON文字列のペイロード
  */
-async function dispatchWebhook(webhook, body) {
-  const headers = {
+export async function dispatchWebhook(webhook: WebhookTarget, body: string): Promise<{ ok: boolean; status: number }> {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'User-Agent': 'Tealus-Webhook/1.0',
   };
@@ -47,18 +79,17 @@ async function dispatchWebhook(webhook, body) {
  * 5xx/ネットワークエラー時は指数バックオフでリトライ
  * 4xxはクライアントエラーなのでリトライしない
  *
- * @param {object} webhook - webhooksテーブルの行
- * @param {string} body - JSON文字列のペイロード
- * @param {object} opts - オプション
- * @param {number} opts.maxRetries - 最大試行回数（デフォルト3）
- * @param {number} opts.baseDelay - 基本遅延ms（デフォルト5000）
- * @returns {Promise<{ok: boolean, status: number, attempts: number}>}
+ * @param webhook - webhooksテーブルの行
+ * @param body - JSON文字列のペイロード
+ * @param opts - オプション
+ * @param opts.maxRetries - 最大試行回数（デフォルト3）
+ * @param opts.baseDelay - 基本遅延ms（デフォルト5000）
  */
-async function dispatchWithRetry(webhook, body, opts = {}) {
+export async function dispatchWithRetry(webhook: WebhookTarget, body: string, opts: { maxRetries?: number; baseDelay?: number } = {}): Promise<DispatchResult> {
   const maxRetries = opts.maxRetries || 3;
   const baseDelay = opts.baseDelay || 5000;
 
-  const headers = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'User-Agent': 'Tealus-Webhook/1.0',
   };
@@ -98,21 +129,24 @@ async function dispatchWithRetry(webhook, body, opts = {}) {
         const delay = baseDelay * Math.pow(3, attempt - 1);
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
-        return { ok: false, status: 0, attempts: attempt, error: err.message };
+        return { ok: false, status: 0, attempts: attempt, error: err instanceof Error ? err.message : String(err) };
       }
     }
   }
+
+  // 到達不能: maxRetries >= 1 のため最終試行で必ず return する (型のための保険)
+  throw new Error('dispatchWithRetry: unreachable');
 }
 
 /**
  * イベントに対応する全Webhookにペイロードを送信する
- * @param {string} eventType - イベント種別（例: 'message.created'）
- * @param {string|null} roomId - ルームID（ルーム限定Webhook用）
- * @param {object} payload - ペイロードオブジェクト
+ * @param eventType - イベント種別（例: 'message.created'）
+ * @param roomId - ルームID（ルーム限定Webhook用）
+ * @param payload - ペイロードオブジェクト
  */
-async function fireWebhooks(eventType, roomId, payload) {
+export async function fireWebhooks(eventType: string, roomId: string | null, payload: WebhookPayload): Promise<void> {
   try {
-    const result = await pool.query(
+    const result = await pool.query<WebhookRow>(
       `SELECT * FROM webhooks
        WHERE is_active = true
        AND $1 = ANY(events)
@@ -125,7 +159,7 @@ async function fireWebhooks(eventType, roomId, payload) {
     // ルーム情報を取得してペイロードに追加
     if (roomId && payload.room) {
       if (!payload.room.name || !payload.room.member_count) {
-        const roomResult = await pool.query(
+        const roomResult = await pool.query<{ name: string | null; type: string; member_count: number }>(
           `SELECT r.name, r.type, (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) as member_count
            FROM rooms r WHERE r.id = $1`,
           [roomId]
@@ -138,7 +172,7 @@ async function fireWebhooks(eventType, roomId, payload) {
       }
       // DM ルームの場合、メンバー名をルーム名として設定
       if (!payload.room.name && payload.room.type === 'direct') {
-        const membersResult = await pool.query(
+        const membersResult = await pool.query<{ display_name: string }>(
           `SELECT u.display_name FROM room_members rm JOIN users u ON u.id = rm.user_id WHERE rm.room_id = $1`,
           [roomId]
         );
@@ -162,12 +196,10 @@ async function fireWebhooks(eventType, roomId, payload) {
           logger.info(`Webhook succeeded after retry: ${webhook.url} (attempts: ${result.attempts})`);
         }
       }).catch(err => {
-        logger.error(`Webhook dispatch error: ${webhook.url}`, err.message);
+        logger.error(`Webhook dispatch error: ${webhook.url}`, err instanceof Error ? err.message : String(err));
       });
     }
   } catch (err) {
     logger.error('fireWebhooks error:', err);
   }
 }
-
-module.exports = { dispatchWebhook, dispatchWithRetry, generateSignature, fireWebhooks };

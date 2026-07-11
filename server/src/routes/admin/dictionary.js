@@ -6,9 +6,9 @@
  * 状態変更後は refreshVocabFromTable でオーバーレイに即反映（active のみ補正段に効く）。
  */
 const express = require('express');
-const repo = require('../../services/dictionaryRepo');
-const { refreshVocabFromTable } = require('../../services/transcriptionConfig');
-const { getReadings } = require('../../services/reading');
+const repo = require('../../services/dictionaryRepo.mts');
+const { refreshVocabFromTable } = require('../../services/transcriptionConfig.mts');
+const { getReadings } = require('../../services/reading.mts');
 const { logger } = require('../../utils/logger.mts');
 const E = require('../../constants/errors.mts');
 

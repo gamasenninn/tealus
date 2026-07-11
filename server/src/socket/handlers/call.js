@@ -1,7 +1,7 @@
 const { logger } = require('../../utils/logger.mts');
 const { pool } = require('../../db/pool.mts');
-const { sendPushToUser } = require('../../services/push');
-const capabilityWatcher = require('../../services/capabilityWatcher');
+const { sendPushToUser } = require('../../services/push.mts');
+const capabilityWatcher = require('../../services/capabilityWatcher.mts');
 
 /**
  * Handle call events (notification + history + status)

@@ -11,30 +11,30 @@
  * - pykakasi 不達時は kata2hira にフォールバック（非破壊）
  * - pykakasiImpl は DI 可能（test で subprocess を回避）
  */
-const { spawn } = require('child_process');
-const path = require('path');
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 
-function kata2hira(s) {
+export function kata2hira(s: string): string {
   return [...String(s || '')].map((c) => {
-    const o = c.codePointAt(0);
+    const o = c.codePointAt(0)!;
     return (o >= 0x30A1 && o <= 0x30F6) ? String.fromCodePoint(o - 0x60) : c;
   }).join('');
 }
 
-const cache = new Map();
+const cache = new Map<string, string>();
 
 // texts[] → {text: ひらがな} を pykakasi(uv run)で取得。stdin/stdout JSON。
-function pykakasiReadings(texts) {
+function pykakasiReadings(texts: string[]): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
-    const py = path.join(__dirname, '../../scripts/_readings_pykakasi.py');
+    const py = path.join(import.meta.dirname, '../../scripts/_readings_pykakasi.py');
     const child = spawn('uv', ['run', py], { shell: true });
     let out = ''; let err = '';
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { err += d; });
+    child.stdout.on('data', (d: Buffer) => { out += d; });
+    child.stderr.on('data', (d: Buffer) => { err += d; });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code !== 0) return reject(new Error(`pykakasi exit ${code}: ${err.slice(-200)}`));
-      try { resolve(JSON.parse(out)); } catch (e) { reject(e); }
+      try { resolve(JSON.parse(out) as Record<string, string>); } catch (e) { reject(e); }
     });
     child.stdin.write(JSON.stringify(texts));
     child.stdin.end();
@@ -43,22 +43,20 @@ function pykakasiReadings(texts) {
 
 /**
  * 文字列群の読みを返す（キャッシュ + pykakasi + kata2hira フォールバック）。
- * @param {string[]} texts
- * @param {object} [opts]
- * @param {(t:string[])=>Promise<object>} [opts.pykakasiImpl] - test 差し替え用
- * @returns {Promise<Map<string,string>>} text → ひらがな読み
+ * @param opts.pykakasiImpl - test 差し替え用
+ * @returns text → ひらがな読み
  */
-async function getReadings(texts, opts = {}) {
+export async function getReadings(texts: string[], opts: { pykakasiImpl?: (t: string[]) => Promise<Record<string, string>> } = {}): Promise<Map<string, string>> {
   const impl = opts.pykakasiImpl || pykakasiReadings;
-  const out = new Map();
-  const need = [];
+  const out = new Map<string, string>();
+  const need: string[] = [];
   for (const t of texts) {
     if (!t) continue;
-    if (cache.has(t)) out.set(t, cache.get(t));
+    if (cache.has(t)) out.set(t, cache.get(t)!);
     else if (!need.includes(t)) need.push(t);
   }
   if (need.length) {
-    let readings = {};
+    let readings: Record<string, string> = {};
     try { readings = await impl(need); } catch { readings = {}; }
     for (const t of need) {
       const r = (readings && readings[t]) || kata2hira(t);
@@ -69,4 +67,4 @@ async function getReadings(texts, opts = {}) {
   return out;
 }
 
-module.exports = { getReadings, kata2hira, _clearCache: () => cache.clear() };
+export const _clearCache = (): void => { cache.clear(); };

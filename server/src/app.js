@@ -212,10 +212,10 @@ if (require.main === module) {
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
     // rtc-server reachability の動的検出を開始
-    const capabilityWatcher = require('./services/capabilityWatcher');
+    const capabilityWatcher = require('./services/capabilityWatcher.mts');
     capabilityWatcher.start(io);
     // #327: dictionary テーブルの vocab を in-memory オーバーレイに読み込む (空/不達なら file フォールバック)
-    require('./services/transcriptionConfig')
+    require('./services/transcriptionConfig.mts')
       .refreshVocabFromTable()
       .catch((err) => logger.warn(`[dictionary] initial vocab refresh failed: ${err.message}`));
   });

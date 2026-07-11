@@ -1,16 +1,22 @@
-const { logger } = require('../../utils/logger.mts');
+import { logger } from '../../utils/logger.mts';
 
-const STAMP_LABELS = [
+export const STAMP_LABELS: string[] = [
   '了解です', 'おはよう', 'OK!', 'おやすみ',
   'ごめんね', 'ありがとう', 'いいね！', '了解！',
   'うるうる', 'がんばります', 'ちらっ', 'ありがとうございました',
   'おつかれさま', 'ねむい', 'えっ!?', 'カンパーイ！',
 ];
 
+/** OpenAI Chat Completions API のレスポンス (外部 JSON 境界) */
+interface OpenAIChatResponse {
+  error?: { message?: string };
+  choices: { message: { content: string } }[];
+}
+
 /**
  * Build the system prompt for stamp prompt generation
  */
-function buildSystemPrompt(labels) {
+function buildSystemPrompt(labels: string[]): string {
   const count = labels.length;
   const cols = 4;
   const rows = Math.ceil(count / cols);
@@ -38,12 +44,15 @@ ${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}
  * OpenAI text provider
  */
 class OpenAITextProvider {
-  constructor(apiKey, model) {
+  apiKey: string | undefined;
+  model: string;
+
+  constructor(apiKey: string | undefined, model?: string) {
     this.apiKey = apiKey;
     this.model = model || 'gpt-4o';
   }
 
-  async generateStampPrompt(userInput, labels = STAMP_LABELS) {
+  async generateStampPrompt(userInput: string, labels: string[] = STAMP_LABELS): Promise<string> {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -60,7 +69,7 @@ class OpenAITextProvider {
       }),
     });
 
-    const data = await res.json();
+    const data = await res.json() as OpenAIChatResponse;
     if (!res.ok) {
       throw new Error(data.error?.message || 'Text generation failed');
     }
@@ -72,7 +81,7 @@ class OpenAITextProvider {
 /**
  * Factory function
  */
-function createTextProvider(provider) {
+export function createTextProvider(provider?: string): OpenAITextProvider {
   const apiKey = process.env.STAMP_TEXT_API_KEY
     || process.env.STAMP_IMAGE_API_KEY
     || process.env.OPENAI_API_KEY;
@@ -85,5 +94,3 @@ function createTextProvider(provider) {
       throw new Error(`Unknown text provider: ${provider}`);
   }
 }
-
-module.exports = { createTextProvider, STAMP_LABELS };

@@ -11,7 +11,8 @@ module.exports = {
   transform: {
     '^.+\\.mts$': ['@swc/jest', {
       jsc: { parser: { syntax: 'typescript' }, target: 'es2022' },
-      module: { type: 'commonjs' },
+      // ignoreDynamic: ESM 専用 package (file-type 等) の動的 import を require に変換せず素通しする
+      module: { type: 'commonjs', ignoreDynamic: true },
     }],
   },
 };

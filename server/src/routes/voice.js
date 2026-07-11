@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const { pool } = require('../db/pool.mts');
 const { authenticate } = require('../middleware/auth.mts');
 const { requireMember } = require('../middleware/roomAccess.mts');
-const { transcribeVoiceMessage } = require('../services/transcription');
+const { transcribeVoiceMessage } = require('../services/transcription.mts');
 const { decodeFileName } = require('../middleware/upload.mts');
 const { fetchReplyMessage } = require('../socket/handlers/message');
 
@@ -102,7 +102,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     io.to(roomId).emit('message:new', fullMessage);
 
     // Webhook notification
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('message.created', roomId, {
       room: { id: roomId },
       message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user.id, display_name: req.user.display_name } },

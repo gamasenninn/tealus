@@ -15,27 +15,33 @@
  *
  * @module services/lineGroupMappings
  */
-const fs = require('fs');
-const path = require('path');
-const { logger } = require('../utils/logger.mts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger } from '../utils/logger.mts';
 
-const DEFAULT_MAPPINGS_FILE = path.join(__dirname, '../../config/line-group-mappings.json');
+export const DEFAULT_MAPPINGS_FILE = path.join(import.meta.dirname, '../../config/line-group-mappings.json');
+
+/** mapping file の object form entry */
+interface GroupMappingObjectForm {
+  room_id?: string;
+  description?: string;
+}
 
 /**
  * file 内容 (= object form / pure form mixed) を flat map { groupId: roomId } に正規化
  *
- * @param {Object} raw - JSON parse 結果
- * @returns {Object} { groupId: roomId } flat form
+ * @param raw - JSON parse 結果
+ * @returns { groupId: roomId } flat form
  */
-function normalizeMap(raw) {
+export function normalizeMap(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== 'object') return {};
-  const result = {};
-  for (const [groupId, target] of Object.entries(raw)) {
+  const result: Record<string, string> = {};
+  for (const [groupId, target] of Object.entries(raw as Record<string, unknown>)) {
     if (groupId.startsWith('_')) continue; // _comment / _format 等 meta key は skip
     if (typeof target === 'string') {
       result[groupId] = target; // pure form
-    } else if (target && typeof target === 'object' && target.room_id) {
-      result[groupId] = target.room_id; // object form
+    } else if (target && typeof target === 'object' && (target as GroupMappingObjectForm).room_id) {
+      result[groupId] = (target as GroupMappingObjectForm).room_id as string; // object form
     }
     // ★ 不正 form は silent skip (= 起動阻害しない)
   }
@@ -45,34 +51,35 @@ function normalizeMap(raw) {
 /**
  * mapping file から flat map を load
  *
- * @param {Object} [options]
- * @param {string} [options.filePath] - file path override (= test 用)
- * @param {string} [options.envValue] - env LINE_GROUP_TO_ROOM 値 override (= test 用)
- * @returns {Object} { groupId: roomId } flat form
+ * @param options.filePath - file path override (= test 用)
+ * @param options.envValue - env LINE_GROUP_TO_ROOM 値 override (= test 用)
+ * @returns { groupId: roomId } flat form
  */
-function loadGroupToRoomMap(options = {}) {
+export function loadGroupToRoomMap(
+  options: { filePath?: string; envValue?: string } = {}
+): Record<string, string> {
   const filePath = options.filePath || process.env.LINE_GROUP_TO_ROOM_FILE || DEFAULT_MAPPINGS_FILE;
   const envValue = options.envValue !== undefined ? options.envValue : process.env.LINE_GROUP_TO_ROOM;
 
   // Priority 1: file
   try {
     const text = fs.readFileSync(filePath, 'utf8');
-    const raw = JSON.parse(text);
+    const raw = JSON.parse(text) as unknown;
     return normalizeMap(raw);
   } catch (e) {
     // file なし or parse fail → fallback chain
-    if (e.code !== 'ENOENT') {
-      logger.warn(`[lineGroupMappings] file load failed: ${e.message}, falling back to env`);
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn(`[lineGroupMappings] file load failed: ${e instanceof Error ? e.message : String(e)}, falling back to env`);
     }
   }
 
   // Priority 2: env LINE_GROUP_TO_ROOM
   if (envValue) {
     try {
-      const raw = JSON.parse(envValue);
+      const raw = JSON.parse(envValue) as unknown;
       return normalizeMap(raw);
     } catch (e) {
-      logger.warn(`[lineGroupMappings] env LINE_GROUP_TO_ROOM JSON parse failed: ${e.message}`);
+      logger.warn(`[lineGroupMappings] env LINE_GROUP_TO_ROOM JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -84,27 +91,24 @@ function loadGroupToRoomMap(options = {}) {
  * 特定 group の mapping meta info (= description 等) を取得
  * routes/line.js では使わないが、admin / debug 用に export
  *
- * @param {string} groupId
- * @param {Object} [options]
- * @returns {Object|null} { room_id, description } or null
+ * @returns { room_id, description } or null
  */
-function getGroupMappingMeta(groupId, options = {}) {
+export function getGroupMappingMeta(
+  groupId: string,
+  options: { filePath?: string } = {}
+): { room_id: string | undefined; description: string | null } | null {
   const filePath = options.filePath || process.env.LINE_GROUP_TO_ROOM_FILE || DEFAULT_MAPPINGS_FILE;
   try {
     const text = fs.readFileSync(filePath, 'utf8');
-    const raw = JSON.parse(text);
+    const raw = JSON.parse(text) as Record<string, unknown>;
     const target = raw[groupId];
     if (typeof target === 'string') return { room_id: target, description: null };
-    if (target && typeof target === 'object') return { room_id: target.room_id, description: target.description || null };
+    if (target && typeof target === 'object') {
+      const obj = target as GroupMappingObjectForm;
+      return { room_id: obj.room_id, description: obj.description || null };
+    }
     return null;
   } catch {
     return null;
   }
 }
-
-module.exports = {
-  loadGroupToRoomMap,
-  getGroupMappingMeta,
-  normalizeMap,
-  DEFAULT_MAPPINGS_FILE,
-};

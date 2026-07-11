@@ -63,7 +63,7 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const OpenAI = require('openai');
-const aliasMiner = require('../src/services/aliasMiner');
+const aliasMiner = require('../src/services/aliasMiner.mts');
 
 function parseArgs(argv) {
   const args = {

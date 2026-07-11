@@ -140,7 +140,7 @@ router.post('/webhooks/:id/test', async (req, res) => {
       message: { content: 'Tealus Webhook テスト送信' },
     });
 
-    const { dispatchWebhook } = require('../../services/webhook');
+    const { dispatchWebhook } = require('../../services/webhook.mts');
     const testResult = await dispatchWebhook(webhook, payload);
 
     res.json({ success: testResult.ok, status: testResult.status });

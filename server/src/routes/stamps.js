@@ -4,7 +4,7 @@ const express = require('express');
 const { pool } = require('../db/pool.mts');
 const { authenticate } = require('../middleware/auth.mts');
 const { isAdmin } = require('../utils/permissions.mts');
-const { generateStampPack, saveStampFiles, checkDailyLimit } = require('../services/stamp');
+const { generateStampPack, saveStampFiles, checkDailyLimit } = require('../services/stamp/index.mts');
 
 const router = express.Router();
 router.use(authenticate);

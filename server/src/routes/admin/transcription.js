@@ -1,7 +1,7 @@
 const { logger } = require('../../utils/logger.mts');
 const E = require('../../constants/errors.mts');
 const express = require('express');
-const { resetCache, loadGuideline, refreshVocabFromTable } = require('../../services/transcriptionConfig');
+const { resetCache, loadGuideline, refreshVocabFromTable } = require('../../services/transcriptionConfig.mts');
 
 const router = express.Router();
 

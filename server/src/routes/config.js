@@ -12,7 +12,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const capabilityWatcher = require('../services/capabilityWatcher');
+const capabilityWatcher = require('../services/capabilityWatcher.mts');
 
 const AGENT_FETCH_TIMEOUT_MS = 2000;
 

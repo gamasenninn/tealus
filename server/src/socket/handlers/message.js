@@ -1,7 +1,7 @@
 const { logger } = require('../../utils/logger.mts');
 const { pool } = require('../../db/pool.mts');
-const { processLinkPreviews } = require('../../services/linkPreview');
-const { sendPushToOfflineMembers } = require('../../services/push');
+const { processLinkPreviews } = require('../../services/linkPreview.mts');
+const { sendPushToOfflineMembers } = require('../../services/push.mts');
 
 /**
  * Fetch reply_to message info with transcription fallback
@@ -99,7 +99,7 @@ function registerMessageHandler(socket, io) {
       }, onlineUserIds);
 
       // Webhook notification
-      const { fireWebhooks } = require('../../services/webhook');
+      const { fireWebhooks } = require('../../services/webhook.mts');
       fireWebhooks('message.created', room_id, {
         room: { id: room_id },
         message: { id: message.id, type, content: content?.trim(), reply_to: reply_to || null, reply_to_message: message.reply_to_message || null, sender: { id: socket.user.id, display_name: socket.user.display_name } },

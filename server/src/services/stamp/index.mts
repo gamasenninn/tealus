@@ -1,10 +1,13 @@
-const { logger } = require('../../utils/logger.mts');
-const sharp = require('sharp');
-const path = require('path');
-const fs = require('fs');
-const { createTextProvider, STAMP_LABELS } = require('./textProviders');
-const { createImageProvider } = require('./imageProviders');
-const { MEDIA_ROOT } = require('../../middleware/upload.mts');
+import { logger } from '../../utils/logger.mts';
+import sharp from 'sharp';
+import path from 'node:path';
+import fs from 'node:fs';
+import type pg from 'pg';
+import { createTextProvider, STAMP_LABELS } from './textProviders.mts';
+import { createImageProvider } from './imageProviders.mts';
+import { MEDIA_ROOT } from '../../middleware/upload.mts';
+
+export { STAMP_LABELS };
 
 const STAMP_DIR = path.join(MEDIA_ROOT, 'stamps');
 const GRID_COLS = 4;
@@ -17,12 +20,27 @@ if (!fs.existsSync(STAMP_DIR)) {
   fs.mkdirSync(STAMP_DIR, { recursive: true });
 }
 
+/** 個別スタンプ (分割結果) */
+interface StampImage {
+  buffer: Buffer;
+  label: string;
+  index: number;
+}
+
+/** セル境界 (start/end は CV 計算用の中心基準、cutStart/cutEnd は切り出し用のバンド端) */
+interface CellBound {
+  start: number;
+  end: number;
+  cutStart?: number;
+  cutEnd?: number;
+}
+
 /**
  * Generate a stamp pack from user prompt
- * @param {string} userPrompt - User's stamp description
- * @returns {object} { gridImageBuffer, stamps: [{ buffer, label, index }] }
+ * @param userPrompt - User's stamp description
+ * @returns { gridImageBuffer, stamps: [{ buffer, label, index }] }
  */
-async function generateStampPack(userPrompt, customLabels = null) {
+export async function generateStampPack(userPrompt: string, customLabels: string[] | null = null): Promise<{ gridBuffer: Buffer; detailedPrompt: string; stamps: StampImage[] }> {
   // Step 1: Convert user prompt to detailed image prompt
   const labelsToUse = customLabels || STAMP_LABELS;
   logger.info(`Stamp generation: converting prompt "${userPrompt}" (${labelsToUse.length} labels)`);
@@ -51,7 +69,7 @@ async function generateStampPack(userPrompt, customLabels = null) {
 /**
  * Split a grid image into individual stamp images by detecting grid lines
  */
-async function splitGridImage(gridBuffer, labels = STAMP_LABELS) {
+async function splitGridImage(gridBuffer: Buffer, labels: string[] = STAMP_LABELS): Promise<StampImage[]> {
   const { data, info } = await sharp(gridBuffer)
     .ensureAlpha()
     .raw()
@@ -60,9 +78,9 @@ async function splitGridImage(gridBuffer, labels = STAMP_LABELS) {
   const { width, height, channels } = info;
 
   // Calculate row variance (low variance = uniform color = grid line)
-  const rowVariance = [];
+  const rowVariance: number[] = [];
   for (let y = 0; y < height; y++) {
-    const values = [];
+    const values: number[] = [];
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * channels;
       values.push((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
@@ -72,9 +90,9 @@ async function splitGridImage(gridBuffer, labels = STAMP_LABELS) {
   }
 
   // Calculate column variance
-  const colVariance = [];
+  const colVariance: number[] = [];
   for (let x = 0; x < width; x++) {
-    const values = [];
+    const values: number[] = [];
     for (let y = 0; y < height; y++) {
       const idx = (y * width + x) * channels;
       values.push((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
@@ -92,7 +110,7 @@ async function splitGridImage(gridBuffer, labels = STAMP_LABELS) {
   logger.info(`Grid rows: ${JSON.stringify(rowBounds)}`);
   logger.info(`Grid cols: ${JSON.stringify(colBounds)}`);
 
-  const stamps = [];
+  const stamps: StampImage[] = [];
 
   for (let row = 0; row < rowBounds.length; row++) {
     for (let col = 0; col < colBounds.length; col++) {
@@ -147,14 +165,14 @@ async function splitGridImage(gridBuffer, labels = STAMP_LABELS) {
  * Detect cell bounds using variance-based grid line detection.
  * Auto-detects the number of cells (no fixed grid size assumption).
  */
-function detectCellBounds(variance, totalSize) {
+function detectCellBounds(variance: number[], totalSize: number): CellBound[] {
   const GAP_TOLERANCE = 20;
   const MIN_CELL_SIZE = 50;
   const MAX_CELLS = 6; // Reasonable max for one dimension
   const MIN_CELLS = 2;
 
   // Collect all candidates
-  const candidates = [];
+  const candidates: { cells: CellBound[]; cv: number; threshold: number }[] = [];
   for (let threshold = 50; threshold <= 3000; threshold += 50) {
     const cells = detectWithThreshold(variance, totalSize, threshold, GAP_TOLERANCE, MIN_CELL_SIZE);
     if (cells.length >= MIN_CELLS && cells.length <= MAX_CELLS) {
@@ -193,14 +211,14 @@ function detectCellBounds(variance, totalSize) {
  * Only removes white/near-white pixels that are connected to the border.
  * Preserves white areas inside characters (e.g. white face of a bird).
  */
-function floodFillTransparent(pixels, width, height, threshold) {
+function floodFillTransparent(pixels: Buffer, width: number, height: number, threshold: number): void {
   const visited = new Uint8Array(width * height);
 
-  function isWhite(idx) {
+  function isWhite(idx: number): boolean {
     return pixels[idx] >= threshold && pixels[idx + 1] >= threshold && pixels[idx + 2] >= threshold;
   }
 
-  const queue = [];
+  const queue: number[] = [];
 
   // Seed from all edge pixels
   for (let x = 0; x < width; x++) {
@@ -213,7 +231,7 @@ function floodFillTransparent(pixels, width, height, threshold) {
   }
 
   while (queue.length > 0) {
-    const pos = queue.pop();
+    const pos = queue.pop()!;
     if (pos < 0 || pos >= width * height || visited[pos]) continue;
 
     const idx = pos * 4;
@@ -234,8 +252,8 @@ function floodFillTransparent(pixels, width, height, threshold) {
 /**
  * Detect cells at a given variance threshold
  */
-function detectWithThreshold(variance, totalSize, threshold, gapTolerance, minCellSize) {
-  const rawBands = [];
+function detectWithThreshold(variance: number[], totalSize: number, threshold: number, gapTolerance: number, minCellSize: number): CellBound[] {
+  const rawBands: { start: number; end: number }[] = [];
   let s = -1;
   for (let i = 0; i < variance.length; i++) {
     if (variance[i] < threshold) {
@@ -260,7 +278,7 @@ function detectWithThreshold(variance, totalSize, threshold, gapTolerance, minCe
 
   // Build cells using band centers for size calculation, band edges for cutting
   const centers = merged.map(b => Math.floor((b.start + b.end) / 2));
-  const cells = [];
+  const cells: CellBound[] = [];
   for (let i = 0; i < centers.length - 1; i++) {
     cells.push({
       start: centers[i],           // for CV calculation
@@ -275,17 +293,17 @@ function detectWithThreshold(variance, totalSize, threshold, gapTolerance, minCe
 
 /**
  * Save stamp files to disk
- * @param {string} packId - Stamp pack UUID
- * @param {Array} stamps - Array of { buffer, label, index }
- * @returns {Array} Array of { filePath, label, index }
+ * @param packId - Stamp pack UUID
+ * @param stamps - Array of { buffer, label, index }
+ * @returns Array of { filePath, label, index }
  */
-async function saveStampFiles(packId, stamps) {
+export async function saveStampFiles(packId: string, stamps: StampImage[]): Promise<{ filePath: string; label: string; index: number }[]> {
   const packDir = path.join(STAMP_DIR, packId);
   if (!fs.existsSync(packDir)) {
     fs.mkdirSync(packDir, { recursive: true });
   }
 
-  const saved = [];
+  const saved: { filePath: string; label: string; index: number }[] = [];
   for (const stamp of stamps) {
     const safeLabel = stamp.label.replace(/[<>:"/\\|?!*]/g, '_');
     const fileName = `${String(stamp.index).padStart(2, '0')}_${safeLabel}.png`;
@@ -305,13 +323,11 @@ async function saveStampFiles(packId, stamps) {
 /**
  * Check daily generation limit
  */
-async function checkDailyLimit(pool, userId) {
-  const result = await pool.query(
+export async function checkDailyLimit(pool: pg.Pool, userId: string): Promise<number> {
+  const result = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int AS count FROM stamp_packs
      WHERE created_by = $1 AND created_at > NOW() - INTERVAL '1 day'`,
     [userId]
   );
   return result.rows[0].count;
 }
-
-module.exports = { generateStampPack, saveStampFiles, checkDailyLimit, STAMP_LABELS };

@@ -8,7 +8,7 @@ const multer = require('multer');
 const { pool } = require('../db/pool.mts');
 const { authenticate } = require('../middleware/auth.mts');
 const { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName } = require('../middleware/upload.mts');
-const { generateThumbnail } = require('../services/thumbnail');
+const { generateThumbnail } = require('../services/thumbnail.mts');
 
 const router = express.Router();
 
@@ -77,7 +77,7 @@ router.post('/push', async (req, res) => {
     });
 
     // Webhook notification
-    const { fireWebhooks } = require('../services/webhook');
+    const { fireWebhooks } = require('../services/webhook.mts');
     fireWebhooks('message.created', room_id, {
       room: { id: room_id },
       message: { id: message.id, type, content: content?.trim(), reply_to: message.reply_to || null, sender: { id: req.user.id, display_name: req.user.display_name } },
@@ -699,7 +699,7 @@ router.post('/messages/:id/transcribe', async (req, res) => {
     );
 
     // 7. transcribe + format を同期実行 (Bot endpoint は MCP からの synchronous call を想定)
-    const { transcribeMessage } = require('../services/transcription');
+    const { transcribeMessage } = require('../services/transcription.mts');
     const isVideo = msg.type === 'video';
     const rawText = await transcribeMessage(messageId, msg.file_path, {
       io: null,           // headless 経路、Socket.IO emit 抑制
