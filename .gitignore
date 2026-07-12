@@ -72,3 +72,10 @@ report/
 
 # Claude Code cc-tealus runtime config (#213) — example はコミット
 .claude/cc-tealus.json
+
+# Claude Code の端末固有設定 / 実行時ロック (共有しない)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# TTS 実行時の一時生成 wav (rtc-server / agent-server が Date.now() で作る)
+.tts-tmp-*.wav
