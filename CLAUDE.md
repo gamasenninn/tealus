@@ -20,11 +20,13 @@
 
 ## 技術スタック
 
-- フロントエンド: React + Vite (PWA)
-- バックエンド: Node.js (Express) + Socket.IO
+- 言語: TypeScript (全レイヤー、strict / ESM)。サーバは Node 24 native type stripping でビルドレス実行 (`node src/app.mts`)、クライアントは Vite。JS→TS 全面移行は #330 で完了 (`engines: node >=22.6`)
+- フロントエンド: React + Vite (PWA、TS)
+- バックエンド: Node.js (Express) + Socket.IO + TypeScript
 - DB: PostgreSQL (RLS有効)
 - キャッシュ: Redis
 - コンテナ: Docker Compose
+- テスト: サーバ/agent-server は Jest + @swc/jest (型検査は `tsc --noEmit` に分離)、クライアント/dashboard は Vitest
 
 ## 開発ルール
 
