@@ -120,8 +120,11 @@ describe('parseCsv (= 簡易 RFC 4180)', () => {
 });
 
 describe('TextFilePreview component', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
-    globalThis.fetch = vi.fn();
+    fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
   });
 
   afterEach(() => {
@@ -136,7 +139,7 @@ describe('TextFilePreview component', () => {
   });
 
   it('toggle button click で fetch (= UTF-8 decode) + markdown rendering', async () => {
-    globalThis.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('# 五千言\n\n本文の日本語テキスト'),
     });
@@ -148,11 +151,11 @@ describe('TextFilePreview component', () => {
 
     await waitFor(() => expect(screen.getByText('五千言')).toBeInTheDocument());
     expect(screen.getByText(/本文の日本語テキスト/)).toBeInTheDocument();
-    expect(globalThis.fetch).toHaveBeenCalledWith('/media/line-files/x.md');
+    expect(fetchMock).toHaveBeenCalledWith('/media/line-files/x.md');
   });
 
   it('非 markdown は <pre> raw 表示 (= source code / log 等)', async () => {
-    globalThis.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('console.log("hello");'),
     });
@@ -162,11 +165,11 @@ describe('TextFilePreview component', () => {
     fireEvent.click(screen.getByRole('button', { name: /プレビューを開く/ }));
 
     await waitFor(() => expect(container.querySelector('pre')).toBeInTheDocument());
-    expect(container.querySelector('pre').textContent).toBe('console.log("hello");');
+    expect(container.querySelector('pre')!.textContent).toBe('console.log("hello");');
   });
 
   it('fetch fail (= 404 等) で error 表示', async () => {
-    globalThis.fetch.mockResolvedValue({ ok: false, status: 404 });
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
 
     const media = { file_path: 'line-files/missing.md', file_name: 'missing.md', mime_type: 'text/markdown' };
     render(<TextFilePreview media={media} />);
@@ -177,7 +180,7 @@ describe('TextFilePreview component', () => {
   });
 
   it('JSON file は自動成形して <pre> 表示', async () => {
-    globalThis.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('{"a":1,"b":[2,3]}'),  // minify JSON
     });
@@ -188,13 +191,13 @@ describe('TextFilePreview component', () => {
 
     await waitFor(() => expect(container.querySelector('pre')).toBeInTheDocument());
     // ★ ★ 自動成形 (= indent 2) で複数行になる
-    const pre = container.querySelector('pre');
+    const pre = container.querySelector('pre')!;
     expect(pre.textContent).toContain('"a": 1');
     expect(pre.textContent).toMatch(/\n/);  // 改行が入っている (= 整形済)
   });
 
   it('CSV file は <table> rendering (= header + body 分離)', async () => {
-    globalThis.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('ID,氏名,部署\n001,山田,技術部\n002,佐藤,営業部'),
     });
@@ -215,7 +218,7 @@ describe('TextFilePreview component', () => {
   });
 
   it('再度 toggle で collapse (= body 非表示、★ ただし content は cache、再 fetch なし)', async () => {
-    globalThis.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('cached content'),
     });
@@ -231,6 +234,6 @@ describe('TextFilePreview component', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /プレビューを開く/ }));
     expect(screen.getByText('cached content')).toBeInTheDocument();
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1); // ★ cache hit
+    expect(fetchMock).toHaveBeenCalledTimes(1); // ★ cache hit
   });
 });

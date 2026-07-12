@@ -11,6 +11,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import RoomSettings from '../../src/components/chat/RoomSettings';
+import type { Room } from '../../src/types';
 
 vi.mock('../../src/services/api', () => ({
   api: {
@@ -40,7 +41,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('DM (type=direct) では「エージェント設定」section が表示される', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'direct' }}
+        currentRoom={{ type: 'direct' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);
@@ -50,7 +51,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('グループ + isAdmin では「エージェント設定」section が表示される', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'group' }}
+        currentRoom={{ type: 'group' } as Room}
         isAdmin={true}
         isSysAdmin={false}
       />);
@@ -60,7 +61,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('グループ + non-admin では「エージェント設定」section が表示されない', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'group' }}
+        currentRoom={{ type: 'group' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);
@@ -73,7 +74,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('canEdit=true の時、3 endpoint を並列で fetch する', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'direct' }}
+        currentRoom={{ type: 'direct' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);
@@ -87,7 +88,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('canEdit=false の時、agent-server endpoint は fetch しない', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'group' }}
+        currentRoom={{ type: 'group' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);
@@ -103,7 +104,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('select 変更で updateRoomAgentSettings が呼ばれる', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'direct' }}
+        currentRoom={{ type: 'direct' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);
@@ -122,7 +123,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('Light Agent プロンプト textarea を blur すると updateRoomLightPrompt が呼ばれる', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'direct' }}
+        currentRoom={{ type: 'direct' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);
@@ -137,7 +138,7 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
     it('Deep Agent プロンプト textarea を blur すると updateRoomClaudeMd が呼ばれる', async () => {
       render(<RoomSettings
         {...baseProps}
-        currentRoom={{ type: 'direct' }}
+        currentRoom={{ type: 'direct' } as Room}
         isAdmin={false}
         isSysAdmin={false}
       />);

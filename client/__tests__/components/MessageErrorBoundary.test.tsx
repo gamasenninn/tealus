@@ -8,7 +8,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import MessageErrorBoundary from '../../src/components/chat/MessageErrorBoundary';
 
-function Boom() {
+function Boom(): never {
   throw new Error('render fail');
 }
 

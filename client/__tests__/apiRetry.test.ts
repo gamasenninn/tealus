@@ -5,13 +5,13 @@ import { api } from '../src/services/api';
 // client 耐性。GET のみ transient 失敗を限定リトライ + 全 method にタイムアウト。
 // POST/PUT/DELETE は二重送信回避のためリトライしない。
 
-const jsonRes = (status, body) => ({
+const jsonRes = (status: number, body: unknown) => ({
   ok: status >= 200 && status < 300,
   status,
   json: async () => body,
 });
 // 非JSON応答（プロキシの HTML エラーページ等）を模す: json() が throw する
-const htmlRes = (status) => ({
+const htmlRes = (status: number) => ({
   ok: status >= 200 && status < 300,
   status,
   json: async () => { throw new SyntaxError('Unexpected token <'); },

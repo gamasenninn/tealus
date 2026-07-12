@@ -19,7 +19,7 @@ import remarkBreaks from 'remark-breaks';
 
 const plugins = [remarkGfm, remarkBreaks];
 
-function renderMd(source) {
+function renderMd(source: string) {
   return render(<Markdown remarkPlugins={plugins}>{source}</Markdown>);
 }
 
@@ -42,22 +42,22 @@ describe('Markdown plugins (remark-gfm + remark-breaks)', () => {
     const { container } = renderMd('```js\nconst a = 1;\nconst b = 2;\n```');
     const pre = container.querySelector('pre');
     expect(pre).not.toBeNull();
-    expect(pre.querySelectorAll('br').length).toBe(0);
-    expect(pre.textContent).toContain('const a = 1;');
-    expect(pre.textContent).toContain('const b = 2;');
+    expect(pre!.querySelectorAll('br').length).toBe(0);
+    expect(pre!.textContent).toContain('const a = 1;');
+    expect(pre!.textContent).toContain('const b = 2;');
   });
 
   it('MD 強調 (**bold**) は通常通り render される', () => {
     const { container } = renderMd('これは **太字** です');
     const strong = container.querySelector('strong');
     expect(strong).not.toBeNull();
-    expect(strong.textContent).toBe('太字');
+    expect(strong!.textContent).toBe('太字');
   });
 
   it('リスト構造は <br> 化されず <ul><li> として render される', () => {
     const { container } = renderMd('- 項目 A\n- 項目 B\n- 項目 C');
     expect(container.querySelectorAll('li').length).toBe(3);
-    expect(container.querySelector('ul').querySelectorAll('br').length).toBe(0);
+    expect(container.querySelector('ul')!.querySelectorAll('br').length).toBe(0);
   });
 
   it('GFM table は remark-gfm 共存で正しく render される', () => {

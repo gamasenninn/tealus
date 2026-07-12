@@ -1,21 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { editableVoiceMessages, voiceNav, transcriptionText } from '../src/utils/voiceNav';
+import type { Message } from '../src/types';
 
 const ME = 'user-me';
 const OTHER = 'user-other';
 
-function voice(id, sender, status = 'done', extra = {}) {
-  return { id, type: 'voice', sender_id: sender, transcription: { status }, ...extra };
+function voice(id: string, sender: string, status = 'done', extra: Partial<Message> = {}): Message {
+  return { id, type: 'voice', sender_id: sender, transcription: { status } as Message['transcription'], ...extra } as Message;
 }
 
 describe('editableVoiceMessages (#文字起こし連続編集)', () => {
   const messages = [
-    { id: 't1', type: 'text', sender_id: ME },
+    { id: 't1', type: 'text', sender_id: ME } as Message,
     voice('v1', ME),
     voice('v2', OTHER),
     voice('v3', ME, 'transcribing'), // 未完了 → 除外
     voice('v4', OTHER),
-    { id: 'v5', type: 'voice', sender_id: ME, is_deleted: true, transcription: { status: 'done' } }, // 削除 → 除外
+    { id: 'v5', type: 'voice', sender_id: ME, is_deleted: true, transcription: { status: 'done' } } as Message, // 削除 → 除外
   ];
 
   it('allowMemberEdit=false: 自分の done 音声のみ', () => {
@@ -42,7 +43,7 @@ describe('voiceNav', () => {
     expect(nav.total).toBe(3);
     expect(nav.prevId).toBeNull();
     expect(nav.nextId).toBe('v2');
-    expect(nav.current.id).toBe('v1');
+    expect(nav.current!.id).toBe('v1');
   });
 
   it('中間: 前後とも存在', () => {
@@ -75,8 +76,8 @@ describe('voiceNav', () => {
 
 describe('transcriptionText', () => {
   it('formatted_text 優先、無ければ raw_text', () => {
-    expect(transcriptionText({ transcription: { formatted_text: 'F', raw_text: 'R' } })).toBe('F');
-    expect(transcriptionText({ transcription: { raw_text: 'R' } })).toBe('R');
+    expect(transcriptionText({ transcription: { formatted_text: 'F', raw_text: 'R' } } as Message)).toBe('F');
+    expect(transcriptionText({ transcription: { raw_text: 'R' } } as Message)).toBe('R');
     expect(transcriptionText(null)).toBe('');
   });
 });

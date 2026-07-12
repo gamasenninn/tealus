@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import type { ReactNode } from 'react';
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }) => <div>{children}</div>,
-  Routes: ({ children }) => <div>{children}</div>,
+  BrowserRouter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Routes: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Route: () => null,
   Navigate: () => null,
   useNavigate: () => vi.fn(),

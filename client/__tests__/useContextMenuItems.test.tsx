@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { buildContextMenuItems } from '../src/hooks/useContextMenuItems';
+import type { BuildContextMenuItemsParams } from '../src/hooks/useContextMenuItems';
 
 describe('buildContextMenuItems 部分コピー', () => {
   it('テキストメッセージに「部分コピー」が出て onSelectText(content) を呼ぶ', () => {
@@ -11,10 +12,10 @@ describe('buildContextMenuItems 部分コピー', () => {
       message: { id: 'm1', content: 'hello world', type: 'text' },
       isOwn: true, roomId: 'r1', currentRoom: {},
       onSelectText,
-    });
+    } as unknown as BuildContextMenuItemsParams);
     const partial = items.find((i) => i.label === '部分コピー');
     expect(partial).toBeTruthy();
-    partial.onClick();
+    partial!.onClick();
     expect(onSelectText).toHaveBeenCalledWith('hello world');
   });
 
@@ -22,7 +23,7 @@ describe('buildContextMenuItems 部分コピー', () => {
     const { items } = buildContextMenuItems({
       message: { id: 'm1', content: 'hello', type: 'text' },
       isOwn: true, roomId: 'r1', currentRoom: {},
-    });
+    } as unknown as BuildContextMenuItemsParams);
     expect(items.find((i) => i.label === '部分コピー')).toBeFalsy();
     // 全文コピーは従来どおり出る
     expect(items.find((i) => i.label === 'コピー')).toBeTruthy();
@@ -34,10 +35,10 @@ describe('buildContextMenuItems 部分コピー', () => {
       message: { id: 'm2', type: 'voice', transcription: { status: 'done', formatted_text: '音声テキスト' } },
       isOwn: true, roomId: 'r1', currentRoom: {},
       onSelectText,
-    });
+    } as unknown as BuildContextMenuItemsParams);
     const partial = items.find((i) => i.label === '文字起こしを部分コピー');
     expect(partial).toBeTruthy();
-    partial.onClick();
+    partial!.onClick();
     expect(onSelectText).toHaveBeenCalledWith('音声テキスト');
   });
 });
