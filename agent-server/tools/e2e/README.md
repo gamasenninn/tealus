@@ -46,13 +46,13 @@ TEALUS_E2E_ROOM_ID=<test room の UUID>
 
 ```bash
 # 全 scenario run
-node agent-server/tools/e2e/run.js
+node agent-server/tools/e2e/run.mts
 
 # 特定 scenario のみ
-node agent-server/tools/e2e/run.js --filter S1,S2
+node agent-server/tools/e2e/run.mts --filter S1,S2
 
 # dry-run (投下せず schema validation のみ)
-node agent-server/tools/e2e/run.js --dry-run
+node agent-server/tools/e2e/run.mts --dry-run
 ```
 
 出力: `report/e2e-runs/YYYY-MM-DD-NNNN.md` (非公開方針準拠、`project_internal_reports_policy.md`)
@@ -61,8 +61,8 @@ node agent-server/tools/e2e/run.js --dry-run
 
 - `scenarios.json` — scenario 定義 (初期 6 件)
 - `scenario-schema.md` — schema 仕様
-- `run.js` — runner CLI
-- `report.js` — markdown report generator
+- `run.mts` — runner CLI
+- `report.mts` — markdown report generator
 - `README.md` — このファイル
 
 ## 想定 use case

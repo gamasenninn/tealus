@@ -10,12 +10,41 @@
  *   - judge 自体の失敗 (network / API key 等) → warn (`llm_judge: error: ...`)、scenario fail にはしない
  *   - cost cap: judge call は 1 scenario あたり 1 回、gpt-4o-mini で 1c 以下を想定
  */
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
+
+export interface JudgeConfig {
+  criteria?: string;
+  min_score?: number;
+}
+
+export interface JudgeScenario {
+  prompt: string;
+  llm_judge?: JudgeConfig | null;
+  // scenario は id 等の付随 field を持つ (scenarios.json の 1 entry)
+  [key: string]: unknown;
+}
+
+export interface JudgeObserved {
+  tool_calls?: Array<{ tool: string }>;
+  bot_response_text?: string;
+}
+
+export interface Judgement {
+  score: number | null;
+  pass: boolean;
+  reasoning: string;
+}
+
+export interface JudgeResult extends Partial<Judgement> {
+  error?: string;
+  min_score?: number;
+  model?: string;
+}
 
 // env は call-time に読む (test での mock + production での hot-swap 両対応)
-function getJudgeModel() { return process.env.E2E_JUDGE_MODEL || 'gpt-4o-mini'; }
-function getJudgeApiKey() { return process.env.E2E_JUDGE_API_KEY || process.env.OPENAI_API_KEY; }
-const DEFAULT_MIN_SCORE = 70;
+function getJudgeModel(): string { return process.env.E2E_JUDGE_MODEL || 'gpt-4o-mini'; }
+function getJudgeApiKey(): string | undefined { return process.env.E2E_JUDGE_API_KEY || process.env.OPENAI_API_KEY; }
+export const DEFAULT_MIN_SCORE = 70;
 
 const SYSTEM_PROMPT = `You are an objective evaluator of an AI agent's response in an end-to-end test.
 You will receive (1) the user's prompt, (2) the agent's actual response, (3) the tool chain the agent used, and (4) success criteria.
@@ -32,7 +61,7 @@ Scoring guidance:
 
 Be strict but fair. The agent has access to tools; if the response omits content the criteria require, that is a real gap.`;
 
-function buildJudgePrompt(scenario, observed) {
+export function buildJudgePrompt(scenario: JudgeScenario, observed: JudgeObserved): string {
   const tools = (observed.tool_calls || []).map(t => t.tool).join(' → ') || '(none)';
   const response = observed.bot_response_text || '(empty)';
   const criteria = scenario.llm_judge?.criteria || '(no criteria specified)';
@@ -51,7 +80,7 @@ ${criteria}
 Output strict JSON only: {"score": <int 0-100>, "reasoning": "<one sentence>"}`;
 }
 
-async function callJudgeApi(prompt) {
+async function callJudgeApi(prompt: string): Promise<{ score?: unknown; reasoning?: unknown }> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -72,14 +101,14 @@ async function callJudgeApi(prompt) {
     const text = await res.text();
     throw new Error(`judge API ${res.status}: ${text.slice(0, 200)}`);
   }
-  const data = await res.json();
+  const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('judge API returned no content');
   return JSON.parse(content);
 }
 
-function normalizeJudgement(raw, minScore) {
-  const score = Number.isFinite(raw?.score) ? Math.round(raw.score) : null;
+export function normalizeJudgement(raw: Record<string, unknown>, minScore: number): Judgement {
+  const score = Number.isFinite(raw?.score) ? Math.round(raw.score as number) : null;
   const reasoning = typeof raw?.reasoning === 'string' ? raw.reasoning : '(no reasoning)';
   if (score === null) {
     return { score: null, pass: false, reasoning: `invalid judge output: ${JSON.stringify(raw).slice(0, 120)}` };
@@ -95,26 +124,19 @@ function normalizeJudgement(raw, minScore) {
  * Run LLM-as-judge for one scenario. Returns null if scenario has no llm_judge config.
  * On any error, returns { error: '...' } instead of throwing — judge failures are warns, not fails.
  */
-async function runJudge(scenario, observed) {
+export async function runJudge(scenario: JudgeScenario, observed: JudgeObserved): Promise<JudgeResult | null> {
   if (!scenario.llm_judge) return null;
   if (!getJudgeApiKey()) {
     return { error: 'no E2E_JUDGE_API_KEY / OPENAI_API_KEY set, skipping LLM judge' };
   }
   const minScore = Number.isFinite(scenario.llm_judge.min_score)
-    ? scenario.llm_judge.min_score
+    ? scenario.llm_judge.min_score as number
     : DEFAULT_MIN_SCORE;
   try {
     const prompt = buildJudgePrompt(scenario, observed);
     const raw = await callJudgeApi(prompt);
     return { ...normalizeJudgement(raw, minScore), min_score: minScore, model: getJudgeModel() };
   } catch (err) {
-    return { error: err.message, min_score: minScore };
+    return { error: err instanceof Error ? err.message : String(err), min_score: minScore };
   }
 }
-
-module.exports = {
-  runJudge,
-  buildJudgePrompt,    // exported for tests
-  normalizeJudgement,  // exported for tests
-  DEFAULT_MIN_SCORE,
-};

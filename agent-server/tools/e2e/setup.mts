@@ -10,7 +10,7 @@
  *   5. agent-server/.env に TEALUS_E2E_* env を追記 / 更新
  *
  * Usage (admin credential は env 経由で渡す、chat / argv に出さない):
- *   TEALUS_ADMIN_LOGIN_ID=xxx TEALUS_ADMIN_PASS=yyy node agent-server/tools/e2e/setup.js
+ *   TEALUS_ADMIN_LOGIN_ID=xxx TEALUS_ADMIN_PASS=yyy node agent-server/tools/e2e/setup.mts
  *
  * 出力:
  *   - .env に追加された env の verify 内容
@@ -22,26 +22,28 @@
  *   - 既に存在する user / room を再利用 (idempotent な動作)
  *   - .env への書込みは marker 行で囲む (安全な再実行)
  */
-const fs = require('fs');
-const path = require('path');
-const fetch = require('node-fetch');
-const crypto = require('crypto');
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+import fs from 'node:fs';
+import path from 'node:path';
+import fetch from 'node-fetch';
+import crypto from 'node:crypto';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: path.join(import.meta.dirname, '../../.env') });
 
 const TEALUS_API_URL = process.env.TEALUS_API_URL || 'http://localhost:3000';
 const ADMIN_ID = process.env.TEALUS_ADMIN_LOGIN_ID;
 const ADMIN_PASS = process.env.TEALUS_ADMIN_PASS;
 const ASSISTANT_ID = process.env.TEALUS_BOT_ID || 'AI_AGENT';
-const ENV_PATH = path.join(__dirname, '../../.env');
+const ENV_PATH = path.join(import.meta.dirname, '../../.env');
 
 if (!ADMIN_ID || !ADMIN_PASS) {
   console.error('[setup] TEALUS_ADMIN_LOGIN_ID / TEALUS_ADMIN_PASS を env で渡してください');
   process.exit(1);
 }
 
-const log = (m) => console.log(`[setup] ${m}`);
+const log = (m: string) => console.log(`[setup] ${m}`);
 
-async function adminLogin() {
+async function adminLogin(): Promise<string> {
   const res = await fetch(`${TEALUS_API_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -54,7 +56,7 @@ async function adminLogin() {
   return data.token;
 }
 
-async function listUsers(token) {
+async function listUsers(token: string) {
   const res = await fetch(`${TEALUS_API_URL}/api/admin/users`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
@@ -62,7 +64,7 @@ async function listUsers(token) {
   return data.users || [];
 }
 
-async function createBotUser(token, login_id, display_name, password) {
+async function createBotUser(token: string, login_id: string, display_name: string, password: string) {
   const res = await fetch(`${TEALUS_API_URL}/api/admin/users`, {
     method: 'POST',
     headers: {
@@ -82,7 +84,7 @@ async function createBotUser(token, login_id, display_name, password) {
   return data.user;
 }
 
-async function createRoom(token, name, member_ids) {
+async function createRoom(token: string, name: string, member_ids: string[]) {
   // First login as e2e-runner to use POST /api/rooms (user-level endpoint)
   // Actually admin can create rooms via /api/rooms too. Let's try user-level.
   const res = await fetch(`${TEALUS_API_URL}/api/rooms`, {
@@ -98,7 +100,7 @@ async function createRoom(token, name, member_ids) {
   return data.room;
 }
 
-async function listMyRooms(token) {
+async function listMyRooms(token: string) {
   const res = await fetch(`${TEALUS_API_URL}/api/rooms`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
@@ -106,12 +108,12 @@ async function listMyRooms(token) {
   return data.rooms || [];
 }
 
-function generatePassword() {
+function generatePassword(): string {
   return 'e2e-' + crypto.randomBytes(12).toString('hex');
 }
 
-function updateEnvFile(updates) {
-  const MARKER_BEGIN = '# >>> E2E harness setup (#262、tools/e2e/setup.js が管理)';
+function updateEnvFile(updates: Record<string, string>): void {
+  const MARKER_BEGIN = '# >>> E2E harness setup (#262、tools/e2e/setup.mts が管理)';
   const MARKER_END = '# <<< E2E harness setup';
 
   let content = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf-8') : '';
@@ -132,18 +134,18 @@ function updateEnvFile(updates) {
   fs.writeFileSync(ENV_PATH, content, 'utf-8');
 }
 
-async function main() {
+async function main(): Promise<void> {
   const token = await adminLogin();
   const users = await listUsers(token);
 
   // resolve アシスタント (AI_AGENT) user
-  const assistant = users.find(u => u.login_id === ASSISTANT_ID);
+  const assistant = users.find((u: { login_id: string }) => u.login_id === ASSISTANT_ID);
   if (!assistant) throw new Error(`assistant user not found (login_id=${ASSISTANT_ID})`);
   log(`assistant: ${assistant.display_name} (${assistant.id})`);
 
   // resolve / create e2e-runner
-  let e2eRunner = users.find(u => u.login_id === 'e2e-runner');
-  let e2ePassword;
+  let e2eRunner = users.find((u: { login_id: string }) => u.login_id === 'e2e-runner');
+  let e2ePassword: string | undefined;
   if (!e2eRunner) {
     e2ePassword = generatePassword();
     e2eRunner = await createBotUser(token, 'e2e-runner', 'E2E Test Runner', e2ePassword);
@@ -180,7 +182,7 @@ async function main() {
   }
 
   const myRooms = await listMyRooms(e2eToken);
-  let sandbox = myRooms.find(r => r.name === 'e2e-sandbox');
+  let sandbox = myRooms.find((r: { name: string }) => r.name === 'e2e-sandbox');
   if (!sandbox) {
     sandbox = await createRoom(e2eToken, 'e2e-sandbox', [e2eRunner.id, assistant.id]);
     log(`created e2e-sandbox room (${sandbox.id})`);
@@ -209,11 +211,11 @@ async function main() {
   log(`次の手動 step:`);
   log(`  1. e2e-sandbox room の TTS を disable (Aivis 課金回避、room settings or admin UI)`);
   log(`  2. agent-server を再起動 (新 .env を反映)`);
-  log(`  3. node agent-server/tools/e2e/run.js --filter S5 で smoke test`);
+  log(`  3. node agent-server/tools/e2e/run.mts --filter S5 で smoke test`);
   log(`     (S5 = greeting、tool call なし最軽量)`);
 }
 
-main().catch(err => {
-  console.error(`[setup] ${err.stack || err.message}`);
+main().catch((err: unknown) => {
+  console.error(`[setup] ${err instanceof Error ? (err.stack || err.message) : String(err)}`);
   process.exit(2);
 });

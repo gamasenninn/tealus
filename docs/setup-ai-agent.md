@@ -325,8 +325,8 @@ Light v2 は agent-server の roomMcpManager 経由で tealus-mcp に接続、�
 
 ```bash
 cd agent-server
-node tools/e2e/run.js --filter=S3   # PDF + vision fallback の end-to-end
-node tools/e2e/run.js               # 全 6 scenario
+node tools/e2e/run.mts --filter=S3   # PDF + vision fallback の end-to-end
+node tools/e2e/run.mts               # 全 6 scenario
 ```
 
 baseline は 5/6 PASS (S1 のみ LLM quality variance 検出 = 設計通り)。

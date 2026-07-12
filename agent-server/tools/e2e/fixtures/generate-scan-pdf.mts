@@ -18,14 +18,14 @@
  *   → extraction_method=vision_gemini になり S3 が PASS
  *
  * Usage:
- *   node tools/e2e/fixtures/generate-scan-pdf.js
+ *   node tools/e2e/fixtures/generate-scan-pdf.mts
  *
  * 出力: ./sample-scan.pdf (~250 bytes)
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-function buildBlankPdf() {
+function buildBlankPdf(): string {
   // 各 object を string で組み立て、累積 offset を xref に書き込む
   const header = '%PDF-1.4\n';
   const obj1 = '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
@@ -41,7 +41,7 @@ function buildBlankPdf() {
 
   // xref table (10-digit zero-padded byte offset + 5-digit generation + 'n'/'f')
   // Note: xref entry ends with " \n" (space + newline) — 各 entry 20 bytes 固定
-  const pad10 = (n) => String(n).padStart(10, '0');
+  const pad10 = (n: number) => String(n).padStart(10, '0');
   const xref =
     'xref\n' +
     '0 5\n' +
@@ -60,9 +60,9 @@ function buildBlankPdf() {
   return header + obj1 + obj2 + obj3 + obj4 + xref + trailer;
 }
 
-function main() {
+function main(): void {
   const pdf = buildBlankPdf();
-  const outPath = path.join(__dirname, 'sample-scan.pdf');
+  const outPath = path.join(import.meta.dirname, 'sample-scan.pdf');
   fs.writeFileSync(outPath, pdf, 'binary');
   console.log(`Generated: ${outPath} (${pdf.length} bytes)`);
 }

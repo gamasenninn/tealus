@@ -3,19 +3,23 @@
  * Light agent E2E verification harness — runner CLI (#262)
  *
  * Usage:
- *   node agent-server/tools/e2e/run.js [--filter S1,S2] [--dry-run]
+ *   node agent-server/tools/e2e/run.mts [--filter S1,S2] [--dry-run]
  *
  * 詳細: agent-server/tools/e2e/README.md
  */
-const fs = require('fs');
-const path = require('path');
-const fetch = require('node-fetch');
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
-const { runJudge } = require('./judge');
+import fs from 'node:fs';
+import path from 'node:path';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import FormData from 'form-data';
+import { runJudge } from './judge.mts';
+import { generateReport } from './report.mts';
 
-const SCRIPT_DIR = __dirname;
+dotenv.config({ path: path.join(import.meta.dirname, '../../.env') });
+
+const SCRIPT_DIR = import.meta.dirname;
 const SCENARIOS_PATH = path.join(SCRIPT_DIR, 'scenarios.json');
-const REPORT_DIR = path.join(__dirname, '../../../report/e2e-runs');
+const REPORT_DIR = path.join(import.meta.dirname, '../../../report/e2e-runs');
 
 // ---- args ----
 const args = process.argv.slice(2);
@@ -37,15 +41,15 @@ if (!dryRun && (!E2E_BOT_ID || !E2E_BOT_PASS || !E2E_ROOM_ID)) {
 }
 
 // ---- helpers ----
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-function logInfo(msg) { console.log(`[E2E ${new Date().toISOString()}] ${msg}`); }
-function logWarn(msg) { console.warn(`[E2E WARN ${new Date().toISOString()}] ${msg}`); }
-function logErr(msg) { console.error(`[E2E ERR ${new Date().toISOString()}] ${msg}`); }
+function logInfo(msg: string) { console.log(`[E2E ${new Date().toISOString()}] ${msg}`); }
+function logWarn(msg: string) { console.warn(`[E2E WARN ${new Date().toISOString()}] ${msg}`); }
+function logErr(msg: string) { console.error(`[E2E ERR ${new Date().toISOString()}] ${msg}`); }
 
 // ---- Tealus API ----
-let authToken = null;
-let botUserInfo = null;
+let authToken: string | null = null;
+let botUserInfo: { id: string; [key: string]: unknown } | null = null;
 
 async function loginAsE2EBot() {
   const res = await fetch(`${TEALUS_API_URL}/api/auth/login`, {
@@ -57,10 +61,10 @@ async function loginAsE2EBot() {
   if (!data.token) throw new Error(`E2E bot login failed: ${data.error || 'unknown'}`);
   authToken = data.token;
   botUserInfo = data.user;
-  logInfo(`logged in as ${E2E_BOT_ID} (id=${botUserInfo.id})`);
+  logInfo(`logged in as ${E2E_BOT_ID} (id=${botUserInfo!.id})`);
 }
 
-async function postMessage(roomId, content) {
+async function postMessage(roomId: string, content: string) {
   const res = await fetch(`${TEALUS_API_URL}/api/bot/push`, {
     method: 'POST',
     headers: {
@@ -72,8 +76,7 @@ async function postMessage(roomId, content) {
   return res.json();
 }
 
-async function postFile(roomId, buffer, filename, mimeType, content = '') {
-  const FormData = require('form-data');
+async function postFile(roomId: string, buffer: Buffer, filename: string, mimeType: string, content = '') {
   const form = new FormData();
   form.append('room_id', roomId);
   form.append('file', buffer, { filename, contentType: mimeType });
@@ -89,7 +92,7 @@ async function postFile(roomId, buffer, filename, mimeType, content = '') {
   return res.json();
 }
 
-async function getMessages(roomId, limit = 20) {
+async function getMessages(roomId: string, limit = 20) {
   const res = await fetch(
     `${TEALUS_API_URL}/api/bot/messages?room_id=${roomId}&limit=${limit}`,
     { headers: { 'Authorization': `Bearer ${authToken}` } }
@@ -100,14 +103,14 @@ async function getMessages(roomId, limit = 20) {
 // ---- Log tail helpers ----
 function getCurrentLogPath() {
   const today = new Date().toISOString().slice(0, 10);  // YYYY-MM-DD
-  return path.join(__dirname, '../../logs', `agent-${today}.log`);
+  return path.join(import.meta.dirname, '../../logs', `agent-${today}.log`);
 }
 
-function getLogSize(p) {
+function getLogSize(p: string) {
   try { return fs.statSync(p).size; } catch { return 0; }
 }
 
-function readLogSlice(p, fromOffset) {
+function readLogSlice(p: string, fromOffset: number) {
   if (!fs.existsSync(p)) return '';
   const stat = fs.statSync(p);
   if (stat.size <= fromOffset) return '';
@@ -120,7 +123,7 @@ function readLogSlice(p, fromOffset) {
 }
 
 // ---- Log parser ----
-function extractToolCalls(logSlice) {
+function extractToolCalls(logSlice: string) {
   const tools = [];
   const lines = logSlice.split('\n');
   for (const line of lines) {
@@ -134,14 +137,14 @@ function extractToolCalls(logSlice) {
     if (m) { tools.push({ tool: 'command_execution', agent: 'light2' }); continue; }
   }
   // dedupe consecutive duplicates (start + 使用 とかで重複)
-  const uniq = [];
+  const uniq: Array<{ tool: string; agent: string }> = [];
   for (const t of tools) {
     if (!uniq.length || uniq[uniq.length - 1].tool !== t.tool) uniq.push(t);
   }
   return uniq;
 }
 
-function findLogLines(logSlice, substrings) {
+function findLogLines(logSlice: string, substrings: string[]) {
   const found = [];
   for (const sub of substrings) {
     if (logSlice.includes(sub)) found.push(sub);
@@ -149,7 +152,7 @@ function findLogLines(logSlice, substrings) {
   return found;
 }
 
-function extractTokenUsage(logSlice) {
+function extractTokenUsage(logSlice: string) {
   // Light v1: '[Light] turn completed, usage: input=X output=Y'
   // Light v2: '[LightV2] turn completed, usage: input=X output=Y'
   const m = logSlice.match(/turn completed,?\s*usage:\s*input=(\d+)\s*output=(\d+)/);
@@ -158,7 +161,7 @@ function extractTokenUsage(logSlice) {
 }
 
 // ---- Scenario evaluator ----
-function evaluateScenario(scenario, observed) {
+function evaluateScenario(scenario: any, observed: any) {
   const fails = [];
   const warns = [];
 
@@ -176,7 +179,7 @@ function evaluateScenario(scenario, observed) {
   const ell = scenario.expected_log_lines || [];
   const metrics = scenario.metrics || {};
 
-  const usedTools = observed.tool_calls.map(t => t.tool);
+  const usedTools = observed.tool_calls.map((t: { tool: string }) => t.tool);
 
   // tool chain — must_include
   if (Array.isArray(tc.must_include)) {
@@ -186,7 +189,7 @@ function evaluateScenario(scenario, observed) {
   }
   // tool chain — must_include_any_of
   if (Array.isArray(tc.must_include_any_of) && tc.must_include_any_of.length > 0) {
-    const anyOk = tc.must_include_any_of.some(t => usedTools.includes(t));
+    const anyOk = tc.must_include_any_of.some((t: string) => usedTools.includes(t));
     if (!anyOk) fails.push(`none of ${JSON.stringify(tc.must_include_any_of)} called (must_include_any_of)`);
   }
   // tool chain — must_not_include_any
@@ -243,9 +246,9 @@ function evaluateScenario(scenario, observed) {
 }
 
 // ---- Bot response detection ----
-async function waitForBotResponse(roomId, sinceTime, timeoutMs) {
+async function waitForBotResponse(roomId: string, sinceTime: number, timeoutMs: number) {
   const start = Date.now();
-  const myUserId = botUserInfo.id;
+  const myUserId = botUserInfo!.id;
   const pollInterval = 2000;
 
   while (Date.now() - start < timeoutMs) {
@@ -253,7 +256,7 @@ async function waitForBotResponse(roomId, sinceTime, timeoutMs) {
     const data = await getMessages(roomId, 20);
     const messages = data.messages || [];
     // sender != myself, created_at > sinceTime
-    const newBotMsg = messages.find(m =>
+    const newBotMsg = messages.find((m: any) =>
       m.sender_id !== myUserId &&
       new Date(m.created_at).getTime() > sinceTime &&
       m.content && m.content.length > 0 &&
@@ -267,7 +270,7 @@ async function waitForBotResponse(roomId, sinceTime, timeoutMs) {
 // ---- Preconditions handler (#262 Phase 2) ----
 // scenario.preconditions に従って、prompt 投下前に test room に file 等を attach する。
 // 現状は attach_pdf のみ対応、将来 attach_image / attach_text も拡張可。
-async function applyPreconditions(scenario) {
+async function applyPreconditions(scenario: any) {
   const pre = scenario.preconditions;
   if (!pre) return null;
 
@@ -280,7 +283,7 @@ async function applyPreconditions(scenario) {
     }
     const buffer = fs.readFileSync(pdfPath);
     const filename = path.basename(pdfPath);
-    const result = await postFile(E2E_ROOM_ID, buffer, filename, 'application/pdf');
+    const result = await postFile(E2E_ROOM_ID!, buffer, filename, 'application/pdf');
     if (!result.message) {
       throw new Error(`postFile failed: ${JSON.stringify(result).slice(0, 200)}`);
     }
@@ -294,7 +297,7 @@ async function applyPreconditions(scenario) {
 }
 
 // ---- Run single scenario ----
-async function runScenario(scenario) {
+async function runScenario(scenario: any) {
   logInfo(`[${scenario.id}] start: ${scenario.description}`);
   const logPath = getCurrentLogPath();
   const logOffsetBefore = getLogSize(logPath);
@@ -307,26 +310,27 @@ async function runScenario(scenario) {
   try {
     // preconditions (e.g., attach_pdf for S3) を実行してから prompt 投下
     preconditionResult = await applyPreconditions(scenario);
-    postedMsg = await postMessage(E2E_ROOM_ID, prompt);
+    postedMsg = await postMessage(E2E_ROOM_ID!, prompt);
     if (!postedMsg.message) {
       throw new Error(`post failed: ${JSON.stringify(postedMsg)}`);
     }
     const sinceTime = new Date(postedMsg.message.created_at).getTime();
     const timeout = scenario.metrics?.max_latency_ms || 120000;
-    botResponse = await waitForBotResponse(E2E_ROOM_ID, sinceTime, timeout + 30000);
+    botResponse = await waitForBotResponse(E2E_ROOM_ID!, sinceTime, timeout + 30000);
     latencyMs = Date.now() - tStart;
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       scenario,
-      observed: { error: err.message, latency_ms: Date.now() - tStart },
-      result: { fails: [`scenario execution error: ${err.message}`], warns: [] },
+      observed: { error: msg, latency_ms: Date.now() - tStart },
+      result: { fails: [`scenario execution error: ${msg}`], warns: [] },
     };
   }
 
   // collect log slice + parse
   await sleep(2000);  // give log a moment to flush after final response
   const logSlice = readLogSlice(logPath, logOffsetBefore);
-  const observed = {
+  const observed: any = {
     posted_message_id: postedMsg.message?.id,
     bot_response_id: botResponse?.id,
     bot_response_text: botResponse?.content || null,
@@ -371,8 +375,8 @@ async function main() {
   let scenarios = scenariosFile.scenarios;
 
   if (filterIds) {
-    scenarios = scenarios.filter(s => filterIds.some(f => s.id.startsWith(f)));
-    logInfo(`filtered to ${scenarios.length} scenarios: ${scenarios.map(s => s.id).join(', ')}`);
+    scenarios = scenarios.filter((s: any) => filterIds.some(f => s.id.startsWith(f)));
+    logInfo(`filtered to ${scenarios.length} scenarios: ${scenarios.map((s: any) => s.id).join(', ')}`);
   }
 
   if (dryRun) {
@@ -396,11 +400,12 @@ async function main() {
       const r = await runScenario(scenario);
       results.push(r);
     } catch (err) {
-      logErr(`scenario ${scenario.id} crashed: ${err.message}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      logErr(`scenario ${scenario.id} crashed: ${msg}`);
       results.push({
         scenario,
-        observed: { error: err.message },
-        result: { fails: [`runner crash: ${err.message}`], warns: [] },
+        observed: { error: msg },
+        result: { fails: [`runner crash: ${msg}`], warns: [] },
       });
     }
     // small gap between scenarios
@@ -408,11 +413,10 @@ async function main() {
   }
 
   // Generate report
-  const { generateReport } = require('./report');
   fs.mkdirSync(REPORT_DIR, { recursive: true });
   const reportName = `${new Date().toISOString().slice(0, 10)}-${String(Date.now()).slice(-6)}.md`;
   const reportPath = path.join(REPORT_DIR, reportName);
-  fs.writeFileSync(reportPath, generateReport(results));
+  fs.writeFileSync(reportPath, generateReport(results as any));
   logInfo(`report: ${reportPath}`);
 
   // summary
@@ -423,7 +427,7 @@ async function main() {
   process.exit(totalFail > 0 ? 1 : 0);
 }
 
-main().catch(err => {
-  logErr(err.stack || err.message);
+main().catch((err: unknown) => {
+  logErr(err instanceof Error ? (err.stack || err.message) : String(err));
   process.exit(2);
 });
