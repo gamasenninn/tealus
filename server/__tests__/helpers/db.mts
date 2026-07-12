@@ -2,16 +2,16 @@
  * Test database helper
  * Provides setup/teardown for test database.
  */
-const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
+import { Pool, type PoolClient } from 'pg';
+import fs from 'node:fs';
+import path from 'node:path';
 
-let pool;
+let pool: Pool | null = null;
 
 /**
  * Get or create the test database pool
  */
-function getTestPool() {
+export function getTestPool(): Pool {
   if (!pool) {
     pool = new Pool({
       host: process.env.DB_HOST || 'localhost',
@@ -27,9 +27,9 @@ function getTestPool() {
 /**
  * Run migrations on the test database
  */
-async function setupTestDb() {
+export async function setupTestDb(): Promise<void> {
   const p = getTestPool();
-  const client = await p.connect();
+  const client: PoolClient = await p.connect();
   try {
     // Drop all tables first (clean slate)
     await client.query(`
@@ -43,7 +43,7 @@ async function setupTestDb() {
     `);
 
     // Run migrations
-    const migrationsDir = path.join(__dirname, '../../src/db/migrations');
+    const migrationsDir = path.join(import.meta.dirname, '../../src/db/migrations');
     const files = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort();
@@ -60,7 +60,7 @@ async function setupTestDb() {
 /**
  * Clean all data from tables (preserve schema)
  */
-async function cleanTestDb() {
+export async function cleanTestDb(): Promise<void> {
   const p = getTestPool();
   await p.query(`
     TRUNCATE TABLE
@@ -86,16 +86,9 @@ async function cleanTestDb() {
 /**
  * Close the test database pool
  */
-async function closeTestDb() {
+export async function closeTestDb(): Promise<void> {
   if (pool) {
     await pool.end();
     pool = null;
   }
 }
-
-module.exports = {
-  getTestPool,
-  setupTestDb,
-  cleanTestDb,
-  closeTestDb,
-};

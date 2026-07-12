@@ -6,7 +6,7 @@
  * - ability checks (canCreateRoom / canInviteToRoom / canSearchUsers) の guest 制限
  * - 不正 / 未定義 input に対する safe fallback (= false 返却)
  */
-const {
+import {
   ROLES,
   getRole,
   isAdmin,
@@ -15,7 +15,8 @@ const {
   canCreateRoom,
   canInviteToRoom,
   canSearchUsers,
-} = require('../../src/utils/permissions');
+  type UserLike,
+} from '../../src/utils/permissions.mts';
 
 const adminUser = { id: 'a1', role: 'admin', display_name: 'Admin' };
 const normalUser = { id: 'u1', role: 'user', display_name: 'User' };
@@ -39,12 +40,13 @@ describe('getRole', () => {
   test('null-safe: undefined / null / 非 object は null 返却', () => {
     expect(getRole(null)).toBeNull();
     expect(getRole(undefined)).toBeNull();
-    expect(getRole('admin')).toBeNull();
-    expect(getRole(123)).toBeNull();
+    // 意図的に不正な型を渡して null-safe を検証 (production 型は緩めない)
+    expect(getRole('admin' as unknown as UserLike)).toBeNull();
+    expect(getRole(123 as unknown as UserLike)).toBeNull();
   });
 
   test('role field 欠落でも null 返却', () => {
-    expect(getRole({ id: 'x' })).toBeNull();
+    expect(getRole({ id: 'x' } as unknown as UserLike)).toBeNull();
     expect(getRole({})).toBeNull();
   });
 });

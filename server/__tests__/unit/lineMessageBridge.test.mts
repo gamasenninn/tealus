@@ -10,12 +10,12 @@ const mockClient = {
   query: jest.fn(),
   release: jest.fn(),
 };
-jest.mock('../../src/db/pool', () => ({ pool: {
+jest.mock('../../src/db/pool.mts', () => ({ pool: {
   connect: jest.fn(() => Promise.resolve(mockClient)),
 } }));
 
 // Mock logger
-jest.mock('../../src/utils/logger', () => ({ logger: {
+jest.mock('../../src/utils/logger.mts', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
@@ -30,33 +30,35 @@ jest.mock('sharp', () => {
 });
 
 // Mock transcription module
-const mockTranscribeFn = jest.fn(() => Promise.resolve());
-jest.mock('../../src/services/transcription', () => ({
-  transcribeVoiceMessage: (...args) => mockTranscribeFn(...args),
+const mockTranscribeFn = jest.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+jest.mock('../../src/services/transcription.mts', () => ({
+  transcribeVoiceMessage: (...args: unknown[]) => mockTranscribeFn(...args),
 }));
 
 // Mock thumbnail (= Phase 2.1 video 用、ffmpeg dependency 排除)
-const mockGenerateThumbnail = jest.fn(() => Promise.resolve('thumbnails/x_thumb.jpg'));
-jest.mock('../../src/services/thumbnail', () => ({
-  generateThumbnail: (...args) => mockGenerateThumbnail(...args),
+const mockGenerateThumbnail = jest.fn((..._args: unknown[]): Promise<string> => Promise.resolve('thumbnails/x_thumb.jpg'));
+jest.mock('../../src/services/thumbnail.mts', () => ({
+  generateThumbnail: (...args: unknown[]) => mockGenerateThumbnail(...args),
 }));
 
-const {
+import type { Server } from 'socket.io';
+import {
   postTextToTealus,
   postImageToTealus,
   postVoiceToTealus,
   postFileToTealus,
   postVideoToTealus,
   postLocationToTealus,
-} = require('../../src/services/lineMessageBridge');
+} from '../../src/services/lineMessageBridge.mts';
 
 function makeMockIo() {
   const emit = jest.fn();
   const io = { to: jest.fn(() => ({ emit })) };
-  return { io, emit, ioTo: io.to };
+  // mock io は Server の全 method を持たないため境界キャスト (テスト scaffold)
+  return { io: io as unknown as Server, emit, ioTo: io.to };
 }
 
-function setupSqlSequence(rows) {
+function setupSqlSequence(rows: Array<{ rows?: unknown[] } | undefined>) {
   // rows = array of result rows for sequential queries (BEGIN + INSERTs + COMMIT)
   // ★ Option D refactor (= Day 21 PM): helper 内 sender info SELECT 削除、★ ★ sender object 引数で受け取る (= 既存 socket.user / req.user pattern 1:1 整合)
   mockClient.query.mockReset();
@@ -107,16 +109,16 @@ describe('postTextToTealus', () => {
   });
 
   test('roomId 未指定で throw', async () => {
-    await expect(postTextToTealus({ sender: TEST_SENDER, content: 'x' })).rejects.toThrow(/roomId/);
+    await expect(postTextToTealus({ sender: TEST_SENDER, content: 'x' } as unknown as Parameters<typeof postTextToTealus>[0])).rejects.toThrow(/roomId/);
   });
 
   test('sender 未指定で throw', async () => {
-    await expect(postTextToTealus({ roomId: 'r', content: 'x' })).rejects.toThrow(/sender/);
+    await expect(postTextToTealus({ roomId: 'r', content: 'x' } as unknown as Parameters<typeof postTextToTealus>[0])).rejects.toThrow(/sender/);
   });
 
   test('SQL error で ROLLBACK + release + rethrow', async () => {
     mockClient.query.mockReset();
-    mockClient.query.mockImplementation((sql) => {
+    mockClient.query.mockImplementation((sql: string) => {
       if (sql === 'BEGIN') return Promise.resolve();
       if (typeof sql === 'string' && sql.includes('INSERT INTO messages')) return Promise.reject(new Error('db down'));
       if (sql === 'ROLLBACK') return Promise.resolve();
@@ -179,7 +181,7 @@ describe('postImageToTealus', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postImageToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
+    await expect(postImageToTealus({ roomId: 'r', sender: TEST_SENDER } as unknown as Parameters<typeof postImageToTealus>[0])).rejects.toThrow(/mediaInfo/);
   });
 });
 
@@ -237,7 +239,7 @@ describe('postVoiceToTealus', () => {
     await postVoiceToTealus({
       roomId: 'r',
       sender: TEST_SENDER,
-      mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'audio/m4a' },
+      mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'audio/m4a' } as unknown as Parameters<typeof postVoiceToTealus>[0]['mediaInfo'],
     });
 
     const queries = mockClient.query.mock.calls.map((c) => c[0]);
@@ -246,7 +248,7 @@ describe('postVoiceToTealus', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postVoiceToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
+    await expect(postVoiceToTealus({ roomId: 'r', sender: TEST_SENDER } as unknown as Parameters<typeof postVoiceToTealus>[0])).rejects.toThrow(/mediaInfo/);
   });
 });
 
@@ -284,7 +286,7 @@ describe('postFileToTealus (= Phase 2.1)', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postFileToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
+    await expect(postFileToTealus({ roomId: 'r', sender: TEST_SENDER } as unknown as Parameters<typeof postFileToTealus>[0])).rejects.toThrow(/mediaInfo/);
   });
 
   test('transcribe trigger 呼ばれない (= file は transcribe 対象外、回帰防止)', async () => {
@@ -292,7 +294,7 @@ describe('postFileToTealus (= Phase 2.1)', () => {
     await postFileToTealus({
       roomId: 'r',
       sender: TEST_SENDER,
-      mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'application/octet-stream' },
+      mediaInfo: { relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'application/octet-stream' } as unknown as Parameters<typeof postFileToTealus>[0]['mediaInfo'],
     });
     expect(mockTranscribeFn).not.toHaveBeenCalled();
   });
@@ -361,7 +363,7 @@ describe('postVideoToTealus (= Phase 2.1)', () => {
   });
 
   test('mediaInfo 未指定で throw', async () => {
-    await expect(postVideoToTealus({ roomId: 'r', sender: TEST_SENDER })).rejects.toThrow(/mediaInfo/);
+    await expect(postVideoToTealus({ roomId: 'r', sender: TEST_SENDER } as unknown as Parameters<typeof postVideoToTealus>[0])).rejects.toThrow(/mediaInfo/);
   });
 });
 
@@ -382,7 +384,7 @@ describe('postLocationToTealus (= Phase 2.2)', () => {
     const insertCall = mockClient.query.mock.calls.find((c) =>
       typeof c[0] === 'string' && c[0].includes('INSERT INTO messages'));
     expect(insertCall).toBeDefined();
-    const contentArg = insertCall[1][2]; // 3rd arg = content
+    const contentArg = insertCall![1][2]; // 3rd arg = content
     expect(contentArg).toContain('📍');
     expect(contentArg).toContain('東京駅');
     expect(contentArg).toContain('35.6812');
@@ -401,7 +403,7 @@ describe('postLocationToTealus (= Phase 2.2)', () => {
     expect(result.message.id).toBe('m');
     const insertCall = mockClient.query.mock.calls.find((c) =>
       typeof c[0] === 'string' && c[0].includes('INSERT INTO messages'));
-    expect(insertCall[1][2]).toContain('📍');
+    expect(insertCall![1][2]).toContain('📍');
   });
 
   test('全 field null (= 緯度経度なし) で throw', async () => {

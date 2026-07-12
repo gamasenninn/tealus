@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*.mts", "src/**/*.d.ts", "scripts/**/*.mts"]
+  "include": ["src/**/*.mts", "src/**/*.d.ts", "scripts/**/*.mts", "__tests__/**/*.mts"]
 }

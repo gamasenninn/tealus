@@ -2,9 +2,26 @@
  * Test auth helper
  * Creates test users and returns their tokens.
  */
-const request = require('supertest');
-const { app } = require('../../src/app');
-const { getTestPool } = require('./db');
+import request from 'supertest';
+import { app } from '../../src/app.mts';
+import { getTestPool } from './db.mts';
+
+interface CreateTestUserOverrides {
+  login_id?: string;
+  display_name?: string;
+  password?: string;
+}
+
+interface TestUser {
+  token: string;
+  user: {
+    id: string;
+    login_id: string;
+    display_name: string;
+    role: string;
+    [key: string]: unknown;
+  };
+}
 
 /**
  * Register a test user and return { token, user }.
@@ -14,7 +31,7 @@ const { getTestPool } = require('./db');
  * DEFAULT 'user' に reset する (個別テストで admin が必要なら DB UPDATE する)。
  * authenticate middleware は DB から role を毎回読むので token 再発行は不要。
  */
-async function createTestUser(overrides = {}) {
+export async function createTestUser(overrides: CreateTestUserOverrides = {}): Promise<TestUser> {
   const data = {
     login_id: overrides.login_id || 'EMP' + Math.random().toString(36).slice(2, 8).toUpperCase(),
     display_name: overrides.display_name || 'テストユーザー',
@@ -32,5 +49,3 @@ async function createTestUser(overrides = {}) {
 
   return { token: res.body.token, user: res.body.user };
 }
-
-module.exports = { createTestUser };

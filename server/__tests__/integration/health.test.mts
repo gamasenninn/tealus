@@ -1,5 +1,5 @@
-const request = require('supertest');
-const { app } = require('../../src/app');
+import request from 'supertest';
+import { app } from '../../src/app.mts';
 
 describe('GET /api/health', () => {
   it('should return status ok', async () => {
