@@ -4,49 +4,59 @@
 
 // OpenAI をモック
 jest.mock('@openai/agents', () => ({}));
-const mockCreate = jest.fn();
+// ESM では import が巻き上げられ、SUT (router/index.mts) がモジュール読込時に `new OpenAI()` を
+// 実行するため、外側 const を factory から参照すると TDZ になる。factory 内で mock を生成し
+// コンストラクタに __mockCreate として公開、import 後に取り出す。
 jest.mock('openai', () => {
-  return jest.fn().mockImplementation(() => ({
-    chat: { completions: { create: mockCreate } },
+  const mockCreateFn = jest.fn();
+  const MockOpenAI = jest.fn().mockImplementation(() => ({
+    chat: { completions: { create: mockCreateFn } },
   }));
+  (MockOpenAI as unknown as { __mockCreate: jest.Mock }).__mockCreate = mockCreateFn;
+  return MockOpenAI;
 });
 
-jest.mock('../../src/lib/logger', () => ({ logger: {
+jest.mock('../../src/lib/logger.mts', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
 } }));
 
-jest.mock('../../src/config', () => {
+jest.mock('../../src/config.mts', () => {
   // getter/setter で定義する: swc の CJS interop は namespace import 時にプロパティを
   // 複製するが getter 記述子は保持されるため、テストからの書き換えが本体に届く
-  const state = {
+  const state: Record<string, unknown> = {
     AGENT_ROUTER_MODEL: 'gpt-5.4-mini',
     OPENAI_API_KEY: 'test-key',
     DEEP_AVAILABLE: true,  // 既存テスト互換: claude CLI が常時あると見なす
   };
-  const m = {};
+  const m: Record<string, unknown> = {};
   for (const k of Object.keys(state)) {
     Object.defineProperty(m, k, { enumerable: true, get: () => state[k], set: (v) => { state[k] = v; } });
   }
   return m;
 });
 
-const config = require('../../src/config');
-const { classifyByRules, classifyByLLM, route, applyDeepAvailability, stripLeadingMentions } = require('../../src/router/index');
+import OpenAI from 'openai';
+const mockCreate = (OpenAI as unknown as { __mockCreate: jest.Mock }).__mockCreate;
+import * as configModule from '../../src/config.mts';
+// namespace import は TS 上 readonly。mutation 用に mutable 型へ境界キャスト
+// (runtime は mock の setter 経由で本体 state に届く = 上記 getter/setter パターン)
+const config = configModule as unknown as { DEEP_AVAILABLE: boolean };
+import { classifyByRules, classifyByLLM, route, applyDeepAvailability, stripLeadingMentions } from '../../src/router/index.mts';
 
 describe('Router', () => {
 
   describe('classifyByRules（第1段: ルールベース）', () => {
     test('/deep コマンドは Deep に振り分け', () => {
-      const result = classifyByRules('/deep このコードをレビューして');
+      const result = classifyByRules('/deep このコードをレビューして')!;
       expect(result.tier).toBe('deep');
       expect(result.prompt).toBe('このコードをレビューして');
     });
 
     test('/light コマンドは Light に振り分け', () => {
-      const result = classifyByRules('/light 在庫を確認して');
+      const result = classifyByRules('/light 在庫を確認して')!;
       expect(result.tier).toBe('light');
       expect(result.prompt).toBe('在庫を確認して');
     });
@@ -54,19 +64,19 @@ describe('Router', () => {
     test('挨拶パターンは Router 直接応答', () => {
       const greetings = ['こんにちは', 'おはよう', 'こんばんは', 'おつかれさま', 'ありがとう'];
       for (const g of greetings) {
-        const result = classifyByRules(g);
+        const result = classifyByRules(g)!;
         expect(result.tier).toBe('router');
         expect(result.response).toBeTruthy();
       }
     });
 
     test('Deep キーワードを含む場合は Deep ヒント', () => {
-      const result = classifyByRules('このコードをリファクタリングして');
+      const result = classifyByRules('このコードをリファクタリングして')!;
       expect(result.tier).toBe('deep');
     });
 
     test('判定不能は null を返す', () => {
-      const result = classifyByRules('来月の売上はどうなりそう？');
+      const result = classifyByRules('来月の売上はどうなりそう？')!;
       expect(result).toBeNull();
     });
   });
@@ -81,7 +91,7 @@ describe('Router', () => {
         choices: [{ message: { content: 'light' } }],
       });
 
-      const result = await classifyByLLM('在庫を教えて');
+      const result = (await classifyByLLM('在庫を教えて'))!;
       expect(result.tier).toBe('light');
     });
 
@@ -90,14 +100,14 @@ describe('Router', () => {
         choices: [{ message: { content: 'deep' } }],
       });
 
-      const result = await classifyByLLM('月次レポートをまとめて分析して');
+      const result = (await classifyByLLM('月次レポートをまとめて分析して'))!;
       expect(result.tier).toBe('deep');
     });
 
     test('LLM呼び出し失敗時は Light にフォールバック', async () => {
       mockCreate.mockRejectedValueOnce(new Error('API error'));
 
-      const result = await classifyByLLM('何かの質問');
+      const result = (await classifyByLLM('何かの質問'))!;
       expect(result.tier).toBe('light');
     });
   });
@@ -109,7 +119,7 @@ describe('Router', () => {
     });
 
     test('ルールベースで判定できたらLLMを呼ばない', async () => {
-      const result = await route('こんにちは');
+      const result = (await route('こんにちは'))!;
       expect(result.tier).toBe('router');
       expect(mockCreate).not.toHaveBeenCalled();
     });
@@ -119,7 +129,7 @@ describe('Router', () => {
         choices: [{ message: { content: 'light' } }],
       });
 
-      const result = await route('来月の売上予測を教えて');
+      const result = (await route('来月の売上予測を教えて'))!;
       expect(result.tier).toBe('light');
       expect(mockCreate).toHaveBeenCalledTimes(1);
     });
@@ -136,13 +146,13 @@ describe('Router', () => {
     });
 
     test('/deep 明示指定 → tier=unavailable（dispatcher が説明メッセージを返す想定）', async () => {
-      const result = await route('/deep このコードをレビューして');
+      const result = (await route('/deep このコードをレビューして'))!;
       expect(result.tier).toBe('unavailable');
       expect(result.prompt).toBe('このコードをレビューして');
     });
 
     test('DEEP_KEYWORDS マッチ → tier=light（silent fallback）', async () => {
-      const result = await route('このコードをリファクタリングして');
+      const result = (await route('このコードをリファクタリングして'))!;
       expect(result.tier).toBe('light');
     });
 
@@ -151,18 +161,18 @@ describe('Router', () => {
         choices: [{ message: { content: 'deep' } }],
       });
 
-      const result = await route('月次レポートをまとめて分析して');
+      const result = (await route('月次レポートをまとめて分析して'))!;
       expect(result.tier).toBe('light');
     });
 
     test('Light の通常ケース → 影響なし', async () => {
-      const result = await route('/light 在庫を確認');
+      const result = (await route('/light 在庫を確認'))!;
       expect(result.tier).toBe('light');
       expect(result.prompt).toBe('在庫を確認');
     });
 
     test('挨拶パターンも影響なし（router 直接応答）', async () => {
-      const result = await route('こんにちは');
+      const result = (await route('こんにちは'))!;
       expect(result.tier).toBe('router');
     });
   });
@@ -193,19 +203,19 @@ describe('Router', () => {
     for (const { name, tier, samplePrompt } of COMMANDS) {
       describe(`${name} → ${tier}`, () => {
         test('(1) DM (mention なし) で振り分け', () => {
-          const result = classifyByRules(`${name} ${samplePrompt}`);
+          const result = classifyByRules(`${name} ${samplePrompt}`)!;
           expect(result.tier).toBe(tier);
           expect(result.prompt).toBe(samplePrompt);
         });
 
         test('(2) group room (@bot mention 付き) で振り分け', () => {
-          const result = classifyByRules(`@アシスタント ${name} ${samplePrompt}`);
+          const result = classifyByRules(`@アシスタント ${name} ${samplePrompt}`)!;
           expect(result.tier).toBe(tier);
           expect(result.prompt).toBe(samplePrompt);
         });
 
         test('(3) 複数 mention でも振り分け', () => {
-          const result = classifyByRules(`@user1 @bot ${name} ${samplePrompt}`);
+          const result = classifyByRules(`@user1 @bot ${name} ${samplePrompt}`)!;
           expect(result.tier).toBe(tier);
           expect(result.prompt).toBe(samplePrompt);
         });
@@ -236,44 +246,44 @@ describe('Router', () => {
     });
 
     test('mention 付き /light2 を v2 に振り分け', () => {
-      const result = classifyByRules('@アシスタント /light2 PDFを要約');
+      const result = classifyByRules('@アシスタント /light2 PDFを要約')!;
       expect(result.tier).toBe('light2');
       expect(result.prompt).toBe('PDFを要約');
     });
 
     test('mention 付き /deep を deep に振り分け', () => {
-      const result = classifyByRules('@cc-tealus /deep このコードをレビュー');
+      const result = classifyByRules('@cc-tealus /deep このコードをレビュー')!;
       expect(result.tier).toBe('deep');
       expect(result.prompt).toBe('このコードをレビュー');
     });
 
     test('mention 付き /light を light に振り分け', () => {
-      const result = classifyByRules('@アシスタント /light 在庫を確認');
+      const result = classifyByRules('@アシスタント /light 在庫を確認')!;
       expect(result.tier).toBe('light');
       expect(result.prompt).toBe('在庫を確認');
     });
 
     test('複数 mention でも prefix 検出', () => {
-      const result = classifyByRules('@user1 @bot /light2 hello');
+      const result = classifyByRules('@user1 @bot /light2 hello')!;
       expect(result.tier).toBe('light2');
       expect(result.prompt).toBe('hello');
     });
 
     test('mention 付き greeting も router 直接応答', () => {
-      const result = classifyByRules('@アシスタント こんにちは');
+      const result = classifyByRules('@アシスタント こんにちは')!;
       expect(result.tier).toBe('router');
       expect(result.response).toBeTruthy();
     });
 
     test('mention 付き DEEP_KEYWORD も deep ヒント', () => {
-      const result = classifyByRules('@アシスタント このコードをリファクタリングして');
+      const result = classifyByRules('@アシスタント このコードをリファクタリングして')!;
       expect(result.tier).toBe('deep');
     });
 
     test('mention 付き /deep が DEEP_AVAILABLE=false で unavailable に変換', async () => {
       config.DEEP_AVAILABLE = false;
       try {
-        const result = await route('@アシスタント /deep refactor');
+        const result = (await route('@アシスタント /deep refactor'))!;
         expect(result.tier).toBe('unavailable');
         expect(result.prompt).toBe('refactor');
       } finally {
@@ -285,12 +295,12 @@ describe('Router', () => {
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { content: 'light' } }],
       });
-      const result = await route('@アシスタント 来月の売上予測を教えて');
+      const result = (await route('@アシスタント 来月の売上予測を教えて'))!;
       expect(result.tier).toBe('light');
       expect(mockCreate).toHaveBeenCalledTimes(1);
       // LLM に渡された content は mention 除去済
       const callArg = mockCreate.mock.calls[0][0];
-      const userMsg = callArg.messages.find(m => m.role === 'user');
+      const userMsg = callArg.messages.find((m: { role: string; content: string }) => m.role === 'user');
       expect(userMsg.content).toBe('来月の売上予測を教えて');
     });
   });

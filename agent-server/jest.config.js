@@ -1,5 +1,5 @@
 module.exports = {
-  testMatch: ['**/__tests__/**/*.test.js'],
+  testMatch: ['**/__tests__/**/*.test.js', '**/__tests__/**/*.test.mts'],
   setupFiles: ['<rootDir>/jest.setup.js'],
   // #330 TS 移行: 変換済み .mts を CJS に transform して JS テストと混在させる
   moduleFileExtensions: ['js', 'mts', 'json', 'node'],
