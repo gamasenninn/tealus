@@ -181,6 +181,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: rtc-server/package-lock.json
 
+      # rtc-server/tts-speak.mts は agent-server/src/lib/tts-core.mts を横断 import するため
+      # tsc の型解決に agent-server の deps (ws 等) が必要。両方 install する。
+      - name: Install agent-server dependencies (rtc-server が横断 import)
+        working-directory: agent-server
+        run: npm ci
+
       - name: Install rtc-server dependencies
         working-directory: rtc-server
         run: npm ci
