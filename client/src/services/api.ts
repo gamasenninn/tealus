@@ -1,5 +1,5 @@
 import type {
-  User, Room, RoomMember, Message, Tag, MessageTag, StampPack,
+  User, Room, RoomMember, Message, Tag, MessageTag, StampPack, Stamp, MediaItem,
   PortalLink, Webhook, DictionaryTerm, DictionaryAlias,
 } from '../types';
 
@@ -25,15 +25,16 @@ export interface UsersResponse { users: User[] }
 export interface OnlineUsersResponse { online: string[] }
 export interface TagsResponse { tags: Tag[] }
 export interface MessageTagsResponse { tags: MessageTag[] }
-export interface SearchResponse { messages: Message[]; total?: number; has_more?: boolean }
+export interface SearchResponse { results: Message[]; total?: number; has_more?: boolean }
 export interface StampPacksResponse { packs: StampPack[] }
-export interface StampPackResponse { pack: StampPack }
-export interface MediaGalleryResponse { items: Message[]; has_more?: boolean; total?: number }
+export interface StampPackResponse { pack: StampPack; stamps: Stamp[] }
+export interface MediaGalleryResponse { media: Array<MediaItem & { message_created_at?: string; sender_id?: string; sender_display_name?: string }>; has_more?: boolean; total?: number }
 export interface PortalLinksResponse { links: PortalLink[] }
 export interface WebhooksResponse { webhooks: Webhook[] }
 export interface DictionaryAliasesResponse { aliases: DictionaryAlias[] }
 export interface DictionaryTermsResponse { terms: DictionaryTerm[] }
-export interface TranscriptionHistoryResponse { edits: Array<{ version: number; text: string; edited_by?: string; created_at: string }> }
+export interface TranscriptionHistoryResponse { history: Array<{ version: number; formatted_text?: string | null; raw_text?: string | null; edited_by_name?: string | null }> }
+export interface TranscriptionEditResponse { transcription: { formatted_text?: string | null; version?: number } }
 export interface CcProjectsResponse { projects: Array<{ name: string; [key: string]: unknown }> }
 
 export type UploadProgressHandler = (percent: number) => void;
@@ -406,7 +407,7 @@ class ApiClient {
 
   // Transcription
   editTranscription(messageId: string, text: string) {
-    return this.request('PUT', `/messages/${messageId}/transcription`, { text });
+    return this.request<TranscriptionEditResponse>('PUT', `/messages/${messageId}/transcription`, { text });
   }
 
   getTranscriptionHistory(messageId: string) {
@@ -545,9 +546,12 @@ class ApiClient {
     return this.request('PATCH', `/admin/users/${id}/status`, { is_active });
   }
 
-  // Access log (admin) — 最終投稿/最終閲覧の集計
+  // Access log (admin) — 最終投稿/最終閲覧の集計 (users サマリ + user×room matrix)
   getAdminAccessLog() {
-    return this.request<{ users: Array<User & { last_post_at?: string | null; last_read_at?: string | null }> }>('GET', '/admin/access-log');
+    return this.request<{
+      users: Array<User & { last_post_at?: string | null; last_view_at?: string | null }>;
+      matrix: Array<{ user_id: string; room_id: string; room_name: string; last_post_at?: string | null; last_view_at?: string | null }>;
+    }>('GET', '/admin/access-log');
   }
 
   // Portal Links (admin)

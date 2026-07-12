@@ -143,7 +143,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
   const handleShowHistory = async () => {
     try {
       const data = await api.getTranscriptionHistory(message.id);
-      setHistory((data as unknown as { history: VoiceHistoryEntry[] }).history);
+      setHistory(data.history);
       setShowHistory(true);
     } catch (err) {
       console.error('History error:', err);

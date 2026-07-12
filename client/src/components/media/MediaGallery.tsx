@@ -6,8 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import type { Tag } from '../../types';
 import './MediaGallery.css';
 
-// gallery API はフラットな media 行 (media / has_more) を返す
-// (api.ts の MediaGalleryResponse は items: Message[] で実態と差分あり)
+// gallery API はフラットな media 行 (api.ts MediaGalleryResponse.media と整合)
 interface GalleryMediaItem {
   id?: string;
   mime_type?: string | null;
@@ -15,11 +14,6 @@ interface GalleryMediaItem {
   thumbnail_path?: string | null;
   file_name?: string | null;
   message_created_at?: string;
-}
-
-interface GalleryResponse {
-  media: GalleryMediaItem[];
-  has_more?: boolean;
 }
 
 interface ViewerState {
@@ -48,7 +42,7 @@ function MediaGallery() {
         category: selectedCategory ?? undefined,
         offset,
         limit: 30,
-      }) as unknown as GalleryResponse;
+      });
       setMedia(prev => append ? [...prev, ...res.media] : res.media);
       setHasMore(!!res.has_more);
     } catch (err) {

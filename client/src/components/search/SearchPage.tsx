@@ -9,7 +9,7 @@ import './SearchPage.css';
 // また応答 key は results (api.ts の SearchResponse は messages で実態と差分あり)。
 type SearchResult = Message & {
   tag_id?: string;
-  is_done?: boolean;
+  is_done?: boolean | null;
   priority?: number | null;
   room_name?: string | null;
 };
@@ -84,7 +84,7 @@ function SearchPage() {
   const doSearch = async (q: string, offset = 0) => {
     setSearching(true);
     try {
-      const data = await api.search(q.trim(), { roomId: roomId || undefined, offset }) as unknown as { results: SearchResult[] };
+      const data = await api.search(q.trim(), { roomId: roomId || undefined, offset });
       if (offset === 0) {
         setResults(data.results);
         saveCache(q.trim(), data.results, []);
@@ -115,7 +115,7 @@ function SearchPage() {
         opts.tagNames = tags;
       }
       // q は空文字なら api 側で skip される (旧 code の `|| null` と同挙動)
-      const data = await api.search(query.trim(), opts) as unknown as { results: SearchResult[] };
+      const data = await api.search(query.trim(), opts);
       if (offset === 0) {
         setResults(data.results);
         saveCache(query.trim(), data.results, tags);

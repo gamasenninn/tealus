@@ -58,7 +58,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
     setSelectedPack(pack.id);
     try {
       const res = await api.getStampPack(pack.id);
-      setStamps((res as unknown as { stamps: StampItem[] }).stamps);
+      setStamps(res.stamps);
     } catch (err) {
       console.error('Load stamps error:', err);
     }
@@ -135,7 +135,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       await api.deleteStamp(stamp.id);
       // Reload current pack
       const res = await api.getStampPack(selectedPack!);
-      setStamps((res as unknown as { stamps: StampItem[] }).stamps);
+      setStamps(res.stamps);
     } catch (err) {
       console.error('Delete stamp error:', err);
     }

@@ -113,9 +113,7 @@ function VoiceEditModal({ messageId, onClose }: VoiceEditModalProps) {
     if (!text || text === originalText.trim()) return;
     setSaving(true);
     try {
-      const data = (await api.editTranscription(currentId, text)) as unknown as {
-        transcription: { formatted_text?: string | null; version?: number };
-      };
+      const data = await api.editTranscription(currentId, text);
       useMessageStore.getState().updateTranscription(currentId, {
         formatted_text: data.transcription.formatted_text,
         version: data.transcription.version,
