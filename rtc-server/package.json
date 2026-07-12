@@ -12,7 +12,9 @@
     "postinstall": "npm run build",
     "start": "node server.mts",
     "dev": "npm run build && node server.mts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "license-check": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --summary",
+    "license-fail-on-gpl": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

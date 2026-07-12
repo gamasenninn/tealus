@@ -16,8 +16,8 @@
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --runInBand --watch",
     "migrate": "node src/db/migrate.mts",
-    "license-check": "npx license-checker-rseidelsohn --production --excludePrivatePackages --summary",
-    "license-fail-on-gpl": "npx license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'",
+    "license-check": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --summary",
+    "license-fail-on-gpl": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -50,6 +50,10 @@ jobs:
         working-directory: server
         run: npm ci
 
+      - name: License check (fail on GPL/AGPL)
+        working-directory: server
+        run: npm run license-fail-on-gpl
+
       - name: Typecheck server (tsc --noEmit)
         working-directory: server
         run: npm run typecheck
@@ -93,6 +97,10 @@ jobs:
         working-directory: client
         run: npm ci
 
+      - name: License check (fail on GPL/AGPL)
+        working-directory: client
+        run: npm run license-fail-on-gpl
+
       - name: Typecheck client (tsc --noEmit)
         working-directory: client
         run: npm run typecheck
@@ -125,6 +133,10 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
+      - name: License check (fail on GPL/AGPL)
+        working-directory: dashboard
+        run: npm run license-fail-on-gpl
+
       - name: Typecheck dashboard (tsc --noEmit)
         working-directory: dashboard
         run: npm run typecheck
@@ -152,6 +164,10 @@ jobs:
       - name: Install agent-server dependencies
         working-directory: agent-server
         run: npm ci
+
+      - name: License check (fail on GPL/AGPL)
+        working-directory: agent-server
+        run: npm run license-fail-on-gpl
 
       - name: Typecheck agent-server (tsc --noEmit)
         working-directory: agent-server
@@ -190,6 +206,10 @@ jobs:
       - name: Install rtc-server dependencies
         working-directory: rtc-server
         run: npm ci
+
+      - name: License check (fail on GPL/AGPL)
+        working-directory: rtc-server
+        run: npm run license-fail-on-gpl
 
       - name: Typecheck rtc-server (tsc --noEmit)
         working-directory: rtc-server

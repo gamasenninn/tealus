@@ -15,7 +15,9 @@
     "postinstall": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "license-check": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --summary",
+    "license-fail-on-gpl": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'"
   },
   "dependencies": {
     "diff": "^8.0.4",

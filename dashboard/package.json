@@ -11,7 +11,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "postinstall": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "license-check": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --summary",
+    "license-fail-on-gpl": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'"
   },
   "dependencies": {
     "lucide-react": "^1.7.0",
