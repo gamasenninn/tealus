@@ -6,12 +6,12 @@
   },
   "description": "Tealus RTC Server — mediasoup SFU for voice/video calls and transceiver",
   "license": "MIT",
-  "main": "server.js",
+  "main": "server.mts",
   "scripts": {
-    "build": "esbuild src/client.js --bundle --outfile=public/bundle.js --format=iife --platform=browser",
+    "build": "esbuild src/client.ts --bundle --outfile=public/bundle.js --format=iife --platform=browser",
     "postinstall": "npm run build",
-    "start": "node server.js",
-    "dev": "npm run build && node server.js"
+    "start": "node server.mts",
+    "dev": "npm run build && node server.mts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -25,5 +25,11 @@
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
     "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.1"
   }
 }

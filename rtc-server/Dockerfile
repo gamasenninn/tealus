@@ -17,7 +17,7 @@
 # mediasoup-worker (C++) を local build するため build-essential 等が必要。
 # prebuilt が落ちてくれば軽いが、buildkit の kernel 検出がミスマッチで
 # 多くは local build に fallback する。
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,7 +34,7 @@ RUN cd rtc-server && npm ci --omit=dev
 COPY rtc-server/ ./rtc-server/
 
 # Client bundle を build (esbuild)
-RUN cd rtc-server && npx esbuild src/client.js \
+RUN cd rtc-server && npx esbuild src/client.ts \
     --bundle \
     --outfile=public/bundle.js \
     --format=iife \
@@ -42,7 +42,7 @@ RUN cd rtc-server && npx esbuild src/client.js \
 
 # --- Stage 2: runtime ---
 # build-essential / python 等は不要、軽量化
-FROM node:20-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -55,4 +55,4 @@ COPY --from=builder /app/rtc-server /app/rtc-server
 WORKDIR /app/rtc-server
 EXPOSE 3100
 
-CMD ["node", "server.js"]
+CMD ["node", "server.mts"]

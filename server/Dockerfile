@@ -14,7 +14,7 @@
 #   docker build -f server/Dockerfile -t tealus-server .
 
 # --- Stage 1: client build ---
-FROM node:20-alpine AS client-builder
+FROM node:24-alpine AS client-builder
 WORKDIR /build
 COPY client/package*.json ./client/
 RUN cd client && npm ci
@@ -22,7 +22,7 @@ COPY client/ ./client/
 RUN cd client && npm run build
 
 # --- Stage 2: dashboard build ---
-FROM node:20-alpine AS dashboard-builder
+FROM node:24-alpine AS dashboard-builder
 WORKDIR /build
 COPY dashboard/package*.json ./dashboard/
 RUN cd dashboard && npm ci
@@ -30,7 +30,7 @@ COPY dashboard/ ./dashboard/
 RUN cd dashboard && npm run build
 
 # --- Stage 3: runtime ---
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 
 # server deps (production only)
@@ -51,4 +51,4 @@ WORKDIR /app/server
 EXPOSE 3000
 
 # 起動時にマイグレーションを実行 (冪等、#172 で対応済み)
-CMD ["sh", "-c", "node src/db/migrate.js && node src/app.js"]
+CMD ["sh", "-c", "node src/db/migrate.mts && node src/app.mts"]

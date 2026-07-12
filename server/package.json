@@ -12,7 +12,7 @@
     "dev": "nodemon -e js,mjs,json,mts src/app.mts",
     "dev:demo": "node --env-file=.env.demo src/app.mts",
     "migrate:demo": "node --env-file=.env.demo src/db/migrate.mts",
-    "seed:demo": "node --env-file=.env.demo scripts/seed-demo.js --confirm",
+    "seed:demo": "node --env-file=.env.demo scripts/seed-demo.mts --confirm",
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --runInBand --watch",
     "migrate": "node src/db/migrate.mts",

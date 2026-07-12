@@ -12,7 +12,7 @@
 # build 方法 (project root から):
 #   docker build -f agent-server/Dockerfile -t tealus-agent-server .
 
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 
 # agent-server deps (production only)
@@ -25,4 +25,4 @@ COPY agent-server/ ./agent-server/
 WORKDIR /app/agent-server
 EXPOSE 4000
 
-CMD ["node", "src/index.js"]
+CMD ["node", "src/index.mts"]
