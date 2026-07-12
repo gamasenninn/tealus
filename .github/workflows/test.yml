@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20]
+        node-version: [24]
     services:
       postgres:
         image: postgres:16-alpine
@@ -50,6 +50,10 @@ jobs:
         working-directory: server
         run: npm ci
 
+      - name: Typecheck server (tsc --noEmit)
+        working-directory: server
+        run: npm run typecheck
+
       - name: Prepare media directories
         run: mkdir -p media/images media/videos media/files media/avatars media/icons media/stamps media/voices media/thumbnails
 
@@ -74,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20]
+        node-version: [24]
     steps:
       - uses: actions/checkout@v4
 
@@ -89,6 +93,10 @@ jobs:
         working-directory: client
         run: npm ci
 
+      - name: Typecheck client (tsc --noEmit)
+        working-directory: client
+        run: npm run typecheck
+
       - name: Run client tests
         working-directory: client
         run: npm test
@@ -102,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20]
+        node-version: [24]
     steps:
       - uses: actions/checkout@v4
 
@@ -117,6 +125,10 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
+      - name: Typecheck dashboard (tsc --noEmit)
+        working-directory: dashboard
+        run: npm run typecheck
+
       - name: Build dashboard
         working-directory: dashboard
         run: npm run build
@@ -126,7 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20]
+        node-version: [24]
     steps:
       - uses: actions/checkout@v4
 
@@ -141,6 +153,10 @@ jobs:
         working-directory: agent-server
         run: npm ci
 
+      - name: Typecheck agent-server (tsc --noEmit)
+        working-directory: agent-server
+        run: npm run typecheck
+
       - name: Run agent-server tests
         working-directory: agent-server
         env:
@@ -148,3 +164,27 @@ jobs:
           JWT_SECRET: ci-test-secret
           OPENAI_API_KEY: dummy-key-for-ci
         run: npm test
+
+  rtc-server-typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: rtc-server/package-lock.json
+
+      - name: Install rtc-server dependencies
+        working-directory: rtc-server
+        run: npm ci
+
+      - name: Typecheck rtc-server (tsc --noEmit)
+        working-directory: rtc-server
+        run: npm run typecheck

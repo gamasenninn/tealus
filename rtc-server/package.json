@@ -11,7 +11,8 @@
     "build": "esbuild src/client.ts --bundle --outfile=public/bundle.js --format=iife --platform=browser",
     "postinstall": "npm run build",
     "start": "node server.mts",
-    "dev": "npm run build && node server.mts"
+    "dev": "npm run build && node server.mts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -30,6 +31,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.1.1",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "typescript": "^7.0.2"
   }
 }
