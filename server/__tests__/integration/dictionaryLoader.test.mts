@@ -3,19 +3,52 @@
  *   - テーブルが空 / DB 不達 → file の vocabulary にフォールバック (非破壊)
  *   - テーブルに active 行あり → vocabulary をテーブルで置換 (実行時 source of truth)
  *   - whisper_context / guidelines は常に file 継続
+ *
+ * 本番 guideline file (config/transcription_guideline.json は .gitignore、machine 固有) には
+ * 依存しない: TRANSCRIPTION_GUIDELINE_PATH env override で test 専用 fixture を指す
+ * (= transcriptionConfig.test と同じ feedback_test_file_guard パターン、CI でも決定論)。
  */
-import * as config from '../../src/services/transcriptionConfig.mts';
-import * as repo from '../../src/services/dictionaryRepo.mts';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { setupTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
-import { pool } from '../../src/db/pool.mts';
 
-// file 側 (config/transcription_guideline.json) にしか無い前提の既知 term / テーブル専用の識別 term
+// file 側 fixture にのみ有る term / テーブル専用の識別 term
 const FILE_ONLY_TERM = 'ガマ';
 const TABLE_ONLY_A = 'ズンドコ検証用A';
 const TABLE_ONLY_B = 'ズンドコ検証用B';
 
-beforeAll(async () => { await setupTestDb(); });
+// file fallback を検証するための test fixture (本番 file の代わり)
+const GUIDELINE_FIXTURE = {
+  version: 1,
+  whisper_context: 'これは業務無線の文字起こしです。固有名詞に注意: ガマ、藤井。',
+  vocabulary: [
+    { term: FILE_ONLY_TERM, category: 'person', reading: 'がま' },
+    { term: '藤井', category: 'person' },
+  ],
+  guidelines: ['句読点を適切に付与する'],
+};
+
+// env override は config module load 前に効かせる必要があるため、resetModules + require で
+// fresh に読み込む (config/repo/pool を同一 registry から取得し pool 二重化を回避)。
+let config: typeof import('../../src/services/transcriptionConfig.mts');
+let repo: typeof import('../../src/services/dictionaryRepo.mts');
+let pool: typeof import('../../src/db/pool.mts').pool;
+let tmpFile: string;
+
+beforeAll(async () => {
+  await setupTestDb();
+  tmpFile = path.join(os.tmpdir(), `tealus-dictloader-guideline-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(tmpFile, JSON.stringify(GUIDELINE_FIXTURE));
+  process.env.TRANSCRIPTION_GUIDELINE_PATH = tmpFile;
+  jest.resetModules();
+  config = require('../../src/services/transcriptionConfig');
+  repo = require('../../src/services/dictionaryRepo');
+  ({ pool } = require('../../src/db/pool'));
+});
 afterAll(async () => {
+  if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+  delete process.env.TRANSCRIPTION_GUIDELINE_PATH;
   await closeTestDb();
   await pool.end();
 });
@@ -39,7 +72,7 @@ test('active 行あり → vocabulary をテーブルで置換する (file を�
 
   expect(n).toBe(2);
   const g = config.loadGuideline();
-  expect(g.vocabulary).toHaveLength(2); // file(214) でなくテーブル(2) = 置換であって merge でない
+  expect(g.vocabulary).toHaveLength(2); // file(fixture 2) でなくテーブル(2) = 置換であって merge でない
   const byTerm = Object.fromEntries(g.vocabulary.map((v) => [v.term, v]));
   expect(byTerm[TABLE_ONLY_A].aliases).toEqual(['ずんA']);
   expect(byTerm[TABLE_ONLY_A].reading).toBe('てすとえー'); // superset フィールド温存
