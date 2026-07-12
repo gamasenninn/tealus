@@ -194,3 +194,30 @@ jobs:
       - name: Typecheck rtc-server (tsc --noEmit)
         working-directory: rtc-server
         run: npm run typecheck
+
+  cli-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      # ルートの CLI (scripts/tealus-cli.ts ほか) は主要5プロジェクトと別に
+      # 追跡漏れしていた。root の deps だけ install (他プロジェクト依存は引かない)。
+      - name: Install root (CLI) dependencies
+        run: npm ci
+
+      - name: Typecheck CLI (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Run CLI tests
+        run: npm test

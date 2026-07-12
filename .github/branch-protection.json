@@ -6,7 +6,8 @@
       "client-build (24)",
       "dashboard-build (24)",
       "agent-server-test (24)",
-      "rtc-server-typecheck (24)"
+      "rtc-server-typecheck (24)",
+      "cli-test (24)"
     ]
   },
   "enforce_admins": false,
