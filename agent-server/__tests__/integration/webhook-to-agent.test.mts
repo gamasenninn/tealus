@@ -1,0 +1,406 @@
+/**
+ * 統合テスト: Webhook → Handler → Dispatcher → Router → Agent
+ * 外部依存のみモック。内部モジュール間の結合を検証。
+ */
+
+// --- モック設定 ---
+
+jest.mock('../../src/lib/botApi.mts', () => ({
+  pushMessage: jest.fn().mockResolvedValue({ message: {} }),
+  pushStatus: jest.fn().mockResolvedValue({ success: true }),
+  pushImage: jest.fn().mockResolvedValue({ message: {} }),
+  getMessages: jest.fn().mockResolvedValue({ messages: [] }),
+  getBotUserId: jest.fn(() => 'bot-uuid'),
+  getRooms: jest.fn().mockResolvedValue({ rooms: [] }),
+}));
+
+jest.mock('../../src/agents/light.mts', () => ({
+  processLight: jest.fn().mockResolvedValue(undefined),
+}));
+
+// #292 6/9 Day 24 default flip ('v2'): test は V1 mock 期待で書かれているので
+// loader mock で 'v1' return を強制 (= dispatcher.test.js と同 pattern、test isolation)
+jest.mock('../../src/agents/lightBackendLoader.mts', () => ({
+  loadLightBackend: jest.fn(),
+  resetForTest: jest.fn(),
+  KNOWN_BACKENDS: { v1: '../agents/light', v2: '../agents/lightV2' },
+}));
+
+// ★ dotenv mock (= user .env の DEEP_AGENT_PROVIDER=codex contaminate 回避)
+jest.mock('dotenv', () => ({ config: jest.fn() }));
+
+jest.mock('../../src/agents/deep.mts', () => ({
+  processDeep: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../src/agents/deepCodex.mts', () => ({
+  processDeepCodex: jest.fn().mockResolvedValue(undefined),
+}));
+
+// #276 follow-up: organon polyseme inject を test では no-op 化
+jest.mock('../../src/lib/organonContext.mts', () => ({
+  loadOrganonPolysemeForPrompt: () => '',
+  isAvailable: () => false,
+}));
+
+jest.mock('../../src/mcp/roomMcpManager.mts', () => ({
+  getOrCreateRoomMcp: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock('../../src/context/sessionManager.mts', () => ({
+  getOrCreateContext: jest.fn(() => ({ workspace_path: '/tmp/test-workspace' })),
+  updateStatus: jest.fn(),
+}));
+
+// Router はルールベースのみ使用（LLM はモック）
+const mockLLMClassify = jest.fn().mockResolvedValue({ tier: 'light', prompt: 'test' });
+jest.mock('openai', () => {
+  return jest.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: jest.fn().mockResolvedValue({
+          choices: [{ message: { content: 'light' } }],
+        }),
+      },
+    },
+  }));
+});
+
+jest.mock('../../src/lib/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+
+jest.mock('../../src/context/settingsManager.mts', () => ({
+  loadSettings: jest.fn(),
+  getSetting: jest.fn((key: string, def: unknown) => def),
+  getAllSettings: jest.fn(() => ({})),
+  saveSettings: jest.fn(),
+}));
+
+jest.mock('../../src/memory/fileMemory.mts', () => ({
+  loadMemoryForPrompt: jest.fn(() => ''),
+}));
+
+// fs モック: room_settings.json の存在をコントロール
+const actualFs = jest.requireActual('fs');
+let mockRoomSettings: Record<string, unknown> | null = null;
+jest.mock('node:fs', () => {
+  const original = jest.requireActual('fs');
+  return {
+    ...original,
+    existsSync: jest.fn((p: string) => {
+      if (p.includes('room_settings.json') && mockRoomSettings !== null) return true;
+      return original.existsSync(p);
+    }),
+    readFileSync: jest.fn((p: string, enc: BufferEncoding) => {
+      if (p.includes('room_settings.json') && mockRoomSettings !== null) {
+        return JSON.stringify(mockRoomSettings);
+      }
+      return original.readFileSync(p, enc);
+    }),
+  };
+});
+
+// --- テスト本体 ---
+
+import { handleWebhook, registerBotUserId } from '../../src/webhook/handler.mts';
+import * as botApi from '../../src/lib/botApi.mts';
+import { processLight } from '../../src/agents/light.mts';
+import { processDeep } from '../../src/agents/deep.mts';
+import { loadLightBackend } from '../../src/agents/lightBackendLoader.mts';
+
+// jest.mock factory は plain jest.fn() を返す (= 実シグネチャとは無関係)。
+// mockResolvedValueOnce / mockReturnValue 等を使うための境界 cast。
+const mockGetRooms = botApi.getRooms as unknown as jest.Mock;
+const mockLoadLightBackend = loadLightBackend as unknown as jest.Mock;
+
+const BOT_ID = 'bot-uuid';
+const BOT_NAME = 'アシスタント';
+const BOT_ROOM = 'room-with-bot';
+const OTHER_ROOM = 'room-without-bot';
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockRoomSettings = null;
+  // #292 6/9 Day 24 default flip ('v2'): loader mock を V1 mock 返却に設定
+  // (= test の V1 expect 期待を維持、isolation)
+  mockLoadLightBackend.mockReturnValue({ name: 'v1', processLight });
+  // Bot 登録（参加ルーム付き）
+  registerBotUserId(BOT_ID, BOT_NAME, [{ id: BOT_ROOM }]);
+});
+
+describe('Webhook → Agent 統合テスト', () => {
+
+  // --- 1. DM テキスト → Light 応答 ---
+  test('1. DM テキスト → Light 応答', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg1', content: 'テスト質問', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    // #229 で dispatcher が user prompt に room_id を prepend する仕様に変更
+    expect(processLight).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: BOT_ROOM,
+        prompt: expect.stringContaining('テスト質問'),
+      })
+    );
+  });
+
+  // --- 2. グループ @メンション → Light ---
+  test('2. グループ @メンション → Light', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg2', content: '@アシスタント 在庫教えて', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: 'Web部', member_count: 5 },
+    });
+    expect(processLight).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('在庫教えて'),
+      })
+    );
+  });
+
+  // --- 3. グループ メンションなし → 無視 ---
+  test('3. グループ メンションなし → 無視', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg3', content: '普通のメッセージ', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: 'Web部', member_count: 5 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+    expect(processDeep).not.toHaveBeenCalled();
+    expect(botApi.pushMessage).not.toHaveBeenCalled();
+  });
+
+  // --- 4. 挨拶 → Router 直接応答 ---
+  test('4. 挨拶 → Router 直接応答', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg4', content: 'こんにちは', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(botApi.pushMessage).toHaveBeenCalledWith(BOT_ROOM, expect.stringContaining('こんにちは'));
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 5. /deep コマンド → Deep ---
+  test('5. /deep コマンド → Deep', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg5', content: '/deep コードをレビューして', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processDeep).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: expect.stringContaining('コードをレビューして') })
+    );
+  });
+
+  // --- 6. Bot メッセージ → スキップ ---
+  test('6. Bot メッセージ → スキップ', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg6', content: '応答です', type: 'text', sender: { id: BOT_ID } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+    expect(processDeep).not.toHaveBeenCalled();
+    expect(botApi.pushMessage).not.toHaveBeenCalled();
+  });
+
+  // --- 7. 音声 → スキップ ---
+  test('7. 音声メッセージ → スキップ（transcription_completed 待ち）', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg7', content: null, type: 'voice', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 8. 文字起こし完了 → Light ---
+  test('8. 文字起こし完了 → Light', async () => {
+    await handleWebhook({
+      event: 'voice.transcription_completed',
+      message: { id: 'msg8', content: null, type: 'voice', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+      transcription: { formatted_text: '明日の会議について', raw_text: '明日の会議について' },
+    });
+    expect(processLight).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: expect.stringContaining('明日の会議について') })
+    );
+  });
+
+  // --- 9. Bot 参加外ルーム → スキップ ---
+  test('9. Bot 参加外ルーム → スキップ', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg9', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: OTHER_ROOM, name: '他のルーム', member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+    expect(botApi.pushMessage).not.toHaveBeenCalled();
+  });
+
+  // --- 10. response_mode=off → スキップ ---
+  test('10. response_mode=off → スキップ', async () => {
+    mockRoomSettings = { response_mode: 'off', enabled: true };
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg10', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+    expect(botApi.pushMessage).not.toHaveBeenCalled();
+  });
+
+  // --- 11. response_mode=mention → DM メンションなし → スキップ ---
+  test('11. response_mode=mention → DM でもメンション必須', async () => {
+    mockRoomSettings = { response_mode: 'mention', enabled: true };
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg11', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 12. 空メッセージ → スキップ ---
+  test('12. 空メッセージ → スキップ', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg12', content: null, type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+    expect(botApi.pushMessage).not.toHaveBeenCalled();
+  });
+
+  // --- 13. member.joined で Bot 追加 → botRoomIds 更新 ---
+  test('13. member.joined で Bot 追加 → 新ルームで応答可能', async () => {
+    const NEW_ROOM = 'new-room-id';
+
+    // まず新ルームではスキップされることを確認
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg13a', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: NEW_ROOM, name: '新ルーム', member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+
+    // Bot が新ルームに参加
+    await handleWebhook({
+      event: 'member.joined',
+      room: { id: NEW_ROOM, name: '新ルーム' },
+      member: { user_id: BOT_ID },
+    });
+
+    // 参加後は応答される
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg13b', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: NEW_ROOM, name: '新ルーム', member_count: 2 },
+    });
+    expect(processLight).toHaveBeenCalled();
+  });
+
+  // --- 14. member.left で Bot 退出 → botRoomIds 削除 ---
+  test('14. member.left で Bot 退出 → 旧ルームで応答停止', async () => {
+    // まず応答されることを確認
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg14a', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).toHaveBeenCalled();
+    jest.clearAllMocks();
+
+    // Bot が退出
+    await handleWebhook({
+      event: 'member.left',
+      room: { id: BOT_ROOM },
+      member: { user_id: BOT_ID },
+    });
+
+    // 退出後はスキップ
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg14b', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: BOT_ROOM, name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 15. member.joined で他ユーザー → botRoomIds 変化なし ---
+  test('15. member.joined で他ユーザー → botRoomIds 変化なし', async () => {
+    await handleWebhook({
+      event: 'member.joined',
+      room: { id: 'some-room' },
+      member: { user_id: 'other-user' },
+    });
+
+    // Bot 参加外ルームは依然スキップ
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg15', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: 'some-room', name: null, member_count: 2 },
+    });
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 16. 未知ルーム → ルーム一覧再取得で参加確認 → 応答 ---
+  test('16. 未知ルーム → ルーム一覧再取得で参加確認 → 応答', async () => {
+    const DM_ROOM = 'new-dm-room';
+
+    // getRooms が新ルームを含むリストを返すようモック
+    mockGetRooms.mockResolvedValueOnce({ rooms: [{ id: BOT_ROOM }, { id: DM_ROOM }] });
+
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg16', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: DM_ROOM, name: 'DM', member_count: 2 },
+    });
+
+    expect(botApi.getRooms).toHaveBeenCalled();
+    expect(processLight).toHaveBeenCalled();
+  });
+
+  // --- 17. 未知ルーム → 再取得しても未参加 → スキップ ---
+  test('17. 未知ルーム → 再取得しても未参加 → スキップ', async () => {
+    const UNKNOWN_ROOM = 'truly-unknown-room';
+
+    // getRooms が既存ルームのみ返す
+    mockGetRooms.mockResolvedValueOnce({ rooms: [{ id: BOT_ROOM }] });
+
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg17', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: UNKNOWN_ROOM, name: '未参加ルーム', member_count: 2 },
+    });
+
+    expect(botApi.getRooms).toHaveBeenCalled();
+    expect(processLight).not.toHaveBeenCalled();
+  });
+
+  // --- 18. member.joined で member.id フィールド（user_id ではない）---
+  test('18. member.joined で member.id フィールド → botRoomIds 更新', async () => {
+    const ID_ROOM = 'id-field-room';
+
+    // member.id で通知（member.user_id ではない）
+    // display_name は本番コードで未消費 (types.mts 未定義)。元テストの意図 (id フィールドで
+    // 拾えること) を保ったまま余剰プロパティ excess check を通すため cast する。
+    await handleWebhook({
+      event: 'member.joined',
+      room: { id: ID_ROOM, name: 'テストルーム' },
+      member: { id: BOT_ID, display_name: BOT_NAME } as unknown as { id?: string; user_id?: string },
+    });
+
+    // 追加後は応答される
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'msg18', content: 'テスト', type: 'text', sender: { id: 'user1' } },
+      room: { id: ID_ROOM, name: 'テストルーム', member_count: 2 },
+    });
+    expect(processLight).toHaveBeenCalled();
+  });
+});

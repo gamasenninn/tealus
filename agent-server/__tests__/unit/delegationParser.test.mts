@@ -1,0 +1,183 @@
+/**
+ * #295: `%` 委譲構文パーサ テスト (Red)
+ *
+ * 仕様:
+ *   - 先頭 `%` (先行空白は許容) を委譲 trigger とする。先頭 `%` でなければ null (= 委譲でない)。
+ *   - `%<room名> <task>`。room 名は既知 room 一覧に対する「最長一致」で確定する。
+ *     room 名の直後は空白または文末でなければならない (= 途中一致での誤分割を防ぐ)。
+ *   - 解決できた → { ok: true, room: { id, name }, task }
+ *   - 先頭 `%` だが解決不能 → { ok: false, reason } (silent fail せず委譲元へ返すため)
+ *       reason: 'room_not_found' | 'empty_task' | 'ambiguous'
+ */
+import { parseDelegation, parseMultiDelegation } from '../../src/webhook/delegationParser.mts';
+
+// 判別 union の narrowing 用 (実装側の interface は非 export のため関数の戻り値型から抽出)
+type DelegResult = ReturnType<typeof parseDelegation>;
+type DelegOk = Extract<NonNullable<DelegResult>, { ok: true }>;
+type DelegFail = Extract<NonNullable<DelegResult>, { ok: false }>;
+type MultiResult = ReturnType<typeof parseMultiDelegation>;
+type MultiOk = Extract<NonNullable<MultiResult>, { ok: true }>;
+type MultiFail = Extract<NonNullable<MultiResult>, { ok: false }>;
+
+const ROOMS = [
+  { id: 'r-db', name: '社内DB検索' },
+  { id: 'r-test', name: 'テスト（自動)' },
+  { id: 'r-ono', name: '小野哲 ↔ アシスタント' },
+  { id: 'r-sales', name: '営業' },
+  { id: 'r-sales-dept', name: '営業部' },
+];
+
+const MULTI_ROOMS = [
+  { id: 'r-asa', name: '朝礼' },
+  { id: 'r-shu', name: '終礼' },
+  { id: 'r-trans', name: 'トランシーバー履歴' },
+  { id: 'r-db', name: '社内DB検索' },
+];
+
+describe('parseDelegation (#295 `%` 委譲構文)', () => {
+  test('先頭が % でない通常メッセージは null (委譲でない)', () => {
+    expect(parseDelegation('売上を集計して', ROOMS)).toBeNull();
+    expect(parseDelegation('進捗は50%です', ROOMS)).toBeNull();
+    expect(parseDelegation('@アシスタント やあ', ROOMS)).toBeNull();
+  });
+
+  test('基本: %<room> <task> を分解する', () => {
+    const r = parseDelegation('%社内DB検索 売上を集計して結果を教えて', ROOMS);
+    expect(r).toEqual({
+      ok: true,
+      room: { id: 'r-db', name: '社内DB検索' },
+      task: '売上を集計して結果を教えて',
+    });
+  });
+
+  test('room 名にスペースを含む場合も最長一致で確定する', () => {
+    const r = parseDelegation('%小野哲 ↔ アシスタント やあ', ROOMS) as DelegOk;
+    expect(r.ok).toBe(true);
+    expect(r.room.id).toBe('r-ono');
+    expect(r.task).toBe('やあ');
+  });
+
+  test('最長一致: 営業 と 営業部 があれば長い方を選ぶ', () => {
+    const r = parseDelegation('%営業部 今月の数字', ROOMS) as DelegOk;
+    expect(r.ok).toBe(true);
+    expect(r.room.id).toBe('r-sales-dept');
+    expect(r.task).toBe('今月の数字');
+  });
+
+  test('短い room 名も空白区切りなら正しく選ぶ', () => {
+    const r = parseDelegation('%営業 今月の数字', ROOMS) as DelegOk;
+    expect(r.ok).toBe(true);
+    expect(r.room.id).toBe('r-sales');
+    expect(r.task).toBe('今月の数字');
+  });
+
+  test('先行空白があっても認識する', () => {
+    const r = parseDelegation('   %社内DB検索 集計して', ROOMS) as DelegOk;
+    expect(r.ok).toBe(true);
+    expect(r.room.id).toBe('r-db');
+    expect(r.task).toBe('集計して');
+  });
+
+  test('task 前後の余分な空白は trim する', () => {
+    const r = parseDelegation('%社内DB検索    集計して   ', ROOMS) as DelegOk;
+    expect(r.ok).toBe(true);
+    expect(r.task).toBe('集計して');
+  });
+
+  test('未登録 room は room_not_found', () => {
+    const r = parseDelegation('%存在しない部屋 なにか', ROOMS);
+    expect(r).toEqual(expect.objectContaining({ ok: false, reason: 'room_not_found' }));
+  });
+
+  test('room 名直後が空白でない (区切り無し) は誤分割せず room_not_found', () => {
+    // '社内DB検索' は prefix だが直後が '売' で区切りが無い → clean match ではない
+    const r = parseDelegation('%社内DB検索売上を集計', ROOMS) as DelegFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('room_not_found');
+  });
+
+  test('room 名のみ (task 無し) は empty_task', () => {
+    expect((parseDelegation('%社内DB検索', ROOMS) as DelegFail).reason).toBe('empty_task');
+    expect((parseDelegation('%社内DB検索    ', ROOMS) as DelegFail).reason).toBe('empty_task');
+  });
+
+  test('% 単体は room_not_found (空文字に一致する room は無い)', () => {
+    const r = parseDelegation('%', ROOMS) as DelegFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('room_not_found');
+  });
+
+  test('同名 room が複数あれば ambiguous', () => {
+    const dupRooms = [
+      { id: 'r-1', name: '共有' },
+      { id: 'r-2', name: '共有' },
+    ];
+    const r = parseDelegation('%共有 これ', dupRooms) as DelegFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('ambiguous');
+  });
+
+  test('rooms が空配列なら room_not_found', () => {
+    const r = parseDelegation('%社内DB検索 集計', []) as DelegFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('room_not_found');
+  });
+
+  test('不正入力 (null / 非文字列) は null', () => {
+    expect(parseDelegation(null as unknown as string, ROOMS)).toBeNull();
+    expect(parseDelegation(undefined as unknown as string, ROOMS)).toBeNull();
+    expect(parseDelegation(123 as unknown as string, ROOMS)).toBeNull();
+  });
+});
+
+describe('parseMultiDelegation (#295 複数室 fan-out)', () => {
+  test('先頭 % でなければ null', () => {
+    expect(parseMultiDelegation('日報を作って', MULTI_ROOMS)).toBeNull();
+    expect(parseMultiDelegation('進捗は50%です', MULTI_ROOMS)).toBeNull();
+  });
+
+  test('単室: targets 1 件 + task', () => {
+    const r = parseMultiDelegation('%社内DB検索 売上集計', MULTI_ROOMS) as MultiOk;
+    expect(r.ok).toBe(true);
+    expect(r.targets).toEqual([{ id: 'r-db', name: '社内DB検索' }]);
+    expect(r.task).toBe('売上集計');
+  });
+
+  test('複数室: 先頭の連続 %room を全部 target に、残りを共通 task に', () => {
+    const r = parseMultiDelegation('%朝礼 %終礼 %トランシーバー履歴 から今日の日報をまとめて', MULTI_ROOMS) as MultiOk;
+    expect(r.ok).toBe(true);
+    expect(r.targets.map((t) => t.name)).toEqual(['朝礼', '終礼', 'トランシーバー履歴']);
+    expect(r.task).toBe('から今日の日報をまとめて');
+  });
+
+  test('重複 target は dedup', () => {
+    const r = parseMultiDelegation('%朝礼 %朝礼 %終礼 まとめて', MULTI_ROOMS) as MultiOk;
+    expect(r.ok).toBe(true);
+    expect(r.targets.map((t) => t.name)).toEqual(['朝礼', '終礼']);
+  });
+
+  test('未登録室が混ざると room_not_found', () => {
+    const r = parseMultiDelegation('%朝礼 %存在しない室 まとめて', MULTI_ROOMS) as MultiFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('room_not_found');
+  });
+
+  test('task 空は empty_task', () => {
+    const r = parseMultiDelegation('%朝礼 %終礼', MULTI_ROOMS) as MultiFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('empty_task');
+  });
+
+  test('MAX_TARGETS (5) 超過は too_many_targets', () => {
+    const rooms = Array.from({ length: 7 }, (_, i) => ({ id: `r${i}`, name: `室${i}` }));
+    const text = '%室0 %室1 %室2 %室3 %室4 %室5 まとめて';
+    const r = parseMultiDelegation(text, rooms) as MultiFail;
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('too_many_targets');
+  });
+
+  test('不正入力 (null / 非文字列) は null', () => {
+    expect(parseMultiDelegation(null as unknown as string, MULTI_ROOMS)).toBeNull();
+    expect(parseMultiDelegation(123 as unknown as string, MULTI_ROOMS)).toBeNull();
+  });
+});
