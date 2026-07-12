@@ -13,12 +13,12 @@ jest.mock('pg', () => {
 });
 
 // logger をモック
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 // config をモック
 jest.mock('../../src/config', () => ({
@@ -26,7 +26,7 @@ jest.mock('../../src/config', () => ({
 }));
 
 // fs をモック
-jest.mock('fs', () => ({
+jest.mock('node:fs', () => ({
   mkdirSync: jest.fn(),
   existsSync: jest.fn(() => false),
   writeFileSync: jest.fn(),

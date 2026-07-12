@@ -16,12 +16,12 @@ jest.mock('../../src/config', () => ({
   TEALUS_BOT_ID: 'BOT',
   TEALUS_BOT_PASS: 'pw',
 }));
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
   debug: jest.fn(),
-}));
+} }));
 
 function makeRes({ ok, status, statusText = '', json = {}, text = '' }) {
   return {
@@ -52,7 +52,7 @@ describe('botApi.request status handling (#303)', () => {
 
   it('(b) 非2xx は status/body を持つ Error を throw し logger.error する', async () => {
     const fetch = require('node-fetch');
-    const logger = require('../../src/lib/logger');
+    const { logger } = require('../../src/lib/logger');
     fetch.mockImplementation((url) =>
       Promise.resolve(url.includes('/auth/login')
         ? loginOk()
@@ -73,7 +73,7 @@ describe('botApi.request status handling (#303)', () => {
 
   it('(c) 401 は token 破棄して再ログイン+1回 retry し、成功すれば resolve', async () => {
     const fetch = require('node-fetch');
-    const logger = require('../../src/lib/logger');
+    const { logger } = require('../../src/lib/logger');
     let apiCall = 0;
     fetch.mockImplementation((url) => {
       if (url.includes('/auth/login')) return Promise.resolve(loginOk());

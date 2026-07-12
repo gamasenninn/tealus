@@ -3,7 +3,7 @@
  * spawn をモック、stdout/stderr/close イベントをシミュレート。
  */
 const os = require('os');
-const fs = require('fs');
+const fs = require('node:fs');
 const path = require('path');
 
 // 各テストで使う一時的な workspace ディレクトリ（MCP config 書込用に実在させる）
@@ -14,7 +14,7 @@ afterAll(() => {
 
 // spawn モック
 let mockProc;
-jest.mock('child_process', () => {
+jest.mock('node:child_process', () => {
   const { EventEmitter } = require('events');
   return {
     spawn: jest.fn(() => {
@@ -37,9 +37,9 @@ jest.mock('../../src/context/sessionManager', () => ({
   updateContext: jest.fn(),
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/config', () => ({
   DEEP_TIMEOUT: 5000,
@@ -48,7 +48,7 @@ jest.mock('../../src/config', () => ({
 
 const { processDeep, buildClaudeArgs } = require('../../src/agents/deep');
 const botApi = require('../../src/lib/botApi');
-const { spawn } = require('child_process');
+const { spawn } = require('node:child_process');
 
 beforeEach(() => {
   jest.clearAllMocks();

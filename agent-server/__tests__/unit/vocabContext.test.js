@@ -5,10 +5,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
-const logger = require('../../src/lib/logger');
+} }));
+const { logger } = require('../../src/lib/logger');
 const { loadVocabForPrompt, logVocabInjectState } = require('../../src/lib/vocabContext');
 
 function writeFixture(vocab) {

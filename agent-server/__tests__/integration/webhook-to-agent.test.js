@@ -66,9 +66,9 @@ jest.mock('openai', () => {
   }));
 });
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/context/settingsManager', () => ({
   loadSettings: jest.fn(),
@@ -84,7 +84,7 @@ jest.mock('../../src/memory/fileMemory', () => ({
 // fs モック: room_settings.json の存在をコントロール
 const actualFs = jest.requireActual('fs');
 let mockRoomSettings = null;
-jest.mock('fs', () => {
+jest.mock('node:fs', () => {
   const original = jest.requireActual('fs');
   return {
     ...original,

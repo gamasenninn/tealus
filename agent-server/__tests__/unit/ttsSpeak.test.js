@@ -12,12 +12,12 @@
  * TTS_BROADCAST_MEDIASOUP=true 時は sendViaPlainTransport も並走。
  */
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 const mockSynthesize = jest.fn();
 const mockSendViaPlainTransport = jest.fn();

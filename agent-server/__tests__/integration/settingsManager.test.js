@@ -9,9 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 let tmpDir;
 

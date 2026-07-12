@@ -1,0 +1,402 @@
+/**
+ * 設定ファイル読み書き API
+ * ダッシュボードからエージェント設定を編集するためのエンドポイント
+ */
+import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger } from '../lib/logger.mts';
+import { getAllSettings, saveSettings, loadSettings, type AgentSettings } from '../context/settingsManager.mts';
+import * as botApi from '../lib/botApi.mts';
+import * as config from '../config.mts';
+import { invalidateRoomMcp } from '../mcp/roomMcpManager.mts';
+
+export const router = express.Router();
+
+// AGENT_CONFIG_DIR / AGENT_MCP_CONFIG_PATH env で override 可能 (test isolation 用、production では unset で default)
+const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(import.meta.dirname, '..', '..', 'config');
+const MCP_CONFIG_PATH = process.env.AGENT_MCP_CONFIG_PATH || path.join(import.meta.dirname, '..', '..', 'mcp_config.json');
+const WORKSPACE_ROOT = path.resolve(import.meta.dirname, '..', '..', config.WORKSPACE_ROOT || './agent-workspaces');
+const ENV_PATH = path.join(import.meta.dirname, '..', '..', '.env');
+
+// 安全に公開する .env のキー（API Key は除外）
+const SAFE_ENV_KEYS = [
+  'AGENT_PORT', 'TEALUS_API_URL', 'AGENT_LIGHT_MODEL', 'AGENT_ROUTER_MODEL',
+  'AGENT_WORKSPACE_ROOT', 'DEEP_TIMEOUT', 'DEEP_MAX_BUFFER',
+];
+
+/**
+ * GET /config/settings — settings.json を返す
+ */
+router.get('/settings', (req, res) => {
+  res.json({ settings: getAllSettings() });
+});
+
+/**
+ * PUT /config/settings — settings.json を書き出し
+ */
+router.put('/settings', (req, res) => {
+  const { settings } = req.body as { settings?: AgentSettings };
+  if (!settings || typeof settings !== 'object') {
+    return res.status(400).json({ error: 'settings オブジェクトが必要です' });
+  }
+  try {
+    saveSettings(settings);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Save settings error: ${err instanceof Error ? err.message : String(err)}`);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/mcp — mcp_config.json を返す
+ */
+router.get('/mcp', (req, res) => {
+  try {
+    if (fs.existsSync(MCP_CONFIG_PATH)) {
+      const mcpConfig = JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, 'utf8'));
+      res.json({ mcpConfig });
+    } else {
+      res.json({ mcpConfig: { mcpServers: {} } });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * PUT /config/mcp — mcp_config.json を書き出し
+ */
+router.put('/mcp', (req, res) => {
+  const { mcpConfig } = req.body as { mcpConfig?: object };
+  if (!mcpConfig || typeof mcpConfig !== 'object') {
+    return res.status(400).json({ error: 'mcpConfig オブジェクトが必要です' });
+  }
+  try {
+    fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(mcpConfig, null, 2) + '\n');
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Save MCP config error: ${err instanceof Error ? err.message : String(err)}`);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/env — .env の安全な項目のみ返す
+ */
+router.get('/env', (req, res) => {
+  try {
+    const env: Record<string, string> = {};
+    if (fs.existsSync(ENV_PATH)) {
+      const content = fs.readFileSync(ENV_PATH, 'utf8');
+      for (const line of content.split('\n')) {
+        const match = line.match(/^([A-Z_]+)=(.*)$/);
+        if (match && SAFE_ENV_KEYS.includes(match[1])) {
+          env[match[1]] = match[2];
+        }
+      }
+    }
+    res.json({ env });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/system-prompt — カスタムプロンプトを返す（なければデフォルト）
+ */
+router.get('/system-prompt', (req, res) => {
+  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
+  const defaultPath = path.join(CONFIG_DIR, 'default_system_prompt.md');
+  try {
+    const custom = fs.existsSync(customPath) ? fs.readFileSync(customPath, 'utf8') : '';
+    const defaultPrompt = fs.existsSync(defaultPath) ? fs.readFileSync(defaultPath, 'utf8') : '';
+    res.json({ custom, default: defaultPrompt, isCustom: !!custom.trim() });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * PUT /config/system-prompt — カスタムプロンプトを保存
+ */
+router.put('/system-prompt', (req, res) => {
+  const { content } = req.body as { content?: string };
+  if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
+  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
+  try {
+    if (!content.trim()) {
+      // 空 → カスタムファイル削除（デフォルトに戻す）
+      if (fs.existsSync(customPath)) fs.unlinkSync(customPath);
+    } else {
+      fs.writeFileSync(customPath, content);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// === ルーム設定 API ===
+
+/**
+ * ルームのワークスペースパスを解決
+ */
+function resolveRoomWorkspace(roomId: string): string | null {
+  const agentId = botApi.getBotUserId();
+  if (!agentId) return null;
+  return path.join(WORKSPACE_ROOT, agentId, roomId);
+}
+
+interface RoomApiMember {
+  id: string;
+  display_name?: string;
+}
+
+interface RoomApiItem {
+  id: string;
+  name?: string;
+  type?: string;
+  member_count?: number;
+  members?: RoomApiMember[];
+  partner_display_name?: string;
+}
+
+interface AdminRoomsResponse {
+  rooms?: RoomApiItem[];
+}
+
+interface RoomSettingsFile {
+  response_mode?: string;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+interface RoomSummary extends RoomSettingsFile {
+  room_id: string;
+  name?: string;
+  type?: string;
+  member_count?: number;
+}
+
+/**
+ * GET /config/rooms — 全ルームのワークスペース一覧 + 設定サマリ
+ */
+// ワークスペースをスキャンしてルーム一覧を返す共通関数
+async function listAgentRooms(agentId: string): Promise<RoomSummary[]> {
+  const agentDir = path.join(WORKSPACE_ROOT, agentId);
+  if (!fs.existsSync(agentDir)) return [];
+
+  // admin API で全ルーム情報を取得（エージェントに関係なくルーム名を解決）
+  const roomInfoMap = new Map<string, { name?: string; type?: string; member_count?: number }>();
+  try {
+    // botApi.request は private helper で export されていない (#330 TS 移行時点の
+    // botApi.mts 確認済み)。元実装 (routes/settings.js) も同様に botApi.request を
+    // 呼んでおり、常に例外→下の Bot API フォールバックに落ちる潜在挙動だった。
+    // これを変えずに保持するため、存在しない前提でキャストして呼び出す。
+    const request = (botApi as unknown as {
+      request?: (method: string, path: string) => Promise<AdminRoomsResponse>;
+    }).request;
+    const allRooms = await request!('GET', '/admin/rooms');
+    const roomList = allRooms.rooms || [];
+    for (const r of roomList) {
+      let name = r.name;
+      if (r.type === 'direct' && r.members) {
+        // DM: エージェント以外のメンバー名を表示
+        const other = r.members.find((m: RoomApiMember) => m.id !== agentId);
+        name = other?.display_name || 'DM';
+      }
+      roomInfoMap.set(r.id, { name, type: r.type, member_count: r.member_count });
+    }
+  } catch {
+    // フォールバック: Bot API
+    try {
+      const apiRooms = (await botApi.getRooms()) as AdminRoomsResponse | RoomApiItem[];
+      const roomList: RoomApiItem[] = Array.isArray(apiRooms) ? apiRooms : (apiRooms.rooms || []);
+      for (const r of roomList) {
+        roomInfoMap.set(r.id, { name: r.name || r.partner_display_name || 'DM', type: r.type, member_count: r.member_count });
+      }
+    } catch { /* ignore */ }
+  }
+
+  const rooms: RoomSummary[] = [];
+  for (const roomId of fs.readdirSync(agentDir)) {
+    const roomDir = path.join(agentDir, roomId);
+    if (!fs.statSync(roomDir).isDirectory()) continue;
+    const settingsPath = path.join(roomDir, 'room_settings.json');
+    let settings: RoomSettingsFile = { response_mode: 'auto', enabled: true };
+    if (fs.existsSync(settingsPath)) {
+      try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as RoomSettingsFile; } catch { /* ignore */ }
+    }
+    const info = roomInfoMap.get(roomId);
+    if (!info) continue; // 退出済みルームはスキップ
+    rooms.push({ room_id: roomId, name: info.name, type: info.type, member_count: info.member_count, ...settings });
+  }
+  return rooms;
+}
+
+/**
+ * GET /config/rooms — デフォルトエージェントのルーム一覧（後方互換）
+ */
+router.get('/rooms', async (req, res) => {
+  try {
+    const agentId = botApi.getBotUserId();
+    if (!agentId) return res.json({ rooms: [] });
+    const rooms = await listAgentRooms(agentId);
+    res.json({ rooms });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/rooms/:agentId — 指定エージェントのルーム一覧
+ */
+router.get('/rooms/:agentId', async (req, res) => {
+  try {
+    const rooms = await listAgentRooms(req.params.agentId);
+    res.json({ rooms });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/room/:roomId/settings — room_settings.json
+ */
+router.get('/room/:roomId/settings', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const filePath = path.join(ws, 'room_settings.json');
+  try {
+    if (fs.existsSync(filePath)) {
+      res.json({ settings: JSON.parse(fs.readFileSync(filePath, 'utf8')) });
+    } else {
+      res.json({ settings: { response_mode: 'auto', enabled: true } });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * PUT /config/room/:roomId/settings — room_settings.json 書き出し
+ */
+router.put('/room/:roomId/settings', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const { settings } = req.body as { settings?: RoomSettingsFile };
+  if (!settings) return res.status(400).json({ error: 'settings が必要です' });
+  try {
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    fs.writeFileSync(path.join(ws, 'room_settings.json'), JSON.stringify(settings, null, 2) + '\n');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/room/:roomId/claude-md — CLAUDE.md
+ */
+router.get('/room/:roomId/claude-md', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const filePath = path.join(ws, 'CLAUDE.md');
+  try {
+    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * PUT /config/room/:roomId/claude-md — CLAUDE.md 書き出し
+ */
+router.put('/room/:roomId/claude-md', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const { content } = req.body as { content?: string };
+  if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
+  try {
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    fs.writeFileSync(path.join(ws, 'CLAUDE.md'), content);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/room/:roomId/light-prompt — light_prompt.md
+ */
+router.get('/room/:roomId/light-prompt', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const filePath = path.join(ws, 'light_prompt.md');
+  try {
+    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * PUT /config/room/:roomId/light-prompt — light_prompt.md 書き出し
+ */
+router.put('/room/:roomId/light-prompt', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const { content } = req.body as { content?: string };
+  if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
+  try {
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    fs.writeFileSync(path.join(ws, 'light_prompt.md'), content);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * GET /config/room/:roomId/mcp — ルーム固有 mcp_config.json
+ */
+router.get('/room/:roomId/mcp', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const filePath = path.join(ws, 'mcp_config.json');
+  try {
+    if (fs.existsSync(filePath)) {
+      res.json({ mcpConfig: JSON.parse(fs.readFileSync(filePath, 'utf8')) });
+    } else {
+      res.json({ mcpConfig: null });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * PUT /config/room/:roomId/mcp — ルーム固有 mcp_config.json 書き出し
+ */
+router.put('/room/:roomId/mcp', (req, res) => {
+  const ws = resolveRoomWorkspace(req.params.roomId);
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const { mcpConfig } = req.body as { mcpConfig?: object };
+  if (!mcpConfig) return res.status(400).json({ error: 'mcpConfig が必要です' });
+  try {
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    fs.writeFileSync(path.join(ws, 'mcp_config.json'), JSON.stringify(mcpConfig, null, 2) + '\n');
+    // MCP キャッシュを即時無効化（次回メッセージで新設定で再接続）
+    const agentId = botApi.getBotUserId();
+    if (agentId) {
+      invalidateRoomMcp(agentId, req.params.roomId).catch(() => {});
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});

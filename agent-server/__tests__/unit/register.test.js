@@ -11,12 +11,12 @@ jest.mock('../../src/webhook/handler', () => ({
   registerBotUserId: jest.fn(),
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/config', () => ({
   TEALUS_BOT_ID: 'AI_AGENT',
@@ -51,7 +51,7 @@ describe('Agent Registration', () => {
 
   test('ログイン失敗時はエラーをログに記録', async () => {
     botApi.login.mockRejectedValueOnce(new Error('Auth failed'));
-    const logger = require('../../src/lib/logger');
+    const { logger } = require('../../src/lib/logger');
 
     await initializeAgent();
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));

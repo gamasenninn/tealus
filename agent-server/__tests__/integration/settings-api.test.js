@@ -27,9 +27,9 @@ afterAll(() => {
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 const JWT_SECRET = process.env.JWT_SECRET;
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/context/settingsManager', () => ({
   getAllSettings: jest.fn(() => ({ tool_tavily: true, max_turns: 3 })),
@@ -54,7 +54,7 @@ jest.mock('../../src/config', () => ({
 const express = require('express');
 const cors = require('cors');
 const { authenticate } = require('../../src/middleware/auth');
-const settingsRoutes = require('../../src/routes/settings');
+const { router: settingsRoutes } = require('../../src/routes/settings');
 
 let app;
 const token = jwt.sign({ id: 'admin1', login_id: 'ADMIN' }, JWT_SECRET, { expiresIn: '1h' });

@@ -66,12 +66,12 @@ jest.mock('../../src/context/sessionManager', () => ({
   updateStatus: jest.fn(),
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 // #295: delegator は handleDelegation を spy 化、parseErrorMessage は実物を使う (通知文の照合用)
 jest.mock('../../src/webhook/delegator', () => {
@@ -170,7 +170,7 @@ describe('Dispatcher', () => {
     });
 
     test('agentId が null の場合は安全に skip (#225 init failure guard)', async () => {
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
 
       await dispatch({
         message: { id: 'msg1', content: 'こんにちは', sender: { id: 'user1' } },
@@ -613,7 +613,7 @@ describe('Dispatcher', () => {
   // キュー層が一定時間で強制 resolve し、以降のメッセージがデッドロックしないことを担保する。
   describe('enqueueForRoom outer timeout (#270)', () => {
     const { enqueueForRoom } = require('../../src/webhook/dispatcher');
-    const logger = require('../../src/lib/logger');
+    const { logger } = require('../../src/lib/logger');
 
     beforeEach(() => {
       jest.clearAllMocks();

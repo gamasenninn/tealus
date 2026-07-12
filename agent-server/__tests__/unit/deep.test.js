@@ -2,7 +2,7 @@
  * Deep Agent テスト
  */
 const os = require('os');
-const fs = require('fs');
+const fs = require('node:fs');
 const path = require('path');
 
 jest.mock('../../src/lib/botApi', () => ({
@@ -16,12 +16,12 @@ jest.mock('../../src/context/sessionManager', () => ({
   updateStatus: jest.fn(),
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/config', () => ({
   DEEP_TIMEOUT: 100,  // テスト用に短く
@@ -33,7 +33,7 @@ jest.mock('../../src/config', () => ({
 
 // child_process をモック
 const mockSpawn = jest.fn();
-jest.mock('child_process', () => ({
+jest.mock('node:child_process', () => ({
   execFile: jest.fn(),
   spawn: mockSpawn,
 }));
@@ -226,7 +226,7 @@ describe('Deep Agent', () => {
       // Promise が resolve しているはず (safety net 発火)
       await expect(promise).resolves.toBeUndefined();
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('safety net fired')
       );

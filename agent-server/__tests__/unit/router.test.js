@@ -11,18 +11,27 @@ jest.mock('openai', () => {
   }));
 });
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
-jest.mock('../../src/config', () => ({
-  AGENT_ROUTER_MODEL: 'gpt-5.4-mini',
-  OPENAI_API_KEY: 'test-key',
-  DEEP_AVAILABLE: true,  // 既存テスト互換: claude CLI が常時あると見なす
-}));
+jest.mock('../../src/config', () => {
+  // getter/setter で定義する: swc の CJS interop は namespace import 時にプロパティを
+  // 複製するが getter 記述子は保持されるため、テストからの書き換えが本体に届く
+  const state = {
+    AGENT_ROUTER_MODEL: 'gpt-5.4-mini',
+    OPENAI_API_KEY: 'test-key',
+    DEEP_AVAILABLE: true,  // 既存テスト互換: claude CLI が常時あると見なす
+  };
+  const m = {};
+  for (const k of Object.keys(state)) {
+    Object.defineProperty(m, k, { enumerable: true, get: () => state[k], set: (v) => { state[k] = v; } });
+  }
+  return m;
+});
 
 const config = require('../../src/config');
 const { classifyByRules, classifyByLLM, route, applyDeepAvailability, stripLeadingMentions } = require('../../src/router/index');

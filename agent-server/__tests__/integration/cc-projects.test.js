@@ -15,7 +15,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 
 jest.mock('../../src/webhook/routes', () => {
   const express = require('express');
-  return express.Router();
+  return { router: express.Router() };
 });
 
 // DEFAULT_QUEUE_DIR を mockTmpDir に向けるため module を mock

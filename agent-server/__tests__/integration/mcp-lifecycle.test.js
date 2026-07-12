@@ -14,9 +14,9 @@ jest.mock('@openai/agents', () => ({
   })),
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/config', () => ({
   MCP_CACHE_TTL: 100,

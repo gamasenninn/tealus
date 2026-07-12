@@ -3,15 +3,15 @@
  */
 const { EventEmitter } = require('events');
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 const mockSpawn = jest.fn();
-jest.mock('child_process', () => ({ spawn: mockSpawn }));
+jest.mock('node:child_process', () => ({ spawn: mockSpawn }));
 
 const deepRegistry = require('../../src/agents/deepRegistry');
 

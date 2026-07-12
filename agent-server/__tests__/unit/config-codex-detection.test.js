@@ -7,12 +7,12 @@
  * 再 require する。既存 config-deep-detection.test.js と同 pattern。
  */
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 // ★ dotenv は実環境 .env を load して process.env を上書きするため、
 // test での process.env 操作と衝突する。test 内では no-op 化。

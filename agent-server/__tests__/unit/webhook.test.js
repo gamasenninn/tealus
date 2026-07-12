@@ -10,12 +10,12 @@ jest.mock('../../src/webhook/dispatcher', () => ({
 const { handleWebhook, registerBotUserId } = require('../../src/webhook/handler');
 
 // logger をモック
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 describe('Webhook Handler', () => {
   beforeEach(() => {
@@ -56,7 +56,7 @@ describe('Webhook Handler', () => {
         room: { id: 'room1', name: 'テスト' },
       };
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipped bot message'));
     });
@@ -68,7 +68,7 @@ describe('Webhook Handler', () => {
         room: { id: 'room1', name: 'テスト' },
       };
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Message received'));
     });
@@ -95,7 +95,7 @@ describe('Webhook Handler', () => {
         room: { id: 'roomA', name: 'same-room' },
       };
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('[SPIKE] Skipped same-room bot echo'));
     });
@@ -111,7 +111,7 @@ describe('Webhook Handler', () => {
         room: { id: 'roomB', name: 'cross-room' },
       };
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('[SPIKE] cross-room delegation accepted'));
     });
@@ -129,7 +129,7 @@ describe('Webhook Handler', () => {
         room: { id: 'roomB', name: 'cross-room' }, // 別 room でも tripped 時は block
       };
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       // spike tripped 時は旧挙動 fallback の log message
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipped bot message'));
@@ -145,7 +145,7 @@ describe('Webhook Handler', () => {
         room: { id: 'roomB', name: 'cross-room' },
       };
 
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipped bot message'));
     });
@@ -154,14 +154,14 @@ describe('Webhook Handler', () => {
   describe('ペイロード検証', () => {
     test('messageがないペイロードは警告を出す', async () => {
       const payload = { event: 'message.created', room: { id: 'room1' } };
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid payload'));
     });
 
     test('roomがないペイロードは警告を出す', async () => {
       const payload = { event: 'message.created', message: { id: 'msg1' } };
-      const logger = require('../../src/lib/logger');
+      const { logger } = require('../../src/lib/logger');
       await handleWebhook(payload);
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid payload'));
     });

@@ -6,12 +6,12 @@
  * 再 require する。
  */
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 describe('config: DEEP_AVAILABLE 検出', () => {
   const originalOverride = process.env.AGENT_DEEP_AVAILABLE_OVERRIDE;

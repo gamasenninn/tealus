@@ -7,12 +7,12 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
   debug: jest.fn(),
-}));
+} }));
 
 describe('loadLightBackend (#292)', () => {
   let loader;
@@ -21,7 +21,7 @@ describe('loadLightBackend (#292)', () => {
   beforeEach(() => {
     jest.resetModules();
     // require 順序: logger → loader
-    logger = require('../../src/lib/logger');
+    logger = require('../../src/lib/logger').logger;
     loader = require('../../src/agents/lightBackendLoader');
     loader.resetForTest();
   });

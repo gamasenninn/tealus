@@ -6,7 +6,7 @@ const request = require('supertest');
 
 jest.mock('../../src/webhook/routes', () => {
   const express = require('express');
-  return express.Router();
+  return { router: express.Router() };
 });
 
 const { app } = require('../../src/app');

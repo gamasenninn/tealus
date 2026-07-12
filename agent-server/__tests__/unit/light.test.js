@@ -25,9 +25,9 @@ jest.mock('zod', () => ({
   z: { object: jest.fn(() => ({})), string: jest.fn(() => ({ describe: jest.fn(() => ({})), optional: jest.fn(() => ({ describe: jest.fn(() => ({})) })) })) },
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/config', () => ({
   AGENT_LIGHT_MODEL: 'gpt-5.4-mini',

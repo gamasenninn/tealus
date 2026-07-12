@@ -8,9 +8,9 @@ jest.mock('../../src/lib/botApi', () => ({
   getBotUserId: jest.fn(() => 'bot-uuid'),
 }));
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-}));
+} }));
 
 jest.mock('../../src/config', () => ({
   TEALUS_API_URL: 'http://localhost:3000',

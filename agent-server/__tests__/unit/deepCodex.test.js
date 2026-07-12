@@ -8,12 +8,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-jest.mock('../../src/lib/logger', () => ({
+jest.mock('../../src/lib/logger', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
-}));
+} }));
 
 // botApi / deepRegistry mock (= processDeepCodex は本 test では呼ばないが require チェーンで必要)
 jest.mock('../../src/lib/botApi', () => ({
