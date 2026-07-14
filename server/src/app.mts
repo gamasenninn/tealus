@@ -224,6 +224,9 @@ if (import.meta.main) {
     import('./services/transcriptionConfig.mts')
       .then(tc => tc.refreshVocabFromTable())
       .catch((err) => logger.warn(`[dictionary] initial vocab refresh failed: ${err instanceof Error ? err.message : String(err)}`));
+    // #331: organon dock watcher。organon.ttl (RDF 契約) の到着で辞書テーブルへ pull + overlay reload。
+    // 起動時に 1 回 pull するので上の initial refresh を subsume する (ORGANON_TTL_PATH 未設定なら no-op)。
+    import('./services/organonWatcher.mts').then(ow => ow.start());
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {
