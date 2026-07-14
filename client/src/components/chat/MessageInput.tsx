@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
@@ -41,10 +41,12 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   const { members } = useRoomStore();
 
   // #253: cc-proj を mention picker に virtual user として表示
+  // #333: mount 時に加え、picker を開く遷移でも再取得（新規 cc project を reload なしで反映）
   const [ccProjects, setCcProjects] = useState<Array<{ name: string }>>([]);
-  useEffect(() => {
+  const refreshCcProjects = useCallback(() => {
     api.getCcProjects().then(d => setCcProjects(d.projects || [])).catch(() => {});
   }, []);
+  useEffect(() => { refreshCcProjects(); }, [refreshCcProjects]);
   const mentionMembers = useMemo<MentionCandidate[]>(() => {
     const ccMembers = ccProjects.map(p => ({
       user_id: `cc:${p.name}`,
@@ -323,6 +325,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
             const textBefore = value.slice(0, cursorPos);
             const atMatch = textBefore.match(/@([^\s@]*)$/);
             if (atMatch) {
+              if (!showMention) refreshCcProjects(); // #333: picker 開時に cc-project 一覧を最新化
               setMentionQuery(atMatch[1]);
               setShowMention(true);
             } else {
