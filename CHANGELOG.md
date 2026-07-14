@@ -10,8 +10,16 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-14
+
+★ ★ ★ **「organon を型付き契約で dock し、辞書が自己成長する」** — Phase 5 後半。STT/OCR の identity 供給層を、痩せた `vocab.json` から (1) 自己成長する dictionary テーブル(#327)、(2) organon を RDF 契約経由で pull する dock(#331) へ格上げ。自ホスト Qwen STT の organon 補正(#326)と中国語誤検出ガード(#332)で音声認識を実運用強化。土台としてコードベースを 100% TypeScript 化(#330、Node 24 buildless)。v0.4.0 以降 74 コミットの集成。
+
 ### Added
 
+- **コードベース 100% TypeScript 化 — buildless Node 24** ([#330](https://github.com/gamasenninn/tealus/issues/330)): 全レイヤー（server / client / agent-server / rtc-server / dashboard / scripts）のプロダクト + テストを `.mts`/`.ts` 化（Phase 0-7）。Node 24 native type stripping でサーバはビルドレス実行（`node src/app.mts`）、型検査は `tsc --noEmit` に分離。CI を Node 24 化 + 全プロジェクトの tsc + ルート CLI（`cli-test` job）を追加。`engines: node >=22.6`。
+- **自己成長する変換辞書 — テーブル化 + 育成トリアージ** ([#327](https://github.com/gamasenninn/tealus/issues/327)): STT/OCR の別名→正規名辞書を file（`guideline.json`）から `dictionary_terms`/`dictionary_aliases` テーブルへ移行（実行時 source of truth）。人間の編集履歴から alias を自動学習するループ（確定 hook）、pykakasi による読み供給（漢字 garble の音韻ゲート）、管理ダッシュボードの育成トリアージ UI（一覧 / 承認 / 却下 / 読み・分類編集）。precedence = manual > auto > organon。
+- **STT organon モード — 自ホスト STT + organon 文脈補正** ([#326](https://github.com/gamasenninn/tealus/issues/326)): `TRANSCRIPTION_MODE=organon` で、自ホスト Qwen3-ASR（RTX 4060・データ主権）の生出力を organon 知識で文脈補正する 2 段構成。責務分離（Qwen = 音響忠実 / 補正段 = canonical 化・未登録温存）で固有名詞回収と過補正抑止を両立。
+- **organon dock — RDF 契約経由で canonical 辞書を自動 pull** ([#331](https://github.com/gamasenninn/tealus/issues/331)): organon（別リポ）を型付き RDF/TTL 契約として publish し、tealus が同一ホストの working-tree を watch して自動 import。**base（辞書テーブル）+ dock（organon）+ pull** の 3 層で、旧 push（cross-repo write + admin token 結合）を retire し pull 一本化。決定論 serialize により no-op commit は無反応、crystallize commit が ≤5 分で辞書 + STT overlay に自動反映。
 - **クリップボード貼り付け(Ctrl+V)で画像/ファイルをアップロード** ([#311](https://github.com/gamasenninn/tealus/issues/311)): textarea への paste で ＋ボタンと同じ経路に流して即アップロード。テキスト貼り付けは従来どおり。PC 向け（Android 等モバイルは paste イベントが画像を渡さないプラットフォーム制約のため対象外、モバイルは ＋ボタンが標準経路）
 - **STT vocab を agent prompt にも inject — 画像 OCR/帳票の正規化** ([#315](https://github.com/gamasenninn/tealus/issues/315)): organon 由来の業務語彙辞書（別名→正規名）は従来 STT(Whisper) のみに効き vision/OCR に未接続だった。`vocabContext` で `transcription_guideline.json` の vocabulary を Light/Deep の prompt に inject し、画像・帳票読み取りで人名/メーカー/業務語の表記揺れを正規化。env `VOCAB_INJECT`（opt-in、default OFF）。出品票 OCR で効果確認。
 - **複数画像（複数添付メッセージ）の一括取得** ([#316](https://github.com/gamasenninn/tealus/issues/316)、tealus-mcp v0.14.5 連動): 1メッセージに複数画像があると `get_message_media` が1枚目しか返さなかった（server endpoint の rows[0]）。`GET /bot/messages/:id/media?index=N` + `media_count` + `media[]` メタ対応とし、index 逐次取得（4枚=base64 約10.4MB のため全枚一括は非現実的）。出品票4枚一括→MD化→保存の dogfood 成功。
@@ -28,6 +36,7 @@
 
 ### Fixed
 
+- **ローカルSTT の中国語誤検出で文字起こしが壊れる件** ([#332](https://github.com/gamasenninn/tealus/issues/332)): Qwen3-ASR が日本語音声を中国語と誤検出し `每句一个` 等を吐く hallucination（議事録生成が不能に）。既存の外来スクリプト fallback ガードが漢字系を対象外にしていた穴を、`looksLikeChineseMisdetection`（かな欠如 かつ〈簡体字専用字 or 漢字 8 字以上〉→ openai へ fallback）で塞いだ。local 分岐のみ、正当な短い全漢字日本語（了解 / 承知 / 型式番号）は誤爆しない。TDD 21 tests。
 - **アップロードファイル名の文字化け** ([#319](https://github.com/gamasenninn/tealus/issues/319)): multer/busboy が multipart の filename を latin1 デコードするため、日本語を含むファイル名（出品票 MD・スクリーンショット等）が `message_media.file_name` に UTF-8→latin1 mojibake で保存されていた（ASCII 名は無害、ディスク実体は `timestamp-random` 名のため影響なし）。`decodeFileName()`（latin1→UTF8 再デコード、非 UTF-8 名は原文フォールバック）を保存 4 経路（bot 画像/ファイル・media UIアップロード・voice）に適用。既存の化けた 78 行も DB 上で一括復元済。新規反映には server 再起動が必要。
 - **画像生成（`generate_and_send_image`）の復活** ([#313](https://github.com/gamasenninn/tealus/issues/313)、tealus-mcp v0.14.3/v0.14.4 連動): `response_format` が現行 OpenAI Images API で拒否され全失敗 → 除去 + b64_json/url 両対応。さらに `dall-e-3` がアカウントで廃止のため `gpt-image-1` へ移行（env `OPENAI_IMAGE_MODEL` で上書き可）。
 - **Deep Codex がタイムアウト後もプロセス生存し遅延応答する bug** ([#312](https://github.com/gamasenninn/tealus/issues/312)): timeout 時の sweep の Name filter が `claude.exe/cmd.exe` 限定で Deep Codex の `codex.exe` にマッチせず空振りだった。`codex.exe` + `node.exe` を追加（codex は `-C <workspace>` 引数を持つため CommandLine 一致）。
