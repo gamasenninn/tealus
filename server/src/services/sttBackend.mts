@@ -38,6 +38,27 @@ export function looksLikeForeignScript(text: unknown): boolean {
   return typeof text === 'string' && FOREIGN_SCRIPT_RE.test(text);
 }
 
+// 中国語誤検出ガード (#332, 2026-07-14 朝礼 dogfood): Qwen3-ASR が日本語音声を中国語と誤検出し
+// 「每句一个」等を吐く。漢字は日本語と重なるため looksLikeForeignScript は意図的に除外しており、
+// この穴をすり抜ける。正常な日本語文字起こしは助詞など「かな」を必ず含むので、
+//   かな(ひらがな/カタカナ) を1字も含まない かつ (簡体字専用字を含む OR 漢字が一定長以上)
+// を中国語誤検出扱いにする。短い全漢字の正当日本語 (了解/承知/型式番号) は簡体字なし+短いので誤爆しない。
+// ひらがな 3040-309F / カタカナ 30A0-30FF / 半角カナ FF66-FF9D
+const KANA_RE = /[぀-ヿｦ-ﾝ]/;
+// 日本語に現れない簡体字専用字 (Qwen 中国語 hallucination の marker)。日本語の新字体・旧字体とは字形が異なるものだけ。
+const SIMPLIFIED_ONLY_RE = /[个这么们吗说请谢语见现关门问间时电话车书东让觉图员长马鸟们儿网页样对经济]/;
+const HAN_RE = /[一-鿿]/g;
+// かな皆無で漢字がこの数以上 = 助詞のない長文 = 日本語ではありえない (誤検出扱い)。
+const KANA_LESS_HAN_LIMIT = 8;
+export function looksLikeChineseMisdetection(text: unknown): boolean {
+  if (typeof text !== 'string') return false;
+  const t = text.trim();
+  if (!t) return false;
+  if (KANA_RE.test(t)) return false; // 正常な日本語は必ずかなを含む
+  if (SIMPLIFIED_ONLY_RE.test(t)) return true; // 簡体字専用字 → 確実に中国語
+  return (t.match(HAN_RE) || []).length >= KANA_LESS_HAN_LIMIT; // かな皆無で漢字が長い
+}
+
 /** log 注入用の最小 logger 形 (既定は winston logger、テストで差し替え可) */
 interface SttLogger {
   warn: (message: string) => unknown;
@@ -103,6 +124,9 @@ export async function transcribeAudio({
       const text = await transcribeLocal({ inputPath, glossary, fetchImpl });
       if (looksLikeForeignScript(text)) {
         throw new Error(`worker returned foreign-script text (language misdetection): "${text.slice(0, 20)}"`);
+      }
+      if (looksLikeChineseMisdetection(text)) {
+        throw new Error(`worker returned kana-less CJK text (Chinese misdetection): "${text.slice(0, 20)}"`);
       }
       return text;
     } catch (err) {

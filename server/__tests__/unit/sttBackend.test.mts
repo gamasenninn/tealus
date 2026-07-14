@@ -221,3 +221,61 @@ describe('transcribeAudio - local 言語誤検出 → openai fallback', () => {
     expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
   });
 });
+
+// 中国語誤検出ガード (#332, 2026-07-14 朝礼 dogfood: Qwen が日本語音声を中国語と誤検出し
+// 「每句一个」を吐く)。looksLikeForeignScript は漢字を意図的に除外しているため、
+// 「かな欠如 かつ (簡体字専用字 or 漢字が一定長以上)」を別ガードで捕捉する。
+describe('looksLikeChineseMisdetection', () => {
+  test('簡体字専用字を含む全漢字 → true (每句一个 / 这个 / 说明)', () => {
+    expect(mod.looksLikeChineseMisdetection('每句一个')).toBe(true);
+    expect(mod.looksLikeChineseMisdetection('每句一个每句一个每句一个')).toBe(true);
+    expect(mod.looksLikeChineseMisdetection('这个')).toBe(true);
+    expect(mod.looksLikeChineseMisdetection('说明')).toBe(true);
+  });
+  test('かな欠如 かつ 漢字が長い → true (助詞なしの長文は日本語ではありえない)', () => {
+    expect(mod.looksLikeChineseMisdetection('本日業務連絡議事録作成')).toBe(true); // 11 han, かな0
+  });
+  test('正常な日本語 (かなを含む) → false (素通り)', () => {
+    expect(mod.looksLikeChineseMisdetection('整備長、取れますか')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('はい、了解です')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('社長、GC215を準備')).toBe(false);
+  });
+  test('短い全漢字の正当日本語 → false (了解/承知/再出品/型式番号 を誤爆しない)', () => {
+    expect(mod.looksLikeChineseMisdetection('了解')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('承知')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('再出品')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('型式番号')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('会議室準備完了')).toBe(false); // 7 han, 閾値未満
+  });
+  test('ラテン/数字のみ・空・非文字列 → false', () => {
+    expect(mod.looksLikeChineseMisdetection('GC215')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection('型式GC215')).toBe(false); // 2 han, 簡体字なし
+    expect(mod.looksLikeChineseMisdetection('')).toBe(false);
+    expect(mod.looksLikeChineseMisdetection(null)).toBe(false);
+  });
+});
+
+describe('transcribeAudio - local 中国語誤検出 → openai fallback (#332)', () => {
+  test('local が 每句一个 を返したら openai に fallback', async () => {
+    process.env.STT_BACKEND = 'local';
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: '每句一个每句一个' }));
+    const openaiClient = fakeOpenAI('おはようございます、朝礼を始めます');
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('おはようございます、朝礼を始めます');
+    expect(openaiClient.audio.transcriptions.create).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  test('STT_LOCAL_STRICT なら中国語誤検出時も fallback せず throw', async () => {
+    process.env.STT_BACKEND = 'local';
+    process.env.STT_LOCAL_STRICT = '1';
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ text: '每句一个' }));
+    const openaiClient = fakeOpenAI('x');
+    await expect(mod.transcribeAudio({ inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient, fetchImpl }))
+      .rejects.toThrow();
+    expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
+  });
+});
