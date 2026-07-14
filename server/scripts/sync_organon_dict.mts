@@ -1,7 +1,7 @@
 /**
  * #331 organon dock sync ツール: organon.ttl (公開 RDF 契約) → 辞書テーブルへ pull-import。
  *
- * 現行の seed_dictionary.mts (guideline.json 経由) の後継。organon が publish した RDF を
+ * 旧 seed_dictionary.mts (guideline.json 経由、#331 で retire 済) の後継。organon が publish した RDF を
  * mirror 経由で読み、proper noun (Role→person / Organization→vendor|organization) を
  * dictionary_terms/aliases に upsert(source='organon')。冪等。
  *
