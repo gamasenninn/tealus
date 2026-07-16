@@ -11,6 +11,8 @@ import { Server } from 'socket.io';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 import { logger } from './utils/logger.mts';
+import { pool } from './db/pool.mts';
+import { checkMigrations } from './services/migrationCheck.mts';
 import { ensureMediaDirs } from './utils/mediaSetup.mts';
 import { MEDIA_ROOT } from './middleware/upload.mts';
 import { runStartupEnvCheck } from './utils/envCheck.mts';
@@ -218,6 +220,10 @@ if (import.meta.main) {
   checkBuildArtifacts();
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
+    // #334: 未適用 migration の loud warn (採用者保護)。辞書テーブル不在を起動時に可視化
+    // (silent degrade 防止)。稼働は止めない — warn のみ。
+    void checkMigrations({ query: (sql) => pool.query(sql), warn: (m) => logger.warn(m) })
+      .catch((err) => logger.warn(`[migration-check] 確認をスキップ: ${err instanceof Error ? err.message : String(err)}`));
     // rtc-server reachability の動的検出を開始
     import('./services/capabilityWatcher.mts').then(cw => cw.start(io));
     // #327: dictionary テーブルの vocab を in-memory オーバーレイに読み込む (空/不達なら file フォールバック)
