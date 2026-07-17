@@ -14,6 +14,7 @@ import {
   loadAliases,
   reloadAliases,
   getAliasesConfigPath,
+  emitCcAck,
 } from '../../src/webhook/ccQueue.mts';
 
 describe('extractCcProject (先頭マッチング、#215)', () => {
@@ -427,5 +428,48 @@ describe('loadSkipSenderIds', () => {
     const set = loadSkipSenderIds('only-one');
     expect(set.size).toBe(1);
     expect(set.has('only-one')).toBe(true);
+  });
+});
+
+// #335 cc-bridge 受付エコー: mention 投入時に「届きました」を出し、TTL 後に idle で消す。
+// 一般ユーザーが「投げたものが受理されたか」を即知れるようにする (一か八か待ちの解消)。
+describe('emitCcAck', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  test('即 processing を出す (文言に cc-<project> と「届きました」を含む)', () => {
+    const calls: Array<{ roomId: string; status: string; message?: string }> = [];
+    emitCcAck({
+      project: 'organon', roomId: 'r1', ttlMs: 5000,
+      pushStatus: (roomId, status, message) => { calls.push({ roomId, status, message }); return Promise.resolve(); },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].roomId).toBe('r1');
+    expect(calls[0].status).toBe('processing');
+    expect(calls[0].message).toContain('cc-organon');
+    expect(calls[0].message).toContain('届きました');
+  });
+
+  test('TTL 後に idle を出す (= 数秒で消える)', () => {
+    const calls: Array<{ status: string }> = [];
+    emitCcAck({
+      project: 'kairos', roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status) => { calls.push({ status }); return Promise.resolve(); },
+    });
+    expect(calls).toHaveLength(1); // processing のみ
+    jest.advanceTimersByTime(4999);
+    expect(calls).toHaveLength(1); // まだ消えない
+    jest.advanceTimersByTime(1);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].status).toBe('idle'); // TTL 到達で消える
+  });
+
+  test('pushStatus が reject しても emitCcAck 自体は throw しない (best-effort)', () => {
+    expect(() => emitCcAck({
+      project: 'organon', roomId: 'r1', ttlMs: 5000,
+      pushStatus: () => Promise.reject(new Error('boom')),
+    })).not.toThrow();
+    // TTL 後の idle 送信も同様に握りつぶす
+    expect(() => jest.advanceTimersByTime(5000)).not.toThrow();
   });
 });

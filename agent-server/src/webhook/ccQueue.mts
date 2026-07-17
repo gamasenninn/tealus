@@ -25,6 +25,9 @@ interface CcAliasesFile {
 
 const DEFAULT_QUEUE_DIR = path.join(os.homedir(), '.tealus', 'cc-queue');
 
+// #335 cc-bridge 受付エコーの表示時間 (ms)。processing を出してこの時間後に idle で消す。
+const CC_ACK_TTL_MS = parseInt(process.env.CC_ACK_TTL_MS || '5000', 10);
+
 // `@cc-{project}` mention 検出 (#215 先頭マッチング方式)。
 // - **メッセージ (or 行) の先頭** に @cc-{project} がある場合のみ match。
 //   /m flag で multi-line 対応 (改行直後も「先頭」扱い)
@@ -167,6 +170,36 @@ function loadSkipSenderIds(envVal: string | undefined = process.env.CC_SKIP_SEND
   return new Set(envVal.split(',').map(s => s.trim()).filter(Boolean));
 }
 
+/**
+ * #335 cc-bridge 受付エコー — mention 投入時に「届きました」を出し、TTL 後に idle で消す。
+ *
+ * 内部エージェント (Light/Deep) は同一プロセスで「考え中」を出せるが、cc-bridge は
+ * tealus(受付) と Claude Code session(応答) が別プロセスで、beacon に積むだけの fire-and-forget
+ * ゆえユーザーに何も見えない → 「投げたものが受理されたか分からず一か八か待つ」心理を生む。
+ * 受付時に typing-indicator 風の status を 1 回出し、TTL 後に idle で消すことでこれを解消する。
+ *
+ * 完了 (idle) は listener の応答完了とは無関係に TTL で出す (別プロセスの完了を tealus は
+ * 知らない)。listener が TTL より早く応答した場合は、その返信 message 到着で client 側が
+ * 自動的に status を消すため二重にはならない (idle は冪等)。
+ *
+ * pushStatus は best-effort: 失敗しても beacon は既に積まれているので握りつぶす。
+ */
+export interface CcAckDeps {
+  project: string;
+  roomId: string;
+  /** POST /bot/status 相当 (本番は botApi.pushStatus)。 */
+  pushStatus: (roomId: string, status: string, message?: string) => Promise<unknown>;
+  /** 表示時間 (ms)。既定 CC_ACK_TTL_MS。 */
+  ttlMs?: number;
+}
+function emitCcAck({ project, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAckDeps): void {
+  void pushStatus(roomId, 'processing', `cc-${project} に届きました。応答をお待ちください…`).catch(() => {});
+  const timer = setTimeout(() => {
+    void pushStatus(roomId, 'idle', '').catch(() => {});
+  }, ttlMs);
+  if (timer.unref) timer.unref(); // ack timer が process を延命しない
+}
+
 export {
   extractCcProject,
   appendCcEvent,
@@ -176,5 +209,6 @@ export {
   loadAliases,
   reloadAliases,
   getAliasesConfigPath,
+  emitCcAck,
   DEFAULT_QUEUE_DIR,
 };

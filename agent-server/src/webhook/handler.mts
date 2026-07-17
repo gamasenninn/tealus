@@ -7,7 +7,7 @@ import { dispatch } from './dispatcher.mts';
 import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
 import * as botSendThrottle from '../lib/botSendThrottle.mts';
-import { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds } from './ccQueue.mts';
+import { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
 
 // #213 Phase A polish: 自己ループ防止用 sender skip set (env CC_SKIP_SENDER_IDS、CSV)
@@ -109,6 +109,9 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
         };
         const filePath = appendCcEvent(ccProject, ccPayload);
         logger.info(`[cc-queue] Routed @cc-${ccProject} → ${filePath}`);
+        // #335 受付エコー: 「cc-<project> に届きました」を出し TTL 後に消す (一か八か待ち解消)。
+        // beacon は既に積んだので best-effort、失敗しても routing 自体は成立している。
+        emitCcAck({ project: ccProject, roomId: room.id, pushStatus: botApi.pushStatus });
       } catch (err) {
         logger.error(`[cc-queue] Append failed: ${err instanceof Error ? err.message : String(err)}`);
       }
