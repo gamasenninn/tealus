@@ -57,24 +57,24 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
   };
 
   return (
-    <div className="form-bubble" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <div className="form-title">📋 {schema.title}</div>
-      {schema.intro && <div className="form-intro">{schema.intro}</div>}
+    <div className="cform-bubble" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="cform-title">📋 {schema.title}</div>
+      {schema.intro && <div className="cform-intro">{schema.intro}</div>}
 
       {schema.fields.map((field) => (
-        <div key={field.id} className="form-field">
-          <div className="form-label">
+        <div key={field.id} className="cform-field">
+          <div className="cform-label">
             {field.label}
-            {field.required && <span className="form-required">*</span>}
+            {field.required && <span className="cform-required">*</span>}
           </div>
 
           {field.type === 'radio' ? (
-            <div className="form-radio-group">
+            <div className="cform-radio-group">
               {field.options.map((opt) => {
                 const selected = values[field.id]?.value === opt.value;
                 return (
-                  <div key={opt.value} className="form-radio-row">
-                    <label className="form-radio-option">
+                  <div key={opt.value} className="cform-radio-row">
+                    <label className="cform-radio-option">
                       <input
                         type="radio"
                         name={`${message.id}-${field.id}`}
@@ -87,7 +87,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
                     {opt.allow_text && selected && (
                       <input
                         type="text"
-                        className="form-suboption-text"
+                        className="cform-suboption-text"
                         placeholder={opt.text_label || '補足'}
                         value={values[field.id]?.text || ''}
                         disabled={sent}
@@ -100,7 +100,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
             </div>
           ) : field.multiline ? (
             <textarea
-              className="form-text"
+              className="cform-text"
               rows={3}
               placeholder={field.placeholder || ''}
               value={values[field.id]?.text || ''}
@@ -110,7 +110,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
           ) : (
             <input
               type="text"
-              className="form-text"
+              className="cform-text"
               placeholder={field.placeholder || ''}
               value={values[field.id]?.text || ''}
               disabled={sent}
@@ -121,7 +121,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
       ))}
 
       <button
-        className="form-submit"
+        className="cform-submit"
         onClick={handleSubmit}
         disabled={!canSubmit || sending || sent}
       >

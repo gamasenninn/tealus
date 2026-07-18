@@ -1,5 +1,5 @@
 /* #336 汎用フォーム primitive のレンダラ */
-.form-bubble {
+.cform-bubble {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -7,46 +7,46 @@
   max-width: 420px;
 }
 
-.form-title {
+.cform-title {
   font-weight: 600;
   font-size: 15px;
 }
 
-.form-intro {
+.cform-intro {
   font-size: 13px;
   color: #555;
   white-space: pre-wrap;
 }
 
-.form-field {
+.cform-field {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
 
-.form-label {
+.cform-label {
   font-size: 14px;
   font-weight: 500;
 }
 
-.form-required {
+.cform-required {
   color: #c5221f;
   margin-left: 3px;
 }
 
-.form-radio-group {
+.cform-radio-group {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.form-radio-row {
+.cform-radio-row {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.form-radio-option {
+.cform-radio-option {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -54,8 +54,15 @@
   cursor: pointer;
 }
 
-.form-suboption-text,
-.form-text {
+/* radio 本体は固有幅を保つ (グローバルの input{width:100%} 系に伸ばされない防御) */
+.cform-radio-option input[type="radio"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.cform-suboption-text,
+.cform-text {
   /* iOS Safari の auto-zoom 回避 (font-size >= 16px) */
   font-size: 16px;
   padding: 6px 10px;
@@ -65,16 +72,16 @@
   box-sizing: border-box;
 }
 
-.form-suboption-text {
+.cform-suboption-text {
   margin-left: 22px;
   width: calc(100% - 22px);
 }
 
-.form-text {
+.cform-text {
   resize: vertical;
 }
 
-.form-submit {
+.cform-submit {
   align-self: flex-start;
   padding: 8px 20px;
   font-size: 14px;
@@ -86,15 +93,15 @@
   cursor: pointer;
 }
 
-.form-submit:disabled {
+.cform-submit:disabled {
   background: #b7c2b9;
   cursor: default;
 }
 
 @media (prefers-color-scheme: dark) {
-  .form-intro { color: #aaa; }
-  .form-suboption-text,
-  .form-text {
+  .cform-intro { color: #aaa; }
+  .cform-suboption-text,
+  .cform-text {
     background: #2a2a2a;
     color: #eee;
     border-color: #555;
