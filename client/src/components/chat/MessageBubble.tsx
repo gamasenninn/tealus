@@ -7,6 +7,8 @@ import { api } from '../../services/api';
 import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
 import VoiceBubble from './VoiceBubble';
+import FormBubble from './FormBubble';
+import { parseForm } from '../../utils/parseForm';
 import ContextMenu from './ContextMenu';
 import type { ContextMenuItem } from './ContextMenu';
 import LinkPreview from './LinkPreview';
@@ -242,7 +244,9 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   }
 
   const hasMedia = message.media && message.media.length > 0;
-  const hasText = message.content && message.content.trim() && message.type !== 'stamp';
+  // #336 form: schema パース成功なら FormBubble、失敗なら content を markdown fallback 表示
+  const formSchema = message.type === 'form' ? parseForm(message.content) : null;
+  const hasText = message.content && message.content.trim() && message.type !== 'stamp' && !formSchema;
   const isStamp = message.type === 'stamp';
   const isStampDeleted = isStamp && !message.stamp;
   const ttsText = getTtsText();
@@ -315,6 +319,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                 );
               })()}
               {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
+              {formSchema && <FormBubble message={message} schema={formSchema} roomId={roomId} />}
               {message.type !== 'voice' && renderMedia()}
             </>
           )}

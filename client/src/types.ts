@@ -61,7 +61,30 @@ export interface AppUrl {
   ratio?: number;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'file' | 'voice' | 'system' | 'stamp';
+export type MessageType = 'text' | 'image' | 'video' | 'file' | 'voice' | 'system' | 'stamp' | 'form';
+
+// #336 汎用フォーム primitive。content 内の ```tealus-form fence に埋め込む schema。
+export interface FormRadioOption {
+  value: string;
+  label: string;
+  /** true なら選択時に補足 text 欄を出す */
+  allow_text?: boolean;
+  /** 補足欄のラベル (既定「補足」) */
+  text_label?: string;
+}
+export type FormField =
+  | { id: string; type: 'radio'; label: string; required?: boolean; options: FormRadioOption[] }
+  | { id: string; type: 'text'; label: string; required?: boolean; multiline?: boolean; placeholder?: string };
+export interface FormSchema {
+  version: 1;
+  title: string;
+  intro?: string;
+  /** 回答時に本文先頭へ付ける mention。例 "@cc-organon"。省略なら誰も起動しない */
+  reply_mention?: string;
+  /** 送信ボタン文言 (既定「回答する」) */
+  submit_label?: string;
+  fields: FormField[];
+}
 
 export interface Transcription {
   status: 'pending' | 'processing' | 'transcribing' | 'formatting' | 'done' | 'error';
