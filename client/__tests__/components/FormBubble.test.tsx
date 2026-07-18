@@ -2,9 +2,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FormSchema, Message } from '../../src/types';
 
-// api / messageStore をモック (送信検証用)
+// api / socket / messageStore をモック (送信検証用)
 const requestMock = vi.fn().mockResolvedValue({});
 vi.mock('../../src/services/api', () => ({ api: { request: (...a: unknown[]) => requestMock(...a) } }));
+const emitMock = vi.fn();
+let socketConnected = true;
+vi.mock('../../src/services/socket', () => ({
+  getSocket: () => ({ get connected() { return socketConnected; }, emit: (...a: unknown[]) => emitMock(...a) }),
+}));
 const fetchMessagesMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../src/stores/messageStore', () => ({
   useMessageStore: { getState: () => ({ fetchMessages: fetchMessagesMock }) },
@@ -31,7 +36,7 @@ const SCHEMA: FormSchema = {
 const MSG = { id: 'form-msg-1', type: 'form' } as Message;
 
 describe('FormBubble', () => {
-  beforeEach(() => { requestMock.mockClear(); fetchMessagesMock.mockClear(); });
+  beforeEach(() => { requestMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; });
 
   it('title と radio option / text field を描画', () => {
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
@@ -55,20 +60,34 @@ describe('FormBubble', () => {
     expect(screen.getByPlaceholderText('補足')).toBeTruthy();
   });
 
-  it('回答するとで api.request が type=text + reply_to + 先頭mention付き content で呼ばれる', async () => {
+  it('★ socket 接続時は message:send で送る (webhook 発火経路 = cc-queue 起動)', async () => {
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
     fireEvent.click(screen.getByLabelText('記録のみ'));
     const btn = screen.getByRole('button', { name: '回答する' }) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
     fireEvent.click(btn);
+    await waitFor(() => expect(emitMock).toHaveBeenCalledTimes(1));
+    const [event, payload] = emitMock.mock.calls[0];
+    expect(event).toBe('message:send');
+    expect(payload.room_id).toBe('room1');
+    expect(payload.reply_to).toBe('form-msg-1');
+    expect(payload.content.startsWith('@cc-organon\n')).toBe(true); // 先頭 mention = cc-queue trigger
+    expect(payload.content).toContain('笹沼さんは?: 記録のみ');
+    expect(requestMock).not.toHaveBeenCalled(); // socket 時は REST を使わない
+  });
+
+  it('socket 未接続時は REST に fallback (type=text + reply_to)', async () => {
+    socketConnected = false;
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByLabelText('記録のみ'));
+    fireEvent.click(screen.getByRole('button', { name: '回答する' }));
     await waitFor(() => expect(requestMock).toHaveBeenCalledTimes(1));
     const [method, path, body] = requestMock.mock.calls[0];
     expect(method).toBe('POST');
     expect(path).toBe('/rooms/room1/messages');
     expect(body.type).toBe('text');
     expect(body.reply_to).toBe('form-msg-1');
-    expect(body.content.startsWith('@cc-organon\n')).toBe(true);
-    expect(body.content).toContain('笹沼さんは?: 記録のみ');
+    expect(emitMock).not.toHaveBeenCalled();
   });
 
   it('送信後はボタンが「回答済み」になり再送信しない', async () => {
@@ -77,6 +96,6 @@ describe('FormBubble', () => {
     fireEvent.click(screen.getByRole('button', { name: '回答する' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '回答済み' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '回答済み' }));
-    expect(requestMock).toHaveBeenCalledTimes(1); // 増えない
+    expect(emitMock).toHaveBeenCalledTimes(1); // 増えない
   });
 });

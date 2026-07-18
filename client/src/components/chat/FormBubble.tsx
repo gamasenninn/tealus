@@ -1,5 +1,6 @@
 import { useState, memo } from 'react';
 import { api } from '../../services/api';
+import { getSocket } from '../../services/socket';
 import { useMessageStore } from '../../stores/messageStore';
 import { buildAnswerText, type FormValues } from '../../utils/parseForm';
 import type { FormSchema, Message } from '../../types';
@@ -16,7 +17,9 @@ interface FormBubbleProps {
  * radio(単一選択・補足text) + text(自由記述) を React 要素で描画し、[回答する] で
  * 回答を human-readable text に組み立て、先頭に schema.reply_mention を付けて
  * reply_to=フォームID の新規メッセージとして送信する (= CCブリッジ起動を兼ねる)。
- * 送信は sendStamp 同型 (api.request POST /rooms/:id/messages with type:'text', reply_to)。
+ * ★ 送信は socket 経路 (message:send)。REST POST は message.created webhook を発火せず
+ *   cc-queue routing に乗らないため、行頭 @cc-* で consumer を起こすには socket が必須
+ *   (MessageInput.handleSend と同じ socket 優先・REST fallback)。
  */
 function FormBubble({ message, schema, roomId }: FormBubbleProps) {
   const [values, setValues] = useState<FormValues>({});
@@ -42,13 +45,16 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
     setSending(true);
     try {
       const content = buildAnswerText(schema, values);
-      await api.request('POST', `/rooms/${roomId}/messages`, {
-        content,
-        type: 'text',
-        reply_to: message.id,
-      });
+      const socket = getSocket();
+      if (socket?.connected) {
+        // socket 経路: message.created webhook が発火し cc-queue routing に乗る (reply_mention 起動)
+        socket.emit('message:send', { room_id: roomId, content, reply_to: message.id });
+      } else {
+        // fallback: socket 未接続時のみ REST (この経路は webhook 非発火 = consumer 起動しない)
+        await api.request('POST', `/rooms/${roomId}/messages`, { content, type: 'text', reply_to: message.id });
+        await useMessageStore.getState().fetchMessages(roomId);
+      }
       setSent(true);
-      await useMessageStore.getState().fetchMessages(roomId);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {
       console.error('Form answer send error:', err);
