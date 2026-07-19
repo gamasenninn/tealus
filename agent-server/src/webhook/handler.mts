@@ -31,6 +31,15 @@ export function registerBotUserId(userId: string, displayName?: string, rooms: A
 }
 
 /**
+ * アプリ内アシスタントの identity を返す (#338 Phase 1)。
+ * クライアントの compose ヘルパーが正しい宛先メンション (@<display_name>) を
+ * 組み立てるのに使う。起動時の registerBotUserId で確定するため、未登録なら null。
+ */
+export function getBotIdentity(): { user_id: string | null; display_name: string | null } {
+  return { user_id: botAgentId, display_name: botAgentName };
+}
+
+/**
  * Bot の参加ルーム一覧を更新
  */
 export function updateBotRooms(rooms: Array<{ id: string }>): void {

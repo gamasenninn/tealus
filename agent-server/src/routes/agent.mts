@@ -8,8 +8,18 @@ import { logger } from '../lib/logger.mts';
 import * as deepRegistry from '../agents/deepRegistry.mts';
 import * as botApi from '../lib/botApi.mts';
 import { DEFAULT_QUEUE_DIR } from '../webhook/ccQueue.mts';
+import { getBotIdentity } from '../webhook/handler.mts';
 
 export const router = express.Router();
+
+/**
+ * #338 Phase 1: GET /agent/identity — アプリ内アシスタントの identity を返す。
+ * クライアントの「エージェントに送る」compose ヘルパーが、正しい宛先メンション
+ * (@<display_name>) を組み立て、他の bot (LINE 等) と区別するのに使う。
+ */
+router.get('/identity', (req, res) => {
+  res.json(getBotIdentity());
+});
 
 // extractCcProject の regex と同じ。invalid な file 名 (manual で置かれた変な file) を除外
 const PROJECT_NAME_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
