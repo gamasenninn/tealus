@@ -20,6 +20,7 @@ import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { getOrCreateContext, updateStatus } from '../context/sessionManager.mts';
 import { getOrCreateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { extractPromptFromMessage } from '../media/messageAdapter.mts';
+import { isMentioned } from './mention.mts';
 import type { WebhookMessage, DispatchParams } from '../types.mts';
 
 // ルームごとの処理キュー（並行実行防止）
@@ -65,18 +66,8 @@ export async function enqueueForRoom(roomId: string, fn: () => unknown, timeoutM
   await next;
 }
 
-/**
- * @メンションを検知
- */
-export function isMentioned(content: unknown, agentName: string | null | undefined): boolean {
-  if (typeof content !== 'string' || !agentName) return false;
-  // 先頭メンションのみ反応する (先行空白は許容)。
-  // 文中・例示・引用・末尾の @mention では誤発火しないようにする (cc-tealus #215 と同方針)。
-  // 「明示的に呼び出す意識」がある先頭メンションだけを応答 trigger とする。
-  const escaped = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^@${escaped}`, 'i');
-  return pattern.test(content.replace(/^\s+/, ''));
-}
+// @メンション検知は mention.mts に切り出し（handler と共有・依存分離）。既存 import 互換で re-export。
+export { isMentioned };
 
 /**
  * message.reply_to があれば agent prompt に「reply 先 message を最優先 context にせよ」

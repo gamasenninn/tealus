@@ -8,6 +8,7 @@ jest.mock('../../src/webhook/dispatcher.mts', () => ({
 }));
 
 import { handleWebhook, registerBotUserId } from '../../src/webhook/handler.mts';
+import { dispatch } from '../../src/webhook/dispatcher.mts';
 
 // logger をモック
 jest.mock('../../src/lib/logger.mts', () => ({ logger: {
@@ -142,6 +143,50 @@ describe('Webhook Handler', () => {
 
       await handleWebhook(payload);
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipped bot message'));
+    });
+  });
+
+  describe('#338 Phase 2: 編集トリガー (message.updated)', () => {
+    // botAgentName='アシスタント' を確定させ、botRoomIds は空(membership check skip)にする
+    beforeEach(() => { registerBotUserId('bot1', 'アシスタント'); });
+
+    function updated(over: Partial<{ content: string; previous_content: string; senderId: string; editorId: string }>) {
+      return {
+        event: 'message.updated',
+        message: {
+          id: 'm1',
+          content: over.content ?? '',
+          previous_content: over.previous_content ?? '',
+          sender: { id: over.senderId ?? 'user1' },
+          edited_by: { id: over.editorId ?? 'user1' },
+        },
+        room: { id: 'room1', name: 'テスト' },
+      } as WebhookPayload;
+    }
+
+    test('編集で @アシスタント を新規に付けたら dispatch する', async () => {
+      await handleWebhook(updated({ content: '@アシスタント 在庫は？', previous_content: '在庫は？' }));
+      expect(dispatch).toHaveBeenCalledTimes(1);
+    });
+
+    test('編集前から @アシスタント が付いていたら再発火しない (一度きり)', async () => {
+      await handleWebhook(updated({ content: '@アシスタント 在庫は？ 追記', previous_content: '@アシスタント 在庫は？' }));
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    test('メンションが付かない編集 (誤字修正等) は発火しない', async () => {
+      await handleWebhook(updated({ content: '在庫はいくら？', previous_content: '在庫は？' }));
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    test('他人が編集した場合は発火しない (自分の投稿のみ)', async () => {
+      await handleWebhook(updated({ content: '@アシスタント 在庫は？', previous_content: '在庫は？', senderId: 'user1', editorId: 'user2' }));
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    test('bot 自身の編集は無視する (self-loop 防止)', async () => {
+      await handleWebhook(updated({ content: '@アシスタント x', previous_content: 'x', senderId: 'bot1', editorId: 'bot1' }));
+      expect(dispatch).not.toHaveBeenCalled();
     });
   });
 

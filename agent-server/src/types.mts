@@ -22,6 +22,10 @@ export interface WebhookMessage {
   transcription?: WebhookTranscription | null;
   /** media 系 message の添付 (media/messageAdapter が消費) */
   media?: Array<{ file_path?: string; mime_type?: string; file_name?: string | null }>;
+  /** message.updated イベント: 編集前の本文 (#338 Phase 2 編集トリガーが消費) */
+  previous_content?: string | null;
+  /** message.updated イベント: 編集者 */
+  edited_by?: { id?: string; display_name?: string };
 }
 
 export interface WebhookRoom {

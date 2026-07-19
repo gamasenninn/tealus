@@ -8,6 +8,7 @@ import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
 import * as botSendThrottle from '../lib/botSendThrottle.mts';
 import { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
+import { isMentioned } from './mention.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
 
 // #213 Phase A polish: 自己ループ防止用 sender skip set (env CC_SKIP_SENDER_IDS、CSV)
@@ -55,6 +56,8 @@ export async function handleWebhook(payload: WebhookPayload): Promise<void> {
 
   if (event === 'message.created') {
     await handleMessageCreated(payload);
+  } else if (event === 'message.updated') {
+    await handleMessageUpdated(payload);
   } else if (event === 'voice.transcription_completed') {
     await handleTranscriptionCompleted(payload);
   } else if (event === 'member.joined') {
@@ -157,6 +160,97 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
   // ディスパッチ
   await dispatch({
     message,
+    room,
+    agentId: botAgentId,
+    agentName: botAgentName,
+  });
+}
+
+/**
+ * message.updated イベント処理 (#338 Phase 2: 編集トリガー)
+ *
+ * 「呼び忘れても、編集で @mention を書き足すだけで届く」を実現する。
+ * 送信済みメッセージを編集して **先頭 mention を新規に付けた時だけ** 起動する。
+ *
+ * 非自明な不変条件:
+ * - **新規付与時のみ** (`isMentioned(now) && !isMentioned(prev)`)。既に付いていれば発火しない
+ *   = 本文だけ再編集しても再応答しない (一度きり)。
+ * - **編集者 = 元の投稿者** の時だけ (他人の投稿を勝手に召喚しない)。
+ * - bot 自身の編集は skip (self-loop 防止)。
+ * サーバは message.updated webhook に previous_content / edited_by を載せている
+ * (server/src/routes/messages.mts)。
+ */
+async function handleMessageUpdated(payload: WebhookPayload): Promise<void> {
+  const { message, room } = payload;
+
+  if (!message || !room) {
+    logger.warn('Invalid payload: missing message or room');
+    return;
+  }
+
+  const content = message.content;
+  const prevContent = message.previous_content;
+  const senderId = message.sender?.id;
+  const editorId = message.edited_by?.id;
+
+  // 編集者 = 元の投稿者 の時だけ (他人編集での召喚を防ぐ)
+  if (!senderId || !editorId || senderId !== editorId) {
+    logger.debug('[edit-trigger] Skipped: editor is not the original sender');
+    return;
+  }
+  // bot 自身の編集は self-loop の元 → skip
+  if (botUserIds.has(senderId)) {
+    logger.debug(`[edit-trigger] Skipped bot self-edit from ${senderId}`);
+    return;
+  }
+
+  // cc-queue: 編集で @cc-<project> が新規に付いたら beacon 追記 (cc-bridge の呼び忘れ救済)
+  const ccNow = extractCcProject(content);
+  const ccPrev = extractCcProject(prevContent);
+  if (ccNow && !ccPrev && !shouldSkipCcSender(senderId, ccSkipSenderIds)) {
+    try {
+      const ccPayload = {
+        id: message.id,
+        room_id: room.id,
+        room_name: room.name,
+        sender: message.sender,
+        content,
+        type: message.type,
+        created_at: message.created_at || new Date().toISOString(),
+      };
+      const filePath = appendCcEvent(ccNow, ccPayload);
+      logger.info(`[edit-trigger][cc-queue] Routed @cc-${ccNow} (newly added via edit) → ${filePath}`);
+      emitCcAck({ project: ccNow, roomId: room.id, pushStatus: botApi.pushStatus });
+    } catch (err) {
+      logger.error(`[edit-trigger][cc-queue] Append failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // アシスタント: 編集で @<assistant> が新規に付いたら dispatch (アシスタントの呼び忘れ救済)
+  const mentionNow = isMentioned(content, botAgentName);
+  const mentionPrev = isMentioned(prevContent, botAgentName);
+  if (!(mentionNow && !mentionPrev)) return;
+
+  // Bot が参加していないルームは無視 (handleMessageCreated と同型に再取得して確認)
+  if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
+    try {
+      const roomData = await botApi.getRooms();
+      const rooms = roomData.rooms || [];
+      botRoomIds.clear();
+      rooms.forEach((r: { id: string }) => botRoomIds.add(r.id));
+      if (!botRoomIds.has(room.id)) {
+        logger.debug(`[edit-trigger] Skipped: bot not member of room ${room.name || room.id}`);
+        return;
+      }
+    } catch {
+      logger.debug(`[edit-trigger] Skipped: bot not member of room ${room.name || room.id}`);
+      return;
+    }
+  }
+
+  logger.info(`[edit-trigger] Mention newly added via edit in room ${room.name || room.id} → dispatch`);
+  await dispatch({
+    message: { ...message, type: message.type || 'text' },
     room,
     agentId: botAgentId,
     agentName: botAgentName,
