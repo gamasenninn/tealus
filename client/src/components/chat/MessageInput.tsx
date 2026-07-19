@@ -4,6 +4,8 @@ import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAgentStore } from '../../stores/agentStore';
+import { useAuthStore } from '../../stores/authStore';
+import { isAdmin } from '../../utils/permissions';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
@@ -58,15 +60,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     }, 0);
   }, [composerPrefill, clearComposerPrefill]);
 
-  // 🤖ボタン: 先頭に @<アシスタント> を差し込んで focus（本文はユーザーが続けて打つ）
-  const prefillAssistantMention = useCallback(() => {
-    if (!assistantName) return;
-    setText(prev => `@${assistantName} ${prev}`);
-    setTimeout(() => {
-      const ta = textareaRef.current;
-      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-    }, 0);
-  }, [assistantName]);
+  const [showAgentPicker, setShowAgentPicker] = useState(false);
 
   // #253: cc-proj を mention picker に virtual user として表示
   // #333: mount 時に加え、picker を開く遷移でも再取得（新規 cc project を reload なしで反映）
@@ -85,6 +79,35 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     // server の members 応答は user_id を持つ (types.ts RoomMember には未定義)
     return [...(members as unknown as MentionCandidate[]), ...ccMembers];
   }, [members, ccProjects]);
+
+  // #338 Phase 1: 🤖 の宛先候補 = アシスタント + (admin/AI班 のみ) cc-* 。既存 mention 候補と同ソース。
+  // Q3: cc-* は一般ユーザーには出さず AI班のみ。管理者ロールを AI班の proxy として gate。
+  const { user } = useAuthStore();
+  const isAdminUser = isAdmin(user);
+  const agentTargets = useMemo<MentionCandidate[]>(() => {
+    if (!assistantName) return [];
+    const list: MentionCandidate[] = [{ user_id: assistantUserId || 'assistant', display_name: assistantName, avatar_url: null }];
+    if (isAdminUser) {
+      list.push(...ccProjects.map(p => ({ user_id: `cc:${p.name}`, display_name: `cc-${p.name}`, avatar_url: null, is_cc: true })));
+    }
+    return list;
+  }, [assistantName, assistantUserId, isAdminUser, ccProjects]);
+
+  // 先頭に @<name> を差し込んで focus（本文はユーザーが続けて打つ）
+  const insertAgentMention = useCallback((name: string) => {
+    setText(prev => `@${name} ${prev}`);
+    setShowAgentPicker(false);
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 0);
+  }, []);
+
+  // 🤖ボタン: 宛先が複数(admin で cc-* あり)なら picker、単一ならアシスタント直挿入。
+  const onAgentButtonClick = useCallback(() => {
+    if (agentTargets.length > 1) setShowAgentPicker(v => !v);
+    else if (assistantName) insertAgentMention(assistantName);
+  }, [agentTargets, assistantName, insertAgentMention]);
 
   const emitTyping = () => {
     const socket = getSocket();
@@ -316,6 +339,14 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           onClose={() => setShowMention(false)}
         />
       )}
+      {showAgentPicker && (
+        <MentionPicker
+          members={agentTargets}
+          query=""
+          onSelect={insertAgentMention}
+          onClose={() => setShowAgentPicker(false)}
+        />
+      )}
       <div className="message-input-row">
         <button
           className="message-input-attach"
@@ -335,9 +366,9 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
         {assistantInRoom && (
           <button
             className="message-input-agent"
-            onClick={prefillAssistantMention}
+            onClick={onAgentButtonClick}
             disabled={isSending}
-            title={`${assistantName} に聞く`}
+            title={agentTargets.length > 1 ? 'エージェントに聞く（宛先を選ぶ）' : `${assistantName} に聞く`}
           >
             🤖
           </button>
