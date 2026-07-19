@@ -8,15 +8,17 @@
  */
 import type { Message } from '../types';
 
-export function buildAgentPrefill({ assistantName, message }: { assistantName: string; message: Message }): string {
-  const mention = `@${assistantName} `;
-  let body = '';
+/** メッセージから「エージェントに渡す本文」を抽出（text=content / voice=文字起こし）。 */
+export function extractAgentBody(message: Message): string {
   if (message.type === 'voice') {
     if (message.transcription?.status === 'done') {
-      body = message.transcription.formatted_text || message.transcription.raw_text || '';
+      return message.transcription.formatted_text || message.transcription.raw_text || '';
     }
-  } else {
-    body = message.content || '';
+    return '';
   }
-  return mention + body;
+  return message.content || '';
+}
+
+export function buildAgentPrefill({ assistantName, message }: { assistantName: string; message: Message }): string {
+  return `@${assistantName} ${extractAgentBody(message)}`;
 }

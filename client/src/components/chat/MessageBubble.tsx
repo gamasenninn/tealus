@@ -4,7 +4,6 @@ import { useParams } from 'react-router-dom';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAgentStore } from '../../stores/agentStore';
-import { buildAgentPrefill } from '../../utils/agentPrefill';
 import { api } from '../../services/api';
 import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
@@ -56,7 +55,7 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const { roomId } = useParams() as { roomId: string };
-  const { setReplyTo, setComposerPrefill } = useMessageStore();
+  const { setReplyTo, setPendingAgentMessage } = useMessageStore();
   const { currentRoom, members } = useRoomStore();
   const { assistantUserId, assistantName } = useAgentStore();
   // #338 Phase 1: アシスタントが当該ルームの member の時だけ「エージェントに送る」を出す
@@ -212,11 +211,8 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
       onForward: () => setShowForwardModal(true),
       onSelectText: (t: string) => setSelectTextValue(t),
       assistantInRoom,
-      onSendToAgent: () => {
-        if (!assistantName) return;
-        setReplyTo(message);
-        setComposerPrefill(buildAgentPrefill({ assistantName, message }));
-      },
+      // 宛先(アシスタント/cc-*)の決定は MessageInput 側（admin は picker）。ここは対象を渡すだけ。
+      onSendToAgent: () => setPendingAgentMessage(message),
     });
     setContextMenu({ x, y, items, onReaction });
   };

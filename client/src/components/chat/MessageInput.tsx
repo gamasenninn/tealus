@@ -6,6 +6,7 @@ import { useRoomStore } from '../../stores/roomStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { isAdmin } from '../../utils/permissions';
+import { buildAgentPrefill, extractAgentBody } from '../../utils/agentPrefill';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
@@ -40,7 +41,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { replyTo, clearReplyTo, composerPrefill, clearComposerPrefill } = useMessageStore();
+  const { replyTo, clearReplyTo, setReplyTo, pendingAgentMessage, clearPendingAgentMessage } = useMessageStore();
   const { members } = useRoomStore();
   // #338 Phase 1: アプリ内アシスタントの identity（🤖ボタンの宛先メンションに使う）
   const { assistantUserId, assistantName, fetchIdentity } = useAgentStore();
@@ -49,16 +50,15 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   const assistantInRoom = !!assistantUserId && !!assistantName
     && (members as unknown as Array<{ user_id?: string }>).some(m => m.user_id === assistantUserId);
 
-  // #338 Phase 1: 「エージェントに送る」等が store 経由で composer に prefill を積んだら消費する。
-  useEffect(() => {
-    if (composerPrefill == null) return;
-    setText(composerPrefill);
-    clearComposerPrefill();
+  // 宛先選択後に埋める本文を保持（入口B。null なら入口A=ボタンでメンションのみ prepend）
+  const [pendingAgentBody, setPendingAgentBody] = useState<string | null>(null);
+
+  const focusTextareaEnd = useCallback(() => {
     setTimeout(() => {
       const ta = textareaRef.current;
       if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
     }, 0);
-  }, [composerPrefill, clearComposerPrefill]);
+  }, []);
 
   const [showAgentPicker, setShowAgentPicker] = useState(false);
 
@@ -93,21 +93,41 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     return list;
   }, [assistantName, assistantUserId, isAdminUser, ccProjects]);
 
-  // 先頭に @<name> を差し込んで focus（本文はユーザーが続けて打つ）
+  // 宛先を選んだら composer に反映。入口B(pendingAgentBody あり)は本文込みで置換、
+  // 入口A(ボタン)は先頭にメンションのみ prepend（本文はユーザーが続けて打つ）。
   const insertAgentMention = useCallback((name: string) => {
-    setText(prev => `@${name} ${prev}`);
     setShowAgentPicker(false);
-    setTimeout(() => {
-      const ta = textareaRef.current;
-      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-    }, 0);
-  }, []);
+    if (pendingAgentBody != null) {
+      setText(`@${name} ${pendingAgentBody}`);
+      setPendingAgentBody(null);
+    } else {
+      setText(prev => `@${name} ${prev}`);
+    }
+    focusTextareaEnd();
+  }, [pendingAgentBody, focusTextareaEnd]);
 
   // 🤖ボタン: 宛先が複数(admin で cc-* あり)なら picker、単一ならアシスタント直挿入。
   const onAgentButtonClick = useCallback(() => {
+    setPendingAgentBody(null);
     if (agentTargets.length > 1) setShowAgentPicker(v => !v);
     else if (assistantName) insertAgentMention(assistantName);
   }, [agentTargets, assistantName, insertAgentMention]);
+
+  // 入口B: コンテキストメニュー「エージェントに送る」が対象 message を積んだら消費する。
+  // admin で宛先が複数なら picker を開き（本文は pendingAgentBody に退避）、単一なら直 prefill。
+  useEffect(() => {
+    if (!pendingAgentMessage) return;
+    const msg = pendingAgentMessage;
+    clearPendingAgentMessage();
+    setReplyTo(msg);
+    if (agentTargets.length > 1) {
+      setPendingAgentBody(extractAgentBody(msg));
+      setShowAgentPicker(true);
+    } else if (assistantName) {
+      setText(buildAgentPrefill({ assistantName, message: msg }));
+      focusTextareaEnd();
+    }
+  }, [pendingAgentMessage, clearPendingAgentMessage, setReplyTo, agentTargets.length, assistantName, focusTextareaEnd]);
 
   const emitTyping = () => {
     const socket = getSocket();

@@ -23,11 +23,12 @@ interface MessageState {
   updateTranscription: (messageId: string, transcription: Partial<Transcription>) => void;
   setReplyTo: (message: Message | null) => void;
   clearReplyTo: () => void;
-  // #338 Phase 1: 「エージェントに送る」等が composer に prefill する text を運ぶチャネル。
-  // replyTo と同じ bubble/menu → composer の一方向。MessageInput が消費後に clear する。
-  composerPrefill: string | null;
-  setComposerPrefill: (text: string | null) => void;
-  clearComposerPrefill: () => void;
+  // #338 Phase 1: 「エージェントに送る」の対象メッセージを composer へ運ぶチャネル。
+  // MessageInput が消費し、宛先(アシスタント/cc-*)の決定・本文引き上げ・prefill を担う
+  // (宛先選択が admin で必要なため、prefill 済み文字列でなく Message を渡す)。
+  pendingAgentMessage: Message | null;
+  setPendingAgentMessage: (message: Message | null) => void;
+  clearPendingAgentMessage: () => void;
   clearMessages: () => void;
 }
 
@@ -141,12 +142,12 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     set({ replyTo: null });
   },
 
-  composerPrefill: null,
-  setComposerPrefill: (text) => {
-    set({ composerPrefill: text });
+  pendingAgentMessage: null,
+  setPendingAgentMessage: (message) => {
+    set({ pendingAgentMessage: message });
   },
-  clearComposerPrefill: () => {
-    set({ composerPrefill: null });
+  clearPendingAgentMessage: () => {
+    set({ pendingAgentMessage: null });
   },
 
   clearMessages: () => {

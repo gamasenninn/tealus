@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAgentPrefill } from '../src/utils/agentPrefill';
+import { buildAgentPrefill, extractAgentBody } from '../src/utils/agentPrefill';
 import type { Message } from '../src/types';
 
 // #338 Phase 1: 「エージェントに送る」compose ヘルパーの prefill 文字列を組む純関数。
@@ -50,5 +50,17 @@ describe('buildAgentPrefill', () => {
   it('メンションは常に先頭 (isMentioned の ^@<name> に一致する形)', () => {
     const out = buildAgentPrefill({ assistantName: 'アシスタント', message: msg({ type: 'text', content: 'x' }) });
     expect(out.startsWith('@アシスタント')).toBe(true);
+  });
+});
+
+describe('extractAgentBody (宛先選択用の本文抽出)', () => {
+  it('text は content', () => {
+    expect(extractAgentBody(msg({ type: 'text', content: '在庫は？' }))).toBe('在庫は？');
+  });
+  it('voice(done) は文字起こし', () => {
+    expect(extractAgentBody(msg({ type: 'voice', content: null, transcription: { status: 'done', formatted_text: 'あさ9時' } }))).toBe('あさ9時');
+  });
+  it('voice(未完了) は空', () => {
+    expect(extractAgentBody(msg({ type: 'voice', content: null, transcription: { status: 'pending' } }))).toBe('');
   });
 });
