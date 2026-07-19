@@ -36,6 +36,7 @@ export interface DictionaryTermsResponse { terms: DictionaryTerm[] }
 export interface TranscriptionHistoryResponse { history: Array<{ version: number; formatted_text?: string | null; raw_text?: string | null; edited_by_name?: string | null }> }
 export interface TranscriptionEditResponse { transcription: { formatted_text?: string | null; version?: number } }
 export interface CcProjectsResponse { projects: Array<{ name: string; [key: string]: unknown }> }
+export interface AgentIdentityResponse { user_id: string | null; display_name: string | null }
 
 export type UploadProgressHandler = (percent: number) => void;
 
@@ -222,6 +223,22 @@ class ApiClient {
       return await res.json();
     } catch {
       return { projects: [] };
+    }
+  }
+
+  /**
+   * アプリ内アシスタントの identity を取得 (#338 Phase 1)
+   * 「エージェントに送る」compose ヘルパーが正しい宛先メンションを組むのに使う。
+   */
+  async getAgentIdentity(): Promise<AgentIdentityResponse> {
+    try {
+      const res = await fetch('/agent-api/agent/identity', {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!res.ok) return { user_id: null, display_name: null };
+      return await res.json();
+    } catch {
+      return { user_id: null, display_name: null };
     }
   }
 

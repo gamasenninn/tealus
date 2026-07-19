@@ -1,4 +1,4 @@
-import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2, TextCursorInput } from 'lucide-react';
+import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, CheckSquare, Share2, TextCursorInput, Bot } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
@@ -27,6 +27,9 @@ export interface BuildContextMenuItemsParams {
   onShowTodoMenu: () => void;
   onForward?: () => void;
   onSelectText?: (text: string) => void;
+  // #338 Phase 1: 「エージェントに送る」— compose ヘルパーへ橋渡し（自分の投稿のみ）
+  onSendToAgent?: () => void;
+  assistantInRoom?: boolean;
 }
 
 export interface ContextMenuItemsResult {
@@ -41,6 +44,7 @@ export function buildContextMenuItems({
   message, isOwn, roomId, currentRoom,
   onEdit, onShowEditHistory,
   onReply, onShowTagModal, onShowTodoMenu, onForward, onSelectText,
+  onSendToAgent, assistantInRoom,
 }: BuildContextMenuItemsParams): ContextMenuItemsResult {
   const items: ContextMenuItem[] = [];
 
@@ -149,6 +153,18 @@ export function buildContextMenuItems({
         },
       });
     }
+  }
+
+  // #338 Phase 1: エージェントに送る（自分の投稿のみ／text は content・voice は文字起こし済みが対象）
+  const sendableToAgent =
+    (message.type === 'text' && !!message.content) ||
+    (message.type === 'voice' && message.transcription?.status === 'done');
+  if (onSendToAgent && assistantInRoom && isOwn && sendableToAgent && !message.is_deleted) {
+    items.push({
+      icon: <Bot size={16} />,
+      label: 'エージェントに送る',
+      onClick: onSendToAgent,
+    });
   }
 
   // Publish/Unpublish (announcement rooms only)

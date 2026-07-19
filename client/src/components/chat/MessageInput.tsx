@@ -3,6 +3,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useAgentStore } from '../../stores/agentStore';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
@@ -37,8 +38,35 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { replyTo, clearReplyTo } = useMessageStore();
+  const { replyTo, clearReplyTo, composerPrefill, clearComposerPrefill } = useMessageStore();
   const { members } = useRoomStore();
+  // #338 Phase 1: アプリ内アシスタントの identity（🤖ボタンの宛先メンションに使う）
+  const { assistantUserId, assistantName, fetchIdentity } = useAgentStore();
+  useEffect(() => { fetchIdentity(); }, [fetchIdentity]);
+  // アシスタントが当該ルームの member の時だけ🤖ボタンを出す（不在ルームで召喚を差し出さない）
+  const assistantInRoom = !!assistantUserId && !!assistantName
+    && (members as unknown as Array<{ user_id?: string }>).some(m => m.user_id === assistantUserId);
+
+  // #338 Phase 1: 「エージェントに送る」等が store 経由で composer に prefill を積んだら消費する。
+  useEffect(() => {
+    if (composerPrefill == null) return;
+    setText(composerPrefill);
+    clearComposerPrefill();
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 0);
+  }, [composerPrefill, clearComposerPrefill]);
+
+  // 🤖ボタン: 先頭に @<アシスタント> を差し込んで focus（本文はユーザーが続けて打つ）
+  const prefillAssistantMention = useCallback(() => {
+    if (!assistantName) return;
+    setText(prev => `@${assistantName} ${prev}`);
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 0);
+  }, [assistantName]);
 
   // #253: cc-proj を mention picker に virtual user として表示
   // #333: mount 時に加え、picker を開く遷移でも再取得（新規 cc project を reload なしで反映）
@@ -304,6 +332,16 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
         >
           😊
         </button>
+        {assistantInRoom && (
+          <button
+            className="message-input-agent"
+            onClick={prefillAssistantMention}
+            disabled={isSending}
+            title={`${assistantName} に聞く`}
+          >
+            🤖
+          </button>
+        )}
         <input
           type="file"
           ref={fileInputRef}

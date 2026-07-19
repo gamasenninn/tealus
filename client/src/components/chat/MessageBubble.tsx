@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useAgentStore } from '../../stores/agentStore';
+import { buildAgentPrefill } from '../../utils/agentPrefill';
 import { api } from '../../services/api';
 import ImageGrid from '../media/ImageGrid';
 import ImageViewer from '../media/ImageViewer';
@@ -54,8 +56,12 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const { roomId } = useParams() as { roomId: string };
-  const { setReplyTo } = useMessageStore();
-  const { currentRoom } = useRoomStore();
+  const { setReplyTo, setComposerPrefill } = useMessageStore();
+  const { currentRoom, members } = useRoomStore();
+  const { assistantUserId, assistantName } = useAgentStore();
+  // #338 Phase 1: アシスタントが当該ルームの member の時だけ「エージェントに送る」を出す
+  const assistantInRoom = !!assistantUserId && !!assistantName
+    && (members as unknown as Array<{ user_id?: string }>).some(m => m.user_id === assistantUserId);
   const [viewerState, setViewerState] = useState<{ images: MediaItem[]; index: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -205,6 +211,12 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
       onShowTodoMenu: () => setShowTodoMenu(true),
       onForward: () => setShowForwardModal(true),
       onSelectText: (t: string) => setSelectTextValue(t),
+      assistantInRoom,
+      onSendToAgent: () => {
+        if (!assistantName) return;
+        setReplyTo(message);
+        setComposerPrefill(buildAgentPrefill({ assistantName, message }));
+      },
     });
     setContextMenu({ x, y, items, onReaction });
   };

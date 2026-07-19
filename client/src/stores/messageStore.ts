@@ -23,6 +23,11 @@ interface MessageState {
   updateTranscription: (messageId: string, transcription: Partial<Transcription>) => void;
   setReplyTo: (message: Message | null) => void;
   clearReplyTo: () => void;
+  // #338 Phase 1: 「エージェントに送る」等が composer に prefill する text を運ぶチャネル。
+  // replyTo と同じ bubble/menu → composer の一方向。MessageInput が消費後に clear する。
+  composerPrefill: string | null;
+  setComposerPrefill: (text: string | null) => void;
+  clearComposerPrefill: () => void;
   clearMessages: () => void;
 }
 
@@ -134,6 +139,14 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   clearReplyTo: () => {
     set({ replyTo: null });
+  },
+
+  composerPrefill: null,
+  setComposerPrefill: (text) => {
+    set({ composerPrefill: text });
+  },
+  clearComposerPrefill: () => {
+    set({ composerPrefill: null });
   },
 
   clearMessages: () => {

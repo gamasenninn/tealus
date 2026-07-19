@@ -42,3 +42,55 @@ describe('buildContextMenuItems 部分コピー', () => {
     expect(onSelectText).toHaveBeenCalledWith('音声テキスト');
   });
 });
+
+describe('buildContextMenuItems エージェントに送る (#338)', () => {
+  const base = {
+    isOwn: true, roomId: 'r1', currentRoom: {},
+    onSendToAgent: undefined as unknown as () => void,
+    assistantInRoom: true,
+  };
+
+  it('自分のテキスト投稿に「エージェントに送る」が出て onSendToAgent を呼ぶ', () => {
+    const onSendToAgent = vi.fn();
+    const { items } = buildContextMenuItems({
+      ...base, onSendToAgent,
+      message: { id: 'm1', content: '在庫は？', type: 'text' },
+    } as unknown as BuildContextMenuItemsParams);
+    const it0 = items.find((i) => i.label === 'エージェントに送る');
+    expect(it0).toBeTruthy();
+    it0!.onClick();
+    expect(onSendToAgent).toHaveBeenCalled();
+  });
+
+  it('自分の音声(文字起こし済み)にも出る', () => {
+    const { items } = buildContextMenuItems({
+      ...base, onSendToAgent: vi.fn(),
+      message: { id: 'm2', type: 'voice', transcription: { status: 'done', formatted_text: 'x' } },
+    } as unknown as BuildContextMenuItemsParams);
+    expect(items.find((i) => i.label === 'エージェントに送る')).toBeTruthy();
+  });
+
+  it('他人の投稿には出ない (Q4: 自分の投稿のみ)', () => {
+    const { items } = buildContextMenuItems({
+      ...base, isOwn: false, onSendToAgent: vi.fn(),
+      message: { id: 'm3', content: 'x', type: 'text' },
+    } as unknown as BuildContextMenuItemsParams);
+    expect(items.find((i) => i.label === 'エージェントに送る')).toBeFalsy();
+  });
+
+  it('アシスタントがルームに居ない時は出ない', () => {
+    const { items } = buildContextMenuItems({
+      ...base, assistantInRoom: false, onSendToAgent: vi.fn(),
+      message: { id: 'm4', content: 'x', type: 'text' },
+    } as unknown as BuildContextMenuItemsParams);
+    expect(items.find((i) => i.label === 'エージェントに送る')).toBeFalsy();
+  });
+
+  it('文字起こし未完了の音声には出ない', () => {
+    const { items } = buildContextMenuItems({
+      ...base, onSendToAgent: vi.fn(),
+      message: { id: 'm5', type: 'voice', transcription: { status: 'pending' } },
+    } as unknown as BuildContextMenuItemsParams);
+    expect(items.find((i) => i.label === 'エージェントに送る')).toBeFalsy();
+  });
+});
