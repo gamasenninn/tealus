@@ -120,6 +120,11 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     //  例: RoomList sidebar の message:new handler、PC layout で発覚した既存 bug)
     const handleConnect = () => {
       socket!.emit('room:join', roomId);
+      // 再接続 = 切断中に idle / typing:stop を取りこぼした可能性がある。
+      // 一過性の「考え中」/「入力中」は履歴に残らないので、ここでリセットしないと
+      // スマホのスリープ復帰後に消えず残り続ける（議事録完成後も「考え中」のまま）。
+      setAgentStatus(null);
+      setTypingUsers({});
     };
 
     const handleMessageNew = (msg: Message) => {
