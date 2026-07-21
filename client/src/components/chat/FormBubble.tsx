@@ -1,6 +1,5 @@
 import { useState, memo } from 'react';
-import { api } from '../../services/api';
-import { getSocket } from '../../services/socket';
+import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/authStore';
 import { buildAnswerText, hasUserAnsweredForm, type FormValues } from '../../utils/parseForm';
@@ -53,13 +52,10 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
     setSending(true);
     try {
       const content = buildAnswerText(schema, values);
-      const socket = getSocket();
-      if (socket?.connected) {
-        // socket 経路: message.created webhook が発火し cc-queue routing に乗る (reply_mention 起動)
-        socket.emit('message:send', { room_id: roomId, content, reply_to: message.id });
-      } else {
-        // fallback: socket 未接続時のみ REST (この経路は webhook 非発火 = consumer 起動しない)
-        await api.request('POST', `/rooms/${roomId}/messages`, { content, type: 'text', reply_to: message.id });
+      // socket 経路が webhook を発火し cc-queue routing に乗る (reply_mention 起動)。切断時は REST fallback。
+      const via = await sendRoomMessage({ roomId, content, replyTo: message.id });
+      if (via === 'rest') {
+        // REST は message:new を発火しないので手元に反映
         await useMessageStore.getState().fetchMessages(roomId);
       }
       setSent(true);

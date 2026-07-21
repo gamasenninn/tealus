@@ -2,9 +2,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FormSchema, Message } from '../../src/types';
 
-// api / socket / messageStore をモック (送信検証用)
+// api / socket / messageStore をモック (送信検証用)。REST 経路は sendRoomMessage 経由で api.sendMessage を叩く。
 const requestMock = vi.fn().mockResolvedValue({});
-vi.mock('../../src/services/api', () => ({ api: { request: (...a: unknown[]) => requestMock(...a) } }));
+const sendMessageMock = vi.fn().mockResolvedValue({});
+vi.mock('../../src/services/api', () => ({
+  api: { request: (...a: unknown[]) => requestMock(...a), sendMessage: (...a: unknown[]) => sendMessageMock(...a) },
+}));
 const emitMock = vi.fn();
 let socketConnected = true;
 vi.mock('../../src/services/socket', () => ({
@@ -48,7 +51,7 @@ const SCHEMA: FormSchema = {
 const MSG = { id: 'form-msg-1', type: 'form' } as Message;
 
 describe('FormBubble', () => {
-  beforeEach(() => { requestMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; mockStore.messages = []; });
+  beforeEach(() => { requestMock.mockClear(); sendMessageMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; mockStore.messages = []; });
 
   it('title と radio option / text field を描画', () => {
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
@@ -88,18 +91,18 @@ describe('FormBubble', () => {
     expect(requestMock).not.toHaveBeenCalled(); // socket 時は REST を使わない
   });
 
-  it('socket 未接続時は REST に fallback (type=text + reply_to)', async () => {
+  it('socket 未接続時は REST(api.sendMessage) に fallback + fetchMessages で手元反映', async () => {
     socketConnected = false;
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
     fireEvent.click(screen.getByLabelText('記録のみ'));
     fireEvent.click(screen.getByRole('button', { name: '回答する' }));
-    await waitFor(() => expect(requestMock).toHaveBeenCalledTimes(1));
-    const [method, path, body] = requestMock.mock.calls[0];
-    expect(method).toBe('POST');
-    expect(path).toBe('/rooms/room1/messages');
-    expect(body.type).toBe('text');
-    expect(body.reply_to).toBe('form-msg-1');
+    await waitFor(() => expect(sendMessageMock).toHaveBeenCalledTimes(1));
+    const [rid, content, replyTo] = sendMessageMock.mock.calls[0];
+    expect(rid).toBe('room1');
+    expect(replyTo).toBe('form-msg-1');
+    expect(content).toContain('笹沼さんは?: 記録のみ');
     expect(emitMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchMessagesMock).toHaveBeenCalledWith('room1'));
   });
 
   it('★ 既に自分が回答済み(store に回答返信あり)なら「回答済み」表示で送信不可', () => {

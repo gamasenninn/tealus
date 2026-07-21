@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRoomStore } from '../../stores/roomStore';
 import { api } from '../../services/api';
-import { getSocket } from '../../services/socket';
+import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { ArrowLeft, Send } from 'lucide-react';
 import type { Room } from '../../types';
 import './SharePage.css';
@@ -67,14 +67,9 @@ function SharePage() {
     if (sending) return;
     setSending(true);
     try {
-      // テキスト/URL があれば送信（Socket.IO 経由でリンクプレビューを有効化）
+      // テキスト/URL があれば送信（socket 優先でリンクプレビュー/webhook を有効化、切断時 REST fallback）
       if (sharedContent.trim()) {
-        const socket = getSocket();
-        if (socket?.connected) {
-          socket.emit('message:send', { room_id: roomId, content: sharedContent.trim() });
-        } else {
-          await api.sendMessage(roomId, sharedContent.trim());
-        }
+        await sendRoomMessage({ roomId, content: sharedContent.trim() });
       }
       // ファイルがあればアップロード
       if (sharedFiles.length > 0) {

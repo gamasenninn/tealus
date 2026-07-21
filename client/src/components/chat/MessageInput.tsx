@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
+import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAgentStore } from '../../stores/agentStore';
@@ -145,16 +146,8 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
 
     setIsSending(true);
     try {
-      const socket = getSocket();
-      if (socket?.connected) {
-        socket.emit('message:send', {
-          room_id: roomId,
-          content,
-          reply_to: replyTo?.id || null,
-        });
-      } else {
-        await api.sendMessage(roomId, content, replyTo?.id ?? null);
-      }
+      // socket 優先 / REST fallback は sendRoomMessage に集約 (docs/05 §4 webhook 発火経路)
+      await sendRoomMessage({ roomId, content, replyTo: replyTo?.id ?? null });
       setText('');
       // textarea の高さをリセット
       const textarea = document.querySelector<HTMLTextAreaElement>('.message-input-text');

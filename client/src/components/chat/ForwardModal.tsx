@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Share2, Search } from 'lucide-react';
 import { api } from '../../services/api';
-import { getSocket } from '../../services/socket';
+import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { useRoomStore } from '../../stores/roomStore';
 import { useConfirm } from '../../stores/confirmStore';
 import type { Message, Room } from '../../types';
@@ -71,17 +71,8 @@ function ForwardModal({ message, onClose }: ForwardModalProps) {
     setError('');
     try {
       if (message.type === 'text') {
-        // text: 既存 socket 経路 (= fire-and-forget リアルタイム配信)
-        const socket = getSocket();
-        if (socket?.connected) {
-          socket.emit('message:send', {
-            room_id: targetRoom.id,
-            content: message.content,
-            forwarded_from: message.id,
-          });
-        } else {
-          await api.sendMessage(targetRoom.id, message.content as string, null, message.id);
-        }
+        // text: socket 優先 / REST fallback (sendRoomMessage に集約)。forwarded_from でリンク元を保持
+        await sendRoomMessage({ roomId: targetRoom.id, content: message.content as string, forwardedFrom: message.id });
       } else {
         // image / video / file: 新 REST 経路 (= リンク方式、server 側で file_path 共有)
         await api.forwardMedia(targetRoom.id, message.id);
