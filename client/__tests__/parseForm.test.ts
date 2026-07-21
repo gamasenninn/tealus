@@ -3,7 +3,7 @@
  * content 内の ```tealus-form fence の抽出と、回答 text の組み立てを検証。
  */
 import { describe, it, expect } from 'vitest';
-import { parseForm, buildAnswerText } from '../src/utils/parseForm';
+import { parseForm, buildAnswerText, hasUserAnsweredForm } from '../src/utils/parseForm';
 import type { FormSchema } from '../src/types';
 
 const SCHEMA: FormSchema = {
@@ -88,5 +88,34 @@ describe('buildAnswerText', () => {
   it('title を回答見出しに含める', () => {
     const text = buildAnswerText(SCHEMA, { q1: { value: 'record' }, q2: { text: '' } });
     expect(text).toContain('Day59 Q0');
+  });
+});
+
+describe('hasUserAnsweredForm (回答済み導出 / 二重回答防止)', () => {
+  const answer = { id: 'a1', reply_to: 'form1', sender_id: 'u1', content: '@cc-organon\n\n【回答】Day59 Q0\n笹沼さんは?: 記録のみ' };
+
+  it('自分がこのフォームに回答済み（reply_to一致＋【回答】）なら true', () => {
+    expect(hasUserAnsweredForm([answer], 'form1', 'u1')).toBe(true);
+  });
+
+  it('回答が他人のものなら false', () => {
+    expect(hasUserAnsweredForm([answer], 'form1', 'u2')).toBe(false);
+  });
+
+  it('別のフォームへの回答なら false', () => {
+    expect(hasUserAnsweredForm([answer], 'form2', 'u1')).toBe(false);
+  });
+
+  it('フォームへの"コメント返信"（【回答】を含まない）は回答扱いしない', () => {
+    const comment = { id: 'c1', reply_to: 'form1', sender_id: 'u1', content: 'これどういう意味ですか？' };
+    expect(hasUserAnsweredForm([comment], 'form1', 'u1')).toBe(false);
+  });
+
+  it('userId 不明なら false', () => {
+    expect(hasUserAnsweredForm([answer], 'form1', null)).toBe(false);
+  });
+
+  it('回答が未ロード（空）なら false（＝ボタン生存＝現状挙動に優雅劣化）', () => {
+    expect(hasUserAnsweredForm([], 'form1', 'u1')).toBe(false);
   });
 });

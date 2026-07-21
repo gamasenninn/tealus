@@ -11,8 +11,20 @@ vi.mock('../../src/services/socket', () => ({
   getSocket: () => ({ get connected() { return socketConnected; }, emit: (...a: unknown[]) => emitMock(...a) }),
 }));
 const fetchMessagesMock = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../src/stores/messageStore', () => ({
-  useMessageStore: { getState: () => ({ fetchMessages: fetchMessagesMock }) },
+// hook-selector 対応 mock (二重回答防止の store 導出用)。messages は test ごとに差し替え。
+const mockStore = vi.hoisted(() => ({ messages: [] as Array<Record<string, unknown>> }));
+vi.mock('../../src/stores/messageStore', () => {
+  const state = () => ({ messages: mockStore.messages, fetchMessages: fetchMessagesMock });
+  const useMessageStore = (selector?: (s: ReturnType<typeof state>) => unknown) =>
+    (selector ? selector(state()) : state());
+  (useMessageStore as { getState?: () => ReturnType<typeof state> }).getState = () => state();
+  return { useMessageStore };
+});
+vi.mock('../../src/stores/authStore', () => ({
+  useAuthStore: (selector?: (s: { user: { id: string } }) => unknown) => {
+    const s = { user: { id: 'u1' } };
+    return selector ? selector(s) : s;
+  },
 }));
 
 import FormBubble from '../../src/components/chat/FormBubble';
@@ -36,7 +48,7 @@ const SCHEMA: FormSchema = {
 const MSG = { id: 'form-msg-1', type: 'form' } as Message;
 
 describe('FormBubble', () => {
-  beforeEach(() => { requestMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; });
+  beforeEach(() => { requestMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; mockStore.messages = []; });
 
   it('title と radio option / text field を描画', () => {
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
@@ -88,6 +100,24 @@ describe('FormBubble', () => {
     expect(body.type).toBe('text');
     expect(body.reply_to).toBe('form-msg-1');
     expect(emitMock).not.toHaveBeenCalled();
+  });
+
+  it('★ 既に自分が回答済み(store に回答返信あり)なら「回答済み」表示で送信不可', () => {
+    // リロード後や他端末でも、既存の回答返信から per-user の回答済みを導出しボタンを締める
+    mockStore.messages = [
+      { id: 'a1', reply_to: 'form-msg-1', sender_id: 'u1', content: '@cc-organon\n\n【回答】Day59 Q0\n笹沼さんは?: 記録のみ' },
+    ];
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    const btn = screen.getByRole('button', { name: '回答済み' }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it('他人の回答返信では自分のボタンは締まらない (per-user)', () => {
+    mockStore.messages = [
+      { id: 'a2', reply_to: 'form-msg-1', sender_id: 'u2', content: '@cc-organon\n\n【回答】Day59 Q0\n笹沼さんは?: 記録のみ' },
+    ];
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    expect(screen.getByRole('button', { name: '回答する' })).toBeTruthy();
   });
 
   it('送信後はボタンが「回答済み」になり再送信しない', async () => {

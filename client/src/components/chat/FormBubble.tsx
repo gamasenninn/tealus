@@ -2,7 +2,8 @@ import { useState, memo } from 'react';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useMessageStore } from '../../stores/messageStore';
-import { buildAnswerText, type FormValues } from '../../utils/parseForm';
+import { useAuthStore } from '../../stores/authStore';
+import { buildAnswerText, hasUserAnsweredForm, type FormValues } from '../../utils/parseForm';
 import type { FormSchema, Message } from '../../types';
 import './FormBubble.css';
 
@@ -26,6 +27,13 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
+  // #336 二重回答防止: サーバに状態を持たず、既存の返信データから「自分がこのフォームに
+  // 回答済みか」を導出する。リロード後も残り(隣接ロード)、他人の回答も message:new で
+  // ライブに反映され、ボタンが締まる。ローカル `sent` は送信直後〜返信到達までの即時反映用。
+  const userId = useAuthStore((s) => s.user?.id);
+  const answeredInStore = useMessageStore((s) => hasUserAnsweredForm(s.messages, message.id, userId));
+  const answered = sent || answeredInStore;
+
   const setRadio = (fieldId: string, value: string) =>
     setValues((prev) => ({ ...prev, [fieldId]: { ...prev[fieldId], value } }));
   const setText = (fieldId: string, text: string) =>
@@ -41,7 +49,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
 
   const handleSubmit = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!canSubmit || sending || sent || !roomId) return;
+    if (!canSubmit || sending || answered || !roomId) return;
     setSending(true);
     try {
       const content = buildAnswerText(schema, values);
@@ -85,7 +93,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
                         type="radio"
                         name={`${message.id}-${field.id}`}
                         checked={selected}
-                        disabled={sent}
+                        disabled={answered}
                         onChange={() => setRadio(field.id, opt.value)}
                       />
                       <span>{opt.label}</span>
@@ -96,7 +104,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
                         className="cform-suboption-text"
                         placeholder={opt.text_label || '補足'}
                         value={values[field.id]?.text || ''}
-                        disabled={sent}
+                        disabled={answered}
                         onChange={(e) => setText(field.id, e.target.value)}
                       />
                     )}
@@ -110,7 +118,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
               rows={3}
               placeholder={field.placeholder || ''}
               value={values[field.id]?.text || ''}
-              disabled={sent}
+              disabled={answered}
               onChange={(e) => setText(field.id, e.target.value)}
             />
           ) : (
@@ -119,7 +127,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
               className="cform-text"
               placeholder={field.placeholder || ''}
               value={values[field.id]?.text || ''}
-              disabled={sent}
+              disabled={answered}
               onChange={(e) => setText(field.id, e.target.value)}
             />
           )}
@@ -129,9 +137,9 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
       <button
         className="cform-submit"
         onClick={handleSubmit}
-        disabled={!canSubmit || sending || sent}
+        disabled={!canSubmit || sending || answered}
       >
-        {sent ? '回答済み' : sending ? '送信中…' : (schema.submit_label || '回答する')}
+        {answered ? '回答済み' : sending ? '送信中…' : (schema.submit_label || '回答する')}
       </button>
     </div>
   );

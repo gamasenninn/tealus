@@ -41,6 +41,28 @@ function isValidSchema(o: unknown): o is FormSchema {
 /** フォーム回答の入力値。radio は選択 value(+補足 text)、text は text。 */
 export type FormValues = Record<string, { value?: string; text?: string }>;
 
+/**
+ * このユーザーが「このフォームに既に回答したか」をメッセージ列から導出する。
+ * 回答は `reply_to = フォームID` の返信で、本文に buildAnswerText が必ず付ける
+ * `【回答】` を含む。これで「フォームへのコメント返信」を回答と誤判定しない。
+ * サーバに状態を持たせず、既存の返信データから per-user の回答済みを判定する
+ * (リロード = フォームと隣接する回答返信が同窓でロードされる / ライブ = message:new)。
+ */
+export function hasUserAnsweredForm(
+  messages: ReadonlyArray<{ reply_to?: string | null; sender_id?: string; content?: string | null }>,
+  formId: string,
+  userId: string | null | undefined,
+): boolean {
+  if (!userId) return false;
+  return messages.some(
+    (m) =>
+      m.reply_to === formId &&
+      m.sender_id === userId &&
+      typeof m.content === 'string' &&
+      m.content.includes('【回答】'),
+  );
+}
+
 /** radio option の value → label 解決 (補足ラベルも) */
 function radioLabel(field: Extract<FormField, { type: 'radio' }>, value: string | undefined): string {
   const opt = field.options.find((o) => o.value === value);
