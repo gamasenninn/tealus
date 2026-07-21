@@ -10,6 +10,8 @@ import ImageViewer from '../media/ImageViewer';
 import VoiceBubble from './VoiceBubble';
 import FormBubble from './FormBubble';
 import { parseForm } from '../../utils/parseForm';
+import { renderMentions } from '../../utils/highlight';
+import { formatClockTime } from '../../utils/format';
 import ContextMenu from './ContextMenu';
 import type { ContextMenuItem } from './ContextMenu';
 import LinkPreview from './LinkPreview';
@@ -83,55 +85,16 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mdPreview = localStorage.getItem('mdPreview') !== 'off';
 
-  // Markdown 内のテキストノードからメンションをハイライト
+  // メンション/検索ハイライトは utils/highlight に集約 (renderMentions)
   const processMentions = (children: ReactNode): ReactNode => {
     if (!children) return children;
     return Array.isArray(children)
-      ? children.map((child, i) => {
-          if (typeof child === 'string') {
-            const mentionRegex = /@([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u30fc\u30fb]+)/g;
-            const parts = child.split(mentionRegex);
-            if (parts.length <= 1) return child;
-            return parts.map((part, j) =>
-              j % 2 === 1 ? <span key={`${i}_${j}`} className="mention-highlight">@{part}</span> : part
-            );
-          }
-          return child;
-        })
-      : typeof children === 'string'
-        ? processMentions([children])
-        : children;
+      ? children.map((child, i) => (typeof child === 'string' ? renderMentions(child, { keyPrefix: `${i}_` }) : child))
+      : typeof children === 'string' ? processMentions([children]) : children;
   };
 
-  const highlightText = (text: string): ReactNode => {
-    if (!text) return text;
-    // @メンション + 検索キーワードのハイライト
-    const mentionRegex = /@([\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u30fc\u30fb]+)/g;
-    const parts = text.split(mentionRegex);
-    return parts.map((part, i) => {
-      if (i % 2 === 1) {
-        // メンション部分
-        return <span key={`m${i}`} className="mention-highlight">@{part}</span>;
-      }
-      // 検索キーワードハイライト
-      if (searchKeyword) {
-        const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const kwRegex = new RegExp(`(${escaped})`, 'gi');
-        const kwParts = part.split(kwRegex);
-        return kwParts.map((kw, j) =>
-          j % 2 === 1 ? <mark key={`s${i}_${j}`} className="search-highlight">{kw}</mark> : kw
-        );
-      }
-      return part;
-    });
-  };
-
-  const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const highlightText = (text: string): ReactNode =>
+    renderMentions(text, { searchKeyword, markClassName: 'search-highlight' });
 
   const handleImageClick = (images: MediaItem[], index: number) => {
     setViewerState({ images, index });
@@ -280,7 +243,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
             {(message.read_count ?? 0) > 0 && (
               <span className="bubble-read">既読{message.read_count}</span>
             )}
-            <span className="bubble-time">{formatTime(message.created_at)}</span>
+            <span className="bubble-time">{formatClockTime(message.created_at)}</span>
             {ttsText && <TtsButton text={ttsText} roomId={roomId} />}
           </div>
         )}
@@ -335,7 +298,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
         </div>
         {!isOwn && (
           <div className="bubble-meta-right">
-            <span className="bubble-time">{formatTime(message.created_at)}</span>
+            <span className="bubble-time">{formatClockTime(message.created_at)}</span>
             {ttsText && <TtsButton text={ttsText} roomId={roomId} />}
           </div>
         )}

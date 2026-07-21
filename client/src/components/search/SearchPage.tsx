@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import { renderKeywordHighlight } from '../../utils/highlight';
 import { ArrowLeft, CheckSquare, Square, X, RefreshCw } from 'lucide-react';
 import type { Message, Tag } from '../../types';
 import './SearchPage.css';
@@ -224,12 +225,8 @@ function SearchPage() {
     return <span className="todo-priority">{stars}</span>;
   };
 
-  const highlightText = (text: string | null, keyword: string): React.ReactNode => {
-    if (!text || !keyword) return text;
-    const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    const parts = text.split(regex);
-    return parts.map((part, i) => regex.test(part) ? <mark key={i}>{part}</mark> : part);
-  };
+  const highlightText = (text: string | null, keyword: string): React.ReactNode =>
+    renderKeywordHighlight(text, keyword);
 
   const refreshSearch = () => {
     if (selectedTags.length > 0) {

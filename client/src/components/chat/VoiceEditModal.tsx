@@ -4,6 +4,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAuthStore } from '../../stores/authStore';
 import { voiceNav, transcriptionText } from '../../utils/voiceNav';
+import { formatDuration } from '../../utils/format';
 
 interface VoiceEditModalProps {
   messageId: string;
@@ -100,12 +101,6 @@ function VoiceEditModal({ messageId, onClose }: VoiceEditModalProps) {
     audio.currentTime = (x / rect.width) * audio.duration;
   };
 
-  const formatTime = (s: number) => {
-    if (!s || !isFinite(s)) return '0:00';
-    const min = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${min}:${String(sec).padStart(2, '0')}`;
-  };
 
   // 現在の編集を保存 (変更が無ければ no-op、無駄な version 増加を防ぐ)
   const saveCurrent = async () => {
@@ -186,7 +181,7 @@ function VoiceEditModal({ messageId, onClose }: VoiceEditModalProps) {
               </div>
             </div>
             <span className="voice-edit-time">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatDuration(currentTime)} / {formatDuration(duration)}
             </span>
           </div>
         )}

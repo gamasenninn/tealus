@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../../services/api';
+import { renderKeywordHighlight } from '../../utils/highlight';
+import { formatDuration } from '../../utils/format';
 import { useConfirm } from '../../stores/confirmStore';
 import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
@@ -129,12 +131,6 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     audio.currentTime = (x / rect.width) * audio.duration;
   };
 
-  const formatTime = (s: number) => {
-    if (!s || !isFinite(s)) return '0:00';
-    const min = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${min}:${String(sec).padStart(2, '0')}`;
-  };
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -176,14 +172,8 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
 
   const displayText = transcription?.formatted_text || transcription?.raw_text;
 
-  const highlightText = (text: string | null | undefined): ReactNode => {
-    if (!text || !searchKeyword) return text;
-    const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
-    return parts.map((part, i) =>
-      i % 2 === 1 ? <mark key={i} className="search-highlight">{part}</mark> : part
-    );
-  };
+  const highlightText = (text: string | null | undefined): ReactNode =>
+    renderKeywordHighlight(text, searchKeyword, { markClassName: 'search-highlight' });
 
   return (
     <div className="voice-bubble">
@@ -203,7 +193,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
         <div className="voice-progress-track">
           <div className="voice-progress-fill" style={{ width: `${progress}%` }} />
         </div>
-        <span className="voice-duration">{formatTime(duration)}</span>
+        <span className="voice-duration">{formatDuration(duration)}</span>
       </div>
 
       {replyMessage && (
