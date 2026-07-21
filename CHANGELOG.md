@@ -10,6 +10,28 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-21
+
+★ ★ ★ **「AI に構造を渡す — 汎用フォームとエージェント起動入口」** — Phase 5。AI/人間が定型の回答をフォームで集められる汎用フォーム primitive(#336)と、「無メンションで無言の空振り」を減らすエージェント起動入口(#338 compose ヘルパー + 編集トリガー)を出荷。採用者保護(未適用 migration の起動時 warn #334)と、送信・表示の client 中核リファクタ(#342 #343)を併走。v0.5.0 以降 16 コミット。
+
+### Added
+
+- **汎用フォーム primitive — send_form** ([#336](https://github.com/gamasenninn/tealus/issues/336)): メッセージ本文の `tealus-form` コードフェンスに JSON schema を載せ、client の FormBubble が radio(単一選択・補足 text)/text(自由記述) で描画。回答は先頭に `reply_mention` を付けた reply として **socket 経路**で送信し、cc-queue consumer(@cc-\<project\>)を起動。UI クラスは衝突を避け `cform-*` に分離。tealus-mcp の `send_form` から投稿可能(v0.14.8)。**docs/05 に「message.created webhook は socket 経路のみ発火」を不変条件として固定。**
+- **エージェント起動入口 — compose ヘルパー + 編集トリガー** ([#338](https://github.com/gamasenninn/tealus/issues/338)): 「アシスタントに聞いたつもりが無メンションで空振り」を構造的に減らす。(Phase 1) 入力欄の 🤖ボタン / コンテキストメニュー「エージェントに送る」で、正しい宛先 mention を prefill(管理者・AI班は cc-* 宛先ピッカー)。agent-server に identity 口を追加し宛先を一意化。(Phase 2) 呼び忘れたメッセージを**編集で mention を足す**と起動する編集トリガー。
+- **未適用 migration の起動時 warn — 採用者保護** ([#334](https://github.com/gamasenninn/tealus/issues/334)): 未適用の DB migration がある状態での起動を warn し、silent degrade(機能が静かに欠ける)を防止。
+- **cc-bridge 受付エコー — mention 投入の可視化** ([#335](https://github.com/gamasenninn/tealus/issues/335)): cc-bridge が mention を受け付けたことをルームにエコー表示し、「起動したか分からず一か八か待つ」状態を解消。
+
+### Changed
+
+- **送信経路を sendRoomMessage に集約** ([#342](https://github.com/gamasenninn/tealus/issues/342)): MessageInput / FormBubble / ForwardModal / SharePage に同型コピーされていた「socket 優先 / REST fallback」を `services/sendRoomMessage.ts` の 1 関数に集約。docs/05 §4 の webhook 発火経路(socket のみ)を明文契約化し、#336 型の事故(REST 送信で cc-queue 不起動)を構造的に封じる。振る舞い不変(サーバ実読で等価を確認)。
+- **ハイライト/時刻フォーマットを純関数に集約** ([#343](https://github.com/gamasenninn/tealus/issues/343)): mention/検索ハイライト・再生時間/時刻フォーマットの重複(11 実装)を `utils/highlight.tsx` / `utils/format.ts` の共有関数へ。`MENTION_DISPLAY_RE` は表示専用(dispatch 判定とは別物)と明記。SearchPage の同一語取りこぼしも修正。
+- **@メンション picker の cc-project 一覧を picker 開時に再取得** ([#333](https://github.com/gamasenninn/tealus/issues/333)): 起動後に追加された cc-project が候補に出ない件を、picker を開くたびに再取得して解消。
+
+### Fixed
+
+- **汎用フォームの二重回答** ([#341](https://github.com/gamasenninn/tealus/issues/341)): タイムラインに残り続けるフォームの回答ボタンが何度でも押せ、グループでは本人以外も多重に押せた(cc-queue 経由の多重リクエスト)。既存の回答返信(reply_to + 「【回答】」)から per-user の回答済みを導出しボタン/入力を締める。サーバ/DB/migration 変更なし。
+- **再接続時に「考え中」/「入力中」表示が残り続ける** ([#340](https://github.com/gamasenninn/tealus/issues/340)): スマホのスリープ復帰後の socket 再接続で agentStatus / typingUsers がリセットされず、エージェントの「考え中」インジケータが残ることがあった。`handleConnect` でリセットを追加。
+
 ## [0.5.0] - 2026-07-14
 
 ★ ★ ★ **「organon を型付き契約で dock し、辞書が自己成長する」** — Phase 5 後半。STT/OCR の identity 供給層を、痩せた `vocab.json` から (1) 自己成長する dictionary テーブル(#327)、(2) organon を RDF 契約経由で pull する dock(#331) へ格上げ。自ホスト Qwen STT の organon 補正(#326)と中国語誤検出ガード(#332)で音声認識を実運用強化。土台としてコードベースを 100% TypeScript 化(#330、Node 24 buildless)。v0.4.0 以降 74 コミットの集成。
