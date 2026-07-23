@@ -22,12 +22,15 @@ import TextSelectModal from './TextSelectModal';
 import TtsButton from './TtsButton';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
-import { diffChars } from 'diff';
+import { useMessageTags, type TagEntry } from '../../hooks/useMessageTags';
+import MessageEditModal from './MessageEditModal';
+import EditHistoryModal from './EditHistoryModal';
+import type { MessageEditEntry } from '../../utils/editHistory';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import type { MediaItem, Message, MessageTag, Reaction } from '../../types';
+import type { MediaItem, Message, Reaction } from '../../types';
 import './MessageBubble.css';
 
 // server 応答が持つが types.ts に無いフィールドの local 拡張:
@@ -35,19 +38,10 @@ import './MessageBubble.css';
 // - reactions[].me: 自分がリアクション済みか
 // - tags[].id: message_tags 応答は id を必ず返す (types.ts では optional)
 type ReactionWithMe = Reaction & { me?: boolean };
-type TagEntry = MessageTag & { id: string };
 type BubbleMessage = Omit<Message, 'reactions'> & {
   reactions?: ReactionWithMe[];
   stamp?: { file_path: string; label?: string | null } | null;
 };
-
-/** メッセージ編集履歴 1 件 (GET /messages/:id/edits) */
-interface MessageEditEntry {
-  version: number;
-  content: string;
-  created_at: string;
-  edited_by_name?: string | null;
-}
 
 interface MessageBubbleProps {
   message: BubbleMessage;
@@ -74,9 +68,8 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const [showTodoMenu, setShowTodoMenu] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [selectTextValue, setSelectTextValue] = useState<string | null>(null);
-  const [tags, setTags] = useState<TagEntry[]>((message.tags as TagEntry[]) || []);
+  const { tags, refreshTags } = useMessageTags(message.id, message.tags as TagEntry[]);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
-  const [editText, setEditText] = useState('');
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [editHistory, setEditHistory] = useState<MessageEditEntry[]>([]);
   const [expanded, setExpanded] = useState(false);
@@ -160,7 +153,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const showContextMenu = (x: number, y: number) => {
     const { items, onReaction } = buildContextMenuItems({
       message, isOwn, roomId, currentRoom,
-      onEdit: () => { setEditText(message.content || ''); setIsEditingMessage(true); },
+      onEdit: () => setIsEditingMessage(true),
       onShowEditHistory: async () => {
         try {
           const data = await api.getMessageEdits(roomId, message.id);
@@ -316,8 +309,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                   const newDone = !tag.is_done;
                   try {
                     await api.updateMessageTag(message.id, tag.id, { is_done: newDone });
-                    const res = await api.getMessageTags(message.id);
-                    setTags(res.tags as TagEntry[]);
+                    await refreshTags();
                   } catch (err) { console.error(err); }
                 }}
               >
@@ -350,69 +342,25 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
       )}
 
       {isEditingMessage && (
-        <div className="modal-overlay" onClick={() => setIsEditingMessage(false)}>
-          <div className="modal-box voice-edit-modal message-edit-modal" onClick={e => e.stopPropagation()}>
-            <h3>メッセージを編集</h3>
-            <textarea
-              value={editText}
-              onChange={e => setEditText(e.target.value)}
-              rows={12}
-              autoFocus
-            />
-            <div className="voice-edit-buttons">
-              <button className="btn-cancel" onClick={() => setIsEditingMessage(false)}>キャンセル</button>
-              <button className="btn-primary" onClick={async () => {
-                try {
-                  await api.editMessage(roomId, message.id, editText);
-                  setIsEditingMessage(false);
-                } catch (err) { console.error(err); }
-              }} disabled={!editText.trim()}>確定</button>
-            </div>
-          </div>
-        </div>
+        <MessageEditModal
+          initialText={message.content || ''}
+          onClose={() => setIsEditingMessage(false)}
+          onConfirm={async (text) => {
+            try {
+              await api.editMessage(roomId, message.id, text);
+              setIsEditingMessage(false);
+            } catch (err) { console.error(err); }
+          }}
+        />
       )}
 
       {showEditHistory && (
-        <div className="modal-overlay" onClick={() => setShowEditHistory(false)}>
-          <div className="modal-box voice-history-modal" onClick={e => e.stopPropagation()}>
-            <h3>編集履歴</h3>
-            <div className="edit-history-list">
-              {(() => {
-                // 時系列順に並べる（ASC）
-                const sorted = [...editHistory].reverse();
-                // 各バージョン間の差分を表示
-                const diffs = sorted.map((entry, i) => {
-                  const prevText = entry.content;
-                  const nextText = i < sorted.length - 1 ? sorted[i + 1].content : (message.content ?? '');
-                  const label = i < sorted.length - 1
-                    ? `v${entry.version} → v${sorted[i + 1].version}`
-                    : `v${entry.version} → 現在`;
-                  const editor = i < sorted.length - 1 ? sorted[i + 1] : null;
-                  return { entry, prevText, nextText, label, editor };
-                });
-                // 新しい変更が上にくるように逆順表示
-                return diffs.reverse().map(({ entry, prevText, nextText, label, editor }) => (
-                  <div key={entry.version} className="edit-history-item">
-                    <div className="edit-history-header">
-                      <span>{label}{editor?.edited_by_name ? ` — ${editor.edited_by_name}` : ''}</span>
-                      <span>{editor ? new Date(editor.created_at).toLocaleString('ja-JP') : ''}</span>
-                    </div>
-                    <div className="edit-history-diff">
-                      {diffChars(prevText, nextText).map((part, j) => (
-                        <span key={j} className={part.added ? 'diff-added' : part.removed ? 'diff-removed' : ''}>{part.value}</span>
-                      ))}
-                    </div>
-                  </div>
-                ));
-              })()}
-              <div className="edit-history-item">
-                <div className="edit-history-header"><span>原文</span></div>
-                <p>{editHistory.length > 0 ? editHistory[editHistory.length - 1].content : message.content}</p>
-              </div>
-            </div>
-            <button className="btn-cancel" style={{ width: '100%', marginTop: '12px' }} onClick={() => setShowEditHistory(false)}>閉じる</button>
-          </div>
-        </div>
+        <EditHistoryModal
+          editHistory={editHistory}
+          currentContent={message.content ?? ''}
+          originalFallback={message.content ?? null}
+          onClose={() => setShowEditHistory(false)}
+        />
       )}
 
       {viewerState && (
@@ -439,14 +387,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
         <TagModal
           messageId={message.id}
           onClose={() => setShowTagModal(false)}
-          onTagsChanged={async () => {
-            try {
-              const res = await api.getMessageTags(message.id);
-              setTags(res.tags as TagEntry[]);
-            } catch (err) {
-              console.error('Tag refresh error:', err);
-            }
-          }}
+          onTagsChanged={refreshTags}
         />
       )}
       {showTodoMenu && (
@@ -454,14 +395,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
           messageId={message.id}
           roomId={roomId}
           onClose={() => setShowTodoMenu(false)}
-          onTagsChanged={async () => {
-            try {
-              const res = await api.getMessageTags(message.id);
-              setTags(res.tags as TagEntry[]);
-            } catch (err) {
-              console.error('Tag refresh error:', err);
-            }
-          }}
+          onTagsChanged={refreshTags}
         />
       )}
     </div>
