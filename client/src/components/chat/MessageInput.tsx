@@ -49,7 +49,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   useEffect(() => { fetchIdentity(); }, [fetchIdentity]);
   // アシスタントが当該ルームの member の時だけ🤖ボタンを出す（不在ルームで召喚を差し出さない）
   const assistantInRoom = !!assistantUserId && !!assistantName
-    && (members as unknown as Array<{ user_id?: string }>).some(m => m.user_id === assistantUserId);
+    && members.some(m => m.user_id === assistantUserId);
 
   // 宛先選択後に埋める本文を保持（入口B。null なら入口A=ボタンでメンションのみ prepend）
   const [pendingAgentBody, setPendingAgentBody] = useState<string | null>(null);
@@ -77,8 +77,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
       avatar_url: null,
       is_cc: true,
     }));
-    // server の members 応答は user_id を持つ (types.ts RoomMember には未定義)
-    return [...(members as unknown as MentionCandidate[]), ...ccMembers];
+    return [...members, ...ccMembers];
   }, [members, ccProjects]);
 
   // #338 Phase 1: 🤖 の宛先候補 = アシスタント + (admin/AI班 のみ) cc-* 。既存 mention 候補と同ソース。

@@ -46,8 +46,8 @@ export interface Room {
 }
 
 export interface RoomMember extends User {
-  /** server の members 応答は id と user_id の両方を持つ */
-  user_id?: string;
+  /** server の members 応答は user_id を必ず持つ (rooms.mts の SELECT rm.user_id) */
+  user_id: string;
   room_role?: string;
   joined_at?: string;
 }

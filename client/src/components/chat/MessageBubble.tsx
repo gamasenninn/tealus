@@ -62,7 +62,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const { assistantUserId, assistantName } = useAgentStore();
   // #338 Phase 1: アシスタントが当該ルームの member の時だけ「エージェントに送る」を出す
   const assistantInRoom = !!assistantUserId && !!assistantName
-    && (members as unknown as Array<{ user_id?: string }>).some(m => m.user_id === assistantUserId);
+    && members.some(m => m.user_id === assistantUserId);
   const [viewerState, setViewerState] = useState<{ images: MediaItem[]; index: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
