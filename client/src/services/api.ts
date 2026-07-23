@@ -214,92 +214,63 @@ class ApiClient {
    * cc-queue から登録済 project 一覧を取得 (#253)
    * mention picker の virtual user 候補に使う。
    */
-  async getCcProjects(): Promise<CcProjectsResponse> {
-    try {
-      const res = await fetch('/agent-api/agent/cc-projects', {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-      if (!res.ok) return { projects: [] };
-      return await res.json();
-    } catch {
-      return { projects: [] };
-    }
+  getCcProjects(): Promise<CcProjectsResponse> {
+    return this._agentApi<CcProjectsResponse>('GET', '/agent/cc-projects', undefined, { fallback: { projects: [] } });
   }
 
   /**
    * アプリ内アシスタントの identity を取得 (#338 Phase 1)
-   * 「エージェントに送る」compose ヘルパーが正しい宛先メンションを組むのに使う。
+   * 「エージェントに送る」compose ヘルパーが正しい宛先メンションを組むのに使う。失敗時は null identity。
    */
-  async getAgentIdentity(): Promise<AgentIdentityResponse> {
-    try {
-      const res = await fetch('/agent-api/agent/identity', {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-      if (!res.ok) return { user_id: null, display_name: null };
-      return await res.json();
-    } catch {
-      return { user_id: null, display_name: null };
-    }
+  getAgentIdentity(): Promise<AgentIdentityResponse> {
+    return this._agentApi<AgentIdentityResponse>('GET', '/agent/identity', undefined, { fallback: { user_id: null, display_name: null } });
   }
 
   /**
    * Deep agent の処理を中断 (#250)
    */
-  async cancelAgent(roomId: string): Promise<Json> {
-    const res = await fetch('/agent-api/agent/cancel', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify({ room_id: roomId }),
-    });
-    if (!res.ok) {
-      let err = '中断リクエストに失敗しました';
-      try { const j = await res.json(); err = j.error || err; } catch {}
-      throw new Error(err);
-    }
-    return await res.json();
+  cancelAgent(roomId: string): Promise<Json> {
+    return this._agentApi('POST', '/agent/cancel', { room_id: roomId }, { errorMessage: '中断リクエストに失敗しました' });
   }
 
   /**
    * TTS synthesis (personal read-aloud) — returns Blob (audio/wav)
    * Uses room's TTS model setting. Safe to call from any component.
    */
-  async synthesizeTts(text: string, roomId: string): Promise<Blob> {
-    const res = await fetch('/agent-api/tts/synthesize', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify({ text, room_id: roomId }),
-    });
-    if (!res.ok) {
-      let err = 'TTS に失敗しました';
-      try { const j = await res.json(); err = j.error || err; } catch {}
-      throw new Error(err);
-    }
-    return await res.blob();
+  synthesizeTts(text: string, roomId: string): Promise<Blob> {
+    return this._agentApi<Blob>('POST', '/tts/synthesize', { text, room_id: roomId }, { as: 'blob', errorMessage: 'TTS に失敗しました' });
   }
 
   // === Room agent settings (#156) — agent-server /config/room/:roomId/... proxy 経由 ===
-  async _agentApi<T = Json>(method: string, path: string, body?: unknown): Promise<T> {
-    const opts: RequestInit & { headers: Record<string, string> } = {
-      method,
-      headers: { Authorization: `Bearer ${this.token}` },
-    };
-    if (body !== undefined) {
-      opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
+  async _agentApi<T = Json>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extra: { as?: 'json' | 'blob'; fallback?: T; errorMessage?: string } = {},
+  ): Promise<T> {
+    const { as = 'json', fallback, errorMessage = 'agent-server リクエストに失敗しました' } = extra;
+    try {
+      const opts: RequestInit & { headers: Record<string, string> } = {
+        method,
+        headers: { Authorization: `Bearer ${this.token}` },
+      };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(`/agent-api${path}`, opts);
+      if (!res.ok) {
+        if (fallback !== undefined) return fallback;
+        let err = errorMessage;
+        try { const j = await res.json() as { error?: string }; err = j.error || err; } catch {}
+        throw new Error(err);
+      }
+      return (as === 'blob' ? await res.blob() : await res.json()) as T;
+    } catch (e) {
+      // fallback 指定メソッド (getCcProjects/getAgentIdentity) は失敗を silent に飲む
+      if (fallback !== undefined) return fallback;
+      throw e;
     }
-    const res = await fetch(`/agent-api${path}`, opts);
-    if (!res.ok) {
-      let err = 'agent-server リクエストに失敗しました';
-      try { const j = await res.json(); err = j.error || err; } catch {}
-      throw new Error(err);
-    }
-    return await res.json();
   }
 
   getRoomAgentSettings(roomId: string) {
