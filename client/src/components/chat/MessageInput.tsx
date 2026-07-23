@@ -148,8 +148,8 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
       // socket 優先 / REST fallback は sendRoomMessage に集約 (docs/05 §4 webhook 発火経路)
       await sendRoomMessage({ roomId, content, replyTo: replyTo?.id ?? null });
       setText('');
-      // textarea の高さをリセット
-      const textarea = document.querySelector<HTMLTextAreaElement>('.message-input-text');
+      // textarea の高さをリセット (ref 経由。querySelector は複数 room 表示等で誤爆源)
+      const textarea = textareaRef.current;
       if (textarea) textarea.style.height = 'auto';
       clearReplyTo();
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -204,7 +204,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
       setTimeout(async () => {
         await useMessageStore.getState().fetchMessages(roomId);
         window.dispatchEvent(new CustomEvent('scroll:bottom'));
-      }, 2000);
+      }, UPLOAD_DELAY);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
       setTimeout(() => setUploadError(''), 5000);
