@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from '../utils/logger.mts';
 import * as dictionaryRepo from './dictionaryRepo.mts';
+import { writeLocalTtl, DEFAULT_LOCAL_TTL_PATH } from './dictionaryTtl.mts';
 
 /** guideline の vocabulary 1 エントリ (file JSON / テーブルオーバーレイ共通の形) */
 export interface VocabularyEntry {
@@ -72,6 +73,18 @@ export function resetCache(): void {
 }
 
 /**
+ * #348 (a): overlay を local.ttl に書き出す (非致命)。書き込み失敗は warn のみで
+ * refresh を壊さない (organon inject と同じく、辞書供給は best-effort の副作用)。
+ */
+async function emitLocalTtl(vocab: VocabularyEntry[]): Promise<void> {
+  try {
+    await writeLocalTtl(DEFAULT_LOCAL_TTL_PATH, vocab);
+  } catch (err) {
+    logger.warn(`[dictionary] local.ttl write failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
  * #327: dictionary テーブルの active vocabulary を in-memory オーバーレイに読み込む (非同期)。
  * 起動時・admin reload・辞書書込 (hook/UI/import) 後に呼ぶ。テーブルが空 / DB 不達なら
  * tableVocab を null に落とし、loadGuideline() は file にフォールバックする (非破壊)。
@@ -91,6 +104,10 @@ export async function refreshVocabFromTable(): Promise<number> {
         description: r.description || null,
       }));
       logger.info(`[dictionary] vocab overlay from table: ${tableVocab.length} terms`);
+      // #348 (a): agent-server (別プロセス) が読む local.ttl を発行 (5 field)。非致命 —
+      // 書き込み失敗で refresh を壊さない (overlay は既に更新済)。空/DB不達時は書かず、
+      // 前回の good な local.ttl を温存する (= file fallback 最後の砦 の思想)。
+      await emitLocalTtl(tableVocab);
       return tableVocab.length;
     }
     tableVocab = null; // 空テーブル → file フォールバック

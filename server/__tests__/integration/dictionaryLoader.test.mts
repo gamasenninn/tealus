@@ -35,12 +35,15 @@ let config: typeof import('../../src/services/transcriptionConfig.mts');
 let repo: typeof import('../../src/services/dictionaryRepo.mts');
 let pool: typeof import('../../src/db/pool.mts').pool;
 let tmpFile: string;
+let tmpTtl: string; // #348 (a): refresh が書き出す local.ttl を test 専用 path に逃がす
 
 beforeAll(async () => {
   await setupTestDb();
   tmpFile = path.join(os.tmpdir(), `tealus-dictloader-guideline-${process.pid}-${Date.now()}.json`);
+  tmpTtl = path.join(os.tmpdir(), `tealus-dictloader-local-${process.pid}-${Date.now()}.ttl`);
   fs.writeFileSync(tmpFile, JSON.stringify(GUIDELINE_FIXTURE));
   process.env.TRANSCRIPTION_GUIDELINE_PATH = tmpFile;
+  process.env.LOCAL_TTL_PATH = tmpTtl; // 本番 config/dictionary.local.ttl を汚さない
   jest.resetModules();
   config = require('../../src/services/transcriptionConfig');
   repo = require('../../src/services/dictionaryRepo');
@@ -48,7 +51,9 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+  if (fs.existsSync(tmpTtl)) fs.unlinkSync(tmpTtl);
   delete process.env.TRANSCRIPTION_GUIDELINE_PATH;
+  delete process.env.LOCAL_TTL_PATH;
   await closeTestDb();
   await pool.end();
 });
@@ -88,6 +93,21 @@ test('rejected term / alias はオーバーレイに出ない', async () => {
 
   const v = config.loadGuideline().vocabulary.find((x) => x.term === TABLE_ONLY_A);
   expect(v!.aliases).toEqual(['生き別名']);
+});
+
+test('#348 (a): active 行ありで refresh すると local.ttl が 5 field で書き出される', async () => {
+  const a = await repo.upsertTerm({ term: TABLE_ONLY_A, category: 'person', reading: 'てすとえー', description: 'テスト整備長' });
+  await repo.upsertAlias({ termId: a.id, alias: 'ずんA', source: 'auto', count: 3 });
+  await config.refreshVocabFromTable();
+
+  expect(fs.existsSync(tmpTtl)).toBe(true);
+  const ttl = fs.readFileSync(tmpTtl, 'utf8');
+  // 5 field 全部が載る (term/reading/category/description/alias)
+  expect(ttl).toContain('rdfs:label "ズンドコ検証用A"');
+  expect(ttl).toContain('org1:reading "てすとえー"');
+  expect(ttl).toContain('org1:category "person"');
+  expect(ttl).toContain('org1:description "テスト整備長"');
+  expect(ttl).toContain('org1:alias "ずんA"');
 });
 
 test('whisper_context / guidelines はオーバーレイ時も file 継続', async () => {

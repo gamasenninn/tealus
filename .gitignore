@@ -14,6 +14,8 @@ agent-server/logs/
 # Voice transcription guideline (実運用版、example はコミット)
 server/config/transcription_guideline.json
 server/config/mining_report.json
+# #348 (a): 辞書テーブル由来の local vocab 契約 (auto 生成、refreshVocabFromTable が発行)
+server/config/dictionary.local.ttl
 
 # LINE Bridge Phase 2.3 (= 6/6 Day 21 確立、2 file 案): example はコミット、実運用 file は ignored
 server/config/line-groups.json
