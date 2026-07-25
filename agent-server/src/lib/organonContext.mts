@@ -55,6 +55,39 @@ export interface SqlMappingEntry {
 }
 
 /**
+ * #349 Tier 1: polyseme yaml から `sql_mapping:` ブロックだけを抽出する (純関数)。
+ *
+ * organonContext は従来 polyseme yaml を丸ごと prompt に注入していたが、DB 検索 grounding に
+ * 必要な事実 (table/field/式/filter/混同注意) は sql_mapping ブロックに揃っており、その外の散文
+ * (概要/多義/hazard/provenance/links) は grounding には marginal と検証済み (inspection + 実機
+ * dogfood: 買取を V_商品_入出庫/区分='入庫'/SUM(入庫数量*単価) で正答)。よって sql_mapping
+ * ブロックのみに絞り、毎プロンプトの生 yaml bloat (7 entry で ~872 行) を削る。
+ *
+ * 抽出規則: `sql_mapping:` 行から、次の top-level key (= 字下げ無し `key:` 行) の直前まで。
+ * sql_mapping が最後の key なら EOF まで。末尾の空行は trim。sql_mapping 不在なら空文字。
+ */
+export function extractSqlMappingBlock(yaml: string): string {
+  const lines = yaml.split(/\r?\n/);
+  const out: string[] = [];
+  let capturing = false;
+  for (const line of lines) {
+    if (!capturing) {
+      if (/^sql_mapping\s*:/.test(line)) {
+        capturing = true;
+        out.push(line);
+      }
+      continue;
+    }
+    // 次の top-level key (字下げ無し・非コメントの `key:`) に到達したら終了。
+    // ブロックスカラ(|)の中身や nested key は字下げされているので巻き込まない。
+    if (/^[^\s#]/.test(line) && /^[^\s#][^:]*:/.test(line)) break;
+    out.push(line);
+  }
+  while (out.length && out[out.length - 1].trim() === '') out.pop();
+  return out.join('\n');
+}
+
+/**
  * polyseme yaml 全件 read、sql_mapping field 持つ entries だけ抽出
  *
  * @param organonPath - organon repo root path (= test 用、default は env / DEFAULT)
@@ -70,10 +103,14 @@ export function loadSqlMappingEntries(organonPath: string = DEFAULT_ORGANON_PATH
     try {
       const content = fs.readFileSync(fullPath, 'utf8');
       if (content.includes('sql_mapping:')) {
-        entries.push({
-          term: file.replace(/\.yaml$/, ''),
-          content: content.trim(),
-        });
+        // #349 Tier 1: 生 yaml 全文でなく sql_mapping ブロックのみ注入 (散文は grounding に marginal)
+        const block = extractSqlMappingBlock(content);
+        if (block) {
+          entries.push({
+            term: file.replace(/\.yaml$/, ''),
+            content: block,
+          });
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

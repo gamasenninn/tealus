@@ -19,6 +19,7 @@ import { logger } from '../../src/lib/logger.mts';
 import {
   loadOrganonPolysemeForPrompt,
   loadSqlMappingEntries,
+  extractSqlMappingBlock,
   isAvailable,
   logOrganonInjectState,
 } from '../../src/lib/organonContext.mts';
@@ -112,6 +113,72 @@ describe('loadSqlMappingEntries', () => {
       const entries = loadSqlMappingEntries(tmpDir);
       expect(entries).toHaveLength(1);
       expect(entries[0].term).toBe('foo');
+    } finally {
+      cleanupFixture(tmpDir);
+    }
+  });
+});
+
+describe('extractSqlMappingBlock (#349 Tier 1: 散文を落とし sql_mapping ブロックのみ)', () => {
+  test('sql_mapping ブロックだけ抽出し、次の top-level key で止まる (散文除外)', () => {
+    const yaml = [
+      'term: 仕切',
+      'description: |',
+      '  長い散文の説明',
+      '  多義の解説がここに続く',
+      'sql_mapping:',
+      '  primary:',
+      '    table: hksdb.V_出品管理',
+      '    field: 仕切書No',
+      '  format_distribution_observed:',
+      '    正規: |',
+      '      5桁-枝番',
+      'hazard: |',
+      '  ハザードの散文',
+      'links:',
+      '  - 売上',
+    ].join('\n');
+    const block = extractSqlMappingBlock(yaml);
+    // sql_mapping の中身は保持
+    expect(block).toContain('sql_mapping:');
+    expect(block).toContain('table: hksdb.V_出品管理');
+    expect(block).toContain('field: 仕切書No');
+    expect(block).toContain('5桁-枝番'); // ブロックスカラ内の grounding-critical も保持
+    // 散文(description/hazard/links)と他 top-level は含まない
+    expect(block).not.toContain('term: 仕切');
+    expect(block).not.toContain('長い散文の説明');
+    expect(block).not.toContain('多義の解説');
+    expect(block).not.toContain('ハザードの散文');
+    expect(block).not.toContain('- 売上');
+  });
+
+  test('sql_mapping が最後の top-level key なら末尾まで取り、末尾空行は trim', () => {
+    const yaml = 'term: X\nsql_mapping:\n  table: t\n  field: f\n\n';
+    const block = extractSqlMappingBlock(yaml);
+    expect(block).toContain('sql_mapping:');
+    expect(block).toContain('table: t');
+    expect(block.endsWith('field: f')).toBe(true);
+    expect(block).not.toContain('term: X');
+  });
+
+  test('sql_mapping 無しは空文字', () => {
+    expect(extractSqlMappingBlock('term: X\ndescription: 散文だけ\n')).toBe('');
+  });
+});
+
+describe('loadSqlMappingEntries は Tier 1 で sql_mapping ブロックのみ返す (#349)', () => {
+  test('散文(description/hazard)を除外して sql_mapping だけ content に載る', () => {
+    const tmpDir = setupFixture({
+      '仕切.yaml': 'term: 仕切\ndescription: 長い散文の説明\nsql_mapping:\n  table: hksdb.V_出品管理\n  field: 仕切書No\nhazard: 危険な散文\n',
+    });
+    try {
+      const entries = loadSqlMappingEntries(tmpDir);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].term).toBe('仕切');
+      expect(entries[0].content).toContain('sql_mapping:');
+      expect(entries[0].content).toContain('table: hksdb.V_出品管理');
+      expect(entries[0].content).not.toContain('長い散文の説明');
+      expect(entries[0].content).not.toContain('危険な散文');
     } finally {
       cleanupFixture(tmpDir);
     }
