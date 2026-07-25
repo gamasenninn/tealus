@@ -5,8 +5,15 @@
  * mapping (= polyseme.sql_mapping、Day 15 で 4 件 grounded) を参照せず、毎回 ad-hoc に SQL
  * 生成して間違える (= 5/16 4 round 訂正 trace pattern が再発火 risk)。
  *
- * 解: 全 agent (= Light v1 / v2 / Deep / Deep Codex) の system prompt build に本 module の
- * loadOrganonPolysemeForPrompt() を呼んで、polyseme + sql_mapping を inline text block で渡す。
+ * 解: 全 agent (= Light v1 / v2 / Deep / Deep Codex) の prompt に本 module の
+ * loadOrganonPolysemeForPrompt() で polyseme + sql_mapping を inline text block として渡す。
+ *
+ * ★ 配線の実態 (#347、実測): 注入は 2 経路で全 agent に届く。
+ *   - Light v1 / v2: agent module 内で自己配線 (light.mts / lightV2.mts が直接呼ぶ)。
+ *   - Deep / Deep Codex: dispatcher.mts の buildDeepPrompt() が呼び、組んだ prompt を
+ *     processDeep / processDeepCodex に渡す (= agent module 内には呼び出しが無い)。
+ *   deepCodex.mts 単体を grep すると呼び出しが見えないが、注入は一段上の dispatcher で
+ *   起きている。「Deep は未注入」と読み違えないこと。
  *
  * env:
  *   - ORGANON_REPO_PATH: organon repo の root path (= default C:/app/tealus-organon 想定、
@@ -115,6 +122,10 @@ export function loadOrganonPolysemeForPrompt(options: { organonPath?: string } =
  *
  * default OFF への flip (#304) で、本番が ORGANON_INJECT を明示し忘れると inject が黙って止まる。
  * 起動ログで状態 (+ 有効時は entries 数) を残し、ON/OFF を log で binary 確認できるようにする。
+ *
+ * #347 ①: ORGANON_INJECT=true なのに organon 不在 / entries 0 件は「ON と宣言したのに
+ * 実際は何も注入されない」silent degrade。migration-check と同型で loud WARN を出す
+ * (organon は任意サブシステムなので FATAL でなく WARN、稼働は止めない)。
  */
 export function logOrganonInjectState(options: { organonPath?: string } = {}): void {
   if (!isInjectEnabled()) {
@@ -122,6 +133,21 @@ export function logOrganonInjectState(options: { organonPath?: string } = {}): v
     return;
   }
   const organonPath = options.organonPath || DEFAULT_ORGANON_PATH;
+  if (!isAvailable(organonPath)) {
+    logger.warn(
+      `[organonContext] organon inject: ON but organon が見つかりません (path=${organonPath}) — `
+      + 'polyseme grounding は無効のまま黙って止まっています。'
+      + 'organon repo を配置するか ORGANON_INJECT=false を設定してください。',
+    );
+    return;
+  }
   const entries = loadSqlMappingEntries(organonPath);
+  if (entries.length === 0) {
+    logger.warn(
+      `[organonContext] organon inject: ON but sql_mapping entries=0 (path=${organonPath}) — `
+      + '注入する内容が無く実質空です。organon の entries/polyseme を確認してください。',
+    );
+    return;
+  }
   logger.info(`[organonContext] organon inject: ON (entries=${entries.length}, path=${organonPath})`);
 }

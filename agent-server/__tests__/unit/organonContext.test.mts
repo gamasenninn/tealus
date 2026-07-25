@@ -200,16 +200,22 @@ describe('loadOrganonPolysemeForPrompt (opt-in、#304)', () => {
   });
 });
 
-describe('logOrganonInjectState (起動時 state ログ、#304)', () => {
+describe('logOrganonInjectState (起動時 state ログ、#304 / #347 warn 化)', () => {
   const originalInject = process.env.ORGANON_INJECT;
 
   afterEach(() => {
     if (originalInject === undefined) delete process.env.ORGANON_INJECT;
     else process.env.ORGANON_INJECT = originalInject;
     (logger.info as jest.Mock).mockClear();
+    (logger.warn as jest.Mock).mockClear();
   });
 
-  test('ORGANON_INJECT=true で ON ログ (= entries 数を含む)', () => {
+  const infoMsg = (): string =>
+    (logger.info as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n');
+  const warnMsg = (): string =>
+    (logger.warn as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n');
+
+  test('ORGANON_INJECT=true + entries あり → ON info ログ (= entries 数を含む)、warn なし', () => {
     process.env.ORGANON_INJECT = 'true';
     const tmpDir = setupFixture({
       '納品.yaml': 'term: 納品\nsql_mapping:\n  x: y\n',
@@ -217,18 +223,43 @@ describe('logOrganonInjectState (起動時 state ログ、#304)', () => {
     });
     try {
       logOrganonInjectState({ organonPath: tmpDir });
-      const msg = (logger.info as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n');
-      expect(msg).toContain('organon inject: ON');
-      expect(msg).toContain('entries=1');
+      expect(infoMsg()).toContain('organon inject: ON');
+      expect(infoMsg()).toContain('entries=1');
+      expect(logger.warn as jest.Mock).not.toHaveBeenCalled();
     } finally {
       cleanupFixture(tmpDir);
     }
   });
 
-  test('ORGANON_INJECT 未設定で OFF ログ', () => {
+  test('ORGANON_INJECT 未設定で OFF info ログ、warn なし', () => {
     delete process.env.ORGANON_INJECT;
     logOrganonInjectState();
-    const msg = (logger.info as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n');
-    expect(msg).toContain('organon inject: OFF');
+    expect(infoMsg()).toContain('organon inject: OFF');
+    expect(logger.warn as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  // #347 ①: ORGANON_INJECT=true なのに organon 不在 = silent degrade。
+  // migration-check 同型で loud warn を出す (FATAL でなく WARN = organon は任意サブシステム)。
+  test('ORGANON_INJECT=true + organon 不在 → warn (silent degrade を可視化)', () => {
+    process.env.ORGANON_INJECT = 'true';
+    logOrganonInjectState({ organonPath: '/nonexistent/organon' });
+    expect(warnMsg()).toContain('organon inject');
+    expect(warnMsg()).toContain('/nonexistent/organon');
+  });
+
+  // #347 ①: ORGANON_INJECT=true で organon はあるが sql_mapping entries 0 件 =
+  // inject が実質空。これも warn で「ON なのに効いていない」を可視化。
+  test('ORGANON_INJECT=true + entries 0 件 → warn (実質空注入を可視化)', () => {
+    process.env.ORGANON_INJECT = 'true';
+    const tmpDir = setupFixture({
+      'foo.yaml': 'term: foo\ncontext: x\n', // sql_mapping なし
+    });
+    try {
+      logOrganonInjectState({ organonPath: tmpDir });
+      expect(warnMsg()).toContain('organon inject');
+      expect(warnMsg()).toContain('entries=0');
+    } finally {
+      cleanupFixture(tmpDir);
+    }
   });
 });
