@@ -164,6 +164,103 @@ describe('Tags API', () => {
   });
 
   // ============================================
+  // DELETE /api/rooms/:id/tags/:tagId — ルームのタグ削除（カスケード）
+  // ============================================
+  describe('DELETE /api/rooms/:id/tags/:tagId', () => {
+    it('should delete a tag from the room', async () => {
+      const tagRes = await request(app)
+        .post(`/api/rooms/${roomId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '削除対象' });
+
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}/tags/${tagRes.body.tag.id}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+
+      // 一覧から消えていること
+      const list = await request(app)
+        .get(`/api/rooms/${roomId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(list.body.tags.find((t: { name: string }) => t.name === '削除対象')).toBeUndefined();
+    });
+
+    it('should cascade-remove the tag from tagged messages', async () => {
+      const tagRes = await request(app)
+        .post(`/api/rooms/${roomId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '使用中タグ' });
+
+      // メッセージに付与
+      await request(app)
+        .post(`/api/messages/${messageId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ tag_id: tagRes.body.tag.id });
+
+      // 使用中でも削除できる（カスケード）
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}/tags/${tagRes.body.tag.id}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(res.status).toBe(200);
+
+      // メッセージからも外れていること
+      const msgTags = await request(app)
+        .get(`/api/messages/${messageId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(msgTags.body.tags.find((t: { name: string }) => t.name === '使用中タグ')).toBeUndefined();
+    });
+
+    it('should 404 for a tag that does not exist in the room', async () => {
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}/tags/00000000-0000-0000-0000-000000000000`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('should not delete a tag belonging to another room', async () => {
+      // 別ルームを作りそこにタグを作成
+      const otherRoomRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '別ルーム', member_ids: [user2.user.id] });
+      const otherRoomId = otherRoomRes.body.room.id;
+
+      const otherTag = await request(app)
+        .post(`/api/rooms/${otherRoomId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '他ルームタグ' });
+
+      // roomId 経由で別ルームのタグを消そうとしても 404
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}/tags/${otherTag.body.tag.id}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(res.status).toBe(404);
+
+      // 別ルーム側にはまだ残っている
+      const list = await request(app)
+        .get(`/api/rooms/${otherRoomId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(list.body.tags.find((t: { name: string }) => t.name === '他ルームタグ')).toBeDefined();
+    });
+
+    it('should reject non-member', async () => {
+      const tagRes = await request(app)
+        .post(`/api/rooms/${roomId}/tags`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '権限テスト' });
+
+      const user3 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎' });
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}/tags/${tagRes.body.tag.id}`)
+        .set('Authorization', `Bearer ${user3.token}`);
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // ============================================
   // POST /api/messages/:id/tags — メッセージにタグ付け
   // ============================================
   describe('POST /api/messages/:id/tags', () => {

@@ -92,6 +92,33 @@ roomRouter.get('/', async (req, res) => {
 });
 
 /**
+ * DELETE /api/rooms/:id/tags/:tagId
+ * Delete a tag from the room. message_tags は FK ON DELETE CASCADE で自動除去される
+ * （使用中タグでも削除可＝カスケード）。
+ */
+roomRouter.delete('/:tagId', async (req, res) => {
+  const roomId = (req.params as { id: string }).id;
+  const tagId = (req.params as { tagId: string }).tagId;
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM tags WHERE id = $1 AND room_id = $2',
+      [tagId, roomId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'タグが見つかりません' });
+    }
+
+    logger.info(`Tag deleted: ${tagId} from room ${roomId}`);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Tag delete error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * GET /api/rooms/:id/tags/suggest?q=prefix
  * Suggest tags by prefix match
  */

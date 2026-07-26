@@ -435,6 +435,11 @@ class ApiClient {
     return this.request<{ tag: Tag }>('POST', `/rooms/${roomId}/tags`, { name, is_todo });
   }
 
+  // ルームからタグを削除（付与済みメッセージからも FK カスケードで外れる）
+  deleteRoomTag(roomId: string, tagId: string) {
+    return this.request('DELETE', `/rooms/${roomId}/tags/${tagId}`);
+  }
+
   getMessageTags(messageId: string) {
     return this.request<MessageTagsResponse>('GET', `/messages/${messageId}/tags`);
   }

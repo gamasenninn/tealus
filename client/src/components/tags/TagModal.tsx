@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Tag } from 'lucide-react';
+import { useConfirm } from '../../stores/confirmStore';
 import type { Tag as TagType } from '../../types';
 import './TagModal.css';
 
@@ -19,11 +20,13 @@ interface TagModalProps {
 
 function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
   const { roomId } = useParams() as { roomId: string };
+  const confirm = useConfirm();
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<TagType[]>([]);
   const [recentTags, setRecentTags] = useState<TagType[]>([]);
   const [messageTags, setMessageTags] = useState<MessageTagRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [manageMode, setManageMode] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -93,6 +96,31 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
     }
   };
 
+  // ルームからタグ定義そのものを削除（使用中でもカスケードで外れる）
+  const deleteRoomTag = async (tag: TagType) => {
+    const used = tag.usage_count ?? 0;
+    const ok = await confirm({
+      body: used > 0
+        ? `タグ「${tag.name}」を削除しますか？\n${used}件のメッセージからも外れます。`
+        : `タグ「${tag.name}」を削除しますか？`,
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      await api.deleteRoomTag(roomId, tag.id);
+      setRecentTags(prev => prev.filter(t => t.id !== tag.id));
+      // このメッセージに付いていたら表示からも外す
+      if (messageTags.some(t => t.id === tag.id)) {
+        setMessageTags(prev => prev.filter(t => t.id !== tag.id));
+        onTagsChanged?.();
+      }
+    } catch (err) {
+      console.error('Room tag delete error:', err);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && input.trim()) {
       e.preventDefault();
@@ -141,17 +169,34 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
 
         {!input && recentTags.length > 0 && (
           <div className="tag-section">
-            <div className="tag-section-label">最近使ったタグ:</div>
+            <div className="tag-section-header">
+              <span className="tag-section-label">最近使ったタグ:</span>
+              <button
+                className="tag-manage-toggle"
+                onClick={() => setManageMode(m => !m)}
+              >{manageMode ? '完了' : '管理'}</button>
+            </div>
             <div className="tag-chips">
               {recentTags.map(tag => (
-                <button
-                  key={tag.id}
-                  className={`tag-chip ${isTagged(tag) ? 'tagged' : ''}`}
-                  onClick={() => !isTagged(tag) && addTag(tag.name, tag.id)}
-                  disabled={isTagged(tag)}
-                >
-                  {tag.name}
-                </button>
+                manageMode ? (
+                  <span key={tag.id} className="tag-chip manage">
+                    {tag.name}
+                    <button
+                      className="tag-remove"
+                      title="このタグをルームから削除"
+                      onClick={() => deleteRoomTag(tag)}
+                    >×</button>
+                  </span>
+                ) : (
+                  <button
+                    key={tag.id}
+                    className={`tag-chip ${isTagged(tag) ? 'tagged' : ''}`}
+                    onClick={() => !isTagged(tag) && addTag(tag.name, tag.id)}
+                    disabled={isTagged(tag)}
+                  >
+                    {tag.name}
+                  </button>
+                )
               ))}
             </div>
           </div>
