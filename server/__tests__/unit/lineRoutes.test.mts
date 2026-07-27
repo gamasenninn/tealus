@@ -11,6 +11,7 @@ import os from 'node:os';
 // Mock dependencies
 const mockPostText = jest.fn((..._args: unknown[]) => Promise.resolve({ message: { id: 'msg-text' } }));
 const mockPostImage = jest.fn((..._args: unknown[]) => Promise.resolve({ message: { id: 'msg-image' } }));
+const mockPostImages = jest.fn((..._args: unknown[]) => Promise.resolve({ message: { id: 'msg-image-set' } }));
 const mockPostVoice = jest.fn((..._args: unknown[]) => Promise.resolve({ message: { id: 'msg-voice' } }));
 const mockPostFile = jest.fn((..._args: unknown[]) => Promise.resolve({ message: { id: 'msg-file' } }));
 const mockPostVideo = jest.fn((..._args: unknown[]) => Promise.resolve({ message: { id: 'msg-video' } }));
@@ -19,6 +20,7 @@ const mockPostLocation = jest.fn((..._args: unknown[]) => Promise.resolve({ mess
 jest.mock('../../src/services/lineMessageBridge.mts', () => ({
   postTextToTealus: (...args: unknown[]) => mockPostText(...args),
   postImageToTealus: (...args: unknown[]) => mockPostImage(...args),
+  postImagesToTealus: (...args: unknown[]) => mockPostImages(...args),
   postVoiceToTealus: (...args: unknown[]) => mockPostVoice(...args),
   postFileToTealus: (...args: unknown[]) => mockPostFile(...args),
   postVideoToTealus: (...args: unknown[]) => mockPostVideo(...args),
@@ -73,6 +75,7 @@ let tmpDir: string;
 beforeEach(() => {
   mockPostText.mockClear();
   mockPostImage.mockClear();
+  mockPostImages.mockClear();
   mockPostVoice.mockClear();
   mockPostFile.mockClear();
   mockPostVideo.mockClear();
@@ -482,3 +485,80 @@ describe('dispatchEvent — sender label (#309 案A)', () => {
 
 // loadGroupToRoomMap の test は 6/6 Day 21 で services/lineGroupMappings.js に移管
 // (= 新 test: __tests__/unit/lineGroupMappings.test.js)
+
+// ============================================
+// imageSet (#353) — 複数画像同時送信の束ね
+// ============================================
+describe('dispatchEvent imageSet', () => {
+  const flushTick = () => new Promise((r) => setTimeout(r, 10));
+
+  function mkImageEvent(setId: string, index: number, total: number, msgId: string) {
+    return {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'image', id: msgId, imageSet: { id: setId, index, total } },
+    };
+  }
+
+  function setupMediaMocks() {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('img'), mimeType: 'image/jpeg' });
+    // 呼び出しごとに別ファイル名を返す (= 画像ごとの save を模す)
+    let n = 0;
+    mockSaveContent.mockImplementation(() => {
+      n += 1;
+      return Promise.resolve({
+        filePath: `/tmp/media-test/line-images/img-${n}.jpg`,
+        relativePath: `line-images/img-${n}.jpg`,
+        fileName: `img-${n}.jpg`,
+        mimeType: 'image/jpeg',
+        fileSize: 100,
+      });
+    });
+  }
+
+  test('imageSet 2枚 → 1回の postImagesToTealus に束ね (index 昇順・個別 post なし)', async () => {
+    setupMediaMocks();
+    const cfg = { ...TEST_CONFIG, skipCatalog: true };
+
+    // ★ 順不同到着 (= LINE 仕様): index 2 → index 1
+    const r1 = await dispatchEvent(mkImageEvent('set-unit-1', 2, 2, 'm-b'), { config: cfg });
+    expect(r1).toEqual({ posted: 'image-set-buffered' });
+    expect(mockPostImages).not.toHaveBeenCalled();
+
+    const r2 = await dispatchEvent(mkImageEvent('set-unit-1', 1, 2, 'm-a'), { config: cfg });
+    expect(r2).toEqual({ posted: 'image-set' });
+    await flushTick();
+
+    expect(mockPostImages).toHaveBeenCalledTimes(1);
+    expect(mockPostImage).not.toHaveBeenCalled(); // 個別 post は走らない
+    const call = mockPostImages.mock.calls[0][0] as {
+      roomId: string; mediaInfos: Array<{ fileName: string }>;
+    };
+    expect(call.roomId).toBe('room-X');
+    // 到着順 img-1(index2), img-2(index1) → flush は index 昇順 = img-2, img-1
+    expect(call.mediaInfos.map((m) => m.fileName)).toEqual(['img-2.jpg', 'img-1.jpg']);
+  });
+
+  test('imageSet なし → 従来どおり個別 postImageToTealus', async () => {
+    setupMediaMocks();
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'image', id: 'm-single' },
+    };
+    const result = await dispatchEvent(event, { config: { ...TEST_CONFIG, skipCatalog: true } });
+    expect(result).toEqual({ posted: 'image' });
+    expect(mockPostImage).toHaveBeenCalledTimes(1);
+    expect(mockPostImages).not.toHaveBeenCalled();
+  });
+
+  test('imageSet total=1 は defensive に個別 post 扱い', async () => {
+    setupMediaMocks();
+    const result = await dispatchEvent(mkImageEvent('set-unit-solo', 1, 1, 'm-solo'), {
+      config: { ...TEST_CONFIG, skipCatalog: true },
+    });
+    expect(result).toEqual({ posted: 'image' });
+    expect(mockPostImage).toHaveBeenCalledTimes(1);
+    expect(mockPostImages).not.toHaveBeenCalled();
+  });
+});

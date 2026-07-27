@@ -45,6 +45,7 @@ import type { Server } from 'socket.io';
 import {
   postTextToTealus,
   postImageToTealus,
+  postImagesToTealus,
   postVoiceToTealus,
   postFileToTealus,
   postVideoToTealus,
@@ -412,5 +413,67 @@ describe('postLocationToTealus (= Phase 2.2)', () => {
       sender: TEST_SENDER,
       location: { title: null, address: null, latitude: null, longitude: null },
     })).rejects.toThrow(/location/);
+  });
+});
+
+// ============================================
+// postImagesToTealus (#353) — imageSet 束ね投稿
+// ============================================
+describe('postImagesToTealus', () => {
+  const mkMediaInfo = (name: string) => ({
+    filePath: `/tmp/media-test/line-images/${name}`,
+    relativePath: `line-images/${name}`,
+    fileName: name,
+    mimeType: 'image/jpeg',
+    fileSize: 100,
+  });
+
+  test('1 message + N media rows (= media.mts マルチアップロード同型) + emit に media 配列', async () => {
+    const newMsg = { id: 'msg-set', room_id: 'room-1', type: 'image', sender_id: 'bot-1' };
+    const mediaRow1 = { id: 'md-1', message_id: 'msg-set', file_path: 'line-images/a.jpg' };
+    const mediaRow2 = { id: 'md-2', message_id: 'msg-set', file_path: 'line-images/b.jpg' };
+    setupSqlSequence([
+      { rows: [] },           // BEGIN
+      { rows: [newMsg] },     // INSERT INTO messages
+      { rows: [mediaRow1] },  // INSERT INTO message_media (1枚目)
+      { rows: [mediaRow2] },  // INSERT INTO message_media (2枚目)
+      { rows: [] },           // COMMIT
+    ]);
+
+    const { io, emit } = makeMockIo();
+    const result = await postImagesToTealus({
+      roomId: 'room-1',
+      sender: TEST_SENDER,
+      mediaInfos: [mkMediaInfo('a.jpg'), mkMediaInfo('b.jpg')],
+      content: '[小野仙人@出品写真・動画]',
+      io,
+    });
+
+    expect(result.message).toEqual(newMsg);
+    expect(result.media).toEqual([mediaRow1, mediaRow2]);
+
+    // message INSERT は 1 回だけ (= 1 メッセージに束ねる)
+    const msgInserts = mockClient.query.mock.calls.filter((c) =>
+      typeof c[0] === 'string' && c[0].includes('INSERT INTO messages'));
+    expect(msgInserts.length).toBe(1);
+    expect(msgInserts[0][1][2]).toBe('[小野仙人@出品写真・動画]'); // content = label
+
+    // media INSERT は 2 回 (= 枚数分)
+    const mediaInserts = mockClient.query.mock.calls.filter((c) =>
+      typeof c[0] === 'string' && c[0].includes('INSERT INTO message_media'));
+    expect(mediaInserts.length).toBe(2);
+
+    // emit は 1 回、media 配列 2 件
+    expect(emit).toHaveBeenCalledTimes(1);
+    const emitted = emit.mock.calls[0][1] as { media: unknown[] };
+    expect(emitted.media).toEqual([mediaRow1, mediaRow2]);
+  });
+
+  test('mediaInfos 空配列で throw', async () => {
+    await expect(postImagesToTealus({
+      roomId: 'room-1',
+      sender: TEST_SENDER,
+      mediaInfos: [],
+    })).rejects.toThrow(/mediaInfos/);
   });
 });

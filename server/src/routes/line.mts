@@ -24,12 +24,14 @@ import type { FetchLike } from '../services/lineBridge.mts';
 import {
   postTextToTealus,
   postImageToTealus,
+  postImagesToTealus,
   postVoiceToTealus,
   postFileToTealus,
   postVideoToTealus,
   postLocationToTealus,
 } from '../services/lineMessageBridge.mts';
 import type { LineSenderContext } from '../services/lineMessageBridge.mts';
+import { ImageSetBuffer, DEFAULT_FLUSH_DELAY_MS } from '../services/lineImageSetBuffer.mts';
 import { loadGroupToRoomMap } from '../services/lineGroupMappings.mts';
 import { upsertGroupEntry, readGroupName } from '../services/lineGroupCatalog.mts';
 import { getMemberDisplayName } from '../services/lineMemberCatalog.mts';
@@ -55,6 +57,8 @@ interface LineEventMessage {
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** ★ #353: 複数画像同時送信時のみ付与 (LINE 11.15 以前の Android は付かない) */
+  imageSet?: { id: string; index: number; total: number };
 }
 
 /** LINE webhook event */
@@ -140,6 +144,22 @@ const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const CHANNEL_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 const BOT_USER_ID = process.env.LINE_BOT_USER_ID;
 const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media');
+
+// ★ #353: imageSet 再構成バッファ (= プロセスに 1 個)。LINE の複数画像同時送信は
+// 画像ごと別 webhook + 順不同で届くため、imageSet.id 単位で貯めて 1 メッセージに束ねる。
+// total 未達でも LINE_IMAGESET_FLUSH_MS (既定 15s) で部分 flush = 欠落しても止まらない。
+const imageSetBuffer = new ImageSetBuffer({
+  flushDelayMs: Number(process.env.LINE_IMAGESET_FLUSH_MS) || DEFAULT_FLUSH_DELAY_MS,
+  onFlush: async (ctx, images) => {
+    await postImagesToTealus({
+      roomId: ctx.roomId,
+      sender: ctx.sender,
+      mediaInfos: images.map((i) => i.mediaInfo),
+      content: ctx.content,
+      io: ctx.io,
+    });
+  },
+});
 
 /**
  * 単一 event を Tealus に post (= test-friendly な独立 function)
@@ -241,6 +261,20 @@ export async function dispatchEvent(
     case 'image': {
       const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-images' });
+
+      // ★ #353: 複数画像同時送信 (imageSet) はバッファに積み、そろってから 1 メッセージに束ねる。
+      // imageSet 無し (単発 / LINE 11.15 以前の Android) は従来どおり個別 post に degrade。
+      const imageSet = message.imageSet;
+      if (imageSet && imageSet.id && imageSet.total > 1) {
+        const flushed = imageSetBuffer.add(
+          imageSet.id,
+          imageSet.total,
+          { index: imageSet.index, mediaInfo },
+          { roomId, sender, content: applyContentLabel(senderLabel, undefined), io }
+        );
+        return { posted: flushed ? 'image-set' : 'image-set-buffered' };
+      }
+
       await postImageToTealus({
         roomId,
         sender,

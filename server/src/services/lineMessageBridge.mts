@@ -181,6 +181,83 @@ export async function postImageToTealus(
 }
 
 /**
+ * 複数 image を 1 メッセージに束ねて Tealus に post (#353 imageSet 用)
+ *
+ * routes/media.mts のマルチアップロード同型 (= 1 message + N message_media 行)。
+ * mediaInfos は caller 側で imageSet.index 昇順ソート済みの前提 (= lineImageSetBuffer が保証)。
+ *
+ * @param params.roomId
+ * @param params.sender
+ * @param params.mediaInfos - 保存済みメディア配列 (1 枚以上)
+ * @param params.content - sender label (= applyContentLabel 済)
+ * @param params.io
+ */
+export async function postImagesToTealus(
+  { roomId, sender, mediaInfos, content, io }: {
+    roomId: string;
+    sender: LineSenderContext;
+    mediaInfos: SavedLineContent[];
+    content?: string;
+    io?: Server | null;
+  }
+): Promise<{ message: MessageRow; media: MediaRow[] }> {
+  if (!roomId) throw new Error('roomId is required');
+  if (!sender) throw new Error('sender is required');
+  if (!mediaInfos || mediaInfos.length === 0) throw new Error('mediaInfos is required (non-empty)');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const msgResult = await client.query<MessageRow>(
+      `INSERT INTO messages (room_id, sender_id, content, type)
+       VALUES ($1, $2, $3, 'image') RETURNING *`,
+      [roomId, sender.id, content || null]
+    );
+    const message = msgResult.rows[0];
+
+    const media: MediaRow[] = [];
+    for (const mediaInfo of mediaInfos) {
+      // image dimensions (= postImageToTealus 同型、失敗時は null で続行)
+      let width: number | null = null;
+      let height: number | null = null;
+      try {
+        const { default: sharp } = await import('sharp');
+        const metadata = await sharp(mediaInfo.filePath).metadata();
+        width = metadata.width || null;
+        height = metadata.height || null;
+      } catch (e) {
+        logger.warn(`[lineMessageBridge] sharp metadata failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      const mediaResult = await client.query<MediaRow>(
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height]
+      );
+      media.push(mediaResult.rows[0]);
+    }
+    await client.query('COMMIT');
+
+    if (io) {
+      io.to(roomId).emit('message:new', {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
+        media,
+      });
+    }
+
+    logger.info(`[lineMessageBridge] image-set post: room=${roomId} msg=${message.id} files=${media.length}`);
+    return { message, media };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * voice message を Tealus に post (= voice.js 同型 + transcribeVoiceMessage 自動 trigger)
  *
  * @param params.roomId
