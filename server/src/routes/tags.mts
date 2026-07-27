@@ -97,8 +97,8 @@ roomRouter.get('/', async (req, res) => {
  * （使用中タグでも削除可＝カスケード）。
  */
 roomRouter.delete('/:tagId', async (req, res) => {
-  const roomId = (req.params as { id: string }).id;
-  const tagId = (req.params as { tagId: string }).tagId;
+  const roomId = (req.params as { id: string; tagId: string }).id;
+  const tagId = (req.params as { id: string; tagId: string }).tagId;
 
   try {
     const result = await pool.query(
