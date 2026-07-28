@@ -5,6 +5,7 @@ import { useConfirm } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import { ArrowLeft, Settings, LogOut, RefreshCw } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
+import { BUILD_ID } from '../../utils/buildVersion';
 import './Profile.css';
 
 function Profile() {
@@ -270,12 +271,24 @@ function Profile() {
             okLabel: 'リロード',
           });
           if (!ok) return;
-          const keys = await caches.keys();
-          await Promise.all(keys.map(k => caches.delete(k)));
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map(r => r.unregister()));
-          // 旧 Firefox の forceGet 引数付き reload (標準の reload() には引数なし)
-          (location.reload as (forceGet?: boolean) => void)(true);
+          // #356 caches / serviceWorker が無い環境 (非セキュアコンテキスト等) では
+          // ここで TypeError が飛び、reload にすら到達せず「押しても無反応」になっていた。
+          // 消せるものは消し、消せなくても必ず reload まで進める。
+          try {
+            if (typeof caches !== 'undefined') {
+              const keys = await caches.keys();
+              await Promise.all(keys.map(k => caches.delete(k)));
+            }
+          } catch (err) {
+            console.warn('cache clear failed:', err);
+          }
+          try {
+            const regs = await navigator.serviceWorker?.getRegistrations?.();
+            await Promise.all((regs || []).map(r => r.unregister()));
+          } catch (err) {
+            console.warn('sw unregister failed:', err);
+          }
+          location.reload();
         }}>
           <RefreshCw size={18} />
           <span>キャッシュクリア＆リロード</span>
@@ -290,6 +303,11 @@ function Profile() {
           <LogOut size={18} />
           <span>ログアウト</span>
         </button>
+      </div>
+
+      {/* #356 実行中のバンドルを名乗らせる。実機で新旧を目視判定するための唯一の手段 */}
+      <div className="profile-build-id" data-testid="profile-build-id">
+        build {BUILD_ID || '(dev)'}
       </div>
 
       <BottomNav />

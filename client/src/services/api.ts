@@ -40,6 +40,8 @@ export interface CcProjectsResponse { projects: Array<{ name: string; [key: stri
 export interface PromptHistoryItem { message_id: string; target: string; body: string; content: string; created_at: string }
 export interface PromptHistoryResponse { items: PromptHistoryItem[]; target_counts: Record<string, number> }
 export interface AgentIdentityResponse { user_id: string | null; display_name: string | null }
+/** #356 配信中クライアントのビルド ID。未ビルド (dev) では null */
+export interface VersionResponse { build_id: string | null }
 
 export type UploadProgressHandler = (percent: number) => void;
 
@@ -211,6 +213,14 @@ class ApiClient {
     return this.request<MessageResponse>('POST', `/rooms/${targetRoomId}/media/forward`, {
       source_message_id: sourceMessageId,
     });
+  }
+
+  /**
+   * #356 いま配信されているクライアントのビルド ID。
+   * Service Worker の precache を通らない経路なので、SW が古い画面を出していても真実が取れる。
+   */
+  getVersion(): Promise<VersionResponse> {
+    return this.request<VersionResponse>('GET', '/version');
   }
 
   /**

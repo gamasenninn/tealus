@@ -37,6 +37,7 @@ import { roomRouter as tagRoomRoutes, messageRouter as tagMessageRoutes, globalR
 import { router as stampRoutes } from './routes/stamps.mts';
 import { router as promptRoutes } from './routes/prompts.mts';
 import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
+import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 
 // 6/9 DoS crash fix: defense in depth global safety net
@@ -117,6 +118,7 @@ app.use((req, res, next) => {
 // Routes
 // (LINE route は app.use(express.json()) より前に登録済、上部参照)
 app.use('/api/config', configRoutes);
+app.use('/api/version', versionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);

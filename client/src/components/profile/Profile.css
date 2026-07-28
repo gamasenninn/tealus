@@ -287,3 +287,13 @@
   min-width: 40px;
   text-align: right;
 }
+
+/* #356 実行中バンドルのビルド ID。目立たせず、しかし必ず読めるように */
+.profile-build-id {
+  padding: 12px 16px 80px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+}

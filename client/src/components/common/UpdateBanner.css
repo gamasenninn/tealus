@@ -1,0 +1,42 @@
+/* #356 更新通知。最上部に薄く出し、操作を塞がない */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  /* iOS のノッチ下に潜らせない */
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  background: var(--primary);
+  color: white;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.update-banner-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-banner-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  /* iOS の auto-zoom を避けるため 16px */
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.update-banner-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
