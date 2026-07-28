@@ -36,6 +36,7 @@ import { router as botRoutes } from './routes/bot.mts';
 import { roomRouter as tagRoomRoutes, messageRouter as tagMessageRoutes, globalRouter as tagGlobalRoutes } from './routes/tags.mts';
 import { router as stampRoutes } from './routes/stamps.mts';
 import { router as promptRoutes } from './routes/prompts.mts';
+import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
 import { router as configRoutes } from './routes/config.mts';
 
 // 6/9 DoS crash fix: defense in depth global safety net
@@ -153,16 +154,17 @@ app.use('/rtc', rtcProxy);
 
 // Dashboard static files（/system パス、client SPA fallback より前に配置）
 const dashboardDistPath = path.join(import.meta.dirname, '../../dashboard/dist');
-app.use('/system', express.static(dashboardDistPath));
+app.use('/system', express.static(dashboardDistPath, { setHeaders: applyStaticCacheHeaders }));
 // #247: /system (trailing slash なし) も /system/* も index.html を返す
 // (client SPA fallback に流れて React Router で / リダイレクトされる bug 防止)
 app.get(['/system', '/system/*'], (req, res) => {
-  res.sendFile(path.join(dashboardDistPath, 'index.html'));
+  res.sendFile(path.join(dashboardDistPath, 'index.html'), { headers: { 'Cache-Control': NO_STORE } });
 });
 
 // Serve built React app (production)
+// #355 キャッシュ方針はファイルの性質で分ける (index.html/sw = no-store, ハッシュ付き assets = immutable)
 const clientDistPath = path.join(import.meta.dirname, '../../client/dist');
-app.use(express.static(clientDistPath));
+app.use(express.static(clientDistPath, { setHeaders: applyStaticCacheHeaders }));
 // SPA fallback — all non-API routes return index.html
 const clientIndexPath = path.join(clientDistPath, 'index.html');
 app.get('*', (req, res, next) => {
@@ -179,7 +181,8 @@ app.get('*', (req, res, next) => {
       + '</body></html>'
     );
   }
-  res.sendFile(clientIndexPath);
+  // SPA fallback も更新の入口なので保存させない (#355)
+  res.sendFile(clientIndexPath, { headers: { 'Cache-Control': NO_STORE } });
 });
 
 // Socket.IO handlers (set up in tests or on direct run)
