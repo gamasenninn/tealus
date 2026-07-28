@@ -87,6 +87,14 @@ describe('AgentPanel — 履歴', () => {
     expect(items()).toHaveLength(0);
     expect(chips()).toHaveLength(3);
   });
+
+  // 見出しでモードが目視できること自体が、入口Bの切り分けに要る
+  it('見出しでモードを出し分ける', () => {
+    const { rerender } = render(<AgentPanel {...baseProps} />);
+    expect(screen.getByTestId('agent-panel-title')).toHaveTextContent('エージェントに聞く');
+    rerender(<AgentPanel {...baseProps} mode="target-only" />);
+    expect(screen.getByTestId('agent-panel-title')).toHaveTextContent('宛先を選ぶ');
+  });
 });
 
 describe('AgentPanel — 絞り込み', () => {

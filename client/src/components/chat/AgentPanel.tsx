@@ -107,7 +107,9 @@ function AgentPanel({
   return (
     <div className="agent-panel">
       <div className="agent-panel-header">
-        <span className="agent-panel-title">🤖 エージェントに聞く</span>
+        <span className="agent-panel-title" data-testid="agent-panel-title">
+          {mode === 'compose' ? '🤖 エージェントに聞く' : '🤖 宛先を選ぶ'}
+        </span>
         <button className="agent-panel-close" onClick={onClose} aria-label="閉じる">✕</button>
       </div>
 
