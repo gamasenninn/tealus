@@ -8,10 +8,14 @@ import { useAgentStore } from '../../stores/agentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { isAdmin } from '../../utils/permissions';
 import { buildAgentPrefill, extractAgentBody } from '../../utils/agentPrefill';
+import { shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion } from '../../utils/agentPanelRules';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
 import type { MentionCandidate } from './MentionPicker';
+import AgentPanel from './AgentPanel';
+import type { AgentPanelMode } from './AgentPanel';
+import type { PromptHistoryItem } from '../../services/api';
 import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants/ui';
 import { Mic } from 'lucide-react';
 import type { Stamp } from '../../types';
@@ -57,11 +61,20 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   const focusTextareaEnd = useCallback(() => {
     setTimeout(() => {
       const ta = textareaRef.current;
-      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      // 差し込んだ本文が複数行のことがあるので高さも合わせる (handleInput は user 入力でしか走らない)
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 150) + 'px';
     }, 0);
   }, []);
 
-  const [showAgentPicker, setShowAgentPicker] = useState(false);
+  // #354 🤖 パネル。null = 閉。'compose' = 宛先 + 最近の指示、'target-only' = 宛先のみ (入口B)
+  const [agentPanel, setAgentPanel] = useState<AgentPanelMode | null>(null);
+  // PC で `/` から開いたか (絞り込み文字列を textarea 側で持つため)
+  const [slashMode, setSlashMode] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
 
   // #253: cc-proj を mention picker に virtual user として表示
   // #333: mount 時に加え、picker を開く遷移でも再取得（新規 cc project を reload なしで反映）
@@ -93,25 +106,78 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     return list;
   }, [assistantName, assistantUserId, isAdminUser, ccProjects]);
 
+  // #354 このルームで自分が過去に送った「@宛先 + 本文」を再利用する。登録という手間を
+  // 発生させないため、専用の登録先は持たず messages をそのまま読む。
+  const [promptHistory, setPromptHistory] = useState<PromptHistoryItem[]>([]);
+  const [targetCounts, setTargetCounts] = useState<Record<string, number>>({});
+  const targetNames = useMemo(() => agentTargets.map(t => t.display_name), [agentTargets]);
+  const refreshPromptHistory = useCallback(() => {
+    if (!roomId || targetNames.length === 0) return;
+    api.getPromptHistory(roomId, targetNames)
+      .then(d => { setPromptHistory(d.items || []); setTargetCounts(d.target_counts || {}); })
+      .catch(() => {});
+  }, [roomId, targetNames]);
+  // 開いた瞬間に「履歴があるか」で挙動を分けるので先読みしておく (ルーム切替時は一旦捨てる)
+  useEffect(() => {
+    setPromptHistory([]);
+    setTargetCounts({});
+    refreshPromptHistory();
+  }, [refreshPromptHistory]);
+
+  const closeAgentPanel = useCallback(() => {
+    setAgentPanel(null);
+    if (slashMode) setText('');  // `/` で開いたときは打った `/` ごと消す
+    setSlashMode(false);
+    setSlashQuery('');
+    focusTextareaEnd();
+  }, [slashMode, focusTextareaEnd]);
+
+  const openAgentPanel = useCallback((mode: AgentPanelMode) => {
+    setAgentPanel(mode);
+    setShowMention(false);
+    setShowStamps(false);
+    if (mode === 'compose') refreshPromptHistory();  // 直前に送った指示も拾えるよう毎回最新化
+    // スマホ: ソフトキーボードが出たままだと 2-3 件しか見えないので閉じる
+    if (window.innerWidth < 768) textareaRef.current?.blur();
+  }, [refreshPromptHistory]);
+
   // 宛先を選んだら composer に反映。入口B(pendingAgentBody あり)は本文込みで置換、
   // 入口A(ボタン)は先頭にメンションのみ prepend（本文はユーザーが続けて打つ）。
   const insertAgentMention = useCallback((name: string) => {
-    setShowAgentPicker(false);
+    setAgentPanel(null);
     if (pendingAgentBody != null) {
       setText(`@${name} ${pendingAgentBody}`);
       setPendingAgentBody(null);
+    } else if (slashMode) {
+      setText(`@${name} `);  // `/朝礼` 等の絞り込み文字列は宛先で置き換える
+      setSlashMode(false);
+      setSlashQuery('');
     } else {
       setText(prev => `@${name} ${prev}`);
     }
     focusTextareaEnd();
-  }, [pendingAgentBody, focusTextareaEnd]);
+  }, [pendingAgentBody, slashMode, focusTextareaEnd]);
 
-  // 🤖ボタン: 宛先が複数(admin で cc-* あり)なら picker、単一ならアシスタント直挿入。
+  // 過去の指示を挿入。表示されていた文字列 (宛先込みの全文) がそのまま入る。送信はしない。
+  const insertPromptHistory = useCallback((content: string) => {
+    setAgentPanel(null);
+    setSlashMode(false);
+    setSlashQuery('');
+    setText(prev => mergePromptInsertion(prev, content, slashMode));
+    focusTextareaEnd();
+  }, [slashMode, focusTextareaEnd]);
+
+  // 🤖ボタン: 選ぶものが無い(履歴0件かつ宛先1つ)なら従来どおり 1 タップで即挿入。
+  // 使い込んで履歴が溜まるとパネルが現れる (初見のユーザーに選択肢を突きつけない)。
   const onAgentButtonClick = useCallback(() => {
     setPendingAgentBody(null);
-    if (agentTargets.length > 1) setShowAgentPicker(v => !v);
-    else if (assistantName) insertAgentMention(assistantName);
-  }, [agentTargets, assistantName, insertAgentMention]);
+    if (agentPanel) { closeAgentPanel(); return; }
+    if (!shouldOpenAgentPanel({ historyCount: promptHistory.length, targetCount: agentTargets.length })) {
+      if (assistantName) insertAgentMention(assistantName);
+      return;
+    }
+    openAgentPanel('compose');
+  }, [agentPanel, closeAgentPanel, promptHistory.length, agentTargets.length, assistantName, insertAgentMention, openAgentPanel]);
 
   // 入口B: コンテキストメニュー「エージェントに送る」が対象 message を積んだら消費する。
   // admin で宛先が複数なら picker を開き（本文は pendingAgentBody に退避）、単一なら直 prefill。
@@ -122,12 +188,13 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     setReplyTo(msg);
     if (agentTargets.length > 1) {
       setPendingAgentBody(extractAgentBody(msg));
-      setShowAgentPicker(true);
+      // 本文は既にあるので、ここで見せるのは宛先だけ (履歴を出すと文脈が壊れる)
+      openAgentPanel('target-only');
     } else if (assistantName) {
       setText(buildAgentPrefill({ assistantName, message: msg }));
       focusTextareaEnd();
     }
-  }, [pendingAgentMessage, clearPendingAgentMessage, setReplyTo, agentTargets.length, assistantName, focusTextareaEnd]);
+  }, [pendingAgentMessage, clearPendingAgentMessage, setReplyTo, agentTargets.length, assistantName, focusTextareaEnd, openAgentPanel]);
 
   const emitTyping = () => {
     const socket = getSocket();
@@ -351,12 +418,16 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           onClose={() => setShowMention(false)}
         />
       )}
-      {showAgentPicker && (
-        <MentionPicker
-          members={agentTargets}
-          query=""
-          onSelect={insertAgentMention}
-          onClose={() => setShowAgentPicker(false)}
+      {agentPanel && (
+        <AgentPanel
+          targets={agentTargets}
+          history={promptHistory}
+          targetCounts={targetCounts}
+          mode={agentPanel}
+          query={slashMode ? slashQuery : ''}
+          onSelectTarget={insertAgentMention}
+          onSelectHistory={insertPromptHistory}
+          onClose={closeAgentPanel}
         />
       )}
       <div className="message-input-row">
@@ -380,7 +451,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
             className="message-input-agent"
             onClick={onAgentButtonClick}
             disabled={isSending}
-            title={agentTargets.length > 1 ? 'エージェントに聞く（宛先を選ぶ）' : `${assistantName} に聞く`}
+            title={promptHistory.length > 0 || agentTargets.length > 1 ? 'エージェントに聞く（宛先・最近の指示）' : `${assistantName} に聞く`}
           >
             🤖
           </button>
@@ -411,6 +482,23 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
               setShowMention(true);
             } else {
               setShowMention(false);
+            }
+            // #354 `/` トリガ (PC のみ)。入力欄が空のときだけ開く — `docs/05` や `src/app.mts`
+            // のようなパスを日常的に打つので、どこでも開くと誤爆が止まらない。
+            if (slashMode) {
+              if (value.startsWith('/')) setSlashQuery(value.slice(1));
+              else { setAgentPanel(null); setSlashMode(false); setSlashQuery(''); }
+            } else if (agentPanel === 'compose') {
+              // ボタンで開いた後に打ち始めたら閉じる (改行の Enter を奪わない)。
+              // 'target-only' は宛先待ちで pendingAgentBody を抱えているので閉じない。
+              setAgentPanel(null);
+            } else if (shouldTriggerSlash({
+              prevText: text, nextText: value,
+              isDesktop: window.innerWidth >= 768, assistantInRoom,
+            })) {
+              setSlashMode(true);
+              setSlashQuery(value.slice(1));
+              openAgentPanel('compose');
             }
           }}
           onInput={handleInput}

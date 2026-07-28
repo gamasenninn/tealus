@@ -35,6 +35,7 @@ import { router as searchRoutes } from './routes/search.mts';
 import { router as botRoutes } from './routes/bot.mts';
 import { roomRouter as tagRoomRoutes, messageRouter as tagMessageRoutes, globalRouter as tagGlobalRoutes } from './routes/tags.mts';
 import { router as stampRoutes } from './routes/stamps.mts';
+import { router as promptRoutes } from './routes/prompts.mts';
 import { router as configRoutes } from './routes/config.mts';
 
 // 6/9 DoS crash fix: defense in depth global safety net
@@ -132,6 +133,7 @@ app.use('/api/rooms/:id/tags', tagRoomRoutes);
 app.use('/api/messages/:id/tags', tagMessageRoutes);
 app.use('/api/tags', tagGlobalRoutes);
 app.use('/api/stamps', stampRoutes);
+app.use('/api/rooms/:id/prompts', promptRoutes);
 
 // Static media files
 app.use('/media', express.static(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../media')));

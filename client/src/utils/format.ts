@@ -22,3 +22,20 @@ export function formatDuration(s: number): string {
 export function formatClockTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 }
+
+/**
+ * ISO 日時文字列 → "今日" / "昨日" / "3日前" / "2週間前" / "5か月前" / "1年前" (#354)
+ * 履歴一覧の「いつ使った指示か」の粗い目印。分単位の精度は要らないので日以下は切り捨てる。
+ * 未来日時 (端末時計のずれ等) は "今日" に丸める。
+ */
+export function formatRelativeDay(dateStr: string): string {
+  const then = new Date(dateStr).getTime();
+  if (!isFinite(then)) return '';
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return '今日';
+  if (days === 1) return '昨日';
+  if (days < 7) return `${days}日前`;
+  if (days < 30) return `${Math.floor(days / 7)}週間前`;
+  if (days < 365) return `${Math.floor(days / 30)}か月前`;
+  return `${Math.floor(days / 365)}年前`;
+}

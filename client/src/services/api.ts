@@ -36,6 +36,9 @@ export interface DictionaryTermsResponse { terms: DictionaryTerm[] }
 export interface TranscriptionHistoryResponse { history: Array<{ version: number; formatted_text?: string | null; raw_text?: string | null; edited_by_name?: string | null }> }
 export interface TranscriptionEditResponse { transcription: { formatted_text?: string | null; version?: number } }
 export interface CcProjectsResponse { projects: Array<{ name: string; [key: string]: unknown }> }
+/** #354 エージェント指示の履歴。content は宛先込みの全文（表示 = 入力欄に入る文字列） */
+export interface PromptHistoryItem { message_id: string; target: string; body: string; content: string; created_at: string }
+export interface PromptHistoryResponse { items: PromptHistoryItem[]; target_counts: Record<string, number> }
 export interface AgentIdentityResponse { user_id: string | null; display_name: string | null }
 
 export type UploadProgressHandler = (percent: number) => void;
@@ -208,6 +211,15 @@ class ApiClient {
     return this.request<MessageResponse>('POST', `/rooms/${targetRoomId}/media/forward`, {
       source_message_id: sourceMessageId,
     });
+  }
+
+  /**
+   * #354 このルームで自分が送った「@宛先 + 本文」形式の過去メッセージを新しい順に取得。
+   * cc project 一覧は agent-server 側にあり本体 server は知らないため、宛先は client から渡す。
+   */
+  getPromptHistory(roomId: string, targets: string[], limit = 30): Promise<PromptHistoryResponse> {
+    const q = new URLSearchParams({ targets: targets.join(','), limit: String(limit) });
+    return this.request<PromptHistoryResponse>('GET', `/rooms/${roomId}/prompts/history?${q}`);
   }
 
   /**

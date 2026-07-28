@@ -1,0 +1,166 @@
+/* #354 エージェントに聞くパネル。位置と重なりは MentionPicker / StampPicker と揃える */
+.agent-panel {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-height: min(420px, 60vh);
+  z-index: 100;
+}
+
+.agent-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agent-panel-title {
+  flex: 1;
+}
+
+.agent-panel-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+}
+
+.agent-panel-close:hover {
+  color: var(--text-primary);
+}
+
+/* 宛先は横 1 行。cc ブリッジが増えても高さが変わらない (.stamp-pack-tabs と同じ作り) */
+.agent-panel-chips {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: thin;
+  /* 右端をフェードさせ、続きがあることを示す */
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+}
+
+.agent-panel-chips::-webkit-scrollbar {
+  height: 4px;
+}
+
+.agent-panel-chips::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 2px;
+}
+
+.agent-panel-chip {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  min-height: 36px;
+  border: 1px solid var(--border-medium);
+  border-radius: 18px;
+  background: none;
+  cursor: pointer;
+  /* iOS Safari の auto-zoom を避けるため 16px */
+  font-size: 16px;
+  white-space: nowrap;
+  color: var(--primary);
+}
+
+.agent-panel-chip:hover {
+  background: var(--bg-hover);
+}
+
+/* cc-* は MentionPicker の virtual user と同じ色域で人間と視覚区別 */
+.agent-panel-chip.cc {
+  color: #2d3748;
+  border-color: #4fd1c5;
+}
+
+.agent-panel-section {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.agent-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.agent-panel-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.agent-panel-list::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 3px;
+}
+
+.agent-panel-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  /* タップ目標として最低 44px */
+  min-height: 44px;
+  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid var(--border-light);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.agent-panel-item:first-child {
+  border-top: none;
+}
+
+.agent-panel-item:hover,
+.agent-panel-item.selected {
+  background: var(--bg-hover);
+}
+
+.agent-panel-item-text {
+  flex: 1;
+  min-width: 0;
+  /* 本文は 3 行で省略。宛先が 1 行目の頭を占めるぶん 2 行だと足りない */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* 全行が同じ宛先で始まっても本文を追えるよう、宛先は控えめにする */
+.agent-panel-item-target {
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+
+.agent-panel-item-target.cc {
+  color: #38b2ac;
+}
+
+.agent-panel-item-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding-top: 2px;
+}
