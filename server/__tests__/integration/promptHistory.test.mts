@@ -46,11 +46,11 @@ describe('Prompt History API', () => {
   });
 
   /** メッセージを投稿して id を返す */
-  async function send(token: string, room: string, content: string): Promise<string> {
+  async function send(token: string, room: string, content: string, extra: Record<string, unknown> = {}): Promise<string> {
     const res = await request(app)
       .post(`/api/rooms/${room}/messages`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ content });
+      .send({ content, ...extra });
     return res.body.message.id;
   }
 
@@ -138,6 +138,77 @@ describe('Prompt History API', () => {
 
       expect(res.body.items).toHaveLength(1);
       expect(res.body.items[0].body).toBe('このルームの指示');
+    });
+
+    // #354 実データ調査で判明: organon/kairos のフォーム回答は 1 日 1-2 件出て各 200-400 字。
+    // 混ざると履歴パネルの上半分が一回きりの回答文で埋まり、実際に再利用したい定型
+    // (「朝のバッチを回そう」等) が押し下げられる。
+    //
+    // 現状これらが漏れていないのは buildAnswerText (client/src/utils/parseForm.ts) が
+    // 宛先を単独行に置く = メンション直後が改行、という偶然に依っている。組み立てが
+    // スペース区切りに変わった瞬間に漏れ出すので、意図として固定する。
+    //
+    // 「フォーム回答」の定義は hasUserAnsweredForm と揃える:
+    // reply_to がフォーム、かつ本文に 【回答】 を含む。
+    describe('フォーム回答', () => {
+      /** フォーム本体を投稿して id を返す */
+      async function sendForm(token: string, room: string): Promise<string> {
+        return send(token, room, '📋 Day80 Q0\n\n```tealus-form\n{"version":1}\n```', { type: 'form' });
+      }
+
+      it('宛先が単独行のフォーム回答は返さない (現行の buildAnswerText 形式)', async () => {
+        const formId = await sendForm(user1.token, roomId);
+        await send(user1.token, roomId, '@アシスタント\n\n【回答】Day80 Q0\n設問1: はい', { reply_to: formId });
+
+        const res = await get(user1.token, roomId);
+
+        expect(res.body.items).toHaveLength(0);
+      });
+
+      it('宛先がスペース区切りでもフォーム回答は返さない (組み立てが変わっても漏れない)', async () => {
+        const formId = await sendForm(user1.token, roomId);
+        await send(user1.token, roomId, '@アシスタント 【回答】Day80 Q0\n設問1: はい', { reply_to: formId });
+
+        const res = await get(user1.token, roomId);
+
+        expect(res.body.items).toHaveLength(0);
+      });
+
+      it('フォーム回答は target_counts にも数えない', async () => {
+        const formId = await sendForm(user1.token, roomId);
+        await send(user1.token, roomId, '@アシスタント 【回答】Day80 Q0\n設問1: はい', { reply_to: formId });
+
+        const res = await get(user1.token, roomId);
+
+        expect(res.body.target_counts).toEqual({});
+      });
+
+      it('フォームへのコメント返信で出した指示は返す (回答ではないため)', async () => {
+        const formId = await sendForm(user1.token, roomId);
+        await send(user1.token, roomId, '@アシスタント このフォームを作り直して', { reply_to: formId });
+
+        const res = await get(user1.token, roomId);
+
+        expect(res.body.items).toHaveLength(1);
+        expect(res.body.items[0].body).toBe('このフォームを作り直して');
+      });
+
+      it('フォーム以外への返信は 【回答】 を含んでいても返す (誤爆させない)', async () => {
+        const target = await send(user1.token, roomId, '普通のメッセージ');
+        await send(user1.token, roomId, '@アシスタント 【回答】と書いてあるだけの普通の指示', { reply_to: target });
+
+        const res = await get(user1.token, roomId);
+
+        expect(res.body.items).toHaveLength(1);
+      });
+
+      it('返信でない通常の指示は当然返す', async () => {
+        await send(user1.token, roomId, '@アシスタント 朝のバッチを回そう');
+
+        const res = await get(user1.token, roomId);
+
+        expect(res.body.items).toHaveLength(1);
+      });
     });
 
     it('削除済みメッセージは返さない', async () => {

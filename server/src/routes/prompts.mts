@@ -61,6 +61,13 @@ function dedupeKey(target: string, body: string): string {
 }
 
 /**
+ * フォーム回答の目印。`client/src/utils/parseForm.ts` の `buildAnswerText` が必ず付ける。
+ * 「フォーム回答」の定義 (reply_to がフォーム かつ 本文に 【回答】) は
+ * 同 file の `hasUserAnsweredForm` と揃えてある — 片方だけ変えないこと。
+ */
+const FORM_ANSWER_MARKER = '【回答】';
+
+/**
  * GET /api/rooms/:id/prompts/history?targets=アシスタント,cc-tealus&limit=30
  *
  * 自分がこのルームで送った「宛先 + 本文」形式のメッセージを新しい順に返す。
@@ -91,6 +98,9 @@ router.get('/history', async (req, res) => {
       return `starts_with(m.content, $${params.length})`;
     });
 
+    params.push(FORM_ANSWER_MARKER);
+    const markerIdx = params.length;
+
     params.push(SCAN_LIMIT);
 
     const result = await pool.query<PromptRow>(
@@ -101,6 +111,15 @@ router.get('/history', async (req, res) => {
           AND m.is_deleted = false
           AND m.content IS NOT NULL
           AND (${prefixConds.join(' OR ')})
+          -- フォーム回答を除外。日付入りの一回きりの回答が 200-400 字で並び、
+          -- 再利用したい定型 (「朝のバッチを回そう」等) を押し下げるため (#354 実データ調査)。
+          -- フォームへの「コメント返信」で出した指示は回答ではないので残す。
+          AND NOT (
+            strpos(m.content, $${markerIdx}) > 0
+            AND EXISTS (
+              SELECT 1 FROM messages f WHERE f.id = m.reply_to AND f.type = 'form'
+            )
+          )
         ORDER BY m.created_at DESC
         LIMIT $${params.length}`,
       params

@@ -73,6 +73,12 @@ function radioLabel(field: Extract<FormField, { type: 'radio' }>, value: string 
  * 回答を human-readable text に組み立てる。
  * 先頭に reply_mention (あれば単独行) → 「【回答】<title>」→ 各 field「<label>: <値>」。
  * radio の allow_text 補足は次行にインデントで追記。
+ *
+ * ★ `【回答】` は「これはフォーム回答である」の目印として **本文外にも契約している**。
+ * `hasUserAnsweredForm` (上) と、サーバの指示履歴 API (`server/src/routes/prompts.mts`
+ * の FORM_ANSWER_MARKER) が両方これを見ている。後者は回答が指示履歴に混ざるのを防ぐ
+ * ためのもので、外すと 200-400 字の一回きりの回答が履歴を占領する (#354)。
+ * この目印を変えるときは両方を追随させること。
  */
 export function buildAnswerText(schema: FormSchema, values: FormValues): string {
   const lines: string[] = [];
