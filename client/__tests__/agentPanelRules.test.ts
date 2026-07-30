@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion } from '../src/utils/agentPanelRules';
+import {
+  shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion, promptInsertionSelection,
+} from '../src/utils/agentPanelRules';
 
 /**
  * #354 🤖 パネルを「開くか / 直挿入か」「`/` で開くか」「どう差し込むか」の判断規則。
@@ -74,5 +76,57 @@ describe('mergePromptInsertion', () => {
 
   it('空白だけの入力欄は空とみなす', () => {
     expect(mergePromptInsertion('   ', CONTENT, false)).toBe(CONTENT);
+  });
+});
+
+/**
+ * #358 挿入後にどこを選択するか。
+ * 穴が無ければ null (末尾にカーソル = 従来どおり)。
+ * 打てば置き換わり、打たなければ前回値のまま、が成立するように「選択範囲」を返す。
+ */
+describe('promptInsertionSelection', () => {
+  const CONTENT = '@アシスタント 直近の画像4枚でDB投入して';
+  // '@アシスタント 直近の画像' までが 12 文字 → '4' は [12,13)
+  const HOLE = { start: CONTENT.indexOf('4'), end: CONTENT.indexOf('4') + 1 };
+
+  it('入力欄が空なら穴の位置がそのまま選択範囲', () => {
+    expect(promptInsertionSelection('', CONTENT, false, [HOLE])).toEqual(HOLE);
+  });
+
+  it('末尾に足したときは書きかけの長さ + 区切り分だけずれる', () => {
+    const prev = '前置き';
+    const sel = promptInsertionSelection(prev, CONTENT, false, [HOLE]);
+    const merged = mergePromptInsertion(prev, CONTENT, false);
+    expect(merged.slice(sel!.start, sel!.end)).toBe('4');
+  });
+
+  it('/ で開いたときは絞り込み文字列が捨てられるのでずれない', () => {
+    expect(promptInsertionSelection('/画像', CONTENT, true, [HOLE])).toEqual(HOLE);
+  });
+
+  it('穴が無ければ null (末尾にカーソル)', () => {
+    expect(promptInsertionSelection('', CONTENT, false, [])).toBeNull();
+  });
+
+  it('穴が複数あっても最初の1つを選ぶ (Tab 移動は Phase 2)', () => {
+    const content = '@アシスタント 画像3枚と動画5本を処理して';
+    const holes = [
+      { start: content.indexOf('3'), end: content.indexOf('3') + 1 },
+      { start: content.indexOf('5'), end: content.indexOf('5') + 1 },
+    ];
+    const sel = promptInsertionSelection('', content, false, holes);
+    expect(content.slice(sel!.start, sel!.end)).toBe('3');
+  });
+
+  it('書きかけがあっても複数穴の最初を正しく指す', () => {
+    const content = '@アシスタント 画像3枚と動画5本を処理して';
+    const holes = [
+      { start: content.indexOf('3'), end: content.indexOf('3') + 1 },
+      { start: content.indexOf('5'), end: content.indexOf('5') + 1 },
+    ];
+    const prev = 'メモ';
+    const sel = promptInsertionSelection(prev, content, false, holes);
+    const merged = mergePromptInsertion(prev, content, false);
+    expect(merged.slice(sel!.start, sel!.end)).toBe('3');
   });
 });

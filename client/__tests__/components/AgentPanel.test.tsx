@@ -18,9 +18,9 @@ const TARGETS = [
 
 /** API はつねに新しい順で返す (messages API と同じ約束) */
 const HISTORY: PromptHistoryItem[] = [
-  { message_id: 'm3', target: 'アシスタント', body: '新しい指示', content: '@アシスタント 新しい指示', created_at: '2026-07-27T00:00:00Z' },
-  { message_id: 'm2', target: 'cc-tealus', body: 'tsc を通して', content: '@cc-tealus tsc を通して', created_at: '2026-07-25T00:00:00Z' },
-  { message_id: 'm1', target: 'アシスタント', body: '古い指示', content: '@アシスタント 古い指示', created_at: '2026-07-20T00:00:00Z' },
+  { message_id: 'm3', target: 'アシスタント', body: '新しい指示', content: '@アシスタント 新しい指示', holes: [], created_at: '2026-07-27T00:00:00Z' },
+  { message_id: 'm2', target: 'cc-tealus', body: 'tsc を通して', content: '@cc-tealus tsc を通して', holes: [], created_at: '2026-07-25T00:00:00Z' },
+  { message_id: 'm1', target: 'アシスタント', body: '古い指示', content: '@アシスタント 古い指示', holes: [], created_at: '2026-07-20T00:00:00Z' },
 ];
 
 const baseProps = {
@@ -73,7 +73,7 @@ describe('AgentPanel — 履歴', () => {
     const onSelectHistory = vi.fn();
     render(<AgentPanel {...baseProps} onSelectHistory={onSelectHistory} />);
     fireEvent.mouseDown(items()[1]);
-    expect(onSelectHistory).toHaveBeenCalledWith('@cc-tealus tsc を通して');
+    expect(onSelectHistory).toHaveBeenCalledWith('@cc-tealus tsc を通して', []);
   });
 
   it('履歴が空なら「最近の指示」の見出しを出さない', () => {
@@ -94,6 +94,61 @@ describe('AgentPanel — 履歴', () => {
     expect(screen.getByTestId('agent-panel-title')).toHaveTextContent('エージェントに聞く');
     rerender(<AgentPanel {...baseProps} mode="target-only" />);
     expect(screen.getByTestId('agent-panel-title')).toHaveTextContent('宛先を選ぶ');
+  });
+});
+
+// #358 変動する部分は「ここが変わる」と分かる形で、具体値のまま出す。
+// {{枚数}} のような抽象ラベルにしないのは、そのまま送っても意味が通るようにするため
+// (穴を埋めないと使えない状態を作らない)。
+describe('AgentPanel — プレースホルダ', () => {
+  const CONTENT = '@アシスタント 直近の画像4枚でDB投入して';
+  const WITH_HOLE: PromptHistoryItem = {
+    message_id: 'h1', target: 'アシスタント', body: '直近の画像4枚でDB投入して', content: CONTENT,
+    holes: [{ start: CONTENT.indexOf('4'), end: CONTENT.indexOf('4') + 1 }],
+    created_at: '2026-07-30T00:00:00Z',
+  };
+
+  it('変わる部分に印が付く', () => {
+    render(<AgentPanel {...baseProps} history={[WITH_HOLE]} />);
+    expect(screen.getByTestId('agent-panel-hole')).toHaveTextContent('4');
+  });
+
+  it('前回使った具体値をそのまま出す (抽象ラベルにしない)', () => {
+    render(<AgentPanel {...baseProps} history={[WITH_HOLE]} />);
+    const row = items()[0];
+    expect(row).toHaveTextContent('直近の画像4枚でDB投入して');
+  });
+
+  it('穴が無ければ印は出ない', () => {
+    render(<AgentPanel {...baseProps} />);
+    expect(screen.queryAllByTestId('agent-panel-hole')).toHaveLength(0);
+  });
+
+  it('穴が複数あればその数だけ印が付く', () => {
+    const content = '@アシスタント 画像3枚と動画5本を処理して';
+    const multi: PromptHistoryItem = {
+      message_id: 'h2', target: 'アシスタント', body: '画像3枚と動画5本を処理して', content,
+      holes: [
+        { start: content.indexOf('3'), end: content.indexOf('3') + 1 },
+        { start: content.indexOf('5'), end: content.indexOf('5') + 1 },
+      ],
+      created_at: '2026-07-30T00:00:00Z',
+    };
+    render(<AgentPanel {...baseProps} history={[multi]} />);
+    expect(screen.getAllByTestId('agent-panel-hole').map(e => e.textContent)).toEqual(['3', '5']);
+  });
+
+  it('選ぶと穴の位置も一緒に渡る (呼び手が選択範囲を計算できる)', () => {
+    const onSelectHistory = vi.fn();
+    render(<AgentPanel {...baseProps} history={[WITH_HOLE]} onSelectHistory={onSelectHistory} />);
+    fireEvent.mouseDown(items()[0]);
+    expect(onSelectHistory).toHaveBeenCalledWith(CONTENT, WITH_HOLE.holes);
+  });
+
+  it('宛先は従来どおり別色のまま (穴の描画で壊れない)', () => {
+    render(<AgentPanel {...baseProps} history={[WITH_HOLE]} />);
+    const row = items()[0];
+    expect(within(row).getByText('@アシスタント')).toBeInTheDocument();
   });
 });
 
@@ -148,14 +203,14 @@ describe('AgentPanel — キーボード操作 (PC)', () => {
     render(<AgentPanel {...baseProps} onSelectHistory={onSelectHistory} />);
     fireEvent.keyDown(document, { key: 'ArrowUp' });
     fireEvent.keyDown(document, { key: 'Enter' });
-    expect(onSelectHistory).toHaveBeenCalledWith('@cc-tealus tsc を通して');
+    expect(onSelectHistory).toHaveBeenCalledWith('@cc-tealus tsc を通して', []);
   });
 
   it('Tab でも挿入する', () => {
     const onSelectHistory = vi.fn();
     render(<AgentPanel {...baseProps} onSelectHistory={onSelectHistory} />);
     fireEvent.keyDown(document, { key: 'Tab' });
-    expect(onSelectHistory).toHaveBeenCalledWith('@アシスタント 新しい指示');
+    expect(onSelectHistory).toHaveBeenCalledWith('@アシスタント 新しい指示', []);
   });
 
   it('Esc で閉じる', () => {
@@ -181,7 +236,7 @@ describe('AgentPanel — キーボード操作 (PC)', () => {
     fireEvent.keyDown(document, { key: 'ArrowUp' });
     rerender(<AgentPanel {...baseProps} query="tsc" onSelectHistory={onSelectHistory} />);
     fireEvent.keyDown(document, { key: 'Enter' });
-    expect(onSelectHistory).toHaveBeenCalledWith('@cc-tealus tsc を通して');
+    expect(onSelectHistory).toHaveBeenCalledWith('@cc-tealus tsc を通して', []);
   });
 
   it('閉じた後はキーを拾わない (listener が残らない)', () => {

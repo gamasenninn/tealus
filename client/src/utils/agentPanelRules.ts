@@ -41,3 +41,27 @@ export function mergePromptInsertion(prevText: string, content: string, slashMod
   const base = slashMode ? '' : prevText.trimEnd();
   return base ? `${base} ${content}` : content;
 }
+
+/** 変動する部分の位置 (content 上のオフセット) */
+export interface Hole {
+  start: number;
+  end: number;
+}
+
+/**
+ * #358 挿入直後に選択しておく範囲。
+ *
+ * 穴を選択状態で入れることで、打てば置き換わり・打たなければ前回値のまま、が両立する。
+ * 穴が無ければ null を返し、呼び手は従来どおり末尾にカーソルを置く。
+ * 穴が複数ある場合は最初の 1 つ (Tab での移動は Phase 2)。
+ */
+export function promptInsertionSelection(
+  prevText: string, content: string, slashMode: boolean, holes: Hole[] | undefined,
+): Hole | null {
+  const hole = holes?.[0];
+  if (!hole) return null;
+  // mergePromptInsertion と同じ規則で、content が置かれる開始位置を求める
+  const base = slashMode ? '' : prevText.trimEnd();
+  const offset = base ? base.length + 1 : 0;
+  return { start: offset + hole.start, end: offset + hole.end };
+}

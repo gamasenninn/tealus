@@ -8,7 +8,8 @@ import { useAgentStore } from '../../stores/agentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { isAdmin } from '../../utils/permissions';
 import { buildAgentPrefill, extractAgentBody } from '../../utils/agentPrefill';
-import { shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion } from '../../utils/agentPanelRules';
+import { shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion, promptInsertionSelection } from '../../utils/agentPanelRules';
+import type { Hole } from '../../utils/agentPanelRules';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
@@ -58,17 +59,21 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   // 宛先選択後に埋める本文を保持（入口B。null なら入口A=ボタンでメンションのみ prepend）
   const [pendingAgentBody, setPendingAgentBody] = useState<string | null>(null);
 
-  const focusTextareaEnd = useCallback(() => {
+  /** focus して指定範囲を選択する。end 省略で末尾にカーソル */
+  const focusTextareaRange = useCallback((start?: number, end?: number) => {
     setTimeout(() => {
       const ta = textareaRef.current;
       if (!ta) return;
       ta.focus();
-      ta.setSelectionRange(ta.value.length, ta.value.length);
+      const s = start ?? ta.value.length;
+      ta.setSelectionRange(s, end ?? s);
       // 差し込んだ本文が複数行のことがあるので高さも合わせる (handleInput は user 入力でしか走らない)
       ta.style.height = 'auto';
       ta.style.height = Math.min(ta.scrollHeight, 150) + 'px';
     }, 0);
   }, []);
+
+  const focusTextareaEnd = useCallback(() => focusTextareaRange(), [focusTextareaRange]);
 
   // #354 🤖 パネル。null = 閉。'compose' = 宛先 + 最近の指示、'target-only' = 宛先のみ (入口B)
   const [agentPanel, setAgentPanel] = useState<AgentPanelMode | null>(null);
@@ -159,13 +164,17 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   }, [pendingAgentBody, slashMode, focusTextareaEnd]);
 
   // 過去の指示を挿入。表示されていた文字列 (宛先込みの全文) がそのまま入る。送信はしない。
-  const insertPromptHistory = useCallback((content: string) => {
+  // #358 変動する部分 (穴) があれば、そこを選択状態にして入れる。打てば置き換わり、
+  // 打たなければ前回値のまま送れる。スマホでカーソルを数字に合わせる操作が消えるのが要。
+  const insertPromptHistory = useCallback((content: string, holes: Hole[]) => {
     setAgentPanel(null);
     setSlashMode(false);
     setSlashQuery('');
+    const selection = promptInsertionSelection(text, content, slashMode, holes);
     setText(prev => mergePromptInsertion(prev, content, slashMode));
-    focusTextareaEnd();
-  }, [slashMode, focusTextareaEnd]);
+    if (selection) focusTextareaRange(selection.start, selection.end);
+    else focusTextareaEnd();
+  }, [slashMode, text, focusTextareaEnd, focusTextareaRange]);
 
   // 🤖ボタン: 選ぶものが無い(履歴0件かつ宛先1つ)なら従来どおり 1 タップで即挿入。
   // 使い込んで履歴が溜まるとパネルが現れる (初見のユーザーに選択肢を突きつけない)。

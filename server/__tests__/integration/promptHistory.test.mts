@@ -259,6 +259,145 @@ describe('Prompt History API', () => {
   });
 
   // ============================================
+  // プレースホルダ (#358)
+  // ============================================
+  // 「挿入時に最初の数字を選択する」は推測なので外れる (2026年7月 の 2026 を選んでしまう)。
+  // 履歴の中で実際に変動した位置だけを穴にする。これは重複除去の緩和と同じ仕組みの表と裏で、
+  // 数字を無視した骨格で統合したとき、まとまった理由 = 変動した位置がそのまま穴になる。
+  describe('プレースホルダ', () => {
+    /** items[i] の穴が指す実際の文字列 */
+    function holeTexts(item: { content: string; holes: Array<{ start: number; end: number }> }): string[] {
+      return item.holes.map(h => item.content.slice(h.start, h.end));
+    }
+
+    it('数字だけが違う指示は1件にまとまる', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像4枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像7枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items).toHaveLength(1);
+    });
+
+    it('まとめた代表は最新の1件 (= 最後に使った値が入る)', async () => {
+      const a = await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      const b = await send(user1.token, roomId, '@アシスタント 直近の画像4枚でDB投入して');
+      await setCreatedAt(a, '2026-07-01T00:00:00Z');
+      await setCreatedAt(b, '2026-07-02T00:00:00Z');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items[0].content).toBe('@アシスタント 直近の画像4枚でDB投入して');
+    });
+
+    it('変動した位置を穴として返す', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像4枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(holeTexts(res.body.items[0])).toEqual(['4']);
+    });
+
+    it('穴の位置は content 上のオフセット (client がそのまま選択できる)', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像12枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+      const item = res.body.items[0];
+
+      expect(item.content.slice(item.holes[0].start, item.holes[0].end)).toBe('12');
+    });
+
+    it('★ 変動していない数字は穴にしない (これを外すと 2026年 を壊す)', async () => {
+      await send(user1.token, roomId, '@アシスタント 2026年7月の買取金額を集計して');
+      await send(user1.token, roomId, '@アシスタント 2026年7月の買取金額を集計して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0].holes).toEqual([]);
+    });
+
+    it('★ 同じ骨格で一部の数字だけが変動するとき、変動した方だけを穴にする', async () => {
+      await send(user1.token, roomId, '@アシスタント 2026年7月の買取金額を集計して');
+      await send(user1.token, roomId, '@アシスタント 2026年8月の買取金額を集計して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(holeTexts(res.body.items[0])).toEqual(['8']); // 2026 は動いていないので穴にしない
+    });
+
+    it('一度しか使っていない指示は穴を持たない (変動の証拠がない)', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像4枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items[0].holes).toEqual([]);
+    });
+
+    it('数字を含まない指示は穴を持たない', async () => {
+      await send(user1.token, roomId, '@アシスタント 朝のバッチを回そう');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items[0].holes).toEqual([]);
+    });
+
+    it('数字の個数が違えば別の指示として扱う', async () => {
+      await send(user1.token, roomId, '@アシスタント 画像1枚を処理して');
+      await send(user1.token, roomId, '@アシスタント 画像1枚と動画2本を処理して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items).toHaveLength(2);
+    });
+
+    it('宛先が違えば統合しない', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      await send(user1.token, roomId, '@cc-tealus 直近の画像4枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items).toHaveLength(2);
+      expect(res.body.items.every((i: { holes: unknown[] }) => i.holes.length === 0)).toBe(true);
+    });
+
+    it('穴は宛先メンションの中には作らない', async () => {
+      // 宛先に数字が含まれていても本文側だけを見る
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像4枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+      const item = res.body.items[0];
+
+      expect(item.holes[0].start).toBeGreaterThan('@アシスタント'.length);
+    });
+
+    it('穴が複数あるときは変動した分だけ返す', async () => {
+      await send(user1.token, roomId, '@アシスタント 画像1枚と動画2本を処理して');
+      await send(user1.token, roomId, '@アシスタント 画像3枚と動画5本を処理して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(holeTexts(res.body.items[0])).toEqual(['3', '5']);
+    });
+
+    it('統合しても target_counts は実際の使用回数のまま', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像4枚でDB投入して');
+      await send(user1.token, roomId, '@アシスタント 直近の画像7枚でDB投入して');
+
+      const res = await get(user1.token, roomId);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.target_counts).toEqual({ 'アシスタント': 3 });
+    });
+  });
+
+  // ============================================
   // 並び順・件数
   // ============================================
   describe('並び順と件数', () => {
@@ -278,9 +417,10 @@ describe('Prompt History API', () => {
     });
 
     it('limit で件数を絞れる', async () => {
-      const a = await send(user1.token, roomId, '@アシスタント 指示1');
-      const b = await send(user1.token, roomId, '@アシスタント 指示2');
-      const c = await send(user1.token, roomId, '@アシスタント 指示3');
+      // #358: 数字だけが違う文面は 1 件に統合されるので、題材は骨格から別物にする
+      const a = await send(user1.token, roomId, '@アシスタント 要約して');
+      const b = await send(user1.token, roomId, '@アシスタント 翻訳して');
+      const c = await send(user1.token, roomId, '@アシスタント 清書して');
       await setCreatedAt(a, '2026-07-01T00:00:00Z');
       await setCreatedAt(b, '2026-07-02T00:00:00Z');
       await setCreatedAt(c, '2026-07-03T00:00:00Z');
@@ -288,7 +428,7 @@ describe('Prompt History API', () => {
       const res = await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&limit=2`);
 
       expect(res.body.items).toHaveLength(2);
-      expect(res.body.items[0].body).toBe('指示3');
+      expect(res.body.items[0].body).toBe('清書して');
     });
   });
 

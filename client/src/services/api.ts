@@ -36,8 +36,16 @@ export interface DictionaryTermsResponse { terms: DictionaryTerm[] }
 export interface TranscriptionHistoryResponse { history: Array<{ version: number; formatted_text?: string | null; raw_text?: string | null; edited_by_name?: string | null }> }
 export interface TranscriptionEditResponse { transcription: { formatted_text?: string | null; version?: number } }
 export interface CcProjectsResponse { projects: Array<{ name: string; [key: string]: unknown }> }
-/** #354 エージェント指示の履歴。content は宛先込みの全文（表示 = 入力欄に入る文字列） */
-export interface PromptHistoryItem { message_id: string; target: string; body: string; content: string; created_at: string }
+/**
+ * #354 エージェント指示の履歴。content は宛先込みの全文（表示 = 入力欄に入る文字列）。
+ * #358 holes は「履歴の中で実際に変動した」数字の位置（content 上のオフセット）。
+ * 変動の証拠がない数字は穴にしない（推測すると 2026年 の 2026 を壊す）。
+ */
+export interface PromptHistoryItem {
+  message_id: string; target: string; body: string; content: string;
+  holes: Array<{ start: number; end: number }>;
+  created_at: string;
+}
 export interface PromptHistoryResponse { items: PromptHistoryItem[]; target_counts: Record<string, number> }
 export interface AgentIdentityResponse { user_id: string | null; display_name: string | null }
 /** #356 配信中クライアントのビルド ID。未ビルド (dev) では null */

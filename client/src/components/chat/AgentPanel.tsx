@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeDay } from '../../utils/format';
 import type { MentionCandidate } from './MentionPicker';
 import type { PromptHistoryItem } from '../../services/api';
+import type { Hole } from '../../utils/agentPanelRules';
 import './AgentPanel.css';
 
 /**
@@ -29,8 +30,32 @@ interface AgentPanelProps {
   mode: AgentPanelMode;
   query: string;
   onSelectTarget: (name: string) => void;
-  onSelectHistory: (content: string) => void;
+  onSelectHistory: (content: string, holes: Hole[]) => void;
   onClose: () => void;
+}
+
+/**
+ * #358 本文を「変わる部分」で切り分けて描画する。
+ * 穴は具体値のまま出す ({{枚数}} のような抽象ラベルにしない) ので、そのまま送っても
+ * 意味が通る。オフセットは content 上のもので、宛先メンションより後ろにしか来ない。
+ */
+function renderBody(item: PromptHistoryItem, bodyStart: number) {
+  const holes = item.holes || [];
+  if (holes.length === 0) return item.body;
+
+  const nodes: React.ReactNode[] = [];
+  let pos = bodyStart;
+  holes.forEach((h, i) => {
+    if (h.start > pos) nodes.push(item.content.slice(pos, h.start));
+    nodes.push(
+      <span key={i} className="agent-panel-item-hole" data-testid="agent-panel-hole">
+        {item.content.slice(h.start, h.end)}
+      </span>
+    );
+    pos = h.end;
+  });
+  nodes.push(item.content.slice(pos));
+  return nodes;
 }
 
 function AgentPanel({
@@ -97,7 +122,7 @@ function AgentPanel({
         const picked = shown[Math.min(Math.max(index, 0), shown.length - 1)];
         if (!picked) return;
         e.preventDefault();
-        onSelectHistory(picked.content);
+        onSelectHistory(picked.content, picked.holes || []);
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -142,12 +167,15 @@ function AgentPanel({
                 className={`agent-panel-item${i === index ? ' selected' : ''}`}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onSelectHistory(h.content);
+                  onSelectHistory(h.content, h.holes || []);
                 }}
               >
                 <span className="agent-panel-item-text">
                   <span className={`agent-panel-item-target${ccNames.has(h.target) ? ' cc' : ''}`}>@{h.target}</span>
-                  <span className="agent-panel-item-body">{h.body}</span>
+                  <span className="agent-panel-item-body">
+                    {/* body は content の連続部分文字列 (trim は端しか削らない) */}
+                    {renderBody(h, h.content.indexOf(h.body))}
+                  </span>
                 </span>
                 <span className="agent-panel-item-time">{formatRelativeDay(h.created_at)}</span>
               </button>

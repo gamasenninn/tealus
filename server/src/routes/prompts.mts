@@ -33,12 +33,19 @@ interface PromptRow {
   created_at: Date;
 }
 
+/** 変動する部分の位置 (content 上のオフセット。client がそのまま選択できる) */
+interface Hole {
+  start: number;
+  end: number;
+}
+
 /** レスポンス 1 件 */
 interface HistoryItem {
   message_id: string;
   target: string;
   body: string;
   content: string;
+  holes: Hole[];
   created_at: Date;
 }
 
@@ -52,12 +59,43 @@ const SCAN_LIMIT = 200;
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 
+/** 数字の連なり。骨格の切れ目であり、穴の候補でもある */
+const DIGITS = /\d+/g;
+
 /**
- * 重複判定キー。宛先が違えば別物、本文は前後 trim + 連続空白の潰しで比較する。
+ * 重複判定キー (#358 で「数字を無視した骨格」に緩めた)。
+ *
+ * 宛先が違えば別物。本文は前後 trim + 連続空白の潰しに加え、**数字を伏せて**比較する。
+ * これにより `直近の画像1枚で…` と `4枚` が 1 件にまとまり、まとまった理由
+ * (= どの数字が動いたか) がそのまま穴になる。数字の個数が違えば分割数も変わるので
+ * 別の指示として扱われる。
+ *
  * 区切り文字を選ばずに済むよう JSON 配列で組む (宛先と本文の境界が曖昧にならない)。
  */
 function dedupeKey(target: string, body: string): string {
-  return JSON.stringify([target, body.replace(/\s+/g, ' ')]);
+  return JSON.stringify([target, body.replace(/\s+/g, ' ').split(DIGITS)]);
+}
+
+/** 本文中の数字の並び (骨格が同じもの同士は同じ長さになる) */
+function numbersOf(body: string): string[] {
+  return body.replace(/\s+/g, ' ').match(DIGITS) || [];
+}
+
+/**
+ * 代表メッセージの content 上で、i 番目の数字がどこにあるかを返す。
+ * body ではなく content を見るのは、client が受け取った content をそのまま
+ * 選択範囲に使えるようにするため。宛先メンションに数字が含まれる可能性があるので
+ * 本文の開始位置より後ろだけを走査する。
+ */
+function digitRanges(content: string, bodyStart: number): Hole[] {
+  const ranges: Hole[] = [];
+  const re = new RegExp(DIGITS.source, 'g');
+  re.lastIndex = bodyStart;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    ranges.push({ start: m.index, end: m.index + m[0].length });
+  }
+  return ranges;
 }
 
 /**
@@ -125,31 +163,63 @@ router.get('/history', async (req, res) => {
       params
     );
 
-    const items: HistoryItem[] = [];
-    const targetCounts: Record<string, number> = {};
-    const seen = new Set<string>();
+    /** 骨格ごとの束。代表は最新の1件、numberSets は各数字位置に現れた値の集合 */
+    interface Group {
+      row: PromptRow;
+      target: string;
+      body: string;
+      bodyStart: number;
+      numberSets: Array<Set<string>>;
+    }
 
-    // 新しい順に走査しているので、同じ文面は最初に出会った (= 最新の) 1 件が残る
+    const targetCounts: Record<string, number> = {};
+    // Map は挿入順を保つ。走査が新しい順なので、束の並びもそのまま新しい順になる
+    const groups = new Map<string, Group>();
+
     for (const row of result.rows) {
       const target = byLengthDesc.find(t => row.content.startsWith(`@${t} `));
       if (!target) continue;
 
-      const body = row.content.slice(target.length + 2).trim();
+      const rawAfter = row.content.slice(target.length + 2);
+      const body = rawAfter.trim();
       if (!body) continue; // 宛先だけの投稿は指示として再利用できない
 
       targetCounts[target] = (targetCounts[target] || 0) + 1;
 
       const key = dedupeKey(target, body);
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const numbers = numbersOf(body);
+
+      let group = groups.get(key);
+      if (!group) {
+        // 最初に出会ったもの = 最新。これを代表にするので「最後に使った値」が入る
+        group = {
+          row,
+          target,
+          body,
+          bodyStart: target.length + 2 + (rawAfter.length - rawAfter.trimStart().length),
+          numberSets: numbers.map(() => new Set<string>()),
+        };
+        groups.set(key, group);
+      }
+      // 骨格が同じなら数字の個数も同じ。i 番目に現れた値を集める
+      numbers.forEach((n, i) => group!.numberSets[i]?.add(n));
+    }
+
+    const items: HistoryItem[] = [];
+    for (const g of groups.values()) {
+      // ★ 穴は推測しない。実際に 2 種類以上の値が現れた位置だけを穴にする。
+      // これを緩めると「2026年7月」の 2026 を選択してしまい、打った瞬間に年が壊れる。
+      const holes = digitRanges(g.row.content, g.bodyStart)
+        .filter((_, i) => (g.numberSets[i]?.size ?? 0) > 1);
 
       // content は加工せずそのまま返す (表示された文字列がそのまま入力欄に入る約束)
       items.push({
-        message_id: row.id,
-        target,
-        body,
-        content: row.content,
-        created_at: row.created_at,
+        message_id: g.row.id,
+        target: g.target,
+        body: g.body,
+        content: g.row.content,
+        holes,
+        created_at: g.row.created_at,
       });
     }
 
