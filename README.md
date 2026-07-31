@@ -57,7 +57,7 @@ cd client && npm install && npm run dev
 - メッセージ転送
 - メッセージ編集 + 編集履歴保持
 - メッセージ削除（論理削除）
-- 絵文字リアクション（6 種類）
+- 絵文字リアクション（7 種類、✅ = 完了を含む）
 - メンション（@ユーザー名）
 - Markdown レンダリング（コード、見出し、テーブル、ToDo リスト等）
 - 全ルーム横断のメッセージ全文検索
@@ -85,7 +85,7 @@ Tealus の核心機能。AI がチャットメンバーとして参加し、自�
   - Aivis Cloud TTS: 高品質（凛音エル等）+ mediasoup でルーム配信
 - **トランシーバー機能 (PTT)**: ルーム内のメンバー間でリアルタイム音声送受信（mediasoup SFU）
 - **音声/ビデオ通話**: 1 対 1 通話、SFU (mediasoup)
-- **CLI からの音声配信**: `scripts/tealus-cli.js --voice --watch` で無線機等の音声を自動取り込み
+- **CLI からの音声配信**: `scripts/tealus-cli.ts --voice --watch` で無線機等の音声を自動取り込み
 
 ### オフィス機能
 
@@ -496,7 +496,7 @@ tealus/
 │   └── tts-speak.js           # CLI: テキスト → Aivis Cloud → mediasoup 配信
 │
 ├── scripts/                   # CLI ツール群
-│   ├── tealus-cli.js          # メッセージ送信・音声ファイルアップロード（--watch 対応）
+│   ├── tealus-cli.ts          # メッセージ送信・音声ファイルアップロード（--watch 対応）
 │   ├── watch.js               # ディレクトリ監視
 │   └── seed-demo.js           # demo データ投入
 │
@@ -621,7 +621,7 @@ tealus/
 
 ### Bot API（外部 / agent-server からの呼び出し用）
 
-Bot ユーザー JWT で認証。agent-server や外部 CLI（`scripts/tealus-cli.js`）が利用。
+Bot ユーザー JWT で認証。agent-server や外部 CLI（`scripts/tealus-cli.ts`）が利用。
 
 | メソッド | パス | 説明 |
 |----------|------|------|
