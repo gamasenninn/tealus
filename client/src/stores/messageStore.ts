@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
+import { patchMessage } from './patchMessage';
 import type { Message, Reaction, LinkPreview, Transcription } from '../types';
 
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
@@ -79,58 +80,34 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   updateReadCount: (messageId, readCount) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, read_count: readCount } : m
-      ),
-    }));
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { read_count: readCount }) }));
   },
 
   updateReactions: (messageId, reactions) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, reactions } : m
-      ),
-    }));
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { reactions }) }));
   },
 
   updateLinkPreview: (messageId, preview) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, link_preview: preview } : m
-      ),
-    }));
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { link_preview: preview }) }));
   },
 
   markDeleted: (messageId) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, is_deleted: true, content: null } : m
-      ),
-    }));
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { is_deleted: true, content: null }) }));
   },
 
   updatePublishStatus: (messageId, isPublished) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, is_published: isPublished } : m
-      ),
-    }));
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { is_published: isPublished }) }));
   },
 
   updateMessageContent: (messageId, content, isEdited) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, content, is_edited: isEdited } : m
-      ),
-    }));
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { content, is_edited: isEdited }) }));
   },
 
   updateTranscription: (messageId, transcription) => {
     set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, transcription: { ...m.transcription, ...transcription } as Transcription } : m
-      ),
+      messages: patchMessage(state.messages, messageId, (m) => ({
+        transcription: { ...m.transcription, ...transcription } as Transcription,
+      })),
     }));
   },
 

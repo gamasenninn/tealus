@@ -8,8 +8,9 @@ import { useAgentStore } from '../../stores/agentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { isAdmin } from '../../utils/permissions';
 import { buildAgentPrefill, extractAgentBody } from '../../utils/agentPrefill';
-import { shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion, promptInsertionSelection } from '../../utils/agentPanelRules';
+import { shouldOpenAgentPanel, nextSlashAction, mergePromptInsertion, promptInsertionSelection } from '../../utils/agentPanelRules';
 import type { Hole } from '../../utils/agentPanelRules';
+import { detectMentionQuery, insertMentionAtCursor } from '../../utils/mentionInput';
 import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
@@ -215,6 +216,43 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     }, TYPING_DEBOUNCE);
   };
 
+  // 1 打鍵ぶんの処理。入力 → typing 通知 → @メンション検知 → slash/パネルの処分、の順。
+  // 判断は純関数 (detectMentionQuery / nextSlashAction) に出し、ここは setState の配線だけ。
+  const handleTextChange = (value: string, cursorPos: number) => {
+    setText(value);
+    emitTyping();
+
+    const mentionQ = detectMentionQuery(value, cursorPos);
+    if (mentionQ !== null) {
+      if (!showMention) refreshCcProjects(); // #333: picker 開時に cc-project 一覧を最新化
+      setMentionQuery(mentionQ);
+      setShowMention(true);
+    } else {
+      setShowMention(false);
+    }
+
+    // #354 `/` トリガ (PC のみ)。入力欄が空のときだけ開く — `docs/05` や `src/app.mts`
+    // のようなパスを日常的に打つので、どこでも開くと誤爆が止まらない。
+    const action = nextSlashAction({
+      slashMode, panelMode: agentPanel, prevText: text, nextText: value,
+      isDesktop: window.innerWidth >= 768, assistantInRoom,
+    });
+    switch (action.kind) {
+      case 'filter':
+        setSlashQuery(action.query);
+        break;
+      case 'exit-slash':
+        setAgentPanel(null); setSlashMode(false); setSlashQuery('');
+        break;
+      case 'close-panel':
+        setAgentPanel(null);
+        break;
+      case 'open-slash':
+        setSlashMode(true); setSlashQuery(action.query); openAgentPanel('compose');
+        break;
+    }
+  };
+
   const handleSend = async () => {
     const content = text.trim();
     if (!content || isSending) return;
@@ -408,21 +446,11 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           onSelect={(name) => {
             const textarea = textareaRef.current;
             if (!textarea) return;
-            const cursorPos = textarea.selectionStart;
-            const textBefore = text.slice(0, cursorPos);
-            const textAfter = text.slice(cursorPos);
-            const atIdx = textBefore.lastIndexOf('@');
-            if (atIdx >= 0) {
-              const newText = textBefore.slice(0, atIdx) + `@${name} ` + textAfter;
-              setText(newText);
-              setShowMention(false);
-              // カーソルを挿入位置の後に移動
-              setTimeout(() => {
-                const newPos = atIdx + name.length + 2; // @ + name + space
-                textarea.selectionStart = textarea.selectionEnd = newPos;
-                textarea.focus();
-              }, 0);
-            }
+            const inserted = insertMentionAtCursor(text, textarea.selectionStart, name);
+            if (!inserted) return;
+            setText(inserted.text);
+            setShowMention(false);
+            focusTextareaRange(inserted.cursor);
           }}
           onClose={() => setShowMention(false)}
         />
@@ -477,39 +505,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           ref={textareaRef}
           className="message-input-text"
           value={text}
-          onChange={(e) => {
-            const value = e.target.value;
-            setText(value);
-            emitTyping();
-            // @メンション検知
-            const cursorPos = e.target.selectionStart;
-            const textBefore = value.slice(0, cursorPos);
-            const atMatch = textBefore.match(/@([^\s@]*)$/);
-            if (atMatch) {
-              if (!showMention) refreshCcProjects(); // #333: picker 開時に cc-project 一覧を最新化
-              setMentionQuery(atMatch[1]);
-              setShowMention(true);
-            } else {
-              setShowMention(false);
-            }
-            // #354 `/` トリガ (PC のみ)。入力欄が空のときだけ開く — `docs/05` や `src/app.mts`
-            // のようなパスを日常的に打つので、どこでも開くと誤爆が止まらない。
-            if (slashMode) {
-              if (value.startsWith('/')) setSlashQuery(value.slice(1));
-              else { setAgentPanel(null); setSlashMode(false); setSlashQuery(''); }
-            } else if (agentPanel === 'compose') {
-              // ボタンで開いた後に打ち始めたら閉じる (改行の Enter を奪わない)。
-              // 'target-only' は宛先待ちで pendingAgentBody を抱えているので閉じない。
-              setAgentPanel(null);
-            } else if (shouldTriggerSlash({
-              prevText: text, nextText: value,
-              isDesktop: window.innerWidth >= 768, assistantInRoom,
-            })) {
-              setSlashMode(true);
-              setSlashQuery(value.slice(1));
-              openAgentPanel('compose');
-            }
-          }}
+          onChange={(e) => handleTextChange(e.target.value, e.target.selectionStart)}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}

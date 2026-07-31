@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   shouldOpenAgentPanel, shouldTriggerSlash, mergePromptInsertion, promptInsertionSelection,
+  nextSlashAction,
 } from '../src/utils/agentPanelRules';
 
 /**
@@ -128,5 +129,67 @@ describe('promptInsertionSelection', () => {
     const sel = promptInsertionSelection(prev, content, false, holes);
     const merged = mergePromptInsertion(prev, content, false);
     expect(merged.slice(sel!.start, sel!.end)).toBe('3');
+  });
+});
+
+/**
+ * #346 候補2 (縮退版): textarea の onChange に JSX 内インラインで書かれていた
+ * 順序依存の if / else if を、判断だけ純関数に出して固定する。
+ *
+ * ★ 分岐の順序そのものが仕様。slashMode を最優先で見ないと `/` の絞り込み中に
+ *   compose を閉じる枝へ落ちてパネルが消える。
+ */
+describe('nextSlashAction', () => {
+  const BASE = { isDesktop: true, assistantInRoom: true, panelMode: null as string | null };
+
+  it('slash 絞り込み中は query を更新する', () => {
+    expect(nextSlashAction({ ...BASE, slashMode: true, prevText: '/朝', nextText: '/朝礼' }))
+      .toEqual({ kind: 'filter', query: '朝礼' });
+  });
+
+  it('★ slashMode は panelMode="compose" より優先される (絞り込み中にパネルを閉じない)', () => {
+    expect(nextSlashAction({
+      ...BASE, panelMode: 'compose', slashMode: true, prevText: '/朝', nextText: '/朝礼',
+    })).toEqual({ kind: 'filter', query: '朝礼' });
+  });
+
+  it('slash 中に先頭の / が消えたら slash を抜けてパネルも閉じる', () => {
+    expect(nextSlashAction({ ...BASE, slashMode: true, prevText: '/朝', nextText: '朝' }))
+      .toEqual({ kind: 'exit-slash' });
+  });
+
+  it('ボタンで開いた compose は打ち始めたら閉じる', () => {
+    expect(nextSlashAction({ ...BASE, panelMode: 'compose', slashMode: false, prevText: '', nextText: 'あ' }))
+      .toEqual({ kind: 'close-panel' });
+  });
+
+  it('宛先待ちの target-only は打っても閉じない (pendingAgentBody を抱えている)', () => {
+    expect(nextSlashAction({ ...BASE, panelMode: 'target-only', slashMode: false, prevText: '', nextText: 'あ' }))
+      .toEqual({ kind: 'none' });
+  });
+
+  it('空欄に / を打ったら slash で開く', () => {
+    expect(nextSlashAction({ ...BASE, slashMode: false, prevText: '', nextText: '/' }))
+      .toEqual({ kind: 'open-slash', query: '' });
+  });
+
+  it('書きかけの途中の / では開かない (docs/05 等のパス誤爆を避ける)', () => {
+    expect(nextSlashAction({ ...BASE, slashMode: false, prevText: 'docs', nextText: 'docs/' }))
+      .toEqual({ kind: 'none' });
+  });
+
+  it('スマホでは / で開かない', () => {
+    expect(nextSlashAction({ ...BASE, isDesktop: false, slashMode: false, prevText: '', nextText: '/' }))
+      .toEqual({ kind: 'none' });
+  });
+
+  it('アシスタント不在ルームでは / で開かない', () => {
+    expect(nextSlashAction({ ...BASE, assistantInRoom: false, slashMode: false, prevText: '', nextText: '/' }))
+      .toEqual({ kind: 'none' });
+  });
+
+  it('通常の入力は何もしない', () => {
+    expect(nextSlashAction({ ...BASE, slashMode: false, prevText: 'おはよ', nextText: 'おはよう' }))
+      .toEqual({ kind: 'none' });
   });
 });

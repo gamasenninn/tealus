@@ -42,6 +42,46 @@ export function mergePromptInsertion(prevText: string, content: string, slashMod
   return base ? `${base} ${content}` : content;
 }
 
+/** #346 onChange 1 打鍵ぶんの、slash / パネルに対する処分 */
+export type SlashAction =
+  | { kind: 'filter'; query: string }       // `/` 絞り込み中: query だけ更新
+  | { kind: 'exit-slash' }                  // 先頭の `/` が消えた: slash を抜けてパネルも閉じる
+  | { kind: 'close-panel' }                 // ボタンで開いた compose に打ち始めた: 閉じる
+  | { kind: 'open-slash'; query: string }   // 空欄に `/`: slash で開く
+  | { kind: 'none' };
+
+/**
+ * #346 候補2 (縮退版) 入力1打鍵に対する slash / パネルの処分。
+ *
+ * textarea の onChange に JSX 内インラインで書かれていた順序依存の if / else if を、
+ * 判断だけここに出す (setState は呼び手に残す)。
+ *
+ * ★ 分岐の順序そのものが仕様:
+ *   1. slashMode を最優先で見る — でないと `/` の絞り込み中に compose を閉じる枝へ
+ *      落ちてパネルが消える。
+ *   2. compose は打ち始めたら閉じる (改行の Enter を奪わないため)。ただし 'target-only'
+ *      は宛先待ちで pendingAgentBody を抱えているので閉じない。
+ *   3. 最後に `/` の開始判定 (shouldTriggerSlash)。
+ */
+export function nextSlashAction(
+  { slashMode, panelMode, prevText, nextText, isDesktop, assistantInRoom }:
+  {
+    slashMode: boolean; panelMode: string | null;
+    prevText: string; nextText: string; isDesktop: boolean; assistantInRoom: boolean;
+  },
+): SlashAction {
+  if (slashMode) {
+    return nextText.startsWith('/')
+      ? { kind: 'filter', query: nextText.slice(1) }
+      : { kind: 'exit-slash' };
+  }
+  if (panelMode === 'compose') return { kind: 'close-panel' };
+  if (shouldTriggerSlash({ prevText, nextText, isDesktop, assistantInRoom })) {
+    return { kind: 'open-slash', query: nextText.slice(1) };
+  }
+  return { kind: 'none' };
+}
+
 /** 変動する部分の位置 (content 上のオフセット) */
 export interface Hole {
   start: number;
