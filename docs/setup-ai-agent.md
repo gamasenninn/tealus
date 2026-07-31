@@ -29,7 +29,7 @@
 **前提**:
 - README のクイックスタート (Step 1-5) を完了している
 - server / client が起動していて、admin ユーザーで login できている
-- Node.js 20+ + Docker + Docker Compose が動いている
+- Node.js 24 + Docker + Docker Compose が動いている
 
 ---
 
@@ -296,7 +296,7 @@ LIGHTV2_AUTH=subscription
 
 agent-server を再起動。これで Light v2 (`/light2`) は subscription 認証で動作、API cost 0 になります。Light v1 / Router は引き続き `OPENAI_API_KEY` を使うので、混在運用 OK。
 
-> ⚠️ subscription mode を有効にしても **画像生成 (`generate_and_send_image`) は別 cost path** で OPENAI_API_KEY を消費します (DALL-E 3 API は subscription に含まれない)。OPENAI_API_KEY は subscription mode でも空欄不可。
+> ⚠️ subscription mode を有効にしても **画像生成 (`generate_and_send_image`) は別 cost path** で OPENAI_API_KEY を消費します (OpenAI Images API は subscription に含まれない)。OPENAI_API_KEY は subscription mode でも空欄不可。
 
 ### 9-3. 内蔵 MCP tool (tealus-mcp v0.11.0+)
 
@@ -306,7 +306,7 @@ Light v2 は agent-server の roomMcpManager 経由で tealus-mcp に接続、�
 |---|---|
 | `list_rooms` / `get_messages` / `search_messages` / `list_tags` | Tealus の context を agent 自身が読みに行く (D4 哲学) |
 | `read_document` | PDF / DOCX / XLSX 解析、scan PDF は Gemini Vision で OCR fallback ([#233](https://github.com/gamasenninn/tealus/issues/233)) |
-| **`generate_and_send_image`** ([#260](https://github.com/gamasenninn/tealus/issues/260)) | DALL-E 3 で画像生成 → Tealus 投稿 を 1 tool で完結 |
+| **`generate_and_send_image`** ([#260](https://github.com/gamasenninn/tealus/issues/260)) | OpenAI Images API (`gpt-image-1`、env `OPENAI_IMAGE_MODEL` で上書き可) で画像生成 → Tealus 投稿 を 1 tool で完結 |
 | **`send_text_as_file`** ([#260](https://github.com/gamasenninn/tealus/issues/260)) | OCR / 整形済 text を DL 可能 file として投稿 (chat に長文を貼らない) |
 
 使用例:
@@ -462,7 +462,7 @@ sample skeleton: `agent-server/src/agents/lightCustomExample.js`
 
 ### Q. `/light2` で `generate_and_send_image` が「画像を生成しました」と言うだけで実際の画像が来ない
 
-→ `OPENAI_API_KEY` が agent-server に未設定 / 不正、または DALL-E 3 access が billing 不足。subscription mode (`LIGHTV2_AUTH=subscription`) でも画像生成は **API 経由 (cost 別)** なので OPENAI_API_KEY 必須。agent-server log の `mcp_tool_call` で error 内容を確認。
+→ `OPENAI_API_KEY` が agent-server に未設定 / 不正、または Images API (`gpt-image-1`) の access が billing 不足。subscription mode (`LIGHTV2_AUTH=subscription`) でも画像生成は **API 経由 (cost 別)** なので OPENAI_API_KEY 必須。agent-server log の `mcp_tool_call` で error 内容を確認。
 
 ---
 

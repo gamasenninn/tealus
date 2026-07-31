@@ -25,7 +25,7 @@ Tealus は **LINE ライクな直感 UI のオープンソース社内メッセ�
 
 ## クイックスタート（5 分で動く最小構成）
 
-> **前提**: **Node.js 20 以上** (推奨: 22 LTS) + **Docker** + **Docker Compose**。Node 18 以下では `undici` が `ReferenceError: File is not defined` で crash します ([#210](https://github.com/gamasenninn/tealus/issues/210))。`.npmrc` で `engine-strict=true` を有効化しているため、Node 18 では `npm install` 自体が `EBADENGINE` で fail します。Ubuntu 等の apt 標準が Node 18 系の場合は [nvm](https://github.com/nvm-sh/nvm) や [NodeSource](https://github.com/nodesource/distributions) で 22 LTS を入れてください。
+> **前提**: **Node.js 24** + **Docker** + **Docker Compose**。サーバ系 (server / agent-server / rtc-server) は **Node の native type stripping で `.mts` を直接実行**する (トランスパイル工程なし、[#330](https://github.com/gamasenninn/tealus/issues/330)) ため、型注釈をそのまま解釈できない版では起動しません。CI・Docker イメージとも **Node 24 のみで検証**しています。`.npmrc` で `engine-strict=true` を有効化しているため、`engines` (>=24) を満たさない版では `npm install` 自体が `EBADENGINE` で fail します (壊れた状態で入るより、入口で止める方針)。Ubuntu 等の apt 標準が古い Node の場合は [nvm](https://github.com/nvm-sh/nvm) や [NodeSource](https://github.com/nodesource/distributions) で 24 を入れてください。
 
 ```bash
 git clone https://github.com/gamasenninn/tealus.git
@@ -131,7 +131,7 @@ Tealus の核心機能。AI がチャットメンバーとして参加し、自�
 
 ### 前提条件
 
-- **Node.js 20+**（`--env-file` を使うため）
+- **Node.js 24**（`.mts` の native type stripping と `--env-file` のため。CI・Docker とも 24 のみで検証）
 - **Docker** + Docker Compose
   - Windows / macOS: **Docker Desktop を起動した状態にしておく**（起動前に `docker-compose` を叩くとデーモンエラー）
   - Linux: Docker daemon が起動していること

@@ -21,7 +21,7 @@
 
 ## 技術スタック
 
-- 言語: TypeScript (全レイヤー、strict / ESM)。サーバは Node 24 native type stripping でビルドレス実行 (`node src/app.mts`)、クライアントは Vite。JS→TS 全面移行は #330 で完了 (`engines: node >=22.6`)
+- 言語: TypeScript (全レイヤー、strict / ESM)。サーバは Node 24 native type stripping でビルドレス実行 (`node src/app.mts`)、クライアントは Vite。JS→TS 全面移行は #330 で完了 (`engines: node >=24`)
 - フロントエンド: React + Vite (PWA、TS)
 - バックエンド: Node.js (Express) + Socket.IO + TypeScript
 - DB: PostgreSQL (RLS有効)
