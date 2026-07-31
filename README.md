@@ -9,7 +9,7 @@ Tealus は **LINE ライクな直感 UI のオープンソース社内メッセ�
 
 設計姿勢の詳細: [philosophy.md](docs/presentation/philosophy.md) (organic ontology / 4 柱 / 5 必要条件) — 物語化: [walkthrough-script-v1.md](docs/presentation/walkthrough-script-v1.md) (5/11-5/14 dogfood 5 act script) — elevator pitch: [elevator-pitches.md](docs/presentation/elevator-pitches.md)。
 
-公式サイト: [tealus.dev](https://tealus.dev) — ロードマップ・思想・スクリーンショットあり。
+公式サイト: [tealus.dev](https://tealus.dev) — 思想・ユースケース・スクリーンショットあり。
 
 ## スクリーンショット
 
@@ -1011,74 +1011,6 @@ npm run build
 | 通話・SFU | mediasoup |
 | コンテナ | Docker Compose |
 
-## ロードマップ
-
-実装済みの機能は上の [機能](#機能) セクション参照。リリース履歴は [CHANGELOG.md](./CHANGELOG.md) を参照 (現在 **v0.2.4**、2026-05-12 release)。今後の予定は GitHub Issues で管理しています。
-
-### v0.1.x — v0.2.x で消化済 ✅
-
-- ~~**内部 DB MCP** — AI に「組織の記憶」を持たせる~~ ✅ ([#185](https://github.com/gamasenninn/tealus/issues/185)、v0.2.x 系で実装、5/11 社内 DB dogfood 成功)
-- ~~**AI 間メッセージング** — Tealus を AI 組織の OS に~~ ✅ ([#164](https://github.com/gamasenninn/tealus/issues/164))
-- ~~**mcp-server を npm publish** — `npx tealus-mcp` で起動可能に~~ ✅ ([#187](https://github.com/gamasenninn/tealus/issues/187))
-
-### v0.2.x ハイライト (リリース済み)
-
-- **PWA App Badge** (Android ドット / iOS 数字、二経路 defense in depth) — v0.2.4
-- **動画文字起こし** (`transcribe_media`、cross-modality dividend の起点) — v0.2.x
-- **vocab inject 拡張** (model-aware 上限 2000 char、新世代 transcribe 2 model に default 適用) — v0.2.x
-- **tealus-mcp HTTP transport** (cross-machine 用、[#264](https://github.com/gamasenninn/tealus/issues/264)) — v0.2.x
-- 詳細は [CHANGELOG.md](./CHANGELOG.md) 参照
-
-### v0.3.x 候補
-
-- **Docker による全サービスデプロイ化** — Synology / QNAP / UGREEN / Linux / Mac で 1 コマンド起動 ([#188](https://github.com/gamasenninn/tealus/issues/188) Phase A)
-- **Anthropic API 経由の Deep agent** — Claude MAX 不要化
-- **TypeScript 化** — コントリビュータ誘致
-- **ローカルエージェント** (Light agent provider abstraction、データ主権 driven、[#272](https://github.com/gamasenninn/tealus/issues/272)) — 議論先行、採用者 voice surface 待ち
-- **バックグラウンド Push 通知** 残 sub-task ([#168](https://github.com/gamasenninn/tealus/issues/168)) — core path は v0.2.4 完了、SW 永続化 / 死活監視は trigger 待ち
-- **multi-agent dock vision** — Tealus = Role を持った主体 (AI / 人間) が dock する context 空間 ([#275](https://github.com/gamasenninn/tealus/issues/275) umbrella、[#276](https://github.com/gamasenninn/tealus/issues/276) codex spike) — 議論先行、Anthropic 6/15 制度との整合 + Codex 自律 / Claude N dock 棲み分け
-- **iOS PWA 他アプリ転送** — Apple Shortcuts 経由 ([#277](https://github.com/gamasenninn/tealus/issues/277) Phase 2 手動 setup MVP / [#278](https://github.com/gamasenninn/tealus/issues/278) Phase 3 profile 画面から自動 setup) — 議論先行、Web Share Target が iOS 非対応のため別 path
-- LINE 連携ブリッジ ([#160](https://github.com/gamasenninn/tealus/issues/160))
-- ゲストルーム — 外部チャット連携 + AI 一次対応 ([#124](https://github.com/gamasenninn/tealus/issues/124))
-- 通話品質の自動最適化 ([#138](https://github.com/gamasenninn/tealus/issues/138))
-
-### Phase 4 物語化 (進行中、中盤の優先 lever)
-
-`docs/presentation/` に narrative 3 doc が同 vocabulary で連動:
-
-- **プレゼン資料 umbrella** ([#209](https://github.com/gamasenninn/tealus/issues/209)) — philosophy.md v2 / elevator-pitches.md v2 / walkthrough-script-v1.md (5/14 sub-1 着地)
-- **採用者 case study** (sub-4、許諾後)
-- **tealus 関連ブログ立ち上げ** ([#265](https://github.com/gamasenninn/tealus/issues/265))
-
-**docs disclosure 階段** (5/18 物理化完成、CHANGELOG `[Unreleased]` 参照):
-
-- **LP** (`tealus.dev`) — concrete hook (NAS / ゼロ円 / AI 音声 / LINE ライク) + 組織記憶 signal (5/17 PR 1/2 で確立)
-- **`docs/00_what-is-tealus.md`** — 入り口 doc (新規 5/18)、Tealus とは何か / なぜ / 何が起こるか / どう違うか / 本質
-- **`docs/04_オーガニックオントロジー構造.md`** — full disclosure (5/17 初版 + 5/18 v0.5 update)、4 層 emergence architecture + 6 段階 feedback loop
-- **`tealus-organon` repo** (private) — Layer 3 data 担体、5+1 原則の運用 manual
-
-audience の認知負荷を段階的に管理する 4 段階構造、SVG 3 枚 + PNG 3 枚で visual 統一感も `docs/images/` で確立。
-
-**Organic ontology の運用 phase 到達** (5/18 → 5/19 update):
-
-- **organon v0.5 → v0.5.1 release**: entries 12 → 20 → **26 (+30%)**、hazard 軸 family 8 → 11 → **12 軸目 candidate (observer-architect-duality)**、organization kind 正式追加、cover 27.3% → **57% (倍以上)**
-- **第 6 feedback layer = upstream pipeline rectification 正典化**: 観測 → 上流 data source 修正 → 量的訂正効果 で因果 loop を外向きに開く戦略確立、internal pragmatic 閉じ + 外部因果 loop 開きの二段戦略で organic に解消
-- **第 1 例 feedback loop 量的成功 4/4 ✅ confirmed** (5/19 Day 3 trace、27 時間 round-trip closure): organon hazard 発見 → 本体 `transcription_guideline.json` vocabulary 38 → 42 → Day 3 朝礼 STT で「上山/アンプリ/中田/クラッチー」全て 0 件 + 「神山/三瓶/舟太/山崎整備長」正発火、distributed AI lane coordination の経験的根拠 ([Issue #279](https://github.com/gamasenninn/tealus/issues/279) (b) 一般理論)
-- **第 7 layer 候補 framing 訂正 (architect-mediated organon ingestion)** + **★★ 14 軸目 candidate (observer-architect-duality)**: universality 主張 = methodology + architect role prerequisite (= adoption barrier) 二重 thesis、Phase 5 narrative の qualifier
-- **maturation curve 4 日連続 layer surface** (5/17 layer 5 / 5/18 layer 6 / 5/19 朝 layer 7 候補 / 5/19 夕 14 軸目 candidate): steepness 自体が architect の active co-evolution の structural evidence
-
-**Phase 5 narrative core 候補 — ゲストユーザ role 拡張 Phase 1 MVP 完成** (5/19 [#282](https://github.com/gamasenninn/tealus/issues/282)):
-
-- `users.role IN ('admin', 'user', 'guest')` 1 軸追加で **schema (Phase A) + permission helper (Phase B) + route guards (Phase C)** 3 層が 1 day 完成、+33 tests、production deploy 済
-- Tealus 根幹原則 (= AI と人間を区別する仕組みが最小限) を外部 user にも適用、`users.is_bot` flag と同型の対称的拡張
-- 採用者 voice trigger 解除候補: 「外部問い合わせ機能?」と聞かれた瞬間に dep ゼロで提示可能
-
-### 将来構想
-
-- LDAP 認証
-- NAS クラスター構成 ([#120](https://github.com/gamasenninn/tealus/issues/120))
-- ブロックチェーントークン（感謝経済）設計 ([#83](https://github.com/gamasenninn/tealus/issues/83))
-
 ## ライセンス
 
 MIT License - 詳細は [LICENSE](./LICENSE) を参照してください。
@@ -1090,6 +1022,7 @@ Copyright (c) 2026 Satoshi Ono and Tealus Project Contributors
 ## 関連ドキュメント
 
 - [CHANGELOG.md](./CHANGELOG.md) — リリースノート / 変更履歴
+- [Issues](https://github.com/gamasenninn/tealus/issues) — 今後の予定 / 既知の課題
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — 開発参加ガイド
 - [SECURITY.md](./SECURITY.md) — 脆弱性報告 / セキュリティポリシー
 - [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) — 行動規範
