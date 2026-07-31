@@ -1011,6 +1011,16 @@ npm run build
 | 通話・SFU | mediasoup |
 | コンテナ | Docker Compose |
 
+## ロードマップ
+
+現場で実害が出たものを最優先で直します。それ以外は下の順で進めています。
+リリース履歴は [CHANGELOG.md](./CHANGELOG.md)、個別の議論は各 Issue にあります。
+
+1. **エージェント連携の分散化** ([#214](https://github.com/gamasenninn/tealus/issues/214)) — Claude Code セッションを別マシンで動かせるようにする（現在は起動通知がローカルファイル経由のため同一ホスト必須）
+2. **ローカル LLM 対応** ([#272](https://github.com/gamasenninn/tealus/issues/272)) — 推論先を差し替え可能にし、社内 GPU / Ollama に向けられるようにする
+
+順番待ち: 長尺音声の分割 ([#329](https://github.com/gamasenninn/tealus/issues/329)) / organic ontology の理論的整理 ([#279](https://github.com/gamasenninn/tealus/issues/279))
+
 ## ライセンス
 
 MIT License - 詳細は [LICENSE](./LICENSE) を参照してください。
