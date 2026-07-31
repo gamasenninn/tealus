@@ -10,6 +10,32 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-31
+
+★ ★ ★ **「出したものが端末に届き、使うほど指示が短くなる」** — Phase 5。iOS PWA に更新が反映されない構造問題を、静的配信の Cache-Control 分離(#355)と **SW を通らない経路でのビルドID照合**(#356)で根治。あわせてエージェントへの指示を「登録」させず過去の自分の投稿から再利用する履歴ピッカー(#354 #357 #358)を 🤖 パネルに統合し、使うほど操作が短くなる形にした。自己ホスト採用者側では identity 契約を **organon-optional** 化(#348 #349)し、organon を deploy しなくても辞書正規化が生き続けるようにした。現場指摘(タグ削除 #351 / LINE 複数画像 #353)と client 中核リファクタ(#344)、アップグレードガイド(#345)を併走。v0.6.0 以降 19 コミット。
+
+### Added
+
+- **エージェント指示の履歴ピッカー — 🤖 パネルに「最近の指示」を統合** ([#354](https://github.com/gamasenninn/tealus/issues/354)): よく使う指示を登録する UI を作る代わりに、過去に自分が送った `@アシスタント` / `@cc-*` 宛メッセージをそのまま再利用する(登録ゼロで始まる・専用テーブルなし)。`GET /api/rooms/:id/prompts/history`(このルーム限定・自分の投稿のみ・前方一致は `starts_with` で宛先名の `%`/`_` wildcard 事故を型で回避)。**新ボタンは足さず 🤖 に統合**し、宛先チップは横1行スクロールで cc ブリッジが増えても面積が増えない。PC は `/` → `↑` がシェルの履歴と同じ操作、スマホは 🤖 のみ(開く時に textarea を blur)。挿入するだけで送信はしない。
+  - **フォーム回答の混入を構造的に除外** ([#357](https://github.com/gamasenninn/tealus/issues/357)): organon/kairos のフォーム回答(1日1-2件・各200-400字)が履歴を埋める実害を、実データ調査(7/12-7/30)を経て予防。現状漏れていないのは「reply_mention が単独行」という**偶然**に依っていたため、`reply_to がフォーム かつ 本文に【回答】を含む` を client の `hasUserAnsweredForm` と揃えて明示契約化。フォームへの「コメント返信」で出した指示は拾う。
+  - **変動した数字をプレースホルダとして選択状態で挿入** ([#358](https://github.com/gamasenninn/tealus/issues/358)): 「直近の画像 N 枚でDB投入して」が完全一致せず履歴の枠を3つ食っていた件。★ **穴は推測しない** — 「最初の数字を選択」の素朴な実装は「2026年7月の買取金額」の年を壊すため、**履歴の中で実際に2種類以上の値が現れた位置だけ**を穴にする。dedupe を「数字を伏せた骨格」に緩めると束がまとまり、まとまった理由がそのまま穴になる。一覧では抽象ラベルでなく**前回の具体値**を出す(穴を埋めなくても送れば意味が通る)。
+- **PWA 更新検知 — ビルドID の照合(SW に依存しない経路)** ([#356](https://github.com/gamasenninn/tealus/issues/356)): 生成 SW は `NavigationRoute` + `createHandlerBoundToURL("index.html")` のため、ナビゲーションは URL に関係なく precache の index.html が返り、**サーバのヘッダーは SW の手前まで届かない**。`registration.update()` 頼みをやめ、vite build が `dist/version.json` を吐き同じ ID を `__BUILD_ID__` として焼き込む(実行中のバンドルが自分自身を名乗る)。`GET /api/version`(認証不要・no-store)と起動時/前面復帰時/30分ごとに照合し、食い違えば precache を捨てて reload。**iOS PWA はサスペンド復帰でナビゲーションが起きないため `visibilitychange` が本命の契機**。`/api/*` は precache 対象外かつ navigateFallbackDenylist にも入るのが検知の生命線。誤検知でバナーが出っぱなしになる方が有害なので、ID が片方でも不明なら判定しない。
+- **ルームのタグ削除機能** ([#351](https://github.com/gamasenninn/tealus/issues/351)): 「タグは追加できるが削除できない」(業務メモ 7/23 の現場指摘)。`DELETE /api/rooms/:id/tags/:tagId` + TagModal の「管理」トグル → 確認ダイアログ。`message_tags` は FK `ON DELETE CASCADE` のため使用中でもカスケード削除。
+- **LINE 複数画像同時送信(imageSet)を1メッセージに束ねる** ([#353](https://github.com/gamasenninn/tealus/issues/353)): LINE の複数画像は画像ごと別 webhook + 順不同(`imageSet {id,index,total}`)で届き、Tealus 側でバラバラのメッセージになっていた。`ImageSetBuffer`(in-memory、total 到達で即 flush / 15s timeout で部分 flush、env `LINE_IMAGESET_FLUSH_MS`)で束ね、1 message + N media 行として再構成。imageSet 情報の無い送信は従来の個別 post に degrade。
+- **辞書テーブル → local.ttl の publish(identity 契約の organon-optional 化)** ([#348](https://github.com/gamasenninn/tealus/issues/348)): agent-server(別プロセス)が読む local vocab 契約を本体が発行。`serializeVocabToTtl`(純関数・決定論・term ソートで byte 安定 = 無駄 churn 回避)が organon.ttl と同じ `org1:` RDF 語彙で **5 field 全部**を serialize(term+alias に痩せさせない)。agent 側は `local.ttl` primary / legacy JSON fallback に切替。**organon を deploy しなくても manual+auto で local.ttl が埋まり正規化が生き続ける**(= OSS 採用者保護)。発火点は起動/admin編集/auto学習昇格/organon pull の全経路を1関数で cover。
+- **採用者向けアップグレードガイド** ([#345](https://github.com/gamasenninn/tealus/issues/345)、#334 の宿題): `docs/upgrade-guide.md` — 汎用手順(取得 → 依存 → migration → client 再ビルド → 再起動)+ 更新後の健全性チェック(`[migration-check]`/`[build-check]` ログの読み方)+ バージョン別ノート + トラブルシューティング表 + 切り戻し。「クラッシュしないが機能が静かに壊れる」事故の再発防止。
+
+### Changed
+
+- **静的配信の Cache-Control をファイルの性質で分ける** ([#355](https://github.com/gamasenninn/tealus/issues/355)): express 既定の `public, max-age=0` は「毎回再検証して」であって「保存するな」ではないため、WebKit がこれを守らないと古い index.html が使われ、そこに書かれた古いハッシュの JS を読みに行く(アプリ完全終了でも直らないことを実機確認 = HTTP キャッシュ層が原因)。index.html / sw.js / registerSW.js / custom-sw.js / workbox-\*.js / \*.webmanifest → `no-store, must-revalidate`、内容ハッシュ付き `/assets/*` → `public, max-age=31536000, immutable`(素の読み込みも軽くなる)。判定は `cacheControlFor()` に純関数として分離し、入口判定を assets 判定より先に置く(構成が変わって assets 配下に sw が出ても長期キャッシュにしない)。client(`/`)と dashboard(`/system`)の両方に適用。
+- **organon inject を sql_mapping ブロックのみに絞る** ([#349](https://github.com/gamasenninn/tealus/issues/349)): polyseme yaml を丸ごと agent prompt に注入していた(7 entry で 879 行)。DB 検索 grounding に必要な事実(table/field/式/filter/混同注意)は sql_mapping ブロックに揃っており、その外の散文は grounding には marginal と**実機 A/B で検証済**。879 → 260 行(70% 減)、grounding 不変。
+- **organonContext の silent-degrade を warn 化** ([#347](https://github.com/gamasenninn/tealus/issues/347)): `ORGANON_INJECT=true` なのに organon 不在 / sql_mapping entries=0 は「ON と宣言したのに何も注入されない」silent degrade。`[migration-check]` と同型の loud WARN に(organon は任意サブシステムなので稼働は止めない)。docstring の Deep 未配線という記載も実配線(dispatcher 経由)に訂正。
+- **client chat 中核のリファクタ** ([#344](https://github.com/gamasenninn/tealus/issues/344)): MessageBubble(508→405行)から編集モーダル / 履歴モーダル / タグ状態 / diff 構築を分離。agent-api 4メソッドを `_agentApi` に集約(api.ts 実質 -66行、synthesizeTts は 10s を超えうるため意図的に retry 経路を通さない)。`RoomMember.user_id` を必須化して cast 3箇所を除去。いずれも振る舞い不変。
+
+### Fixed
+
+- **キャッシュクリアが「押しても無反応」になる** ([#356](https://github.com/gamasenninn/tealus/issues/356)): `caches` / `serviceWorker` が無い環境で TypeError で止まり reload にすら到達していなかった穴を try/catch で塞いだ。`location.reload(true)` の非標準引数も削除。あわせてプロフィール下部にビルド ID を常時表示(実機で新旧を目視判定する唯一の手段)。
+
 ## [0.6.0] - 2026-07-21
 
 ★ ★ ★ **「AI に構造を渡す — 汎用フォームとエージェント起動入口」** — Phase 5。AI/人間が定型の回答をフォームで集められる汎用フォーム primitive(#336)と、「無メンションで無言の空振り」を減らすエージェント起動入口(#338 compose ヘルパー + 編集トリガー)を出荷。採用者保護(未適用 migration の起動時 warn #334)と、送信・表示の client 中核リファクタ(#342 #343)を併走。v0.5.0 以降 16 コミット。

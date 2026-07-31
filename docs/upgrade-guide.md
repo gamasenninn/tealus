@@ -108,6 +108,35 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
+### → v0.7.0（PWA 更新検知 + エージェント指示の履歴）
+
+**必須の作業:**
+
+1. ★ **`cd client && npm run build`** — この版は**再ビルドしないと更新検知そのものが入りません**。ビルド時に `dist/version.json` が生成され、同じ ID がバンドルに焼き込まれます（[#356](https://github.com/gamasenninn/tealus/issues/356)）。server の `GET /api/version` はこの `client/dist/version.json` を読むため、**ファイルが無いと ID 不明として判定がスキップ**されます（誤検知を出さない設計なので、エラーにはならず静かに機能しません）。
+2. ★ **`cd agent-server && npm install` + 再起動** — 依存に **`n3`（+ `@types/n3`）が追加**されました（[#348](https://github.com/gamasenninn/tealus/issues/348) の辞書 `.ttl` 読み込み用）。`npm install` を忘れると **agent-server が起動時に import 解決で落ちます**（これは silent でなく loud に失敗します）。
+3. **server の再起動** — 静的配信の Cache-Control 分離（[#355](https://github.com/gamasenninn/tealus/issues/355)）と `GET /api/version` の追加を反映するため。
+
+**DB migration: この版では追加ゼロ**です（`npm run migrate` は実行しても無害＝冪等ですが、新規適用はありません）。
+
+**任意 / 条件付き:**
+
+- **新しい必須の環境変数はありません。** 既定値ありの任意 env として `LINE_IMAGESET_FLUSH_MS`（LINE 複数画像の束ね待ち、既定 15 秒 / [#353](https://github.com/gamasenninn/tealus/issues/353)）が増えました。
+- **リバースプロキシ（Nginx / Cloudflare 等）を挟んでいる場合**は、`index.html` / `sw.js` / `*.webmanifest` に対して **プロキシ側が独自の Cache-Control を上書きしていないか**を確認してください。#355 はオリジンが `no-store` を返すようにする変更なので、手前で上書きされると効きません。
+- **organon を deploy していない環境**でも、辞書テーブル（manual + 自動学習）から `dictionary.local.ttl` が発行され、エージェント側の語彙正規化が効くようになりました（[#348](https://github.com/gamasenninn/tealus/issues/348)）。設定は不要です。
+
+**★ この版に上げるときだけ、端末側は手動リロードが必要です:**
+
+更新検知（#356）は「新しいクライアントが自分の陳腐化に気づく」仕組みなので、**まだ旧クライアントを開いている端末は、この版への更新自体は自動では気づけません**。各端末で 1 回だけハードリロード（PWA はアプリを閉じて開き直し、それでも変わらなければプロフィール画面の「キャッシュをクリア」）してください。**次回以降の更新からは、前面復帰時などに更新バナーが自動で出ます。**
+
+更新できたかは、**プロフィール画面の下部に表示されるビルド ID** で目視確認できます（実機で新旧を判定する唯一の手段）。
+
+**この版で直った不具合（更新すれば解消）:**
+
+- iOS の PWA に更新が反映されない（[#355](https://github.com/gamasenninn/tealus/issues/355) / [#356](https://github.com/gamasenninn/tealus/issues/356)。standalone PWA は 2 日放置しても自己回復しないことを実機で確認済み）
+- プロフィールの「キャッシュをクリア」が押しても無反応になる環境があった（[#356](https://github.com/gamasenninn/tealus/issues/356)）
+- ルームのタグを削除できない（[#351](https://github.com/gamasenninn/tealus/issues/351)。管理トグルから削除可能に）
+- LINE から複数画像を同時送信するとバラバラのメッセージになる（[#353](https://github.com/gamasenninn/tealus/issues/353)）
+
 ### → v0.6.0（汎用フォーム + エージェント起動入口）
 
 **必須の作業:**
