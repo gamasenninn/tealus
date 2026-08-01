@@ -5,6 +5,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+
+jest.mock('../../src/lib/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+
+import { logger } from '../../src/lib/logger.mts';
+import {
+  addSubscriber, removeSubscriber, type CcSubscriber,
+} from '../../src/webhook/ccSubscribers.mts';
 import {
   extractCcProject,
   appendCcEvent,
@@ -471,5 +480,119 @@ describe('emitCcAck', () => {
     })).not.toThrow();
     // TTL 後の idle 送信も同様に握りつぶす
     expect(() => jest.advanceTimersByTime(5000)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #214 HTTP 化: appendCcEvent に足した 2 つの副作用
+//   (1) 接続中の購読者にも配る (publish)
+//   (2) jsonl が伸びすぎないよう上限で切る (trim)
+// ★ file への append 自体は不変であること (上の既存テスト群が担保) が前提。
+// ---------------------------------------------------------------------------
+describe('appendCcEvent — #214 購読者への配信', () => {
+  let testDir: string;
+  const subs: CcSubscriber[] = [];
+
+  beforeEach(() => { testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-pub-test-')); });
+  afterEach(() => {
+    for (const s of subs) removeSubscriber(s);
+    subs.length = 0;
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  function listen(project: string, rooms: string[]) {
+    const got: string[] = [];
+    const s: CcSubscriber = {
+      project, allowedRooms: new Set(rooms),
+      sink: { write: (c: string) => { got.push(c); return true; } },
+    };
+    addSubscriber(s); subs.push(s);
+    return got;
+  }
+
+  test('★ file に append しつつ、購読者にも同じ payload が届く', () => {
+    const got = listen('tealus', ['r1']);
+    const payload = { id: 'm1', room_id: 'r1', content: 'hello' };
+
+    const filePath = appendCcEvent('tealus', payload, testDir);
+
+    // file 側 (既存の振る舞い)
+    expect(JSON.parse(fs.readFileSync(filePath, 'utf8').trim())).toEqual(payload);
+    // 購読者側 (追加した振る舞い)
+    expect(got).toHaveLength(1);
+    expect(JSON.parse(got[0].trim())).toEqual(payload);
+  });
+
+  test('★ 購読者の allowedRooms 外なら file には書くが配らない', () => {
+    const got = listen('tealus', ['r1']);
+
+    const filePath = appendCcEvent('tealus', { id: 'm1', room_id: 'r-other' }, testDir);
+
+    expect(fs.readFileSync(filePath, 'utf8').trim()).not.toBe('');  // file には書かれる
+    expect(got).toHaveLength(0);                                     // 配られない
+  });
+
+  test('購読者がいなくても append は成功する', () => {
+    const filePath = appendCcEvent('tealus', { id: 'm1', room_id: 'r1' }, testDir);
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+});
+
+describe('appendCcEvent — #214 jsonl の上限 (trim)', () => {
+  let testDir: string;
+  const ORIG = process.env.CC_QUEUE_MAX_LINES;
+
+  beforeEach(() => { testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-trim-test-')); });
+  afterEach(() => {
+    if (ORIG === undefined) delete process.env.CC_QUEUE_MAX_LINES;
+    else process.env.CC_QUEUE_MAX_LINES = ORIG;
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  const lines = (p: string) => fs.readFileSync(p, 'utf8').trim().split('\n');
+
+  test('上限以下なら切らない', () => {
+    process.env.CC_QUEUE_MAX_LINES = '10';
+    let filePath = '';
+    for (let i = 1; i <= 10; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    expect(lines(filePath)).toHaveLength(10);
+  });
+
+  test('★ 上限を超えたら末尾 80% を残して古い行を捨てる', () => {
+    process.env.CC_QUEUE_MAX_LINES = '10';   // → 超えたら 8 行に切り詰め
+    let filePath = '';
+    for (let i = 1; i <= 11; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    const l = lines(filePath);
+    expect(l).toHaveLength(8);
+    // 新しい方が残る = m4..m11
+    expect(JSON.parse(l[0]).id).toBe('m4');
+    expect(JSON.parse(l[7]).id).toBe('m11');
+  });
+
+  test('★ 切り詰め後も JSON として壊れていない (原子的に書き換わる)', () => {
+    process.env.CC_QUEUE_MAX_LINES = '5';
+    let filePath = '';
+    for (let i = 1; i <= 20; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    for (const l of lines(filePath)) expect(() => JSON.parse(l)).not.toThrow();
+    expect(fs.existsSync(filePath + '.tmp')).toBe(false);   // temp が残らない
+  });
+
+  test('★ 切り詰めたらログに出す (黙って消えない)', () => {
+    process.env.CC_QUEUE_MAX_LINES = '3';
+    for (let i = 1; i <= 4; i++) appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('cc-queue'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/切り詰め|trim/));
+  });
+
+  test('env 未設定なら既定 2000 が使われる (少数の append では切らない)', () => {
+    delete process.env.CC_QUEUE_MAX_LINES;
+    let filePath = '';
+    for (let i = 1; i <= 30; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    expect(lines(filePath)).toHaveLength(30);
   });
 });

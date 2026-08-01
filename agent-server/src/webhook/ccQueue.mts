@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { logger } from '../lib/logger.mts';
+import { publish } from './ccSubscribers.mts';
 
 interface CcAlias {
   mention: string;
@@ -24,6 +25,15 @@ interface CcAliasesFile {
 }
 
 const DEFAULT_QUEUE_DIR = path.join(os.homedir(), '.tealus', 'cc-queue');
+
+/**
+ * queue dir の解決。`CC_QUEUE_DIR` で差し替え可能 (テスト隔離 / 運用で場所を変えたい場合)。
+ * ★ 呼び出しのたびに env を読む — module 読込時に固定すると、env を後から設定する
+ *   テストで本番 ~/.tealus/cc-queue を掴んでしまうため (#235 と同じ罠)。
+ */
+function getCcQueueDir(): string {
+  return process.env.CC_QUEUE_DIR || DEFAULT_QUEUE_DIR;
+}
 
 // #335 cc-bridge 受付エコーの表示時間 (ms)。processing を出してこの時間後に idle で消す。
 const CC_ACK_TTL_MS = parseInt(process.env.CC_ACK_TTL_MS || '5000', 10);
@@ -128,21 +138,70 @@ function extractCcProject(content: string | null | undefined): string | null {
 }
 
 /**
- * project 用の jsonl file に payload を 1 行 append する。
- * queue dir が無ければ再帰的に作成。
+ * jsonl の行数上限 (#214)。超えたら末尾 80% を残して古い行を捨てる。
+ *
+ * ★ 不変条件: この trim は read → rewrite なので、**1 つの cc-queue dir を
+ *   複数の agent-server プロセスが共有してはいけない** (docs/05 参照)。
+ */
+const CC_QUEUE_MAX_LINES_DEFAULT = 2000;
+const CC_QUEUE_KEEP_RATIO = 0.8;
+
+function ccQueueMaxLines(): number {
+  const raw = parseInt(process.env.CC_QUEUE_MAX_LINES || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : CC_QUEUE_MAX_LINES_DEFAULT;
+}
+
+/**
+ * jsonl が上限を超えていたら末尾 keep 行だけ残す。
+ * temp file に書いて rename する = 読み手 (tail -F / stream) が途中の状態を見ない。
+ */
+function trimIfNeeded(filePath: string): void {
+  const max = ccQueueMaxLines();
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return;   // append 直後なので通常あり得ないが、trim の失敗で append を壊さない
+  }
+  const lines = content.split('\n').filter((l) => l !== '');
+  if (lines.length <= max) return;
+
+  const keep = Math.floor(max * CC_QUEUE_KEEP_RATIO);
+  const dropped = lines.length - keep;
+  const tmpPath = `${filePath}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, lines.slice(-keep).join('\n') + '\n');
+    fs.renameSync(tmpPath, filePath);
+    logger.info(`[cc-queue] 上限 ${max} 行を超えたため切り詰めました: ${path.basename(filePath)} (${dropped} 行破棄 → ${keep} 行)`);
+  } catch (err) {
+    try { fs.rmSync(tmpPath, { force: true }); } catch { /* noop */ }
+    logger.warn(`[cc-queue] 切り詰めに失敗しました (append 自体は成功): ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * project 用の jsonl file に payload を 1 行 append し、
+ * 接続中の HTTP 購読者にも同じ payload を配る (#214)。
+ *
+ * ★ append 自体は #213 から不変。file beacon (`tail -n 0 -F`) の挙動は変わらない。
+ *   publish / trim はその**後ろに足した副作用**で、どちらが失敗しても append は成立済み。
  *
  * @param project - project 識別子 (例: "tealus")
  * @param payload - シリアライズして書き込む event payload
  * @param baseDir - queue dir (default: ~/.tealus/cc-queue/)
  * @returns 書き込み先 file path
  */
-function appendCcEvent(project: string, payload: Record<string, unknown>, baseDir: string = DEFAULT_QUEUE_DIR): string {
+function appendCcEvent(project: string, payload: Record<string, unknown>, baseDir: string = getCcQueueDir()): string {
   if (!project || typeof project !== 'string') {
     throw new Error('appendCcEvent: project is required');
   }
   fs.mkdirSync(baseDir, { recursive: true });
   const filePath = path.join(baseDir, `${project}.jsonl`);
   fs.appendFileSync(filePath, JSON.stringify(payload) + '\n');
+
+  publish(project, payload);   // #214 HTTP 購読者 (認可は publish 側で room 単位に絞る)
+  trimIfNeeded(filePath);
+
   return filePath;
 }
 
@@ -211,4 +270,5 @@ export {
   getAliasesConfigPath,
   emitCcAck,
   DEFAULT_QUEUE_DIR,
+  getCcQueueDir,
 };

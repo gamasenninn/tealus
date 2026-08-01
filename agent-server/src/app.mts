@@ -10,6 +10,7 @@ import { router as settingsRoutes } from './routes/settings.mts';
 import { router as logsRoutes } from './routes/logs.mts';
 import { router as ttsRoutes } from './routes/tts.mts';
 import { router as agentRoutes } from './routes/agent.mts';
+import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { authenticate } from './middleware/auth.mts';
 
 export const app = express();
@@ -45,3 +46,7 @@ app.use('/tts', authenticate, ttsRoutes);
 
 // Agent control API（認証必要）— #250 Deep agent cancel
 app.use('/agent', authenticate, agentRoutes);
+
+// cc-queue ストリーム（認証必要）— #214 CC セッションを別マシンで動かすための復路。
+// 認証は署名検証のみなので、route 側でさらに本体 /api/rooms を引いて参加ルームに絞る。
+app.use('/cc-queue', authenticate, ccQueueRoutes);
