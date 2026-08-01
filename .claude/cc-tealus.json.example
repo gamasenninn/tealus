@@ -1,7 +1,16 @@
 {
   "_comment": "Tealus cc-queue 設定。.claude/cc-tealus.json として copy + 編集してください (gitignored)。",
+  "_mode": "queue_path (同一ホスト) か stream_url (別マシン) の **どちらか一方** を書く。両方あると二重に受信するため skill 側でエラーになります。",
+
   "project_name": "tealus",
   "auto_level": "L2",
+  "catch_up_policy": "ask",
+
+  "_file_mode": "--- 同一ホストで動かす場合 (既定) ---",
   "queue_path": "~/.tealus/cc-queue/tealus.jsonl",
-  "catch_up_policy": "ask"
+
+  "_http_mode": "--- 別マシンで動かす場合 (#214)。上の queue_path を消してこちらを書く ---",
+  "_stream_url": "https://tealus.example.com/agent-api/cc-queue",
+  "_auth_file": "~/.tealus/cc-auth.json",
+  "_auth_file_content": "{ \"login_id\": \"CLAUDE\", \"password\": \"...\" } — 本体の POST /api/auth/login にそのまま渡す。chmod 600 推奨"
 }

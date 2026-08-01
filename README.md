@@ -944,6 +944,18 @@ server {
         proxy_set_header Host $host;
     }
 
+    # cc-queue ストリーム — 別マシンの Claude Code を繋ぐ場合のみ必要 (#214)
+    # 長時間つなぎっぱなしの NDJSON なので、buffering off と長い read timeout が要る
+    # (既定のままだと 1 行ずつ届かない / 60 秒で切られる)
+    location /agent-api/cc-queue/ {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
     # agent-server (AI エージェント webhook / config)
     location /agent-api/ {
         proxy_pass http://localhost:3000;

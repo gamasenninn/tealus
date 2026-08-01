@@ -409,22 +409,24 @@ cc routing したいルームに **agent-server の Bot ユーザー**を参加�
 
 ## ステップ 3.5B. listen-tealus skill ファイルを配置 (~1 分)
 
-`/listen-tealus` を実行できるようにするには、skill 定義ファイル (`listen-tealus.md`) を Claude Code が読める場所に置く必要があります。
+`/listen-tealus` を実行できるようにするには、skill 定義を Claude Code が読める場所に置く必要があります。
 
-> 💡 **これは「インストール」ではなくただの**ファイルコピーです。Claude Code の skill は `npm install` 等のパッケージ管理ではなく、特定の場所にある markdown ファイルを起動時に scan する仕組み。
+> 💡 **これは「インストール」ではなくただの**ファイルコピーです。Claude Code の skill は `npm install` 等のパッケージ管理ではなく、特定の場所にあるファイルを起動時に scan する仕組み。
+
+★ **skill は `<name>/SKILL.md` というディレクトリ形式で置きます。** flat な `<name>.md` は**読み込まれません** (置いても `/listen-tealus` が出てこない)。
 
 Claude Code は以下 2 つの場所を skill として scan:
 
 | 場所 | scope |
 |---|---|
-| `~/.claude/skills/<name>.md` | **ユーザー単位** (どのプロジェクトでも有効、推奨) |
-| `<project>/.claude/skills/<name>.md` | **プロジェクト単位** (そのディレクトリで `claude` 起動時のみ有効) |
+| `~/.claude/skills/<name>/SKILL.md` | **ユーザー単位** (どのプロジェクトでも有効、推奨) |
+| `<project>/.claude/skills/<name>/SKILL.md` | **プロジェクト単位** (そのディレクトリで `claude` 起動時のみ有効) |
 
 ### 案 A: ユーザー単位で配置 (推奨)
 
 ```bash
 mkdir -p ~/.claude/skills/
-cp ~/tealus/.claude/skills/listen-tealus.md ~/.claude/skills/
+cp -r ~/tealus/.claude/skills/listen-tealus ~/.claude/skills/
 ```
 
 これで全プロジェクトの Claude Code session で `/listen-tealus` が使えるようになります。
@@ -435,10 +437,19 @@ cp ~/tealus/.claude/skills/listen-tealus.md ~/.claude/skills/
 
 ```bash
 mkdir -p ~/your-project/.claude/skills/
-cp ~/tealus/.claude/skills/listen-tealus.md ~/your-project/.claude/skills/
+cp -r ~/tealus/.claude/skills/listen-tealus ~/your-project/.claude/skills/
 ```
 
-> 💡 **Tealus repo 自身**で使う場合は `.claude/skills/listen-tealus.md` が既に commit 済 = **この step は skip**。`cd ~/tealus && claude` で起動するだけで `/listen-tealus` が使える状態です。
+### 案 C: repo を clone していない場合 (別マシンなど)
+
+Tealus repo を持っていないマシンでは、skill 定義を GitHub から直接取ってきます:
+
+```bash
+mkdir -p ~/.claude/skills/listen-tealus
+curl -sL https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/SKILL.md   -o ~/.claude/skills/listen-tealus/SKILL.md
+```
+
+> 💡 **Tealus repo 自身**で使う場合は `.claude/skills/listen-tealus/SKILL.md` が既に commit 済 = **この step は skip**。`cd ~/tealus && claude` で起動するだけで `/listen-tealus` が使える状態です。
 
 ### 動作確認
 
@@ -560,15 +571,17 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ### Q. `/listen-tealus` skill が見つからない / 認識されない
 
-→ skill 定義ファイル (`listen-tealus.md`) が Claude Code の scan 対象パスに置かれていない。確認:
+→ skill 定義が Claude Code の scan 対象パスに置かれていない。確認:
 
 ```bash
 # ユーザー単位 (推奨)
-ls ~/.claude/skills/listen-tealus.md
+ls ~/.claude/skills/listen-tealus/SKILL.md
 
 # プロジェクト単位
-ls .claude/skills/listen-tealus.md
+ls .claude/skills/listen-tealus/SKILL.md
 ```
+
+★ **`~/.claude/skills/listen-tealus.md` のような flat なファイルは読み込まれません。** ディレクトリ形式 (`listen-tealus/SKILL.md`) である必要があります。
 
 どちらも無ければステップ 3.5B を実施。配置後は **Claude Code を再起動**して下さい (起動時に scan するため)。
 
@@ -609,7 +622,26 @@ tail -n 5 ~/.tealus/cc-queue/{project}.jsonl
 
 ### Q. 別 PC で動かしている場合は?
 
-file beacon は **agent-server と同じマシン**にあります。別 PC で Claude Code を動かす場合、共有ストレージ (NAS / SMB) で `~/.tealus/cc-queue/` を mount する必要あり (Phase A 想定外、Phase B で network-aware 化検討、[#214](https://github.com/gamasenninn/tealus/issues/214))。
+**[#214](https://github.com/gamasenninn/tealus/issues/214) で対応済み。** file beacon の代わりに HTTP で起床通知を受け取れます (共有ストレージの mount は不要になりました)。
+
+`~/.tealus/cc-queue/` は agent-server のあるマシンにしか無いので、別 PC では `.claude/cc-tealus.json` に `queue_path` ではなく `stream_url` を書きます:
+
+```json
+{
+  "project_name": "tealus",
+  "auto_level": "L2",
+  "stream_url": "https://tealus.example.com/agent-api/cc-queue",
+  "auth_file": "~/.tealus/cc-auth.json"
+}
+```
+
+**手順の全体は [`setup-cc-remote.md`](setup-cc-remote.md) にあります。** そのドキュメントは Claude Code 自身が読んで実行できる形で書いてあるので、別 PC では repo を clone せず、CC に URL を 1 本渡すだけで済みます:
+
+```
+https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.md を読んでセットアップして
+```
+
+> 💡 **なぜ別 PC で動かすのか**: 利便性ではなく**隔離**です。同一ホストだと、`@cc-*` に反応する AI が本番 DB・メディア・`server/.env` の秘密鍵に原理的に手が届きます。別マシンなら届くのは HTTP API 越しの権限だけになります。
 
 ### Q. `@cc-tealus` 以外の自然な mention 名で呼びたい (例: `@Claude`)
 
@@ -649,7 +681,7 @@ file beacon は **agent-server と同じマシン**にあります。別 PC で 
 ## 内部実装
 
 - agent-server cc-queue: `agent-server/src/webhook/ccQueue.js` + `handler.js`
-- listen-tealus skill: `.claude/skills/listen-tealus.md`
+- listen-tealus skill: `.claude/skills/listen-tealus/SKILL.md`
 - 設定 schema: `.claude/cc-tealus.json` (`.json.example` から copy)
 
 ## 外部 repo
