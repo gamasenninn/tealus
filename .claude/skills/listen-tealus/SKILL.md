@@ -113,13 +113,15 @@ while true; do
   curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}" \
   | while IFS= read -r line; do
       case "$line" in
-        '{"__hb"'*) ;;                                                  # heartbeat: 捨てる
-        '{"id"'*)   printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
-        *)          printf '[stream-error] %s\n' "$line" ;;             # 通知のみ、ログは汚さない
+        '{"__hb"'*)   ;;                                                # heartbeat: 捨てる
+        '{"__'*)      ;;                                                # ★ 制御メッセージ全般: 捨てる (前方互換)
+        '{"id"'*)     printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
+        *)            printf '[stream-error] %s\n' "$line" ;;           # 通知のみ、ログは汚さない
       esac
     done
-  echo "[stream] disconnected, retrying in 5s"
-  sleep 5
+  BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
+  echo "[stream] disconnected, retrying in ${BACKOFF}s"
+  sleep "$BACKOFF"
 done
 ```
 
@@ -134,6 +136,8 @@ done
 | `SINCE` を `grep '^{"id"'` 経由で取る | 同じ理由の二重防御。ログに非 JSON 行が混ざってもカーソルが壊れない |
 | `[stream-error]` / `[stream] disconnected` | 切断とエラーを**見えるようにする**。黙って張り直すと、何が起きているか分からないまま取りこぼしだけが進む。ただし **`$LOG` には書かない** |
 | heartbeat を捨てる | サーバは 15 秒ごとに `{"__hb":1}` を流して接続を維持する。素通しすると **15 秒ごとに CC が起きる**。なお `grep` 等を挟む場合は `--line-buffered` が必須 (Monitor は行ごとの flush が前提) |
+| ★ `'{"__'*)` で制御メッセージをまとめて捨てる | **前方互換のため**。`__hb` だけを名指しで捨てると、サーバが将来新しい制御メッセージ (`__meta` 等) を流した瞬間、**古い SKILL の環境が全部 `[stream-error]` を出す**。skill は各自が curl で取る配布形態なので追隨しない環境が必ず残る。`__` 接頭辞を **「イベントではない制御行」の予約語**として扱う |
+| `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。`/api/auth/login` は毎回 bcrypt を踏むので CPU がスパイクする。3〜12 秒に散らす。`RANDOM` は POSIX `sh` に無いので PID で代用する |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 
 ### 4. 状態通知
