@@ -110,6 +110,7 @@ while true; do
           -d @{auth_file} | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).token")
   SINCE=$(grep '^{"id"' "$LOG" 2>/dev/null | tail -1 \
           | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
+  START=$(date +%s)
   curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}" \
   | while IFS= read -r line; do
       case "$line" in
@@ -120,7 +121,7 @@ while true; do
       esac
     done
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
-  echo "[stream] disconnected, retrying in ${BACKOFF}s"
+  echo "[stream] disconnected after $(( $(date +%s) - START ))s, retrying in ${BACKOFF}s"
   sleep "$BACKOFF"
 done
 ```
@@ -137,8 +138,16 @@ done
 | `[stream-error]` / `[stream] disconnected` | 切断とエラーを**見えるようにする**。黙って張り直すと、何が起きているか分からないまま取りこぼしだけが進む。ただし **`$LOG` には書かない** |
 | heartbeat を捨てる | サーバは 15 秒ごとに `{"__hb":1}` を流して接続を維持する。素通しすると **15 秒ごとに CC が起きる**。なお `grep` 等を挟む場合は `--line-buffered` が必須 (Monitor は行ごとの flush が前提) |
 | ★ `'{"__'*)` で制御メッセージをまとめて捨てる | **前方互換のため**。`__hb` だけを名指しで捨てると、サーバが将来新しい制御メッセージ (`__meta` 等) を流した瞬間、**古い SKILL の環境が全部 `[stream-error]` を出す**。skill は各自が curl で取る配布形態なので追隨しない環境が必ず残る。`__` 接頭辞を **「イベントではない制御行」の予約語**として扱う |
+| `START` と `disconnected after Ns` | ★ **接続がどれだけ持ったかを切断行自体に持たせる**。これが無いと、切断を見たときに「前回いつ張ったか」を思い出す必要があり、**イベントの初着時刻を接続開始と誤読する** (2026-08-01 に実際に起きた: 55 分の寿命による切断を「16 分だからデプロイだろう」と誤認)。なお接続時に別行を出すと **1 周期あたりの起床が 2 回に増える** (stdout の行はすべて Monitor のイベント) ので、切断行に持たせる。`START` はパイプの外で取ること (`while` の中はサブシェルで変数が残らない) |
 | `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。`/api/auth/login` は毎回 bcrypt を踏むので CPU がスパイクする。3〜12 秒に散らす。`RANDOM` は POSIX `sh` に無いので PID で代用する |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
+
+> ★ **接続コマンドを変えたら、`sh -c` で 1 回通してから配布すること。**
+> Monitor が使うシェルは環境によって zsh / bash / dash と違う。`RANDOM` のような
+> bash/zsh 固有の記法は、**手元では絶対に再現しない形で他環境を壊す**。2026-08-01 に
+> `sleep $((3 + RANDOM % 10))` を zsh のマシンで検証して「動く」と報告されたが、
+> POSIX sh では算術エラーになるコードだった。別マシンで動いたことは、
+> **そのマシンで動いた証拠にしかならない**。
 
 ### 4. 状態通知
 
