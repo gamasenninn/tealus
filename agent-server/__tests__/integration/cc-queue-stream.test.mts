@@ -24,6 +24,7 @@ import express, { type Express } from 'express';
 const tmpQueueDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-test-'));
 process.env.CC_QUEUE_DIR = tmpQueueDir;
 process.env.CC_STREAM_HEARTBEAT_MS = '80';   // 実時間で検証するため短く
+process.env.CC_STREAM_MAX_AGE_MS = '400';    // 同上 (本番既定は 55 分)
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -68,6 +69,7 @@ beforeEach(() => {
 afterAll(() => {
   delete process.env.CC_QUEUE_DIR;
   delete process.env.CC_STREAM_HEARTBEAT_MS;
+  delete process.env.CC_STREAM_MAX_AGE_MS;
   fs.rmSync(tmpQueueDir, { recursive: true, force: true });
 });
 
@@ -93,6 +95,7 @@ interface StreamClient {
   events: () => Array<Record<string, unknown>>;   // heartbeat を除いたもの
   status: number;
   headers: http.IncomingHttpHeaders;
+  ended: () => boolean;                           // サーバ側から閉じられたか (#360)
   abort: () => void;
 }
 
@@ -105,7 +108,9 @@ function openStream(port: number, query: string, bearer = token): Promise<Stream
     }, (res) => {
       const lines: string[] = [];
       let buf = '';
+      let closed = false;
       res.setEncoding('utf8');
+      res.on('end', () => { closed = true; });
       res.on('data', (chunk: string) => {
         buf += chunk;
         const parts = buf.split('\n');
@@ -118,6 +123,7 @@ function openStream(port: number, query: string, bearer = token): Promise<Stream
         events: () => lines.map((l) => JSON.parse(l)).filter((o) => !o.__hb),
         status: res.statusCode ?? 0,
         headers: res.headers,
+        ended: () => closed,
         abort: () => req.destroy(),
       });
     });
@@ -341,3 +347,63 @@ function fetchJson(port: number, pathname: string, bearer: string | null): Promi
     req.on('error', reject);
   });
 }
+
+// --- 接続の最大寿命 (#360) ------------------------------------------------
+//
+// ★ なぜ要るか: 認可 (allowedRooms) は接続時に /api/rooms を引いた**スナップショット**で、
+//   JWT の検証も入口で 1 回だけ。接続が長生きするほど権限が古くなる。実測で 2 時間 26 分
+//   無切断の接続が出たため、こちらから寿命を切って**クライアントの再接続ループに
+//   再ログイン + 再認可をさせる**。取りこぼしは since (受信済みカーソル) が防ぐ。
+
+describe('cc-queue — 接続の最大寿命 (#360)', () => {
+  test('★ 最大寿命を過ぎたら接続が閉じる', async () => {
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+
+    await sleep(200);
+    expect(s.ended()).toBe(false);   // まだ寿命前
+
+    await sleep(400);
+    expect(s.ended()).toBe(true);    // CC_STREAM_MAX_AGE_MS=400 を過ぎた
+
+    await srv.close();
+  });
+
+  test('★ 寿命で閉じたら購読も解除される (切断済み購読者を溜めない)', async () => {
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+    await sleep(50);
+    expect(subscriberCount('tealus')).toBe(1);
+
+    await sleep(500);
+    expect(subscriberCount('tealus')).toBe(0);
+
+    s.abort();
+    await srv.close();
+  });
+
+  test('★ 寿命で閉じたことがログに残る (黙って切れない)', async () => {
+    const { logger } = require('../../src/lib/logger.mts');
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+    await sleep(550);
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/最大寿命|max age/));
+
+    s.abort();
+    await srv.close();
+  });
+
+  test('寿命が来る前のイベントは通常どおり届く', async () => {
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+    await sleep(30);
+
+    appendCcEvent('tealus', EV('before-expiry', ROOM_A));
+    await sleep(50);
+
+    expect(s.events().map((e) => e.id)).toEqual(['before-expiry']);
+    s.abort();
+    await srv.close();
+  });
+});

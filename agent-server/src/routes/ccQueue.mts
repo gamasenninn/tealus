@@ -38,6 +38,25 @@ function heartbeatMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 15000;
 }
 
+/**
+ * 1 接続の最大寿命 (ms)。既定 55 分 (#360)。
+ *
+ * ★ なぜ必要か: 認可 (`allowedRooms`) は接続時に `/api/rooms` を引いた**スナップショット**で、
+ *   JWT の検証も入口で 1 回だけ。接続が長生きするほど権限が古くなり、
+ *   「ルームから外された / ユーザーが無効化された / トークンが失効した」のどれも
+ *   開いている接続を止めない。実測で 2 時間 26 分無切断の接続が出たため顕在化した。
+ *
+ *   → こちらから寿命で閉じ、**クライアントの再接続ループに再ログイン + 再認可をさせる**。
+ *     取りこぼしは `since` (受信済みカーソル) が防ぐので、消費側の変更は要らない。
+ *
+ *   既定を 55 分にしているのは、nginx の `proxy_read_timeout 3600s` (1 時間) より短く取り、
+ *   タイムアウト境界での不定な切れ方より**こちらの意図した切断を先に来させる**ため。
+ */
+function maxAgeMs(): number {
+  const raw = parseInt(process.env.CC_STREAM_MAX_AGE_MS || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 55 * 60 * 1000;
+}
+
 interface CcEvent {
   id?: string;
   room_id?: string;
@@ -175,12 +194,24 @@ router.get('/stream', async (req, res) => {
     try { res.write('{"__hb":1}\n'); } catch { /* close 側で片付く */ }
   }, heartbeatMs());
 
+  // 寿命が来たらこちらから閉じる。クライアントの再接続ループが再ログイン + 再認可する
+  const maxAge = maxAgeMs();
+  let expiry: NodeJS.Timeout;
+
   const cleanup = () => {
     clearInterval(hb);
+    clearTimeout(expiry);
     removeSubscriber(sub);
   };
+
+  expiry = setTimeout(() => {
+    logger.info(`[cc-stream] 最大寿命 (${Math.round(maxAge / 1000)}s) に達したため切断します: project=${project} — クライアントが再接続して認可を取り直します`);
+    cleanup();
+    res.end();
+  }, maxAge);
+
   req.on('close', cleanup);
   res.on('close', cleanup);
 
-  logger.info(`[cc-stream] 接続: project=${project} rooms=${allowedRooms.size} backlog=${backlog.length}`);
+  logger.info(`[cc-stream] 接続: project=${project} rooms=${allowedRooms.size} backlog=${backlog.length} max_age=${Math.round(maxAge / 1000)}s`);
 });
