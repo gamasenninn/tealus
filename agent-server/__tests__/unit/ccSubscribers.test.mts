@@ -9,6 +9,12 @@
  *   member でない DM が beacon に入っていた (返信しようとすると bot API が 403)。
  *   購読者ごとの allowedRooms で絞り、**消費者が実際に行動できる範囲に揃える**。
  */
+// logger をモックしないと、テストの購読者が **本番の agent-server ログ** に書き込む
+// (実際に `rooms=1` / `project=organon` 等のテストデータが本番ログに混入した)
+jest.mock('../../src/lib/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+
 import {
   addSubscriber, removeSubscriber, publish, subscriberCount,
   type CcSubscriber,

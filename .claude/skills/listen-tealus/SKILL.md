@@ -108,9 +108,17 @@ P={project_name}; API={本体の origin}; STREAM={stream_url}; LOG=~/.claude/.cc
 while true; do
   TOKEN=$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
           -d @{auth_file} | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).token")
-  SINCE=$(tail -1 "$LOG" 2>/dev/null | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
+  SINCE=$(grep '^{"id"' "$LOG" 2>/dev/null | tail -1 \
+          | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
   curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}" \
-    | grep --line-buffered -v '"__hb"' | tee -a "$LOG"
+  | while IFS= read -r line; do
+      case "$line" in
+        '{"__hb"'*) ;;                                                  # heartbeat: 捨てる
+        '{"id"'*)   printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
+        *)          printf '[stream-error] %s\n' "$line" ;;             # 通知のみ、ログは汚さない
+      esac
+    done
+  echo "[stream] disconnected, retrying in 5s"
   sleep 5
 done
 ```
@@ -121,8 +129,12 @@ done
 |---|---|
 | `while true` … `sleep 5` | ★ Monitor は `persistent: true` のとき **exit で監視ごと終わる**。curl がネットワーク断や nginx のタイムアウトで死ぬと、**セッションは黙って聞かなくなる**。`tail -F` には無い HTTP 固有の失敗モードなので、自力で張り直す。`sleep 5` はビジーループ防止 |
 | 毎周の `login` | トークンは 7 日で失効する。周回ごとに取り直せば失効が構造的に起きない。**長寿命 JWT は使わない** (本体の `authenticate` は `decoded.id` で users を引くため、`{userId:...}` 形式の手製トークンでは `/api/rooms` が引けず認可できない) |
-| `tee -a "$LOG"` + `SINCE` | ★ **受信済みカーソル**。`.last_processed` (watermark) は reply 成功時にしか進まないので、それを `since` に使うと **L2 で保留中の mention が再接続のたびに再提示される**。受信した時点で進むカーソルを別に持つことで、「切断中のイベントは拾う / 未処理は再送しない」を両立する |
-| `grep --line-buffered -v '"__hb"'` | サーバは 15 秒ごとに `{"__hb":1}` を流して接続を維持する。素通しすると **15 秒ごとに CC が起きる**。ここで捨てる。`--line-buffered` を外すと行が溜まって通知が届かない (Monitor は行ごとの flush が前提) |
+| `>> "$LOG"` + `SINCE` | ★ **受信済みカーソル**。`.last_processed` (watermark) は reply 成功時にしか進まないので、それを `since` に使うと **L2 で保留中の mention が再接続のたびに再提示される**。受信した時点で進むカーソルを別に持つことで、「切断中のイベントは拾う / 未処理は再送しない」を両立する |
+| ★ `case` による **許可方式**の仕分け | **除外方式 (`grep -v '"__hb"'`) にしてはいけない。** proxy の 504 などで返る **HTML / テキストのエラー本文が素通りして受信ログに混ざり、`SINCE` の計算が壊れて空になる** = 再接続で切断中の mention を丸ごと取りこぼす。`{"id"` で始まる行だけをログに入れる。**2026-08-01 の dogfood で実際に踏んだ** |
+| `SINCE` を `grep '^{"id"'` 経由で取る | 同じ理由の二重防御。ログに非 JSON 行が混ざってもカーソルが壊れない |
+| `[stream-error]` / `[stream] disconnected` | 切断とエラーを**見えるようにする**。黙って張り直すと、何が起きているか分からないまま取りこぼしだけが進む。ただし **`$LOG` には書かない** |
+| heartbeat を捨てる | サーバは 15 秒ごとに `{"__hb":1}` を流して接続を維持する。素通しすると **15 秒ごとに CC が起きる**。なお `grep` 等を挟む場合は `--line-buffered` が必須 (Monitor は行ごとの flush が前提) |
+| — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 
 ### 4. 状態通知
 
