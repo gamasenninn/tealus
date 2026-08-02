@@ -131,12 +131,16 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 **消費側の skill も差し替えてください。** `.claude/skills/listen-tealus/SKILL.md` は `main` から取得する運用なので、**タグを打っても配布物は切り替わりません**。
 
 ```bash
-curl -o ~/.claude/skills/listen-tealus/SKILL.md \
-  https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/SKILL.md
-sh -n ~/.claude/skills/listen-tealus/SKILL.md   # ★ 配布前に構文を通す
+S=~/.claude/skills/listen-tealus/SKILL.md
+curl -o "$S" https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/SKILL.md
+
+# ★ 接続コマンドだけを抜き出して構文を通す
+awk '/^P=\{project_name\}/{f=1} f&&/^```/{exit} f' "$S" | sh -n && echo "構文 OK"
 ```
 
-`sh -n` を挟むのは、**zsh でしか動かない書き方が混ざっていても、書いた環境では気づけない**からです（`RANDOM` / `PIPESTATUS` など）。
+構文を通すのは、**zsh でしか動かない書き方が混ざっていても、書いた環境では気づけない**からです（`RANDOM` / `PIPESTATUS` など）。
+
+★ **`sh -n "$S"` と Markdown 全体に掛けてはいけません。** frontmatter の 3 行目で必ず落ちるので、**接続コマンドまで到達せず、常に赤く出るだけの検査**になります（2026-08-02 に一度そう書いて配布し、Mac セッションの指摘で判明）。**「落ちるべきときに落ちるか」を確かめていない検査は、無いより悪い**（通ったつもりになる）。
 
 ★ **サーバだけ更新しても壊れません。**新しい制御メッセージは `{"__` で始まり、古い skill は**知らない制御行として黙って無視**します（前方互換）。ただし静音化と停止予告は効かないので、**55 分ごとと再起動のたびにセッションが起こされ続けます**。
 
