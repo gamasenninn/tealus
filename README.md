@@ -1028,10 +1028,10 @@ npm run build
 現場で実害が出たものを最優先で直します。それ以外は下の順で進めています。
 リリース履歴は [CHANGELOG.md](./CHANGELOG.md)、個別の議論は各 Issue にあります。
 
-1. **エージェント連携の分散化** ([#214](https://github.com/gamasenninn/tealus/issues/214)) — AI エージェントを別マシンで動かせるようにし、サーバー本体（DB・メディア・秘密鍵）から切り離す。現在は起動通知がローカルファイル経由のため同一ホスト必須
-2. **ローカル LLM 対応** ([#272](https://github.com/gamasenninn/tealus/issues/272)) — 推論先を差し替え可能にし、社内 GPU / Ollama に向けられるようにする
+1. **ローカル LLM 対応** ([#272](https://github.com/gamasenninn/tealus/issues/272)) — 推論先を差し替え可能にし、社内 GPU / Ollama に向けられるようにする
+2. **長尺音声の分割** ([#329](https://github.com/gamasenninn/tealus/issues/329)) — 長い会議音声を分割して文字起こしできるようにする
 
-順番待ち: 長尺音声の分割 ([#329](https://github.com/gamasenninn/tealus/issues/329)) / organic ontology の理論的整理 ([#279](https://github.com/gamasenninn/tealus/issues/279))
+順番待ち: organic ontology の理論的整理 ([#279](https://github.com/gamasenninn/tealus/issues/279)) / 複数 AI セッションが同じチャンネルを共有するときの配信制御 ([#359](https://github.com/gamasenninn/tealus/issues/359))
 
 ## ライセンス
 

@@ -110,6 +110,56 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
+### → v0.8.0（AI セッションを別マシンで動かせるように）
+
+> **★ 影響範囲**: 機能の中身は **cc-bridge（`@cc-*` で Claude Code を起こす仕組み）を使っている環境にのみ**効きます。メッセンジャーとして使っている場合、画面に見える変化はありません。**ただし下の「必須の作業」1 は全員が対象です。**
+
+**必須の作業:**
+
+1. ★ **Node 24 以上にする** — `engines` が 6 パッケージとも `>=20` / `>=22.6` から **`>=24.0.0`** に変わりました（`0cf9684`）。実行時の要件は以前から 24（Node native type stripping でビルドレス実行しているため）で、**宣言だけが古かった**のを実態に揃えたものです。**Node 22 以下では `npm install` が止まります**（loud に失敗するので気づけます）。
+
+   ```bash
+   node -v   # v24 以上であること
+   ```
+
+2. **server / agent-server の再起動** — cc-bridge の HTTP 経路（[#214](https://github.com/gamasenninn/tealus/issues/214)）を反映するため。
+
+**DB migration: この版では追加ゼロ**です（最新は `026` のまま）。**client の再ビルドも不要**です（client の変更は内部リファクタのみ）。
+
+**★ cc-bridge を使っている場合だけ、追加で 1 つ:**
+
+**消費側の skill も差し替えてください。** `.claude/skills/listen-tealus/SKILL.md` は `main` から取得する運用なので、**タグを打っても配布物は切り替わりません**。
+
+```bash
+curl -o ~/.claude/skills/listen-tealus/SKILL.md \
+  https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/SKILL.md
+sh -n ~/.claude/skills/listen-tealus/SKILL.md   # ★ 配布前に構文を通す
+```
+
+`sh -n` を挟むのは、**zsh でしか動かない書き方が混ざっていても、書いた環境では気づけない**からです（`RANDOM` / `PIPESTATUS` など）。
+
+★ **サーバだけ更新しても壊れません。**新しい制御メッセージは `{"__` で始まり、古い skill は**知らない制御行として黙って無視**します（前方互換）。ただし静音化と停止予告は効かないので、**55 分ごとと再起動のたびにセッションが起こされ続けます**。
+
+**任意 / 条件付き（新しい必須の環境変数はありません）:**
+
+| 環境変数 | 既定 | |
+|---|---|---|
+| `CC_STREAM_MAX_AGE_MS` | `3300000`（55 分） | 1 接続の最大寿命。★ **伸ばす / 外すと権限の更新が止まります**（下記） |
+| `CC_STREAM_HEARTBEAT_MS` | `15000` | 無音時の keep-alive |
+| `CC_SHUTDOWN_EXPECT_BACK_MS` | `30000` | 停止予告に載せる「戻ってくるまでの見込み」。デプロイに時間がかかる環境では伸ばしてよい |
+| `CC_QUEUE_MAX_LINES` | `2000` | cc-queue の jsonl 上限（超えたら 1600 行に切り詰め、ログに出る） |
+
+- **リバースプロキシ（Nginx 等）を挟んで cc-bridge を外に出す場合**は、ストリーム経路だけ `proxy_buffering off;` と長めの `proxy_read_timeout` が要ります（README の Nginx 例を参照）。バッファリングされると**行が届かず、通知がまとめて遅れて来ます**。
+- **★ `CC_STREAM_MAX_AGE_MS` を伸ばさないこと。** 接続の認可は**接続時のスナップショット**で、JWT の検証も入口で 1 回だけです。「ルームから外された / ユーザーが無効化された / トークンが失効した」のどれも**開いている接続を止めません**（[#360](https://github.com/gamasenninn/tealus/issues/360)）。寿命で切ってクライアントに再ログイン + 再認可させることが、権限を新しく保つ唯一の経路です。既定の 55 分は nginx の `proxy_read_timeout 3600s` より短く取っています。
+
+**この版で直った不具合（更新すれば解消）:**
+
+- cc-queue ストリームの認可が古いまま残り続ける（[#360](https://github.com/gamasenninn/tealus/issues/360)。実測で 2 時間 26 分無切断の接続が出て顕在化）
+- 別マシンのセッションが、**予定どおりの切断や計画的な再起動のたびに起こされる**（[#363](https://github.com/gamasenninn/tealus/issues/363) / [#365](https://github.com/gamasenninn/tealus/issues/365)。1 日 26 回 → 実イベントのみに）
+- `docs/setup-cc-tealus-bridge.md` の skill 配置手順が、**存在しないファイル**をコピーするよう案内していた（しかも読み込まれない flat 形式）
+
+**別マシンで動かす場合:** `docs/setup-cc-remote.md` を新設しました。**CC 自身が読んで実行する**形の手順書で、人間は raw URL を 1 本渡すだけです。★ **パスワードは人間が書きます**（`~/.tealus/cc-auth.json` を `chmod 600`）。
+
 ### → v0.7.0（PWA 更新検知 + エージェント指示の履歴）
 
 **必須の作業:**
