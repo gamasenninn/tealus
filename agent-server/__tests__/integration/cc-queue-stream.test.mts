@@ -191,6 +191,22 @@ describe('cc-queue — GET /pending', () => {
     await srv.close();
   });
 
+  test('★ サーバの設定値 (max_age_ms / heartbeat_ms) を返す (#361)', async () => {
+    // クライアントはこれを使って「今の切断は予定どおりか」を自分で判定する。
+    // これが無いと値をハードコードするしかなく、サーバ側で max_age を変えた瞬間に
+    // **全ての切断が「想定外」に落ちて通知の嵐になる** (2026-08-01 の 120 秒実験で実例)。
+    const srv = await listen(makeApp());
+    const res = await fetchJson(srv.port, '/cc-queue/pending?project=tealus', token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.max_age_ms).toBe(400);      // CC_STREAM_MAX_AGE_MS
+    expect(res.body.heartbeat_ms).toBe(80);     // CC_STREAM_HEARTBEAT_MS
+    // 既存フィールドは不変 (古いクライアントを壊さない)
+    expect(res.body).toMatchObject({ project: 'tealus', count: 0 });
+
+    await srv.close();
+  });
+
   test('since を渡すとそれ以降だけ数える', async () => {
     appendCcEvent('tealus', EV('m1', ROOM_A));
     appendCcEvent('tealus', EV('m2', ROOM_A));

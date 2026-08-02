@@ -152,7 +152,16 @@ router.get('/pending', async (req, res) => {
   const pending = (since ? backlogSince(events, since, ctx.project) : events)
     .filter((e) => typeof e.room_id === 'string' && ctx.allowedRooms.has(e.room_id));
 
-  res.json({ project: ctx.project, count: pending.length });
+  // ★ サーバの設定値を一緒に返す (#361)。クライアントはこれで「今の切断が予定どおりか」を
+  //   自分で判定する。無いと値をハードコードするしかなく、サーバ側で max_age を変えた瞬間に
+  //   **全ての切断が「想定外」に落ちて通知の嵐になる** (2026-08-01 の 120 秒実験で実例)。
+  //   既存フィールドは不変なので、知らないクライアントは無視するだけで壊れない。
+  res.json({
+    project: ctx.project,
+    count: pending.length,
+    max_age_ms: maxAgeMs(),
+    heartbeat_ms: heartbeatMs(),
+  });
 });
 
 /**
