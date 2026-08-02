@@ -78,6 +78,11 @@ logger.info(
 export const PORT = parseInt(process.env.AGENT_PORT || '4000');
 
 // Tealus API
+// ★ 停止を予告するとき、クライアントに伝える「戻ってくるまでの見込み」(ms、#365)。
+// デプロイにどれだけかかるかを知っているのはサーバだけなので、クライアントに
+// ハードコードさせない (#361 で解いたのと同じ問題を再導入しないため)。
+export const CC_SHUTDOWN_EXPECT_BACK_MS = parseInt(process.env.CC_SHUTDOWN_EXPECT_BACK_MS || '30000', 10);
+
 export const TEALUS_API_URL = process.env.TEALUS_API_URL || 'http://localhost:3000';
 export const TEALUS_BOT_ID = process.env.TEALUS_BOT_ID;
 export const TEALUS_BOT_PASS = process.env.TEALUS_BOT_PASS;

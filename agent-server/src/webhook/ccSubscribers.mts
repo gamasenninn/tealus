@@ -55,6 +55,65 @@ export function subscriberCount(project: string): number {
 }
 
 /**
+ * 1 行を購読者集合に書き出す共通処理。write が投げた購読者は登録から外す。
+ * 配信中に set を触るので、走査は snapshot に対して行う。
+ */
+function writeTo(set: Set<CcSubscriber>, line: string, filter?: (s: CcSubscriber) => boolean): void {
+  for (const sub of [...set]) {
+    if (filter && !filter(sub)) continue;
+    try {
+      sub.sink.write(line);
+    } catch (err) {
+      logger.debug(`[cc-stream] write 失敗のため購読解除: project=${sub.project} ${err instanceof Error ? err.message : String(err)}`);
+      removeSubscriber(sub);
+    }
+  }
+}
+
+/**
+ * project の全購読者に**制御メッセージ**を送る (#365)。
+ *
+ * ★ `publish()` では送れない。制御メッセージは room に属さないため
+ *   `publish` の「room_id が無い payload は捨てる」に引っかかる。
+ *   逆に言うと、**制御メッセージは認可 (allowedRooms) の対象外**である
+ *   ことを明示するために経路を分けている。room の中身を含めてはいけない。
+ *
+ * 消費側は `{"__` 接頭辞を「イベントではない制御行」として扱う (前方互換)。
+ */
+export function broadcastControl(project: string, payload: Record<string, unknown>): void {
+  const set = subscribers.get(project);
+  if (!set || set.size === 0) return;
+  writeTo(set, JSON.stringify(payload) + '\n');
+}
+
+/**
+ * ★ 計画的な停止を全 project の購読者に予告する (#365)。
+ *
+ * 再起動はバグ修正のたびに起きる。人が毎回予告する運用は **忘れるようになった
+ * 時点で、本当に必要な場面でも使われなくなる**。情報を持っているサーバが
+ * 自分で予告すれば、覚えておく必要が消える。
+ *
+ * ★ この予告が出るのは graceful shutdown (SIGINT / SIGTERM) のときだけ。
+ *   クラッシュや強制終了では出ない —— **予告できるものは予告し、
+ *   予告できないものは異常として残る**、が仕組みから自然にそうなる。
+ *
+ * @param expectBackMs クライアントに伝える「戻ってくるまでの見込み」。
+ *   これをクライアント側にハードコードさせない (デプロイ時間を知るのはサーバだけ)。
+ */
+export function broadcastShutdown(expectBackMs: number): void {
+  const payload = { __bye: { reason: 'shutdown', expect_back_ms: expectBackMs } };
+  const line = JSON.stringify(payload) + '\n';
+  let total = 0;
+  for (const set of subscribers.values()) {
+    total += set.size;
+    writeTo(set, line);
+  }
+  if (total > 0) {
+    logger.info(`[cc-stream] 停止を予告しました: ${total} 購読者 (expect_back_ms=${expectBackMs})`);
+  }
+}
+
+/**
  * project の購読者に 1 イベントを配る (NDJSON = 1 行 + 改行)。
  *
  * - **allowedRooms に含まれる room_id のイベントだけ**配る (認可)
@@ -72,15 +131,5 @@ export function publish(project: string, payload: Record<string, unknown>): void
     return;
   }
 
-  const line = JSON.stringify(payload) + '\n';
-  // 配信中に set を触る (切断済みの除去) ので、走査は snapshot に対して行う
-  for (const sub of [...set]) {
-    if (!sub.allowedRooms.has(roomId)) continue;
-    try {
-      sub.sink.write(line);
-    } catch (err) {
-      logger.debug(`[cc-stream] write 失敗のため購読解除: project=${project} ${err instanceof Error ? err.message : String(err)}`);
-      removeSubscriber(sub);
-    }
-  }
+  writeTo(set, JSON.stringify(payload) + '\n', (sub) => sub.allowedRooms.has(roomId));
 }

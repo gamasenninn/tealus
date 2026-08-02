@@ -17,6 +17,7 @@ jest.mock('../../src/lib/logger.mts', () => ({ logger: {
 
 import {
   addSubscriber, removeSubscriber, publish, subscriberCount,
+  broadcastControl, broadcastShutdown,
   type CcSubscriber,
 } from '../../src/webhook/ccSubscribers.mts';
 
@@ -173,5 +174,89 @@ describe('ccSubscribers — 切断済み購読者の扱い', () => {
     publish('tealus', EV('r1'));
 
     expect(subscriberCount('tealus')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #365 計画的な停止の予告 (`__bye`)
+//
+// ★ なぜ要るか: 再起動はバグ修正のたびに起きる。人が毎回予告する運用は
+//   **忘れるようになった時点で、本当に必要な場面でも使われなくなる**。
+//   情報を持っているサーバが自分で予告すれば、覚えておく必要が消える。
+//
+// ★ 制御メッセージは room に属さないので publish() では送れない
+//   (publish は room_id が無い payload を捨てる)。専用の経路が要る。
+// ---------------------------------------------------------------------------
+describe('broadcastControl — #365 制御メッセージの一斉送信', () => {
+  it('★ room に関係なく全購読者に届く', () => {
+    const a = makeSub('tealus', ['r1']);
+    const b = makeSub('tealus', ['r9']);   // ★ 全く別の room だけの購読者
+    addSubscriber(a.s);
+    addSubscriber(b.s);
+
+    broadcastControl('tealus', { __bye: { reason: 'shutdown', expect_back_ms: 30000 } });
+
+    for (const r of [a.res, b.res]) {
+      expect(r.written).toHaveLength(1);
+      expect(JSON.parse(r.written[0].trim())).toEqual({ __bye: { reason: 'shutdown', expect_back_ms: 30000 } });
+    }
+  });
+
+  it('別 project の購読者には届かない', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r1']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    broadcastControl('tealus', { __bye: { reason: 'shutdown' } });
+
+    expect(t.res.written).toHaveLength(1);
+    expect(o.res.written).toHaveLength(0);
+  });
+
+  it('NDJSON = 1 行 + 改行', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    broadcastControl('tealus', { __bye: { reason: 'shutdown' } });
+    expect(res.written[0]).toBe('{"__bye":{"reason":"shutdown"}}' + '\n');
+  });
+
+  it('購読者ゼロでも例外を投げない', () => {
+    expect(() => broadcastControl('tealus', { __bye: {} })).not.toThrow();
+  });
+
+  it('★ write が投げても他の購読者への送信は続く (停止時なので特に重要)', () => {
+    const broken: CcSubscriber = {
+      project: 'tealus', allowedRooms: new Set(['r1']),
+      sink: { write: () => { throw new Error('EPIPE'); } },
+    };
+    created.push(broken);
+    const ok = makeSub('tealus', ['r1']);
+    addSubscriber(broken);
+    addSubscriber(ok.s);
+
+    expect(() => broadcastControl('tealus', { __bye: {} })).not.toThrow();
+    expect(ok.res.written).toHaveLength(1);
+  });
+});
+
+describe('broadcastShutdown — #365 全 project への停止予告', () => {
+  it('★ project を問わず全購読者に予告を送る', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r2']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    broadcastShutdown(30000);
+
+    for (const r of [t.res, o.res]) {
+      const msg = JSON.parse(r.written[0].trim());
+      expect(msg.__bye.reason).toBe('shutdown');
+      expect(msg.__bye.expect_back_ms).toBe(30000);
+    }
+  });
+
+  it('購読者が一人もいなくても例外を投げない (停止処理を阻害しない)', () => {
+    expect(() => broadcastShutdown(30000)).not.toThrow();
   });
 });

@@ -105,8 +105,8 @@ Monitor (
 
 ```sh
 P={project_name}; API={本体の origin}; STREAM={stream_url}
-LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc
-FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0
+LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
+FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300
 while true; do
   TOKEN=$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
           -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}")
@@ -130,6 +130,11 @@ while true; do
   | while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
         '{"__hb"'*)   ;;                                                # heartbeat: 捨てる
+        '{"__bye"'*)                                                    # ★ 計画的な停止の予告 (#365)
+          E=$(printf '%s' "$line" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).__bye.expect_back_ms/1000);Number.isFinite(v)&&v>0?v:0}catch(e){0}")
+          [ "$E" = "0" ] && E=30
+          [ "$E" -gt "$GRACE_LIMIT" ] && E=$GRACE_LIMIT                 # 壊れた値でも暴走させない
+          echo $(( $(date +%s) + E )) > "$BYE" ;;
         '{"__'*)      ;;                                                # ★ 制御メッセージ全般: 捨てる (前方互換)
         '{"id"'*)     printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
         *)            printf '[stream-error] %s\n' "$line" ;;           # 通知のみ、ログは汚さない
@@ -138,7 +143,9 @@ while true; do
   SEC=$(( $(date +%s) - START )); RC_VAL=$(cat "$RC" 2>/dev/null); DISC=$((DISC+1))
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
   MSG="[stream] disconnected after ${SEC}s (curl=$RC_VAL), retrying in ${BACKOFF}s"
-  if [ "$RC_VAL" = "0" ] && [ "$SEC" -ge "$MAX_AGE" ] && [ "$SEC" -le $((MAX_AGE + 5)) ]; then
+  if [ "$(date +%s)" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]; then
+    FAILS=0; echo "$MSG — 停止予告の猶予中" >&2      # ★ __bye の猶予窓 (#365)。判定によらず黙る
+  elif [ "$RC_VAL" = "0" ] && [ "$SEC" -ge "$MAX_AGE" ] && [ "$SEC" -le $((MAX_AGE + 5)) ]; then
     FAILS=0; echo "$MSG" >&2                        # ★ 予定どおり = 記録だけ。起こさない
   else
     FAILS=$((FAILS+1)); [ "$FAILS" = "1" ] && DOWN_FROM=$START
@@ -172,6 +179,9 @@ done
 | ★ `Number.isFinite(v)?v:0` | **古いサーバ (#361 前) は `max_age_ms` を返さない**。`undefined/1000` は `NaN` になるが**例外にならないので catch に落ちない**。そのままだと `[ "$SEC" -ge "NaN" ]` がエラーになり、**全ての切断が「想定外」に落ちて通知の嵐** = 防ごうとしている状態そのものになる。2026-08-02 に旧サーバへの実接続で確認 |
 | 毎周の `pending` | MAX_AGE を毎回取り直す。arm 時に 1 回だけだと、**実行中にサーバ側で max_age を変えられたときに古い値を持ち続ける** (2026-08-01 の 120 秒実験で実例)。取れないときは 3300 と仮定し、**その旨を 1 回だけ通知**する (黙って仮定しない) |
 | `[stream] alive` (1 日 1 回) | 変更後は正常運転が通知ゼロになるが、**Monitor が自動停止した場合も通知ゼロ**で区別がつかない。日次で 1 行出して **沈黙の意味を一つに絞る**。ただしこれは死活監視ではなく、**「来るはずのものが来ない」と誰かが気づいて初めて機能する** |
+| ★ `__bye` と猛予窓 (`$BYE`) | **再起動はバグ修正のたびに起きる**。人が毎回予告する運用は、忘れるようになった時点で本当に必要な場面でも使われなくなるので、**サーバが自分で予告する** (#365)。<br>★ **「次の 1 回の切断だけ黙る」では足りない** —— 切断は黙っても、その後の再接続失敗 (まだ戻っていない) で結局起こされる。**時間の猛予として持つ**。<br>★ 時間で持つと、「予告が来たのに切断が来ない」ケースも**自動で失効する** (失効処理を書く必要すら無い)。回数で持つと消し忘れが起きる |
+| ★ `expect_back_ms` をサーバから受け取る | クライアントが 60 秒などと決め打つと、**#361 で解いたばかりの問題 (サーバの都合をクライアントがハードコード) を再導入**する。デプロイに 5 分かかる日もあり、その値を知っているのはサーバだけ。<br>ただし `GRACE_LIMIT` (300 秒) で clamp すること —— **壊れた値を返されても永久に黙り込まない**ため |
+| ★ クラッシュでは `__bye` が出ない | これは欠陥ではなく**意図した振る舞い**。計画的な停止 (SIGINT / SIGTERM) だけが静かになり、クラッシュ・電源断・`kill -9` は異常として残る。**予告できるものは予告し、予告できないものは異常として残る** —— 仕組みから自然にそうなるので、例外処理を書く必要がない |
 | `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。`/api/auth/login` は毎回 bcrypt を踏むので CPU がスパイクする。3〜12 秒に散らす。`RANDOM` は POSIX `sh` に無いので PID で代用する |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 

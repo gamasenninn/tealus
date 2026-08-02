@@ -9,6 +9,7 @@ import { logger } from './lib/logger.mts';
 import { app } from './app.mts';
 import { initializeAgent } from './setup/register.mts';
 import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
+import { broadcastShutdown } from './webhook/ccSubscribers.mts';
 import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
 
@@ -41,6 +42,12 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // Graceful shutdown
 const shutdown = async () => {
   logger.info('Shutting down...');
+  // ★ cc-queue の購読者に「計画的な停止」を先に伝える (#365)。
+  //   これが無いと、別マシンのクライアントは再起動を「予定外の切断」として
+  //   毎回通知する。人が毎回予告する運用は忘れられるので、サーバが自分で言う。
+  //   クラッシュ時には当然出ない = 予告できないものは異常として残る。
+  //   server.close() より先に呼ぶこと (接続を閉じてからでは届かない)。
+  try { broadcastShutdown(config.CC_SHUTDOWN_EXPECT_BACK_MS); } catch { /* 停止処理は止めない */ }
   server.close();
   await closeAllRoomMcp();
   process.exit(0);
