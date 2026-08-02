@@ -104,15 +104,16 @@ Monitor (
 接続コマンド (`{...}` を設定値で置換して 1 行の sh として渡す):
 
 ```sh
-P={project_name}; API={本体の origin}; STREAM={stream_url}; LOG=~/.claude/.cc-stream-$P.ndjson
+P={project_name}; API={本体の origin}; STREAM={stream_url}
+LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc
 while true; do
   TOKEN=$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
           -d @{auth_file} | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).token")
   SINCE=$(grep '^{"id"' "$LOG" 2>/dev/null | tail -1 \
           | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
   START=$(date +%s)
-  curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}" \
-  | while IFS= read -r line; do
+  { curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}"; echo $? > "$RC"; } \
+  | while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
         '{"__hb"'*)   ;;                                                # heartbeat: 捨てる
         '{"__'*)      ;;                                                # ★ 制御メッセージ全般: 捨てる (前方互換)
@@ -121,7 +122,7 @@ while true; do
       esac
     done
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
-  echo "[stream] disconnected after $(( $(date +%s) - START ))s, retrying in ${BACKOFF}s"
+  echo "[stream] disconnected after $(( $(date +%s) - START ))s (curl=$(cat "$RC" 2>/dev/null)), retrying in ${BACKOFF}s"
   sleep "$BACKOFF"
 done
 ```
@@ -139,6 +140,8 @@ done
 | heartbeat を捨てる | サーバは 15 秒ごとに `{"__hb":1}` を流して接続を維持する。素通しすると **15 秒ごとに CC が起きる**。なお `grep` 等を挟む場合は `--line-buffered` が必須 (Monitor は行ごとの flush が前提) |
 | ★ `'{"__'*)` で制御メッセージをまとめて捨てる | **前方互換のため**。`__hb` だけを名指しで捨てると、サーバが将来新しい制御メッセージ (`__meta` 等) を流した瞬間、**古い SKILL の環境が全部 `[stream-error]` を出す**。skill は各自が curl で取る配布形態なので追隨しない環境が必ず残る。`__` 接頭辞を **「イベントではない制御行」の予約語**として扱う |
 | `START` と `disconnected after Ns` | ★ **接続がどれだけ持ったかを切断行自体に持たせる**。これが無いと、切断を見たときに「前回いつ張ったか」を思い出す必要があり、**イベントの初着時刻を接続開始と誤読する** (2026-08-01 に実際に起きた: 55 分の寿命による切断を「16 分だからデプロイだろう」と誤認)。なお接続時に別行を出すと **1 周期あたりの起床が 2 回に増える** (stdout の行はすべて Monitor のイベント) ので、切断行に持たせる。`START` はパイプの外で取ること (`while` の中はサブシェルで変数が残らない) |
+| `{ curl ...; echo $? > "$RC"; }` | ★ **curl の終了コードを拾う。** これが無いと切断の種類をクライアント側だけで判別できず、毎回サーバログを見に行くことになる。`0`=サーバが正常に閉じた (寿命など) / `18`・`52`・`56`=転送が途中で切れた (ネットワーク起因) / `6`・`7`=DNS・接続失敗 / `28`=タイムアウト。**パイプの左側の終了コードを取る移植可能な方法はこれだけ** (`PIPESTATUS` は bash 専用、`$pipestatus` は zsh 専用、`set -o pipefail` は POSIX 外) |
+| ★ `|| [ -n "$line" ]` | **末尾に改行が無い行を `read` が捨てるのを防ぐ。** エラー応答の本文 (401 の JSON や 504 の HTML) は改行で終わらないので、これが無いと **`[stream-error]` が無音で消える**。「エラーが出ていない」のではなく「読めていない」状態になる。2026-08-02 に実機で確認 |
 | `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。`/api/auth/login` は毎回 bcrypt を踏むので CPU がスパイクする。3〜12 秒に散らす。`RANDOM` は POSIX `sh` に無いので PID で代用する |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 
