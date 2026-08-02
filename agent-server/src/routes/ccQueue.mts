@@ -57,6 +57,15 @@ function maxAgeMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 55 * 60 * 1000;
 }
 
+/**
+ * 寿命切断の予告に載せる「戻ってくるまでの見込み」(ms)。
+ *
+ * ★ 停止 (`CC_SHUTDOWN_EXPECT_BACK_MS`) と違い、**サーバは動き続けている**。
+ *   クライアントは即座に繋ぎ直せるので短くてよい。長くすると、寿命切断の直後に
+ *   起きた本物の障害が、その分だけ黙って見過ごされる。
+ */
+const MAX_AGE_EXPECT_BACK_MS = 5000;
+
 interface CcEvent {
   id?: string;
   room_id?: string;
@@ -215,6 +224,16 @@ router.get('/stream', async (req, res) => {
 
   expiry = setTimeout(() => {
     logger.info(`[cc-stream] 最大寿命 (${Math.round(maxAge / 1000)}s) に達したため切断します: project=${project} — クライアントが再接続して認可を取り直します`);
+    // ★ 閉じる前に**理由**を伝える (#366)。これが無いと、クライアントは
+    //   「経過秒が寿命に近いか」で理由を逆算するしかない。その逆算は
+    //   **`date +%s` が単調増加する**という前提に乗っていて、成り立たない。
+    //   実際 2026-08-02 に別マシンで SEC=3298 と記録され、寿命切断が「想定外」として
+    //   通知された (サーバ側の実測は 3300 秒ちょうど。2 台の時計が 55 分で 2 秒ずれていた)。
+    //   理由を知っているのはサーバだけなので、サーバが配る。
+    //   ★ end() より先に書くこと。閉じた後では届かない。
+    try {
+      res.write(JSON.stringify({ __bye: { reason: 'max_age', expect_back_ms: MAX_AGE_EXPECT_BACK_MS } }) + '\n');
+    } catch { /* 閉じる直前なので失敗しても停止処理は続ける */ }
     cleanup();
     res.end();
   }, maxAge);

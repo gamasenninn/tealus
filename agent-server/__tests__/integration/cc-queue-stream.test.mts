@@ -398,6 +398,39 @@ describe('cc-queue — 接続の最大寿命 (#360)', () => {
     await srv.close();
   });
 
+  // ★ #366: 理由を配る。クライアントに経過秒から逆算させない。
+  //   別マシンでの実測で、寿命切断が SEC=3298 と記録され「想定外」として通知された。
+  //   サーバ側の実測は 3300 秒ちょうどで、2 台の時計が 55 分で 2 秒ずれていた
+  //   (`date +%s` は壁時計であって単調増加しない)。**理由を知っているのはサーバだけ**。
+  test('★ 寿命で閉じる前に理由を伝える (#366)', async () => {
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+    await sleep(550);
+
+    const bye = s.lines.map((l) => JSON.parse(l)).find((o) => o.__bye);
+    expect(bye).toBeDefined();
+    expect(bye.__bye.reason).toBe('max_age');
+    // 停止 (shutdown) と違い、サーバは動き続けている。すぐ戻る値を渡す
+    expect(bye.__bye.expect_back_ms).toBeGreaterThan(0);
+    expect(s.ended()).toBe(true);
+
+    s.abort();
+    await srv.close();
+  });
+
+  test('★ 理由は閉じる前に届く (end の後では受け取れない)', async () => {
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+    await sleep(550);
+
+    // 最終行が __bye であること = end() の直前に書けている
+    const last = JSON.parse(s.lines[s.lines.length - 1]);
+    expect(last.__bye).toBeDefined();
+
+    s.abort();
+    await srv.close();
+  });
+
   test('★ 寿命で閉じたことがログに残る (黙って切れない)', async () => {
     const { logger } = require('../../src/lib/logger.mts');
     const srv = await listen(makeApp());
