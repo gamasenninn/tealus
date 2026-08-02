@@ -38,6 +38,7 @@ cd client       && npx tsc --noEmit && npx vitest run
 | 絵文字リアクション | 7 | `client/src/components/chat/ContextMenu.tsx` の `REACTION_EMOJIS` |
 | 選択できる TTS の声 | 10 | `client/src/components/chat/RoomSettings.tsx` の `TTS_MODELS`（先頭の「デフォルト（環境変数）」を除く） |
 | migration の最新番号 | 026 | `server/src/db/migrations/` |
+| cc-bridge の接続寿命 | 55 分 (3300 秒) | `agent-server/src/routes/ccQueue.mts` の `maxAgeMs()` 既定。★ **`SKILL.md` が取得失敗時の退避として 3300 をハードコードしている**ので、既定を変えたら消費側も直す |
 
 ```bash
 # 変化の確認（前タグとの差分）

@@ -16,7 +16,7 @@
 │                                                                  │
 │   Outbound (この文書 Part 1)                                      │
 │     Claude Code session                                          │
-│         ↓ tealus-mcp (MCP tool 11 個)                             │
+│         ↓ tealus-mcp (MCP tool 18 個)                             │
 │     Tealus Bot API                                               │
 │         ↓                                                        │
 │     Tealus DB / room broadcast                                   │
@@ -237,7 +237,7 @@ session 内で:
 /mcp
 ```
 
-server 一覧に **`tealus-http · ✔ connected · 15 tools`** と表示されれば成功。実呼び出し:
+server 一覧に **`tealus-http · ✔ connected · 18 tools`** と表示されれば成功 (**数は tealus-mcp の版で変わる**。18 は v0.14.8 時点)。実呼び出し:
 
 ```
 @tealus-http list_rooms を使って参加 room を一覧して
@@ -252,17 +252,24 @@ stdio (`@tealus list_rooms`) と同じ結果が返れば transport 透明性が�
 - **公開**: tealus host を public expose する場合は HTTPS / reverse proxy (nginx 等) で TLS 終端必須。`<JWT>` は適切な expiry で運用、漏洩時は `JWT_SECRET` rotate で全 token 失効。
 - **詳細**: [tealus-mcp README v0.12.x](https://github.com/gamasenninn/tealus-mcp#http-transport-リモート利用-v0120) 参照。
 
-## 提供される 11 個の MCP tool
+## 提供される 18 個の MCP tool
 
-[tealus-mcp v0.7.0 時点](https://github.com/gamasenninn/tealus-mcp):
+[tealus-mcp v0.14.8 時点](https://github.com/gamasenninn/tealus-mcp)。**ツール数は版で変わる**ので、`/mcp` の表示と食い違うときは自分の tealus-mcp の版を確認すること:
 
 | Tool | 用途 |
 |---|---|
 | `send_message` | ルームにテキストメッセージ送信 |
 | `send_image` | ルームに画像送信 (base64) |
+| `generate_and_send_image` | 画像を生成して送信 |
+| `send_text_as_file` | 長文をファイルとして送信 |
+| `send_form` | 選択式フォームを送信 |
 | `get_messages` | ルームのメッセージ履歴取得。voice transcription は default で `formatted_text` のみ inline (`include_raw=true` / `include_transcription=false` で verbosity 制御、v0.7.0〜) |
 | `get_message_media` | メッセージのメディア取得 (画像は AI 直接視認可、音声は文字起こし優先) |
+| `get_message_edit_history` | メッセージの編集履歴を取得 |
+| `transcribe_media` | 音声 / 動画の文字起こし (`force_retranscribe` で cache を無視) |
+| `read_document` | 添付ドキュメントの読み取り |
 | `search_messages` | キーワード / タグ / 期間 / 発言者でメッセージ全文検索 |
+| `list_tags` | ルームのタグ一覧 |
 | `mark_tag_done` | メッセージのタグ完了状態 (is_done) 更新 |
 | `create_room` | 新しいグループルーム作成 (bot は admin で自動追加) |
 | `delete_room` | グループルーム削除 (creator + solo member のみ) |
