@@ -50,6 +50,11 @@ const shutdown = async () => {
   try { broadcastShutdown(config.CC_SHUTDOWN_EXPECT_BACK_MS); } catch { /* 停止処理は止めない */ }
   server.close();
   await closeAllRoomMcp();
+  // ★ logger (winston) の file transport は非同期。process.exit を即座に呼ぶと
+  //   直前のログが書き出される前に落ちる。実際 2026-08-02 に、__bye は正しく
+  //   送信されているのに「停止を予告しました」の行だけがログから消えていた
+  //   (受信側の curl では観測できた)。**動いているのに見えない**状態になるので待つ。
+  await new Promise((r) => setTimeout(r, 200));
   process.exit(0);
 };
 process.on('SIGINT', shutdown);
