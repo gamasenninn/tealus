@@ -115,8 +115,10 @@ while true; do
   if [ "$MAX_AGE" = "0" ]; then                     # 古いサーバ / 到達できない → 仮定値で続行
     MAX_AGE=3300
     [ "$WARNED" = "1" ] || { echo "[stream] max_age を取得できないため 3300 と仮定します"; WARNED=1; }
-  elif [ "$FAILS" -gt 0 ]; then                     # ★ 復帰はここで判定 (接続終了を待たない)
-    echo "[stream] recovered after ${FAILS} attempts, $(( $(date +%s) - DOWN_FROM ))s down"; FAILS=0
+  else
+    WARNED=0                                        # ★ 取れたら警告フラグを戻す (次に取れなくなったら再度知らせる)
+    [ "$FAILS" -gt 0 ] && {                         # ★ 復帰はここで判定 (接続終了を待たない)
+      echo "[stream] recovered after ${FAILS} attempts, $(( $(date +%s) - DOWN_FROM ))s down"; FAILS=0; }
   fi
   TODAY=$(date '+%Y-%m-%d')
   if [ "$TODAY" != "$LASTDAY" ]; then
@@ -137,7 +139,10 @@ while true; do
           echo $(( $(date +%s) + E )) > "$BYE" ;;
         '{"__'*)      ;;                                                # ★ 制御メッセージ全般: 捨てる (前方互換)
         '{"id"'*)     printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
-        *)            printf '[stream-error] %s\n' "$line" ;;           # 通知のみ、ログは汚さない
+        *)            if [ "$(date +%s)" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]
+                      then printf '[stream-error] %s\n' "$line" >&2    # ★ 猶予中は記録だけ (#365)
+                      else printf '[stream-error] %s\n' "$line"        # 通知のみ、ログは汚さない
+                      fi ;;
       esac
     done
   SEC=$(( $(date +%s) - START )); RC_VAL=$(cat "$RC" 2>/dev/null); DISC=$((DISC+1))
