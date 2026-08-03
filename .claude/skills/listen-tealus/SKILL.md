@@ -106,7 +106,7 @@ Monitor (
 ```sh
 P={project_name}; API={本体の origin}; STREAM={stream_url}
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
-FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300
+FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s)
 while true; do
   TOKEN=$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
           -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}")
@@ -122,8 +122,11 @@ while true; do
   fi
   TODAY=$(date '+%Y-%m-%d')
   if [ "$TODAY" != "$LASTDAY" ]; then
-    [ -n "$LASTDAY" ] && echo "[stream] alive, ${DISC} disconnects in last 24h"
-    LASTDAY=$TODAY; DISC=0
+    [ -n "$LASTDAY" ] && {                          # ★ 集計の起点からの経過を必ず添える (#366)
+      ELAPSED=$(( $(date +%s) - COUNT_FROM ))
+      printf '[stream] alive, %d disconnects in %dh%02dm\n' \
+             "$DISC" $((ELAPSED / 3600)) $(((ELAPSED % 3600) / 60)); }
+    LASTDAY=$TODAY; DISC=0; COUNT_FROM=$(date +%s)  # 件数と起点は必ず同時に戻す
   fi
   SINCE=$(grep '^{"id"' "$LOG" 2>/dev/null | tail -1 \
           | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
@@ -187,6 +190,7 @@ done
 | ★ `Number.isFinite(v)?v:0` | **古いサーバ (#361 前) は `max_age_ms` を返さない**。`undefined/1000` は `NaN` になるが**例外にならないので catch に落ちない**。そのままだと `[ "$SEC" -ge "NaN" ]` がエラーになり、**全ての切断が「想定外」に落ちて通知の嵐** = 防ごうとしている状態そのものになる。2026-08-02 に旧サーバへの実接続で確認 |
 | 毎周の `pending` | MAX_AGE を毎回取り直す。arm 時に 1 回だけだと、**実行中にサーバ側で max_age を変えられたときに古い値を持ち続ける** (2026-08-01 の 120 秒実験で実例)。取れないときは 3300 と仮定し、**その旨を 1 回だけ通知**する (黙って仮定しない) |
 | `[stream] alive` (1 日 1 回) | 変更後は正常運転が通知ゼロになるが、**Monitor が自動停止した場合も通知ゼロ**で区別がつかない。日次で 1 行出して **沈黙の意味を一つに絞る**。ただしこれは死活監視ではなく、**「来るはずのものが来ない」と誰かが気づいて初めて機能する** |
+| ★ `alive` に **経過時間を必ず添える** (`in 4h32m`) | 当初は `in last 24h` と書いていたが、**`DISC` はループのプロセス変数なので張り直すたびに 0 に戻る**。定常運転では 24 時間で正しいが、**張り直した日はラベルだけが過大**になり、「昨日 40 件・今日 6 件、何かあったか」と読むと実際は「張り直しただけ」になる (2026-08-02 に実例)。<br>★ 経過を行に入れると、**張り直しがあったことが同じ 1 行で分かる**。`since start` では「いつからか」が落ちるので不可。<br>★ `DISC=0` と `COUNT_FROM` の更新は**必ず同じ場所で同時に**行うこと。片方だけ戻すと、また数字とラベルがずれる |
 | ★ `__bye` と猛予窓 (`$BYE`) | **再起動はバグ修正のたびに起きる**。人が毎回予告する運用は、忘れるようになった時点で本当に必要な場面でも使われなくなるので、**サーバが自分で予告する** (#365)。<br>★ **「次の 1 回の切断だけ黙る」では足りない** —— 切断は黙っても、その後の再接続失敗 (まだ戻っていない) で結局起こされる。**時間の猛予として持つ**。<br>★ 時間で持つと、「予告が来たのに切断が来ない」ケースも**自動で失効する** (失効処理を書く必要すら無い)。回数で持つと消し忘れが起きる |
 | ★ `expect_back_ms` をサーバから受け取る | クライアントが 60 秒などと決め打つと、**#361 で解いたばかりの問題 (サーバの都合をクライアントがハードコード) を再導入**する。デプロイに 5 分かかる日もあり、その値を知っているのはサーバだけ。<br>ただし `GRACE_LIMIT` (300 秒) で clamp すること —— **壊れた値を返されても永久に黙り込まない**ため |
 | ★ 寿命切断も `__bye` で予告される (#366) | **切断の理由を知っているのはサーバだけ**。経過秒から逆算する方式 (上の窓) は `date +%s` が単調増加する前提に乗っていて、**時計が動いた瞬間に誤判定する**。サーバが `{"__bye":{"reason":"max_age"}}` を送れば、時計がずれても丸めがどうでも判定は変わらない。<br>`expect_back_ms` は停止時より**短い** (サーバは動き続けているので即座に繋ぎ直せる)。長くすると、寿命切断の直後に起きた本物の障害がその分だけ黙って見過ごされる |
