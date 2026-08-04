@@ -387,6 +387,66 @@ describe('dispatchEvent', () => {
   });
 });
 
+describe('dispatchEvent — join を catalog に通す (#367)', () => {
+  // ★ catalog の name fetch は globalThis.fetch (= fetchGroupSummary) を叩くので stub する。
+  // catalog file 自体は本物を書かせる (= beforeEach の LINE_GROUP_CATALOG_FILE で tmpDir に隔離済み)
+  let origFetch: typeof globalThis.fetch;
+  beforeEach(() => { origFetch = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = origFetch; });
+
+  const joinEvent = (groupId: string) => ({
+    type: 'join',
+    timestamp: Date.parse('2026-08-03T05:37:25.000Z'),
+    source: { type: 'group', groupId },
+  });
+
+  test('join → catalog に entry が作られる + 投影は一切しない', async () => {
+    globalThis.fetch = jest.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ groupName: '営業報告' }),
+    })) as unknown as typeof globalThis.fetch;
+
+    // ★ mapping 未登録の group (= 招待直後は必ずこの状態)
+    const result = await dispatchEvent(joinEvent('group-NEW'), { config: TEST_CONFIG });
+
+    expect(result).toEqual({ skipped: 'join-catalogued' });
+
+    // ★ catalog に group ID と名前が残る (= 投稿を頼まずに mapping を書ける)
+    const catalog = JSON.parse(fs.readFileSync(tmpCatalog, 'utf8')) as Record<string, { name: string | null; first_seen_at: string }>;
+    expect(catalog['group-NEW']).toBeDefined();
+    expect(catalog['group-NEW'].name).toBe('営業報告');
+    expect(catalog['group-NEW'].first_seen_at).toBe('2026-08-03T05:37:25.000Z');
+
+    // ★ ★ 投影経路には一切入れない (= join は本文を持たない)
+    expect(mockPostText).not.toHaveBeenCalled();
+    expect(mockPostImage).not.toHaveBeenCalled();
+    expect(mockPoolQuery).not.toHaveBeenCalled();  // bot user の DB query まで走らせない
+  });
+
+  test('join で getGroupSummary が失敗しても entry は name:null で作られる (= ID は残る)', async () => {
+    globalThis.fetch = jest.fn(() => Promise.resolve({
+      ok: false, status: 403, statusText: 'Forbidden',
+    })) as unknown as typeof globalThis.fetch;
+
+    const result = await dispatchEvent(joinEvent('group-NONAME'), { config: TEST_CONFIG });
+
+    expect(result).toEqual({ skipped: 'join-catalogued' });
+    const catalog = JSON.parse(fs.readFileSync(tmpCatalog, 'utf8')) as Record<string, { name: string | null }>;
+    expect(catalog['group-NONAME']).toBeDefined();
+    expect(catalog['group-NONAME'].name).toBeNull();  // name は次の message で再 try される
+  });
+
+  test('memberJoined は catalog に通さない (= #367 の scope は bot 自身の join のみ)', async () => {
+    const event = {
+      type: 'memberJoined',
+      source: { type: 'group', groupId: 'group-OTHER' },
+    };
+    const result = await dispatchEvent(event, { config: TEST_CONFIG });
+    expect(result).toEqual({ skipped: 'not-message' });
+    expect(fs.existsSync(tmpCatalog)).toBe(false);
+  });
+});
+
 describe('dispatchEvent — sender label (#309 案A)', () => {
   let origMemberEnv: string | undefined;
   beforeEach(() => {

@@ -188,6 +188,28 @@ export async function dispatchEvent(
   // (= memory feedback_silent_skip_log_distinction.md、AI session が「届かない」誤判断するのを構造的に防止する device、恒久)
   logger.info(`[LINE Bridge] dispatchEvent: type=${event?.type}, source=${event?.source?.type}, msg=${event?.message?.type}`);
 
+  // ★ #367: join (= bot がグループに招待された) は catalog upsert だけ通し、★ ★ 投影経路には入れない。
+  // join は本文を持たないので Tealus に投稿するものが無い。目的は group ID / name を
+  // 「1 通投稿してください」と頼む前に確定させ、mapping (= line-group-mappings.json) を先に書き終えられるようにすること
+  // (= 2026-08-03「営業報告」追加時、join の 5 分後まで mapping が無く 3 件を unmapped-group で捨てた)。
+  // memberJoined (= 他ユーザーの参加) は既に catalog にある group で起きるので対象外。
+  if (event?.type === 'join' && event.source?.type === 'group' && event.source.groupId) {
+    const joinGroupId = event.source.groupId;
+    if (!cfg.skipCatalog) {
+      // ★ message 経路と違い後続処理が無いので await できる (= webhook 応答は router 側で既に 200 済み)。
+      // await して「catalog に入った / 名前が取れた」を log に binary で残す
+      // (= memory feedback_silent_skip_log_distinction.md、入口 log だけでは upsert の成否が判別できない)
+      await upsertGroupEntry(joinGroupId, {
+        timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
+      }, { accessToken: channelToken }).catch((e) => {
+        // catalog 失敗は silent (= message 経路と同じ、200 OK 最優先)。name は次の message で再 try される
+        logger.warn(`[LINE Bridge] catalog upsert failed (join): ${e instanceof Error ? e.message : String(e)}`);
+      });
+      logger.info(`[LINE Bridge] join catalogued: ${joinGroupId} name=${readGroupName(joinGroupId) || '(未取得)'}`);
+    }
+    return { skipped: 'join-catalogued' };
+  }
+
   if (!event || event.type !== 'message') return { skipped: 'not-message' };
   if (!event.source || event.source.type !== 'group') return { skipped: 'not-group' };
 
