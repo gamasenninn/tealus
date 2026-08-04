@@ -17,7 +17,7 @@ jest.mock('../../src/lib/logger.mts', () => ({ logger: {
 
 import {
   addSubscriber, removeSubscriber, publish, subscriberCount,
-  broadcastControl, broadcastShutdown,
+  broadcastControl, broadcastShutdown, broadcastBye,
   type CcSubscriber,
 } from '../../src/webhook/ccSubscribers.mts';
 
@@ -258,5 +258,56 @@ describe('broadcastShutdown — #365 全 project への停止予告', () => {
 
   it('購読者が一人もいなくても例外を投げない (停止処理を阻害しない)', () => {
     expect(() => broadcastShutdown(30000)).not.toThrow();
+  });
+
+  it('★ 出力が従来と 1 バイトも変わらない (broadcastBye 切り出しの回帰止め)', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    broadcastShutdown(30000);
+    expect(res.written[0]).toBe('{"__bye":{"reason":"shutdown","expect_back_ms":30000}}' + '\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #368 本体サーバ (中継) の再起動を予告する
+//
+// ★ 本体サーバは「自分が落ちる」を知っているが購読者を知らない。agent-server は
+//   その逆。情報と配る能力が別プロセスにあるので、本体から一段渡して配らせる。
+//   reason を分けるのは、購読者側の記録に「何で切れたか」を残すため
+//   (SKILL は `{"__bye"` の接頭辞一致 + expect_back_ms しか見ないので、
+//    新しい reason 値でも既存クライアントはそのまま扱える = 再配布不要)。
+// ---------------------------------------------------------------------------
+describe('broadcastBye — #368 理由つきの予告', () => {
+  it('★ 指定した reason で全 project の購読者に届く', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r2']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    broadcastBye('gateway_restart', 30000);
+
+    for (const r of [t.res, o.res]) {
+      const msg = JSON.parse(r.written[0].trim());
+      expect(msg.__bye.reason).toBe('gateway_restart');
+      expect(msg.__bye.expect_back_ms).toBe(30000);
+    }
+  });
+
+  it('NDJSON = 1 行 + 改行 (キーの順序も固定)', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    broadcastBye('gateway_restart', 5000);
+    expect(res.written[0]).toBe('{"__bye":{"reason":"gateway_restart","expect_back_ms":5000}}' + '\n');
+  });
+
+  it('購読者ゼロでも例外を投げない (停止処理を阻害しない)', () => {
+    expect(() => broadcastBye('gateway_restart', 30000)).not.toThrow();
+  });
+
+  it('★ 送信件数を返す (呼び出し側が「誰にも届いていない」を判別できる)', () => {
+    expect(broadcastBye('gateway_restart', 30000)).toBe(0);
+    const { s } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    expect(broadcastBye('gateway_restart', 30000)).toBe(1);
   });
 });

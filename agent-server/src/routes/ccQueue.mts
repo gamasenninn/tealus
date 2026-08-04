@@ -28,9 +28,41 @@ import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { getCcQueueDir } from '../webhook/ccQueue.mts';
-import { addSubscriber, removeSubscriber, type CcSubscriber } from '../webhook/ccSubscribers.mts';
+import { addSubscriber, removeSubscriber, broadcastBye, type CcSubscriber } from '../webhook/ccSubscribers.mts';
 
 export const router = express.Router();
+
+/**
+ * 呼び出し元が `expect_back_ms` を寄越さなかった / 壊れていたときの既定 (ms)。
+ *
+ * ★ env にしていないのは、**値を知っているのは停止する側 (本体サーバ)** だから。
+ *   こちらに設定を置くと、実際のデプロイ時間を知らない側が値を持つことになる (#361 と同じ形)。
+ *   ここにあるのは「壊れた値で永久に黙り込ませない」ための床。
+ */
+const DEFAULT_GATEWAY_EXPECT_BACK_MS = 30000;
+
+/**
+ * ★ 中継 (本体サーバ) の計画的な再起動を、cc-queue の購読者へ予告する (#368)。
+ *
+ * 別マシンの CC セッションは `/agent-api/cc-queue/stream` に繋いでおり、その中継を
+ * 握っているのは**本体サーバのプロセス**。本体が落ちると、この agent-server が無傷でも
+ * ブリッジは切れる。しかし購読者を知っているのはこちらだけなので、**本体から一段渡して
+ * こちらに配らせる**。2026-08-04 に予告なしの切断 (`curl=92`) を実測して判明した穴。
+ *
+ * ★ 認可は共有 JWT (mount 側の `authenticate`)。**送信元アドレスでは守れない** —
+ *   本体サーバの `/agent-api` proxy が外部リクエストを `localhost` から中継するため、
+ *   「loopback のみ許可」は `https://<host>/agent-api/cc-queue/gateway-bye` で破れる。
+ *
+ * 制御メッセージなので **room の中身は一切載せない** (`broadcastBye` が payload を固定)。
+ */
+router.post('/gateway-bye', (req: Request, res: Response) => {
+  const raw = (req.body as { expect_back_ms?: unknown } | undefined)?.expect_back_ms;
+  const expectBackMs = (typeof raw === 'number' && Number.isFinite(raw) && raw > 0)
+    ? raw
+    : DEFAULT_GATEWAY_EXPECT_BACK_MS;
+  const notified = broadcastBye('gateway_restart', expectBackMs);
+  res.json({ notified });
+});
 
 /** 無音でも接続を維持するための heartbeat 間隔 (ms)。クライアント側でフィルタして捨てる */
 function heartbeatMs(): number {

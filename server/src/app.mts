@@ -18,6 +18,9 @@ import { MEDIA_ROOT } from './middleware/upload.mts';
 import { runStartupEnvCheck } from './utils/envCheck.mts';
 import { setupSocketHandlers } from './socket/index.mts';
 import { setIo } from './io-registry.mts';
+import { createSignalHandler, realSleep, realDeadline } from './utils/shutdown.mts';
+import { notifyGatewayBye } from './utils/gatewayBye.mts';
+import { JWT_SECRET } from './middleware/auth.mts';
 
 import { router as lineRoutes } from './routes/line.mts';
 import { router as authRoutes } from './routes/auth.mts';
@@ -225,6 +228,13 @@ function checkBuildArtifacts(): void {
 if (import.meta.main) {
   const PORT = process.env.PORT || 3000;
   checkBuildArtifacts();
+
+  // #368 停止時に止める watcher。起動時に読み込んだ module をそのまま覚えておく
+  // (ここで static import すると、モジュール読込時に env を読む都合 (docs/05 §2a) と
+  //  起動順が変わるため、既存の動的 import の結果を捕まえる形にしている)
+  let capabilityWatcher: typeof import('./services/capabilityWatcher.mts') | null = null;
+  let organonWatcher: typeof import('./services/organonWatcher.mts') | null = null;
+
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
     // #334: 未適用 migration の loud warn (採用者保護)。辞書テーブル不在を起動時に可視化
@@ -232,15 +242,46 @@ if (import.meta.main) {
     void checkMigrations({ query: (sql) => pool.query(sql), warn: (m) => logger.warn(m) })
       .catch((err) => logger.warn(`[migration-check] 確認をスキップ: ${err instanceof Error ? err.message : String(err)}`));
     // rtc-server reachability の動的検出を開始
-    import('./services/capabilityWatcher.mts').then(cw => cw.start(io));
+    import('./services/capabilityWatcher.mts').then(cw => { capabilityWatcher = cw; cw.start(io); });
     // #327: dictionary テーブルの vocab を in-memory オーバーレイに読み込む (空/不達なら file フォールバック)
     import('./services/transcriptionConfig.mts')
       .then(tc => tc.refreshVocabFromTable())
       .catch((err) => logger.warn(`[dictionary] initial vocab refresh failed: ${err instanceof Error ? err.message : String(err)}`));
     // #331: organon dock watcher。organon.ttl (RDF 契約) の到着で辞書テーブルへ pull + overlay reload。
     // 起動時に 1 回 pull するので上の initial refresh を subsume する (ORGANON_TTL_PATH 未設定なら no-op)。
-    import('./services/organonWatcher.mts').then(ow => ow.start());
+    import('./services/organonWatcher.mts').then(ow => { organonWatcher = ow; ow.start(); });
   });
+
+  // ★ #368 graceful shutdown。これが無いと停止時にハンドラを通らずプロセスが死に、
+  //   接続・タイマー・DB プールが後始末されない。とくに cc-queue の**中継**は
+  //   本体サーバのプロセスが握っているため、別マシンの CC セッションが予告なしで切れる
+  //   (2026-08-04 に `curl=92` = HTTP/2 ストリーム破損として実測)。
+  //   ★ 登録は import.meta.main の中だけ — app.mts は test が import するので、
+  //     トップレベルで process.on すると test 実行中にハンドラが登録される。
+  const onSignal = createSignalHandler({
+    log: (m) => logger.info(m),
+    warn: (m) => logger.warn(m),
+    // ★ 予告は「中継が生きているうち」に通す。接続を切ってからでは届かない
+    notifyGateway: async () => {
+      const notified = await notifyGatewayBye({
+        port: process.env.AGENT_PORT || 4000,
+        secret: JWT_SECRET,
+        expectBackMs: parseInt(process.env.CC_GATEWAY_EXPECT_BACK_MS || '', 10) || 30000,
+      });
+      if (notified > 0) logger.info(`[shutdown] cc-queue の購読者 ${notified} 件に再起動を予告しました`);
+    },
+    stopTimers: () => { capabilityWatcher?.stop(); organonWatcher?.stop(); },
+    // ★ server.close() は await しない — cc-queue の中継は終わらないので callback が来ない
+    closeServer: () => { server.close(); },
+    closeConnections: () => { server.closeAllConnections(); },
+    closeIo: () => { io.close(); },
+    endPool: () => pool.end(),
+    sleep: realSleep,
+    deadline: realDeadline,
+    exit: (code) => process.exit(code),
+  });
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {

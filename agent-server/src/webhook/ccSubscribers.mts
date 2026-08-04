@@ -101,7 +101,31 @@ export function broadcastControl(project: string, payload: Record<string, unknow
  *   これをクライアント側にハードコードさせない (デプロイ時間を知るのはサーバだけ)。
  */
 export function broadcastShutdown(expectBackMs: number): void {
-  const payload = { __bye: { reason: 'shutdown', expect_back_ms: expectBackMs } };
+  broadcastBye('shutdown', expectBackMs);
+}
+
+/**
+ * ★ 理由つきの切断予告を全 project の購読者へ送る (#368 で `broadcastShutdown` から切り出し)。
+ *
+ * reason を外から渡せるようにしたのは、**agent-server 自身の停止以外にも
+ * 予告すべき停止がある**と分かったため。2026-08-04、本体サーバ (cc-queue の中継を
+ * している側) を再起動したところ、別マシンの購読者が予告なしで切れた
+ * (`curl=92` = HTTP/2 ストリーム破損)。
+ *
+ * ★ 本体サーバは「自分が落ちる」を知っているが購読者を知らない。こちらはその逆。
+ *   **情報と、配る能力が別プロセスにある**ので、本体から一段渡して配らせる
+ *   (`POST /cc-queue/gateway-bye` → `reason: 'gateway_restart'`)。
+ *
+ * 消費側は `{"__bye"` の接頭辞一致で猶予窓を張り、読むのは `expect_back_ms` だけ。
+ * reason は記録に残るのみなので、**新しい reason 値を足しても再配布は要らない**。
+ *
+ * @param reason 予告の理由 (`shutdown` = 自分の停止 / `gateway_restart` = 中継の再起動)
+ * @param expectBackMs 「戻ってくるまでの見込み」。★ 値を知っているのは停止する側なので、
+ *   クライアントにハードコードさせない (#361 と同じ理由)。
+ * @returns 送信した購読者数。0 なら誰も繋いでいない (呼び出し側が判別できるように返す)
+ */
+export function broadcastBye(reason: string, expectBackMs: number): number {
+  const payload = { __bye: { reason, expect_back_ms: expectBackMs } };
   const line = JSON.stringify(payload) + '\n';
   let total = 0;
   for (const set of subscribers.values()) {
@@ -109,8 +133,9 @@ export function broadcastShutdown(expectBackMs: number): void {
     writeTo(set, line);
   }
   if (total > 0) {
-    logger.info(`[cc-stream] 停止を予告しました: ${total} 購読者 (expect_back_ms=${expectBackMs})`);
+    logger.info(`[cc-stream] 切断を予告しました: reason=${reason} ${total} 購読者 (expect_back_ms=${expectBackMs})`);
   }
+  return total;
 }
 
 /**
