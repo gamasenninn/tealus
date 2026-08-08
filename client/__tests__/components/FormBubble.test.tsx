@@ -131,4 +131,69 @@ describe('FormBubble', () => {
     fireEvent.click(screen.getByRole('button', { name: '回答済み' }));
     expect(emitMock).toHaveBeenCalledTimes(1); // 増えない
   });
+
+  // ── 畳み込み ──────────────────────────────────────────────
+  // Q0 のような長いフォームが流れを占有するため、タイトルだけ残して畳めるようにする。
+  // ★ 回答済みでも自動では畳まない: 既存の「回答済みで送信不可」の可視性を壊さないため。
+
+  it('★ 畳むと本文(intro/フィールド/送信ボタン)が消え、タイトルは残る', () => {
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    expect(screen.getByText('笹沼さんは?')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '折りたたむ' }));
+
+    expect(screen.queryByText('笹沼さんは?')).toBeNull();
+    expect(screen.queryByRole('button', { name: '回答する' })).toBeNull();
+    expect(screen.getByText(/Day59 Q0/)).toBeTruthy(); // タイトルは残る = 何のフォームか分かる
+  });
+
+  it('畳んだあと展開すると元に戻る', () => {
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByRole('button', { name: '折りたたむ' }));
+    fireEvent.click(screen.getByRole('button', { name: '展開する' }));
+    expect(screen.getByText('笹沼さんは?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '回答する' })).toBeTruthy();
+  });
+
+  it('畳んでも入力中の値は失われない', () => {
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByLabelText('記録のみ'));
+    fireEvent.click(screen.getByRole('button', { name: '折りたたむ' }));
+    fireEvent.click(screen.getByRole('button', { name: '展開する' }));
+    expect((screen.getByLabelText('記録のみ') as HTMLInputElement).checked).toBe(true);
+  });
+
+  // ── 横拡張 ────────────────────────────────────────────────
+  // ★ 幅の仕組みは新設しない。bubble の既存 expanded (.bubble-content-row 80%→100%) を
+  //   そのまま使う。FormBubble は onDoubleClick を stopPropagation しているため
+  //   (フォーム操作の誤爆防止)、既存のダブルクリック経路だけが届かない。明示の操作子で補う。
+
+  it('★ 横拡張ボタンは onToggleExpand を呼ぶ (bubble 側の expanded を使い回す)', () => {
+    const onToggleExpand = vi.fn();
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" onToggleExpand={onToggleExpand} />);
+    fireEvent.click(screen.getByRole('button', { name: '横に広げる' }));
+    expect(onToggleExpand).toHaveBeenCalledTimes(1);
+  });
+
+  it('expanded=true のときはラベルが「幅を戻す」になる', () => {
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" expanded onToggleExpand={vi.fn()} />);
+    expect(screen.getByRole('button', { name: '幅を戻す' })).toBeTruthy();
+  });
+
+  it('onToggleExpand が無ければ横拡張ボタンは出さない', () => {
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    expect(screen.queryByRole('button', { name: '横に広げる' })).toBeNull();
+  });
+
+  it('横拡張ボタンのクリックは bubble へ伝播しない (ダブルクリック誤爆防止と同じ理由)', () => {
+    const onToggleExpand = vi.fn();
+    const onParentClick = vi.fn();
+    render(
+      <div onClick={onParentClick}>
+        <FormBubble message={MSG} schema={SCHEMA} roomId="room1" onToggleExpand={onToggleExpand} />
+      </div>
+    );
+    fireEvent.click(screen.getByRole('button', { name: '横に広げる' }));
+    expect(onParentClick).not.toHaveBeenCalled();
+  });
 });

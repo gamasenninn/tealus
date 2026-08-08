@@ -10,6 +10,15 @@ interface FormBubbleProps {
   message: Message;
   schema: FormSchema;
   roomId?: string;
+  /** 親 bubble の expanded 状態 (.bubble-content-row を 80%→100% に広げる既存の仕組み) */
+  expanded?: boolean;
+  /**
+   * ★ 幅の仕組みは新設しない。FormBubble は onDoubleClick を stopPropagation している
+   * (フォーム操作で誤って幅が変わるのを防ぐため) ので、bubble 既存のダブルクリック経路
+   * だけが届かない。その一点を明示の操作子で補うための hook。
+   * 未指定なら横拡張ボタンを出さない (MessageBubble 以外から使われた場合)。
+   */
+  onToggleExpand?: () => void;
 }
 
 /**
@@ -21,10 +30,14 @@ interface FormBubbleProps {
  *   cc-queue routing に乗らないため、行頭 @cc-* で consumer を起こすには socket が必須
  *   (MessageInput.handleSend と同じ socket 優先・REST fallback)。
  */
-function FormBubble({ message, schema, roomId }: FormBubbleProps) {
+function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormBubbleProps) {
   const [values, setValues] = useState<FormValues>({});
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  // Q0 のような長いフォームが流れを占有するので、タイトルだけ残して畳めるようにする。
+  // ★ 回答済みでも自動では畳まない — 「回答済み」でボタンが締まっていることが
+  //   見えなくなり、二重回答防止が効いているのか判断できなくなるため。
+  const [collapsed, setCollapsed] = useState(false);
 
   // #336 二重回答防止: サーバに状態を持たず、既存の返信データから「自分がこのフォームに
   // 回答済みか」を導出する。リロード後も残り(隣接ロード)、他人の回答も message:new で
@@ -68,7 +81,34 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
 
   return (
     <div className="cform-bubble" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-      <div className="cform-title">📋 {schema.title}</div>
+      <div className="cform-header">
+        <div className="cform-title">📋 {schema.title}</div>
+        <div className="cform-controls">
+          {onToggleExpand && (
+            <button
+              type="button"
+              className="cform-ctl"
+              aria-label={expanded ? '幅を戻す' : '横に広げる'}
+              title={expanded ? '幅を戻す' : '横に広げる'}
+              onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+            >
+              ⇔
+            </button>
+          )}
+          <button
+            type="button"
+            className="cform-ctl"
+            aria-label={collapsed ? '展開する' : '折りたたむ'}
+            title={collapsed ? '展開する' : '折りたたむ'}
+            onClick={(e) => { e.stopPropagation(); setCollapsed((v) => !v); }}
+          >
+            {collapsed ? '▸' : '▾'}
+          </button>
+        </div>
+      </div>
+
+      {/* 畳んでいる間も values は state に残るので、展開すれば入力途中から再開できる */}
+      {collapsed ? null : <>
       {schema.intro && <div className="cform-intro">{schema.intro}</div>}
 
       {schema.fields.map((field) => (
@@ -137,6 +177,7 @@ function FormBubble({ message, schema, roomId }: FormBubbleProps) {
       >
         {answered ? '回答済み' : sending ? '送信中…' : (schema.submit_label || '回答する')}
       </button>
+      </>}
     </div>
   );
 }

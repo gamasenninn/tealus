@@ -283,7 +283,15 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                 );
               })()}
               {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
-              {formSchema && <FormBubble message={message} schema={formSchema} roomId={roomId} />}
+              {formSchema && (
+                <FormBubble
+                  message={message}
+                  schema={formSchema}
+                  roomId={roomId}
+                  expanded={expanded}
+                  onToggleExpand={() => setExpanded((prev) => !prev)}
+                />
+              )}
               {message.type !== 'voice' && renderMedia()}
             </>
           )}
