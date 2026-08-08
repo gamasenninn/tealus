@@ -3,6 +3,7 @@ import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/authStore';
 import { buildAnswerText, hasUserAnsweredForm, type FormValues } from '../../utils/parseForm';
+import { isFormCollapsed, setFormCollapsed } from '../../utils/formCollapse';
 import type { FormSchema, Message } from '../../types';
 import './FormBubble.css';
 
@@ -37,7 +38,15 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
   // Q0 のような長いフォームが流れを占有するので、タイトルだけ残して畳めるようにする。
   // ★ 回答済みでも自動では畳まない — 「回答済み」でボタンが締まっていることが
   //   見えなくなり、二重回答防止が効いているのか判断できなくなるため。
-  const [collapsed, setCollapsed] = useState(false);
+  // ★ 状態は端末に残す。ここを component の state だけにすると、別ルームへ移って
+  //   戻ったときに unmount → 初期値で開いた状態に戻る (#370 の dogfood で判明)。
+  const [collapsed, setCollapsed] = useState(() => isFormCollapsed(message.id));
+
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      setFormCollapsed(message.id, !v);
+      return !v;
+    });
 
   // #336 二重回答防止: サーバに状態を持たず、既存の返信データから「自分がこのフォームに
   // 回答済みか」を導出する。リロード後も残り(隣接ロード)、他人の回答も message:new で
@@ -100,7 +109,7 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
             className="cform-ctl"
             aria-label={collapsed ? '展開する' : '折りたたむ'}
             title={collapsed ? '展開する' : '折りたたむ'}
-            onClick={(e) => { e.stopPropagation(); setCollapsed((v) => !v); }}
+            onClick={(e) => { e.stopPropagation(); toggleCollapsed(); }}
           >
             {collapsed ? '▸' : '▾'}
           </button>

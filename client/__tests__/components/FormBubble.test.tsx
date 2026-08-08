@@ -51,7 +51,7 @@ const SCHEMA: FormSchema = {
 const MSG = { id: 'form-msg-1', type: 'form' } as Message;
 
 describe('FormBubble', () => {
-  beforeEach(() => { requestMock.mockClear(); sendMessageMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; mockStore.messages = []; });
+  beforeEach(() => { requestMock.mockClear(); sendMessageMock.mockClear(); fetchMessagesMock.mockClear(); emitMock.mockClear(); socketConnected = true; mockStore.messages = []; localStorage.clear(); });
 
   it('title と radio option / text field を描画', () => {
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
@@ -183,6 +183,40 @@ describe('FormBubble', () => {
   it('onToggleExpand が無ければ横拡張ボタンは出さない', () => {
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
     expect(screen.queryByRole('button', { name: '横に広げる' })).toBeNull();
+  });
+
+  // ── 畳み込みの永続化 ─────────────────────────────────────
+  // 「畳む」= もう見なくていい、という意図はルーム移動やリロードを跨いで残るべき。
+  // component の state だけだと unmount で開いた状態に戻ってしまう (dogfood で判明)。
+
+  it('★ 畳んだ状態は再マウント後も残る (別ルームから戻っても畳まれたまま)', () => {
+    const { unmount } = render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByRole('button', { name: '折りたたむ' }));
+    unmount(); // 別ルームへ移動して戻る = 再マウント
+
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    expect(screen.queryByText('笹沼さんは?')).toBeNull();
+    expect(screen.getByRole('button', { name: '展開する' })).toBeTruthy();
+  });
+
+  it('展開し直した状態も再マウント後に残る', () => {
+    const { unmount } = render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByRole('button', { name: '折りたたむ' }));
+    fireEvent.click(screen.getByRole('button', { name: '展開する' }));
+    unmount();
+
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    expect(screen.getByText('笹沼さんは?')).toBeTruthy();
+  });
+
+  it('畳み込みはフォームごとに独立して覚える', () => {
+    const other = { id: 'form-msg-2', type: 'form' } as Message;
+    const { unmount } = render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByRole('button', { name: '折りたたむ' }));
+    unmount();
+
+    render(<FormBubble message={other} schema={SCHEMA} roomId="room1" />);
+    expect(screen.getByText('笹沼さんは?')).toBeTruthy(); // 別フォームは畳まれない
   });
 
   it('横拡張ボタンのクリックは bubble へ伝播しない (ダブルクリック誤爆防止と同じ理由)', () => {
