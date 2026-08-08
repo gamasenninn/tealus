@@ -219,6 +219,56 @@ describe('FormBubble', () => {
     expect(screen.getByText('笹沼さんは?')).toBeTruthy(); // 別フォームは畳まれない
   });
 
+  // ── ダブルクリックでの横拡張 ───────────────────────────────
+  // 他の bubble は「ダブルクリックで幅 80%→100%」。フォームだけ全面 stopPropagation して
+  // いたので、そこだけ操作感が揃っていなかった。実害は「書きかけを単語選択で直すたびに
+  // 幅が飛ぶ」= 文字入力欄に集中するので、そこだけ止めて残りは通す。
+  // ★ ラジオ/チェックは冪等で実害が無いため通す。将来 date 等が増えても
+  //   「文字入力系は止める」で自動的に正しくなるよう、type で判定する。
+
+  const renderInParent = (onDouble: () => void) =>
+    render(
+      <div onDoubleClick={onDouble}>
+        <FormBubble message={MSG} schema={SCHEMA} roomId="room1" />
+      </div>
+    );
+
+  it('★ textarea の上でのダブルクリックは伝播しない (入力中に幅が飛ばない)', () => {
+    const onDouble = vi.fn();
+    const { container } = renderInParent(onDouble);
+    fireEvent.doubleClick(container.querySelector('textarea')!);
+    expect(onDouble).not.toHaveBeenCalled();
+  });
+
+  it('★ 補足の text input の上でも伝播しない', () => {
+    const onDouble = vi.fn();
+    renderInParent(onDouble);
+    fireEvent.click(screen.getByLabelText('その他'));
+    fireEvent.doubleClick(screen.getByPlaceholderText('補足'));
+    expect(onDouble).not.toHaveBeenCalled();
+  });
+
+  it('★ タイトルの上でのダブルクリックは伝播する (他の bubble と同じ操作感)', () => {
+    const onDouble = vi.fn();
+    renderInParent(onDouble);
+    fireEvent.doubleClick(screen.getByText(/Day59 Q0/));
+    expect(onDouble).toHaveBeenCalledTimes(1);
+  });
+
+  it('ラジオ本体の上では伝播する (選択は冪等で実害が無い)', () => {
+    const onDouble = vi.fn();
+    renderInParent(onDouble);
+    fireEvent.doubleClick(screen.getByLabelText('記録のみ'));
+    expect(onDouble).toHaveBeenCalledTimes(1);
+  });
+
+  it('ラジオのラベル文字の上でも伝播する', () => {
+    const onDouble = vi.fn();
+    renderInParent(onDouble);
+    fireEvent.doubleClick(screen.getByText('記録のみ'));
+    expect(onDouble).toHaveBeenCalledTimes(1);
+  });
+
   it('横拡張ボタンのクリックは bubble へ伝播しない (ダブルクリック誤爆防止と同じ理由)', () => {
     const onToggleExpand = vi.fn();
     const onParentClick = vi.fn();

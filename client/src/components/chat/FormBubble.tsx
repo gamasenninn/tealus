@@ -68,6 +68,21 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
     return !!v?.text?.trim();
   });
 
+  /**
+   * ★ 他の bubble と同じく「ダブルクリックで横拡張」を通す。
+   * 元は全面 stopPropagation だったが、実害があるのは文字入力欄の上だけだった —
+   * ダブルクリックは単語選択の操作でもあるので、書きかけの回答を直すたびに幅が飛ぶ。
+   * ラジオ/チェックは冪等なので通す (type で判定しているため、将来 date 等の
+   * 文字入力系が増えても自動的に止まる側に入る)。
+   */
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const el = e.target as HTMLElement | null;
+    if (typeof el?.closest !== 'function') return;
+    if (el.closest('textarea, input:not([type="radio"]):not([type="checkbox"])')) {
+      e.stopPropagation();
+    }
+  };
+
   const handleSubmit = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canSubmit || sending || answered || !roomId) return;
@@ -89,7 +104,7 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
   };
 
   return (
-    <div className="cform-bubble" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="cform-bubble" onClick={(e) => e.stopPropagation()} onDoubleClick={handleDoubleClick}>
       <div className="cform-header">
         <div className="cform-title">📋 {schema.title}</div>
         <div className="cform-controls">
