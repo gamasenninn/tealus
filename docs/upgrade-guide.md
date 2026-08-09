@@ -110,6 +110,54 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
+### → v0.9.0（停止と寿命切断を必ず予告する / フォームの表示）
+
+> **★ 影響範囲**: **フォームを使っている場合は全員に画面の変化があります**（[#370](https://github.com/gamasenninn/tealus/issues/370)）。それ以外（停止予告・寿命切断の理由）は **cc-bridge（`@cc-*`）を使っている環境にのみ**効きます。
+
+**必須の作業:**
+
+1. ★ **client を本番ビルドし直す** — フォームの表示変更（文字サイズ追随 / 横拡張 / 畳み込み）は **client のみの変更**です。ビルドしないと**画面は何も変わりません**。エラーは出ないので、**静かに変化ゼロ**になります。
+
+   ```bash
+   cd client && npm run build
+   ```
+
+2. **server / agent-server の再起動** — 本体サーバの graceful shutdown（[#368](https://github.com/gamasenninn/tealus/issues/368)）と寿命切断の予告（[#366](https://github.com/gamasenninn/tealus/issues/366)）を反映するため。
+
+**DB migration: この版では追加ゼロ**です（最新は `026` のまま）。
+
+**★ cc-bridge を使っている場合だけ、追加で 1 つ:**
+
+**消費側の skill も差し替えてください。** `.claude/skills/listen-tealus/SKILL.md` は `main` から取得する運用なので、**タグを打っても配布物は切り替わりません**。
+
+```bash
+S=~/.claude/skills/listen-tealus/SKILL.md
+curl -o "$S" https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/SKILL.md
+
+# ★ 接続コマンドだけを抜き出して構文を通す（Markdown 全体に掛けない）
+awk '/^P=\{project_name\}/{f=1} f&&/^```/{exit} f' "$S" | sh -n && echo "構文 OK"
+```
+
+★ **サーバだけ更新しても壊れません**（新しい制御メッセージは `{"__` の前方互換で黙って無視されます）。ただし差し替えないと、**サーバが送る切断理由を使わず古い経過秒の窓で判定し続け**、ダウン秒数の過大表示（例: 実際 11 秒に対し `3309s down`）と `alive` 行の件数ずれも残ります。
+
+**任意 / 条件付き（新しい必須の環境変数はありません）:**
+
+| 環境変数 | 既定 | |
+|---|---|---|
+| `CC_GATEWAY_EXPECT_BACK_MS` | `30000` | ★ **新規。** 本体サーバの停止予告に載せる「戻ってくるまでの見込み」。デプロイに時間がかかる環境では伸ばす（超えた分は購読者側の通常判定で拾われます） |
+
+- **★ 本体サーバの停止予告は、agent-server が動いていて初めて届きます。** 本体は「自分が落ちる」を知っていますが**購読者を知りません**（購読者を知っているのは agent-server 側）。予告に失敗した場合は warn を出して停止処理を続行します（agent-server が先に落ちている場合は普通に起こります）。**両方を止めるときは、本体を先に止めると予告が出ます。**
+- **LINE ブリッジを新しく足す場合**、bot を招待した時点で group ID が catalog（`server/config/line-groups.json`）に載ります。**「1 通投稿してください」と頼む必要はもうありません**（[#367](https://github.com/gamasenninn/tealus/issues/367)）。
+
+**この版で直った不具合（更新すれば解消）:**
+
+- 別マシンのセッションが、**本体サーバの再起動のたびに予告なしで切られる**（[#368](https://github.com/gamasenninn/tealus/issues/368)。接続は本体を通り抜けているのに、予告を入れたのは agent-server だけだった）
+- **寿命切断が「想定外」として通知される**（[#366](https://github.com/gamasenninn/tealus/issues/366)。2 台の時計が 55 分で 2 秒ずれると、経過秒からの逆算が誤判定する）
+- **復帰通知のダウン秒数が過大**（[#366](https://github.com/gamasenninn/tealus/issues/366)。起点が切断時刻ではなく接続開始時刻だった）
+- **LINE グループを足すときに、mapping を書くまでの投稿が捨てられる**（[#367](https://github.com/gamasenninn/tealus/issues/367)。実例では画像 1 枚を含む 3 件）
+- **フォームだけ文字サイズ設定に追随しない**（[#370](https://github.com/gamasenninn/tealus/issues/370)）
+- v0.8.0 の周知で案内した構文チェック `sh -n SKILL.md` が、**常に落ちるだけで何も検査していなかった**（上のコマンドが正しい形です）
+
 ### → v0.8.0（AI セッションを別マシンで動かせるように）
 
 > **★ 影響範囲**: 機能の中身は **cc-bridge（`@cc-*` で Claude Code を起こす仕組み）を使っている環境にのみ**効きます。メッセンジャーとして使っている場合、画面に見える変化はありません。**ただし下の「必須の作業」1 は全員が対象です。**
