@@ -39,6 +39,19 @@ export async function occurrenceFromDb(garble: string): Promise<number> {
   return rows[0] ? rows[0].n : 0;
 }
 
+/**
+ * ゲート棄却の内訳 (#371)。
+ * ★ 「何を直せば拾えるようになるか」は理由が分かれていないと判断できない。
+ *   moras    … 読みが MIN_MORAS 未満 (短すぎて曖昧)
+ *   phonetic … 読みのモーラ距離が MORA_MAX 超 (音が保たれていない)
+ *   noTerm   … 音韻は通ったが alias を付ける先の term が無い (新 entity は Phase2 未実装)
+ */
+export interface GateRejectionBreakdown {
+  moras: number;
+  phonetic: number;
+  noTerm: number;
+}
+
 /** learnFromEdit の集計結果 */
 export interface LearnFromEditResult {
   learned: number;
@@ -46,6 +59,8 @@ export interface LearnFromEditResult {
   pending: number;
   extracted: number;
   gateRejected: number;
+  /** ★ gateRejected の内訳。3 つの合計は必ず gateRejected と一致する */
+  gateRejectedBy: GateRejectionBreakdown;
 }
 
 export interface LearnFromEditOptions {
@@ -67,7 +82,10 @@ export async function learnFromEdit(
   const getOccurrence = opts.getOccurrence || occurrenceFromDb;
   const prior = String(priorFormatted || '');
   const next = String(newFormatted || '');
-  const empty: LearnFromEditResult = { learned: 0, promoted: 0, pending: 0, extracted: 0, gateRejected: 0 };
+  const empty: LearnFromEditResult = {
+    learned: 0, promoted: 0, pending: 0, extracted: 0, gateRejected: 0,
+    gateRejectedBy: { moras: 0, phonetic: 0, noTerm: 0 },
+  };
   if (!prior || !next || prior === next) return empty;
 
   const vocab = await repo.listActiveVocabulary();
@@ -91,12 +109,14 @@ export async function learnFromEdit(
   const getReading = (s: string): string => readingByTerm.get(s) || garbleReadings.get(s) || kata2hira(s);
 
   let promoted = 0; let pending = 0; let gateRejected = 0;
+  const gateRejectedBy: GateRejectionBreakdown = { moras: 0, phonetic: 0, noTerm: 0 };
   for (const { from: garble, to: term } of uniquePairs) {
-    // --- 安価ゲート（書込前）---
-    if (toMoras(getReading(garble)).length < MIN_MORAS) { gateRejected += 1; continue; }      // 短別名(モーラ数)
-    if (moraDistance(getReading(garble), getReading(term)) > MORA_MAX) { gateRejected += 1; continue; } // 音韻
+    // --- 安価ゲート（書込前）--- ★ 理由別に数える (#371)
+    if (toMoras(getReading(garble)).length < MIN_MORAS) { gateRejected += 1; gateRejectedBy.moras += 1; continue; }
+    if (moraDistance(getReading(garble), getReading(term)) > MORA_MAX) { gateRejected += 1; gateRejectedBy.phonetic += 1; continue; }
     const termId = termIdByTerm.get(term);
-    if (!termId) { gateRejected += 1; continue; } // MVP: 既存 term への alias のみ（新 entity は Phase2）
+    // ★ 音韻は通ったのに term が無くて捨てている分。ここが Phase2 (term の pending 起票) の対象。
+    if (!termId) { gateRejected += 1; gateRejectedBy.noTerm += 1; continue; }
 
     // pending で累積（既存 active/pending は count 加算、rejected は no-op）
     const { row, applied } = await repo.upsertAlias({ termId, alias: garble, source: 'auto', count: 1, status: 'pending' });
@@ -115,5 +135,5 @@ export async function learnFromEdit(
     // 育った辞書を実行時オーバーレイに反映（active のみが補正段に効く）
     await refreshVocabFromTable();
   }
-  return { learned, promoted, pending, extracted: uniquePairs.length, gateRejected };
+  return { learned, promoted, pending, extracted: uniquePairs.length, gateRejected, gateRejectedBy };
 }

@@ -85,7 +85,15 @@ router.put('/', authenticate, async (req, res) => {
     // fire-and-forget（応答をブロックしない・失敗は編集を妨げない）。
     learnFromEdit({ priorFormatted, newFormatted: text.trim() })
       // 発火を常に記録 (learned=0 でも「届いた+ゲート棄却」と「不発」を log で区別する)
-      .then((r) => logger.info(`[dictionary] edit ${messageId}: extracted ${r.extracted} → +${r.promoted} active / +${r.pending} pending / ${r.gateRejected} gate-rejected`))
+      // ★ #371 棄却は理由別に出す。1 つのカウンタでは「何を直せば拾えるか」が読めない
+      //   (実測: 抽出 146 のうち 118 = 80.8% が gate-rejected だが内訳が不明だった)
+      .then((r) => {
+        const by = r.gateRejectedBy;
+        const detail = r.gateRejected
+          ? ` (モーラ数 ${by.moras} / 音韻 ${by.phonetic} / term不在 ${by.noTerm})`
+          : '';
+        logger.info(`[dictionary] edit ${messageId}: extracted ${r.extracted} → +${r.promoted} active / +${r.pending} pending / ${r.gateRejected} gate-rejected${detail}`);
+      })
       .catch((err: unknown) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${err instanceof Error ? err.message : String(err)}`));
 
     // Broadcast update
