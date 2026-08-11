@@ -12,7 +12,11 @@ agent-server/mcp_config.json
 agent-server/logs/
 
 # Voice transcription guideline (実運用版、example はコミット)
-server/config/transcription_guideline.json
+# ★ 派生も必ず含める: enriched 版は description に個人名+所属+雇用形態を持ち、
+#   TRANSCRIPTION_GUIDELINE_PATH で本番が実際に読んでいる (2026-08-11 に未追跡で発見)。
+#   glob にしてあるのは、次の派生 (.enriched2 等) を作ったときに漏れないようにするため。
+server/config/transcription_guideline*.json
+!server/config/transcription_guideline.example.json
 server/config/mining_report.json
 # #348 (a): 辞書テーブル由来の local vocab 契約 (auto 生成、refreshVocabFromTable が発行)
 server/config/dictionary.local.ttl
