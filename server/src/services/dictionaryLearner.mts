@@ -52,6 +52,25 @@ export interface GateRejectionBreakdown {
   noTerm: number;
 }
 
+/**
+ * ★ 棄却された 1 ペアの中身 (#371)。
+ * 件数だけでは「読みを取り違えて落ちたのか、本当に音が遠いのか」が区別できない。
+ * 実例: `終礼` を pykakasi が「おわりれい」と訓読みし、`修繕`(しゅうぜん) との距離が
+ * 1.00 になって棄却された。正しい「しゅうれい」なら距離 0.50 = ちょうど通過だった。
+ */
+export interface GateRejection {
+  garble: string;
+  term: string;
+  reason: keyof GateRejectionBreakdown;
+  /** 判定に実際に使った読み (pykakasi の誤りはここに出る) */
+  garbleReading: string;
+  termReading: string;
+  /** garble の読みのモーラ数 (moras 棄却の判断材料) */
+  moras: number;
+  /** 読みのモーラ距離 (phonetic 棄却の判断材料)。moras 棄却時は未計算で -1 */
+  distance: number;
+}
+
 /** learnFromEdit の集計結果 */
 export interface LearnFromEditResult {
   learned: number;
@@ -61,6 +80,8 @@ export interface LearnFromEditResult {
   gateRejected: number;
   /** ★ gateRejected の内訳。3 つの合計は必ず gateRejected と一致する */
   gateRejectedBy: GateRejectionBreakdown;
+  /** ★ 棄却されたペアの中身。length は必ず gateRejected と一致する */
+  gateRejections: GateRejection[];
 }
 
 export interface LearnFromEditOptions {
@@ -84,7 +105,7 @@ export async function learnFromEdit(
   const next = String(newFormatted || '');
   const empty: LearnFromEditResult = {
     learned: 0, promoted: 0, pending: 0, extracted: 0, gateRejected: 0,
-    gateRejectedBy: { moras: 0, phonetic: 0, noTerm: 0 },
+    gateRejectedBy: { moras: 0, phonetic: 0, noTerm: 0 }, gateRejections: [],
   };
   if (!prior || !next || prior === next) return empty;
 
@@ -110,13 +131,23 @@ export async function learnFromEdit(
 
   let promoted = 0; let pending = 0; let gateRejected = 0;
   const gateRejectedBy: GateRejectionBreakdown = { moras: 0, phonetic: 0, noTerm: 0 };
+  const gateRejections: GateRejection[] = [];
+  /** 棄却を 1 件記録する。件数と中身を必ず同時に進めるための唯一の入口。 */
+  const reject = (reason: keyof GateRejectionBreakdown, garble: string, term: string, moras: number, distance: number) => {
+    gateRejected += 1;
+    gateRejectedBy[reason] += 1;
+    gateRejections.push({ garble, term, reason, garbleReading: getReading(garble), termReading: getReading(term), moras, distance });
+  };
+
   for (const { from: garble, to: term } of uniquePairs) {
-    // --- 安価ゲート（書込前）--- ★ 理由別に数える (#371)
-    if (toMoras(getReading(garble)).length < MIN_MORAS) { gateRejected += 1; gateRejectedBy.moras += 1; continue; }
-    if (moraDistance(getReading(garble), getReading(term)) > MORA_MAX) { gateRejected += 1; gateRejectedBy.phonetic += 1; continue; }
+    // --- 安価ゲート（書込前）--- ★ 理由別に数え、中身も残す (#371)
+    const moras = toMoras(getReading(garble)).length;
+    if (moras < MIN_MORAS) { reject('moras', garble, term, moras, -1); continue; }
+    const distance = moraDistance(getReading(garble), getReading(term));
+    if (distance > MORA_MAX) { reject('phonetic', garble, term, moras, distance); continue; }
     const termId = termIdByTerm.get(term);
     // ★ 音韻は通ったのに term が無くて捨てている分。ここが Phase2 (term の pending 起票) の対象。
-    if (!termId) { gateRejected += 1; gateRejectedBy.noTerm += 1; continue; }
+    if (!termId) { reject('noTerm', garble, term, moras, distance); continue; }
 
     // pending で累積（既存 active/pending は count 加算、rejected は no-op）
     const { row, applied } = await repo.upsertAlias({ termId, alias: garble, source: 'auto', count: 1, status: 'pending' });
@@ -135,5 +166,5 @@ export async function learnFromEdit(
     // 育った辞書を実行時オーバーレイに反映（active のみが補正段に効く）
     await refreshVocabFromTable();
   }
-  return { learned, promoted, pending, extracted: uniquePairs.length, gateRejected, gateRejectedBy };
+  return { learned, promoted, pending, extracted: uniquePairs.length, gateRejected, gateRejectedBy, gateRejections };
 }

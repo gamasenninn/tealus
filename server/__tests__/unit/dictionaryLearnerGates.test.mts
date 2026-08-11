@@ -89,5 +89,50 @@ describe('learnFromEdit の棄却理由を 3 種に分ける', () => {
     mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '飛行船', reading: 'ひこうせん' }]) as never);
     const r = await learnFromEdit({ priorFormatted: '同じ', newFormatted: '同じ' }, {});
     expect(r.gateRejectedBy).toEqual({ moras: 0, phonetic: 0, noTerm: 0 });
+    expect(r.gateRejections).toEqual([]);
+  });
+});
+
+/**
+ * ★ #371 続き: 件数だけでは「読み誤りで落ちたのか、本当に音が遠いのか」が区別できない。
+ * 棄却されたペアそのもの (garble/term/両方の読み/距離) を返させる。
+ */
+describe('棄却されたペアの中身を返す', () => {
+  it('★ 音韻で落ちたペアの garble/term/読み/距離が分かる', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '飛行船', reading: 'ひこうせん' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: 'ご清算ファーム', newFormatted: '飛行船ファーム' },
+      { getReadings: async () => new Map([['ご清算', 'ごせいさん']]), getOccurrence: async () => 10 },
+    );
+    expect(r.gateRejections).toHaveLength(1);
+    const x = r.gateRejections[0];
+    expect(x.reason).toBe('phonetic');
+    expect(x.garble).toBe('ご清算');
+    expect(x.term).toBe('飛行船');
+    expect(x.garbleReading).toBe('ごせいさん');   // ★ 読み誤りの発見に要る
+    expect(x.termReading).toBe('ひこうせん');
+    expect(x.distance).toBeGreaterThan(0.5);      // MORA_MAX 超で落ちたこと
+  });
+
+  it('★ モーラ数で落ちたペアは、モーラ数が分かる', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '田中', reading: 'たなか' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: 'タナ さん', newFormatted: '田中 さん' },
+      { getReadings: async () => new Map([['タナ', 'たな']]), getOccurrence: async () => 10 },
+    );
+    expect(r.gateRejections).toHaveLength(1);
+    expect(r.gateRejections[0].reason).toBe('moras');
+    expect(r.gateRejections[0].moras).toBe(2);    // MIN_MORAS(3) 未満
+  });
+
+  it('通過したペアは含まれない / 件数は gateRejectedBy と一致する', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '砕石', reading: 'さいせき' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: '最積を入れる', newFormatted: '砕石を入れる' },
+      { getReadings: async () => new Map([['最積', 'さいせき']]), getOccurrence: async () => 10 },
+    );
+    expect(r.gateRejections).toEqual([]);         // 通過したので空
+    const by = r.gateRejectedBy;
+    expect(r.gateRejections.length).toBe(by.moras + by.phonetic + by.noTerm);
   });
 });

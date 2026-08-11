@@ -93,6 +93,13 @@ router.put('/', authenticate, async (req, res) => {
           ? ` (モーラ数 ${by.moras} / 音韻 ${by.phonetic} / term不在 ${by.noTerm})`
           : '';
         logger.info(`[dictionary] edit ${messageId}: extracted ${r.extracted} → +${r.promoted} active / +${r.pending} pending / ${r.gateRejected} gate-rejected${detail}`);
+        // ★ 件数だけでは「読み誤りで落ちたか、本当に音が遠いか」が区別できない (#371)。
+        //   実例: 終礼 を pykakasi が「おわりれい」と訓読みし、修繕(しゅうぜん) との距離が
+        //   1.00 になって棄却。正しい「しゅうれい」なら 0.50 = ちょうど通過だった。
+        for (const x of r.gateRejections) {
+          const metric = x.reason === 'moras' ? `${x.moras} モーラ` : `距離 ${x.distance.toFixed(2)}`;
+          logger.info(`[dictionary] gate-reject ${x.reason}: 「${x.garble}」(${x.garbleReading}) → 「${x.term}」(${x.termReading}) ${metric}`);
+        }
       })
       .catch((err: unknown) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${err instanceof Error ? err.message : String(err)}`));
 
