@@ -263,9 +263,28 @@ router.get('/stream', async (req, res) => {
     //   通知された (サーバ側の実測は 3300 秒ちょうど。2 台の時計が 55 分で 2 秒ずれていた)。
     //   理由を知っているのはサーバだけなので、サーバが配る。
     //   ★ end() より先に書くこと。閉じた後では届かない。
+    //
+    // ★ 送出結果を残す (2026-08-13 切断調査)。silent catch だと **「送った」と「出た」の
+    //   区別が付かない**。8/12 22:48 に「寿命の直後なのに予告が届いていない」が起きたとき、
+    //   こちらは「書きに行った」までしか言えず、Mac 側は「受けていない」しか言えなかった。
+    //   → どちらで消えたかが、両側を突き合わせても決まらない。
+    //   Mac 側は同日 hb_age (最後に heartbeat を受けてからの経過) を足した。これはその対。
+    //
+    //   読み方:
+    //   - accepted=false は**失敗ではない**。「内部バッファに積まれた」= 相手が吸えていない兆候
+    //   - pending は未送出バイト数。溜まっていれば socket が drain していない
+    //   - destroyed=true は「既に死んだ接続に書いた」= タイマーが空に向かって撃った
+    const byeLine = JSON.stringify({ __bye: { reason: 'max_age', expect_back_ms: MAX_AGE_EXPECT_BACK_MS } }) + '\n';
+    let accepted: boolean | string = 'throw';
     try {
-      res.write(JSON.stringify({ __bye: { reason: 'max_age', expect_back_ms: MAX_AGE_EXPECT_BACK_MS } }) + '\n');
-    } catch { /* 閉じる直前なので失敗しても停止処理は続ける */ }
+      accepted = res.write(byeLine, (err?: Error | null) => {
+        // flush 時のエラー。write の戻り値では拾えない (非同期に失敗する)
+        if (err) logger.warn(`[cc-stream] __bye の flush に失敗しました: project=${project} ${err.message}`);
+      });
+    } catch (err) {
+      logger.warn(`[cc-stream] __bye の write が例外を投げました: project=${project} ${err instanceof Error ? err.message : String(err)}`);
+    }
+    logger.info(`[cc-stream] __bye 送出: project=${project} reason=max_age accepted=${accepted} pending=${res.writableLength}B destroyed=${res.destroyed}`);
     cleanup();
     res.end();
   }, maxAge);

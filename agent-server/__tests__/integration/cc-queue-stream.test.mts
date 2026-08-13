@@ -443,6 +443,51 @@ describe('cc-queue — 接続の最大寿命 (#360)', () => {
     await srv.close();
   });
 
+  // ★ #214 切断調査 (2026-08-13)。「__bye を送ったのに届いていない」が起きたとき、
+  //   サーバ側は **書きに行ったこと** しか言えなかった。write は silent catch で、
+  //   戻り値も例外も残していない。→ 「送った」と「出た」の区別が両側から付かない。
+  //   Mac 側は同日 hb_age (最後に heartbeat を受けた時刻) を足した。こちらは送出側を残す。
+  describe('__bye の送出結果を残す (2026-08-13 切断調査)', () => {
+    test('★ 送れたかどうかがログに残る (accepted / 未送出バイト)', async () => {
+      const { logger } = require('../../src/lib/logger.mts');
+      const srv = await listen(makeApp());
+      const s = await openStream(srv.port, 'project=tealus');
+      await sleep(550);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringMatching(/__bye 送出.*reason=max_age.*accepted=/));
+
+      s.abort();
+      await srv.close();
+    });
+
+    test('★ 相手が先に消えていても、送出を試みた記録が残る (黙って諦めない)', async () => {
+      const { logger } = require('../../src/lib/logger.mts');
+      const srv = await listen(makeApp());
+      const s = await openStream(srv.port, 'project=tealus');
+      await sleep(50);
+      s.abort();            // ★ クライアントが先に消える
+      await sleep(550);     // その後で寿命が来る
+
+      // 送出行そのものは必ず出す。destroyed=true で「相手が居ない状態で書いた」と分かる
+      expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/__bye 送出/));
+
+      await srv.close();
+    });
+
+    test('★ 送出行に接続の状態を含める (destroyed — 死んだ接続に書いたかが分かる)', async () => {
+      const { logger } = require('../../src/lib/logger.mts');
+      const srv = await listen(makeApp());
+      const s = await openStream(srv.port, 'project=tealus');
+      await sleep(550);
+
+      expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/destroyed=/));
+
+      s.abort();
+      await srv.close();
+    });
+  });
+
   test('寿命が来る前のイベントは通常どおり届く', async () => {
     const srv = await listen(makeApp());
     const s = await openStream(srv.port, 'project=tealus');
