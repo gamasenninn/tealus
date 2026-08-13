@@ -529,4 +529,41 @@ describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', ()
     expect(p).toContain('ガマ');
     expect(p).not.toContain('お客様');
   });
+
+  // ★ 棄権ガード (#371、2026-08-13 実測)。
+  // 既存の「リストに無い固有名詞は作らない」は **リスト外** への捏造しか禁じておらず、
+  // 実際の誤りは **リスト内** の名前への無理な吸着だった:
+  //   「サマさん」(正: ガマさん) → 3 回で 三和さん / 山崎さん / 高山さん
+  // 崩れたまま残れば人が気づけるが、実在の同僚名に化けると気づけない。
+  // 342 本 × 3 回で 人名の捏造 24.0 → 15.0 (範囲が重ならない)。得は 37.0 → 34.0 (幅 8 の中、差とは言えない)。
+  describe('棄権ガード: 音が合わないならリストの語に寄せない', () => {
+    test('音韻近接を要求し、近い語が無ければ聞こえたまま残すよう指示する', () => {
+      const p = configModule.buildOrganonCorrectionPrompt({ vocabulary: [] });
+      expect(p).toContain('読みと十分に近いとき');
+      expect(p).toContain('聞こえたままの表記で残す');
+    });
+
+    test('人名は「リストに載っているから」だけで当てはめない (誤った人名 < 崩れた表記)', () => {
+      const p = configModule.buildOrganonCorrectionPrompt({ vocabulary: [] });
+      expect(p).toContain('誤った人物名を書くことは、表記が崩れたまま残すことより悪い');
+    });
+
+    test('呼ばれていない人名を補わない', () => {
+      const p = configModule.buildOrganonCorrectionPrompt({ vocabulary: [] });
+      expect(p).toContain('人名を補わない');
+    });
+
+    test('棄権ガードは既存の「リストに無い」ガードより後に置く (リスト外→リスト内 の順で読ませる)', () => {
+      const p = configModule.buildOrganonCorrectionPrompt({ vocabulary: [] });
+      expect(p.indexOf('リストに無い')).toBeLessThan(p.indexOf('読みと十分に近いとき'));
+    });
+
+    test('vocabulary があっても棄権ガードは残る (知識ブロックに押し出されない)', () => {
+      const p = configModule.buildOrganonCorrectionPrompt({
+        vocabulary: [{ term: 'ガマ', category: 'person', aliases: ['サマ'] }],
+      });
+      expect(p).toContain('聞こえたままの表記で残す');
+      expect(p.indexOf('聞こえたままの表記で残す')).toBeLessThan(p.indexOf('# 組織固有名詞リスト'));
+    });
+  });
 });
