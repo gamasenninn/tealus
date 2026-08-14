@@ -47,6 +47,16 @@ jest.mock('../../src/services/linkPreview.mts', () => ({
   processLinkPreviews: (...args: unknown[]) => mockProcessLinkPreviews(...args),
 }));
 
+// Mock push (= web-push で外に出る。media.mts と同じ組で mock する)
+const mockSendPush = jest.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+jest.mock('../../src/services/push.mts', () => ({
+  sendPushToOfflineMembers: (...args: unknown[]) => mockSendPush(...args),
+}));
+const mockGetOnlineUserIds = jest.fn((): string[] => []);
+jest.mock('../../src/socket/index.mts', () => ({
+  getOnlineUserIds: () => mockGetOnlineUserIds(),
+}));
+
 import type { Server } from 'socket.io';
 import {
   postTextToTealus,
@@ -87,6 +97,58 @@ beforeEach(() => {
   mockGenerateThumbnail.mockResolvedValue('thumbnails/x_thumb.jpg');
   mockProcessLinkPreviews.mockReset();
   mockProcessLinkPreviews.mockResolvedValue(undefined);
+  mockSendPush.mockReset();
+  mockSendPush.mockResolvedValue(undefined);
+  mockGetOnlineUserIds.mockReset();
+  mockGetOnlineUserIds.mockReturnValue([]);
+});
+
+// ★ プッシュ通知 (2026-08-14)。socket と media にしか付いておらず、LINE 経由は飛んでいなかった。
+//   = Tealus しか見ていない人は、アプリを閉じている間 LINE の投稿に気づけない
+//     (投稿・データは欠けない。開けばサーバの未読数から取り直すのでバッジも正しくなる)。
+//   ★ text だけに付ける。実測 (直近 7 日): 出品写真・動画 は image 24.4/日・video 4.3/日 に対し
+//     text は 2.6/日。画像は 3 秒間隔で連投されるので、1 枚ずつ鳴らすと実用にならない。
+//   ★ webhook は付けない — docs/05 の不変条件で「message.created を発火するのは socket のみ」。
+//     付けると LINE のメッセージで @cc-* が agent を起動してしまう。
+describe('postTextToTealus のプッシュ通知 (2026-08-14)', () => {
+  const newMsg = { id: 'msg-1', room_id: 'room-1', type: 'text', content: 'x', sender_id: 'bot-1' };
+  const okSql = () => setupSqlSequence([{ rows: [] }, { rows: [newMsg] }, { rows: [] }]);
+
+  test('★ オフラインのメンバーへプッシュを送る (送信者名 + 本文)', async () => {
+    okSql();
+    mockGetOnlineUserIds.mockReturnValue(['u-online']);
+    const { io } = makeMockIo();
+    await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content: 'シバウラS440 動作確認', io });
+
+    expect(mockSendPush).toHaveBeenCalledWith(
+      'room-1',
+      TEST_SENDER.id,
+      expect.objectContaining({
+        title: 'LINE Bridge',
+        body: 'シバウラS440 動作確認',
+        data: { roomId: 'room-1', messageId: 'msg-1' },
+      }),
+      new Set(['u-online']),
+    );
+  });
+
+  test('本文は 100 文字で切る (socket 側と同じ扱い)', async () => {
+    okSql();
+    const { io } = makeMockIo();
+    await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content: 'あ'.repeat(150), io });
+
+    const payload = mockSendPush.mock.calls[0][2] as { body: string };
+    expect(payload.body).toHaveLength(100);
+  });
+
+  test('プッシュの失敗は投稿を壊さない', async () => {
+    okSql();
+    mockSendPush.mockRejectedValue(new Error('web-push 失敗'));
+    const { io } = makeMockIo();
+
+    const result = await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content: 'x', io });
+    expect(result.message).toEqual(newMsg);
+  });
 });
 
 // ★ リンクプレビューは socket 経由の投稿にしか付いていなかった (socket/handlers/message.mts の 1 か所だけ)。

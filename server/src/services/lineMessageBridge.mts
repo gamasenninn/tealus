@@ -17,6 +17,8 @@ import type { Server } from 'socket.io';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { processLinkPreviews } from './linkPreview.mts';
+import { sendPushToOfflineMembers } from './push.mts';
+import { getOnlineUserIds } from '../socket/index.mts';
 import type { AuthUser } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
@@ -113,6 +115,23 @@ export async function postTextToTealus(
     //   socket 側 (socket/handlers/message.mts) と同じく待たずに投げる — OGP 取得は外に出るので、
     //   失敗しても投稿を止めない。
     processLinkPreviews(message.id, content || '', io ?? null, roomId).catch(() => {});
+
+    // ★ プッシュ通知 (2026-08-14)。socket と media にしか付いておらず、LINE 経由は飛んでいなかった。
+    //   Tealus しか見ていない人は、アプリを閉じている間 LINE の投稿に気づけない
+    //   (投稿・データは欠けない。開けばサーバの未読数から取り直すのでバッジも直る)。
+    //
+    //   ★ text だけに付ける。実測 (直近 7 日、出品写真・動画): image 24.4/日・video 4.3/日 に対し
+    //   text は 2.6/日。画像は 3 秒間隔で連投されるので、1 枚ずつ鳴らすと実用にならない。
+    //   画像も要るなら「まとめて 1 件」の仕組みを先に作ること。
+    //
+    //   ★★ webhook (fireWebhooks) は **付けない**。docs/05 の不変条件で「message.created を
+    //   発火するのは socket の message:send のみ」。付けると LINE のメッセージで @cc-* が
+    //   agent-server の dispatch を起動する = 別の挙動変更になる。
+    sendPushToOfflineMembers(roomId, sender.id, {
+      title: sender.display_name,
+      body: (content || '').slice(0, 100),
+      data: { roomId, messageId: message.id },
+    }, new Set(getOnlineUserIds())).catch(() => {});
 
     logger.info(`[lineMessageBridge] text post: room=${roomId} msg=${message.id}`);
     return { message };
