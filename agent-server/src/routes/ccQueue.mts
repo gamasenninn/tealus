@@ -272,8 +272,14 @@ router.get('/stream', async (req, res) => {
     //
     //   読み方:
     //   - accepted=false は**失敗ではない**。「内部バッファに積まれた」= 相手が吸えていない兆候
-    //   - pending は未送出バイト数。溜まっていれば socket が drain していない
+    //   - pending_before は **書く前に**溜まっていた未送出バイト数。溜まっていれば drain していない
     //   - destroyed=true は「既に死んだ接続に書いた」= タイマーが空に向かって撃った
+    //
+    // ★★ pending は必ず write の **前** に読むこと (2026-08-14 に実運用で判明)。
+    //   後で読むと「いま書いた __bye 行 + chunked 枠」が必ず入り、45 件すべてが 59B 固定になった。
+    //   自分が書いた分を数えていたので、**「詰まっていなかった」が証拠ゼロで常に成立**する。
+    //   測っていないものを測ったことにする形なので、名前も pending_before にして誤読を防ぐ。
+    const pendingBefore = res.writableLength;
     const byeLine = JSON.stringify({ __bye: { reason: 'max_age', expect_back_ms: MAX_AGE_EXPECT_BACK_MS } }) + '\n';
     let accepted: boolean | string = 'throw';
     try {
@@ -284,7 +290,7 @@ router.get('/stream', async (req, res) => {
     } catch (err) {
       logger.warn(`[cc-stream] __bye の write が例外を投げました: project=${project} ${err instanceof Error ? err.message : String(err)}`);
     }
-    logger.info(`[cc-stream] __bye 送出: project=${project} reason=max_age accepted=${accepted} pending=${res.writableLength}B destroyed=${res.destroyed}`);
+    logger.info(`[cc-stream] __bye 送出: project=${project} reason=max_age accepted=${accepted} pending_before=${pendingBefore}B destroyed=${res.destroyed}`);
     cleanup();
     res.end();
   }, maxAge);

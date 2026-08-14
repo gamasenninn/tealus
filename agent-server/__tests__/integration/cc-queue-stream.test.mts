@@ -475,6 +475,23 @@ describe('cc-queue — 接続の最大寿命 (#360)', () => {
       await srv.close();
     });
 
+    // ★ 2026-08-14 に実運用で判明。`writableLength` を write の **後** に読んでいたため、
+    //   45 件すべてが pending=59B (= いま書いた __bye 行 + chunked 枠) で固定されていた。
+    //   「書く前に溜まっていたか」を測るつもりが、自分が書いた分を数えていた。
+    //   このままだと「詰まっていなかった」が証拠ゼロで常に成立してしまう。
+    test('★ pending_before は「書く前に溜まっていた量」— 正常な接続では 0 になる', async () => {
+      const { logger } = require('../../src/lib/logger.mts');
+      const srv = await listen(makeApp());
+      const s = await openStream(srv.port, 'project=tealus');
+      await sleep(550);
+
+      // 相手が正常に吸っていれば、書く前のバッファは空
+      expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/__bye 送出.*pending_before=0B/));
+
+      s.abort();
+      await srv.close();
+    });
+
     test('★ 送出行に接続の状態を含める (destroyed — 死んだ接続に書いたかが分かる)', async () => {
       const { logger } = require('../../src/lib/logger.mts');
       const srv = await listen(makeApp());
