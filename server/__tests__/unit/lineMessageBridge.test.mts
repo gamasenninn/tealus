@@ -41,6 +41,12 @@ jest.mock('../../src/services/thumbnail.mts', () => ({
   generateThumbnail: (...args: unknown[]) => mockGenerateThumbnail(...args),
 }));
 
+// Mock link preview (= OGP 取得で外に出るので、単体テストでは呼ばれたことだけ見る)
+const mockProcessLinkPreviews = jest.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+jest.mock('../../src/services/linkPreview.mts', () => ({
+  processLinkPreviews: (...args: unknown[]) => mockProcessLinkPreviews(...args),
+}));
+
 import type { Server } from 'socket.io';
 import {
   postTextToTealus,
@@ -79,6 +85,44 @@ beforeEach(() => {
   mockTranscribeFn.mockReset();
   mockGenerateThumbnail.mockReset();
   mockGenerateThumbnail.mockResolvedValue('thumbnails/x_thumb.jpg');
+  mockProcessLinkPreviews.mockReset();
+  mockProcessLinkPreviews.mockResolvedValue(undefined);
+});
+
+// ★ リンクプレビューは socket 経由の投稿にしか付いていなかった (socket/handlers/message.mts の 1 か所だけ)。
+//   実測 (2026-08-14): link_previews 239 件はすべて socket 経由の人間 4 名のもので、
+//   LINE 経由のリンク投稿 13 件はプレビュー 0 件。YouTube の OGP 自体は取れる (既存 87 件)。
+//   = 経路が増えたときに、投稿に付随する処理が一緒に増えていなかった。
+describe('postTextToTealus のリンクプレビュー (2026-08-14)', () => {
+  const newMsg = { id: 'msg-1', room_id: 'room-1', type: 'text', content: 'x', sender_id: 'bot-1' };
+  const okSql = () => setupSqlSequence([{ rows: [] }, { rows: [newMsg] }, { rows: [] }]);
+
+  test('★ リンクを含む投稿でプレビュー生成を呼ぶ (socket 経由と同じ扱いにする)', async () => {
+    okSql();
+    const { io } = makeMockIo();
+    const content = 'シバウラS440 動作確認の様子 https://youtu.be/Z96CUBLXZTc';
+    await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content, io });
+
+    expect(mockProcessLinkPreviews).toHaveBeenCalledWith('msg-1', content, io, 'room-1');
+  });
+
+  test('プレビュー生成の失敗は投稿を壊さない (非同期・投げっぱなし)', async () => {
+    okSql();
+    mockProcessLinkPreviews.mockRejectedValue(new Error('OGP 取得失敗'));
+    const { io } = makeMockIo();
+
+    // 投稿自体は成功して message を返す
+    const result = await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content: 'https://x.test/a', io });
+    expect(result.message).toEqual(newMsg);
+  });
+
+  test('リンクを含まなくても呼ぶ (URL 判定は linkPreview 側の責務)', async () => {
+    okSql();
+    const { io } = makeMockIo();
+    await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content: 'ただのテキスト', io });
+
+    expect(mockProcessLinkPreviews).toHaveBeenCalled();
+  });
 });
 
 describe('postTextToTealus', () => {

@@ -16,6 +16,7 @@
 import type { Server } from 'socket.io';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
+import { processLinkPreviews } from './linkPreview.mts';
 import type { AuthUser } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
@@ -104,6 +105,14 @@ export async function postTextToTealus(
         sender_avatar_url: sender.avatar_url,
       });
     }
+
+    // ★ リンクプレビュー (2026-08-14)。socket 経由の投稿にしか付いておらず、LINE 経由は
+    //   ずっと素の URL のままだった (実測: link_previews 239 件はすべて socket 経由の人間 4 名、
+    //   LINE 経由のリンク投稿 13 件はプレビュー 0 件)。OGP 取得自体は動いていて、
+    //   **経路が増えたときに、投稿に付随する処理が一緒に増えていなかった**だけ。
+    //   socket 側 (socket/handlers/message.mts) と同じく待たずに投げる — OGP 取得は外に出るので、
+    //   失敗しても投稿を止めない。
+    processLinkPreviews(message.id, content || '', io ?? null, roomId).catch(() => {});
 
     logger.info(`[lineMessageBridge] text post: room=${roomId} msg=${message.id}`);
     return { message };
