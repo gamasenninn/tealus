@@ -100,6 +100,12 @@ router.put('/', authenticate, async (req, res) => {
           const metric = x.reason === 'moras' ? `${x.moras} モーラ` : `距離 ${x.distance.toFixed(2)}`;
           logger.info(`[dictionary] gate-reject ${x.reason}: 「${x.garble}」(${x.garbleReading}) → 「${x.term}」(${x.termReading}) ${metric}`);
         }
+        // ★ 受理側も同じ粒度で残す (#371)。棄却だけだと「絞りを足したら何を失うか」が測れず、
+        //   片側の数字だけで「N 件消える」と言うことになる。term のモーラ数まで出すのは、
+        //   実測で棄却の 44% が 2 モーラの term への誤ペアだったため (絞りの費用をここで測る)。
+        for (const x of r.accepted) {
+          logger.info(`[dictionary] gate-accept ${x.status}: 「${x.garble}」(${x.garbleReading}) → 「${x.term}」(${x.termReading}) 距離 ${x.distance.toFixed(2)} / term ${x.termMoras} モーラ`);
+        }
       })
       .catch((err: unknown) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${err instanceof Error ? err.message : String(err)}`));
 

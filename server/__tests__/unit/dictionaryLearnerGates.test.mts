@@ -136,3 +136,54 @@ describe('棄却されたペアの中身を返す', () => {
     expect(r.gateRejections.length).toBe(by.moras + by.phonetic + by.noTerm);
   });
 });
+
+/**
+ * #371 受理側もペア単位で残す。
+ *
+ * 棄却だけを中身つきで出していたので、「短い term を切ったら何を失うか」が測れなかった。
+ * 8/10-8/15 の実測で棄却 18 件のうち 8 件が 2 モーラの term「ガマ」への誤ペアだったが、
+ * 同じ絞りで正しい学習を何件落とすかは、受理側のログが無いと片側しか見えない。
+ */
+describe('learnFromEdit が受理したペアの中身も返す (#371)', () => {
+  it('★ 受理したペアを accepted に中身つきで返す', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '砕石', reading: 'さいせき' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: '最積を入れる', newFormatted: '砕石を入れる' },
+      { getReadings: async () => new Map([['最積', 'さいせき']]), getOccurrence: async () => 10 },
+    );
+    expect(r.accepted).toHaveLength(1);
+    expect(r.accepted[0]).toMatchObject({
+      garble: '最積', term: '砕石',
+      garbleReading: 'さいせき', termReading: 'さいせき',
+      moras: 4, distance: 0, status: 'pending',
+    });
+  });
+
+  it('★ term 側の読み・モーラ数が出る (短い term を切る判断の材料)', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '砕石', reading: 'さいせき' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: '最積を入れる', newFormatted: '砕石を入れる' },
+      { getReadings: async () => new Map([['最積', 'さいせき']]), getOccurrence: async () => 10 },
+    );
+    expect(r.accepted[0].termMoras).toBe(4);   // さ/い/せ/き
+  });
+
+  it('★ accepted.length は learned と一致する', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '砕石', reading: 'さいせき' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: '最積を入れる', newFormatted: '砕石を入れる' },
+      { getReadings: async () => new Map([['最積', 'さいせき']]), getOccurrence: async () => 10 },
+    );
+    expect(r.accepted.length).toBe(r.learned);
+  });
+
+  it('★ 棄却されたペアは accepted に入らない', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '飛行船', reading: 'ひこうせん' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: 'ご清算ファーム', newFormatted: '飛行船ファーム' },
+      { getReadings: async () => new Map([['ご清算', 'ごせいさん']]), getOccurrence: async () => 10 },
+    );
+    expect(r.gateRejections).toHaveLength(1);
+    expect(r.accepted).toEqual([]);
+  });
+});

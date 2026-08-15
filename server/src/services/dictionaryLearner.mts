@@ -71,6 +71,28 @@ export interface GateRejection {
   distance: number;
 }
 
+/**
+ * ★ 受理された 1 ペアの中身 (#371)。
+ * 棄却側だけを中身つきで出していたので、「絞りを足したら何を失うか」が測れなかった。
+ * 実測 (8/10-8/15): 棄却 18 件のうち 8 件が 2 モーラの term「ガマ」への誤ペアだが、
+ * 「term にもモーラ下限を入れる」で正しい学習を何件落とすかは、受理側が無いと片側しか見えない。
+ * → そのため term 側の読み・モーラ数も残す (garble 側だけでは絞りの費用が出せない)。
+ */
+export interface AliasAcceptance {
+  garble: string;
+  term: string;
+  garbleReading: string;
+  termReading: string;
+  /** garble の読みのモーラ数 */
+  moras: number;
+  /** ★ term の読みのモーラ数。短い term を切る判断はこれで測る */
+  termMoras: number;
+  /** 読みのモーラ距離 (通過しているので必ず MORA_MAX 以下) */
+  distance: number;
+  /** この編集での帰結。active = 昇格ゲートも通った */
+  status: 'active' | 'pending';
+}
+
 /** learnFromEdit の集計結果 */
 export interface LearnFromEditResult {
   learned: number;
@@ -82,6 +104,8 @@ export interface LearnFromEditResult {
   gateRejectedBy: GateRejectionBreakdown;
   /** ★ 棄却されたペアの中身。length は必ず gateRejected と一致する */
   gateRejections: GateRejection[];
+  /** ★ 受理されたペアの中身。length は必ず learned と一致する */
+  accepted: AliasAcceptance[];
 }
 
 export interface LearnFromEditOptions {
@@ -105,7 +129,7 @@ export async function learnFromEdit(
   const next = String(newFormatted || '');
   const empty: LearnFromEditResult = {
     learned: 0, promoted: 0, pending: 0, extracted: 0, gateRejected: 0,
-    gateRejectedBy: { moras: 0, phonetic: 0, noTerm: 0 }, gateRejections: [],
+    gateRejectedBy: { moras: 0, phonetic: 0, noTerm: 0 }, gateRejections: [], accepted: [],
   };
   if (!prior || !next || prior === next) return empty;
 
@@ -132,6 +156,7 @@ export async function learnFromEdit(
   let promoted = 0; let pending = 0; let gateRejected = 0;
   const gateRejectedBy: GateRejectionBreakdown = { moras: 0, phonetic: 0, noTerm: 0 };
   const gateRejections: GateRejection[] = [];
+  const accepted: AliasAcceptance[] = [];
   /** 棄却を 1 件記録する。件数と中身を必ず同時に進めるための唯一の入口。 */
   const reject = (reason: keyof GateRejectionBreakdown, garble: string, term: string, moras: number, distance: number) => {
     gateRejected += 1;
@@ -156,9 +181,15 @@ export async function learnFromEdit(
     // --- corpus-precision 昇格ゲート ---
     const occ = await getOccurrence(garble);
     const active = corpusPrecision(row.count, occ) >= P_MIN;
-    if (active && row.status !== 'active') { await repo.setAliasStatus(row.id, 'active'); promoted += 1; }
-    else if (row.status === 'active') { promoted += 1; }
-    else { pending += 1; }
+    let status: AliasAcceptance['status'];
+    if (active && row.status !== 'active') { await repo.setAliasStatus(row.id, 'active'); promoted += 1; status = 'active'; }
+    else if (row.status === 'active') { promoted += 1; status = 'active'; }
+    else { pending += 1; status = 'pending'; }
+    // ★ 件数と中身を必ず同時に進める (棄却側の reject() と同じ約束)
+    accepted.push({
+      garble, term, garbleReading: getReading(garble), termReading: getReading(term),
+      moras, termMoras: toMoras(getReading(term)).length, distance, status,
+    });
   }
 
   const learned = promoted + pending;
@@ -166,5 +197,5 @@ export async function learnFromEdit(
     // 育った辞書を実行時オーバーレイに反映（active のみが補正段に効く）
     await refreshVocabFromTable();
   }
-  return { learned, promoted, pending, extracted: uniquePairs.length, gateRejected, gateRejectedBy, gateRejections };
+  return { learned, promoted, pending, extracted: uniquePairs.length, gateRejected, gateRejectedBy, gateRejections, accepted };
 }
