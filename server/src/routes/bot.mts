@@ -472,8 +472,9 @@ router.post('/push-file', upload.single('file'), async (req, res) => {
  *   true + include_raw=true                  → { id, status, version, formatted_text, raw_text }
  */
 router.get('/messages', async (req, res) => {
-  const { room_id, since, include_transcription, include_raw } = req.query as {
-    room_id?: string; since?: string; include_transcription?: string; include_raw?: string;
+  const { room_id, since, limit, include_transcription, include_raw } = req.query as {
+    room_id?: string; since?: string; limit?: string | number;
+    include_transcription?: string; include_raw?: string;
   };
   const userId = req.user!.id;
 
@@ -483,6 +484,10 @@ router.get('/messages', async (req, res) => {
 
   const includeTranscription = include_transcription !== 'false';
   const includeRaw = include_raw === 'true';
+  // #373: tealus-mcp は v0.1.0 から limit を送っていたが、ここで読んでいなかったため
+  //   silent に 20 件固定だった (既定値が一致していたので誤りが表に出ない)。
+  //   既定は 20 のまま = 既存の呼び出し元 (全員 20 を渡している) の挙動は不変。
+  const parsedLimit = Math.min(Math.max(parseInt(limit as string) || 20, 1), 100);
 
   try {
     // Check membership
@@ -495,9 +500,11 @@ router.get('/messages', async (req, res) => {
     }
 
     let query: string;
-    let params: string[];
+    let params: (string | number)[];
 
     if (since) {
+      // #373 方針 A: since は catch-up 用途なので limit を効かせない。
+      //   件数で絞ると「前回の続き」を取りこぼすため、上限 100 は保険として固定のまま。
       query = `
         SELECT m.*, u.display_name AS sender_display_name
         FROM messages m
@@ -514,9 +521,9 @@ router.get('/messages', async (req, res) => {
         JOIN users u ON u.id = m.sender_id
         WHERE m.room_id = $1 AND m.is_deleted = false
         ORDER BY m.created_at DESC
-        LIMIT 20
+        LIMIT $2
       `;
-      params = [room_id];
+      params = [room_id, parsedLimit];
     }
 
     const result = await pool.query<BotMessageListRow>(query, params);

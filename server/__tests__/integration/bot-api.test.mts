@@ -248,6 +248,81 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/messages — limit (#373)
+  // ============================================
+  describe('GET /api/bot/messages — limit (#373)', () => {
+    // 105 件を 1 秒刻みで投入する (msg1 が最新)。clamp 上限 100 を跨がせるため 100 件超。
+    const seed = async () => {
+      const pool = getTestPool();
+      await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, created_at)
+         SELECT $1, $2, 'text', 'msg' || g, now() - (g || ' seconds')::interval
+         FROM generate_series(1, 105) g`,
+        [roomId, user1.user.id]
+      );
+    };
+
+    it('limit を渡すとその件数だけ返る (新しい順)', async () => {
+      await seed();
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&limit=5`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBe(5);
+      expect(res.body.messages[0].content).toBe('msg1');
+    });
+
+    it('limit 省略時は従来どおり 20 件 (後方互換)', async () => {
+      await seed();
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBe(20);
+    });
+
+    it('上限 100 に丸める', async () => {
+      await seed();
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&limit=1000`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBe(100);
+    });
+
+    it('数値でない limit は既定 20 に落ちる', async () => {
+      await seed();
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&limit=abc`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBe(20);
+    });
+
+    // #373 の方針 A: since は catch-up 用途で「全部欲しい」が正しいので limit を効かせない。
+    // ここを緩めると取りこぼしが出るため、決定をテストで固定しておく。
+    it('since 指定時は limit の影響を受けない (上限 100 のまま)', async () => {
+      await seed();
+
+      const since = new Date(Date.now() - 3600_000).toISOString();
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&since=${since}&limit=5`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBe(100);
+    });
+  });
+
+  // ============================================
   // GET /api/bot/messages — reactions (#324)
   // ============================================
   describe('GET /api/bot/messages — reactions (#324)', () => {
