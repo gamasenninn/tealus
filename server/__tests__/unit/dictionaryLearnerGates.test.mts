@@ -184,6 +184,87 @@ describe('learnFromEdit が受理したペアの中身も返す (#371)', () => {
       { getReadings: async () => new Map([['ご清算', 'ごせいさん']]), getOccurrence: async () => 10 },
     );
     expect(r.gateRejections).toHaveLength(1);
-    expect(r.accepted).toEqual([]);
+    expect(r.accepted).toHaveLength(0);
+  });
+});
+
+/**
+ * ★ #371 term 側の読みが「読みになっていない」場合に引き直す。
+ *
+ * 音韻ゲートは garble/term 双方の読みをモーラで比べるが、term 側は table の
+ * `reading` をそのまま信じていた。本番の active term 266 件のうち 5 件は
+ * reading が空 or 漢字のままで (人名 2 件 / 社名 1 件 / 東芝 / モノ太郎)、
+ * ★ 漢字と仮名を比べると距離は必ず 1.00 = MORA_MAX(0.5) 超で全棄却になる。
+ *
+ * ★★ しかも棄却理由は `phonetic` (音が遠い) として記録されるため、
+ *    「読みが無いせい」だとログから読み取れない —— silent に落ち続ける。
+ * garble 側は既に pykakasi で読みを当てているので、term 側も同じ扱いにする。
+ */
+describe('term の読みが読みになっていないときは引き直す (#371)', () => {
+  /**
+   * ★ 読み供給の stub は「要求された語にだけ答える」こと。
+   *
+   * 最初に書いた stub は要求に関係なく term の読みも返しており、
+   * 本番では term を要求していないのに テストだけが通った (偽の合格)。
+   * 実物 (reading.mts) は `texts` に無い語を返さないので、それに揃える。
+   */
+  const pykakasi = (dict: Record<string, string>) =>
+    jest.fn(async (texts: string[]) => new Map(texts.filter((t) => dict[t]).map((t) => [t, dict[t]])));
+
+  it('★ reading が空の term でも、引き直した読みで音韻ゲートを通る', async () => {
+    // 本番の実例: 「東芝」は reading が空 → kata2hira でも漢字のまま → 距離 1.00 で全棄却
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '東芝', reading: '' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: 'とうしばの機械', newFormatted: '東芝の機械' },
+      { getReadings: pykakasi({ とうしば: 'とうしば', 東芝: 'とうしば' }), getOccurrence: async () => 10 },
+    );
+    expect(r.gateRejectedBy.phonetic).toBe(0);
+    expect(r.learned).toBe(1);
+    expect(r.accepted[0].termReading).toBe('とうしば');
+  });
+
+  it('★ reading に漢字が残っている term も引き直す (モノ太郎 = もの太郎)', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: 'モノ太郎', reading: 'もの太郎' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: '物太郎で発注', newFormatted: 'モノ太郎で発注' },
+      { getReadings: pykakasi({ 物太郎: 'ものたろう', モノ太郎: 'ものたろう' }), getOccurrence: async () => 10 },
+    );
+    expect(r.learned).toBe(1);
+    expect(r.accepted[0].termReading).toBe('ものたろう');
+    expect(r.accepted[0].termMoras).toBe(5);
+  });
+
+  it('★ 引き直しを要求する対象に term が入る (garble だけでなく)', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '東芝', reading: '' }]) as never);
+    const spy = pykakasi({ とうしば: 'とうしば', 東芝: 'とうしば' });
+    await learnFromEdit(
+      { priorFormatted: 'とうしばの機械', newFormatted: '東芝の機械' },
+      { getReadings: spy, getOccurrence: async () => 10 },
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual(expect.arrayContaining(['とうしば', '東芝']));
+  });
+
+  it('★ 読みが仮名の term は引き直しに出さない (既存の挙動を変えない)', async () => {
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '砕石', reading: 'さいせき' }]) as never);
+    const spy = pykakasi({ 最積: 'さいせき' });
+    const r = await learnFromEdit(
+      { priorFormatted: '最積を入れる', newFormatted: '砕石を入れる' },
+      { getReadings: spy, getOccurrence: async () => 10 },
+    );
+    expect(spy.mock.calls[0][0]).not.toContain('砕石');
+    expect(r.accepted[0].termReading).toBe('さいせき');   // table の読みがそのまま使われる
+    expect(r.learned).toBe(1);
+  });
+
+  it('★ 引き直しても読みが取れなければ従来どおり棄却する (非破壊)', async () => {
+    // pykakasi 不達 = 読みが返らない。勝手に受理してはいけない
+    mockedRepo.listActiveVocabulary.mockResolvedValue(vocab([{ term: '東芝', reading: '' }]) as never);
+    const r = await learnFromEdit(
+      { priorFormatted: 'とうしばの機械', newFormatted: '東芝の機械' },
+      { getReadings: pykakasi({ とうしば: 'とうしば' }), getOccurrence: async () => 10 },
+    );
+    expect(r.learned).toBe(0);
+    expect(r.gateRejectedBy.phonetic).toBe(1);
   });
 });

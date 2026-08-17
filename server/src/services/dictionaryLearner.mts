@@ -23,6 +23,25 @@ const MIN_MORAS = 3;   // 読みが3モーラ未満は過補正リスクで除�
 const MORA_MAX = 0.5;  // 読みのモーラ距離。本物の崩れは音を保つ
 const P_MIN = 0.5;     // corpus-precision 昇格閾値
 
+/**
+ * ★ 「読みとして使えるか」の判定 (#371)。漢字が残っていれば使えない。
+ *
+ * 音韻ゲートは garble/term 双方をモーラで比べるが、term 側は table の `reading` を
+ * そのまま信じていた。本番の active term 266 件のうち 5 件は reading が空 or 漢字のままで
+ * (人名 2 件 / 社名 1 件 / 東芝 / モノ太郎)、**仮名と漢字を比べると距離は必ず 1.00**
+ * = MORA_MAX(0.5) 超。つまり **どんな崩れが来ても永久に受理されない**。
+ * しかも棄却は `phonetic` (音が遠い) として記録されるので、読みが無いせいだと読み取れない。
+ *
+ * → garble 側は既に pykakasi で読みを当てているので、term 側も同じ扱いにする。
+ *
+ * ★ 英字・数字を含む読み (KBL / IHI / 44 / JUあいち) は対象外。pykakasi に投げても
+ *   読みにならず、現状より良くならない。ここで直すのは「引き直せば読みになるもの」だけ。
+ */
+const KANJI_RE = /[々㐀-䶿一-鿿豈-﫿]/;
+function isUsableReading(r: string | undefined): r is string {
+  return !!r && !KANJI_RE.test(r);
+}
+
 /** occurrence カウントの集計行 */
 interface OccurrenceRow {
   n: number;
@@ -148,10 +167,17 @@ export async function learnFromEdit(
     if (!seen.has(key)) { seen.add(key); uniquePairs.push(p); }
   }
 
-  // garble の読みを pykakasi で当てる（漢字 garble を音韻ゲートで採点可能に。term は table 読み）。
+  // garble の読みを pykakasi で当てる（漢字 garble を音韻ゲートで採点可能に）。
+  // ★ term も、table の読みが読みになっていなければ同じ経路で引き直す (#371)。
+  //   table の値を無条件に信じると、reading が空/漢字のままの term が silent に全棄却される。
   const getReadings = opts.getReadings || readingService.getReadings;
-  const garbleReadings = await getReadings(uniquePairs.map((p) => p.from));
-  const getReading = (s: string): string => readingByTerm.get(s) || garbleReadings.get(s) || kata2hira(s);
+  const termsNeedingReading = uniquePairs.map((p) => p.to).filter((t) => !isUsableReading(readingByTerm.get(t)));
+  const fetchedReadings = await getReadings([...uniquePairs.map((p) => p.from), ...termsNeedingReading]);
+  const getReading = (s: string): string => {
+    const tabled = readingByTerm.get(s);
+    // 引き直しても読みにならなければ従来どおり kata2hira（非破壊。勝手に受理しない）
+    return isUsableReading(tabled) ? tabled : (fetchedReadings.get(s) || kata2hira(s));
+  };
 
   let promoted = 0; let pending = 0; let gateRejected = 0;
   const gateRejectedBy: GateRejectionBreakdown = { moras: 0, phonetic: 0, noTerm: 0 };
