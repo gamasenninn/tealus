@@ -111,6 +111,27 @@
   margin-bottom: 4px;
 }
 
+/* ★ 音声添付はその場で再生する (動画と同じ扱い)。通話履歴の .m4a は
+   「文字起こしを読みながら音を確かめる」使い方なので、バブル内に置く。
+   幅は .media-video より広め — 再生バーはシークできる幅が要る。 */
+.media-audio {
+  width: 100%;
+  max-width: 320px;
+  height: 36px;
+  margin-top: 4px;
+  display: block;
+}
+
+/* 再生バーが主役になるので、併存するダウンロードリンクは控えめにする
+   (ダウンロード自体は残す = #246 の原本名保存を壊さない) */
+.media-file-compact {
+  padding: 4px 8px;
+  font-size: 11px;
+  opacity: 0.75;
+  background: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+}
+
 .media-file {
   display: block;
   padding: 8px;

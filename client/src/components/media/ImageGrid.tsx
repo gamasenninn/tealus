@@ -69,6 +69,13 @@ function ImageGrid({ media, onImageClick }: ImageGridProps) {
             <video key={m.id} src={`/media/${m.file_path}`} controls className="media-video" />
           );
         }
+        // ★ 音声はその場に再生バーを出す (動画と同じ扱い)。
+        //   通話履歴の .m4a は「クリック = 即ダウンロード」しか無く、聞くだけでも
+        //   ファイルが溜まっていた。文字起こしを読みながら音を確かめる使い方が主なので、
+        //   バブル内で再生できる方が合う。★ ダウンロードは下のリンクとして残す (#246 を壊さない)。
+        //   preload="metadata" — 1 room に何十件も並ぶので本体は先読みしない。
+        //   ただし尺とシークバーは出したいので metadata までは取る。
+        const isAudio = m.mime_type.startsWith('audio/');
         // #246: download attribute 必須 — 旧 implementation は target="_blank"
         //   + onClick window.open() で新タブ inline 表示していたが、browser save 時に
         //   URL basename (cryptic timestamp + hash) で保存される UX 不備があった。
@@ -76,10 +83,19 @@ function ImageGrid({ media, onImageClick }: ImageGridProps) {
         //   stopPropagation のみ keep (parent click 干渉防止)。
         return (
           <div key={m.id} className="media-file-wrapper">
+            {isAudio && (
+              <audio
+                src={`/media/${m.file_path}`}
+                controls
+                preload="metadata"
+                className="media-audio"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
             <a href={`/media/${m.file_path}`}
                download={m.file_name}
                rel="noopener noreferrer"
-               className="media-file"
+               className={`media-file${isAudio ? ' media-file-compact' : ''}`}
                onClick={(e) => e.stopPropagation()}>
               📎 {m.file_name}
             </a>
