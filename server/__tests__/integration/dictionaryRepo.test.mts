@@ -48,6 +48,61 @@ describe('upsertTerm', () => {
   });
 });
 
+/**
+ * ★ #375 語(term)の取り消しと、それが import で復活しないこと。
+ *
+ * 別名(alias)側には最初から tombstone ガード (`WHERE status <> 'rejected'`) があるのに、
+ * ★ 語側の upsertTerm には無く `status = EXCLUDED.status` で無条件に上書きしていた。
+ * → 取り消した語が、次の organon 取り込みで黙って active に戻る。
+ * 実例: 2026-07-05 に手入力された `ガマ / マンタ` 等 3 行を取り消す手段が無く、
+ *       266 語の用語リスト (音声認識へ渡る) に載り続けていた。
+ */
+describe('語(term)の取り消し (#375)', () => {
+  test('setTermStatus で rejected にできる', async () => {
+    const t = await repo.upsertTerm({ term: '保坂', reading: 'ほさか' });
+    const r = await repo.setTermStatus(t.id, 'rejected');
+    expect(r!.status).toBe('rejected');
+    expect(r!.id).toBe(t.id);
+  });
+
+  test('存在しない id は null', async () => {
+    expect(await repo.setTermStatus('00000000-0000-4000-8000-000000000000', 'rejected')).toBeNull();
+  });
+
+  test('★ 取り消した語は listActiveVocabulary から消える (用語リストに載らない)', async () => {
+    const t = await repo.upsertTerm({ term: '把握 / 把握しておく', reading: 'はあく / はあくしておく' });
+    await repo.upsertTerm({ term: '保坂', reading: 'ほさか' });
+    await repo.setTermStatus(t.id, 'rejected');
+    const vocab = await repo.listActiveVocabulary();
+    expect(vocab.map((v) => v.term)).toEqual(['保坂']);
+  });
+
+  test('★★ tombstone(rejected) の語は upsertTerm で復活しない (別名側と同じ約束)', async () => {
+    const t = await repo.upsertTerm({ term: 'ガマ / マンタ', reading: 'がま / まんた', source: 'manual' });
+    await repo.setTermStatus(t.id, 'rejected');
+    // organon の取り込みが同じ語を active で持ってくる
+    const back = await repo.upsertTerm({ term: 'ガマ / マンタ', reading: 'がま / まんた', source: 'organon', status: 'active' });
+    expect(back.id).toBe(t.id);          // 行は同じ
+    expect(back.status).toBe('rejected'); // ★ 却下は維持される
+    expect((await repo.listActiveVocabulary()).map((v) => v.term)).not.toContain('ガマ / マンタ');
+  });
+
+  test('取り消していない語は従来どおり upsertTerm で更新される (後方互換)', async () => {
+    const a = await repo.upsertTerm({ term: '保坂', category: 'person' });
+    const b = await repo.upsertTerm({ term: '保坂', category: 'person', reading: 'ほさか', status: 'active' });
+    expect(b.id).toBe(a.id);
+    expect(b.status).toBe('active');
+    expect(b.reading).toBe('ほさか');
+  });
+
+  test('★ 人間が明示的に戻すのは通る (setTermStatus は tombstone を見ない)', async () => {
+    const t = await repo.upsertTerm({ term: '保坂', reading: 'ほさか' });
+    await repo.setTermStatus(t.id, 'rejected');
+    const back = await repo.setTermStatus(t.id, 'active');
+    expect(back!.status).toBe('active');
+  });
+});
+
 describe('getTermByName', () => {
   test('存在すれば行、無ければ null', async () => {
     await repo.upsertTerm({ term: '保坂' });

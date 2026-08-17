@@ -181,6 +181,14 @@ function TermView() {
       setEditing(null); await load();
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
+  // ★ #375 語の取り消し / 解除。取り消した語は用語リスト（音声認識へ渡る語彙）から外れ、
+  //   organon の取り込みでも復活しない。誤操作できるように解除も用意する。
+  const setRejected = async (id: string, rejected: boolean) => {
+    try {
+      await (rejected ? api.rejectDictionaryTerm(id) : api.restoreDictionaryTerm(id));
+      await load();
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+  };
   const createTerm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nt.term.trim()) return;
@@ -229,9 +237,13 @@ function TermView() {
           <tbody>
             {terms.map((t) => {
               const ed = editing && editing.id === t.id;
+              const off = t.status === 'rejected';
               return (
-                <tr key={t.id}>
-                  <td>{t.term}</td>
+                <tr key={t.id} style={off ? { opacity: 0.5 } : undefined}>
+                  <td>
+                    <span style={off ? { textDecoration: 'line-through' } : undefined}>{t.term}</span>
+                    {off && <span style={{ marginLeft: 6, fontSize: 11, color: '#c00' }}>取り消し済</span>}
+                  </td>
                   <td style={{ color: '#888' }}>
                     {ed ? (
                       <select value={editing!.category} onChange={(e) => setEditing({ ...editing!, category: e.target.value })} style={{ padding: '4px 6px' }}>
@@ -257,7 +269,12 @@ function TermView() {
                         <button className="kebab-btn" onClick={() => setEditing(null)}>×</button>
                       </span>
                     ) : (
-                      <button className="kebab-btn" onClick={() => setEditing({ id: t.id, reading: t.reading || '', description: t.description || '', category: t.category || 'other' })}>編集</button>
+                      <span style={{ display: 'inline-flex', gap: 4 }}>
+                        <button className="kebab-btn" onClick={() => setEditing({ id: t.id, reading: t.reading || '', description: t.description || '', category: t.category || 'other' })}>編集</button>
+                        {off
+                          ? <button className="admin-create-btn" onClick={() => setRejected(t.id, false)}>戻す</button>
+                          : <button className="kebab-btn" onClick={() => setRejected(t.id, true)}>取り消し</button>}
+                      </span>
                     )}
                   </td>
                 </tr>

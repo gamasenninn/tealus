@@ -83,6 +83,47 @@ router.post('/dictionary/aliases/:id/reject', async (req, res) => {
   }
 });
 
+/**
+ * ★ 語(term)の取り消し（→ rejected tombstone）(#375)。
+ *
+ * 別名には「却下」があるのに語には無く、**一度登録した語は取り消せなかった**
+ * (term 本体を編集する手段も無い)。打ち間違えた語が用語リスト = 音声認識へ渡る語彙に
+ * 載り続ける。`listActiveVocabulary` が `status='active'` で絞っているので、
+ * ここで rejected にすれば refresh 後すぐ外れる。
+ *
+ * ★ 削除にしない理由: (1) なぜ消したかが残らない (2) `upsertTerm` の tombstone ガードと
+ *   対でないと、次の取り込みで復活する。人間が戻したいときは PATCH で status を戻す。
+ */
+router.post('/dictionary/terms/:id/reject', async (req, res) => {
+  try {
+    const row = await repo.setTermStatus(req.params.id, 'rejected');
+    if (!row) return res.status(404).json({ error: '語が見つかりません' });
+    await refreshVocabFromTable();
+    logger.info(`[dictionary] term rejected ${row.term} by ${req.user!.login_id}`);
+    res.json({ term: row });
+  } catch (err) {
+    logger.error('[dictionary] term reject error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * ★ 取り消しの取り消し (#375)。**取り消せて戻せないのは、取り消せなかったのと同じ穴**
+ * (誤操作が永久に残る)。`setTermStatus` は tombstone を見ないので、人間の明示は常に通る。
+ */
+router.post('/dictionary/terms/:id/restore', async (req, res) => {
+  try {
+    const row = await repo.setTermStatus(req.params.id, 'active');
+    if (!row) return res.status(404).json({ error: '語が見つかりません' });
+    await refreshVocabFromTable();
+    logger.info(`[dictionary] term restored ${row.term} by ${req.user!.login_id}`);
+    res.json({ term: row });
+  } catch (err) {
+    logger.error('[dictionary] term restore error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 // 語(term)一覧 — 「語」ビュー用（読み/description/category 編集）
 router.get('/dictionary/terms', async (req, res) => {
   try {

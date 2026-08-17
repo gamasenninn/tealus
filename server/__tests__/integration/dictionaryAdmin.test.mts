@@ -154,6 +154,64 @@ describe('語(term)ビュー', () => {
   });
 });
 
+/**
+ * ★ #375 語(term)の取り消し。別名に「却下」があるのに語には無く、
+ * 一度入れた語は管理画面から取り消せなかった (term 本体の編集手段も無い)。
+ */
+describe('語(term)の取り消し POST /dictionary/terms/:id/reject', () => {
+  test('★ 取り消すと rejected になり、用語リストから外れる', async () => {
+    const t = await repo.upsertTerm({ term: 'ガマ / マンタ', reading: 'がま / まんた', source: 'manual' });
+    await repo.upsertTerm({ term: '保坂', reading: 'ほさか' });
+    const res = await request(app).post(`/api/admin/dictionary/terms/${t.id}/reject`)
+      .set('Authorization', `Bearer ${admin.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.term.status).toBe('rejected');
+    const vocab = await repo.listActiveVocabulary();
+    expect(vocab.map((v) => v.term)).toEqual(['保坂']);
+  });
+
+  test('★ 取り消した語は organon 取り込みで復活しない', async () => {
+    const t = await repo.upsertTerm({ term: '把握 / 把握しておく', source: 'manual' });
+    await request(app).post(`/api/admin/dictionary/terms/${t.id}/reject`)
+      .set('Authorization', `Bearer ${admin.token}`);
+    await repo.upsertTerm({ term: '把握 / 把握しておく', source: 'organon', status: 'active' });
+    expect((await repo.listActiveVocabulary()).map((v) => v.term)).not.toContain('把握 / 把握しておく');
+  });
+
+  test('存在しない語は 404', async () => {
+    const res = await request(app).post('/api/admin/dictionary/terms/00000000-0000-4000-8000-000000000000/reject')
+      .set('Authorization', `Bearer ${admin.token}`);
+    expect(res.status).toBe(404);
+  });
+
+  test('★ 取り消しは取り消せる — restore で用語リストに戻る (誤操作が永久に残らない)', async () => {
+    const t = await repo.upsertTerm({ term: '保坂', reading: 'ほさか' });
+    await request(app).post(`/api/admin/dictionary/terms/${t.id}/reject`).set('Authorization', `Bearer ${admin.token}`);
+    expect((await repo.listActiveVocabulary())).toHaveLength(0);
+
+    const res = await request(app).post(`/api/admin/dictionary/terms/${t.id}/restore`)
+      .set('Authorization', `Bearer ${admin.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.term.status).toBe('active');
+    expect((await repo.listActiveVocabulary()).map((v) => v.term)).toEqual(['保坂']);
+  });
+
+  test('restore も存在しない語は 404 / 非 admin は 403', async () => {
+    const t = await repo.upsertTerm({ term: '保坂' });
+    expect((await request(app).post('/api/admin/dictionary/terms/00000000-0000-4000-8000-000000000000/restore')
+      .set('Authorization', `Bearer ${admin.token}`)).status).toBe(404);
+    expect((await request(app).post(`/api/admin/dictionary/terms/${t.id}/restore`)
+      .set('Authorization', `Bearer ${user.token}`)).status).toBe(403);
+  });
+
+  test('非 admin は 403', async () => {
+    const t = await repo.upsertTerm({ term: '保坂' });
+    const res = await request(app).post(`/api/admin/dictionary/terms/${t.id}/reject`)
+      .set('Authorization', `Bearer ${user.token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('手動追加 POST /dictionary/aliases', () => {
   test('既存 term に別名を追加（source=manual, active）', async () => {
     const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', source: 'organon' });

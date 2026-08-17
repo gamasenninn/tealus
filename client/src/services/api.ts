@@ -647,6 +647,15 @@ class ApiClient {
     return this.request<{ term: DictionaryTerm }>('PATCH', `/admin/dictionary/terms/${id}`, fields);
   }
 
+  // 語の取り消し / 取り消しの解除 (#375)。rejected は用語リスト(音声認識の語彙)から外れる
+  rejectDictionaryTerm(id: string) {
+    return this.request<{ term: DictionaryTerm }>('POST', `/admin/dictionary/terms/${id}/reject`);
+  }
+
+  restoreDictionaryTerm(id: string) {
+    return this.request<{ term: DictionaryTerm }>('POST', `/admin/dictionary/terms/${id}/restore`);
+  }
+
   createDictionaryTerm(fields: Partial<DictionaryTerm>) {
     return this.request<{ term: DictionaryTerm }>('POST', '/admin/dictionary/terms', fields);
   }

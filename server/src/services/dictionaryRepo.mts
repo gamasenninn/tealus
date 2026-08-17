@@ -50,6 +50,12 @@ export interface UpsertTermInput {
 /**
  * term を term 文字列で upsert。reading / description は COALESCE で「null なら既存を消さない」。
  * （import が null-reading を持ってきても手動で入れた読みを消さない安全策）
+ *
+ * ★ status='rejected'(tombstone) の行は尊重して no-op (#375)。**取り込みが「取り消し」を
+ *   上書きしない**ための約束で、`upsertAlias` が最初から持っていたものと同じ。
+ *   これが無いと、管理画面で取り消した語が **次の organon 取り込みで黙って active に戻る**
+ *   (語側だけ `status = EXCLUDED.status` で無条件に上書きしていた)。
+ *   ★ 人間が明示的に戻すときは `setTermStatus` を使う (そちらは tombstone を見ない)。
  */
 export async function upsertTerm({ term, category = 'other', reading = null, description = null, source = 'manual', status = 'active' }: UpsertTermInput): Promise<DictionaryTermRow> {
   const { rows } = await pool.query<DictionaryTermRow>(
@@ -62,10 +68,14 @@ export async function upsertTerm({ term, category = 'other', reading = null, des
        source      = EXCLUDED.source,
        status      = EXCLUDED.status,
        updated_at  = NOW()
+     WHERE dictionary_terms.status <> 'rejected'
      RETURNING *`,
     [term, category, reading, description, source, status],
   );
-  return rows[0];
+  if (rows[0]) return rows[0];
+  // DO UPDATE の WHERE が false = tombstone に当たった。現行を返す（呼び出し側は id を使う）
+  const existing = await pool.query<DictionaryTermRow>('SELECT * FROM dictionary_terms WHERE term = $1', [term]);
+  return existing.rows[0];
 }
 
 export async function getTermByName(term: string): Promise<DictionaryTermRow | null> {
@@ -201,6 +211,26 @@ export async function rejectAlias(aliasId: string): Promise<DictionaryAliasRow |
   const { rows } = await pool.query<DictionaryAliasRow>(
     "UPDATE dictionary_aliases SET status = 'rejected', updated_at = NOW() WHERE id = $1 RETURNING *",
     [aliasId],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * ★ 語(term)の状態を明示的に切り替える (#375)。取り消し = 'rejected'。
+ *
+ * 別名には最初から「却下」があったが**語には無く、一度入れた語を取り消す手段が無かった**
+ * (term 本体の編集手段も無いので、打ち間違えた語が 266 語の用語リスト = 音声認識へ渡る
+ * 語彙に載り続けた)。`listActiveVocabulary` は既に `status='active'` で絞っているので、
+ * rejected にした瞬間に用語リストから外れる。
+ *
+ * ★ 削除ではなく tombstone にするのは、**なぜ消したかを残す**ため + `upsertTerm` 側の
+ *   ガードと対で「取り込みが復活させない」を成立させるため (別名側と同じ形)。
+ * ★ この関数は tombstone を見ない = **人間が明示的に戻すのは常に通る**（人間の明示が最上位）。
+ */
+export async function setTermStatus(termId: string, status: DictionaryTermStatus): Promise<DictionaryTermRow | null> {
+  const { rows } = await pool.query<DictionaryTermRow>(
+    'UPDATE dictionary_terms SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING *',
+    [termId, status],
   );
   return rows[0] || null;
 }
