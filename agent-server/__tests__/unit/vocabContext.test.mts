@@ -122,6 +122,37 @@ describe('loadVocabForPrompt (primary = local.ttl)', () => {
   });
 });
 
+/**
+ * #377: 表は渡っているのに議事録で使われなかった件。原因は「使え」という指示の側で、
+ * 文面が OCR 前提 (「画像・帳票から読み取った語」) だったため 音声起こし由来の人名に
+ * 向いていなかった。指示は表と同じ block に載せる = Light / Deep 全経路に同時に届く。
+ */
+describe('#377 指示文: 音声起こし / 議事録も対象と明示する (OCR 前提を外す)', () => {
+  const ttl = () => writeTtl([{ term: '五月女', category: 'person', aliases: ['ソートメ', '総トメ'] }]);
+
+  test('音声の文字起こし・議事録が対象だと明示している', () => {
+    process.env.VOCAB_INJECT = 'true';
+    const out = loadVocabForPrompt({ ttlPath: ttl() });
+    expect(out).toContain('音声');
+    expect(out).toContain('議事録');
+  });
+
+  test('別名に一致したら正規名に「置換」する (認識補助で終わらせない)', () => {
+    process.env.VOCAB_INJECT = 'true';
+    const out = loadVocabForPrompt({ ttlPath: ttl() });
+    expect(out).toContain('置換');
+    // Deep 側 (dispatcher buildDeepPrompt) の方針 1 と同じく、元表記の併記は不要と明示する
+    expect(out).toMatch(/元(の)?表記.*(残す必要|不要)/);
+  });
+
+  test('OCR 専用と読める列挙 (画像・帳票のみ) にはなっていない', () => {
+    process.env.VOCAB_INJECT = 'true';
+    const out = loadVocabForPrompt({ ttlPath: ttl() });
+    const heading = out.split('\n').find((l) => l.includes('別名')) || '';
+    expect(heading).not.toMatch(/^画像・帳票・文章から読み取った語/);
+  });
+});
+
 describe('fallback: ttl 不在なら legacy JSON (最後の砦、旧挙動保持)', () => {
   test('ttl 不在 + json あり → json から読む', () => {
     process.env.VOCAB_INJECT = 'true';
