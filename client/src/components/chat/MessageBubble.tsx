@@ -352,6 +352,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
       {isEditingMessage && (
         <MessageEditModal
           initialText={message.content || ''}
+          media={message.media}
           onClose={() => setIsEditingMessage(false)}
           onConfirm={async (text) => {
             try {

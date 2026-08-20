@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import type { MediaItem } from '../../types';
 
 interface MessageEditModalProps {
   initialText: string;
+  /** 対象メッセージの添付。音声だけ再生バーを出す (#378)。省略可 = 従来の呼び出し */
+  media?: MediaItem[];
   onConfirm: (text: string) => void | Promise<void>;
   onClose: () => void;
 }
@@ -9,13 +12,32 @@ interface MessageEditModalProps {
 /**
  * #344 候補3: メッセージ編集モーダル (MessageBubble から分離)。
  * 本文の編集状態はこのモーダル内に閉じ、確定時に onConfirm(text) を呼ぶ。
+ *
+ * ★ #378: 添付音声の再生バーをここにも出す。#376 で足したのは ImageGrid (= バブル側)
+ *   だけで、モーダルはバブルを覆うため **編集中は音を操作できなかった**。音声メッセージ
+ *   (VoiceEditModal) には最初からプレイヤーが付いており、経路による不揃いだった。
+ *   条件は mime_type のみ = ルームで分岐しない (通話履歴専用の作りにしない)。
+ *
+ * ★ 再生位置はバブル側と共有しない (別の audio 要素なので 0 秒から)。共有するには
+ *   再生状態を持ち上げる必要があり規模が変わるので、要望が出てから別途。
  */
-function MessageEditModal({ initialText, onConfirm, onClose }: MessageEditModalProps) {
+function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEditModalProps) {
   const [text, setText] = useState(initialText);
+  const audios = (media ?? []).filter((m) => m.mime_type?.startsWith('audio/'));
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box voice-edit-modal message-edit-modal" onClick={e => e.stopPropagation()}>
         <h3>メッセージを編集</h3>
+        {audios.map((m) => (
+          // ImageGrid と同じ markup / class (#376)。preload=metadata で尺とシークバーだけ先に取る
+          <audio
+            key={m.id}
+            src={`/media/${m.file_path}`}
+            controls
+            preload="metadata"
+            className="media-audio"
+          />
+        ))}
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
