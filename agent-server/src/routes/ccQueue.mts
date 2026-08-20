@@ -25,6 +25,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { getCcQueueDir } from '../webhook/ccQueue.mts';
@@ -232,7 +233,14 @@ router.get('/stream', async (req, res) => {
 
   // 先に購読を登録する: backlog を書いている間に来たイベントも落とさない
   // (NDJSON なので順序が多少前後しても、消費側は id で判断できる)
-  const sub: CcSubscriber = { project, allowedRooms, sink: res };
+  //
+  // ★ id / connectedAt / lastHbAt は切断を突き合わせるための計器 (#359 follow-up)。
+  //   id が無いと、購読者が 2 本あるとき removed 行がどちらのものか決まらない。
+  const sub: CcSubscriber = {
+    project, allowedRooms, sink: res,
+    id: randomUUID().slice(0, 6),
+    connectedAt: Date.now(),
+  };
   addSubscriber(sub);
 
   const since = typeof req.query.since === 'string' ? req.query.since : undefined;
@@ -241,7 +249,12 @@ router.get('/stream', async (req, res) => {
   for (const ev of backlog) res.write(JSON.stringify(ev) + '\n');
 
   const hb = setInterval(() => {
-    try { res.write('{"__hb":1}\n'); } catch { /* close 側で片付く */ }
+    // ★ 書けたときだけ時刻を進める。write が投げた後も進めると、届いていない heartbeat を
+    //   「送った」ことにしてしまい、hb_age が実際より小さく出る (= 測定が甘い方へずれる)。
+    try {
+      res.write('{"__hb":1}\n');
+      sub.lastHbAt = Date.now();
+    } catch { /* close 側で片付く */ }
   }, heartbeatMs());
 
   // 寿命が来たらこちらから閉じる。クライアントの再接続ループが再ログイン + 再認可する
@@ -255,7 +268,7 @@ router.get('/stream', async (req, res) => {
   };
 
   expiry = setTimeout(() => {
-    logger.info(`[cc-stream] 最大寿命 (${Math.round(maxAge / 1000)}s) に達したため切断します: project=${project} — クライアントが再接続して認可を取り直します`);
+    logger.info(`[cc-stream] 最大寿命 (${Math.round(maxAge / 1000)}s) に達したため切断します: project=${project} id=${sub.id} — クライアントが再接続して認可を取り直します`);
     // ★ 閉じる前に**理由**を伝える (#366)。これが無いと、クライアントは
     //   「経過秒が寿命に近いか」で理由を逆算するしかない。その逆算は
     //   **`date +%s` が単調増加する**という前提に乗っていて、成り立たない。
@@ -290,7 +303,7 @@ router.get('/stream', async (req, res) => {
     } catch (err) {
       logger.warn(`[cc-stream] __bye の write が例外を投げました: project=${project} ${err instanceof Error ? err.message : String(err)}`);
     }
-    logger.info(`[cc-stream] __bye 送出: project=${project} reason=max_age accepted=${accepted} pending_before=${pendingBefore}B destroyed=${res.destroyed}`);
+    logger.info(`[cc-stream] __bye 送出: project=${project} id=${sub.id} reason=max_age accepted=${accepted} pending_before=${pendingBefore}B destroyed=${res.destroyed}`);
     cleanup();
     res.end();
   }, maxAge);
@@ -298,5 +311,5 @@ router.get('/stream', async (req, res) => {
   req.on('close', cleanup);
   res.on('close', cleanup);
 
-  logger.info(`[cc-stream] 接続: project=${project} rooms=${allowedRooms.size} backlog=${backlog.length} max_age=${Math.round(maxAge / 1000)}s`);
+  logger.info(`[cc-stream] 接続: project=${project} id=${sub.id} rooms=${allowedRooms.size} backlog=${backlog.length} max_age=${Math.round(maxAge / 1000)}s`);
 });

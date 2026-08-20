@@ -311,3 +311,60 @@ describe('broadcastBye — #368 理由つきの予告', () => {
     expect(broadcastBye('gateway_restart', 30000)).toBe(1);
   });
 });
+
+/**
+ * #359 follow-up (2026-08-20): 切断の起点を両側で突き合わせるための計器。
+ *
+ * Mac セッションは切断時の `hb_age` (最後に heartbeat を受けてからの経過) の分布で
+ * 「予告済みは 13-14s に 97% 集中 / 想定外は 2-15s に一様」を出した。同じ土俵の数字を
+ * サーバ側でも出せないと、「サーバのタイマと同期しているか」を突き合わせられない。
+ * ★ 名目値 (15s 間隔) からの計算では代用できない —— setInterval は 220 回でおよそ
+ * 13-14 秒ドリフトしており、それがまさに測りたい量に混ざる。実測しか使えない。
+ */
+describe('#359 subscriber removed の計器 (id / age / hb_age)', () => {
+  const { logger } = require('../../src/lib/logger.mts');
+
+  function lastRemovedLog(): string {
+    const calls = [...(logger.info as jest.Mock).mock.calls, ...(logger.debug as jest.Mock).mock.calls];
+    const lines = calls.map((c) => String(c[0])).filter((m) => m.includes('subscriber removed'));
+    return lines[lines.length - 1] ?? '';
+  }
+
+  beforeEach(() => {
+    (logger.info as jest.Mock).mockClear();
+    (logger.debug as jest.Mock).mockClear();
+  });
+
+  it('★ hb_age (最後に heartbeat を書いてからの秒数) と接続齢を出す', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    s.id = 'ab12cd';
+    s.connectedAt = Date.now() - 30_000;
+    s.lastHbAt = Date.now() - 7_000;
+    addSubscriber(s);
+    removeSubscriber(s);
+
+    const line = lastRemovedLog();
+    expect(line).toContain('id=ab12cd');
+    expect(line).toMatch(/age=(29|30|31)s/);
+    expect(line).toMatch(/hb_age=(6|7|8)s/);
+  });
+
+  it('★ heartbeat をまだ 1 回も書いていなければ hb_age=- (0 と区別する)', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    s.id = 'ef34gh';
+    s.connectedAt = Date.now() - 3_000;
+    addSubscriber(s);
+    removeSubscriber(s);
+
+    const line = lastRemovedLog();
+    expect(line).toContain('hb_age=-');
+    expect(line).not.toContain('hb_age=0s');
+  });
+
+  it('計器のフィールドが無い購読者でも落ちない (後方互換)', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    expect(() => removeSubscriber(s)).not.toThrow();
+    expect(lastRemovedLog()).toContain('project=tealus');
+  });
+});

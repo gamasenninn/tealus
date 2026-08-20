@@ -26,6 +26,18 @@ export interface CcSubscriber {
   /** ★ この購読者に配ってよい room id 集合。接続時に確定させる */
   allowedRooms: Set<string>;
   sink: CcSubscriberSink;
+  /**
+   * ★ 以下 3 つは切断を突き合わせるための計器 (#359 follow-up、2026-08-20)。
+   * 省略可 = 既存の呼び出し側を壊さない。
+   *
+   * `id` が無いと、購読者が 2 本あるとき **サーバ側ではどちらが落ちたか区別できない**
+   * (removed 行に識別子が無く、8 月の切断調査で実際に詰まった)。
+   * `lastHbAt` は **実際に `__hb` を書いた時刻**。名目間隔からの計算では代用できない ——
+   * `setInterval` は 220 回でおよそ 13-14 秒ドリフトしており、それが測りたい量に混ざる。
+   */
+  id?: string;
+  connectedAt?: number;
+  lastHbAt?: number;
 }
 
 /** project → 購読者集合 */
@@ -41,11 +53,22 @@ export function addSubscriber(sub: CcSubscriber): void {
   logger.debug(`[cc-stream] subscriber added: project=${sub.project} rooms=${sub.allowedRooms.size} total=${set.size}`);
 }
 
+/** ミリ秒差を「Ns」に。基準が無ければ `-` (= 0 秒と区別する) */
+function secsSince(at: number | undefined, now: number): string {
+  return typeof at === 'number' ? `${Math.round((now - at) / 1000)}s` : '-';
+}
+
 export function removeSubscriber(sub: CcSubscriber): void {
   const set = subscribers.get(sub.project);
   if (!set) return;
   if (set.delete(sub)) {
-    logger.debug(`[cc-stream] subscriber removed: project=${sub.project} total=${set.size}`);
+    // ★ info で出す (接続行と同じ高さ)。debug のままだと NODE_ENV=production で
+    //   level が warn に上がったとき、**接続行だけ残って切断行が消える**。
+    const now = Date.now();
+    logger.info(
+      `[cc-stream] subscriber removed: project=${sub.project} id=${sub.id ?? '-'}`
+      + ` age=${secsSince(sub.connectedAt, now)} hb_age=${secsSince(sub.lastHbAt, now)} total=${set.size}`,
+    );
   }
   if (set.size === 0) subscribers.delete(sub.project);
 }

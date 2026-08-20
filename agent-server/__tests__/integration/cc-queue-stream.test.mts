@@ -518,3 +518,58 @@ describe('cc-queue — 接続の最大寿命 (#360)', () => {
     await srv.close();
   });
 });
+
+/**
+ * #359 follow-up (2026-08-20): 切断の起点を両側で突き合わせるための計器。
+ *
+ * Mac セッション側は `hb_age` の分布で「予告済みは位相が寄る / 想定外は一様」を示した。
+ * ★ 同じ量をサーバ側でも **実測** できないと突き合わせられない (名目間隔からの計算は
+ * setInterval のドリフトを含むので代用にならない)。
+ */
+describe('cc-queue — 切断の計器 (#359 follow-up)', () => {
+  const { logger } = require('../../src/lib/logger.mts');
+
+  function removedLines(): string[] {
+    return [...(logger.info as jest.Mock).mock.calls, ...(logger.debug as jest.Mock).mock.calls]
+      .map((c) => String(c[0]))
+      .filter((m) => m.includes('subscriber removed'));
+  }
+
+  test('★ 切断行に hb_age と接続齢が実測で出る', async () => {
+    (logger.info as jest.Mock).mockClear();
+    (logger.debug as jest.Mock).mockClear();
+    const srv = await listen(makeApp());
+    const s = await openStream(srv.port, 'project=tealus');
+    await sleep(200);   // heartbeat 80ms → 2 回以上流れている
+    s.abort();
+    await sleep(80);
+
+    const line = removedLines().pop() ?? '';
+    expect(line).toMatch(/hb_age=\d+s/);   // '-' ではない = 実際に書いた時刻から測っている
+    expect(line).toMatch(/age=\d+s/);
+    await srv.close();
+  });
+
+  test('★ 接続行と切断行が同じ id を持つ (購読者 2 本のどちらが落ちたか分かる)', async () => {
+    (logger.info as jest.Mock).mockClear();
+    const srv = await listen(makeApp());
+    const a = await openStream(srv.port, 'project=tealus');
+    const b = await openStream(srv.port, 'project=tealus');
+    await sleep(30);
+
+    const connectIds = (logger.info as jest.Mock).mock.calls
+      .map((c) => String(c[0]))
+      .filter((m) => m.includes('[cc-stream] 接続:'))
+      .map((m) => /id=(\w+)/.exec(m)?.[1]);
+    expect(connectIds).toHaveLength(2);
+    expect(new Set(connectIds).size).toBe(2);   // 2 本が別 id
+
+    a.abort();
+    await sleep(80);
+    const removedId = /id=(\w+)/.exec(removedLines().pop() ?? '')?.[1];
+    expect(connectIds).toContain(removedId);
+
+    b.abort();
+    await srv.close();
+  });
+});
