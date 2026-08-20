@@ -4,6 +4,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAuthStore } from '../../stores/authStore';
 import { voiceNav, transcriptionText } from '../../utils/voiceNav';
+import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted } from '../../utils/audioExclusive';
 import { formatDuration } from '../../utils/format';
 
 interface VoiceEditModalProps {
@@ -55,12 +56,23 @@ function VoiceEditModal({ messageId, onClose }: VoiceEditModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId]);
 
+  // ★ #380: 同時再生抑制の規約に参加する。この画面だけ参加しておらず、
+  //   編集中に再生すると **裏のバブルが鳴りっぱなし**になり得た (VoiceBubble は参加済)。
+  //   ここで止めるときは notifyAudioStopped を呼ばない —— 直前に相手が取った
+  //   Wake Lock を解放してしまうため (useVoiceContinuousPlay)。
+  useEffect(() => subscribeAudioStarted(currentId, () => {
+    audioRef.current?.pause();
+    setIsPlaying(false);
+  }), [currentId]);
+
   const handlePlayPause = () => {
     const audio = audioRef.current;
     if (!audio) return;
     if (isPlaying) {
       audio.pause();
+      notifyAudioStopped();
     } else {
+      notifyAudioStarted(currentId);
       audio.volume = (parseInt(localStorage.getItem('voiceVolume') || '80', 10)) / 100;
       audio.play();
     }

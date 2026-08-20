@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import MediaAudio from '../media/MediaAudio';
 import type { MediaItem } from '../../types';
 
 interface MessageEditModalProps {
@@ -28,16 +29,8 @@ function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEdi
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box voice-edit-modal message-edit-modal" onClick={e => e.stopPropagation()}>
         <h3>メッセージを編集</h3>
-        {audios.map((m) => (
-          // ImageGrid と同じ markup / class (#376)。preload=metadata で尺とシークバーだけ先に取る
-          <audio
-            key={m.id}
-            src={`/media/${m.file_path}`}
-            controls
-            preload="metadata"
-            className="media-audio"
-          />
-        ))}
+        {/* ★ #380: バブルと同じ部品を使う。markup も 同時再生抑制の配線も 1 か所に持つ */}
+        {audios.map((m) => <MediaAudio key={m.id} media={m} />)}
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}

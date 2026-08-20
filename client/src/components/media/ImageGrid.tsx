@@ -1,5 +1,6 @@
 import { Download } from 'lucide-react';
 import TextFilePreview, { isTextFile } from './TextFilePreview';
+import MediaAudio from './MediaAudio';
 import type { MediaItem } from '../../types';
 import './ImageGrid.css';
 
@@ -83,15 +84,7 @@ function ImageGrid({ media, onImageClick }: ImageGridProps) {
         //   stopPropagation のみ keep (parent click 干渉防止)。
         return (
           <div key={m.id} className="media-file-wrapper">
-            {isAudio && (
-              <audio
-                src={`/media/${m.file_path}`}
-                controls
-                preload="metadata"
-                className="media-audio"
-                onClick={(e) => e.stopPropagation()}
-              />
-            )}
+            {isAudio && <MediaAudio media={m} />}
             <a href={`/media/${m.file_path}`}
                download={m.file_name}
                rel="noopener noreferrer"
