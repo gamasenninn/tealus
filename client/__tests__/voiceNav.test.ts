@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { editableVoiceMessages, voiceNav, transcriptionText } from '../src/utils/voiceNav';
+import { editableVoiceMessages, voiceNav, transcriptionText, editableAudioAttachmentMessages, navFor } from '../src/utils/voiceNav';
 import type { Message } from '../src/types';
 
 const ME = 'user-me';
@@ -79,5 +79,77 @@ describe('transcriptionText', () => {
     expect(transcriptionText({ transcription: { formatted_text: 'F', raw_text: 'R' } } as Message)).toBe('F');
     expect(transcriptionText({ transcription: { raw_text: 'R' } } as Message)).toBe('R');
     expect(transcriptionText(null)).toBe('');
+  });
+});
+
+/**
+ * #379: 連続編集を 添付音声つきメッセージ でも使うための一覧抽出。
+ *
+ * ★ 「編集できるか」は右クリックメニュー (useContextMenuItems) と同じ規則を使う。
+ *   別ルールを書くと「前/次で送った先が保存時に 403」になり、実行時にしか出ない。
+ * ★★ type='voice' は除く —— あちらは既に連続編集を持っており、含めると同じメッセージに
+ *   2 系統のナビができて、どちらから開いたかで挙動が変わる。
+ */
+describe('editableAudioAttachmentMessages (#379)', () => {
+  const withAudio = (id: string, senderId = 'other', extra: Record<string, unknown> = {}) => ({
+    id, sender_id: senderId, type: 'text', content: 'x', is_deleted: false,
+    media: [{ id: `${id}m`, file_path: `${id}.m4a`, mime_type: 'audio/mp4' }],
+    ...extra,
+  }) as never;
+
+  it('★ 音声添付を持つものだけを拾う', () => {
+    const list = [
+      withAudio('a'),
+      { id: 'b', type: 'text', content: 'y', is_deleted: false, media: [{ id: 'bm', mime_type: 'image/jpeg' }] },
+      { id: 'c', type: 'text', content: 'z', is_deleted: false },
+    ] as never[];
+    expect(editableAudioAttachmentMessages(list, 'u1', 'member').map((m) => m.id)).toEqual(['a']);
+  });
+
+  it('★ type=voice は除く (VoiceEditModal の担当)', () => {
+    const list = [withAudio('a'), withAudio('v', 'other', { type: 'voice' })] as never[];
+    expect(editableAudioAttachmentMessages(list, 'u1', 'member').map((m) => m.id)).toEqual(['a']);
+  });
+
+  it('削除済みは除く', () => {
+    const list = [withAudio('a'), withAudio('d', 'other', { is_deleted: true })] as never[];
+    expect(editableAudioAttachmentMessages(list, 'u1', 'member').map((m) => m.id)).toEqual(['a']);
+  });
+
+  it('★ policy=none は 1 件も返さない', () => {
+    expect(editableAudioAttachmentMessages([withAudio('a', 'u1')] as never[], 'u1', 'none')).toEqual([]);
+  });
+
+  it('★ policy=sender は自分の投稿だけ', () => {
+    const list = [withAudio('mine', 'u1'), withAudio('theirs', 'u2')] as never[];
+    expect(editableAudioAttachmentMessages(list, 'u1', 'sender').map((m) => m.id)).toEqual(['mine']);
+  });
+
+  it('★ policy=member は他人の投稿も含む (bot 投稿の文字起こしを直せること)', () => {
+    const list = [withAudio('bot', 'bot-user'), withAudio('mine', 'u1')] as never[];
+    expect(editableAudioAttachmentMessages(list, 'u1', 'member').map((m) => m.id)).toEqual(['bot', 'mine']);
+  });
+
+  it('並び順は元のメッセージ順のまま', () => {
+    const list = [withAudio('c'), withAudio('a'), withAudio('b')] as never[];
+    expect(editableAudioAttachmentMessages(list, 'u1', 'member').map((m) => m.id)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('navFor — 一覧を渡してナビ情報を得る (#379 汎用版)', () => {
+  const m = (id: string) => ({ id }) as never;
+
+  it('中間なら前後ともある', () => {
+    const r = navFor([m('a'), m('b'), m('c')], 'b');
+    expect([r.prevId, r.nextId, r.index, r.total]).toEqual(['a', 'c', 1, 3]);
+  });
+
+  it('端は null になる', () => {
+    expect(navFor([m('a'), m('b')], 'a').prevId).toBeNull();
+    expect(navFor([m('a'), m('b')], 'b').nextId).toBeNull();
+  });
+
+  it('一覧に無い id なら current が null', () => {
+    expect(navFor([m('a')], 'zzz').current).toBeNull();
   });
 });

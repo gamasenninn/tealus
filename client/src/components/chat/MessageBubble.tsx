@@ -24,6 +24,9 @@ import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
 import { useMessageTags, type TagEntry } from '../../hooks/useMessageTags';
 import MessageEditModal from './MessageEditModal';
+import VoiceEditModal from './VoiceEditModal';
+import MediaAudio from '../media/MediaAudio';
+import { editableAudioAttachmentMessages } from '../../utils/voiceNav';
 import EditHistoryModal from './EditHistoryModal';
 import type { MessageEditEntry } from '../../utils/editHistory';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems';
@@ -37,6 +40,11 @@ import './MessageBubble.css';
 // - stamp: type='stamp' の展開済みスタンプ (file_path / label)
 // - reactions[].me: 自分がリアクション済みか
 // - tags[].id: message_tags 応答は id を必ず返す (types.ts では optional)
+/** 音声の添付を持つか (#379: 連続編集モーダルへ回す判定) */
+function hasAudioAttachment(media: MediaItem[] | undefined | null): boolean {
+  return Array.isArray(media) && media.some((m) => m?.mime_type?.startsWith('audio/'));
+}
+
 type ReactionWithMe = Reaction & { me?: boolean };
 type BubbleMessage = Omit<Message, 'reactions'> & {
   reactions?: ReactionWithMe[];
@@ -349,7 +357,23 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
         />
       )}
 
-      {isEditingMessage && (
+      {/* ★ #379: 音声添付があるものは連続編集モーダル (前/次つき) を使う。
+          連続編集の実装を 2 つ持たないため、音声メッセージ用のものに注入して共用する。
+          添付が無い場合は従来どおり素のテキスト編集。 */}
+      {isEditingMessage && (hasAudioAttachment(message.media) ? (
+        <VoiceEditModal
+          messageId={message.id}
+          title="メッセージを編集"
+          selectItems={(msgs, uid, room) => editableAudioAttachmentMessages(msgs, uid, room?.message_edit_policy)}
+          textOf={(m) => m?.content || ''}
+          save={async (id, text) => { await api.editMessage(roomId, id, text); }}
+          renderPlayer={(m) => {
+            const a = (m.media || []).find((x) => x.mime_type?.startsWith('audio/'));
+            return a ? <MediaAudio key={a.id} media={a} /> : null;
+          }}
+          onClose={() => setIsEditingMessage(false)}
+        />
+      ) : (
         <MessageEditModal
           initialText={message.content || ''}
           media={message.media}
@@ -361,7 +385,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
             } catch (err) { console.error(err); }
           }}
         />
-      )}
+      ))}
 
       {showEditHistory && (
         <EditHistoryModal

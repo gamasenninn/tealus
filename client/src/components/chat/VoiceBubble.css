@@ -344,3 +344,13 @@
   text-decoration: line-through;
 }
 
+
+/* #379: 保存に失敗したことを画面に出す。以前は握り潰して先へ進み、編集が黙って消えていた */
+.voice-edit-error {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--danger-bg, #fdecea);
+  color: var(--danger, #b3261e);
+  font-size: 0.9em;
+}
