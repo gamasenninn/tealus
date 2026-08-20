@@ -477,3 +477,11 @@
   min-height: 50vh;
 }
 
+/* #378: 添付音声の再生バーと本文入力の間隔。バブル側 (.media-audio) は隣の要素が
+   ダウンロードリンクなので 4px で足りるが、モーダルでは本文入力と隣り合うため近すぎた
+   (実機 dogfood での指摘)。VoiceEditModal の .voice-edit-player と同じ 12px に揃える。
+   ★ .media-audio 自体は触らない — バブル側の詰まった見た目は #376 の意図どおり。 */
+.modal-box.message-edit-modal .media-audio {
+  margin: 8px 0 12px;
+}
+
