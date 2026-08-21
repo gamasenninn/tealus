@@ -122,6 +122,16 @@
   display: block;
 }
 
+/* ★ モーダルの中では 本文入力と隣り合うので、バブル内 (4px) より広く取る。
+   #378 で入れたときは .modal-box.message-edit-modal に限定していたが、
+   #379 で 添付音声の編集が VoiceEditModal (message-edit-modal クラスを持たない) へ
+   移り、★★ セレクタが当たらなくなって 詰まった状態に戻っていた。
+   → ★★★ 部品 (MediaAudio) と同じ粒度で 「モーダルの中なら」に広げる。
+   バブル側 (ImageGrid) は modal-box の外なので 4px のまま。 */
+.modal-box .media-audio {
+  margin: 8px 0 12px;
+}
+
 /* 再生バーが主役になるので、併存するダウンロードリンクは控えめにする
    (ダウンロード自体は残す = #246 の原本名保存を壊さない) */
 .media-file-compact {
