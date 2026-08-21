@@ -7,7 +7,7 @@ import { dispatch } from './dispatcher.mts';
 import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
 import * as botSendThrottle from '../lib/botSendThrottle.mts';
-import { extractCcProject, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
+import { extractCcProject, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
 import { isMentioned } from './mention.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
 
@@ -129,6 +129,17 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
       }
     }
     // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
+  } else {
+    // #359 (a): 宛先を書いたつもりで配送されなかった便を可視化する。
+    // 2026-08-20 の実害は「3 日間どこにも届かず、痕跡も残らなかった」。
+    // ★ silent をやめるだけで 3 日は 1 時間になっていた (issue の選択肢 6)。
+    // 精度優先で拾うので info。全件を上げると通常の会話に埋もれて「見えない」に戻る。
+    const hint = detectUnroutedAddressHint(message.content);
+    if (hint) {
+      const head = (message.content || '').split('\n').find(l => l.trim().length > 0) || '';
+      logger.info(`[cc-queue] 宛先未解決のため配送していません (${hint}): `
+        + `room=${room.name || room.id} sender=${message.sender?.display_name || senderId} head="${head.slice(0, 60)}"`);
+    }
   }
 
   // Bot が参加していないルームは無視（ただしルーム一覧を再取得して確認）

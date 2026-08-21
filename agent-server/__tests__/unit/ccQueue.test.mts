@@ -24,6 +24,7 @@ import {
   reloadAliases,
   getAliasesConfigPath,
   emitCcAck,
+  detectUnroutedAddressHint,
 } from '../../src/webhook/ccQueue.mts';
 
 describe('extractCcProject (先頭マッチング、#215)', () => {
@@ -81,15 +82,34 @@ describe('extractCcProject (先頭マッチング、#215)', () => {
 describe('@Claude mention routing (#263)', () => {
   // 既存 cc-tealus bot の display_name "Claude" で mention picker から
   // 挿入される `@Claude` も @cc-{default-project} 同等に routing する
+  //
+  // ★ この describe は **実機の agent-server/config/cc-aliases.json を読んでいた**。
+  //   同 dir は git 管理外のローカル設定なので、運用で `Claude` の宛先を変えると
+  //   (2026-08-20 に tealus → support へ変更) テストが 4 件赤くなり、
+  //   「テスト全体が信号として使えない」状態になっていた。
+  //   → AGENT_CONFIG_DIR を tmp に向けて隔離する (他の describe と同じ形)。
   let origEnv: string | undefined;
+  let origConfigDir: string | undefined;
+  let aliasDir: string;
 
   beforeEach(() => {
     origEnv = process.env.CLAUDE_DEFAULT_PROJECT;
+    delete process.env.CLAUDE_DEFAULT_PROJECT;   // 実機 .env の値を持ち込まない
+    origConfigDir = process.env.AGENT_CONFIG_DIR;
+    aliasDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-alias-'));
+    fs.writeFileSync(path.join(aliasDir, 'cc-aliases.json'),
+      JSON.stringify({ aliases: [{ mention: 'Claude', project: 'tealus' }] }));
+    process.env.AGENT_CONFIG_DIR = aliasDir;
+    reloadAliases();
   });
 
   afterEach(() => {
     if (origEnv === undefined) delete process.env.CLAUDE_DEFAULT_PROJECT;
     else process.env.CLAUDE_DEFAULT_PROJECT = origEnv;
+    if (origConfigDir === undefined) delete process.env.AGENT_CONFIG_DIR;
+    else process.env.AGENT_CONFIG_DIR = origConfigDir;
+    fs.rmSync(aliasDir, { recursive: true, force: true });
+    reloadAliases();   // ★ cache を持ち越さない (module 変数なので後続 describe に漏れる)
   });
 
   test('@Claude 行頭 → default project (tealus) に routing', () => {
@@ -594,5 +614,59 @@ describe('appendCcEvent — #214 jsonl の上限 (trim)', () => {
     for (let i = 1; i <= 30; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
 
     expect(lines(filePath)).toHaveLength(30);
+  });
+});
+
+/**
+ * #359 (a) 配送されなかった便の可視化。
+ *
+ * 2026-08-20 の実害: `【organon班 → 本体班】🔴 6 件目…` が 3 日間どの queue にも入らず、
+ * ログにも痕跡が残らなかった。extractCcProject が null を返した便のうち
+ * **「宛先を書いたつもり」に見えるものだけ** を拾って info に上げる。
+ *
+ * ★ 精度が命。全件を上げると雑音に埋もれて「見えない」に戻る。
+ */
+describe('detectUnroutedAddressHint (#359 (a))', () => {
+  test('★ 実害ケース: 「→ ○○班」で宛先を書いたが mention が無い', () => {
+    expect(detectUnroutedAddressHint('【organon班 → 本体班】🔴 6 件目、閾値に到達しました'))
+      .toBe('team-arrow');
+    expect(detectUnroutedAddressHint('kairos班 → 本体班\n本文')).toBe('team-arrow');
+  });
+
+  test('★ 行頭に @cc- を書いたのに project 名が規約外 (大文字・空)', () => {
+    expect(detectUnroutedAddressHint('@cc-Tealus 進捗どう')).toBe('malformed-cc-mention');
+    expect(detectUnroutedAddressHint('@cc- 進捗どう')).toBe('malformed-cc-mention');
+    expect(detectUnroutedAddressHint('@cc-_foo')).toBe('malformed-cc-mention');
+  });
+
+  test('★★ 本文中 (行頭でない) の @cc- 引用では鳴らない — AI 同士の引用で毎回鳴るため', () => {
+    expect(detectUnroutedAddressHint('宛先は @cc-tealus と書いてください')).toBeNull();
+    expect(detectUnroutedAddressHint('`@cc-organon` を先頭に置く')).toBeNull();
+  });
+
+  test('★★ 普通の本文では鳴らない', () => {
+    expect(detectUnroutedAddressHint('今日の朝礼のメモです')).toBeNull();
+    expect(detectUnroutedAddressHint('organon班の進捗はどうですか')).toBeNull();   // 班 はあるが → が無い
+    expect(detectUnroutedAddressHint('A → B の順に処理する')).toBeNull();          // → はあるが 班 が無い
+  });
+
+  test('空 / null / 非文字列は null', () => {
+    expect(detectUnroutedAddressHint('')).toBeNull();
+    expect(detectUnroutedAddressHint(null)).toBeNull();
+    expect(detectUnroutedAddressHint(undefined)).toBeNull();
+    expect(detectUnroutedAddressHint(42 as unknown as string)).toBeNull();
+  });
+
+  test('★★★ 最初の非空行だけを見る — 長い返信の引用部分で鳴らせない', () => {
+    // 冒頭で名乗り、後段で他班のやり取りを引用しているだけの返信
+    expect(detectUnroutedAddressHint('了解しました。\n\n> 【organon班 → 本体班】前回の件'))
+      .toBeNull();
+    // 先頭が空行でも、最初の「中身のある行」を見る
+    expect(detectUnroutedAddressHint('\n\n【organon班 → 本体班】本題')).toBe('team-arrow');
+  });
+
+  test('★ 正常に routing される便では呼ばれない前提だが、呼ばれても null', () => {
+    expect(detectUnroutedAddressHint('@cc-tealus 【organon班 → 本体班】本題')).toBeNull();
+    expect(detectUnroutedAddressHint('@cc-organon よろしく')).toBeNull();
   });
 });

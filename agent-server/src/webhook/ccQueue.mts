@@ -137,6 +137,40 @@ function extractCcProject(content: string | null | undefined): string | null {
   return null;
 }
 
+// #359 (a) 宛先を書いたつもりで配送されなかった便を拾うための signal。
+// 社内の宛先記法「【organon班 → 本体班】」= 矢印のあとに 班。2026-08-20 の実害はこの形。
+const TEAM_ARROW_RE = /→\s*\S*班/;
+// 行頭の `@cc-` 記法を試したが CC_MENTION_RE に届かなかったもの (`@cc-Tealus` / `@cc-` 等)。
+const CC_MENTION_ATTEMPT_RE = /^@cc-/m;
+
+/** #359 (a) の判定結果。null = 宛先を書いたようには見えない。 */
+type UnroutedAddressHint = 'team-arrow' | 'malformed-cc-mention' | null;
+
+/**
+ * 配送されなかった便のうち「宛先を書いたつもり」に見えるものを判別する (#359 (a))。
+ *
+ * 2026-08-20 の実害: `【organon班 → 本体班】🔴 6 件目…` が 3 日間どの queue にも入らず、
+ * **送信側にも受信側にも痕跡が残らなかった**。issue の選択肢 6「silent をやめる」の実装。
+ *
+ * ★ 精度を優先する。配送されなかった便を全部 info に上げると、通常の会話で埋もれて
+ *   「見えない」に戻る。**鳴らない方に倒し、鳴ったら本物**を狙う:
+ * - 見るのは **最初の非空行だけ** — 長い返信が後段で他班のやり取りを引用しても鳴らない
+ * - 本文中 (行頭でない) の `@cc-` 引用では鳴らさない — AI 同士が宛先を説明するたびに鳴るため
+ *
+ * ★ 呼び出し側は extractCcProject() が null のときだけ呼ぶこと。routing 済みの便に
+ *   対して呼んでも null を返すが (下の `!CC_MENTION_RE.test`)、意味のある使い方ではない。
+ */
+function detectUnroutedAddressHint(content: string | null | undefined): UnroutedAddressHint {
+  if (typeof content !== 'string' || content.length === 0) return null;
+  const firstLine = content.split('\n').find((l) => l.trim().length > 0);
+  if (!firstLine) return null;
+  // 規約どおりに match するなら routing 済み = ここでは扱わない
+  if (CC_MENTION_RE.test(content)) return null;
+  if (CC_MENTION_ATTEMPT_RE.test(firstLine)) return 'malformed-cc-mention';
+  if (TEAM_ARROW_RE.test(firstLine)) return 'team-arrow';
+  return null;
+}
+
 /**
  * jsonl の行数上限 (#214)。超えたら末尾 80% を残して古い行を捨てる。
  *
@@ -261,6 +295,7 @@ function emitCcAck({ project, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAck
 
 export {
   extractCcProject,
+  detectUnroutedAddressHint,
   appendCcEvent,
   shouldSkipCcSender,
   loadSkipSenderIds,
