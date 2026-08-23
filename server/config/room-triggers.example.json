@@ -23,7 +23,7 @@
     ],
     "when": "every",
     "interval_minutes": 30,
-    "message": "@cc-tealus-app 直近画像を作業フォルダーに変換保存して",
+    "message": "@cc-tealus-apps 直近画像を作業フォルダーに変換保存して",
     "as_user_id": "00000000-0000-0000-0000-000000000000",
     "enabled": false,
     "description": "溜まった画像を変換保存する (第 2 段)",
