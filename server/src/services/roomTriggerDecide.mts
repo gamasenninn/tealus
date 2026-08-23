@@ -16,6 +16,18 @@ export interface DecideContext {
   lastFiredAt: Date | null;
   /** 該当種別の直近の投稿時刻。無ければ null */
   latestMatchAt: Date | null;
+  /**
+   * ★ 初回の基準 = 設定ファイルの mtime (= このトリガーを有効にした時刻)。
+   *
+   * 一度も撃っていないと lastFiredAt が null で、「前回以降」が**部屋の全履歴**になる。
+   * 2026-08-23 の dogfood で、有効化した瞬間に **4 週間前の画像**で発火した。
+   * 本番の朝礼で同じことをすると、既に議事録がある動画にもう一度撃つ。
+   *
+   * ★★ これは状態ではない。**起点**なので §3.1.1 (状態を持たない) と矛盾しない ——
+   *   一度撃てば lastFiredAt が優先され、以後 mtime は使われない。
+   *   だから設定ファイルを触っても、既に動いているトリガーには影響しない。
+   */
+  bootstrapAt?: Date | null;
 }
 
 export interface Decision {
@@ -39,6 +51,7 @@ export function decide(t: RoomTrigger, ctx: DecideContext): Decision {
   if (!t.enabled) return { fire: false, reason: '無効 (enabled: false)' };
 
   const { now, lastFiredAt, latestMatchAt } = ctx;
+  const bootstrapAt = ctx.bootstrapAt ?? null;
 
   if (t.when === 'schedule') {
     const [h, m] = (t.at ?? '00:00').split(':').map(Number);
@@ -51,12 +64,22 @@ export function decide(t: RoomTrigger, ctx: DecideContext): Decision {
     if (lastFiredAt && jstDateKey(lastFiredAt) === jstDateKey(now)) {
       return { fire: false, reason: `発火済み (JST ${jstDateKey(now)} 分は投稿済み)` };
     }
+    // ★ 有効化より前の時刻は、その日ぶんを撃たない (§3.2「過ぎた時刻は撃たない」と同じ理屈)
+    if (!lastFiredAt && bootstrapAt
+        && jstDateKey(bootstrapAt) === jstDateKey(now) && jstMinutes(bootstrapAt) > target) {
+      return { fire: false, reason: `有効化前 (JST ${t.at} は有効化より前なので本日分は撃ちません)` };
+    }
     return { fire: true, reason: `JST ${t.at} を過ぎ、本日分は未投稿` };
   }
 
   // immediate / every はどちらも「該当種別の投稿があるか」が要る
   if (!latestMatchAt) {
     return { fire: false, reason: `投稿なし (${t.types.join('/')} が 1 件もありません)` };
+  }
+
+  // ★ 初回は「有効化より後の投稿」だけを見る。無いと部屋の全履歴が対象になる
+  if (!lastFiredAt && bootstrapAt && latestMatchAt <= bootstrapAt) {
+    return { fire: false, reason: '有効化前 (直近の該当投稿は設定を置くより前のものです)' };
   }
 
   if (t.when === 'immediate') {

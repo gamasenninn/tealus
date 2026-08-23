@@ -151,6 +151,104 @@ describe('schedule', () => {
   });
 });
 
+/**
+ * ★ 初回の基準 (2026-08-23 の dogfood で発覚)
+ *
+ * 一度も撃っていないトリガーは lastFiredAt が null なので、「前回以降」が
+ * **部屋の全履歴**になる。テストE2E で有効化した瞬間、**4 週間前の画像**で発火した。
+ * 本番の朝礼で同じことをすると、既に議事録がある動画に対してもう一度撃つ。
+ *
+ * → 設定ファイルの mtime (= 有効にした時刻) を初回の基準にする。
+ *   **有効化より前の出来事では撃たない**、という 1 本の規則にまとめる。
+ */
+describe('bootstrapAt — 有効化より前の出来事では撃たない', () => {
+  test('★ 初回、有効化より前の投稿では撃たない', () => {
+    const d = decide(make(), {
+      now: jst('2026-08-23T14:04:00'),
+      lastFiredAt: null,
+      latestMatchAt: jst('2026-07-26T19:03:00'),   // 4 週間前
+      bootstrapAt: jst('2026-08-23T14:03:32'),      // 設定を置いた時刻
+    });
+    expect(d.fire).toBe(false);
+    expect(d.reason).toContain('有効化前');
+  });
+
+  test('★ 初回でも、有効化より後の投稿なら撃つ', () => {
+    const d = decide(make(), {
+      now: jst('2026-08-23T14:05:29'),
+      lastFiredAt: null,
+      latestMatchAt: jst('2026-08-23T14:05:26'),
+      bootstrapAt: jst('2026-08-23T14:03:32'),
+    });
+    expect(d.fire).toBe(true);
+  });
+
+  test('一度撃ったあとは bootstrapAt を使わない (前回発火が優先)', () => {
+    const d = decide(make(), {
+      now: jst('2026-08-23T15:00:00'),
+      lastFiredAt: jst('2026-08-23T14:05:29'),
+      latestMatchAt: jst('2026-08-23T14:50:00'),
+      bootstrapAt: jst('2026-08-23T14:58:00'),   // ★ 設定を触っても既存には効かない
+    });
+    expect(d.fire).toBe(true);
+  });
+
+  test('bootstrapAt が無ければ従来どおり (履歴があれば撃つ)', () => {
+    const d = decide(make(), {
+      now: jst('2026-08-23T14:04:00'),
+      lastFiredAt: null,
+      latestMatchAt: jst('2026-07-26T19:03:00'),
+      bootstrapAt: null,
+    });
+    expect(d.fire).toBe(true);
+  });
+
+  test('every も同じ (初回は有効化より後の投稿だけ)', () => {
+    const t = make({ when: 'every', interval_minutes: 30 });
+    const d = decide(t, {
+      now: jst('2026-08-23T14:04:00'),
+      lastFiredAt: null,
+      latestMatchAt: jst('2026-07-26T19:03:00'),
+      bootstrapAt: jst('2026-08-23T14:03:32'),
+    });
+    expect(d.fire).toBe(false);
+  });
+
+  test('★ schedule も同じ — 有効化より前の時刻は その日ぶんを撃たない', () => {
+    const t = make({ when: 'schedule', at: '08:00', types: undefined });
+    const d = decide(t, {
+      now: jst('2026-08-23T14:04:00'),
+      lastFiredAt: null,
+      latestMatchAt: null,
+      bootstrapAt: jst('2026-08-23T14:03:32'),   // 08:00 はもう過ぎている
+    });
+    expect(d.fire).toBe(false);
+    expect(d.reason).toContain('有効化前');
+  });
+
+  test('schedule — 有効化が指定時刻より前なら その日から撃つ', () => {
+    const t = make({ when: 'schedule', at: '08:00', types: undefined });
+    const d = decide(t, {
+      now: jst('2026-08-23T08:01:00'),
+      lastFiredAt: null,
+      latestMatchAt: null,
+      bootstrapAt: jst('2026-08-23T07:00:00'),
+    });
+    expect(d.fire).toBe(true);
+  });
+
+  test('schedule — 前日に有効化していれば翌日は普通に撃つ', () => {
+    const t = make({ when: 'schedule', at: '08:00', types: undefined });
+    const d = decide(t, {
+      now: jst('2026-08-23T08:01:00'),
+      lastFiredAt: null,
+      latestMatchAt: null,
+      bootstrapAt: jst('2026-08-22T14:00:00'),
+    });
+    expect(d.fire).toBe(true);
+  });
+});
+
 describe('共通', () => {
   test('★ enabled: false は撃たない。理由も残す', () => {
     const d = decide(make({ enabled: false }), {

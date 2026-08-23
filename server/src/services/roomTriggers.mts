@@ -39,6 +39,12 @@ export interface LoadResult {
   triggers: RoomTrigger[];
   /** 落とした行の理由。呼び出し側が必ず warn として出すこと */
   warnings: string[];
+  /**
+   * ★ 設定ファイルの mtime = 「このトリガーを有効にした時刻」。
+   *   まだ一度も撃っていないトリガーの起点に使う (roomTriggerDecide の bootstrapAt)。
+   *   ファイルが無い / パース済みの値から読んだ場合は null。
+   */
+  mtime: Date | null;
 }
 
 export const CONFIG_PATH = path.join(import.meta.dirname, '..', '..', 'config', 'room-triggers.json');
@@ -115,9 +121,9 @@ function validate(raw: unknown, index: number): RoomTrigger | string {
 }
 
 /** パース済みの値から読む (テストと loadTriggers の共通部分) */
-export function loadTriggersFrom(parsed: unknown): LoadResult {
+export function loadTriggersFrom(parsed: unknown, mtime: Date | null = null): LoadResult {
   if (!Array.isArray(parsed)) {
-    return { triggers: [], warnings: ['room-triggers.json が配列ではありません (全行を無視します)'] };
+    return { triggers: [], warnings: ['room-triggers.json が配列ではありません (全行を無視します)'], mtime };
   }
   const triggers: RoomTrigger[] = [];
   const warnings: string[] = [];
@@ -136,7 +142,7 @@ export function loadTriggersFrom(parsed: unknown): LoadResult {
     seen.add(result.id);
     triggers.push(result);
   });
-  return { triggers, warnings };
+  return { triggers, warnings, mtime };
 }
 
 /**
@@ -147,17 +153,21 @@ export function loadTriggersFrom(parsed: unknown): LoadResult {
  */
 export function loadTriggers(configPath: string = CONFIG_PATH): LoadResult {
   let text: string;
+  let mtime: Date | null = null;
   try {
     text = fs.readFileSync(configPath, 'utf8');
+    // ★ 「有効にした時刻」として使う。読めなければ null (= 従来どおりの挙動に落ちる)
+    try { mtime = fs.statSync(configPath).mtime; } catch { mtime = null; }
   } catch {
-    return { triggers: [], warnings: [] };
+    return { triggers: [], warnings: [], mtime: null };
   }
   try {
-    return loadTriggersFrom(JSON.parse(text));
+    return loadTriggersFrom(JSON.parse(text), mtime);
   } catch (err) {
     return {
       triggers: [],
       warnings: [`room-triggers.json が JSON として読めません: ${err instanceof Error ? err.message : String(err)}`],
+      mtime,
     };
   }
 }

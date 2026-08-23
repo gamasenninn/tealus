@@ -25,6 +25,8 @@ const HEARTBEAT_MS = 3_600_000;
 
 export interface RunDeps {
   now: Date;
+  /** ★ 設定ファイルの mtime = 有効にした時刻。未発火のトリガーの起点 (docs/06 §3.1.2) */
+  bootstrapAt?: Date | null;
   lastFiredAt: (t: RoomTrigger) => Promise<Date | null>;
   latestMatchAt: (t: RoomTrigger) => Promise<Date | null>;
   resolveSender: (t: RoomTrigger) => Promise<SenderContext | null>;
@@ -46,12 +48,14 @@ export async function runOnce(triggers: RoomTrigger[], deps: RunDeps): Promise<R
     try {
       // ★ 無効な行で毎周 DB を叩かない。判定だけ先に済ませる
       if (!t.enabled) {
-        results.push({ id: t.id, ...pick(decide(t, { now: deps.now, lastFiredAt: null, latestMatchAt: null })) });
+        results.push({ id: t.id, ...pick(decide(t, {
+          now: deps.now, lastFiredAt: null, latestMatchAt: null, bootstrapAt: deps.bootstrapAt ?? null,
+        })) });
         continue;
       }
 
       const [lastFiredAt, latestMatchAt] = await Promise.all([deps.lastFiredAt(t), deps.latestMatchAt(t)]);
-      const d = decide(t, { now: deps.now, lastFiredAt, latestMatchAt });
+      const d = decide(t, { now: deps.now, lastFiredAt, latestMatchAt, bootstrapAt: deps.bootstrapAt ?? null });
       if (!d.fire) {
         results.push({ id: t.id, fired: false, reason: d.reason });
         continue;
@@ -173,7 +177,7 @@ export function startRoomTriggers(configPath: string = CONFIG_PATH): void {
   let warnedSignature = initial.warnings.join('|');
   timer = setInterval(() => {
     void (async () => {
-      const { triggers, warnings } = loadTriggers(configPath);
+      const { triggers, warnings, mtime } = loadTriggers(configPath);
       // ★ 同じ warn を 10 秒ごとに出さない。ただし内容が変わったら必ず出す
       const signature = warnings.join('|');
       if (signature !== warnedSignature) {
@@ -183,6 +187,7 @@ export function startRoomTriggers(configPath: string = CONFIG_PATH): void {
       const now = new Date();
       const results = await runOnce(triggers, {
         now,
+        bootstrapAt: mtime,
         lastFiredAt: lastFiredAtFromRoom,
         latestMatchAt: latestMatchAtFromRoom,
         resolveSender: resolveSenderFromDb,
