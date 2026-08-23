@@ -20,6 +20,7 @@ import { setupSocketHandlers } from './socket/index.mts';
 import { setIo } from './io-registry.mts';
 import { createSignalHandler, realSleep, realDeadline } from './utils/shutdown.mts';
 import { notifyGatewayBye } from './utils/gatewayBye.mts';
+import { describeProxyClose, isCcStreamPath } from './utils/ccStreamProxyLog.mts';
 import { JWT_SECRET } from './middleware/auth.mts';
 
 import { router as lineRoutes } from './routes/line.mts';
@@ -81,10 +82,43 @@ setIo(io);
 app.use(cors());
 
 // Agent Server proxy（express.json() より前に配置 — body をパースせずに転送するため）
+//
+// ★ cc-stream (長時間接続) だけ切断ログを出す (#359 B-1)。この 3000 番は 8 月の
+//   切断調査の間ずっと無言で、「何も起きていない」と「記録していない」が区別できなかった。
+//   ここで書くのは **どちら側が先に閉じたか** だけ。原因は分からないので書かない。
+//   ★★ 全 API に付けない —— 短命リクエストの行に埋もれた計器は無いのと同じ。
 app.use('/agent-api', createProxyMiddleware({
   target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
   pathRewrite: { '^/agent-api': '' },
   changeOrigin: true,
+  on: {
+    proxyReq: (_proxyReq, req, res) => {
+      if (!isCcStreamPath(req.url ?? '')) return;
+      const facts = { url: req.url ?? '', startedAt: Date.now(), bytes: 0 } as {
+        url: string; startedAt: number; bytes: number;
+        clientClosedAt?: number; upstreamClosedAt?: number; error?: string;
+      };
+      // ★ 1 リクエストに 1 つだけ持たせる。proxyRes / error / close の 3 か所から書き込む
+      (req as unknown as { _ccProxyFacts?: typeof facts })._ccProxyFacts = facts;
+      req.on('close', () => { facts.clientClosedAt ??= Date.now(); });
+      // ★ 書き出しは res の close 1 か所に集約する。両側のフラグが揃ってから 1 行だけ出す
+      //   (2 か所から出すと、同着のときに 2 行出て件数が倍になる)
+      res.on('close', () => { logger.info(describeProxyClose({ ...facts, now: Date.now() })); });
+    },
+    proxyRes: (proxyRes, req) => {
+      const facts = (req as unknown as {
+        _ccProxyFacts?: { bytes: number; upstreamClosedAt?: number };
+      })._ccProxyFacts;
+      if (!facts) return;
+      // pipe で既に flowing なので、listener を足しても取りこぼさない (観測だけ)
+      proxyRes.on('data', (chunk: Buffer) => { facts.bytes += chunk.length; });
+      proxyRes.on('close', () => { facts.upstreamClosedAt ??= Date.now(); });
+    },
+    error: (err, req) => {
+      const facts = (req as unknown as { _ccProxyFacts?: { error?: string } })._ccProxyFacts;
+      if (facts) facts.error ??= err.message;
+    },
+  },
 }));
 
 // tealus-mcp HTTP transport proxy (#264 Phase 1 alpha)
