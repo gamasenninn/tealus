@@ -14,7 +14,7 @@
  *   - res が最後まで書き切れたか (writableFinished)
  *   向きを決められないときは **unknown と書く**。沈黙にも、当てずっぽうにもしない。
  */
-import { describeProxyClose } from '../../src/utils/ccStreamProxyLog.mts';
+import { describeProxyClose, endDownstream } from '../../src/utils/ccStreamProxyLog.mts';
 
 const base = { url: '/cc-queue/stream?project=support', startedAt: 1_000_000, bytes: 4096, resFinished: false };
 
@@ -89,5 +89,41 @@ describe('describeProxyClose — 出す数値', () => {
 
   test('バイト数 0 も出す (0 と「記録していない」を区別する)', () => {
     expect(describeProxyClose({ ...base, now: 1_001_000, bytes: 0 })).toContain('bytes=0');
+  });
+});
+
+/**
+ * 上流が消えたときに下流も閉じる (#359、2026-08-23 の実測から)
+ *
+ * ★ 放っておくと 60 秒かかる。機構は docs/05 に揃っている:
+ *   nginx (NAS) の `proxy_read_timeout` は 60s。ふだんは 15 秒ごとの heartbeat が
+ *   それを抑えている (4 倍の余裕)。**heartbeat の発生源である agent-server が死ぬと
+ *   抑えが外れる** —— proxy は気づかず、nginx が 60 秒で切るまで下流を抱え続ける。
+ *
+ * ★★ 実測: agent-server 再起動で 3 本とも 59.783 / 59.784 / 59.842 秒 保持された。
+ *   その間クライアントは死んだ上流に繋がったままで、受信できない。
+ *   同じ日の server 再起動 (proxy 自身が落ちる) は 1 秒で撤去され、空白は 19 秒だった。
+ */
+describe('endDownstream', () => {
+  test('まだ書き終えていなければ閉じる', () => {
+    const end = jest.fn();
+    expect(endDownstream({ writableEnded: false, end })).toBe(true);
+    expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  test('★ すでに書き終えていれば触らない (正常終了時に二重で end しない)', () => {
+    const end = jest.fn();
+    expect(endDownstream({ writableEnded: true, end })).toBe(false);
+    expect(end).not.toHaveBeenCalled();
+  });
+
+  test('★ end が投げても呼び出し側に伝播させない (切断処理でクラッシュしない)', () => {
+    const end = jest.fn(() => { throw new Error('already destroyed'); });
+    expect(() => endDownstream({ writableEnded: false, end })).not.toThrow();
+  });
+
+  test('end が投げたときは false を返す (閉じられなかったと分かる)', () => {
+    const end = jest.fn(() => { throw new Error('boom'); });
+    expect(endDownstream({ writableEnded: false, end })).toBe(false);
   });
 });

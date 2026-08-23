@@ -20,7 +20,7 @@ import { setupSocketHandlers } from './socket/index.mts';
 import { setIo } from './io-registry.mts';
 import { createSignalHandler, realSleep, realDeadline } from './utils/shutdown.mts';
 import { notifyGatewayBye } from './utils/gatewayBye.mts';
-import { describeProxyClose, isCcStreamPath } from './utils/ccStreamProxyLog.mts';
+import { describeProxyClose, endDownstream, isCcStreamPath } from './utils/ccStreamProxyLog.mts';
 import { JWT_SECRET } from './middleware/auth.mts';
 
 import { router as lineRoutes } from './routes/line.mts';
@@ -108,14 +108,19 @@ app.use('/agent-api', createProxyMiddleware({
         logger.info(describeProxyClose({ ...facts, now: Date.now(), resFinished: res.writableFinished }));
       });
     },
-    proxyRes: (proxyRes, req) => {
+    proxyRes: (proxyRes, req, res) => {
       const facts = (req as unknown as {
         _ccProxyFacts?: { bytes: number; upstreamClosedAt?: number };
       })._ccProxyFacts;
       if (!facts) return;
       // pipe で既に flowing なので、listener を足しても取りこぼさない (観測だけ)
       proxyRes.on('data', (chunk: Buffer) => { facts.bytes += chunk.length; });
-      proxyRes.on('close', () => { facts.upstreamClosedAt ??= Date.now(); });
+      proxyRes.on('close', () => {
+        facts.upstreamClosedAt ??= Date.now();
+        // ★ 上流が消えたら下流も閉じる。放っておくと nginx の proxy_read_timeout 60s が
+        //   切るまで、クライアントは死んだ上流に繋がったままになる (2026-08-23 実測 59.78s)。
+        endDownstream(res);
+      });
     },
     error: (err, req) => {
       const facts = (req as unknown as { _ccProxyFacts?: { error?: string } })._ccProxyFacts;

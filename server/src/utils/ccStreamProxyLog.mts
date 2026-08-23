@@ -86,6 +86,35 @@ export function describeProxyClose(f: ProxyCloseFacts): string {
 }
 
 /**
+ * 上流が消えたら下流も即座に閉じる (#359、2026-08-23 の実測から)。
+ *
+ * ★ なぜ要るか: 放っておくと **60 秒** かかる。
+ *   nginx (NAS) の `proxy_read_timeout` は 60s で、ふだんは 15 秒ごとの heartbeat が
+ *   それを抑えている (docs/05 §4)。**heartbeat を出している agent-server が死ぬと
+ *   抑えが外れる** —— proxy は上流の死に気づかず、nginx が 60 秒で切るまで
+ *   クライアントを「死んだ上流に繋がったまま」にしておく。
+ *
+ * ★★ 実測 (agent-server 再起動、3 本): 保持 59.783 / 59.784 / 59.842 秒。
+ *   同じ日の server 再起動 (proxy 自身が落ちる) は 1 秒で撤去され、空白は 19 秒だった。
+ *   **同じ「予告つき再起動」で 3.5 倍の差**が付いていた。
+ *
+ * ★★★ `end()` であって `destroy()` ではない。NDJSON の行境界を壊さずに EOF を伝え、
+ *   クライアントの再接続ループにそのまま渡す。
+ *
+ * @returns 実際に閉じたか (既に終わっていた / 閉じられなかった場合は false)
+ */
+export function endDownstream(res: { writableEnded: boolean; end(): void }): boolean {
+  if (res.writableEnded) return false;
+  try {
+    res.end();
+    return true;
+  } catch {
+    // 既に破棄されている等。切断処理の中なので、ここで投げても誰も得をしない
+    return false;
+  }
+}
+
+/**
  * このリクエストを cc-stream の長時間接続として記録するか。
  *
  * ★ 全 API に付けると、通常の短命リクエストが 1 秒に何十行も出て、
