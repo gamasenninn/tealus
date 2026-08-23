@@ -7,8 +7,8 @@
  */
 import { buildBody, loadTriggersFrom, markFor } from '../../src/services/roomTriggers.mts';
 
-const ROOM = 'c698839a-25fb-44e3-9646-d71fce43cdc5';
-const USER = '353c1076-5241-4542-bca8-9b259c47e5de';
+const ROOM = '00000000-0000-0000-0000-000000000002';
+const USER = '00000000-0000-0000-0000-000000000001';
 
 const valid = {
   id: 'chourei-gijiroku',
@@ -43,7 +43,7 @@ describe('loadTriggersFrom', () => {
   });
 
   test('★ 壊れた行があっても、他の行は生きる', () => {
-    const other = { ...valid, id: 'other', room_id: 'c8146708-bbba-4371-acaa-f19de1f97f52' };
+    const other = { ...valid, id: 'other', room_id: '00000000-0000-0000-0000-000000000003' };
     const { triggers, warnings } = loadTriggersFrom([{ ...valid, types: ['text'] }, other]);
     expect(triggers.map((t) => t.id)).toEqual(['other']);
     expect(warnings).toHaveLength(1);

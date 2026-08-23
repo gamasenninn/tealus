@@ -15,9 +15,9 @@ import {
   isPolling, runOnce, shouldReport, startRoomTriggers, stopRoomTriggers,
 } from '../../src/services/roomTriggerRunner.mts';
 
-const ROOM = 'c698839a-25fb-44e3-9646-d71fce43cdc5';
-const USER = '353c1076-5241-4542-bca8-9b259c47e5de';
-const SENDER: SenderContext = { id: USER, display_name: '小野哲', avatar_url: null };
+const ROOM = '00000000-0000-0000-0000-000000000002';
+const USER = '00000000-0000-0000-0000-000000000001';
+const SENDER: SenderContext = { id: USER, display_name: 'テスト太郎', avatar_url: null };
 const POSTED = { id: 'm1', room_id: ROOM, sender_id: USER, content: 'go', type: 'text' };
 
 const rawTrigger = {

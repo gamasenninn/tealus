@@ -9,8 +9,8 @@
 import { decide } from '../../src/services/roomTriggerDecide.mts';
 import { loadTriggersFrom } from '../../src/services/roomTriggers.mts';
 
-const ROOM = 'c698839a-25fb-44e3-9646-d71fce43cdc5';
-const USER = '353c1076-5241-4542-bca8-9b259c47e5de';
+const ROOM = '00000000-0000-0000-0000-000000000002';
+const USER = '00000000-0000-0000-0000-000000000001';
 const base = {
   id: 't', room_id: ROOM, room: '朝礼', types: ['video'], when: 'immediate',
   message: 'go', as_user_id: USER, enabled: true, description: '',

@@ -31,9 +31,9 @@ jest.mock('../../src/utils/logger.mts', () => ({
 
 import { postAsUser } from '../../src/services/postAsUser.mts';
 
-const ROOM = 'c698839a-25fb-44e3-9646-d71fce43cdc5';
-const USER = '353c1076-5241-4542-bca8-9b259c47e5de';
-const SENDER = { id: USER, display_name: '小野哲', avatar_url: null };
+const ROOM = '00000000-0000-0000-0000-000000000002';
+const USER = '00000000-0000-0000-0000-000000000001';
+const SENDER = { id: USER, display_name: 'テスト太郎', avatar_url: null };
 const MESSAGE = { id: 'msg-1', room_id: ROOM, sender_id: USER, content: 'hi', type: 'text' };
 
 /** メンバーである / INSERT 成功 の既定並び */
@@ -84,7 +84,7 @@ describe('postAsUser', () => {
     happyPath();
     await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
     expect(mockEmit).toHaveBeenCalledWith(
-      'message:new', expect.objectContaining({ sender_display_name: '小野哲' }),
+      'message:new', expect.objectContaining({ sender_display_name: 'テスト太郎' }),
     );
   });
 
