@@ -268,6 +268,7 @@ if (import.meta.main) {
   //  起動順が変わるため、既存の動的 import の結果を捕まえる形にしている)
   let capabilityWatcher: typeof import('./services/capabilityWatcher.mts') | null = null;
   let organonWatcher: typeof import('./services/organonWatcher.mts') | null = null;
+  let roomTriggers: typeof import('./services/roomTriggerRunner.mts') | null = null;
 
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
@@ -284,6 +285,11 @@ if (import.meta.main) {
     // #331: organon dock watcher。organon.ttl (RDF 契約) の到着で辞書テーブルへ pull + overlay reload。
     // 起動時に 1 回 pull するので上の initial refresh を subsume する (ORGANON_TTL_PATH 未設定なら no-op)。
     import('./services/organonWatcher.mts').then(ow => { organonWatcher = ow; ow.start(); });
+    // #382 ルームトリガー: 条件が満たされたら定型メッセージを投稿する。
+    // 設定 (server/config/room-triggers.json) が無ければ何もしない = 既定では止まったまま。
+    import('./services/roomTriggerRunner.mts')
+      .then(rt => { roomTriggers = rt; rt.startRoomTriggers(); })
+      .catch((err) => logger.warn(`[room-triggers] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
   });
 
   // ★ #368 graceful shutdown。これが無いと停止時にハンドラを通らずプロセスが死に、
@@ -304,7 +310,7 @@ if (import.meta.main) {
       });
       if (notified > 0) logger.info(`[shutdown] cc-queue の購読者 ${notified} 件に再起動を予告しました`);
     },
-    stopTimers: () => { capabilityWatcher?.stop(); organonWatcher?.stop(); },
+    stopTimers: () => { capabilityWatcher?.stop(); organonWatcher?.stop(); roomTriggers?.stopRoomTriggers(); },
     // ★ server.close() は await しない — cc-queue の中継は終わらないので callback が来ない
     closeServer: () => { server.close(); },
     closeConnections: () => { server.closeAllConnections(); },

@@ -14,6 +14,7 @@ import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName } from '.
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
+import { postAsUser } from '../services/postAsUser.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -121,47 +122,22 @@ router.post('/push', async (req, res) => {
     return res.status(400).json({ error: 'content は必須です' });
   }
 
-  try {
-    // Check membership
-    const memberCheck = await pool.query(
-      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-      [room_id, userId]
-    );
-    if (memberCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'このルームのメンバーではありません' });
-    }
+  // ★ メンバー確認 → INSERT → socket 配信 → webhook は postAsUser に集約 (#382)。
+  //   ルームトリガーが同じ 4 つを必要とし、書き写すと必ず片方だけ直る形になる。
+  const result = await postAsUser({
+    roomId: room_id,
+    sender: { id: userId, display_name: req.user!.display_name, avatar_url: req.user!.avatar_url ?? null },
+    content,
+    type,
+  });
 
-    // Insert message
-    const result = await pool.query<MessageRow>(
-      `INSERT INTO messages (room_id, sender_id, content, type)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [room_id, userId, content.trim(), type]
-    );
-
-    const message = result.rows[0];
-
-    // Socket.IO broadcast (the key difference from regular REST API)
-    const io = getIo();
-    io.to(room_id).emit('message:new', {
-      ...message,
-      sender_display_name: req.user!.display_name,
-      sender_avatar_url: req.user!.avatar_url,
-    });
-
-    // Webhook notification
-    fireWebhooks('message.created', room_id, {
-      room: { id: room_id },
-      message: { id: message.id, type, content: content?.trim(), reply_to: message.reply_to || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
-    });
-
-    logger.info(`Bot push: ${req.user!.display_name} → room ${room_id}`);
-
-    res.status(201).json({ message });
-  } catch (err) {
-    logger.error('Bot push error:', err);
-    res.status(500).json({ error: E.SERVER_ERROR });
+  if (!result.ok) {
+    if (result.code === 'not_member') return res.status(403).json({ error: result.reason });
+    return res.status(500).json({ error: E.SERVER_ERROR });
   }
+
+  logger.info(`Bot push: ${req.user!.display_name} → room ${room_id}`);
+  res.status(201).json({ message: result.message });
 });
 
 /**

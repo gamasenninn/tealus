@@ -1,0 +1,36 @@
+[
+  {
+    "id": "chourei-gijiroku",
+    "room_id": "00000000-0000-0000-0000-000000000000",
+    "room": "朝礼",
+    "types": ["video"],
+    "when": "immediate",
+    "message": "@アシスタント /light この動画から議事録を作成して",
+    "as_user_id": "00000000-0000-0000-0000-000000000000",
+    "enabled": false,
+    "description": "動画が上がったら議事録を作る (第 1 段)"
+  },
+  {
+    "id": "shuppin-image-convert",
+    "room_id": "00000000-0000-0000-0000-000000000000",
+    "room": "出品写真・動画",
+    "types": ["image", "video"],
+    "when": "every",
+    "interval_minutes": 30,
+    "message": "@cc-tealus-app 直近画像を作業フォルダーに変換保存して",
+    "as_user_id": "00000000-0000-0000-0000-000000000000",
+    "enabled": false,
+    "description": "溜まった画像を変換保存する (第 2 段)"
+  },
+  {
+    "id": "yahoo-junkai",
+    "room_id": "00000000-0000-0000-0000-000000000000",
+    "room": "新規出品業務",
+    "when": "schedule",
+    "at": "08:00",
+    "message": "@cc-tealus-app ヤフオクを巡回して",
+    "as_user_id": "00000000-0000-0000-0000-000000000000",
+    "enabled": false,
+    "description": "定時巡回 (第 3 段)。at は JST"
+  }
+]
