@@ -33,7 +33,18 @@ export interface RoomTrigger {
   interval_minutes?: number;
   /** when === 'schedule' のみ。JST の HH:MM */
   at?: string;
+  /**
+   * ★ 最後の該当投稿から これだけ静かになってから撃つ (#385)。既定 3 分。
+   *
+   * 朝礼は 直近 25 営業日のうち 3 日 (12%) が 動画 2 本以上だった。無しだと 2 本の日に 2 回撃つ。
+   * 人は 2 本揃うのを待って 1 回打っている (10:38 に 2 本目 → 10:39 に打つ)。
+   * `0` を明示すると従来どおり即時。
+   */
+  quiet_minutes: number;
 }
+
+/** ★ 静穏待ちの既定 (分)。実測 (朝礼: 2 本目の 1 分後に人が打つ) から 3 分 */
+export const DEFAULT_QUIET_MINUTES = 3;
 
 export interface LoadResult {
   triggers: RoomTrigger[];
@@ -104,6 +115,12 @@ function validate(raw: unknown, index: number): RoomTrigger | string {
     return `${where} (${r.id}): schedule には at (JST の HH:MM) が要ります`;
   }
 
+  // ★ 静穏待ち。未指定は既定 3 分 (#385)。0 は「即時」の明示指定として通す
+  if (r.quiet_minutes !== undefined
+      && (typeof r.quiet_minutes !== 'number' || !Number.isFinite(r.quiet_minutes) || r.quiet_minutes < 0)) {
+    return `${where} (${r.id}): quiet_minutes は 0 以上の数値です`;
+  }
+
   return {
     id: r.id,
     room_id: r.room_id,
@@ -115,6 +132,7 @@ function validate(raw: unknown, index: number): RoomTrigger | string {
     // ★ 既定は false。書き忘れで勝手に撃たない方が安全
     enabled: r.enabled === true,
     description: isNonEmptyString(r.description) ? r.description : '',
+    quiet_minutes: typeof r.quiet_minutes === 'number' ? r.quiet_minutes : DEFAULT_QUIET_MINUTES,
     ...(when === 'every' ? { interval_minutes: r.interval_minutes as number } : {}),
     ...(when === 'schedule' ? { at: r.at as string } : {}),
   };

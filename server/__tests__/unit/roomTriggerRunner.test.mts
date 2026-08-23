@@ -28,7 +28,7 @@ const rawTrigger = {
 
 function deps(over: Record<string, unknown> = {}) {
   return {
-    now: new Date('2026-08-23T01:40:00Z'),
+    now: new Date('2026-08-23T01:44:00Z'),   // ★ 静穏 3 分の既定を越える
     lastFiredAt: jest.fn(async () => null),
     latestMatchAt: jest.fn(async () => new Date('2026-08-23T01:38:00Z')),
     resolveSender: jest.fn(async () => SENDER),

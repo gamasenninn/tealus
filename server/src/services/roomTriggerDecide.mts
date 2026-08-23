@@ -82,11 +82,24 @@ export function decide(t: RoomTrigger, ctx: DecideContext): Decision {
     return { fire: false, reason: '有効化前 (直近の該当投稿は設定を置くより前のものです)' };
   }
 
+  /**
+   * ★ 静穏待ち (#385)。投稿が止まってから撃つ。
+   *
+   * 順序が大事: **「発火済み」「投稿なし」より後に見る。**
+   * 新しい投稿が無いのに「静穏待ち」と言うと、待てば撃つように読めてしまう。
+   */
+  const quietCheck = (): Decision | null => {
+    const waited = (now.getTime() - latestMatchAt.getTime()) / 60_000;
+    if (waited >= t.quiet_minutes) return null;
+    const left = (t.quiet_minutes - waited).toFixed(1);
+    return { fire: false, reason: `静穏待ち (最後の投稿から ${waited.toFixed(1)} 分 / ${t.quiet_minutes} 分、あと ${left} 分)` };
+  };
+
   if (t.when === 'immediate') {
     if (lastFiredAt && latestMatchAt <= lastFiredAt) {
       return { fire: false, reason: '発火済み (前回発火より後の投稿がありません)' };
     }
-    return { fire: true, reason: '前回発火より後に該当投稿があります' };
+    return quietCheck() ?? { fire: true, reason: '前回発火より後に該当投稿があります' };
   }
 
   // every: 間隔を過ぎ、かつ前回発火以降に投稿があること。
@@ -101,5 +114,6 @@ export function decide(t: RoomTrigger, ctx: DecideContext): Decision {
       return { fire: false, reason: '投稿なし (前回発火より後の該当投稿がありません)' };
     }
   }
-  return { fire: true, reason: '間隔を過ぎ、前回発火より後に該当投稿があります' };
+  // ★ every にも効かせる。待ち処理は immediate 固有ではないし、分ける方がコードが増える
+  return quietCheck() ?? { fire: true, reason: '間隔を過ぎ、前回発火より後に該当投稿があります' };
 }
