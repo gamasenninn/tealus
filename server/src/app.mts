@@ -96,14 +96,17 @@ app.use('/agent-api', createProxyMiddleware({
       if (!isCcStreamPath(req.url ?? '')) return;
       const facts = { url: req.url ?? '', startedAt: Date.now(), bytes: 0 } as {
         url: string; startedAt: number; bytes: number;
-        clientClosedAt?: number; upstreamClosedAt?: number; error?: string;
+        upstreamClosedAt?: number; error?: string;
       };
       // ★ 1 リクエストに 1 つだけ持たせる。proxyRes / error / close の 3 か所から書き込む
       (req as unknown as { _ccProxyFacts?: typeof facts })._ccProxyFacts = facts;
-      req.on('close', () => { facts.clientClosedAt ??= Date.now(); });
-      // ★ 書き出しは res の close 1 か所に集約する。両側のフラグが揃ってから 1 行だけ出す
-      //   (2 か所から出すと、同着のときに 2 行出て件数が倍になる)
-      res.on('close', () => { logger.info(describeProxyClose({ ...facts, now: Date.now() })); });
+      // ★ 下流が閉じた時刻は取らない。req.on('close') は「リクエストを読み終えた時刻」で、
+      //   GET は即完了するため常に 0 秒になる (2026-08-23 に実測 3 本とも +0.000s)。
+      //   向きは res が閉じた時点の gap で決める (ccStreamProxyLog.mts 参照)。
+      // ★★ 書き出しは res の close 1 か所に集約する (2 か所から出すと件数が倍になる)
+      res.on('close', () => {
+        logger.info(describeProxyClose({ ...facts, now: Date.now(), resFinished: res.writableFinished }));
+      });
     },
     proxyRes: (proxyRes, req) => {
       const facts = (req as unknown as {
