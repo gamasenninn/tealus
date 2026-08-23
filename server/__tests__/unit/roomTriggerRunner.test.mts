@@ -7,9 +7,13 @@
  *   - 撃たなかったことが記録に残る (沈黙にしない)
  *   - 投稿の本文は buildBody (印が 2 行目) を通ったものであること
  */
+import os from 'node:os';
+import path from 'node:path';
 import type { SenderContext } from '../../src/services/postAsUser.mts';
 import { loadTriggersFrom } from '../../src/services/roomTriggers.mts';
-import { runOnce, shouldReport } from '../../src/services/roomTriggerRunner.mts';
+import {
+  isPolling, runOnce, shouldReport, startRoomTriggers, stopRoomTriggers,
+} from '../../src/services/roomTriggerRunner.mts';
 
 const ROOM = 'c698839a-25fb-44e3-9646-d71fce43cdc5';
 const USER = '353c1076-5241-4542-bca8-9b259c47e5de';
@@ -119,6 +123,31 @@ describe('runOnce', () => {
 
   test('トリガーが 0 件でも落ちない', async () => {
     expect(await runOnce([], deps())).toEqual([]);
+  });
+});
+
+describe('startRoomTriggers — 設定が無くてもポーリングは始める', () => {
+  // ★ 本番 config に結合させない (docs/05 §3)。存在しないパスと tmp ファイルで自給する
+  const missing = path.join(os.tmpdir(), 'room-triggers-does-not-exist.json');
+
+  afterEach(() => { stopRoomTriggers(); });
+
+  test('★ 設定ファイルが無くてもポーリングを始める (docs/06 §4「再起動不要」の前提)', () => {
+    startRoomTriggers(missing);
+    expect(isPolling()).toBe(true);
+  });
+
+  test('停止できる', () => {
+    startRoomTriggers(missing);
+    stopRoomTriggers();
+    expect(isPolling()).toBe(false);
+  });
+
+  test('★ 二重起動しない (呼び直しても timer が増えない)', () => {
+    startRoomTriggers(missing);
+    startRoomTriggers(missing);
+    stopRoomTriggers();
+    expect(isPolling()).toBe(false);
   });
 });
 

@@ -16,7 +16,7 @@ import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { decide } from './roomTriggerDecide.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
-import { buildBody, loadTriggers, markFor, type RoomTrigger } from './roomTriggers.mts';
+import { buildBody, CONFIG_PATH, loadTriggers, markFor, type RoomTrigger } from './roomTriggers.mts';
 
 /** 判定の間隔。immediate が最大これだけ遅れるが、いま人が打っているのは動画と同じ秒〜数分後 (§3) */
 const POLL_MS = 10_000;
@@ -156,21 +156,24 @@ const reported = new Map<string, ReportState>();
  * ★★ 設定ファイルが無ければ何もしない。**起動は止めない** ——
  *   トリガーの設定ミスで本体が上がらない方が高くつく。
  */
-export function startRoomTriggers(): void {
-  const initial = loadTriggers();
+export function startRoomTriggers(configPath: string = CONFIG_PATH): void {
+  // ★ 二重起動しない。呼び直しても timer は 1 本
+  if (timer) return;
+
+  const initial = loadTriggers(configPath);
   for (const w of initial.warnings) logger.warn(`[room-triggers] ${w}`);
-  if (initial.triggers.length === 0) {
-    logger.info('[room-triggers] 設定なし (ポーリングは開始しません)');
-    return;
-  }
+
+  // ★ 設定が 0 件でもポーリングは始める。docs/06 §4 の「判定のたびに読み直す = 再起動不要」は
+  //   **設定ファイルを初めて置くとき**にも成り立たないと意味がない。
+  //   ここで return すると「設定を置いたのに動かない」= また沈黙になる (2026-08-23 の dogfood で発覚)。
   const enabled = initial.triggers.filter((t) => t.enabled).length;
   logger.info(`[room-triggers] ${initial.triggers.length} 件 (有効 ${enabled} 件) — ${POLL_MS / 1000} 秒ごとに判定します`);
-  void checkRooms(initial.triggers);
+  if (initial.triggers.length > 0) void checkRooms(initial.triggers);
 
   let warnedSignature = initial.warnings.join('|');
   timer = setInterval(() => {
     void (async () => {
-      const { triggers, warnings } = loadTriggers();
+      const { triggers, warnings } = loadTriggers(configPath);
       // ★ 同じ warn を 10 秒ごとに出さない。ただし内容が変わったら必ず出す
       const signature = warnings.join('|');
       if (signature !== warnedSignature) {
@@ -200,4 +203,9 @@ export function stopRoomTriggers(): void {
   if (timer) clearInterval(timer);
   timer = null;
   reported.clear();
+}
+
+/** ポーリング中か (テスト用)。★ 「設定なしでも回っている」を外から確かめられるようにする */
+export function isPolling(): boolean {
+  return timer !== null;
 }
