@@ -120,6 +120,31 @@ export function extractPrompt(content: string, agentName: string): string {
 }
 
 /**
+ * ルームトリガーの「自動投稿の印」を prompt から除去する (#388)
+ *
+ * 印は **人間が自動投稿を見分けるためのもの**で、agent への指示ではない。
+ * 剥がさないと `ユーザーの質問: ... — 自動投稿 (room-triggers: xxx)` として
+ * 依頼文の一部に混ざる (2026-08-24 の朝礼で実際に混ざっていた)。
+ *
+ * 非自明な約束事:
+ * - **投稿本文からは消さない。**落とすのは agent に渡す prompt だけ。
+ *   印は server 側 `roomTriggers.mts §3.1.1` で「前回撃った時刻」の検索キーに使う。
+ *   本文から消すとトリガーが自分の前回発火を見失う。
+ * - 形は server 側 `markFor()` が決める: `— 自動投稿 (room-triggers: <id>)`。
+ *   **行全体**が一致する時だけ落とす (引用・説明文の中の同じ文字列は残す)。
+ * - 先頭メンションは 1 行目にあるので、印を落としても `isMentioned` は生きている
+ *   (落とすと agent が起動しない = 機能そのものが動かない。docs/06 §10 と同じ罠)。
+ */
+export function stripAutoPostMark(content: string | null | undefined): string {
+  if (!content) return '';
+  return content
+    .split('\n')
+    .filter((line) => !/^\s*—\s*自動投稿\s*\(room-triggers:[^)]*\)\s*$/.test(line))
+    .join('\n')
+    .trim();
+}
+
+/**
  * Light/Light2 用 prompt 構築 (#295: 通常 dispatch と委譲 runAgent で共有)
  */
 function buildLightPrompt(roomId: string, userPrompt: string, replyHint = ''): string {
@@ -184,7 +209,9 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
   }
 
   // メッセージタイプに応じてプロンプトを抽出
-  let prompt = extractPromptFromMessage(message);
+  // #388: 自動投稿の印はここで落とす。mention 判定より前だが 1 行目は残るので影響しない。
+  //       DM (mention 不要) 経路も通るよう extractPrompt ではなくこの位置に置く。
+  let prompt = stripAutoPostMark(extractPromptFromMessage(message));
   if (!prompt) {
     logger.debug(`Skipped: empty prompt (type: ${message.type})`);
     return;

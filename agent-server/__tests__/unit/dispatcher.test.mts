@@ -119,6 +119,60 @@ describe('Dispatcher', () => {
     });
   });
 
+  /**
+   * #388: ルームトリガーの「自動投稿の印」は人間が自動投稿を見分けるためのもので、
+   * agent への指示ではない。印が prompt に混ざると、依頼文の一部として読まれる。
+   *
+   * 印の形は server 側 roomTriggers.mts markFor() が決める:
+   *   `— 自動投稿 (room-triggers: <id>)`
+   * 投稿本文からは消さない (§3.1.1 で「前回撃った時刻」の検索キー)。落とすのは prompt だけ。
+   */
+  describe('stripAutoPostMark (#388)', () => {
+    const { stripAutoPostMark } = require('../../src/webhook/dispatcher');
+
+    test('2 行目の自動投稿の印を落とす', () => {
+      const body = '@アシスタント /light この動画から議事録を作成して\n— 自動投稿 (room-triggers: chourei-gijiroku)';
+      expect(stripAutoPostMark(body)).toBe('@アシスタント /light この動画から議事録を作成して');
+    });
+
+    test('本文が複数行で印が末尾でも落とす', () => {
+      const body = '@アシスタント 定時巡回です\n対象: 昨日ぶん\n— 定時巡回 (room-triggers: junkai)'
+        .replace('— 定時巡回', '— 自動投稿');
+      expect(stripAutoPostMark(body)).toBe('@アシスタント 定時巡回です\n対象: 昨日ぶん');
+    });
+
+    test('印が無い通常のメッセージは 1 文字も変えない', () => {
+      const body = '@アシスタント 在庫を教えて\n急ぎです';
+      expect(stripAutoPostMark(body)).toBe(body);
+    });
+
+    test('行の途中にある同じ文字列は落とさない (引用・説明文を壊さない)', () => {
+      const body = '印は「— 自動投稿 (room-triggers: foo)」という形です';
+      expect(stripAutoPostMark(body)).toBe(body);
+    });
+
+    test('印に似ているが id 括弧が無い行は残す', () => {
+      const body = '@アシスタント やあ\n— 自動投稿';
+      expect(stripAutoPostMark(body)).toBe(body);
+    });
+
+    test('印だけの本文は空になる (呼び出し側の empty prompt 判定に委ねる)', () => {
+      expect(stripAutoPostMark('— 自動投稿 (room-triggers: x)')).toBe('');
+    });
+
+    test('null / undefined / 空文字で落ちない', () => {
+      expect(stripAutoPostMark('')).toBe('');
+      expect(stripAutoPostMark(null)).toBe('');
+      expect(stripAutoPostMark(undefined)).toBe('');
+    });
+
+    test('★ 印を落としても先頭メンション判定は生きている (落とすと agent が起動しない)', () => {
+      const { isMentioned } = require('../../src/webhook/dispatcher');
+      const body = '@アシスタント /light この動画から議事録を作成して\n— 自動投稿 (room-triggers: chourei-gijiroku)';
+      expect(isMentioned(stripAutoPostMark(body), 'アシスタント')).toBe(true);
+    });
+  });
+
   describe('dispatch', () => {
     beforeEach(() => {
       jest.clearAllMocks();
