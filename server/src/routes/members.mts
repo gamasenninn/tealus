@@ -9,27 +9,11 @@ import { authenticate } from '../middleware/auth.mts';
 import { requireMember, requireGroup } from '../middleware/roomAccess.mts';
 import { canInviteToRoom } from '../utils/permissions.mts';
 import { fireWebhooks } from '../services/webhook.mts';
+import { insertSystemMessage } from '../services/systemMessage.mts';
 
 export const router = express.Router({ mergeParams: true });
 
-/**
- * Helper: Insert system message
- */
-async function insertSystemMessage(roomId: string, content: string, io: Server | undefined): Promise<void> {
-  const result = await pool.query(
-    `INSERT INTO messages (room_id, sender_id, content, type)
-     VALUES ($1, (SELECT user_id FROM room_members WHERE room_id = $1 LIMIT 1), $2, 'system')
-     RETURNING *`,
-    [roomId, content]
-  );
-
-  if (io) {
-    io.to(roomId).emit('message:new', {
-      ...result.rows[0],
-      sender_display_name: 'システム',
-    });
-  }
-}
+// Helper: Insert system message (#390 で services/systemMessage.mts へ移動。bot join と共有)
 
 /**
  * POST /api/rooms/:id/members

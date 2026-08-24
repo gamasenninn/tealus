@@ -1209,6 +1209,84 @@ describe('Bot API', () => {
       expect(msgRes.status).toBe(201);
     });
 
+    /**
+     * #390: bot は room ID さえ分かれば 1 対 1 ルームにも自分を入れられた。
+     * 招待の UI が無いルームに、UI を通らない経路で第三者が入れる状態だった。
+     *
+     * 人間側の招待経路 (POST /api/rooms/:id/members) には既に
+     * requireGroup と システムメッセージ の両方が入っている。bot join だけが素通りだった。
+     * 新しい規則を作らず、同じ形に揃える。
+     */
+    it('★ 1 対 1 ルームには join できない (人間側 requireGroup と同じ扱い)', async () => {
+      const partner = await createTestUser({ login_id: 'EMP009', display_name: '乙野次郎' });
+      const dmRes = await request(app)
+        .post('/api/rooms/direct')
+        .set('Authorization', `Bearer ${partner.token}`)
+        .send({ partner_id: user1.user.id });
+      expect(dmRes.status).toBe(201);
+
+      const res = await request(app)
+        .post(`/api/bot/rooms/${dmRes.body.room.id}/join`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(400);
+
+      // 実際に入っていないこと (応答だけ 400 で membership が残る事故を防ぐ)
+      const pool = getTestPool();
+      const m = await pool.query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [dmRes.body.room.id, bot.user.id]
+      );
+      expect(m.rows).toHaveLength(0);
+    });
+
+    it('★ 新規に入った時はルームにシステムメッセージが出る (黙って増えない)', async () => {
+      const owner = await createTestUser({ login_id: 'EMP010', display_name: '甲野三郎' });
+      const roomRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ name: '参加が見えるルーム', member_ids: [] });
+      const targetId = roomRes.body.room.id;
+
+      await request(app)
+        .post(`/api/bot/rooms/${targetId}/join`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .expect(200);
+
+      const pool = getTestPool();
+      const sys = await pool.query<{ content: string }>(
+        "SELECT content FROM messages WHERE room_id = $1 AND type = 'system'",
+        [targetId]
+      );
+      expect(sys.rows).toHaveLength(1);
+      expect(sys.rows[0].content).toContain('Tealus Bot');
+    });
+
+    it('★ 既にメンバーなら再 join でシステムメッセージを増やさない (再接続で溢れない)', async () => {
+      // 通話履歴ボットは 7 日で 208 回 join を叩いている。毎回出すと本文が埋まる。
+      const pool = getTestPool();
+
+      await request(app)
+        .post(`/api/bot/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .expect(200);
+      const after1 = await pool.query(
+        "SELECT 1 FROM messages WHERE room_id = $1 AND type = 'system'", [roomId]
+      );
+
+      await request(app)
+        .post(`/api/bot/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${bot.token}`)
+        .expect(200);
+      const after2 = await pool.query(
+        "SELECT 1 FROM messages WHERE room_id = $1 AND type = 'system'", [roomId]
+      );
+
+      // bot は room 作成時から member なので、そもそも新規参加ではない = 0 件のまま
+      expect(after1.rows).toHaveLength(0);
+      expect(after2.rows).toHaveLength(after1.rows.length);
+    });
+
     it('should not duplicate membership', async () => {
       const res = await request(app)
         .post(`/api/bot/rooms/${roomId}/join`)

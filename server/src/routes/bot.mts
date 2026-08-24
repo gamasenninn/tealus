@@ -15,6 +15,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
 import { postAsUser } from '../services/postAsUser.mts';
+import { insertSystemMessage } from '../services/systemMessage.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -1468,13 +1469,26 @@ router.post('/rooms/:id/join', async (req, res) => {
 
   try {
     // Check room exists
-    const room = await pool.query('SELECT id FROM rooms WHERE id = $1', [roomId]);
+    const room = await pool.query<{ id: string; type: string }>(
+      'SELECT id, type FROM rooms WHERE id = $1', [roomId]
+    );
     if (room.rows.length === 0) {
       return res.status(404).json({ error: E.ROOM_NOT_FOUND });
     }
 
+    // #390: 1 対 1 ルームには入れない。
+    // 人間側の招待 (POST /api/rooms/:id/members) は requireGroup で既に弾いており、
+    // **この経路だけが素通りだった** = 招待 UI の無いルームに、UI を通らずに第三者が入れた。
+    // 実際に 2026-08-11、他 bot が room ID だけで 1 対 1 ルームに自分を追加している。
+    // 副作用として member_count が 3 になり、mention 判定 (dispatcher の memberCount > 2) が
+    // 黙ってグループ側に倒れ、その部屋の音声応答が止まっていた。
+    if (room.rows[0].type !== 'group') {
+      logger.warn(`Bot join rejected (not a group): ${req.user!.display_name} → ${roomId}`);
+      return res.status(400).json({ error: E.ROOM_GROUP_ONLY });
+    }
+
     // Join (ignore if already member)
-    await pool.query(
+    const inserted = await pool.query(
       `INSERT INTO room_members (room_id, user_id, role)
        VALUES ($1, $2, 'member')
        ON CONFLICT (room_id, user_id) DO NOTHING`,
@@ -1482,6 +1496,13 @@ router.post('/rooms/:id/join', async (req, res) => {
     );
 
     logger.info(`Bot joined room: ${req.user!.display_name} → ${roomId}`);
+
+    // #390: 新規に入った時だけルームに出す。人間の招待と同じ見え方に揃える。
+    // ★ rowCount で判定するのは必須。再 join でも出すと、常時再接続する bot
+    //   (7 日で 208 回 join を叩いているものがある) の分でルームが埋まる。
+    if (inserted.rowCount && inserted.rowCount > 0) {
+      await insertSystemMessage(roomId, `${req.user!.display_name}が参加しました`, getIo());
+    }
 
     res.json({ success: true });
   } catch (err) {
