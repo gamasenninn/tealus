@@ -27,7 +27,7 @@ import { handleWebhook } from '../../src/webhook/handler.mts';
 import type { WebhookPayload } from '../../src/types.mts';
 
 const room = { id: 'r1', name: 'AI班連絡' };
-const sender = { id: 'u1', display_name: '小野哲' };
+const sender = { id: 'u1', display_name: '甲野太郎' };
 
 function payload(content: string): WebhookPayload {
   return {
@@ -66,7 +66,7 @@ describe('#359 (a) handler の配線', () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain('team-arrow');
     expect(logs[0]).toContain('AI班連絡');       // どの room か
-    expect(logs[0]).toContain('小野哲');          // 誰が出したか
+    expect(logs[0]).toContain('甲野太郎');          // 誰が出したか
     expect(logs[0]).toContain('6 件目');          // 本文の頭 (どの便か特定できる)
   });
 

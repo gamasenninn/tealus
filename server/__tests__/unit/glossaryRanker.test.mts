@@ -15,33 +15,33 @@ const VOCAB = [
 ];
 
 describe('役職 alias 汚染の除外', () => {
-  // 桶田博信 は person だが alias に汎用役職「社長/専務」を持つ。役職言及で person を
-  // 頻度に引き込むと glossary が汚染される (2026-07-03 実データで 桶田博信 が過剰 hot 化)。
+  // 甲野太郎 は person だが alias に汎用役職「社長/専務」を持つ。役職言及で person を
+  // 頻度に引き込むと glossary が汚染される (2026-07-03 実データで 甲野太郎 が過剰 hot 化)。
   const VOCAB_ROLE = [
-    { term: '桶田博信', category: 'person', aliases: ['社長', '専務', '桶田専務'] },
+    { term: '甲野太郎', category: 'person', aliases: ['社長', '専務', '甲野専務'] },
     { term: 'ガマ', category: 'person', aliases: ['ガマさん'] },
   ];
 
   test('汎用役職 alias (社長/専務) 単独の言及は person にカウントしない', () => {
     const r = mod.rankByFrequency(VOCAB_ROLE, ['社長取れますか', '専務お願いします']);
-    expect(r.find(x => x.term === '桶田博信')!.count).toBe(0);
+    expect(r.find(x => x.term === '甲野太郎')!.count).toBe(0);
   });
 
   test('term 本体は従来どおりカウントする', () => {
-    const r = mod.rankByFrequency(VOCAB_ROLE, ['桶田博信さん来た']);
-    expect(r.find(x => x.term === '桶田博信')!.count).toBe(1);
+    const r = mod.rankByFrequency(VOCAB_ROLE, ['甲野太郎さん来た']);
+    expect(r.find(x => x.term === '甲野太郎')!.count).toBe(1);
   });
 
-  test('名前付き役職 alias (桶田専務) は汎用役職ではないので残す', () => {
-    const r = mod.rankByFrequency(VOCAB_ROLE, ['桶田専務が来た']);
-    expect(r.find(x => x.term === '桶田博信')!.count).toBe(1);
+  test('名前付き役職 alias (甲野専務) は汎用役職ではないので残す', () => {
+    const r = mod.rankByFrequency(VOCAB_ROLE, ['甲野専務が来た']);
+    expect(r.find(x => x.term === '甲野太郎')!.count).toBe(1);
   });
 
   test('roleAliases を options で上書きできる', () => {
-    const V = [{ term: '桶田博信', category: 'person', aliases: ['親方'] }];
+    const V = [{ term: '甲野太郎', category: 'person', aliases: ['親方'] }];
     // 「親方」を役職扱いに指定 → alias 経由の言及は除外、term は text に無いので 0
     const r = mod.rankByFrequency(V, ['親方お願いします'], { roleAliases: ['親方'] });
-    expect(r.find(x => x.term === '桶田博信')!.count).toBe(0);
+    expect(r.find(x => x.term === '甲野太郎')!.count).toBe(0);
   });
 });
 

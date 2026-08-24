@@ -65,35 +65,35 @@ describe('GET /dictionary/aliases', () => {
 
 describe('語(term)ビュー', () => {
   test('GET /dictionary/terms は term を別名数付きで返す（検索可）', async () => {
-    const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', category: 'person', source: 'organon' });
+    const t = await repo.upsertTerm({ term: '乙野', reading: 'おつの', category: 'person', source: 'organon' });
     await repo.upsertAlias({ termId: t.id, alias: 'ソトメ', source: 'organon', count: 0, status: 'active' });
     await repo.upsertTerm({ term: 'ガマ', reading: 'がま', source: 'organon' });
 
     const all = await authGet('/api/admin/dictionary/terms', admin.token);
     expect(all.status).toBe(200);
     expect(all.body.terms.length).toBe(2);
-    const sao = all.body.terms.find((x: { term: string }) => x.term === '五月女');
+    const sao = all.body.terms.find((x: { term: string }) => x.term === '乙野');
     expect(sao.alias_count).toBe(1);
-    expect(sao.reading).toBe('さおとめ');
+    expect(sao.reading).toBe('おつの');
 
-    const q = await authGet('/api/admin/dictionary/terms?search=五月', admin.token);
+    const q = await authGet('/api/admin/dictionary/terms?search=乙', admin.token);
     expect(q.body.terms).toHaveLength(1);
-    expect(q.body.terms[0].term).toBe('五月女');
+    expect(q.body.terms[0].term).toBe('乙野');
   });
 
   test('PATCH /dictionary/terms/:id で読みと description を更新', async () => {
-    const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', source: 'organon' });
+    const t = await repo.upsertTerm({ term: '乙野', reading: 'おつの', source: 'organon' });
     const res = await request(app)
       .patch(`/api/admin/dictionary/terms/${t.id}`)
       .set('Authorization', `Bearer ${admin.token}`)
-      .send({ reading: 'そうとめ', description: '難読姓' });
+      .send({ reading: 'おつのう', description: '難読姓' });
     expect(res.status).toBe(200);
-    expect(res.body.term.reading).toBe('そうとめ');
+    expect(res.body.term.reading).toBe('おつのう');
     expect(res.body.term.description).toBe('難読姓');
   });
 
   test('PATCH で分類(category)を更新', async () => {
-    const t = await repo.upsertTerm({ term: '五月女', category: 'other', source: 'organon' });
+    const t = await repo.upsertTerm({ term: '乙野', category: 'other', source: 'organon' });
     const res = await request(app)
       .patch(`/api/admin/dictionary/terms/${t.id}`)
       .set('Authorization', `Bearer ${admin.token}`)
@@ -115,11 +115,11 @@ describe('語(term)ビュー', () => {
   });
 
   test('既存の語を POST すると 409', async () => {
-    await repo.upsertTerm({ term: '五月女', source: 'organon' });
+    await repo.upsertTerm({ term: '乙野', source: 'organon' });
     const res = await request(app)
       .post('/api/admin/dictionary/terms')
       .set('Authorization', `Bearer ${admin.token}`)
-      .send({ term: '五月女', reading: 'そうとめ' });
+      .send({ term: '乙野', reading: 'おつのう' });
     expect(res.status).toBe(409);
   });
 
@@ -132,7 +132,7 @@ describe('語(term)ビュー', () => {
   });
 
   test('更新項目が無ければ 400', async () => {
-    const t = await repo.upsertTerm({ term: '五月女', source: 'organon' });
+    const t = await repo.upsertTerm({ term: '乙野', source: 'organon' });
     const res = await request(app)
       .patch(`/api/admin/dictionary/terms/${t.id}`)
       .set('Authorization', `Bearer ${admin.token}`)
@@ -214,13 +214,13 @@ describe('語(term)の取り消し POST /dictionary/terms/:id/reject', () => {
 
 describe('手動追加 POST /dictionary/aliases', () => {
   test('既存 term に別名を追加（source=manual, active）', async () => {
-    const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', source: 'organon' });
+    const t = await repo.upsertTerm({ term: '乙野', reading: 'おつの', source: 'organon' });
     const res = await request(app)
       .post('/api/admin/dictionary/aliases')
       .set('Authorization', `Bearer ${admin.token}`)
-      .send({ term: '五月女', alias: 'ソフトメイ' });
+      .send({ term: '乙野', alias: 'オツノメイ' });
     expect(res.status).toBe(201);
-    expect(res.body.alias.alias).toBe('ソフトメイ');
+    expect(res.body.alias.alias).toBe('オツノメイ');
     expect(res.body.alias.source).toBe('manual');
     expect(res.body.alias.status).toBe('active');
     expect(res.body.term.id).toBe(t.id);
@@ -239,13 +239,13 @@ describe('手動追加 POST /dictionary/aliases', () => {
   });
 
   test('tombstone(却下済) を手動追加で復活できる（人間の明示は最上位）', async () => {
-    const t = await repo.upsertTerm({ term: '五月女', reading: 'さおとめ', source: 'organon' });
-    const { row } = await repo.upsertAlias({ termId: t.id, alias: 'ソフトメイ', source: 'auto', count: 1, status: 'pending' });
+    const t = await repo.upsertTerm({ term: '乙野', reading: 'おつの', source: 'organon' });
+    const { row } = await repo.upsertAlias({ termId: t.id, alias: 'オツノメイ', source: 'auto', count: 1, status: 'pending' });
     await repo.setAliasStatus(row!.id, 'rejected');
     const res = await request(app)
       .post('/api/admin/dictionary/aliases')
       .set('Authorization', `Bearer ${admin.token}`)
-      .send({ term: '五月女', alias: 'ソフトメイ' });
+      .send({ term: '乙野', alias: 'オツノメイ' });
     expect(res.status).toBe(201);
     expect(res.body.alias.status).toBe('active');
     expect(res.body.alias.source).toBe('manual');
@@ -255,7 +255,7 @@ describe('手動追加 POST /dictionary/aliases', () => {
     const res = await request(app)
       .post('/api/admin/dictionary/aliases')
       .set('Authorization', `Bearer ${admin.token}`)
-      .send({ term: '五月女', alias: '  ' });
+      .send({ term: '乙野', alias: '  ' });
     expect(res.status).toBe(400);
   });
 
@@ -263,7 +263,7 @@ describe('手動追加 POST /dictionary/aliases', () => {
     const res = await request(app)
       .post('/api/admin/dictionary/aliases')
       .set('Authorization', `Bearer ${user.token}`)
-      .send({ term: '五月女', alias: 'ソフトメイ' });
+      .send({ term: '乙野', alias: 'オツノメイ' });
     expect(res.status).toBe(403);
   });
 });

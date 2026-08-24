@@ -101,7 +101,7 @@ describe('Dispatcher', () => {
       // 例示・引用・末尾メンション等
       expect(isMentioned('こんにちは @アシスタント 在庫教えて', 'アシスタント')).toBe(false);
       expect(isMentioned('使い方: `@アシスタント %室A` のように書く', 'アシスタント')).toBe(false);
-      expect(isMentioned('@藤井律男 さん、これは @アシスタント の例です', 'アシスタント')).toBe(false);
+      expect(isMentioned('@甲野太郎 さん、これは @アシスタント の例です', 'アシスタント')).toBe(false);
     });
 
     test('@なしはメンションではない', () => {

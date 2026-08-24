@@ -491,7 +491,7 @@ describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', ()
     expect(p.length).toBeGreaterThan(0);
     expect(p).toContain('固有名詞');       // 補正の役割
     expect(p).toContain('リストに無い');    // 未登録は変えないガード
-    expect(p).toContain('フルネーム');      // 単独姓/地名をフルネーム化しないガード (Exp7: 小川→小川朱美)
+    expect(p).toContain('フルネーム');      // 単独姓/地名をフルネーム化しないガード (Exp7: 甲野→甲野花子)
   });
 
   test('proper-noun term と aliases を知識ブロックに含める', () => {

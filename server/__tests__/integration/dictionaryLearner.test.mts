@@ -88,22 +88,22 @@ test('AI版と人間版が同一なら何もしない', async () => {
   expect(r.learned).toBe(0);
 });
 
-test('★漢字 garble も pykakasi 読みが供給されれば学習する（田辺井→田部井）', async () => {
-  await seedTerm('田部井', 'たべい');
+test('★漢字 garble も pykakasi 読みが供給されれば学習する（田名島→田島）', async () => {
+  await seedTerm('田島', 'たじま');
   const r = await learner.learnFromEdit(
-    { priorFormatted: '田辺井さん取れますか', newFormatted: '田部井さん取れますか' },
-    { getOccurrence: async () => 3, getReadings: async () => new Map([['田辺井', 'たなべい']]) });
-  // たなべい ≈ たべい (d=0.25) → 音韻通過、count1/occ3 P=0.33 → pending
+    { priorFormatted: '田名島さん取れますか', newFormatted: '田島さん取れますか' },
+    { getOccurrence: async () => 3, getReadings: async () => new Map([['田名島', 'たなじま']]) });
+  // たなじま ≈ たじま (d=0.25) → 音韻通過、count1/occ3 P=0.33 → pending
   expect(r.learned).toBe(1);
   expect(r.pending).toBe(1);
-  const t = await repo.getTermByName('田部井');
-  expect((await alias(t!.id, '田辺井')).status).toBe('pending');
+  const t = await repo.getTermByName('田島');
+  expect((await alias(t!.id, '田名島')).status).toBe('pending');
 });
 
 test('★漢字 garble に読みが無いと音韻ゲートで棄却される（供給欠落＝旧挙動の証拠）', async () => {
-  await seedTerm('田部井', 'たべい');
+  await seedTerm('田島', 'たじま');
   const r = await learner.learnFromEdit(
-    { priorFormatted: '田辺井さん取れますか', newFormatted: '田部井さん取れますか' },
+    { priorFormatted: '田名島さん取れますか', newFormatted: '田島さん取れますか' },
     { getOccurrence: async () => 3, getReadings: NO_PYKAKASI }); // 読み供給なし→kata2hira→漢字のまま→d=1.0
   expect(r.learned).toBe(0);
   expect(r.extracted).toBe(1);       // 抽出はできている

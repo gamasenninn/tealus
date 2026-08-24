@@ -22,7 +22,7 @@ type MultiFail = Extract<NonNullable<MultiResult>, { ok: false }>;
 const ROOMS = [
   { id: 'r-db', name: '社内DB検索' },
   { id: 'r-test', name: 'テスト（自動)' },
-  { id: 'r-ono', name: '小野哲 ↔ アシスタント' },
+  { id: 'r-ono', name: '甲野太郎 ↔ アシスタント' },
   { id: 'r-sales', name: '営業' },
   { id: 'r-sales-dept', name: '営業部' },
 ];
@@ -51,7 +51,7 @@ describe('parseDelegation (#295 `%` 委譲構文)', () => {
   });
 
   test('room 名にスペースを含む場合も最長一致で確定する', () => {
-    const r = parseDelegation('%小野哲 ↔ アシスタント やあ', ROOMS) as DelegOk;
+    const r = parseDelegation('%甲野太郎 ↔ アシスタント やあ', ROOMS) as DelegOk;
     expect(r.ok).toBe(true);
     expect(r.room.id).toBe('r-ono');
     expect(r.task).toBe('やあ');

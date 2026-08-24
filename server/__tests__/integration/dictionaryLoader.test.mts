@@ -21,10 +21,10 @@ const TABLE_ONLY_B = 'ズンドコ検証用B';
 // file fallback を検証するための test fixture (本番 file の代わり)
 const GUIDELINE_FIXTURE = {
   version: 1,
-  whisper_context: 'これは業務無線の文字起こしです。固有名詞に注意: ガマ、藤井。',
+  whisper_context: 'これは業務無線の文字起こしです。固有名詞に注意: ガマ、丙野。',
   vocabulary: [
     { term: FILE_ONLY_TERM, category: 'person', reading: 'がま' },
-    { term: '藤井', category: 'person' },
+    { term: '丙野', category: 'person' },
   ],
   guidelines: ['句読点を適切に付与する'],
 };

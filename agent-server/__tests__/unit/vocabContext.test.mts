@@ -98,12 +98,12 @@ describe('loadVocabForPrompt (primary = local.ttl)', () => {
     process.env.VOCAB_INJECT = 'true';
     const ttl = writeTtl([
       { term: '高山', category: 'person', aliases: ['高山さん', '田山'] },
-      { term: '五月女', category: 'person', aliases: ['ソートメ', 'ソウトメ'] },
+      { term: '乙野', category: 'person', aliases: ['オツノ', 'オツノウ'] },
     ]);
     const out = loadVocabForPrompt({ ttlPath: ttl });
     expect(out).toContain('## 業務語彙の正規化');
     expect(out).toContain('高山 ← 高山さん, 田山');
-    expect(out).toContain('五月女 ← ソートメ, ソウトメ');
+    expect(out).toContain('乙野 ← オツノ, オツノウ');
   });
 
   test('aliases 無し entry は除外', () => {
@@ -128,7 +128,7 @@ describe('loadVocabForPrompt (primary = local.ttl)', () => {
  * 向いていなかった。指示は表と同じ block に載せる = Light / Deep 全経路に同時に届く。
  */
 describe('#377 指示文: 音声起こし / 議事録も対象と明示する (OCR 前提を外す)', () => {
-  const ttl = () => writeTtl([{ term: '五月女', category: 'person', aliases: ['ソートメ', '総トメ'] }]);
+  const ttl = () => writeTtl([{ term: '乙野', category: 'person', aliases: ['オツノ', '音野'] }]);
 
   test('音声の文字起こし・議事録が対象だと明示している', () => {
     process.env.VOCAB_INJECT = 'true';
@@ -156,9 +156,9 @@ describe('#377 指示文: 音声起こし / 議事録も対象と明示する (O
 describe('fallback: ttl 不在なら legacy JSON (最後の砦、旧挙動保持)', () => {
   test('ttl 不在 + json あり → json から読む', () => {
     process.env.VOCAB_INJECT = 'true';
-    const json = writeJson([{ term: '藤井', category: 'person', aliases: ['富士井'] }]);
+    const json = writeJson([{ term: '丙野', category: 'person', aliases: ['平野'] }]);
     const out = loadVocabForPrompt({ ttlPath: MISSING_TTL, filePath: json });
-    expect(out).toContain('藤井 ← 富士井');
+    expect(out).toContain('丙野 ← 平野');
   });
 
   test('ttl も json も無い → 空文字', () => {

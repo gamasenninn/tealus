@@ -1,5 +1,5 @@
 /**
- * config.js WORKSPACE_ROOT normalize test (= #292 follow-up、藤井さん環境 Deep Codex bug fix)
+ * config.js WORKSPACE_ROOT normalize test (= #292 follow-up、採用者第 1 号の環境 Deep Codex bug fix)
  *
  * codex CLI は CODEX_HOME に絶対 path 要求、相対 path で渡すと
  * 「CODEX_HOME points to "agent-workspaces/..." but that path...」 エラー。
@@ -27,7 +27,7 @@ describe('config.WORKSPACE_ROOT path.resolve normalize', () => {
     const config = require('../../src/config');
     // .env file で AGENT_WORKSPACE_ROOT が pre-set されている可能性があるため、
     // 具体値 assert は避け 「絶対 path に normalize される」 invariant のみ verify。
-    // これが fix の本質 (= 藤井さん環境 Deep Codex CODEX_HOME 絶対 path 要求 への対応)。
+    // これが fix の本質 (= 採用者第 1 号の環境 Deep Codex CODEX_HOME 絶対 path 要求 への対応)。
     expect(path.isAbsolute(config.WORKSPACE_ROOT)).toBe(true);
   });
 

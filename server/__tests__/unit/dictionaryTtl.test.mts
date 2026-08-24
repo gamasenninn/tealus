@@ -53,17 +53,17 @@ describe('serializeVocabToTtl', () => {
 
   test('5 field 全部を載せる (term/alias/reading/category/description)', () => {
     const ttl = serializeVocabToTtl([
-      { term: '山崎', category: 'person', reading: 'やまざき', description: '整備長', aliases: ['まさ', 'マサ'] },
+      { term: '乙野', category: 'person', reading: 'おつの', description: '整備長', aliases: ['おつ', 'オツ'] },
     ]);
     const parsed = parseBack(ttl);
     expect(parsed).toHaveLength(1);
     expect(parsed[0]).toMatchObject({
-      label: '山崎',
+      label: '乙野',
       category: 'person',
-      reading: 'やまざき',
+      reading: 'おつの',
       description: '整備長',
     });
-    expect(parsed[0].aliases.sort()).toEqual(['まさ', 'マサ'].sort());
+    expect(parsed[0].aliases.sort()).toEqual(['おつ', 'オツ'].sort());
   });
 
   test('reading / description / aliases が無い entry は該当述語を出さない (label + category のみ)', () => {
@@ -121,11 +121,11 @@ describe('writeLocalTtl', () => {
     const out = path.join(tmpDir, 'nested', 'dictionary.local.ttl');
     try {
       await writeLocalTtl(out, [
-        { term: '山崎', category: 'person', reading: 'やまざき', description: '整備長', aliases: ['まさ'] },
+        { term: '乙野', category: 'person', reading: 'おつの', description: '整備長', aliases: ['おつ'] },
       ]);
       expect(fs.existsSync(out)).toBe(true); // 中間ディレクトリも作る
       const back = parseBack(fs.readFileSync(out, 'utf8'));
-      expect(back[0]).toMatchObject({ label: '山崎', reading: 'やまざき' });
+      expect(back[0]).toMatchObject({ label: '乙野', reading: 'おつの' });
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

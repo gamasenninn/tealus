@@ -388,8 +388,8 @@ describe('extractAliasPairs (#327 決定論 char-LCS 抽出、LLM不要)', () =>
 
   test('全文書き換え (変更>50%) は棄却する', () => {
     const r = aliasMiner.extractAliasPairs(
-      'AIの短い文', '田部井さんと下野新聞と黒瀬が全部違う長い別の内容に書き換わった文章です',
-      ['田部井', '下野新聞', '黒瀬']);
+      'AIの短い文', '田島さんと東西新聞と丙野が全部違う長い別の内容に書き換わった文章です',
+      ['田島', '東西新聞', '丙野']);
     expect(r).toEqual([]);
   });
 
@@ -404,11 +404,11 @@ describe('extractAliasPairs (#327 決定論 char-LCS 抽出、LLM不要)', () =>
 
   test('複数の置換を抽出する', () => {
     const r = aliasMiner.extractAliasPairs(
-      'サビーが岡崎に戻る。フェビト取れますか',
-      '田部井が岡崎に戻る。整備長取れますか',
-      ['田部井', '整備長']);
+      'サビーが本社に戻る。フェビト取れますか',
+      '田島が本社に戻る。整備長取れますか',
+      ['田島', '整備長']);
     expect(r).toEqual(expect.arrayContaining([
-      { from: 'サビー', to: '田部井' },
+      { from: 'サビー', to: '田島' },
       { from: 'フェビト', to: '整備長' },
     ]));
   });
@@ -452,10 +452,10 @@ describe('corpusPrecision (常用語ガードの土台)', () => {
 describe('filterSafeAliases (#327 Phase1: 2ゲート + 自動/確認分岐)', () => {
   // 依存注入: 読み・コーパス出現数はスタブ (DB非依存 = テスト可能)
   const READ: Record<string, string> = {
-    'ホタカ': 'ほたか', '保坂': 'ほさか', 'タベイソン': 'たべいそん', '田部井': 'たべい',
-    'どうも': 'どうも', 'ガマ': 'がま', 'まさか': 'まさか', '小川': 'おがわ', '小川朱美': 'おがわあけみ',
+    'ホタカ': 'ほたか', '保坂': 'ほさか', 'タジマソン': 'たじまそん', '田島': 'たじま',
+    'どうも': 'どうも', 'ガマ': 'がま', 'まさか': 'まさか', '甲野': 'こうの', '甲野花子': 'こうのはなこ',
   };
-  const OCC: Record<string, number> = { 'ホタカ': 9, 'タベイソン': 1, 'どうも': 500, 'まさか': 8, '小川': 40 };
+  const OCC: Record<string, number> = { 'ホタカ': 9, 'タジマソン': 1, 'どうも': 500, 'まさか': 8, '甲野': 40 };
   const opts = { getReading: (t: string) => READ[t] || '', getOccurrence: (g: string) => OCC[g] || 1 };
 
   test('音韻近 + 高P + freq≥2 → 自動追加 (ホタカ→保坂)', () => {
@@ -467,9 +467,9 @@ describe('filterSafeAliases (#327 Phase1: 2ゲート + 自動/確認分岐)', ()
     expect(r.rejected).toEqual([]);
   });
 
-  test('音韻近 + 高P + freq=1 → 人間確認 (タベイソン→田部井)', () => {
+  test('音韻近 + 高P + freq=1 → 人間確認 (タジマソン→田島)', () => {
     const r = aliasMiner.filterSafeAliases(
-      [{ from: 'タベイソン', to: '田部井', count: 1 }] as unknown as AggregatedAlias[], opts);
+      [{ from: 'タジマソン', to: '田島', count: 1 }] as unknown as AggregatedAlias[], opts);
     expect(r.confirm).toHaveLength(1);
     expect(r.auto).toEqual([]);
   });
@@ -492,16 +492,16 @@ describe('filterSafeAliases (#327 Phase1: 2ゲート + 自動/確認分岐)', ()
     expect(r.rejected[0].reason).toBe('common-word');
   });
 
-  test('≤2字の裸の garble → 棄却 reason=short (小川→小川朱美)', () => {
+  test('≤2字の裸の garble → 棄却 reason=short (甲野→甲野花子)', () => {
     const r = aliasMiner.filterSafeAliases(
-      [{ from: '小川', to: '小川朱美', count: 3 }] as unknown as AggregatedAlias[], opts);
+      [{ from: '甲野', to: '甲野花子', count: 3 }] as unknown as AggregatedAlias[], opts);
     expect(r.rejected[0].reason).toBe('short');
   });
 
   test('閾値はオプションで調整可能', () => {
-    // autoFreq=3 なら freq=2 は confirm 行き (タベイソン=出現1でPは通る)
+    // autoFreq=3 なら freq=2 は confirm 行き (タジマソン=出現1でPは通る)
     const r = aliasMiner.filterSafeAliases(
-      [{ from: 'タベイソン', to: '田部井', count: 2 }] as unknown as AggregatedAlias[], { ...opts, autoFreq: 3 });
+      [{ from: 'タジマソン', to: '田島', count: 2 }] as unknown as AggregatedAlias[], { ...opts, autoFreq: 3 });
     expect(r.confirm).toHaveLength(1);
     expect(r.auto).toEqual([]);
   });
