@@ -41,7 +41,24 @@ Phronesis のようにディレクトリごと分けることだが、**サポ�
 直接読めることが仕事の価値**なので、別チェックアウト (worktree) にはしない判断をした。
 経緯と他班の分離状況は [#392](https://github.com/gamasenninn/tealus/issues/392)。
 
-★ `.mcp.json` は **gitignore 済み** (env に平文の資格情報が入る。この repo は PUBLIC)。
+★ **定義は `~/.claude.json` の `projects["C:\app\tealus"].mcpServers` に置くこと。`.mcp.json` に書いても読まれない。**
+2026-08-25 に `.mcp.json` へ `tealus-support` を置いたが、**サーバ名すら出てこなかった**。実測:
+
+```
+C:/app/tealus          local mcpServers=["tealus", ...] (空でない)  → ★ .mcp.json 無効
+C:/app/tealus-organon  local mcpServers=["tealus"]                  → ★ .mcp.json 無効
+C:/app/tealus-apps     local mcpServers=[]                          → .mcp.json 有効
+C:/app/tealus-site     local mcpServers=[]                          → .mcp.json 有効
+```
+
+**4 件とも `enabledMcpjsonServers` は空**なので、「未承認だから読まれない」では apps / site が説明できない。
+相関しているのは **local scope の `mcpServers` が空でないこと**。機構は未確認なので、**このディレクトリでは
+`~/.claude.json` 側に置く**を約束事として守る (`.mcp.json` を置いても静かに無視される = 気づけない)。
+
+★ MCP は **Claude Code の起動時に解決される**。設定を変えたら**フル再起動**が要る (in-app の reload では
+stdio の子プロセスが生き残るので不十分)。
+
+★ `.mcp.json` は gitignore 済み (env に平文の資格情報が入る。この repo は PUBLIC)。
 
 ## 技術スタック
 
