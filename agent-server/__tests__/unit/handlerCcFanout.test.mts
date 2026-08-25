@@ -24,7 +24,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { logger } from '../../src/lib/logger.mts';
 import * as botApi from '../../src/lib/botApi.mts';
-import { handleWebhook } from '../../src/webhook/handler.mts';
+import * as inflightRooms from '../../src/webhook/inflightRooms.mts';
+import { handleWebhook, registerBotUserId } from '../../src/webhook/handler.mts';
 import type { WebhookPayload } from '../../src/types.mts';
 
 const room = { id: 'r1', name: 'AI班連絡' };
@@ -174,5 +175,55 @@ describe('#387 message.updated (編集で宛先を足した場合)', () => {
     await handleWebhook(updated('@cc-tealus 呼び忘れました', '呼び忘れました'));
 
     expect(queuedProjects()).toEqual(['tealus']);
+  });
+});
+
+/**
+ * #392 アカウント共有で起きる取りこぼし。
+ *
+ * cc セッションがアプリ内アシスタントと **同じ Tealus アカウント**を使っていると、
+ * その部屋が inflight (アシスタントが応答中) の間、**cc の便が配送前に落ちる**。
+ * skip は `botUserIds.has(senderId)` かつ inflight でだけ起きる (`handler.mts`) ので、
+ * ★ **投稿が自送 echo か第三者の便かは条件に入っていない** —— そこが取りこぼしの正体。
+ *
+ * ★ この 2 本は「同じ便・同じ部屋・同じ inflight の窓で、**アカウントだけ違う**」対照。
+ *   2026-08-25 の実機検証では、実測できたのは下側 (通る方) だけで、
+ *   上側 (消える方) は **コードからの演繹**だった。ここで演繹を実行可能な形に固定する。
+ */
+describe('#392 bot account を共有していると inflight 中の便が消える', () => {
+  const sharedBot = { id: 'shared-bot-account', display_name: '共有アカウント' };
+
+  beforeEach(() => {
+    process.env.ENABLE_CROSS_ROOM_DELEGATION = 'true';
+    inflightRooms._reset();
+    registerBotUserId(sharedBot.id);       // = アプリ内アシスタントとして登録済みの状態
+    inflightRooms.add(room.id);            // = その部屋でアシスタントが応答中
+  });
+  afterEach(() => {
+    delete process.env.ENABLE_CROSS_ROOM_DELEGATION;
+    inflightRooms._reset();
+  });
+
+  test('★★★ 共有アカウントから投げると、配送されず warn も出ない (痕跡が残らない)', async () => {
+    await handleWebhook({
+      event: 'message.created',
+      message: {
+        id: 'm-shared', content: '@cc-tealus 検証便です', type: 'text',
+        sender: sharedBot, created_at: '2026-08-25T07:24:17Z',
+      },
+      room,
+    } as unknown as WebhookPayload);
+
+    expect(queuedProjects()).toEqual([]);     // ★ 消える
+    expect(ackCalls()).toHaveLength(0);       // 受付エコーも出ない = 送信者にも見えない
+    expect(droppedLogs()).toHaveLength(0);    // ★ #386 の warn にも掛からない (配送前に return するため)
+  });
+
+  test('★★★ まったく同じ便でも、専用アカウントなら配送される (アカウントだけが違い)', async () => {
+    // created() の送信者 u1 = bot 登録なし = 分離後の cc セッション
+    await handleWebhook(created('@cc-tealus 検証便です', 'm-own'));
+
+    expect(queuedProjects()).toEqual(['tealus']);
+    expect(ackCalls()).toHaveLength(1);
   });
 });
