@@ -34,6 +34,50 @@ interface SubjectAcc {
   aliases: string[];
 }
 
+/**
+ * 敬称 (#381)。**長いものから試す** — 「くん」と「君」のように片方が他方の部分でなくても、
+ * 将来足したときに短い方が先に当たる事故を防ぐため、長さ降順で固定する。
+ */
+const HONORIFICS = ['ちゃん', 'さま', 'さん', 'くん', '様', '君'];
+
+/** 末尾の敬称を 1 つだけ外した形。敬称が無い / 外すと空になるなら null */
+function stripHonorific(s: string): string | null {
+  for (const h of HONORIFICS) {
+    if (s.length > h.length && s.endsWith(h)) return s.slice(0, -h.length);
+  }
+  return null;
+}
+
+/**
+ * 冗長な alias を畳む (#381)。**落とすだけで、新しい語は 1 つも作らない。**
+ *
+ * ```
+ * ① 恒等                  alias == term                     → 落とす
+ * ①' 敬称を外すと term      田島さん (term=田島)             → 落とす
+ * ②  素の形が別行にある      タジマ がある上での タジマさん         → 落とす
+ * ★③ 素の形が無い敬称つき    甲さん/甲ちゃん (term=甲野)          → ★ 残す
+ * ```
+ *
+ * ★ ③ を残す理由: 一律に敬称を剥がすと `甲さん` → `甲` になり、**「甲板」「甲高い」まで
+ *   巻き込む**。安全な規則は「敬称を剥がす」ではなく **「素の形が既に別行にあるときだけ、
+ *   敬称つきの行を落とす」**。これなら新しく短い alias は 1 つも生まれない。
+ *
+ * ★ 判定は **元の集合**に対して行う (畳みながら判定すると並び順で結果が変わる)。
+ *
+ * ★ organon 側 (`org1:alias`) には触れない。あちらでは呼び名が identity 情報で、
+ *   冗長なのは「STT 補正」という消費者から見たときだけ (issue #381 / 2026-08-21 の相互の約束)。
+ */
+function foldRedundantAliases(term: string, aliases: string[]): string[] {
+  const original = new Set(aliases);
+  return aliases.filter((a) => {
+    if (a === term) return false;                       // ①
+    const bare = stripHonorific(a);
+    if (bare === null) return true;                     // 敬称なし → 残す
+    if (bare === term) return false;                    // ①'
+    return !original.has(bare);                         // ② 素の形があるなら落とす
+  });
+}
+
 export function projectOrganonDict(ttl: string): ProjectedTerm[] {
   const parser = new Parser();
   const quads = parser.parse(ttl);
@@ -68,7 +112,9 @@ export function projectOrganonDict(ttl: string): ProjectedTerm[] {
     const term = (a.label || '').trim();
     if (!term) continue;
     // alias は重複排除 + 決定論のため sort (順序は辞書用途に無関係)
-    const aliases = [...new Set(a.aliases.map((x) => x.trim()).filter(Boolean))].sort();
+    const deduped = [...new Set(a.aliases.map((x) => x.trim()).filter(Boolean))].sort();
+    // #381 恒等・敬称重複を畳む (organon 側は触らず、消費者側の粒度に合わせる)
+    const aliases = foldRedundantAliases(term, deduped);
     out.push({ term, category, aliases });
   }
   return out;
