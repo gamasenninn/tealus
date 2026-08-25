@@ -10,6 +10,12 @@ scripts/.env.trx
 # MCP / Agent server secrets
 agent-server/mcp_config.json
 agent-server/logs/
+# ★ .mcp.json は Claude Code の MCP 定義。tealus MCP の env に平文の
+#   TEALUS_USER_ID / TEALUS_PASSWORD が入るため追跡しない (#392)。
+#   ★ この repo は PUBLIC。gitignore が無いと `git add -A` 一発で資格情報が公開される。
+#   兄弟プロジェクト (tealus-apps / tealus-kairos 等) では `.mcp.json.example` を
+#   コミットして実体は各自が置く形をとっている。
+.mcp.json
 
 # Voice transcription guideline (実運用版、example はコミット)
 # ★ 派生も必ず含める: enriched 版は description に個人名+所属+雇用形態を持ち、
