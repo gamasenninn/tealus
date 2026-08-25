@@ -7,7 +7,7 @@ import { dispatch } from './dispatcher.mts';
 import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
 import * as botSendThrottle from '../lib/botSendThrottle.mts';
-import { extractCcProject, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
+import { extractCcProjects, findDroppedCcMentions, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
 import { isMentioned } from './mention.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
 
@@ -72,6 +72,81 @@ export async function handleWebhook(payload: WebhookPayload): Promise<void> {
 }
 
 /**
+ * cc-queue への配送 (#213 / #387 同報)。
+ *
+ * ★ 配送先ごとに `appendCcEvent` を呼ぶが、**受付エコーは最後に 1 回だけ**出す。
+ *   room の status は 1 つしか無いので、宛先ごとに押し込むと上書きし合う (ccQueue.mts 参照)。
+ *
+ * ★ 1 宛先の append が失敗しても、残りの宛先への配送は続ける。同報の一部が落ちても
+ *   全部を落とすより良い (落ちた分は error に残る)。
+ *
+ * @param targets 実際に beacon を積む先
+ * @param recipients 便に載せる「この message の宛先一覧」。編集経路では targets と異なる
+ *   (既に届いている班は積み直さないが、受け手には全体像を見せる)
+ * @param tag ログの接頭辞 (編集経路は `[edit-trigger]`)
+ * @returns 実際に配送できた project 名
+ */
+function routeCcEvent(
+  message: NonNullable<WebhookPayload['message']>,
+  room: WebhookRoom,
+  targets: string[],
+  recipients: string[],
+  tag = '',
+): string[] {
+  const ccPayload = {
+    id: message.id,
+    room_id: room.id,
+    room_name: room.name,
+    sender: message.sender,
+    content: message.content,
+    type: message.type,
+    created_at: message.created_at || new Date().toISOString(),
+    // #387 受け手が「これは N 班に配られた」と分かる形。無いと 2 班が同じ作業を並行する
+    recipients,
+  };
+  const delivered: string[] = [];
+  for (const project of targets) {
+    try {
+      const filePath = appendCcEvent(project, ccPayload);
+      delivered.push(project);
+      logger.info(`${tag}[cc-queue] Routed @cc-${project} → ${filePath}`);
+    } catch (err) {
+      logger.error(`${tag}[cc-queue] Append failed (@cc-${project}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  // #335 受付エコー: 「cc-<project> に届きました」を出し TTL 後に消す (一か八か待ち解消)。
+  // beacon は既に積んだので best-effort、失敗しても routing 自体は成立している。
+  if (delivered.length > 0) {
+    emitCcAck({ projects: delivered, roomId: room.id, pushStatus: botApi.pushStatus });
+  }
+  return delivered;
+}
+
+/**
+ * #386 行頭に書かれているのに配送しなかった宛先を warn に出す (黙って捨てない)。
+ *
+ * 2026-08-23 の実害は「3 班宛のつもりが 1 班にしか届かず、**送った側も受け取らなかった側も
+ * 気づかなかった**」。配送の挙動は #387 で直したが、**1 行目の先頭以外に書かれた宛先は
+ * 今も配送しない** (引用・案内表で無関係なセッションを起こさないため) ので、
+ * そちらは宣言する。
+ */
+function warnDroppedCcMentions(
+  content: string | null | undefined,
+  delivered: string[],
+  room: WebhookRoom,
+  senderId: string | undefined,
+): void {
+  const dropped = findDroppedCcMentions(content, delivered);
+  if (dropped.length === 0) return;
+  logger.warn(
+    `[cc-queue] 1 行目の先頭以外にある宛先には配送していません: `
+    + `配送先=${delivered.join(',') || '(なし)'} 未配送=${dropped.join(',')} `
+    + `room=${room.name || room.id} sender=${senderId || '?'}。`
+    + `同報するときは 1 行目の先頭に @cc-a @cc-b と並べてください`,
+  );
+}
+
+/**
  * message.created イベント処理
  */
 async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
@@ -102,31 +177,16 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
   }
 
   // #213 Phase A: cc-queue routing — `@cc-{project}` mention を file beacon に追記。
+  // #387: 1 行目の先頭に並べた宛先 (`@cc-a @cc-b`) は全部に配る (同報)。
   // Bot membership 検証より前に実行 (cc routing は agent-server の Light/Deep dispatch とは独立)。
-  const ccProject = extractCcProject(message.content);
-  if (ccProject) {
+  const ccProjects = extractCcProjects(message.content);
+  if (ccProjects.length > 0) {
     if (shouldSkipCcSender(senderId, ccSkipSenderIds)) {
       // #213 Phase A polish: Claude Code session 等の cc bot からの @cc-* 言及は self-loop の元。skip。
-      logger.debug(`[cc-queue] Skipped self-loop sender ${senderId} for @cc-${ccProject}`);
+      logger.debug(`[cc-queue] Skipped self-loop sender ${senderId} for @cc-${ccProjects.join(' @cc-')}`);
     } else {
-      try {
-        const ccPayload = {
-          id: message.id,
-          room_id: room.id,
-          room_name: room.name,
-          sender: message.sender,
-          content: message.content,
-          type: message.type,
-          created_at: message.created_at || new Date().toISOString(),
-        };
-        const filePath = appendCcEvent(ccProject, ccPayload);
-        logger.info(`[cc-queue] Routed @cc-${ccProject} → ${filePath}`);
-        // #335 受付エコー: 「cc-<project> に届きました」を出し TTL 後に消す (一か八か待ち解消)。
-        // beacon は既に積んだので best-effort、失敗しても routing 自体は成立している。
-        emitCcAck({ project: ccProject, roomId: room.id, pushStatus: botApi.pushStatus });
-      } catch (err) {
-        logger.error(`[cc-queue] Append failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      const delivered = routeCcEvent(message, room, ccProjects, ccProjects);
+      warnDroppedCcMentions(message.content, delivered, room, senderId);
     }
     // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
   } else {
@@ -216,25 +276,13 @@ async function handleMessageUpdated(payload: WebhookPayload): Promise<void> {
   }
 
   // cc-queue: 編集で @cc-<project> が新規に付いたら beacon 追記 (cc-bridge の呼び忘れ救済)
-  const ccNow = extractCcProject(content);
-  const ccPrev = extractCcProject(prevContent);
-  if (ccNow && !ccPrev && !shouldSkipCcSender(senderId, ccSkipSenderIds)) {
-    try {
-      const ccPayload = {
-        id: message.id,
-        room_id: room.id,
-        room_name: room.name,
-        sender: message.sender,
-        content,
-        type: message.type,
-        created_at: message.created_at || new Date().toISOString(),
-      };
-      const filePath = appendCcEvent(ccNow, ccPayload);
-      logger.info(`[edit-trigger][cc-queue] Routed @cc-${ccNow} (newly added via edit) → ${filePath}`);
-      emitCcAck({ project: ccNow, roomId: room.id, pushStatus: botApi.pushStatus });
-    } catch (err) {
-      logger.error(`[edit-trigger][cc-queue] Append failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+  // ★ #387: 宛先が複数になったので「付いたか / 付いていないか」の真偽値ではなく **差分**で見る。
+  //   既に届いている班へ積み直すと、同じ便で 2 回起こすことになる。
+  const ccNow = extractCcProjects(content);
+  const ccPrev = new Set(extractCcProjects(prevContent));
+  const ccAdded = ccNow.filter((p) => !ccPrev.has(p));
+  if (ccAdded.length > 0 && !shouldSkipCcSender(senderId, ccSkipSenderIds)) {
+    routeCcEvent(message, room, ccAdded, ccNow, '[edit-trigger]');
   }
 
   // アシスタント: 編集で @<assistant> が新規に付いたら dispatch (アシスタントの呼び忘れ救済)

@@ -233,6 +233,24 @@ user に以下のように報告:
 
 `<task-notification>` で 1 行 jsonl payload が届く (file / http どちらでも同じ形)。各 payload に対して:
 
+#### ★ 同報された便 (`recipients` が 2 つ以上) —— #387
+
+payload に `recipients` があれば、**同じ便が他の班にも届いている**。
+
+```json
+{"id":"...","room_name":"AI班連絡","recipients":["tealus","organon","kairos"], ...}
+```
+
+- **他の班も同じものを読んでいる前提で動く。** 「調べておきます」と全班が言うと同じ作業が 3 回走る。
+  自分の担当範囲だけに答え、他班の範囲は書かない
+- ★ **返信の先頭 mention は発信者 1 つだけにする。** 受け取った宛先を並べて返してはいけない
+  —— A の返信が B と C を起こし、B の返信が A と C を起こす、が成立する。
+  自己ループ防止は「行頭にあるか」だけで効いている (`docs/06` §6.1) ので、
+  **返し方の慣習が唯一のブレーキ**になる
+- **同報してよいのは最初に投げる便だけ。** 返信・追記では使わない
+
+`recipients` が無い payload (古いサーバ) は単一宛先として扱う。
+
 #### L1 (notify only)
 ```
 📨 新着 from {sender.display_name} (room: {room_name})

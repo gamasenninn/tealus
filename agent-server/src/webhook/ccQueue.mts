@@ -137,6 +137,85 @@ function extractCcProject(content: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * #387 同報の上限。1 便がこれ以上のセッションを起こすことはない。
+ * 実測 (cc-queue 全 1323 便) の最大は 3 宛先なので、通常運用では当たらない。
+ * **暴走したときに止まる高さ**として置いている。
+ */
+const CC_FANOUT_MAX = 5;
+
+// 1 行目の先頭から**連続して並ぶ** mention 群 (`@cc-a @cc-b @cc-c`)。
+// ★ CC_MENTION_RE と違い /m を付けない。**最初の行だけ**を見るための意図的な差。
+const CC_HEAD_RUN_RE = new RegExp(`^((?:@cc-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?[ \\t]*)+)`);
+const CC_MENTION_G_RE = /@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/g;
+// 行頭 (どの行でもよい) の mention を全部拾う。#386 の「捨てた宛先」検出に使う
+const CC_MENTION_LINE_HEAD_G_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/gm;
+
+/** 最初の非空行。無ければ空文字 */
+function firstNonEmptyLine(content: string): string {
+  return content.split('\n').find((l) => l.trim().length > 0) || '';
+}
+
+/** 文字列中の `@cc-name` を出現順・重複排除で取り出す */
+function ccNamesIn(s: string): string[] {
+  CC_MENTION_G_RE.lastIndex = 0;
+  return [...new Set([...s.matchAll(CC_MENTION_G_RE)].map((m) => m[1]))];
+}
+
+/**
+ * 配送先の一覧を返す (#387 同報)。
+ *
+ * ★ **1 行目の先頭に並べたものだけ**を宛先とする。`@cc-a @cc-b @cc-c` の形。
+ *   それ以外は `extractCcProject()` と同じ 1 宛先に落ちる (alias 経由もここに含む)。
+ *
+ * ★ なぜ「1 行目の先頭」に限るのか —— **測ったから**。cc-queue の全 1323 便で:
+ * ```
+ *   1 行目の先頭に並べた便          2 件 → 2 件とも本物の同報 (2026-08-21 / 08-23)
+ *   1 行目以外の行頭に mention がある便 2 件 → 2 件とも引用・案内表 = 配ったら誤配
+ * ```
+ *   両者は母集団で完全に排他だった。全体を `/m` で走査する実装にすると、
+ *   **拾いたい 2 件は増えず、誤配だけが 2 件増える** (案内表の便は 7 セッションを起こす)。
+ *
+ * ★ 自己ループ防止 (docs/06 §6.1 = 「行頭にあるか」だけが防御) もこの限定で保たれる。
+ *   AI の返信が本文中で `@cc-*` を引用しても、1 行目の先頭には来ない。
+ *
+ * @returns 配送先の配列 (重複排除・出現順・最大 CC_FANOUT_MAX)。宛先が無ければ空配列
+ */
+function extractCcProjects(content: string | null | undefined): string[] {
+  if (typeof content !== 'string' || content.length === 0) return [];
+  const run = firstNonEmptyLine(content).match(CC_HEAD_RUN_RE);
+  if (run) {
+    const names = ccNamesIn(run[1]);
+    if (names.length > 1) return names.slice(0, CC_FANOUT_MAX);
+  }
+  // 単一宛先 (従来経路)。alias もここで解決される
+  const single = extractCcProject(content);
+  return single ? [single] : [];
+}
+
+/**
+ * 行頭に書かれているのに配送しなかった宛先を返す (#386 黙って捨てない)。
+ *
+ * 対象は **行頭の `@cc-`** だけ。本文中の引用 (`宛先は @cc-organon と書く`) では鳴らさない
+ * —— AI 同士が宛先を説明するたびに鳴ると、警告が通常の会話に埋もれて「見えない」に戻る
+ * ([[detectUnroutedAddressHint]] と同じ stance)。
+ *
+ * ★ 上限超過分もここに現れる: `delivered` が CC_FANOUT_MAX で切られているため、
+ *   1 行目に並んだ 6 番目以降が差分として出る。
+ *
+ * @param delivered 実際に配送した project 名 (extractCcProjects の結果)
+ */
+function findDroppedCcMentions(content: string | null | undefined, delivered: readonly string[]): string[] {
+  if (typeof content !== 'string' || content.length === 0) return [];
+  const deliveredSet = new Set(delivered);
+  CC_MENTION_LINE_HEAD_G_RE.lastIndex = 0;
+  const lineHead = [...content.matchAll(CC_MENTION_LINE_HEAD_G_RE)].map((m) => m[1]);
+  // 1 行目の先頭に並べた分は行頭 1 つ分しか掛からないので、そちらも合わせて見る
+  const headRun = firstNonEmptyLine(content).match(CC_HEAD_RUN_RE);
+  const candidates = new Set([...lineHead, ...(headRun ? ccNamesIn(headRun[1]) : [])]);
+  return [...candidates].filter((n) => !deliveredSet.has(n));
+}
+
 // #359 (a) 宛先を書いたつもりで配送されなかった便を拾うための signal。
 // 社内の宛先記法「【organon班 → 本体班】」= 矢印のあとに 班。2026-08-20 の実害はこの形。
 const TEAM_ARROW_RE = /→\s*\S*班/;
@@ -276,17 +355,24 @@ function loadSkipSenderIds(envVal: string | undefined = process.env.CC_SKIP_SEND
  * 自動的に status を消すため二重にはならない (idle は冪等)。
  *
  * pushStatus は best-effort: 失敗しても beacon は既に積まれているので握りつぶす。
+ *
+ * ★ #387 で `projects` (複数) を受けるようにした。**宛先ごとに呼んではいけない** ——
+ *   status は room に 1 つしか無いので、N 回押し込むと互いに上書きし合い、
+ *   最後の 1 件しか見えない (しかも TTL の idle が N 個走って先に消える)。
+ *   同報は「1 回のエコーに宛先を並べる」が正しい形。
  */
 export interface CcAckDeps {
-  project: string;
+  /** 配送先 (同報なら複数)。空配列では呼ばないこと */
+  projects: string[];
   roomId: string;
   /** POST /bot/status 相当 (本番は botApi.pushStatus)。 */
   pushStatus: (roomId: string, status: string, message?: string) => Promise<unknown>;
   /** 表示時間 (ms)。既定 CC_ACK_TTL_MS。 */
   ttlMs?: number;
 }
-function emitCcAck({ project, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAckDeps): void {
-  void pushStatus(roomId, 'processing', `cc-${project} に届きました。応答をお待ちください…`).catch(() => {});
+function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAckDeps): void {
+  const label = projects.map((p) => `cc-${p}`).join(' / ');
+  void pushStatus(roomId, 'processing', `${label} に届きました。応答をお待ちください…`).catch(() => {});
   const timer = setTimeout(() => {
     void pushStatus(roomId, 'idle', '').catch(() => {});
   }, ttlMs);
@@ -295,6 +381,9 @@ function emitCcAck({ project, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAck
 
 export {
   extractCcProject,
+  extractCcProjects,
+  findDroppedCcMentions,
+  CC_FANOUT_MAX,
   detectUnroutedAddressHint,
   appendCcEvent,
   shouldSkipCcSender,
