@@ -23,6 +23,26 @@
 
 このプロジェクトで `/<name>` slash command (custom skill) を作る時は **`.claude/skills/<name>/SKILL.md`** (ディレクトリ構造) で配置すること。flat `.md` file (`.claude/skills/<name>.md`) は読み込まれない。詳細仕様 / トラブルシューティングは [`docs/claude-code-skills.md`](docs/claude-code-skills.md) 参照。
 
+## ★ このディレクトリには tealus MCP が 2 本ある (#392)
+
+本体班とサポート班は**同じリポジトリを別の角度で見る**ため、同じディレクトリから動く。
+MCP のアカウント設定はディレクトリ単位なので、**サーバを 2 本置いて役割で使い分ける**。
+
+| 役割 | cc project | 使う MCP | 投稿時の表示名 |
+|------|-----------|---------|--------------|
+| 本体班 | `tealus` | `mcp__tealus__*` | Claude |
+| サポート班 | `support` | **`mcp__tealus-support__*`** | サポート班 |
+
+**自分の `project_name`** (`.claude/cc-tealus.json`) **に対応する方を使うこと。**
+間違えても投稿は成功するが、**部屋には別の班の名前で出る**。
+
+★ **これは規約であって、構造で強制されていない。** 分離の本来の形は
+Phronesis のようにディレクトリごと分けることだが、**サポート班は本体リポジトリを
+直接読めることが仕事の価値**なので、別チェックアウト (worktree) にはしない判断をした。
+経緯と他班の分離状況は [#392](https://github.com/gamasenninn/tealus/issues/392)。
+
+★ `.mcp.json` は **gitignore 済み** (env に平文の資格情報が入る。この repo は PUBLIC)。
+
 ## 技術スタック
 
 - 言語: TypeScript (全レイヤー、strict / ESM)。サーバは Node 24 native type stripping でビルドレス実行 (`node src/app.mts`)、クライアントは Vite。JS→TS 全面移行は #330 で完了 (`engines: node >=24`)
