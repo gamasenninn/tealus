@@ -354,3 +354,36 @@
   color: var(--danger, #b3261e);
   font-size: 0.9em;
 }
+
+/* ★ PC では編集枠を縦に広げる (2026-08-29)。
+   スマホは 1 px も変えない: 枠が伸びるとキーボードに隠れて実質編集できなくなるため。
+   分岐は DesktopShell.css と同じ 1024px = アプリがすでに持つ「PC」の定義を使う。
+
+   高さを決めて textarea が余りを全部取る形にする (min-height を足すだけにしない)。
+   .modal-box は max-height:80vh + overflow-y:auto なので、単に高くすると
+   窓の低い PC で ★ 確定ボタンが折り返しの下に隠れ、モーダルと textarea の
+   二重スクロールになる。連続編集は「聞く→直す→次へ」の往復なので、
+   再生バー / 前・次 / 確定が常に見えることが体感を決める。
+
+   ★ セレクタは .modal-box.voice-edit-modal (= MessageEditModal にも当たる)。
+   #379 で 添付音声の編集経路が VoiceEditModal へ移り、message-edit-modal 限定の
+   指定 (ImageGrid.css / MessageBubble.css の min-height:50vh) が外れた前例がある。
+   両モーダルが共有するクラスに置いて、経路が変わっても外れないようにする。
+
+   ★ textarea 側は .modal-overlay を足して specificity を上げる。
+   MessageBubble.css の .modal-box.message-edit-modal textarea { min-height:50vh }
+   と同点になり、バンドル順で勝敗が決まってしまうため。 */
+@media (min-width: 1024px) {
+  .modal-box.voice-edit-modal {
+    display: flex;
+    flex-direction: column;
+    height: 80vh;
+    max-width: 720px;
+  }
+
+  .modal-overlay .modal-box.voice-edit-modal textarea {
+    flex: 1;
+    min-height: 0;
+    resize: none;
+  }
+}
