@@ -85,7 +85,10 @@ agent-server/config/system_prompt.md
 report/
 
 # Claude Code cc-tealus runtime config (#213) — example はコミット
+# 役割別 (.claude/cc-tealus.tealus.json / .cc-tealus.support.json、#392) も含めて無視する
 .claude/cc-tealus.json
+.claude/cc-tealus.*.json
+!.claude/cc-tealus.json.example
 
 # Claude Code の端末固有設定 / 実行時ロック (共有しない)
 .claude/settings.local.json

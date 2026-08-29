@@ -33,8 +33,23 @@ MCP のアカウント設定はディレクトリ単位なので、**サーバ�
 | 本体班 | `tealus` | `mcp__tealus__*` | Claude |
 | サポート班 | `support` | **`mcp__tealus-support__*`** | サポート班 |
 
-**自分の `project_name`** (`.claude/cc-tealus.json`) **に対応する方を使うこと。**
+**自分の `project_name` に対応する方を使うこと。**
 間違えても投稿は成功するが、**部屋には別の班の名前で出る**。
+
+★ **cc-queue の設定は役割別に分けてある** (2026-08-28)。`.claude/cc-tealus.json` は**置かない**:
+
+```
+.claude/cc-tealus.tealus.json    本体班    → /listen-tealus tealus
+.claude/cc-tealus.support.json   サポート班 → /listen-tealus support
+```
+
+**役割を引数で指定する。** 引数なしで起動すると skill は 2 つ見つけて止まり、user に聞く
+(既定を選ばない)。単一の `cc-tealus.json` を置き直すと、また片方の班が黙って
+別の班の queue を監視する状態に戻るので、**戻さないこと**。
+
+★ **投稿側 (MCP) の間違いは部屋のメンバーシップ (403) で気づけるが、受信側 (queue) は静かに外れる。**
+2026-08-20〜08-28 に `support` のまま 8 日間放置され、本体班のセッションが
+`@cc-tealus` を受け取れていなかった (未処理 5 件が滞留)。**「未処理 0 件」は正常の証拠にならない。**
 
 ★ **これは規約であって、構造で強制されていない。** 分離の本来の形は
 Phronesis のようにディレクトリごと分けることだが、**サポート班は本体リポジトリを

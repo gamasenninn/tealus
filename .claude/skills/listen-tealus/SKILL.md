@@ -19,14 +19,36 @@ agent-server が `@cc-{project}` mention を検知したときの起床通知を
 ## 前提
 
 - **agent-server** が起動済み (webhook 受信 + `src/webhook/ccQueue.mts` 経由の routing が有効)
-- このプロジェクトに **`.claude/cc-tealus.json`** が存在する (`.claude/cc-tealus.json.example` から copy + 編集)
+- このプロジェクトに **設定ファイル**が存在する (`.claude/cc-tealus.json.example` から copy + 編集)。1ディレクトリを複数の班が共用する場合は**役割別**に分ける (step 1)
 - http mode では加えて: 本体が外から到達可能、`~/.tealus/cc-auth.json` にログイン情報
 
 ## 手順
 
-### 1. 設定読み込みと mode 判定
+### 1. 設定の選択と読み込み、mode 判定
 
-`.claude/cc-tealus.json` を Read。schema:
+設定ファイルの置き方は 2 通り:
+
+| 置き方 | ファイル名 | いつ使うか |
+|---|---|---|
+| 単一役割 (既定) | `.claude/cc-tealus.json` | **1ディレクトリ = 1班**。organon / kairos / lp / docs / phronesis / tealus-apps はこれ |
+| **役割別** | `.claude/cc-tealus.{role}.json` | ★ **1ディレクトリを複数の班が共用する場合** (`C:\app\tealus` の 本体班 `tealus` / サポート班 `support`、[#392](https://github.com/gamasenninn/tealus/issues/392)) |
+
+**選び方 (この順に判定する)**:
+
+1. **skill 引数があれば、それを役割名として `.claude/cc-tealus.{引数}.json` を使う**
+   — 例 `/listen-tealus support`。**無ければエラーで止まる** (存在する役割別ファイルを一覧して示す)
+2. 引数が無く、役割別ファイルが **1 つだけ**あればそれを使う
+3. 引数が無く、役割別ファイルが **2 つ以上**あれば ★ **user に聞いて止まる。既定を選んではいけない**
+4. 役割別ファイルが無ければ `.claude/cc-tealus.json` を使う (従来どおり)
+
+★ **`.claude/cc-tealus.json` と役割別ファイルを同じディレクトリに混在させない。**
+混在していたら**止まって user に聞く**。どちらを読むかを skill が黙って決めると、
+**間違った班として静かに待機する**状態が作れてしまう (下の実例)。
+
+★ **役割別に分けたら `.gitignore` の pattern も広げること** (`.claude/cc-tealus.json` だけを
+無視していると `cc-tealus.support.json` が commit 対象に残る)。
+
+選んだファイルを Read。schema:
 
 | field | 必須 | 例 / default |
 |---|---|---|
@@ -56,12 +78,31 @@ watermark file を Read:
 
 処理:
 
-- **未処理 0 件**: skip して step 3 へ
+- **未処理 0 件**: skip して step 3 へ。★ **ただし「0 件」を正常の証拠にしないこと** (下記)
 - **未処理 ≥1 件**: `catch_up_policy` に従う
   - `"ask"` (default): user に提示し option (A: 全部 / B: 直近 / C: 古いものは自動応答 / D: skip) を選ばせる
   - `"all"`: 確認なしで全件処理
   - `"skip"`: watermark を最新に更新して skip
   - `"recent:Nh"`: 過去 N 時間以内のみ処理
+
+#### ★ 「未処理 0 件」は正常の証拠にならない
+
+**間違った queue を見ていれば、未処理は常に 0 に見える。** file mode では arm する前に必ず横並びで見る:
+
+```sh
+ls -la ~/.tealus/cc-queue/*.jsonl
+```
+
+選んだ queue が**他に比べて極端に古い / 小さい**なら、**役割の取り違えを疑って user に確認する**。
+
+★ 2026-08-20〜08-28 に実際に起きた: `C:\app\tealus` の `.claude/cc-tealus.json` が
+`support` のまま 8 日間放置され、**本体班のセッションが `support.jsonl`
+(最終更新 8 日前・23KB) を監視**していた。本来見るべき `tealus.jsonl` は
+**1.1MB・当日も稼働・未処理 5 件**で、その中に**自分がその日に出したフォームへの回答 2 件**が
+入っていた。「未処理 0 件」「🟢 listening」と報告した時点では**何も間違って見えなかった**。
+
+★ **投稿側は部屋のメンバーシップ (403) で気づけるが、受信側は静かに外れる。**
+出す方に防波堤があることを、受け取る方の正しさの証拠にしないこと。
 
 ### 3. Monitor を arm
 
@@ -224,10 +265,14 @@ user に以下のように報告:
 ```
 🟢 Tealus listening
    project: {project_name}
+   config:  {選んだ設定ファイル}      ← ★ どれを読んだかを必ず出す
    auto_level: {auto_level}
    mode: file / http
    source: {queue_path} または {stream_url}
 ```
+
+★ **`config:` 行を省略しない。** 役割別に分けた意味は「どちらとして待機しているかが
+報告に出ること」にある。project 名だけだと、**設定が古いのか意図どおりなのかを user が見分けられない**。
 
 ### 5. event 到着時の振る舞い
 
