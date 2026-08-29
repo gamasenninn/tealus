@@ -46,3 +46,34 @@ export function subscribeAudioStarted(selfId: string, onOtherStarted: () => void
   window.addEventListener(VOICE_STARTED, handler);
   return () => window.removeEventListener(VOICE_STARTED, handler);
 }
+
+/** シーク要求の合図 (2026-08-29)。通話履歴の時刻タグから再生位置を動かすために足した */
+export const VOICE_SEEK = 'voice:seek';
+
+/**
+ * シーク要求。**絶対位置 `{to}` と 相対 `{by}` の 2 通り**。
+ *
+ * ★ 相対を「送る側で currentTime を読んで足す」形にしない。currentTime を知っているのは
+ *   **要素を持っている受け手**で、送る側 (チップの並び) は知らない。計算は受け手に置く。
+ */
+export type SeekRequest = { to: number } | { by: number };
+
+/** 指定の再生単位へシークを頼む (id は notifyAudioStarted と同じ規約 = media id 可) */
+export function requestAudioSeek(id: string, req: SeekRequest): void {
+  window.dispatchEvent(new CustomEvent(VOICE_SEEK, { detail: { messageId: id, req } }));
+}
+
+/**
+ * 自分宛のシーク要求を受け取る。
+ * ★ 1 メッセージに音声が 2 つ付くことがあるので、**自分宛だけ**を通す。
+ * @returns 購読解除関数
+ */
+export function subscribeAudioSeek(selfId: string, onSeek: (req: SeekRequest) => void): () => void {
+  const handler = (e: Event) => {
+    const d = (e as CustomEvent<{ messageId?: string; req?: SeekRequest }>).detail;
+    if (d?.messageId !== selfId || !d.req) return;
+    onSeek(d.req);
+  };
+  window.addEventListener(VOICE_SEEK, handler);
+  return () => window.removeEventListener(VOICE_SEEK, handler);
+}

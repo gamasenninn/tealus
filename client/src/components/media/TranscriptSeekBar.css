@@ -1,0 +1,50 @@
+/* 通話履歴の時刻タグへ飛ぶバー (2026-08-29)。
+   ★ 高さは 1 行に固定する。スマホの編集はキーボードで縦が足りない (#397) ので、
+   段を増やさない。10 秒送り戻しは端に固定し、タグ側だけ横スクロールさせる。 */
+.transcript-seek {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  min-width: 0;
+}
+
+.tseek-btn {
+  flex-shrink: 0;              /* ★ スクロールで隠れない。常に押せる位置に残す */
+  padding: 4px 8px;
+  border: 1px solid var(--border-medium);
+  border-radius: 14px;
+  background: white;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tseek-marks {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  min-width: 0;                /* ★ flex 子は既定で縮まないので、これが無いと溢れる */
+  scrollbar-width: thin;
+}
+
+.tseek-mark {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--primary);
+  border-radius: 14px;
+  background: rgba(0, 180, 160, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tseek-btn:hover,
+.tseek-mark:hover {
+  background: rgba(0, 180, 160, 0.18);
+}

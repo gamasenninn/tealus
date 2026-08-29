@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted } from '../utils/audioExclusive';
+import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted, subscribeAudioSeek } from '../utils/audioExclusive';
+import type { SeekRequest } from '../utils/audioExclusive';
 
 export interface ExclusiveAudio {
   /** <audio> に挿す ref */
@@ -35,6 +36,23 @@ export function useExclusiveAudio(id: string): ExclusiveAudio {
     if (!el) return;
     pausedByOther.current = true;
     el.pause();
+  }), [id]);
+
+  // ★ シーク要求 (2026-08-29)。通話履歴の時刻タグ / 10 秒送り・戻し から呼ばれる。
+  //   ★ 相対の計算をここに置くのは、currentTime を知っているのが要素を持つ側だから。
+  useEffect(() => subscribeAudioSeek(id, (req: SeekRequest) => {
+    const el = ref.current;
+    if (!el) return;
+    const apply = () => {
+      // duration は metadata 前だと NaN。★ NaN と比較すると常に false になるので明示的に外す
+      const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
+      const next = 'to' in req ? req.to : el.currentTime + req.by;
+      el.currentTime = Math.min(Math.max(next, 0), dur);
+    };
+    // preload="metadata" なので通常は読み込み済みだが、開いた直後に押されると 0 のことがある。
+    // ★ readyState 0 で currentTime を書いても効かない (実装によっては例外) ので、一度だけ待つ。
+    if (el.readyState === 0) el.addEventListener('loadedmetadata', apply, { once: true });
+    else apply();
   }), [id]);
 
   return {

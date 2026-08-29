@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   VOICE_STARTED, VOICE_STOP_CONTINUOUS,
   notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted,
+  requestAudioSeek, subscribeAudioSeek,
 } from '../src/utils/audioExclusive';
 
 /**
@@ -77,5 +78,47 @@ describe('audioExclusive — 合図の規約 (#380)', () => {
     off();
 
     expect(seen.map((s) => s.type)).toEqual(['voice:started']);   // stop-continuous は無い
+  });
+});
+
+/**
+ * ★ シーク要求 (2026-08-29)。通話履歴の時刻タグから再生位置を動かすために足した。
+ *
+ * ★ 「再生バーの機能」ではなく **規約に 1 つイベントを増やす** 形にしてある。
+ *   再生バーの実装は 標準 <audio controls> と 手作り の 2 系統あり、#380 で
+ *   「規約に参加させる」ことで 2 か所に配線を複製する問題を解いた。同じ形に乗せる。
+ */
+describe('シーク要求', () => {
+  it('自分宛の絶対シークを受け取る', () => {
+    const got: unknown[] = [];
+    const off = subscribeAudioSeek('a', (r) => got.push(r));
+    requestAudioSeek('a', { to: 62 });
+    off();
+    expect(got).toEqual([{ to: 62 }]);
+  });
+
+  it('★ 他人宛は受け取らない (1 メッセージに音声が 2 つ付く場合がある)', () => {
+    const got: unknown[] = [];
+    const off = subscribeAudioSeek('a', (r) => got.push(r));
+    requestAudioSeek('b', { to: 10 });
+    off();
+    expect(got).toEqual([]);
+  });
+
+  it('相対シーク (10 秒送り / 戻し) も同じ経路で渡す', () => {
+    const got: unknown[] = [];
+    const off = subscribeAudioSeek('a', (r) => got.push(r));
+    requestAudioSeek('a', { by: -10 });
+    requestAudioSeek('a', { by: 10 });
+    off();
+    expect(got).toEqual([{ by: -10 }, { by: 10 }]);
+  });
+
+  it('購読解除したら届かない', () => {
+    const got: unknown[] = [];
+    const off = subscribeAudioSeek('a', (r) => got.push(r));
+    off();
+    requestAudioSeek('a', { to: 1 });
+    expect(got).toEqual([]);
   });
 });

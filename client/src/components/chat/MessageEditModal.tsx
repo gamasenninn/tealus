@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import MediaAudio from '../media/MediaAudio';
+import TranscriptSeekBar from '../media/TranscriptSeekBar';
 import type { MediaItem } from '../../types';
 
 interface MessageEditModalProps {
@@ -31,6 +32,8 @@ function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEdi
         <h3>メッセージを編集</h3>
         {/* ★ #380: バブルと同じ部品を使う。markup も 同時再生抑制の配線も 1 か所に持つ */}
         {audios.map((m) => <MediaAudio key={m.id} media={m} />)}
+        {/* ★ 通話履歴の時刻タグへ飛ぶバー。textarea の中の文字は押せないので外に出す */}
+        {audios[0] && <TranscriptSeekBar text={text} audioId={audios[0].id} />}
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}

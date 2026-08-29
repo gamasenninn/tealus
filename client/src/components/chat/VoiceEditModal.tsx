@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../../services/api';
+import TranscriptSeekBar from '../media/TranscriptSeekBar';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -23,6 +24,8 @@ interface VoiceEditModalProps {
   textOf?: (m: Message | null) => string;              // 本文の取り出し
   save?: (id: string, text: string) => Promise<void>;  // 保存
   renderPlayer?: (m: Message) => ReactNode;            // 再生バー
+  /** ★ 時刻タグのシーク先 (media id)。返せない経路 (音声メッセージ) は省略してよい */
+  audioIdOf?: (m: Message) => string | null;
   title?: string;
 }
 
@@ -37,7 +40,7 @@ interface VoiceEditModalProps {
  *   再生バー の 4 か所を注入できる。**省略時は従来どおり**。
  */
 function VoiceEditModal({
-  messageId, onClose, selectItems, textOf, save, renderPlayer, title = '文字起こしを編集',
+  messageId, onClose, selectItems, textOf, save, renderPlayer, audioIdOf, title = '文字起こしを編集',
 }: VoiceEditModalProps) {
   const messages = useMessageStore((s) => s.messages);
   const currentRoom = useRoomStore((s) => s.currentRoom);
@@ -204,6 +207,11 @@ function VoiceEditModal({
         {/* #248: textarea の上に再生 slider を配置、編集しながら音声を seek 可能に */}
         {/* ★ #379: 再生バーは注入可 (添付音声は #380 の MediaAudio を渡す) */}
         {renderPlayer && current && renderPlayer(current)}
+        {/* ★ 時刻タグへ飛ぶバー。添付音声の編集 (#379 の経路) でだけ出る。
+            audioId は呼び出し側が渡す —— この modal は media の形を知らない */}
+        {audioIdOf && current && audioIdOf(current) && (
+          <TranscriptSeekBar text={editText} audioId={audioIdOf(current)!} />
+        )}
         {!renderPlayer && audioUrl && (
           <div className="voice-edit-player">
             <audio

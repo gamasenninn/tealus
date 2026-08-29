@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useExclusiveAudio } from '../src/hooks/useExclusiveAudio';
-import { VOICE_STARTED, VOICE_STOP_CONTINUOUS, notifyAudioStarted } from '../src/utils/audioExclusive';
+import { VOICE_STARTED, VOICE_STOP_CONTINUOUS, notifyAudioStarted, requestAudioSeek } from '../src/utils/audioExclusive';
 
 /**
  * #380: 標準の <audio controls> を 同時再生抑制の規約に参加させる React 側の接続。
@@ -87,5 +87,71 @@ describe('useExclusiveAudio (#380)', () => {
     unmount();
     act(() => notifyAudioStarted('other'));
     expect(pause).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ シークの受け側 (2026-08-29)。currentTime を知っているのは要素を持つこちらなので、
+ *   相対シーク (10 秒送り/戻し) の計算もここに置く。
+ */
+describe('useExclusiveAudio — シーク', () => {
+  function mountWithAudio(id: string, init: { currentTime?: number; duration?: number; readyState?: number } = {}) {
+    const el = {
+      currentTime: init.currentTime ?? 0,
+      duration: init.duration ?? 300,
+      readyState: init.readyState ?? 1,
+      pause: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLAudioElement;
+    const { result } = renderHook(() => useExclusiveAudio(id));
+    result.current.ref.current = el;
+    return el;
+  }
+
+  it('絶対シークで currentTime が動く', () => {
+    const el = mountWithAudio('a');
+    act(() => { requestAudioSeek('a', { to: 62 }); });
+    expect(el.currentTime).toBe(62);
+  });
+
+  it('相対シークは 現在位置からの差分', () => {
+    const el = mountWithAudio('a', { currentTime: 30 });
+    act(() => { requestAudioSeek('a', { by: -10 }); });
+    expect(el.currentTime).toBe(20);
+  });
+
+  it('★ 先頭より前へは行かない (0 で止める)', () => {
+    const el = mountWithAudio('a', { currentTime: 4 });
+    act(() => { requestAudioSeek('a', { by: -10 }); });
+    expect(el.currentTime).toBe(0);
+  });
+
+  it('★ 終端より後ろへは行かない (duration で止める)', () => {
+    const el = mountWithAudio('a', { currentTime: 295, duration: 300 });
+    act(() => { requestAudioSeek('a', { by: 10 }); });
+    expect(el.currentTime).toBe(300);
+  });
+
+  it('★ duration が未取得 (NaN) でも壊れない', () => {
+    const el = mountWithAudio('a', { currentTime: 5, duration: NaN });
+    act(() => { requestAudioSeek('a', { by: 10 }); });
+    expect(el.currentTime).toBe(15);
+  });
+
+  it('★ metadata 未読込 (readyState 0) では 読み込みを待ってから当てる', () => {
+    const el = mountWithAudio('a', { readyState: 0 });
+    act(() => { requestAudioSeek('a', { to: 62 }); });
+    expect(el.currentTime).toBe(0);                       // まだ当てない
+    expect(el.addEventListener).toHaveBeenCalledWith('loadedmetadata', expect.any(Function), { once: true });
+    const cb = (el.addEventListener as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as () => void;
+    act(() => { (el as { readyState: number }).readyState = 1; cb(); });
+    expect(el.currentTime).toBe(62);
+  });
+
+  it('他人宛では動かない', () => {
+    const el = mountWithAudio('a', { currentTime: 30 });
+    act(() => { requestAudioSeek('b', { to: 0 }); });
+    expect(el.currentTime).toBe(30);
   });
 });

@@ -371,6 +371,8 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
             const a = (m.media || []).find((x) => x.mime_type?.startsWith('audio/'));
             return a ? <MediaAudio key={a.id} media={a} /> : null;
           }}
+          // ★ 時刻タグのシーク先。再生バーと同じ音声を指す (2026-08-29)
+          audioIdOf={(m) => (m.media || []).find((x) => x.mime_type?.startsWith('audio/'))?.id ?? null}
           onClose={() => setIsEditingMessage(false)}
         />
       ) : (
