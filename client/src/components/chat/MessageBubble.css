@@ -469,12 +469,17 @@
   margin: 0.5em 0;
 }
 
-/* メッセージ編集モーダル: textarea を縦に広げる（業務メモ 6/27 小野さん要望）。
-   voice-edit-modal の共有スタイルは活かしつつ、テキスト編集だけ高さを拡張。
-   .modal-box.message-edit-modal で specificity を上げ、バンドル順に依らず override。
-   .modal-box は max-height:80vh + overflow-y:auto なので 50vh でも収まる。resize:vertical で更にドラッグ可。 */
-.modal-box.message-edit-modal textarea {
-  min-height: 50vh;
-}
+/* ★ ここにあった .modal-box.message-edit-modal textarea { min-height:50vh } は撤去した
+   (2026-08-29)。元は「PC で縦に広く編集したい」ための指定 (業務メモ 6/27)。
+
+   撤去の理由は 2 つ:
+   1. PC では既に効いていない。VoiceBubble.css の PC 指定
+      (.modal-overlay .modal-box.voice-edit-modal textarea { flex:1; min-height:0 })
+      の方が詳細度で勝つため、この規則が実際に効くのは ★ 1024px 未満だけだった。
+   2. ★ そのスマホで害になっていた。モーダルは overlay の中央に置かれ、ボタン行は
+      最後の子。50vh ぶん背が高いと、キーボードが出たときに下端 (= 確定/キャンセル) が
+      画面の外に出る。高さを減らすだけでは中央寄せの下端は画面中心より上に来ないので、
+      ★ 対になる上寄せ指定が VoiceBubble.css の 1023px 以下ブロックに入っている。
+      片方だけ戻すと再発する。 */
 
 

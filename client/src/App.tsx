@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useCapabilityStore } from './stores/capabilityStore';
 import { useCallNotification } from './hooks/useCallNotification';
+import { useVisualViewportVars } from './hooks/useVisualViewportVars';
 import Login from './components/auth/Login';
 import HomePage from './components/home/HomePage';
 import RoomList from './components/room-list/RoomList';
@@ -33,6 +34,10 @@ function App() {
   const { initialize, isLoading, user } = useAuthStore();
   const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
   const { incomingCall, activeCall, acceptCall, rejectCall, endCall, getCallUrl } = useCallNotification();
+
+  // ★ 見えている領域を CSS 変数 (--vvh / --vvt) に流す。モーダルがキーボードの裏に
+  //   入るのを防ぐため (2026-08-29)。置くだけで挙動は変わらず、使うのは CSS 側。
+  useVisualViewportVars();
 
   useEffect(() => {
     initialize();

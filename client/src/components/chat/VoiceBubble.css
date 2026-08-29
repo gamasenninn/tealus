@@ -387,3 +387,30 @@
     resize: none;
   }
 }
+
+/* ★ スマホ: 編集モーダルは「見えている領域」を埋める (2026-08-29、Android で実測)。
+
+   症状は「編集画面でキーボードが出るとボタン (キャンセル/確定) が画面外に出て押せない」。
+   ★ 原因は overlay がレイアウトビューポート基準だったこと。overlay 側を visual viewport に
+   合わせた (styles/common.css) ので、ここは ★ その中を素直に埋めるだけでよい。
+
+   ★ 当て推量をやめた経緯: 最初は「上寄せ + rows を 6 に減らす」で対処したが、
+   キーボードの高さは端末と IME で違い、本文の文字サイズも 12/15/19px 可変なので、
+   ★★ 行数を何行にすれば安全かは決められなかった。高さを実寸から取れば決める必要が無い。
+
+   ★ textarea が余りを全部取るので rows の値は効かない (PC 側と同じ形)。
+   MessageEditModal の rows={6} は visualViewport が無い環境向けの控えになる。 */
+@media (max-width: 1023px) {
+  .modal-box.voice-edit-modal {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 24px);
+    max-height: none;
+  }
+
+  .modal-overlay .modal-box.voice-edit-modal textarea {
+    flex: 1;
+    min-height: 0;
+    resize: none;
+  }
+}

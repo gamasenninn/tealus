@@ -34,7 +34,12 @@ function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEdi
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
-          rows={12}
+          /* ★ 6 に揃える (2026-08-29)。12 だとスマホでキーボードが出たとき
+             ボタン行が画面外に出た。VoiceEditModal は 6 で収まっており、
+             ★ しかも前/次ナビを余分に持つのに収まっている = 差は rows だった。
+             ★★ PC では flex:1 (flex-basis:0) が高さを支配するので rows は効かない。
+             下げても PC の見た目は変わらない。 */
+          rows={6}
           autoFocus
         />
         <div className="voice-edit-buttons">

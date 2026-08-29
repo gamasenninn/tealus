@@ -1,12 +1,17 @@
 /* ============================================
  * Common Modal Overlay
  * ============================================ */
+/* ★ 基準は「実際に見えている領域」(visual viewport)。--vvh / --vvt は
+   useVisualViewportVars が流す (2026-08-29)。
+   ソフトキーボードが出てもレイアウトビューポートが縮まない環境があり、inset:0 のままだと
+   overlay の下端 = ボタン行がキーボードの裏に入って押せなかった (Android で実測)。
+   ★ 変数が無い環境 (古いブラウザ) では fallback で従来どおり全面になる。 */
 .modal-overlay {
   position: fixed;
-  top: 0;
+  top: var(--vvt, 0px);
   left: 0;
   right: 0;
-  bottom: 0;
+  height: var(--vvh, 100%);
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
