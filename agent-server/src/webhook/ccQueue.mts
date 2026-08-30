@@ -378,6 +378,10 @@ function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAc
   //   (2026-08-30 実測。#399 で表示条件を広げたときに巻き込んだ)。
   //   ★★ client 側の対は `client/src/utils/agentStatus.ts` の RELAYED_STATUS。片方だけ変えると壊れる。
   void pushStatus(roomId, 'relayed', `${label} に届きました。応答をお待ちください…`).catch(() => {});
+  // ★ 1 行残す。これが無いと「relayed で出たのか processing のままか」がどちらのログにも
+  //   残らず、status を変えた直後の確認が画面を見るしかなくなる (2026-08-30 に実際そうなった)。
+  //   ★★ 「観測不能」と「起きていない」を取り違えないための計器。
+  logger.info(`[cc-ack] room=${roomId} status=relayed projects=${projects.join(',')} ttl=${ttlMs}ms`);
   const timer = setTimeout(() => {
     void pushStatus(roomId, 'idle', '').catch(() => {});
   }, ttlMs);

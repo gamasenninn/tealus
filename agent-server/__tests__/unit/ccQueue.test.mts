@@ -488,6 +488,26 @@ describe('emitCcAck', () => {
     expect(calls[0].message).toContain('届きました');
   });
 
+  // ★ 2026-08-30: エコーは log を 1 行も出していなかったため、「relayed で出たのか
+  //   processing のままか」がどちらのログにも残らなかった (= 観測不能)。
+  //   status を変えた直後の確認が **画面を見るしかない** 状態だったので、1 行足す。
+  test('★ log に status と宛先を残す (エコーが出たことを後から確かめられる)', () => {
+    // ★ この describe は mock を clear していないので、前の test の [cc-ack] 行を
+    //   拾ってしまう。自分の呼び出しだけを見るため、ここで落とす。
+    (logger.info as jest.Mock).mockClear();
+    emitCcAck({
+      projects: ['organon', 'kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: () => Promise.resolve(),
+    });
+    const line = (logger.info as jest.Mock).mock.calls.map(c => String(c[0]))
+      .find(s => s.includes('[cc-ack]'));
+    expect(line).toBeDefined();
+    expect(line).toContain('status=relayed');
+    expect(line).toContain('r1');
+    expect(line).toContain('organon');
+    expect(line).toContain('kairos');
+  });
+
   test('★ #387 同報は 1 回のエコーに宛先を並べる (room の status は 1 つしか無い)', () => {
     const calls: Array<{ status: string; message?: string }> = [];
     emitCcAck({
