@@ -1,13 +1,19 @@
+/**
+ * 実行中の agent を中断するボタン。
+ *
+ * #250 で Deep 用に入れたが、通常応答 (Light) も同じ `/agent/cancel` で止まるようになったので
+ * 名前を Agent に広げた。表示条件は ChatRoom 側 (agentStatus が非 null = 走行中)。
+ */
 import { useState } from 'react';
 import { Square } from 'lucide-react';
 import { api } from '../../services/api';
-import './DeepCancelButton.css';
+import './AgentCancelButton.css';
 
-interface DeepCancelButtonProps {
+interface AgentCancelButtonProps {
   roomId: string;
 }
 
-function DeepCancelButton({ roomId }: DeepCancelButtonProps) {
+function AgentCancelButton({ roomId }: AgentCancelButtonProps) {
   const [busy, setBusy] = useState(false);
 
   const handleCancel = async () => {
@@ -25,11 +31,11 @@ function DeepCancelButton({ roomId }: DeepCancelButtonProps) {
   return (
     <button
       type="button"
-      className="deep-cancel-button"
+      className="agent-cancel-button"
       onClick={handleCancel}
       disabled={busy}
-      title="分析を中断"
-      aria-label="分析を中断"
+      title="応答を中断"
+      aria-label="応答を中断"
     >
       <Square size={12} fill="currentColor" />
       <span>{busy ? '中断中...' : '中断'}</span>
@@ -37,4 +43,4 @@ function DeepCancelButton({ roomId }: DeepCancelButtonProps) {
   );
 }
 
-export default DeepCancelButton;
+export default AgentCancelButton;

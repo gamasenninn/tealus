@@ -19,7 +19,7 @@ import CallConfirmModal from '../call/CallConfirmModal';
 import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
 import MessageErrorBoundary from './MessageErrorBoundary';
-import DeepCancelButton from './DeepCancelButton';
+import AgentCancelButton from './AgentCancelButton';
 import { useCapabilityStore } from '../../stores/capabilityStore';
 import type { RoomMember } from '../../types';
 import './ChatRoom.css';
@@ -221,7 +221,9 @@ function ChatRoom() {
           {agentStatus
             ? `${agentStatus.display_name}: ${agentStatus.message || agentStatus.status}`
             : `${Object.values(typingUsers).join(', ')}が入力中...`}
-          {agentStatus?.status === 'analyzing' && <DeepCancelButton roomId={roomId} />}
+          {/* agentStatus は idle で null になる (useSocketSync) ので、非 null = 走行中。
+              Deep (analyzing) だけでなく通常応答 (thinking/searching/...) でも中断できる */}
+          {agentStatus && <AgentCancelButton roomId={roomId} />}
         </div>
       )}
 

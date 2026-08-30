@@ -14,6 +14,7 @@ import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { createTools } from './lightTools.mts';
 import { getSetting } from '../context/settingsManager.mts';
+import * as lightRegistry from './lightRegistry.mts';
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
@@ -192,7 +193,17 @@ export interface ProcessLightArgs {
 /**
  * Light Agent でメッセージを処理
  */
+/**
+ * ★ 中断について (v1 の限界):
+ *   v2 は event stream を回すので loop 内で break できるが、**v1 は `run()` が単一の await**
+ *   なので、走り出したら途中で止められない。ここでできるのは
+ *   **「走り終わったあと、その結果を部屋に投稿しない」**までである。
+ *   API 呼び出し自体は最後まで走る (= token も消費される)。
+ *   default backend は v2 (`AGENT_LIGHT_BACKEND=v2`) なので実運用への影響は限定的だが、
+ *   v1 に戻すときはこの差を承知しておくこと。
+ */
 export async function processLight({ roomId, prompt, workspacePath, mcpServers = [] }: ProcessLightArgs): Promise<void> {
+  lightRegistry.register(roomId, { workspacePath });
   try {
     const agent = createLightAgent(workspacePath, mcpServers, roomId);
 
@@ -270,6 +281,13 @@ export async function processLight({ roomId, prompt, workspacePath, mcpServers =
       }
     }
 
+    // 中断されていたら、ここから先は一切投稿しない (画像もテキストも)。
+    // status idle と「⏹ 応答を中断しました。」は /agent/cancel 側が出す。
+    if (lightRegistry.isCancelled(roomId)) {
+      logger.info(`[Light] cancelled room=${roomId}: 応答を破棄 (処理自体は完走している)`);
+      return;
+    }
+
     // 生成画像を送信
     await sendGeneratedImages(result, roomId);
 
@@ -289,6 +307,10 @@ export async function processLight({ roomId, prompt, workspacePath, mcpServers =
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (lightRegistry.isCancelled(roomId)) {
+      logger.info(`[Light] cancelled room=${roomId}: 中断由来の error を無視 (${message})`);
+      return;
+    }
     logger.error(`Light Agent error: ${message}`);
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
     try {
@@ -297,6 +319,8 @@ export async function processLight({ roomId, prompt, workspacePath, mcpServers =
       const pushMessage = pushErr instanceof Error ? pushErr.message : String(pushErr);
       logger.error(`Failed to send error message: ${pushMessage}`);
     }
+  } finally {
+    lightRegistry.unregister(roomId);
   }
 }
 

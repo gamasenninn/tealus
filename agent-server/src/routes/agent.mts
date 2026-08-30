@@ -6,6 +6,7 @@ import path from 'node:path';
 import express from 'express';
 import { logger } from '../lib/logger.mts';
 import * as deepRegistry from '../agents/deepRegistry.mts';
+import * as lightRegistry from '../agents/lightRegistry.mts';
 import * as botApi from '../lib/botApi.mts';
 import { DEFAULT_QUEUE_DIR } from '../webhook/ccQueue.mts';
 import { getBotIdentity } from '../webhook/handler.mts';
@@ -53,16 +54,30 @@ router.get('/cc-projects', (req, res) => {
   }
 });
 
+/**
+ * 実行中の agent を中断する。
+ *
+ * Deep (#250) と Light (通常応答) の両方を見る。同一 room で両方が同時に走ることは無いので、
+ * Deep → Light の順に試し、当たった方の文言を出す。
+ */
 router.post('/cancel', async (req, res) => {
   const { room_id } = (req.body || {}) as { room_id?: string };
   if (!room_id) {
     return res.status(400).json({ error: 'room_id is required' });
   }
-  const result = deepRegistry.cancel(room_id);
+  let tier: 'deep' | 'light' | null = null;
+  let result = deepRegistry.cancel(room_id);
   if (result.was_running) {
-    await botApi.pushStatus(room_id, 'idle').catch(() => {});
-    await botApi.pushMessage(room_id, '⏹ 分析を中断しました。').catch(() => {});
+    tier = 'deep';
+  } else {
+    result = lightRegistry.cancel(room_id);
+    if (result.was_running) tier = 'light';
   }
-  logger.info(`[Cancel] room=${room_id} was_running=${result.was_running}`);
-  res.json(result);
+  if (tier) {
+    await botApi.pushStatus(room_id, 'idle').catch(() => {});
+    const notice = tier === 'deep' ? '⏹ 分析を中断しました。' : '⏹ 応答を中断しました。';
+    await botApi.pushMessage(room_id, notice).catch(() => {});
+  }
+  logger.info(`[Cancel] room=${room_id} was_running=${result.was_running} tier=${tier || '-'}`);
+  res.json({ ...result, tier });
 });

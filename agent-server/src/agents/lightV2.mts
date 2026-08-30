@@ -27,6 +27,7 @@ import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { detectCodexAuthError, buildAuthFailUserMessage } from '../lib/codexAuthError.mts';
+import * as lightRegistry from './lightRegistry.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -208,6 +209,9 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
   // 最終 response auto-post を skip (= cross-room delegation の「2 件返信」防止、
   // 6/13 12:40 業務メモ dogfood で観察)
   let llmSentToOwnRoom = false;
+  // 中断 (#250 の Light 版): /agent/cancel が isCancelled を立てて codex を sweep kill する。
+  // 後始末は必ず finally で行う (loop 内 return もあるため)。
+  lightRegistry.register(roomId, { workspacePath });
   try {
     const Codex = await getCodex();
 
@@ -279,6 +283,12 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     let turnCompleted = false;
     try {
       for await (const event of events as AsyncGenerator<ThreadEvent>) {
+        // 中断されていたら以降の event を捨てる。tool 実行の合間に必ず通るので、
+        // sweep kill が届く前でも「これ以上部屋に書かない」ところまでは即座に効く。
+        if (lightRegistry.isCancelled(roomId)) {
+          logger.info(`[LightV2] cancelled room=${roomId}: stream 消費を打ち切り`);
+          break;
+        }
         try {
           if (event.type === 'item.started') {
             const mapped = mapToolToStatus(event.item);
@@ -381,6 +391,13 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       }
     }
 
+    // 中断されていたら応答は捨てる。status idle と「⏹ 応答を中断しました。」は
+    // /agent/cancel 側が出すので、ここでは投稿しない (二重に出さない)。
+    if (lightRegistry.isCancelled(roomId)) {
+      logger.info(`[LightV2] cancelled room=${roomId}: 応答を破棄 (${lastAgentMessage?.length || 0} chars)`);
+      return null;
+    }
+
     // 最終 response 送信
     if (lastAgentMessage) {
       // #295: 委譲 (runAgent) からの呼出は suppressAutoPost=true。自室投稿せず本文を return し、
@@ -410,6 +427,12 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     return lastAgentMessage || null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // 中断由来の例外 (sweep kill で stream が途中で壊れる) はエラーとして扱わない。
+    // ★ auth 判定より先に置く — kill 由来の壊れ方を auth 切れと誤読しないため。
+    if (lightRegistry.isCancelled(roomId)) {
+      logger.info(`[LightV2] cancelled room=${roomId}: 中断由来の stream error を無視 (${message})`);
+      return null;
+    }
     // pre-α (#292 follow-up): 外側 catch でも auth 切れを検出
     const authResult = detectCodexAuthError(message);
     if (authResult.isAuth) {
@@ -437,6 +460,8 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       logger.error(`Failed to send error message: ${pushMessage}`);
     }
     return null;
+  } finally {
+    lightRegistry.unregister(roomId);
   }
 }
 
