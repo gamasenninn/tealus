@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import cors from 'cors';
 import { Server } from 'socket.io';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import { createProxyMiddleware, errorResponsePlugin } from 'http-proxy-middleware';
 
 import { logger } from './utils/logger.mts';
 import { pool } from './db/pool.mts';
@@ -87,10 +87,22 @@ app.use(cors());
 //   切断調査の間ずっと無言で、「何も起きていない」と「記録していない」が区別できなかった。
 //   ここで書くのは **どちら側が先に閉じたか** だけ。原因は分からないので書かない。
 //   ★★ 全 API に付けない —— 短命リクエストの行に埋もれた計器は無いのと同じ。
+//
+// ★ plugins に errorResponsePlugin を明示する (2026-08-30)。
+//   http-proxy-middleware は **`on.error` を渡すと既定の errorResponsePlugin を読み込まない**
+//   (`dist/get-plugins.js` にコメント付きで明記)。下の on.error は記録しか
+//   しないので、agent-server が落ちている間に来た要求は **応答が返らないまま**
+//   nginx の proxy_read_timeout 60s まで掴まれていた (実測 60.04s)。
+//   ★★ ダウンは 4〜6 秒。罰が 60 秒で、10 倍の非対称だった。
+//   ★★★ 自前で 504 を書かないのは、写像 (ECONNREFUSED→504 等) をこちらに焼き込むと
+//   ライブラリが変えたとき黙ってずれるため。plugins は既定の後ろに足されるので、
+//   記録 (on.error) → 応答 (plugin) の順で **両方走る**。
+//   挙動は __tests__/integration/proxyErrorResponse.test.mts で固定。
 app.use('/agent-api', createProxyMiddleware({
   target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
   pathRewrite: { '^/agent-api': '' },
   changeOrigin: true,
+  plugins: [errorResponsePlugin],
   on: {
     proxyReq: (_proxyReq, req, res) => {
       if (!isCcStreamPath(req.url ?? '')) return;
