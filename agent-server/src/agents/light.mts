@@ -15,6 +15,7 @@ import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { createTools } from './lightTools.mts';
 import { getSetting } from '../context/settingsManager.mts';
 import * as lightRegistry from './lightRegistry.mts';
+import { briefError } from '../lib/briefError.mts';
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
@@ -309,13 +310,14 @@ export async function processLight({ roomId, prompt, workspacePath, mcpServers =
     const message = err instanceof Error ? err.message : String(err);
     if (lightRegistry.isCancelled(roomId)) {
       // 全文を出さない (lightV2 と同じ理由。意図的に捨てるエラーなので頭だけ残す)
-      logger.info(`[Light] cancelled room=${roomId}: 中断由来の error を無視 (${message.slice(0, 300)}… 全長 ${message.length} 文字)`);
+      logger.info(`[Light] cancelled room=${roomId}: 中断由来の error を無視 (${briefError(message)})`);
       return;
     }
-    logger.error(`Light Agent error: ${message}`);
+    logger.error(`Light Agent error: ${briefError(message)}`);
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
     try {
-      await botApi.pushMessage(roomId, `申し訳ございません。エラーが発生しました: ${message}`);
+      // ★ 部屋には全文を投げない (lightV2 と同じ理由)
+      await botApi.pushMessage(roomId, `申し訳ございません。エラーが発生しました: ${briefError(message, 500)}`);
     } catch (pushErr) {
       const pushMessage = pushErr instanceof Error ? pushErr.message : String(pushErr);
       logger.error(`Failed to send error message: ${pushMessage}`);

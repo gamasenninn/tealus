@@ -28,6 +28,7 @@ import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { detectCodexAuthError, buildAuthFailUserMessage } from '../lib/codexAuthError.mts';
 import * as lightRegistry from './lightRegistry.mts';
+import { briefError } from '../lib/briefError.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -385,7 +386,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       const message = streamErr instanceof Error ? streamErr.message : String(streamErr);
       if (turnCompleted) {
         // pre-α (#292 follow-up): post-turn の parse error は cleanup phase、auth check skip 明示
-        logger.warn(`[LightV2] post-turn stream error (ignored, response captured, auth check skipped): ${message}`);
+        logger.warn(`[LightV2] post-turn stream error (ignored, response captured, auth check skipped): ${briefError(message)}`);
       } else {
         throw streamErr;
       }
@@ -433,7 +434,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       // ★ 全文を出さない。codex を kill すると models JSON を丸ごと含む 16 万字級の
       //   エラーが返り、1 行でその日のログの過半を占める (2026-08-30 実測: 164,976 文字 = 62%)。
       //   意図的に捨てるエラーなので、頭 300 字と全長だけ残す。
-      logger.info(`[LightV2] cancelled room=${roomId}: 中断由来の stream error を無視 (${message.slice(0, 300)}… 全長 ${message.length} 文字)`);
+      logger.info(`[LightV2] cancelled room=${roomId}: 中断由来の stream error を無視 (${briefError(message)})`);
       return null;
     }
     // pre-α (#292 follow-up): 外側 catch でも auth 切れを検出
@@ -449,7 +450,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       }
       return null;
     }
-    logger.error(`Light v2 Agent error: ${message}`);
+    logger.error(`Light v2 Agent error: ${briefError(message)}`);
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
     // #295: 委譲経由 (suppressAutoPost) の時はエラー文を委譲先に残さない。デリゲーターが
     //       runAgent の throw として捕捉し委譲元へ通知する。throw して呼出元に伝える。
@@ -457,7 +458,8 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       throw err;
     }
     try {
-      await botApi.pushMessage(roomId, `Light v2 でエラーが発生しました: ${message}`);
+      // ★ 部屋には全文を投げない。codex が落ちると 16 万字が user に届く (2026-08-30 実測)
+      await botApi.pushMessage(roomId, `Light v2 でエラーが発生しました: ${briefError(message, 500)}`);
     } catch (pushErr) {
       const pushMessage = pushErr instanceof Error ? pushErr.message : String(pushErr);
       logger.error(`Failed to send error message: ${pushMessage}`);
