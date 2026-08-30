@@ -20,6 +20,7 @@ import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
 import MessageErrorBoundary from './MessageErrorBoundary';
 import AgentCancelButton from './AgentCancelButton';
+import { isCancellableStatus } from '../../utils/agentStatus';
 import { useCapabilityStore } from '../../stores/capabilityStore';
 import type { RoomMember } from '../../types';
 import './ChatRoom.css';
@@ -221,9 +222,10 @@ function ChatRoom() {
           {agentStatus
             ? `${agentStatus.display_name}: ${agentStatus.message || agentStatus.status}`
             : `${Object.values(typingUsers).join(', ')}が入力中...`}
-          {/* agentStatus は idle で null になる (useSocketSync) ので、非 null = 走行中。
-              Deep (analyzing) だけでなく通常応答 (thinking/searching/...) でも中断できる */}
-          {agentStatus && <AgentCancelButton roomId={roomId} />}
+          {/* ★ 非 null = 何か表示中、だが「走行中」とは限らない。cc-bridge の受領表示 (relayed) は
+              別セッションへ中継しただけで、止められる処理が無い (2026-08-30 の回帰)。
+              判定は utils/agentStatus に閉じ込めてある */}
+          {agentStatus && isCancellableStatus(agentStatus.status) && <AgentCancelButton roomId={roomId} />}
         </div>
       )}
 

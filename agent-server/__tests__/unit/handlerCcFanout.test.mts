@@ -62,9 +62,12 @@ function eventsOf(project: string): Array<Record<string, unknown>> {
   if (!fs.existsSync(p)) return [];
   return fs.readFileSync(p, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
 }
+// ★ 受付エコーの status は 'relayed' (2026-08-30 に 'processing' から変更)。
+//   'processing' は「このボットが処理中」= client が中断ボタンを出す status で、
+//   中継しただけの受領エコーには 止められる処理が無い。詳細は ccQueue.mts の emitCcAck。
 function ackCalls(): string[] {
   return (botApi.pushStatus as jest.Mock).mock.calls
-    .filter(c => c[1] === 'processing').map(c => String(c[2]));
+    .filter(c => c[1] === 'relayed').map(c => String(c[2]));
 }
 function droppedLogs(): string[] {
   return (logger.warn as jest.Mock).mock.calls.map(c => String(c[0])).filter(s => s.includes('配送していません'));

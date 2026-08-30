@@ -469,7 +469,12 @@ describe('emitCcAck', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  test('即 processing を出す (文言に cc-<project> と「届きました」を含む)', () => {
+  // ★ status は 'relayed'。'processing' ではない (2026-08-30)。
+  //   'processing' は「このボットが処理中」の意味で、client が中断ボタンを出す。
+  //   受領エコーは **別セッションへ中継しただけ**で止められる処理が無いため、
+  //   押しても何も起きないボタンが 5 秒間出ていた (#399 で表示条件を広げたときの回帰)。
+  //   ★★ client 側の対は client/src/utils/agentStatus.ts の RELAYED_STATUS。片方だけ変えると壊れる。
+  test('★ 即 relayed を出す (文言に cc-<project> と「届きました」を含む)', () => {
     const calls: Array<{ roomId: string; status: string; message?: string }> = [];
     emitCcAck({
       projects: ['organon'], roomId: 'r1', ttlMs: 5000,
@@ -477,7 +482,8 @@ describe('emitCcAck', () => {
     });
     expect(calls).toHaveLength(1);
     expect(calls[0].roomId).toBe('r1');
-    expect(calls[0].status).toBe('processing');
+    expect(calls[0].status).toBe('relayed');
+    expect(calls[0].status).not.toBe('processing');   // ★ 中断ボタンを出させない
     expect(calls[0].message).toContain('cc-organon');
     expect(calls[0].message).toContain('届きました');
   });

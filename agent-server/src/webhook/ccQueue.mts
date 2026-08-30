@@ -372,7 +372,12 @@ export interface CcAckDeps {
 }
 function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAckDeps): void {
   const label = projects.map((p) => `cc-${p}`).join(' / ');
-  void pushStatus(roomId, 'processing', `${label} に届きました。応答をお待ちください…`).catch(() => {});
+  // ★ 'processing' ではなく 'relayed'。これは「このボットが処理中」ではなく
+  //   「**別セッションへ中継した**」の意味で、止められる処理が無い。
+  //   'processing' のままだと client が中断ボタンを出し、押しても何も起きない
+  //   (2026-08-30 実測。#399 で表示条件を広げたときに巻き込んだ)。
+  //   ★★ client 側の対は `client/src/utils/agentStatus.ts` の RELAYED_STATUS。片方だけ変えると壊れる。
+  void pushStatus(roomId, 'relayed', `${label} に届きました。応答をお待ちください…`).catch(() => {});
   const timer = setTimeout(() => {
     void pushStatus(roomId, 'idle', '').catch(() => {});
   }, ttlMs);
