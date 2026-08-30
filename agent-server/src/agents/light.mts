@@ -308,7 +308,8 @@ export async function processLight({ roomId, prompt, workspacePath, mcpServers =
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (lightRegistry.isCancelled(roomId)) {
-      logger.info(`[Light] cancelled room=${roomId}: 中断由来の error を無視 (${message})`);
+      // 全文を出さない (lightV2 と同じ理由。意図的に捨てるエラーなので頭だけ残す)
+      logger.info(`[Light] cancelled room=${roomId}: 中断由来の error を無視 (${message.slice(0, 300)}… 全長 ${message.length} 文字)`);
       return;
     }
     logger.error(`Light Agent error: ${message}`);

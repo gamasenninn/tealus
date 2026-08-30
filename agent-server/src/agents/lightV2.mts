@@ -430,7 +430,10 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     // 中断由来の例外 (sweep kill で stream が途中で壊れる) はエラーとして扱わない。
     // ★ auth 判定より先に置く — kill 由来の壊れ方を auth 切れと誤読しないため。
     if (lightRegistry.isCancelled(roomId)) {
-      logger.info(`[LightV2] cancelled room=${roomId}: 中断由来の stream error を無視 (${message})`);
+      // ★ 全文を出さない。codex を kill すると models JSON を丸ごと含む 16 万字級の
+      //   エラーが返り、1 行でその日のログの過半を占める (2026-08-30 実測: 164,976 文字 = 62%)。
+      //   意図的に捨てるエラーなので、頭 300 字と全長だけ残す。
+      logger.info(`[LightV2] cancelled room=${roomId}: 中断由来の stream error を無視 (${message.slice(0, 300)}… 全長 ${message.length} 文字)`);
       return null;
     }
     // pre-α (#292 follow-up): 外側 catch でも auth 切れを検出
