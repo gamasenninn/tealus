@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app.mts';
-import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
+import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 
 describe('Group Member Management', () => {
@@ -194,6 +194,114 @@ describe('Group Member Management', () => {
         .set('Authorization', `Bearer ${admin.token}`);
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  // ============================================
+  // #391 1 対 1 ルームに紛れ込んだ 3 人目を外す
+  //
+  // ★ 入口は #390 で塞いだので、API では 3 人目を作れない。事故と同じ状態を DB から作る。
+  // ★ direct には admin が居ない (作成時は 2 人とも 'member') ので、admin 判定は使えない。
+  //   代わりに **joined_at が最古 = 正規の 2 人** を保護対象にする。
+  // ============================================
+  describe('DELETE /api/rooms/:id/members/:userId — direct room (#391)', () => {
+    let directId: string;
+
+    /** 事故と同じ状態: direct ルームに 3 人目が居る */
+    const intrude = async (userId: string): Promise<void> => {
+      await getTestPool().query(
+        `INSERT INTO room_members (room_id, user_id, role, joined_at)
+         VALUES ($1, $2, 'member', NOW() + interval '1 second')`,
+        [directId, userId]
+      );
+    };
+
+    beforeEach(async () => {
+      const res = await request(app)
+        .post('/api/rooms/direct')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ partner_id: user1.user.id });
+      directId = res.body.room.id;
+    });
+
+    it('正規メンバーは 3 人目を外せる', async () => {
+      await intrude(user2.user.id);
+
+      const res = await request(app)
+        .delete(`/api/rooms/${directId}/members/${user2.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      expect(res.status).toBe(200);
+
+      const { rows } = await getTestPool().query(
+        'SELECT user_id FROM room_members WHERE room_id = $1',
+        [directId]
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.user_id)).not.toContain(user2.user.id);
+    });
+
+    it('★ 正規メンバーどうしは外せない (2 人のままの direct では誰も外せない)', async () => {
+      const res = await request(app)
+        .delete(`/api/rooms/${directId}/members/${user1.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      expect(res.status).toBe(400);
+      // ★ 理由まで固定する。requireGroup 時代も 400 だったので、状態だけ見ると
+      //   「塞がっているから通った」のか「本来のメンバーを守ったから通った」のか区別できない。
+      expect(res.body.error).toContain('本来のメンバー');
+
+      const { rows } = await getTestPool().query(
+        'SELECT user_id FROM room_members WHERE room_id = $1',
+        [directId]
+      );
+      expect(rows).toHaveLength(2);
+    });
+
+    it('★ 3 人目が居ても 正規メンバーは外せない (侵入者が本人を追い出せない)', async () => {
+      await intrude(user2.user.id);
+
+      const res = await request(app)
+        .delete(`/api/rooms/${directId}/members/${user1.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('本来のメンバー');
+    });
+
+    it('★ 3 人目は誰も外せない', async () => {
+      await intrude(user2.user.id);
+
+      const res = await request(app)
+        .delete(`/api/rooms/${directId}/members/${user1.user.id}`)
+        .set('Authorization', `Bearer ${user2.token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('外したことがシステムメッセージに残る', async () => {
+      await intrude(user2.user.id);
+      await request(app)
+        .delete(`/api/rooms/${directId}/members/${user2.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      const msgs = await request(app)
+        .get(`/api/rooms/${directId}/messages`)
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      const sysMsg = msgs.body.messages.find((m: { type: string }) => m.type === 'system');
+      expect(sysMsg).toBeDefined();
+      expect(sysMsg.content).toContain('五条悟');
+    });
+
+    it('ルームの非メンバーは操作できない', async () => {
+      await intrude(user2.user.id);
+
+      const res = await request(app)
+        .delete(`/api/rooms/${directId}/members/${user2.user.id}`)
+        .set('Authorization', `Bearer ${user3.token}`);
+
+      expect(res.status).toBe(403);
     });
   });
 

@@ -135,16 +135,20 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req: Requ
 
 /**
  * DELETE /api/rooms/:id/members/:userId
- * Kick a member (group admin only)
+ * Kick a member (group: admin only / direct: 本来の 2 人が 3 人目を外す — #391)
+ *
+ * ★ requireGroup を外してある。#390 で join の穴は塞いだが、**出口が無かった**ため
+ *   1 件を DB 直操作で外す羽目になった。「入れないが、万一入っていたら出せる」が本来の形。
+ *
+ * ★ direct には admin が居ない (作成時に 2 人とも role='member')。したがって group と同じ
+ *   admin 判定は使えず、**joined_at が最古のメンバー = 本来の 2 人** を基準にする:
+ *     - 本来の 2 人だけが操作できる (侵入した側が本人を追い出せない)
+ *     - 本来の 2 人は外せない (= 2 人を下回らない)
+ *   3 人全員の joined_at が同一という異常な状態では誰も外せない = 安全側に倒れる。
  */
-router.delete('/:userId', authenticate, requireGroup, requireMember, async (req: Request, res: Response) => {
+router.delete('/:userId', authenticate, requireMember, async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const targetUserId = (req.params as { userId: string }).userId;
-
-  // Must be admin
-  if (req.memberRole !== 'admin') {
-    return res.status(403).json({ error: 'グループ管理者のみがメンバーを除外できます' });
-  }
 
   // Cannot kick self
   if (targetUserId === req.user!.id) {
@@ -152,6 +156,32 @@ router.delete('/:userId', authenticate, requireGroup, requireMember, async (req:
   }
 
   try {
+    const roomType = await pool.query<{ type: string }>('SELECT type FROM rooms WHERE id = $1', [roomId]);
+    if (roomType.rows.length === 0) {
+      return res.status(404).json({ error: E.ROOM_NOT_FOUND });
+    }
+
+    if (roomType.rows[0].type === 'group') {
+      if (req.memberRole !== 'admin') {
+        return res.status(403).json({ error: 'グループ管理者のみがメンバーを除外できます' });
+      }
+    } else {
+      // direct: 本来の 2 人 = joined_at が最古の行
+      const original = await pool.query<{ user_id: string }>(
+        `SELECT user_id FROM room_members
+          WHERE room_id = $1
+            AND joined_at = (SELECT MIN(joined_at) FROM room_members WHERE room_id = $1)`,
+        [roomId]
+      );
+      const originalIds = original.rows.map((r) => r.user_id);
+      if (!originalIds.includes(req.user!.id)) {
+        return res.status(403).json({ error: E.DIRECT_ORIGINAL_MEMBER_REQUIRED });
+      }
+      if (originalIds.includes(targetUserId)) {
+        return res.status(400).json({ error: E.DIRECT_ORIGINAL_MEMBER_PROTECTED });
+      }
+    }
+
     // Check target is a member
     const target = await pool.query<{ user_id: string; display_name: string }>(
       `SELECT rm.user_id, u.display_name FROM room_members rm

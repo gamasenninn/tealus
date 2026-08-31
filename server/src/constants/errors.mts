@@ -29,3 +29,8 @@ export const SELF_KICK_NOT_ALLOWED = '自分自身を除外することはでき
 export const LAST_ADMIN_CANNOT_LEAVE = 'あなたは最後のグループ管理者です。先に他のメンバーをグループ管理者に変更してください。';
 export const ROOM_CREATOR_ONLY = 'ルームを作成した本人のみ削除できます';
 export const ROOM_NOT_SOLO = '他のメンバーが残っているため削除できません。先にメンバーを退会させてください。';
+
+// #391 1 対 1 ルームのメンバー除外。direct には admin が居ないので、
+// 「joined_at が最古 = 本来の 2 人」を権限と保護の両方の基準にする。
+export const DIRECT_ORIGINAL_MEMBER_PROTECTED = '1 対 1 ルームの本来のメンバーは外せません';
+export const DIRECT_ORIGINAL_MEMBER_REQUIRED = '1 対 1 ルームの本来のメンバーのみが操作できます';
