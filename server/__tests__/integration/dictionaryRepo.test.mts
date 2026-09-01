@@ -147,6 +147,35 @@ describe('upsertAlias', () => {
     const { rows } = await getTestPool().query('SELECT COUNT(*)::int n FROM dictionary_aliases WHERE term_id=$1', [term.id]);
     expect(rows[0].n).toBe(2);
   });
+
+  /**
+   * ★ organon の pull は 既存 alias の来歴を上書きしない。
+   *
+   * これは `ON CONFLICT DO UPDATE SET` に `source` が **無い** ことで成り立っている
+   * (= 書いてある約束ではなく、書いていないことによる約束)。SET 句に `source` を
+   * 足すと静かに壊れ、**人が足した alias が organon 由来に見えるようになる**。
+   *
+   * 2026-09-01 に実機で依存が確認された: organon が `大阪` を canon に追加 → pull
+   * (12:43:00) が既存の manual 行に当たったが、`source='manual'` / `count=7` のまま
+   * `updated_at` だけが動いた。sync は `count: 0` で来るので加算も効かない。
+   *
+   * ★ なお `upsertTerm` は逆で、`source = EXCLUDED.source` を持つ (= 上書きする)。
+   *   非対称だが現時点で実害 0 件 (どちらの向きも 0)。揃えるかは未決なので、
+   *   ここでは **alias 側の現状だけ** を固定する。
+   */
+  test('★ organon の pull は manual alias の source を上書きしない (count 0 加算 / updated_at のみ)', async () => {
+    const first = await repo.upsertAlias({ termId: term.id, alias: '大阪', source: 'manual', count: 7 });
+    expect(first.row!.source).toBe('manual');
+    expect(first.row!.count).toBe(7);
+
+    // organon dock と同じ呼び方 (scripts/sync_organon_dict.mts:38)
+    const pulled = await repo.upsertAlias({ termId: term.id, alias: '大阪', source: 'organon', count: 0 });
+
+    expect(pulled.applied).toBe(true);
+    expect(pulled.row!.id).toBe(first.row!.id);   // 行は 1 本のまま
+    expect(pulled.row!.source).toBe('manual');    // ★ 来歴は保たれる
+    expect(pulled.row!.count).toBe(7);            // ★ count: 0 なので加算されない
+  });
 });
 
 describe('setAliasStatus', () => {

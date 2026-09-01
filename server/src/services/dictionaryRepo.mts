@@ -100,6 +100,13 @@ export async function upsertAlias({ termId, alias, source = 'auto', count = 1, s
   const { rows } = await pool.query<DictionaryAliasRow>(
     `INSERT INTO dictionary_aliases (term_id, alias, source, count, status)
      VALUES ($1, $2, $3, $4, $5)
+     -- ★ source を SET 句に置かない = organon の pull が既存 alias の来歴を上書きしない。
+     --   「書いていないこと」で成り立っている約束なので、足すと静かに壊れる
+     --   (人が足した alias が organon 由来に見えるようになる)。
+     --   2026-09-01 に実機で依存を確認: canon に 大阪 が入り pull が manual 行に当たったが、
+     --   source='manual' / count=7 のまま updated_at だけが動いた。回帰は dictionaryRepo.test.mts で固定。
+     -- ★ 非対称: upsertTerm は source = EXCLUDED.source を持つ (= 上書きする)。
+     --   実害は現時点で 0 件だが揃っていない。揃えるかは未決。
      ON CONFLICT (term_id, alias) DO UPDATE SET
        count      = dictionary_aliases.count + EXCLUDED.count,
        updated_at = NOW()
