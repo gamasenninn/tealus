@@ -825,3 +825,120 @@ describe('findDroppedCcMentions (#386 捨てた宛先を黙らせない)', () =>
     expect(findDroppedCcMentions(null, [])).toEqual([]);
   });
 });
+
+/**
+ * ★★★ 宛名欄 —— 行頭から続く mention の並び (#393)
+ *
+ * ★ 症状: `@アシスタント @cc-phronesis 一斉送信のテストです` が **どこにも届かず、
+ *   warn も hint も出ない**。`@cc-` が 1 行目にあるのに行頭ではないため、
+ *   配送 / #386 warn / #359(a) hint の **3 つの検査すべてがすり抜ける**。
+ *   送った側は届いたと思っている (2026-08-25 実測、テストE2E)。
+ *
+ * ★★ なぜ「行頭だけ」だったのか —— **自己ループ防止の主要機構だから** (docs/06 §6.1)。
+ *   AI の返信は本文中で `@cc-*` を引用するので、行頭限定なら自然に外れる。
+ *   ここを緩めるときは、**引用が配送に化けない**ことを先に測る必要がある。
+ *
+ * ★★★ 測った (2026-09-03、全期間 2026-05-01〜09-03、`@cc-` を含む 1747 件):
+ * ```
+ *   どこでもよい            新規 201 件 → ★ うち 134 件が Claude 自身の引用。採れない
+ *   第 1 非空行のどこでも     新規   9 件 → ★ 8 件が誤報 (89%)。「@cc-organon 起動」等
+ *   ★ 行頭から続く並びの中    新規   1 件 → ★★★ 誤報 0 件。それが当該メッセージ
+ * ```
+ *   検算は 2 経路 (JS = 第 1 行のみ / SQL = 行を限定しない) で、範囲が違うのに双方 1 件。
+ *   総数も 1509 配送 + 28 規約外 + 210 未配送 = 1747 で一致。
+ *
+ * ★★★★ したがって宛名欄はこう定義する —— **封筒の宛名欄**:
+ * ```
+ *   宛名欄 = 最初の非空行の 行頭から 連続する mention の並び
+ *   その並びの中の @cc-名前 が宛先 (連名可)
+ *   ★ 並びが途切れたら そこで終わり。本文に出てくる名前は宛名ではない
+ * ```
+ */
+describe('宛名欄 — 行頭から続く mention の並び (#393)', () => {
+  test('★★★ 実害ケース: @cc- の前に別の mention があっても届く', () => {
+    const c = '@アシスタント @cc-phronesis 一斉送信のテストです。返信ください。';
+    expect(extractCcProject(c)).toBe('phronesis');
+    expect(extractCcProjects(c)).toEqual(['phronesis']);
+  });
+
+  test('★★★ 回帰: @cc-a @cc-b @cc-c は従来どおり全部配送 (同報の仕様は変えない)', () => {
+    expect(extractCcProjects('@cc-a @cc-b @cc-c 本題')).toEqual(['a', 'b', 'c']);
+    expect(extractCcProjects('@cc-tealus @cc-organon @cc-kairos\n\n相談です'))
+      .toEqual(['tealus', 'organon', 'kairos']);
+  });
+
+  test('★★ 並びの中の @cc- は全部宛先 (人の mention が前に付いても同報のまま)', () => {
+    expect(extractCcProjects('@アシスタント @cc-a @cc-b 本題')).toEqual(['a', 'b']);
+    expect(extractCcProjects('@小野哲 @アシスタント @cc-tealus 本題')).toEqual(['tealus']);
+  });
+
+  /**
+   * ★★★ 実データの誤報 8 件 (2026-09-03 測定)。★ 全部「行頭でない位置で経過を報告している」形。
+   *   ここが鳴ると、報告のたびに相手が起きて、その返事がまた誰かを起こす。
+   */
+  test('★★★ 本文に出てくる名前は宛名にしない (実データの誤報 8 件の形)', () => {
+    const cases = [
+      'AI班連絡へ送りました（msg `047b498f`・@cc-organon 起動）。',                   // kairos 2026-08-08
+      'organon班へ申し送りました（AI班連絡・@cc-organon 起動）。',                    // kairos 2026-08-07
+      '君が書いてくれたPDFの内容をAI班連絡で@cc-organon あてにおくって',              // 小野哲 2026-08-09
+      '直近では、`@cc-tealus-apps 直近画像を変換保存して` の対応が完了しています。',   // アシスタント 2026-07-28
+      '【Mac セッション → 本体班】★ `@cc-tealus-dev` で待機しています。',            // アシスタント 2026-08-09
+      '✅ **`@cc-tealus-dev` で受信できました。** 改名後の初回です 🌱',                // アシスタント 2026-08-09
+      '気になった所はいつでも `@cc-kairos` で。それでは、静かに続けます。',            // kairos 2026-07-25
+    ];
+    for (const c of cases) {
+      expect(extractCcProjects(c)).toEqual([]);
+      expect(extractCcProject(c)).toBeNull();
+    }
+  });
+
+  test('★★★ 並びは途切れたら終わり — 冒頭が mention でも、後段の @cc- は拾わない', () => {
+    // 実データ 2026-05-08 (Claude 自身の返信)。★ 拾うと自己ループになる
+    const c = '@小野哲 こんにちは! `@Claude` mention が dispatcher 経由で wake しました。`@cc-tealus` と完全に同じ経路です';
+    expect(extractCcProjects(c)).toEqual([]);
+    expect(extractCcProject(c)).toBeNull();
+  });
+
+  test('★ 規約外の mention はそこで打ち切る (従来どおり)', () => {
+    expect(extractCcProjects('@アシスタント @cc-Tealus 本題')).toEqual([]);
+    expect(extractCcProjects('@アシスタント @cc- 本題')).toEqual([]);
+  });
+
+  test('★ 先行 whitespace は従来どおり不可 (行頭であることは緩めない)', () => {
+    expect(extractCcProjects('  @アシスタント @cc-tealus 本題')).toEqual([]);
+    expect(extractCcProjects('\t@アシスタント @cc-tealus 本題')).toEqual([]);
+  });
+
+  test('★★ 宛名欄は最初の非空行だけ — 2 行目以降の並びは宛名欄ではない', () => {
+    expect(extractCcProjects('本題です\n@アシスタント @cc-tealus')).toEqual([]);
+    // ★ 先頭の空行は従来どおり読み飛ばす
+    expect(extractCcProjects('\n\n@アシスタント @cc-tealus 本題')).toEqual(['tealus']);
+  });
+
+  test('★★ 上限で切られた宛先は #386 で拾う (並びの前に mention があっても黙らせない)', () => {
+    const many = '@アシスタント @cc-a1 @cc-a2 @cc-a3 @cc-a4 @cc-a5 @cc-a6 本題';
+    const delivered = extractCcProjects(many);
+    expect(delivered).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
+    expect(findDroppedCcMentions(many, delivered)).toEqual(['a6']);
+  });
+
+  test('★ 配送できた便では #386 warn は鳴らない', () => {
+    expect(findDroppedCcMentions('@アシスタント @cc-a @cc-b 本題', ['a', 'b'])).toEqual([]);
+  });
+
+  test('★★ 配送できるようになったので #359(a) hint は鳴らさない', () => {
+    expect(detectUnroutedAddressHint('@アシスタント @cc-phronesis 一斉送信のテストです')).toBeNull();
+  });
+
+  test('★★★ extractCcProject の結果は先頭要素と一致する (2 つの実装が割れない)', () => {
+    for (const c of [
+      '@アシスタント @cc-phronesis 本題',
+      '@アシスタント @cc-a @cc-b 本題',
+      '@cc-a @cc-b @cc-c 本題',
+      'AI班連絡へ送りました（@cc-organon 起動）。',
+      '@小野哲 こんにちは! `@cc-tealus` の話',
+    ]) {
+      expect(extractCcProjects(c)[0] ?? null).toBe(extractCcProject(c));
+    }
+  });
+});

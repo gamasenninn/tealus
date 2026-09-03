@@ -111,7 +111,8 @@ function getClaudeDefaultProject(): string {
 
 /**
  * メッセージ content から cc-queue routing 用の project 名を抽出する。
- * - `@cc-{project}` mention があればその project
+ * - 宛名欄 (行頭から続く mention の並び) に `@cc-{project}` があればその project (#393)
+ * - どの行でもよいので**行頭**に `@cc-{project}` があればその project
  * - cc-aliases.json の alias 一覧を順に check、最初に match した alias の project
  * - backward compat: alias の mention が "claude" (case-insensitive) で
  *   `CLAUDE_DEFAULT_PROJECT` env が設定されていれば、そちらを優先
@@ -122,6 +123,9 @@ function getClaudeDefaultProject(): string {
  */
 function extractCcProject(content: string | null | undefined): string | null {
   if (typeof content !== 'string' || content.length === 0) return null;
+  // ★ 宛名欄が先。1 行目の宛名は、他の行の行頭 mention より前にある
+  const run = addressRunCcNames(content);
+  if (run.length > 0) return run[0];
   const ccMatch = content.match(CC_MENTION_RE);
   if (ccMatch) return ccMatch[1];
   const aliases = getAliases();
@@ -144,10 +148,11 @@ function extractCcProject(content: string | null | undefined): string | null {
  */
 const CC_FANOUT_MAX = 5;
 
-// 1 行目の先頭から**連続して並ぶ** mention 群 (`@cc-a @cc-b @cc-c`)。
-// ★ CC_MENTION_RE と違い /m を付けない。**最初の行だけ**を見るための意図的な差。
-const CC_HEAD_RUN_RE = new RegExp(`^((?:@cc-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?[ \\t]*)+)`);
-const CC_MENTION_G_RE = /@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/g;
+// 宛名欄の中の 1 語。規約どおりの `@cc-名前` = 宛先。
+const CC_ADDRESS_TOKEN_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$/;
+// 宛名欄の中の 1 語。`@cc-` **以外**の mention (`@アシスタント` / `@小野哲`) = 並びを途切れさせない。
+// ★ `@cc-` で始まるのに規約外 (`@cc-Tealus` / `@cc-`) はここに落ちない = そこで打ち切る。
+const OTHER_MENTION_TOKEN_RE = /^@(?!cc-)[^\s@]+$/;
 // 行頭 (どの行でもよい) の mention を全部拾う。#386 の「捨てた宛先」検出に使う
 const CC_MENTION_LINE_HEAD_G_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/gm;
 
@@ -156,19 +161,51 @@ function firstNonEmptyLine(content: string): string {
   return content.split('\n').find((l) => l.trim().length > 0) || '';
 }
 
-/** 文字列中の `@cc-name` を出現順・重複排除で取り出す */
-function ccNamesIn(s: string): string[] {
-  CC_MENTION_G_RE.lastIndex = 0;
-  return [...new Set([...s.matchAll(CC_MENTION_G_RE)].map((m) => m[1]))];
+/**
+ * 宛名欄の中の `@cc-名前` を出現順・重複排除で返す (#393)。**封筒の宛名欄**の考え方:
+ *
+ * ```
+ *   宛名欄 = 最初の非空行の 行頭から 連続する mention の並び
+ *   その並びの中の @cc-名前 が宛先 (連名可)
+ *   ★ mention でない語が来たら そこで終わり。本文に出てくる名前は宛名ではない
+ * ```
+ *
+ * ★ #387 までは「並びは `@cc-` だけ」だった。`@アシスタント @cc-phronesis 返信ください` が
+ *   **配送も warn も hint も出ずに落ちていた** (2026-08-25 実測)。3 つの検査すべてが
+ *   行頭を見ていたため、宛名を 1 つ前にずらすだけで全部すり抜ける。
+ *
+ * ★★ **緩められるのはここまで**。自己ループ防止の主要機構がこの限定だから (docs/06 §6.1)。
+ *   2026-09-03 に全期間 (`@cc-` を含む 1747 便) で測った:
+ * ```
+ *   どこでもよい          新規 201 便 → ★ うち 134 便が Claude 自身の引用。採れない
+ *   第 1 非空行のどこでも   新規   9 便 → ★ 8 便が誤報 (89%)。「@cc-organon 起動」等
+ *   ★ この規則            新規   1 便 → ★★★ 誤報 0 件。それが当該メッセージ
+ * ```
+ *
+ * ★★★ **先行 whitespace は従来どおり不可**。「行頭であること」は緩めていない。
+ *   緩めたのは「並びの先頭が `@cc-` であること」だけ。
+ */
+function addressRunCcNames(content: string): string[] {
+  const line = firstNonEmptyLine(content);
+  if (!line.startsWith('@')) return [];
+  const names: string[] = [];
+  for (const token of line.split(/[ \t]+/)) {
+    const cc = CC_ADDRESS_TOKEN_RE.exec(token);
+    if (cc) { names.push(cc[1]); continue; }
+    if (OTHER_MENTION_TOKEN_RE.test(token)) continue;
+    break;
+  }
+  return [...new Set(names)];
 }
 
 /**
  * 配送先の一覧を返す (#387 同報)。
  *
- * ★ **1 行目の先頭に並べたものだけ**を宛先とする。`@cc-a @cc-b @cc-c` の形。
+ * ★ **宛名欄に並べたものだけ**を宛先とする ([[addressRunCcNames]])。`@cc-a @cc-b @cc-c` の形。
  *   それ以外は `extractCcProject()` と同じ 1 宛先に落ちる (alias 経由もここに含む)。
+ *   ★ #393 で「並びの前に `@アシスタント` 等が付いていてもよい」に広げた。**連名の扱いは不変**。
  *
- * ★ なぜ「1 行目の先頭」に限るのか —— **測ったから**。cc-queue の全 1323 便で:
+ * ★ なぜ「宛名欄」に限るのか —— **測ったから**。cc-queue の全 1323 便で:
  * ```
  *   1 行目の先頭に並べた便          2 件 → 2 件とも本物の同報 (2026-08-21 / 08-23)
  *   1 行目以外の行頭に mention がある便 2 件 → 2 件とも引用・案内表 = 配ったら誤配
@@ -176,18 +213,15 @@ function ccNamesIn(s: string): string[] {
  *   両者は母集団で完全に排他だった。全体を `/m` で走査する実装にすると、
  *   **拾いたい 2 件は増えず、誤配だけが 2 件増える** (案内表の便は 7 セッションを起こす)。
  *
- * ★ 自己ループ防止 (docs/06 §6.1 = 「行頭にあるか」だけが防御) もこの限定で保たれる。
- *   AI の返信が本文中で `@cc-*` を引用しても、1 行目の先頭には来ない。
+ * ★ 自己ループ防止 (docs/06 §6.1) もこの限定で保たれる。AI の返信が本文中で
+ *   `@cc-*` を引用しても、宛名欄には来ない (並びは mention でない語で途切れるため)。
  *
  * @returns 配送先の配列 (重複排除・出現順・最大 CC_FANOUT_MAX)。宛先が無ければ空配列
  */
 function extractCcProjects(content: string | null | undefined): string[] {
   if (typeof content !== 'string' || content.length === 0) return [];
-  const run = firstNonEmptyLine(content).match(CC_HEAD_RUN_RE);
-  if (run) {
-    const names = ccNamesIn(run[1]);
-    if (names.length > 1) return names.slice(0, CC_FANOUT_MAX);
-  }
+  const names = addressRunCcNames(content);
+  if (names.length > 1) return names.slice(0, CC_FANOUT_MAX);
   // 単一宛先 (従来経路)。alias もここで解決される
   const single = extractCcProject(content);
   return single ? [single] : [];
@@ -210,9 +244,10 @@ function findDroppedCcMentions(content: string | null | undefined, delivered: re
   const deliveredSet = new Set(delivered);
   CC_MENTION_LINE_HEAD_G_RE.lastIndex = 0;
   const lineHead = [...content.matchAll(CC_MENTION_LINE_HEAD_G_RE)].map((m) => m[1]);
-  // 1 行目の先頭に並べた分は行頭 1 つ分しか掛からないので、そちらも合わせて見る
-  const headRun = firstNonEmptyLine(content).match(CC_HEAD_RUN_RE);
-  const candidates = new Set([...lineHead, ...(headRun ? ccNamesIn(headRun[1]) : [])]);
+  // 宛名欄に並べた分は行頭 1 つ分しか掛からないので、そちらも合わせて見る。
+  // ★ #393 以降、宛名欄は行頭に無いことがある (`@アシスタント @cc-a @cc-b`)。
+  //   ここを揃えないと、上限で切られた 6 番目以降が**黙って消える**
+  const candidates = new Set([...lineHead, ...addressRunCcNames(content)]);
   return [...candidates].filter((n) => !deliveredSet.has(n));
 }
 
@@ -244,6 +279,9 @@ function detectUnroutedAddressHint(content: string | null | undefined): Unrouted
   const firstLine = content.split('\n').find((l) => l.trim().length > 0);
   if (!firstLine) return null;
   // 規約どおりに match するなら routing 済み = ここでは扱わない
+  // ★ 宛名欄も見る (#393)。配送されるようになった便で hint を鳴らすと、
+  //   「届かなかった」の合図が「届いた」便に付く = 読み手が逆に読む
+  if (addressRunCcNames(content).length > 0) return null;
   if (CC_MENTION_RE.test(content)) return null;
   if (CC_MENTION_ATTEMPT_RE.test(firstLine)) return 'malformed-cc-mention';
   if (TEAM_ARROW_RE.test(firstLine)) return 'team-arrow';
