@@ -93,6 +93,85 @@ describe('describeProxyClose — 出す数値', () => {
 });
 
 /**
+ * ★ ua —— 送り手を分ける鍵 (2026-09-02、Mac セッションからの依頼)
+ *
+ * ★ 背景: url に載るのは project だけで、probe-b / probe-c / 本線が全部 `tealus-dev`。
+ *   **この行だけでは 3 本を分けられなかった**。ua があれば送り手で分かれる。
+ *
+ * ★★ ただし **`ua=-` は 1 本を指さない** (2026-09-02 07:05 に訂正が入った)。
+ *   最初の申告は「probe は UA を送る / 本線は送らない → 本線は消去法で一意」だったが、
+ *   実際に送っているのは **probe-c だけ**で、probe-b と本線はどちらも送っていない。
+ *   probe-c だけを見た一般化だった。3 本に分かれるのは本線に `-A cc-main` が入った後。
+ *   → **ここで固定するのは「値をどう書くか」だけ。「どの値がどの接続か」は固定しない**
+ *     (送り手の構成は向こう側の都合で変わる。ここに書くと黙って古くなる)。
+ *
+ * ★★ 揃える側を選んだ理由: もう一案は「probe に -D を足して CF-Ray を取る」だったが、
+ *   それは**実験装置そのものの変更**になる。こちらは受け身のログに 1 項目足すだけで、
+ *   probe の張り方・切れ方は一切変わらない。**露出を触らない方を採った**。
+ *
+ * ★★★ UA はクライアントが自由に決める文字列なので、**そのまま書かない**。
+ *   この行は空白区切りの key=value で、生の UA を通すと
+ *   `side=upstream` のような**偽のフィールドを注入できてしまう** (改行なら行ごと偽造できる)。
+ *   計器の値を読み手に偽らせないために、空白系は潰して長さも切る。
+ */
+describe('describeProxyClose — ua (送り手を分ける)', () => {
+  test('★ UA があればそのまま載る (送っている接続はこれで一意)', () => {
+    // ★ 実際にこの形で送っているのは probe-c のみ (2026-09-02 時点)
+    expect(describeProxyClose({ ...base, now: 1_050_000, ua: 'cc-probe-c' })).toContain('ua=cc-probe-c');
+  });
+
+  test('★ UA が無ければ ua=- (誰が送っていないかは、この行では決めない)', () => {
+    expect(describeProxyClose({ ...base, now: 1_050_000 })).toContain('ua=-');
+  });
+
+  test('★ 空文字も ua=- (空と「送っていない」を同じに倒す)', () => {
+    expect(describeProxyClose({ ...base, now: 1_050_000, ua: '' })).toContain('ua=-');
+  });
+
+  test('★★★ 空白を潰す — 生で通すと偽のフィールドを注入できる', () => {
+    const line = describeProxyClose({ ...base, now: 1_050_000, ua: 'evil side=upstream x' });
+    expect(line).toContain('ua=evil_side_upstream_x');
+    // ★ side は 1 か所しか出てはいけない (注入された側を数えないため)。
+    //   空白を潰すだけでは文字列 `side=` が ua の中に残り、grep が 2 本に数えた
+    expect(line.match(/side=/g)).toHaveLength(1);
+    // ★★ 行の中の `=` はフィールド区切りだけ。ua の値に `=` を残さない
+    expect(line.split(' ').filter((t) => t.startsWith('ua=')))
+      .toEqual(['ua=evil_side_upstream_x']);
+  });
+
+  test('★★★ 改行も潰す — 行ごと偽造させない', () => {
+    // ★ 改行そのものを渡す。エスケープを書くと、テスト側の書き間違いと区別できない
+    const raw = ['a', '[cc-stream proxy] closed: url=fake'].join(String.fromCharCode(10));
+    const line = describeProxyClose({ ...base, now: 1_050_000, ua: raw });
+    expect(line).not.toContain(String.fromCharCode(10));
+    expect(line.match(/\[cc-stream proxy\] closed: /g)).toHaveLength(1);
+  });
+
+  test('★ 長い UA は切り詰める (1 日 4 件の行が埋もれないように)', () => {
+    const line = describeProxyClose({ ...base, now: 1_050_000, ua: 'x'.repeat(200) });
+    const ua = /ua=(\S+)/.exec(line)?.[1] ?? '';
+    expect(ua).not.toBe('');   // ★ ua= が無いと長さ検査は素通りする
+    expect(ua.length).toBeLessThanOrEqual(64);
+  });
+
+  test('★ ua は err より前に置く (err は空白を含むので末尾のまま)', () => {
+    const line = describeProxyClose({ ...base, now: 1_050_000, ua: 'cc-probe-c', error: 'read ECONNRESET' });
+    expect(line).toContain('ua=cc-probe-c');   // ★ 先に存在を見る (-1 < n で素通りするため)
+    expect(line.indexOf('ua=')).toBeLessThan(line.indexOf('err='));
+    expect(line).toContain('err=read ECONNRESET');
+  });
+
+  test('既存フィールドの書式は変えない (8 月の行と比較可能に保つ)', () => {
+    const line = describeProxyClose({ ...base, now: 1_184_792, upstreamClosedAt: 1_125_009, bytes: 132, ua: 'cc-probe-b' });
+    expect(line).toMatch(/^\[cc-stream proxy\] closed: /);
+    expect(line).toContain('dur=184.792s');
+    expect(line).toContain('upstream=+125.009s');
+    expect(line).toContain('gap=59.783s');
+    expect(line).toContain('bytes=132');
+  });
+});
+
+/**
  * 上流が消えたときに下流も閉じる (#359、2026-08-23 の実測から)
  *
  * ★ 放っておくと 60 秒かかる。機構は docs/05 に揃っている:

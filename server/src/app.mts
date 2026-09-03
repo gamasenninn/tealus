@@ -106,9 +106,16 @@ app.use('/agent-api', createProxyMiddleware({
   on: {
     proxyReq: (_proxyReq, req, res) => {
       if (!isCcStreamPath(req.url ?? '')) return;
-      const facts = { url: req.url ?? '', startedAt: Date.now(), bytes: 0 } as {
+      // ★ ua は接続時に確保する。res の close 時に req.headers を読むと、
+      //   経路によっては既に片付いていることがある (2026-09-02)
+      const facts = {
+        url: req.url ?? '',
+        startedAt: Date.now(),
+        bytes: 0,
+        ua: req.headers['user-agent'],
+      } as {
         url: string; startedAt: number; bytes: number;
-        upstreamClosedAt?: number; error?: string;
+        upstreamClosedAt?: number; error?: string; ua?: string;
       };
       // ★ 1 リクエストに 1 つだけ持たせる。proxyRes / error / close の 3 か所から書き込む
       (req as unknown as { _ccProxyFacts?: typeof facts })._ccProxyFacts = facts;

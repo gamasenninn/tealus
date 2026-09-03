@@ -30,6 +30,23 @@ export interface ProxyCloseFacts {
   resFinished: boolean;
   /** proxy 自身が観測したエラー (ECONNRESET 等) */
   error?: string;
+  /**
+   * リクエストの User-Agent。★ **3 本を分ける唯一の鍵** (2026-09-02)
+   *
+   * url に載るのは project だけで、probe-b / probe-c / 本線が全部 `tealus-dev` になる。
+   * 時刻で対応づける必要が無くなるので、`side` の 1 秒ラベルと違って取り違えようがない。
+   *
+   * ★★ 送り手側の実測 (2026-09-02 07:05 に Mac セッションが訂正):
+   * ```
+   * probe-c   -A cc-probe-c   → ua=cc-probe-c
+   * probe-b   ★ UA を送らない → ua=-
+   * 本線      ★ UA を送らない → ua=-   ← ★★★ probe-b と区別が付かない
+   * ```
+   * → **`ua=-` は 1 本を指さない。** 本線に `-A cc-main` が入って初めて 3 本に分かれる。
+   *   最初の申告は「probe が UA を送る」だったが、それは probe-c だけの話だった。
+   *   **この module は送り手を知らない。`ua=-` を「本線」と読む規則をここに書かないこと。**
+   */
+  ua?: string;
 }
 
 /**
@@ -61,6 +78,32 @@ function decideSide(f: ProxyCloseFacts): string {
   return gap >= CASCADE_MS ? 'upstream' : 'unknown';
 }
 
+/** ua の上限。★ 長さは行の読みやすさ側の都合で、判定には使わない */
+const UA_MAX = 64;
+
+/**
+ * UA は **クライアントが自由に決める文字列**なので、そのまま行に載せない。
+ *
+ * ★ この行は空白区切りの key=value で読まれる。生の UA を通すと
+ *   `User-Agent: evil side=upstream x` の 1 本で **偽の `side=` を注入できる**。
+ *   改行を含めれば `[cc-stream proxy] closed: ...` の行ごと偽造できる。
+ *   計器は読み手に嘘をつかせない側に倒す —— **空白系も `=` も潰す**。
+ *
+ * ★★★ `=` まで潰すのは、空白だけでは足りなかったから。空白を `_` にすると
+ *   **フィールドとしては割れなくなる**が、`ua=evil_side=upstream_x` の中に
+ *   文字列 `side=` が残る。読み手は `grep -o 'side=[a-z]*'` で数えるので、
+ *   **1 本の接続が 2 本に化ける**。値の中に `=` を残さなければ、行の中の `=` は
+ *   フィールド区切りだけになる (probe の UA は `cc-probe-b` なので実害の損は無い)。
+ *
+ * ★★ 無い / 空はどちらも `-` に倒す (「送っていない」と「空で送った」を分ける必要は無い)。
+ *   ★★★ `-` が**どの接続かは、この行だけでは決まらない**。送り手側の構成に依る。
+ */
+function sanitizeUa(ua: string | undefined): string {
+  if (!ua) return '-';
+  const flat = ua.replace(/[\s=]+/g, '_').slice(0, UA_MAX);
+  return flat === '' ? '-' : flat;
+}
+
 /** ms 差を「+N.NNNs」に。基準が無ければ `-` (= 0 秒と区別する) */
 function offset(at: number | undefined, from: number): string {
   return typeof at === 'number' ? `+${((at - from) / 1000).toFixed(3)}s` : '-';
@@ -82,6 +125,8 @@ export function describeProxyClose(f: ProxyCloseFacts): string {
     + ` dur=${((f.now - f.startedAt) / 1000).toFixed(3)}s bytes=${f.bytes}`
     + ` upstream=${offset(f.upstreamClosedAt, f.startedAt)} gap=${gap}`
     + ` res=${f.resFinished ? 'finished' : 'aborted'}`
+    // ★ ua は err の**手前**。err (`read ECONNRESET`) は空白を含むので末尾に置いたままにする
+    + ` ua=${sanitizeUa(f.ua)}`
     + ` err=${f.error ?? '-'}`;
 }
 
