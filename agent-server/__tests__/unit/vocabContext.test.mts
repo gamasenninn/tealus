@@ -179,7 +179,8 @@ describe('fallback: ttl 不在なら legacy JSON (最後の砦、旧挙動保持
 describe('logVocabInjectState', () => {
   test('ON で terms 数を含むログ (ttl 由来)', () => {
     process.env.VOCAB_INJECT = 'true';
-    const ttl = writeTtl([{ term: 'A', aliases: ['a'] }, { term: 'B', aliases: [] }]);
+    // #403: alias は 2 文字以上にする (1 文字 alias は過補正ガードで置換対象から外れるため)
+    const ttl = writeTtl([{ term: 'A', aliases: ['aa'] }, { term: 'B', aliases: [] }]);
     logVocabInjectState({ ttlPath: ttl });
     const msg = (logger.info as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(msg).toContain('vocab inject: ON');
@@ -252,5 +253,18 @@ describe('過補正ガード (#403)', () => {
     const out = loadVocabForPrompt({ ttlPath: ttl });
     expect(out).toContain('フルネーム');
     expect(out).toMatch(/呼び方|呼称|役職/);
+  });
+});
+
+describe('起動ログは 実際に渡る数を出す (#403 follow-up)', () => {
+  test('全 alias が除外された entry は terms に数えない', () => {
+    process.env.VOCAB_INJECT = 'true';
+    const ttl = writeTtl([
+      { term: '架空六郎', category: 'person', aliases: ['会長'] },        // 全部除外 → 渡らない
+      { term: '架空七郎', category: 'person', aliases: ['カクウ七郎'] },  // 残る
+    ]);
+    logVocabInjectState({ ttlPath: ttl });
+    const msg = (logger.info as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n');
+    expect(msg).toContain('terms=1');   // 2 ではない (alias を持つ entry 数ではなく、実際に渡る行数)
   });
 });

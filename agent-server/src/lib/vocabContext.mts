@@ -189,7 +189,10 @@ export function logVocabInjectState(options: { ttlPath?: string; filePath?: stri
     logger.info('[vocabContext] vocab inject: OFF (set VOCAB_INJECT=true to enable)');
     return;
   }
+  // #403: 数えるのは「alias を持つ entry」ではなく「実際に prompt へ渡る行」。
+  // 過補正ガードで全 alias が落ちた entry は渡らないので、計器が実態より多く申告してしまう。
   const terms = resolveVocab(options)
-    .filter((e) => e && e.term && Array.isArray(e.aliases) && e.aliases.length > 0).length;
+    .filter((e) => e && e.term && Array.isArray(e.aliases)
+      && e.aliases.filter(isReplaceableAlias).length > 0).length;
   logger.info(`[vocabContext] vocab inject: ON (terms=${terms})`);
 }
