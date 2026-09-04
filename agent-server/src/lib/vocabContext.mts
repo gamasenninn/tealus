@@ -23,6 +23,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Parser } from 'n3';
 import { logger } from './logger.mts';
+import { DEFAULT_ROLE_ALIASES } from '../../../server/src/services/glossaryRanker.mts';
+
+/**
+ * #403 過補正ガード: 「置換せよ」の対象から外す alias。
+ *
+ * 実測 (2026-09-04、message_edits 502 便の全走査): AI が書いた朝礼議事録で、正規名が人の手で
+ * 呼称へ戻された編集が 6 月から 4 件あった (役職語 → 人物のフルネーム 3 件、1 文字の愛称 → 同 1 件)。
+ * 「社長」と言ったら社長であって、人物のフルネームに変えたら誤り (= 崩れの修正ではなく過補正)。
+ *
+ * server 側の organon 補正段は同じ辞書を「転写ブレ例」として渡し、フルネーム展開のガードを
+ * 持つため過補正が出ていない (文字起こし 434 便で 0 件)。差は文面だけだったので、ここも揃える。
+ *
+ * 役職語リストは server/glossaryRanker.mts (#326、2026-07-03) を再利用する。同じ現象
+ * (person entry が役職言及で過剰 hot 化) を 3 か月前に特定して作られたもので、複製しない。
+ */
+const ROLE_ALIAS_SET = new Set<string>(DEFAULT_ROLE_ALIASES);
+
+/**
+ * 置換指示に載せてよい alias か。載せないのは 2 種類 (本番 721 本のうち 14 本 = 2%):
+ *   - 汎用役職語 (社長 / 会長 / 店長 …)。姓を伴う役職 (「〇〇専務」) は崩れ側なので残す
+ *   - 1 文字 alias (明 / 秋 / 松 …)。organon の identity 引きには要るが、
+ *     置換指示にすると「正しい語を別の語に変える」licence になる
+ */
+function isReplaceableAlias(alias: string): boolean {
+  const a = alias.trim();
+  return a.length > 1 && !ROLE_ALIAS_SET.has(a);
+}
 
 /** #348 (a) の発行先と対にする local.ttl path (env override 可) */
 export const DEFAULT_LOCAL_TTL_FILE = process.env.LOCAL_TTL_PATH
@@ -128,6 +155,8 @@ export function loadVocabForPrompt(options: { ttlPath?: string; filePath?: strin
   if (!isInjectEnabled()) return '';
 
   const lines = resolveVocab(options)
+    .map((e) => (e && Array.isArray(e.aliases)
+      ? { ...e, aliases: e.aliases.filter(isReplaceableAlias) } : e))
     .filter((e) => e && e.term && Array.isArray(e.aliases) && e.aliases.length > 0)
     .map((e) => `- ${e.term} ← ${e.aliases.join(', ')}`);
   if (lines.length === 0) return '';
@@ -138,9 +167,14 @@ export function loadVocabForPrompt(options: { ttlPath?: string; filePath?: strin
     '',
     '以下は社内で確定済みの表記対応です (人名・メーカー名・業務語)。'
       + '**音声の文字起こし・議事録・画像や帳票の読み取り**のいずれであっても、'
-      + '生成する文章に別名と一致する語が現れたら、**正規名に置換**してください。',
+      + '生成する文章に**音は近いが表記が崩れた**語が現れたら、**正規名に置換**してください。',
     '元の表記を併記して残す必要はありません。'
       + '表に無い語は勝手に近い語へ寄せず、そのまま扱ってください。',
+    // #403 過補正ガード (server の organon 補正段と同趣旨)。役職語・愛称はリストから
+    // 外してあるが、リスト外の呼び方まで機械的に寄せられると同じ誤りが出るため文面でも止める。
+    '**役職や呼び方はそのまま残してください。**'
+      + '「社長」「店長」のような呼び方や、単独の一般的な姓を、'
+      + '文脈が明確に支持しない限りフルネーム(人物の正式名)へ展開しないでください。',
     '',
     ...lines,
     '',

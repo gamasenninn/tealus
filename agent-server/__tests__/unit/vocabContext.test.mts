@@ -192,3 +192,65 @@ describe('logVocabInjectState', () => {
     expect((logger.info as jest.Mock).mock.calls.map((c: unknown[]) => c[0]).join('\n')).toContain('vocab inject: OFF');
   });
 });
+
+/**
+ * #403 過補正ガード —— 呼称・愛称を「置換せよ」と指示しない
+ *
+ * 実測 (2026-09-04、message_edits 502 便の全走査): AI が書いた朝礼議事録で、
+ * 正規名が人に呼称へ戻された編集が 6 月から 4 件あった。
+ *   役職語 → 人物のフルネーム 3 件 (07-11 / 07-23 / 09-04)、1 文字の愛称 → 同 1 件 (06-15)
+ * 「社長」と言ったら社長であって、人物のフルネームに変えたら誤り (= 崩れの修正ではない)。
+ *
+ * 原因は文面の差だった。server 側の organon 補正段 (buildOrganonCorrectionPrompt) は
+ * 別名を「転写ブレ例」として渡し、「単独の一般的な姓を文脈が支持しない限りフルネームへ
+ * 展開しない」ガードを持つ (Day48 Exp7)。agent-server の inject には そのガードが無く、
+ * 「別名と一致する語が現れたら正規名に置換してください」と無条件に命じていた。
+ * 同じ辞書で挙動が割れていた理由がこれ (文字起こし側は 434 便で過補正 0 件)。
+ *
+ * 除外は 2 種類。既知 4 件をすべて覆い、本番 721 alias のうち 14 本 (2%) だけに当たる:
+ *   - 汎用役職語 (server/glossaryRanker.mts の DEFAULT_ROLE_ALIASES、2026-07-03 #326)
+ *   - 1 文字 alias (姓の 1 字・愛称。identity 引きには要るが、置換指示にすると危険)
+ */
+describe('過補正ガード (#403)', () => {
+  beforeEach(() => { process.env.VOCAB_INJECT = 'true'; });
+
+  /** 一覧の行 (`- term ← alias, …`) だけを取り出す。ガード文は「社長」を例に挙げるので除く */
+  const listLines = (out: string) => out.split('\n').filter((l) => l.startsWith('- ')).join('\n');
+
+  test('汎用役職語の alias は 置換リストに出さない', () => {
+    const ttl = writeTtl([{ term: '架空太郎', category: 'person', aliases: ['社長', '専務', '架空専務'] }]);
+    const list = listLines(loadVocabForPrompt({ ttlPath: ttl }));
+    expect(list).toBe('- 架空太郎 ← 架空専務');   // 名前付き役職だけが残る
+  });
+
+  test('1 文字 alias は 置換リストに出さない (2026-06-15 の 1 件がこの形)', () => {
+    const ttl = writeTtl([{ term: '架空花子', category: 'person', aliases: ['花', '子', 'ハナさん', '架空花子さん'] }]);
+    const out = loadVocabForPrompt({ ttlPath: ttl });
+    expect(listLines(out)).toBe('- 架空花子 ← ハナさん, 架空花子さん');
+  });
+
+  test('崩れの alias は これまでどおり残る', () => {
+    const ttl = writeTtl([{ term: '架空次郎', category: 'person', aliases: ['大阪', 'カクウ', '細川'] }]);
+    const out = loadVocabForPrompt({ ttlPath: ttl });
+    expect(out).toContain('大阪');
+    expect(out).toContain('カクウ');
+    expect(out).toContain('細川');
+  });
+
+  test('alias が すべて除外対象なら その行ごと出さない', () => {
+    const ttl = writeTtl([
+      { term: '架空三郎', category: 'person', aliases: ['会長'] },
+      { term: '架空四郎', category: 'person', aliases: ['カクウ四郎'] },
+    ]);
+    const out = loadVocabForPrompt({ ttlPath: ttl });
+    expect(out).not.toContain('架空三郎');
+    expect(out).toContain('架空四郎');
+  });
+
+  test('過補正ガードの一文が prompt に入る (server 側と同趣旨)', () => {
+    const ttl = writeTtl([{ term: '架空五郎', category: 'person', aliases: ['カクウ五郎'] }]);
+    const out = loadVocabForPrompt({ ttlPath: ttl });
+    expect(out).toContain('フルネーム');
+    expect(out).toMatch(/呼び方|呼称|役職/);
+  });
+});
