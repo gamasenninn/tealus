@@ -283,6 +283,15 @@ class ApiClient {
     return this._agentApi('POST', '/voice-chat/tool-call', { session_id: sessionId, call_id: callId, name, arguments: args });
   }
 
+  /**
+   * ★ 昇格 — 会話の「良かった 1 つ」を、いま居るルームへ残す (docs/08 §1.2.2 / R3)。
+   * ★ 行き先は渡さない。session のルームが唯一の正 (サーバ側で決まる)。
+   * ★★ 失敗は握りつぶさない —— 残ったと思って残っていない、を作らないため。
+   */
+  voiceChatPromote(sessionId: string, text: string): Promise<{ ok: boolean }> {
+    return this._agentApi('POST', '/voice-chat/promote', { session_id: sessionId, text }, { errorMessage: '残せませんでした' });
+  }
+
   /** 計測イベントの送信 (docs/08 §12.6)。★ 失敗しても会話は止めない */
   voiceChatLog(sessionId: string, events: unknown[]): Promise<{ ok: boolean }> {
     return this._agentApi('POST', '/voice-chat/log', { session_id: sessionId, events }, { fallback: { ok: false } });

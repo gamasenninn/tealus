@@ -200,3 +200,94 @@ describe('POST /voice-chat/tool-call — 台帳の検証 (二段目)', () => {
     expect(res.body.output).toContain('MCP が落ちています');
   });
 });
+
+/**
+ * #405 R3 昇格 — 会話の中の「良かった 1 つ」を、いま居るルームへ残す (docs/08 §1.2.2)。
+ *
+ * ★ **これが無い会話モードは作らない**、が設計書の成立条件。捨てるだけなら ChatGPT でよく、
+ *   Tealus にしかできないのは「捨てる前提で話した中から良かった 1 つを組織記憶へ上げる」こと。
+ *
+ * ★ 行き先を選ばせない。会話は**そのルームから開いている**ので、昇格先はそのルーム。
+ *   選択画面が要らないぶん、閉じる時にまとめて選ぶ案より安く、押す瞬間も自然になる。
+ *
+ * ★★ **失敗は必ず見せる。** 道具の実行 (tool-call) は会話を止めないために失敗を飲み込むが、
+ *   昇格は**残ったと思って残っていない**のが最悪なので、逆に必ずエラーを返す。
+ */
+describe('POST /voice-chat/promote — 昇格 (R3)', () => {
+  let sessionId: string;
+
+  beforeEach(async () => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue([
+      ...TOOLS,
+      { name: 'send_message', description: '送信', inputSchema: { type: 'object', properties: {} } },
+    ]);
+    mockCallTool.mockReset().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    stubFetch();
+    const res = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
+    sessionId = res.body.session_id;
+  });
+
+  test('認証なし → 401', async () => {
+    const res = await request(app).post('/voice-chat/promote').send({ session_id: sessionId, text: 'あ' });
+    expect(res.status).toBe(401);
+  });
+
+  test('★ 知らない session → 403 (台帳の検証は tool-call と同じ)', async () => {
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: 'nope', text: 'あ' });
+    expect(res.status).toBe(403);
+    expect(mockCallTool).not.toHaveBeenCalled();
+  });
+
+  test('★ 他人の session では残せない', async () => {
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u2')}`).send({ session_id: sessionId, text: 'あ' });
+    expect(res.status).toBe(403);
+    expect(mockCallTool).not.toHaveBeenCalled();
+  });
+
+  test('本文が空なら 400 (空の便を組織記憶に入れない)', async () => {
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: sessionId, text: '   ' });
+    expect(res.status).toBe(400);
+    expect(mockCallTool).not.toHaveBeenCalled();
+  });
+
+  test('★★ 行き先は「会話を開いたルーム」。client に room_id を選ばせない', async () => {
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`)
+      .send({ session_id: sessionId, text: '要点はこうです', room_id: 'ほかの部屋' });
+    expect(res.status).toBe(200);
+    const [name, args] = mockCallTool.mock.calls[0];
+    expect(name).toBe('send_message');
+    expect(args.room_id).toBe('r1');            // ★ session の room。body の指定は効かない
+  });
+
+  test('★★ どこから来たか分かる印を付ける (普段の AI 応答と区別が付かないと後で混乱する)', async () => {
+    await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: sessionId, text: '要点はこうです' });
+    const [, args] = mockCallTool.mock.calls[0];
+    expect(args.content).toContain('要点はこうです');
+    expect(args.content).toMatch(/会話/);        // 由来が本文から読める
+  });
+
+  test('★★★ 送れなかったら必ずエラーを返す (残ったと思って残っていない、を作らない)', async () => {
+    mockCallTool.mockRejectedValue(new Error('ルームに投稿できません'));
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: sessionId, text: 'あ' });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain('残せませんでした');
+  });
+
+  test('★ send_message が使えないルームなら、その旨を返す (黙って捨てない)', async () => {
+    voiceChat._resetForTest();
+    mockListTools.mockResolvedValue(TOOLS);     // send_message 無し
+    const s = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: s.body.session_id, text: 'あ' });
+    expect(res.status).toBe(409);
+  });
+});

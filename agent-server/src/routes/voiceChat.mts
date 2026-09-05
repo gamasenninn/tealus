@@ -265,6 +265,54 @@ router.post('/tool-call', async (req, res) => {
 });
 
 /**
+ * POST /voice-chat/promote — ★ 昇格 (R3、docs/08 §1.2.2)。
+ *
+ * 会話の中の「良かった 1 つ」を、**いま居るルーム**へ残す。
+ *
+ * ★★ **これが無い会話モードは作らない**、が設計書の成立条件。捨てるだけなら ChatGPT でよく、
+ *   Tealus にしかできないのは「捨てる前提で話した中から、良かった 1 つを組織記憶へ上げる」こと。
+ *
+ * ★ **行き先は client に選ばせない。** 会話はそのルームから開いているので、昇格先はそのルーム。
+ *   body に room_id が来ても無視する (session の room が唯一の正)。
+ *
+ * ★★★ **失敗は必ず返す。** tool-call は会話を止めないために失敗を飲み込むが、昇格は
+ *   **残ったと思って残っていない**のが最悪なので、逆に必ずエラーにする。
+ */
+router.post('/promote', async (req, res) => {
+  const userId = callerId(req);
+  const { session_id: sessionId, text } = req.body || {};
+  if (!userId) return res.status(401).json({ error: '認証が必要です' });
+
+  const entry = typeof sessionId === 'string' ? sessions.get(sessionId) : undefined;
+  if (!entry || entry.userId !== userId) {
+    return res.status(403).json({ error: 'この会話では残せません' });
+  }
+  const body = typeof text === 'string' ? text.trim() : '';
+  if (!body) return res.status(400).json({ error: '残す内容がありません' });
+
+  const server = entry.serverOf.get('send_message');
+  if (!server) {
+    // ★ 黙って捨てない。このルームでは送信の道具が使えない、と正直に返す
+    return res.status(409).json({ error: 'このルームには残せません (送信の道具が使えません)' });
+  }
+
+  try {
+    // ★ 由来が本文から読める印。ルームには普段の AI 応答も出るので、
+    //   区別が付かないと後から見た人が「いつ誰が言ったのか」を追えなくなる。
+    const content = `🎙 会話モードから
+
+${body}`;
+    await (server as McpServerLike).callTool('send_message', { room_id: entry.roomId, content });
+    logger.info(`[voice-chat] 昇格 room=${entry.roomId} ${body.length}字 by ${userId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(`[voice-chat] 昇格に失敗: ${message}`);
+    res.status(502).json({ error: `残せませんでした: ${message}` });
+  }
+});
+
+/**
  * POST /voice-chat/log — ブラウザ側の計測を受け取る (docs/08 §12.6)。
  * ★ 成立の基準 4 項目 (§7.1) を**あとから数えられる形**で残すための口。
  *   §2.2 と同じ段分けで集計できるよう、生のイベントをそのまま JSONL に落とす。

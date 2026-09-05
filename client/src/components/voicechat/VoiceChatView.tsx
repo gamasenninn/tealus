@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Mic, X } from 'lucide-react';
+import { Mic, X, ArrowUpToLine } from 'lucide-react';
 import { useRealtimeVoice } from '../../hooks/useRealtimeVoice';
 import './VoiceChatView.css';
 
@@ -52,6 +52,30 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
         <p className="voice-chat-status" role="status">{label}</p>
         {voice.error && <p className="voice-chat-error" role="alert">{voice.error}</p>}
         {state === 'live' && <p className="voice-chat-turns">{voice.turns} 往復</p>}
+      </div>
+
+      {/*
+        ★ 昇格 (R3、docs/08 §1.2.2)。**会話の途中で押せる**。
+        閉じる時にまとめて選ぶ形は採らなかった —— 会話が頭から消えたあとに読み返す作業が
+        発生し、壁打ちの軽さと逆行する。良いと思った瞬間に押す方が自然で、しかも
+        行き先を選ばなくてよい (会話はそのルームから開いている)。
+        ★ 対象は直近の **AI の発言** だけ。人の発言は今回入れない。
+      */}
+      <div className="voice-chat-promote">
+        <button
+          className={`voice-chat-promote-btn ${voice.promoteState === 'done' ? 'done' : ''}`}
+          disabled={!voice.lastReply || voice.promoteState === 'sending' || voice.promoteState === 'done'}
+          onClick={() => void voice.promote()}
+        >
+          <ArrowUpToLine size={16} />
+          <span>
+            {voice.promoteState === 'sending' ? '残しています…'
+              : voice.promoteState === 'done' ? '残しました'
+              : 'このルームに残す'}
+          </span>
+        </button>
+        {/* ★ 失敗は必ず見せる。残ったと思って残っていない、を作らない */}
+        {voice.promoteError && <p className="voice-chat-error" role="alert">{voice.promoteError}</p>}
       </div>
 
       <div className="voice-chat-footer">

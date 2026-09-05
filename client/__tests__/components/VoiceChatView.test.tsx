@@ -16,11 +16,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const createSession = vi.fn();
 const voiceChatLog = vi.fn().mockResolvedValue({ ok: true });
+const promoteMock = vi.fn().mockResolvedValue({ ok: true });
 vi.mock('../../src/services/api', () => ({
   api: {
     createVoiceChatSession: (...a: unknown[]) => createSession(...a),
     voiceChatToolCall: vi.fn(),
     voiceChatLog: (...a: unknown[]) => voiceChatLog(...a),
+    voiceChatPromote: (...a: unknown[]) => promoteMock(...a),
   },
 }));
 
@@ -115,5 +117,30 @@ describe('VoiceChatView', () => {
     const [sessionId, events] = voiceChatLog.mock.calls[0];
     expect(sessionId).toBe('s1');
     expect((events as Array<{ type: string }>).map((e) => e.type)).toContain('connected');
+  });
+});
+
+/**
+ * #405 R3 昇格 — 会話の途中で「良かった 1 つ」をルームへ残す (docs/08 §1.2.2)。
+ *
+ * ★ **閉じる時にまとめて選ぶ形は採らなかった。** 会話が頭から消えたあとに読み返す作業が
+ *   発生し、壁打ちの軽さと逆行する。**良いと思った瞬間に押す**方が自然で、しかも
+ *   行き先を選ばなくてよい (会話はそのルームから開いている) ので実装も小さい。
+ *
+ * ★ 対象は **AI の発言だけ**。人の発言を残せるかは、使ってみないと要否が分からないので入れない。
+ */
+describe('VoiceChatView — 昇格 (R3)', () => {
+
+  beforeEach(() => {
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    promoteMock.mockReset().mockResolvedValue({ ok: true });
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+
+  it('★ AI がまだ何も言っていないうちは「残す」を押せない', async () => {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+    expect(screen.getByText('このルームに残す').closest('button')).toBeDisabled();
   });
 });

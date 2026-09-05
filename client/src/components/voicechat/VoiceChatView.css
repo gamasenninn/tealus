@@ -97,3 +97,34 @@
 }
 .voice-chat-ptt.active { background: #38a169; transform: scale(1.04); }
 .voice-chat-ptt:disabled { background: rgba(255, 255, 255, 0.12); cursor: default; }
+
+/* ★ 昇格 (R3)。会話の途中で押せる位置に置く (押して話すボタンのすぐ上) */
+.voice-chat-promote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px 8px;
+}
+
+.voice-chat-promote-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: #f2f4f6;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.voice-chat-promote-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.voice-chat-promote-btn:disabled { opacity: 0.4; cursor: default; }
+/* 残せたことが分かる。押した先 (ルーム) は画面の裏なので、ここで見せないと確認できない */
+.voice-chat-promote-btn.done {
+  border-color: rgba(120, 220, 150, 0.6);
+  color: #9fe6b8;
+  opacity: 1;
+}

@@ -34,6 +34,13 @@ interface RealtimeVoice {
   turns: number;
   /** 道具の実行中か */
   isToolRunning: boolean;
+  /** ★ 直近の AI の発言 (昇格の対象。無ければ null) */
+  lastReply: string | null;
+  /** ★ 昇格の状態 */
+  promoteState: 'idle' | 'sending' | 'done' | 'error';
+  promoteError: string | null;
+  /** ★ 直近の発言を、いま居るルームへ残す (docs/08 §1.2.2 / R3) */
+  promote: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => void;
   pressTalk: () => void;
@@ -54,6 +61,10 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [turns, setTurns] = useState(0);
   const [isToolRunning, setIsToolRunning] = useState(false);
+  // ★ 昇格 (R3)。直近の AI 発言だけを対象にする。人の発言は今回入れない (docs/08 §12)
+  const [lastReply, setLastReply] = useState<string | null>(null);
+  const [promoteState, setPromoteState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const [promoteError, setPromoteError] = useState<string | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -153,7 +164,14 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     }
     // transcript は残す唯一のもの (docs/08 §7-4 訂正: 音声原本は存在しない)
     if (msg.type && msg.type.endsWith('transcript.done') && msg.transcript) {
-      mark('transcript', { who: msg.type.includes('input_audio') ? 'user' : 'ai', text: msg.transcript });
+      const who = msg.type.includes('input_audio') ? 'user' : 'ai';
+      mark('transcript', { who, text: msg.transcript });
+      // ★ 昇格の対象は AI の発言だけ。新しい発言が来たら「残す」は押せる状態に戻る
+      if (who === 'ai') {
+        setLastReply(msg.transcript);
+        setPromoteState('idle');
+        setPromoteError(null);
+      }
       return;
     }
     if (msg.type === 'error') {
@@ -190,6 +208,9 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     setIsAiSpeaking(false);
     setIsTalking(false);
     setTurns(0);
+    setLastReply(null);
+    setPromoteState('idle');
+    setPromoteError(null);
     setState('idle');
   }, [mark]);
 
@@ -262,6 +283,26 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     }
   }, [roomId, mark, onServerEvent, watchLevel]);
 
+  /**
+   * ★ 昇格 (R3、docs/08 §1.2.2)。行き先は渡さない —— 会話を開いたルームへ残る。
+   * ★★ 失敗したら黙らない。**残ったと思って残っていない**のが一番まずい。
+   */
+  const promote = useCallback(async () => {
+    if (!lastReply || !sessionIdRef.current) return;
+    setPromoteState('sending');
+    setPromoteError(null);
+    mark('promote_start', { chars: lastReply.length });
+    try {
+      await api.voiceChatPromote(sessionIdRef.current, lastReply);
+      setPromoteState('done');
+      mark('promote_done');
+    } catch (e) {
+      setPromoteState('error');
+      setPromoteError(e instanceof Error ? e.message : String(e));
+      mark('promote_error', { message: e instanceof Error ? e.message : String(e) });
+    }
+  }, [lastReply, mark]);
+
   const pressTalk = useCallback(() => {
     if (state !== 'live') return;
     // ★ 基準③ 割り込み。**公式の手順は 2 段** (2026-09-05、調べて分かった):
@@ -309,5 +350,5 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
   }, []);
 
-  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, start, stop, pressTalk, releaseTalk };
+  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };
 }
