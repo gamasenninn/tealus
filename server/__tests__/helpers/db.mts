@@ -2,9 +2,8 @@
  * Test database helper
  * Provides setup/teardown for test database.
  */
-import { Pool, type PoolClient } from 'pg';
-import fs from 'node:fs';
-import path from 'node:path';
+import { Pool } from 'pg';
+import { migrate } from '../../src/db/migrate.mts';
 
 let pool: Pool | null = null;
 
@@ -29,32 +28,27 @@ export function getTestPool(): Pool {
  */
 export async function setupTestDb(): Promise<void> {
   const p = getTestPool();
-  const client: PoolClient = await p.connect();
-  try {
-    // Drop all tables first (clean slate)
-    await client.query(`
-      DO $$ DECLARE
-        r RECORD;
-      BEGIN
-        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-          EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-        END LOOP;
-      END $$;
-    `);
+  // Drop all tables first (clean slate)
+  await p.query(`
+    DO $$ DECLARE
+      r RECORD;
+    BEGIN
+      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+      END LOOP;
+    END $$;
+  `);
 
-    // Run migrations
-    const migrationsDir = path.join(import.meta.dirname, '../../src/db/migrations');
-    const files = fs.readdirSync(migrationsDir)
-      .filter(f => f.endsWith('.sql'))
-      .sort();
-
-    for (const file of files) {
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-      await client.query(sql);
-    }
-  } finally {
-    client.release();
-  }
+  // ★ #406: 本番と同じ runner を使う。以前はここに「全ファイルを流す」処理を
+  //   **もう 1 つ持っていた** ので、台帳も再生の経路もテストで一度も通らなかった。
+  //   同じ仕事のコードを 2 か所に持つと、片方だけが壊れていても気づけない。
+  await migrate({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5433'),
+    database: process.env.DB_NAME || 'tealus_test',
+    user: process.env.DB_USER || 'tealus_test',
+    password: process.env.DB_PASSWORD || 'tealus_test',
+  }, { log: () => {} });
 }
 
 /**

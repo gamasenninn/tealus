@@ -35,6 +35,9 @@ export async function checkMigrations({ query, warn }: MigrationCheckDeps): Prom
     if (code === '42P01') {
       // undefined_table: migration 未適用が確定
       warn(`[migration-check] ${CORE_TABLE} テーブルが見つかりません — cd server && npm run migrate を実行してください`);
+      // ★ #406: 既に他のテーブルが在る DB では、runner が止まって baseline を案内する。
+      //   そちらの手順も先に出しておく (「案内どおり打ったら失敗した」を作らない)。
+      warn(`[migration-check]   ★ 既存の DB で「schema_migrations が無い」と止まった場合は npm run migrate -- --baseline`);
       warn(`[migration-check]   辞書育成タブ (admin) が 500 になり、自己成長辞書 (#327) が動作しません。稼働は継続します (file フォールバック)。`);
     } else {
       // DB 不達など: テーブルの有無を断定できないが、setup 中の可能性があるので surface する
