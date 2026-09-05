@@ -313,6 +313,43 @@ ${body}`;
 });
 
 /**
+ * ★ 会話の逐語は 1 週間で消す (#389、利用者判断 2026-09-05)。
+ *
+ * ★★ 会話モードは「組織記憶に入れないための入口」で、会話はルームに 1 件も入らない
+ *   —— **書かないことで捨てている**。ところが計測ログには逐語が丸ごと残っていた。
+ *   docs/08 §11 が名指しで警告していた形:
+ *
+ *   > 「捨てる」をどこまで本当に捨てるか。**「使い捨て」を名乗って実は残っていると、
+ *   >  信頼を一度で失う。中途半端が一番悪い**
+ *
+ * ★ 1 週間なのは、測り直し (§7-5) には足りて、溜め込みにはならない長さだから。
+ * ★ `.jsonl` 以外には触らない。同じ置き場に別のものが来ても壊さないため。
+ * ★ 失敗しても投げない。掃除で会話を止めない。
+ */
+export const VOICE_LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function pruneVoiceChatLogs(dir: string, maxAgeMs: number, now: number = Date.now()): number {
+  let removed = 0;
+  try {
+    if (!fs.existsSync(dir)) return 0;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.jsonl')) continue;
+      const full = path.join(dir, name);
+      try {
+        if (now - fs.statSync(full).mtimeMs <= maxAgeMs) continue;
+        fs.unlinkSync(full);
+        removed += 1;
+      } catch (err) {
+        logger.warn(`[voice-chat] 古いログを消せませんでした ${name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  } catch (err) {
+    logger.warn(`[voice-chat] ログの掃除に失敗: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return removed;
+}
+
+/**
  * POST /voice-chat/log — ブラウザ側の計測を受け取る (docs/08 §12.6)。
  * ★ 成立の基準 4 項目 (§7.1) を**あとから数えられる形**で残すための口。
  *   §2.2 と同じ段分けで集計できるよう、生のイベントをそのまま JSONL に落とす。
