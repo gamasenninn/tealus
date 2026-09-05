@@ -1,0 +1,99 @@
+/*
+ * #405 Realtime 音声会話の専用画面 (docs/08 §12)。
+ * ★ 縦位置は --vvh / --vvt (#397 で入れた visual viewport 変数) に乗せる。
+ *   これが無いと、スマホでキーボードや URL バーが出たときに下端が画面外に出る。
+ *   変数は App.tsx の useVisualViewportVars が更新しているので、ここでは使うだけ。
+ */
+.voice-chat-overlay {
+  position: fixed;
+  top: var(--vvt, 0px);
+  left: 0;
+  right: 0;
+  height: var(--vvh, 100%);
+  z-index: 1200;                 /* modal-overlay(1000) / z-high(1100) より上 */
+  background: #101418;
+  color: #f2f4f6;
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.voice-chat-room { font-size: 15px; font-weight: 600; }
+
+.voice-chat-close {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+}
+
+.voice-chat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* 状態を一目で出すための丸 (§7-2 無言で待たせない) */
+.voice-chat-orb {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s, background 0.2s;
+}
+.voice-chat-orb.speaking { background: rgba(94, 176, 255, 0.35); animation: voice-chat-pulse 1.4s ease-in-out infinite; }
+.voice-chat-orb.listening { background: rgba(120, 220, 150, 0.35); transform: scale(1.08); }
+
+@keyframes voice-chat-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* 動きを減らす設定の人には点滅させない */
+@media (prefers-reduced-motion: reduce) {
+  .voice-chat-orb.speaking { animation: none; }
+}
+
+.voice-chat-status { font-size: 16px; margin: 0; }
+.voice-chat-error { font-size: 14px; color: #ff9b9b; margin: 0; }
+.voice-chat-turns { font-size: 13px; opacity: 0.6; margin: 0; }
+
+.voice-chat-footer {
+  padding: 20px 24px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  justify-content: center;
+}
+
+.voice-chat-ptt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 160px;
+  padding: 18px 0;
+  border-radius: 999px;
+  border: none;
+  background: #2b6cb0;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  touch-action: none;            /* 押している間にスクロールさせない */
+  user-select: none;
+  transition: background 0.15s, transform 0.15s;
+}
+.voice-chat-ptt.active { background: #38a169; transform: scale(1.04); }
+.voice-chat-ptt:disabled { background: rgba(255, 255, 255, 0.12); cursor: default; }

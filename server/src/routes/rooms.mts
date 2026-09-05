@@ -394,7 +394,7 @@ router.get('/:id', requireMember, async (req, res) => {
  */
 router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy } = req.body;
+  const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled } = req.body;
 
   try {
     const updates: string[] = [];
@@ -406,6 +406,8 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     if (is_announcement !== undefined) { updates.push(`is_announcement = $${paramIndex++}`); values.push(is_announcement); }
     if (app_urls !== undefined) { updates.push(`app_urls = $${paramIndex++}`); values.push(JSON.stringify(app_urls)); }
     if (message_edit_policy !== undefined) { updates.push(`message_edit_policy = $${paramIndex++}`); values.push(message_edit_policy); }
+    // #405 Realtime 音声会話 (docs/08 §12)。既定 false = 開けたルームにだけ入口が出る
+    if (voice_conversation_enabled !== undefined) { updates.push(`voice_conversation_enabled = $${paramIndex++}`); values.push(voice_conversation_enabled); }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: '更新する項目がありません' });

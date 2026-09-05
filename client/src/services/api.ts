@@ -271,6 +271,23 @@ class ApiClient {
     return this._agentApi<Blob>('POST', '/tts/synthesize', { text, room_id: roomId }, { as: 'blob', errorMessage: 'TTS に失敗しました' });
   }
 
+  // === #405 Realtime 音声会話 (docs/08 §12) — agent-server /voice-chat/... proxy 経由 ===
+
+  /** 会話を始める。★ MCP の冷間起動をここで吸収するので、数十秒かかることがある */
+  createVoiceChatSession(roomId: string): Promise<{ session_id: string; client_secret: string; model: string }> {
+    return this._agentApi('POST', '/voice-chat/session', { room_id: roomId }, { errorMessage: '会話を開始できませんでした' });
+  }
+
+  /** モデルが要求した道具を、サーバ側で実行して結果をもらう (ブラウザは実行しない) */
+  voiceChatToolCall(sessionId: string, callId: string, name: string, args: string): Promise<{ output: string; elapsed_ms: number }> {
+    return this._agentApi('POST', '/voice-chat/tool-call', { session_id: sessionId, call_id: callId, name, arguments: args });
+  }
+
+  /** 計測イベントの送信 (docs/08 §12.6)。★ 失敗しても会話は止めない */
+  voiceChatLog(sessionId: string, events: unknown[]): Promise<{ ok: boolean }> {
+    return this._agentApi('POST', '/voice-chat/log', { session_id: sessionId, events }, { fallback: { ok: false } });
+  }
+
   // === Room agent settings (#156) — agent-server /config/room/:roomId/... proxy 経由 ===
   async _agentApi<T = Json>(
     method: string,

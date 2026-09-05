@@ -14,8 +14,9 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio } from 'lucide-react';
+import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic } from 'lucide-react';
 import CallConfirmModal from '../call/CallConfirmModal';
+import VoiceChatView from '../voicechat/VoiceChatView';
 import { useTransceiver } from '../../hooks/useTransceiver';
 import TransceiverErrorBoundary from './TransceiverErrorBoundary';
 import MessageErrorBoundary from './MessageErrorBoundary';
@@ -45,6 +46,8 @@ function ChatRoom() {
   const { messages, error: messageError } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
   const [showCallConfirm, setShowCallConfirm] = useState(false);
+  // #405 Realtime 音声会話 (docs/08 §12)。専用画面なので、開いている間はトーク画面を覆う
+  const [showVoiceChat, setShowVoiceChat] = useState(false);
   const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom);
   useVoiceContinuousPlay(messages);
 
@@ -163,6 +166,17 @@ function ChatRoom() {
         ) : (
           <button className="chat-header-btn" onClick={() => setShowCallConfirm(true)} title="通話"><Phone size={18} /></button>
         ))}
+        {/* #405 Realtime 音声会話 (docs/08 §12)。★ 開けたルームにだけ出す — 既定 false なので
+            開けていないルームではボタンは 1 つも増えない。トランシーバー接続中は音が重なるので出さない */}
+        {currentRoom?.voice_conversation_enabled && !transceiver.isConnected && !callStatus && (
+          <button
+            className="chat-header-btn"
+            onClick={() => setShowVoiceChat(true)}
+            title="AI と話す"
+          >
+            <Mic size={18} />
+          </button>
+        )}
         <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル"><Image size={18} /></button>
         <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}><Search size={18} /></button>
         {currentRoom?.type === 'group' && (
@@ -269,6 +283,14 @@ function ChatRoom() {
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />
       )}
+      {showVoiceChat && (
+        <VoiceChatView
+          roomId={roomId!}
+          roomName={currentRoom?.name || 'このルーム'}
+          onClose={() => setShowVoiceChat(false)}
+        />
+      )}
+
       {showCallConfirm && (
         <CallConfirmModal
           onConfirm={({ video, audio }) => {

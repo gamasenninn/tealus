@@ -89,6 +89,11 @@ export const TEALUS_BOT_PASS = process.env.TEALUS_BOT_PASS;
 
 // OpenAI
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// #405 Realtime 音声会話のモデル (docs/08 §12)。
+// ★ 既定は mini。成立の基準① (2 秒) が mini で落ちたら flagship (gpt-realtime-2.1) で測り直す、
+//   が R0 の分岐なので env で差し替えられるようにしてある。料金は約 4 倍違う。
+export const REALTIME_MODEL = process.env.REALTIME_MODEL || 'gpt-realtime-2.1-mini';
 export const AGENT_LIGHT_MODEL = process.env.AGENT_LIGHT_MODEL || 'gpt-5.4-mini';
 export const AGENT_ROUTER_MODEL = process.env.AGENT_ROUTER_MODEL || 'gpt-5.4-mini';
 

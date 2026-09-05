@@ -11,6 +11,7 @@ import { router as logsRoutes } from './routes/logs.mts';
 import { router as ttsRoutes } from './routes/tts.mts';
 import { router as agentRoutes } from './routes/agent.mts';
 import { router as ccQueueRoutes } from './routes/ccQueue.mts';
+import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
 
 export const app = express();
@@ -46,6 +47,11 @@ app.use('/tts', authenticate, ttsRoutes);
 
 // Agent control API（認証必要）— #250 Deep agent cancel
 app.use('/agent', authenticate, agentRoutes);
+
+// #405 Realtime 音声会話（認証必要）— docs/08 §12。使い捨てトークンの発行 / 道具の実行 / 計測。
+// 認証は JWT のみなので、route 側でさらに本体 /api/rooms/:id を引いて
+// 「参加しているか」と「そのルームで開けてよいか」の両方を確認する。
+app.use('/voice-chat', authenticate, voiceChatRoutes);
 
 // cc-queue ストリーム（認証必要）— #214 CC セッションを別マシンで動かすための復路。
 // 認証は署名検証のみなので、route 側でさらに本体 /api/rooms を引いて参加ルームに絞る。

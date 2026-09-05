@@ -40,6 +40,8 @@ export interface Room {
   last_message_at?: string | null;
   message_edit_policy?: 'none' | 'sender' | 'member';
   allow_member_transcription_edit?: boolean;
+  /** #405 Realtime 音声会話モードを開けるルームか (docs/08 §12)。既定 false */
+  voice_conversation_enabled?: boolean;
   app_urls?: AppUrl[];
   is_announcement?: boolean;
   my_role?: string;

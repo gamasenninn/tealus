@@ -35,6 +35,8 @@ interface RoomSettingsProps {
 function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: RoomSettingsProps) {
   const [transcriptionEdit, setTranscriptionEdit] = useState<string>(currentRoom?.allow_member_transcription_edit ? 'member' : 'sender');
   const [messageEditPolicy, setMessageEditPolicy] = useState<string>(currentRoom?.message_edit_policy || 'none');
+  // #405 Realtime 音声会話 (docs/08 §12)。★ 既定 false = 明示的に開けたルームだけ
+  const [voiceConversation, setVoiceConversation] = useState<boolean>(!!currentRoom?.voice_conversation_enabled);
   const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
   const [appUrls, setAppUrls] = useState<AppUrl[]>(currentRoom?.app_urls || []);
@@ -117,6 +119,19 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
     try {
       await api.updateRoom(roomId, { allow_member_transcription_edit: value === 'member' });
       setTranscriptionEdit(value);
+      await selectRoom(roomId);
+    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+  };
+
+  /**
+   * #405 会話モードの可否 (docs/08 §4.1)。★ 全ルーム解放にしない根拠は §4 の理由② ——
+   * 会話モードは未知の失敗をするので、壊れたときにその 1 ルームで止まる方がよい。
+   */
+  const handleVoiceConversationChange = async (value: string) => {
+    const enabled = value === 'on';
+    try {
+      await api.updateRoom(roomId, { voice_conversation_enabled: enabled });
+      setVoiceConversation(enabled);
       await selectRoom(roomId);
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
   };
@@ -227,6 +242,13 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
             <select value={transcriptionEdit} onChange={e => handleTranscriptionEditChange(e.target.value)}>
               <option value="sender">送信者のみ</option>
               <option value="member">メンバー全員</option>
+            </select>
+          </div>
+          <div className="room-setting-select">
+            <label>AI と音声で話す</label>
+            <select value={voiceConversation ? 'on' : 'off'} onChange={e => handleVoiceConversationChange(e.target.value)}>
+              <option value="off">開かない</option>
+              <option value="on">このルームで開く</option>
             </select>
           </div>
           <div className="room-setting-select">
