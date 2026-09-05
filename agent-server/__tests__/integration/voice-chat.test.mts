@@ -17,6 +17,9 @@ import request from 'supertest';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 process.env.OPENAI_API_KEY = 'sk-test-key';
 process.env.TEALUS_API_URL = 'http://tealus.test';
+// ★ ルーム固有の指示のテストで本物のファイルを置くため、ワークスペースを一時 dir にする
+process.env.AGENT_WORKSPACE_ROOT = require('node:fs')
+  .mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'vc-ws-'));
 
 jest.mock('../../src/webhook/routes.mts', () => {
   const express = require('express');
@@ -395,5 +398,72 @@ describe('POST /voice-chat/session — ルームごとの道具の上乗せ', ()
       .send({ session_id: s.body.session_id, call_id: 'c', name: 'execute_sql', arguments: '{}' });
     expect(ng.status).toBe(403);
     expect(mockCallTool).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ ルーム固有の指示 (`light_prompt.md`) を会話モードにも渡す (2026-09-05)。
+ *
+ * ★★ 当初は「毎ターン 96,000 tokens が遅さの正体」(docs/08 §2.4) を根拠に、
+ *   system_prompt / light_prompt / 辞書 の 3 つとも外していた。**十把一絡げだった** ——
+ *   大きいのは辞書 (57KB) だけで、light_prompt は 8.8KB。しかも **instructions は
+ *   セッション内で安定した接頭辞なのでキャッシュが効く** (利用者指摘)。
+ *
+ * ★ 効果がはっきりしている: 社内DB ルームの light_prompt には「6 つのビューの一覧」と
+ *   「用語 → テーブルの対応表」が書いてある。**渡していなかったので、AI は search_objects で
+ *   7 回も調べ、権限エラーを踏んでいた。** 答えは最初から用意されていた。
+ *
+ * ★★★ `default_system_prompt.md` は**入れない。サイズではなく中身の理由**:
+ *   「応答前に必ず get_messages で直近を確認」「latency より質を優先」と書いてあり、
+ *   **毎ターン道具の往復が挟まる = 基準① (2 秒) と正面から衝突する**。
+ *   テキスト経路のために書かれたもので、音声には合わない。
+ */
+describe('POST /voice-chat/session — ルーム固有の指示', () => {
+  const fsx = require('node:fs') as typeof import('node:fs');
+  const pathx = require('node:path') as typeof import('node:path');
+  // ★ fs をモックせず、**本物のワークスペース**を作る (本番と同じ経路を通す)
+  const roomWs = pathx.join(process.env.AGENT_WORKSPACE_ROOT as string, 'agent-1', 'r1');
+
+  const instructions = () => {
+    const c = (global.fetch as jest.Mock).mock.calls.find((x) => String(x[0]).includes('client_secrets'));
+    return JSON.parse(c[1].body).session.instructions as string;
+  };
+
+  beforeEach(() => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue(TOOLS);
+    stubFetch();
+    fsx.mkdirSync(roomWs, { recursive: true });
+    fsx.rmSync(pathx.join(roomWs, 'light_prompt.md'), { force: true });
+  });
+
+  test('★ light_prompt.md があれば instructions に載る', async () => {
+    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), '## このルームの決まり\n入荷は入庫と読み替える');
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(instructions()).toContain('入荷は入庫と読み替える');
+  });
+
+  test('★ 無くても落ちない (大半のルームには無い)', async () => {
+    const res = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(res.status).toBe(200);
+    expect(instructions()).toContain('話し言葉');   // 共通部分は残る
+  });
+
+  test('★★ 共通の指示は消えない (ルーム固有が上書きしない)', async () => {
+    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), 'ルームの決まり');
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    const ins = instructions();
+    expect(ins).toContain('ルームの決まり');
+    expect(ins).toContain('道具を呼ぶ前に');   // ★ 一言つなぐ = 基準①を守っている指示
+  });
+
+  test('★ 空のファイルなら足さない (見出しだけが増えない)', async () => {
+    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), '   \n');
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(instructions()).not.toContain('このルームの決まり');
   });
 });

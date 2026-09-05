@@ -151,14 +151,35 @@ function toFunctionTools(tools: McpToolLike[]): Array<Record<string, unknown>> {
  *   **同じことを Realtime で繰り返さない** — 辞書も light_prompt.md も入れない。
  *   過去のやりとりは「毎回読ませる」のではなく「必要なときに道具で引く」に変える。
  */
-function buildInstructions(roomName: string): string {
-  return [
+function buildInstructions(roomName: string, workspacePath: string): string {
+  const base = [
     `あなたは社内メッセンジャー Tealus の「${roomName}」ルームで、音声で会話するアシスタントです。`,
     '過去のやりとりは道具 (get_messages / search_messages) で引けます。必要になったときだけ引いてください。',
     '★ 道具を呼ぶ前に「確認しますね」のように一言だけ挟んでください (黙って待たせない)。',
     '話し言葉で、短く答えてください。聞かれていないことを足さないこと。',
     '役職や呼び方はそのまま残してください。人物のフルネームに言い換えないこと。',
   ].join('\n');
+
+  // ★ ルーム固有の指示は載せる (2026-09-05)。**そのルームの知識そのもの**で、会話モードが
+  //   一番欲しいもの。社内DB ルームなら「6 つのビューの一覧」と「用語 → テーブルの対応表」が
+  //   書いてあり、渡さないと AI が search_objects で調べ直して権限エラーを踏む。
+  // ★★ 当初は「毎ターン 96,000 tokens が遅さの正体」(§2.4) を根拠に外していたが、
+  //   **十把一絡げだった** —— 大きいのは辞書 (57KB) だけで light_prompt は 8.8KB。
+  //   しかも instructions はセッション内で安定した接頭辞なのでキャッシュが効く。
+  // ★★★ `default_system_prompt.md` は入れない。**サイズではなく中身の理由**:
+  //   「応答前に必ず get_messages で直近を確認」「latency より質を優先」と書いてあり、
+  //   毎ターン道具の往復が挟まる = 基準① (2 秒) と正面から衝突する。
+  try {
+    const roomPrompt = path.join(workspacePath, 'light_prompt.md');
+    if (fs.existsSync(roomPrompt)) {
+      const text = fs.readFileSync(roomPrompt, 'utf8').trim();
+      if (text) return `${base}\n\n## このルームの決まり\n\n${text}`;
+    }
+  } catch (err) {
+    // 読めなくても会話は始める (指示が薄くなるだけ)
+    logger.warn(`[voice-chat] light_prompt.md を読めませんでした: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return base;
 }
 
 /**
@@ -214,7 +235,7 @@ router.post('/session', async (req, res) => {
       session: {
         type: 'realtime',
         model: config.REALTIME_MODEL,
-        instructions: buildInstructions(roomName),
+        instructions: buildInstructions(roomName, workspacePath),
         tools: toFunctionTools(picked),
         tool_choice: 'auto',
         audio: {
