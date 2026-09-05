@@ -236,3 +236,31 @@ describe('createResponseGate — 出力音声が鳴っているかを、サー�
     expect(g.isOutputAudioPlaying()).toBe(false);
   });
 });
+
+/**
+ * ★ ルームに足す道具の入力を、区切り文字で取りこぼさない (2026-09-05)。
+ *
+ * カンマ区切りだけを想定していたら、**空白で入力されて 1 つの文字列として保存された**
+ * (`["execute_sql  search_objects tavily_search"]`)。プレースホルダに区切り文字を
+ * 書いていなかったのが原因だが、**区切り文字を人に覚えさせる方が間違い**。
+ */
+describe('道具名の入力を区切る', () => {
+  const parse = (s: string) => s.split(/[\s,、]+/).map((t) => t.trim()).filter(Boolean);
+
+  it('★ 空白区切り (実際に入力された形)', () => {
+    expect(parse('execute_sql  search_objects tavily_search'))
+      .toEqual(['execute_sql', 'search_objects', 'tavily_search']);
+  });
+  it('カンマ区切り', () => {
+    expect(parse('execute_sql, search_objects')).toEqual(['execute_sql', 'search_objects']);
+  });
+  it('★ 全角の読点でも区切れる (日本語入力のまま打てる)', () => {
+    expect(parse('execute_sql、search_objects')).toEqual(['execute_sql', 'search_objects']);
+  });
+  it('前後の空白と空要素は落とす', () => {
+    expect(parse('  a ,, b  ')).toEqual(['a', 'b']);
+  });
+  it('空なら空 (何も足さない)', () => {
+    expect(parse('   ')).toEqual([]);
+  });
+});

@@ -37,6 +37,8 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
   const [messageEditPolicy, setMessageEditPolicy] = useState<string>(currentRoom?.message_edit_policy || 'none');
   // #405 Realtime 音声会話 (docs/08 §12)。★ 既定 false = 明示的に開けたルームだけ
   const [voiceConversation, setVoiceConversation] = useState<boolean>(!!currentRoom?.voice_conversation_enabled);
+  // ★ 会話モードで上乗せする道具 (このルームの MCP のもの)。既定は空 = 何も増えない
+  const [voiceTools, setVoiceTools] = useState<string>((currentRoom?.voice_conversation_tools || []).join(', '));
   const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
   const [appUrls, setAppUrls] = useState<AppUrl[]>(currentRoom?.app_urls || []);
@@ -132,6 +134,23 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
     try {
       await api.updateRoom(roomId, { voice_conversation_enabled: enabled });
       setVoiceConversation(enabled);
+      await selectRoom(roomId);
+    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+  };
+
+  /**
+   * ★ このルームの MCP の道具を、名指しで会話モードに出す (#405)。
+   * ★★ ここに置くのは requireRoomAdmin で守られているから。room_settings.json 側は
+   *   認証のみで誰でも書けるので、`execute_sql` の許可を置くと危ない。
+   * ★ 道具の名前は agent-server のログに出る (会話を開くと「未許可: ...」で列挙される)。
+   */
+  const handleVoiceToolsSave = async () => {
+    // ★ カンマでも空白でも区切れるようにする (2026-09-05)。
+    //   カンマ区切りだけにしていたら、空白で入力されて **1 つの文字列**として保存された。
+    //   区切り文字を人に覚えさせない。
+    const tools = voiceTools.split(/[\s,、]+/).map((t) => t.trim()).filter(Boolean);
+    try {
+      await api.updateRoom(roomId, { voice_conversation_tools: tools });
       await selectRoom(roomId);
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
   };
@@ -251,6 +270,18 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
               <option value="on">このルームで開く</option>
             </select>
           </div>
+          {voiceConversation && (
+            <div className="room-setting-select">
+              <label>会話で使う道具を足す</label>
+              <input
+                type="text"
+                value={voiceTools}
+                onChange={(e) => setVoiceTools(e.target.value)}
+                onBlur={handleVoiceToolsSave}
+                placeholder="例: search_objects tavily_search（空白かカンマ区切り）"
+              />
+            </div>
+          )}
           <div className="room-setting-select">
             <label>メッセージ編集</label>
             <select value={messageEditPolicy} onChange={e => handleMessageEditChange(e.target.value)}>

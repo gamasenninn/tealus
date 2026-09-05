@@ -291,3 +291,109 @@ describe('POST /voice-chat/promote — 昇格 (R3)', () => {
     expect(res.status).toBe(409);
   });
 });
+
+/**
+ * ★ ルームごとに、道具を足せるようにする (2026-09-05)。
+ *
+ * これまで許可リストは**コードに固定の 6 個**で、ルーム固有 MCP (社内DB 等) の道具は
+ * **起動して道具一覧まで取ったうえで捨てていた**。守る対象を取り違えていた ——
+ * 許可リストは *tealus の破壊的な道具* を守るためのもので、
+ * **管理者がそのルームのために意図的に設定した MCP まで巻き添えにしていた**。
+ *
+ * ★★ 置き場は **DB の列** (`rooms.voice_conversation_tools`)。`room_settings.json` には置かない ——
+ *   `PUT /config/room/:roomId/settings` は認証のみでメンバー確認も管理者確認も無く、
+ *   **誰でも任意のルームに `execute_sql` を足せてしまう**。
+ *   会話モードを開く判定 (`voice_conversation_enabled`) と同じ場所・同じ門にする。
+ *
+ * ★ 既定は空。**何もしなければ 1 つも増えない。**
+ */
+describe('POST /voice-chat/session — ルームごとの道具の上乗せ', () => {
+  const withTools = (extra: unknown) => {
+    global.fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('/api/rooms/')) {
+        return { ok: true, status: 200, json: async () => ({
+          room: { id: 'r1', name: '営業報告', voice_conversation_enabled: true, voice_conversation_tools: extra },
+        }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ value: 'ek_1' }) };
+    }) as unknown as typeof fetch;
+  };
+  const names = () => {
+    const c = (global.fetch as jest.Mock).mock.calls.find((x) => String(x[0]).includes('client_secrets'));
+    return JSON.parse(c[1].body).session.tools.map((t: { name: string }) => t.name);
+  };
+  const ROOM_TOOLS = [
+    ...TOOLS,
+    { name: 'execute_sql', description: '社内DB', inputSchema: { type: 'object', properties: {} } },
+    { name: 'search_objects', description: 'DB 検索', inputSchema: { type: 'object', properties: {} } },
+  ];
+
+  beforeEach(() => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue(ROOM_TOOLS);
+    mockCallTool.mockReset();
+  });
+
+  test('★ 既定 (設定なし) では 1 つも増えない', async () => {
+    withTools(undefined);
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).not.toContain('execute_sql');
+    expect(names()).toContain('get_messages');
+  });
+
+  test('★★ 名指しした道具だけ増える', async () => {
+    withTools(['search_objects']);
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).toContain('search_objects');
+    expect(names()).not.toContain('execute_sql');   // ★ 名指ししていないものは増えない
+  });
+
+  test('★★★★ 名指しすれば破壊的な道具も通る (管理者が明示的に許した時だけ)', async () => {
+    withTools(['execute_sql']);
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).toContain('execute_sql');
+  });
+
+  test('★ 上乗せしても、もとの 6 個は残る', async () => {
+    withTools(['execute_sql']);
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    // ★ モックが出す道具のうち、もともと許可されている 2 つ
+    for (const n of ['get_messages', 'search_messages']) {
+      expect(names()).toContain(n);
+    }
+    expect(names()).not.toContain('delete_room');   // ★ 上乗せしても、危ないものは通らない
+  });
+
+  test('★ 壊れた値 (配列でない / 文字列でない要素) では増やさない', async () => {
+    withTools({ nope: true });
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).not.toContain('execute_sql');
+  });
+
+  test('★★ 上乗せしたものも、道具の口の検証を通る (session ごとに効く)', async () => {
+    withTools(['execute_sql']);
+    const s = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    mockCallTool.mockResolvedValue('done');
+    const ok = await request(app).post('/voice-chat/tool-call')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ session_id: s.body.session_id, call_id: 'c', name: 'execute_sql', arguments: '{}' });
+    expect(ok.status).toBe(200);
+  });
+
+  test('★★★ 上乗せしていないルームでは、口へ直接投げても実行しない', async () => {
+    withTools(undefined);
+    const s = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    const ng = await request(app).post('/voice-chat/tool-call')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ session_id: s.body.session_id, call_id: 'c', name: 'execute_sql', arguments: '{}' });
+    expect(ng.status).toBe(403);
+    expect(mockCallTool).not.toHaveBeenCalled();
+  });
+});

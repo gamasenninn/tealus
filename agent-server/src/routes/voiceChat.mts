@@ -34,11 +34,24 @@ export const router = express.Router();
 /**
  * ★ 会話モードに出す道具は明示リストで絞る。理由が 2 つある:
  *   1. 破壊的な道具を音声から誤爆させない (「消しといて」が通ると戻せない)
- *   2. ★ 関数方式は**道具の説明文を毎セッション渡す**ので、増えるほど遅くなる
- *      = 成立の基準① (2 秒) を自分で削ることになる (docs/08 §7.1)
+ *   2. ~~関数方式は道具の説明文を毎セッション渡すので、増えるほど遅くなる~~
+ *      ★★ **訂正 (2026-09-05): 測ったら効かなかった。** 6 → 9 に増やして比較:
+ *      ```
+ *      tools=6  n=54  中央値 1.05s  2 秒以内 52/54
+ *      tools=9  n=22  中央値 1.02s  2 秒以内 20/22   ← ★ むしろ速い (誤差)
+ *      ```
+ *      **この規模 (数個) では観測されない。** 大きく増やしたときは測り直すこと。
+ *      ★ したがって**このリストが立っている根拠は 1 だけ**である。
  * 試作は read 系 + 昇格用の送信だけ。増やすときは①を測り直してから。
+ * ★ 参考 (2026-09-05 実測): `tavily_search` が 5220ms かかったターンでも**声は 2.14s で返った**。
+ *   「道具を呼ぶ前に一言つなぐ」を instructions に入れてあるので、**道具の遅さは①に出にくい**。
+ *
+ * ★★ **ここは「tealus の破壊的な道具」を守るためのリストである** (2026-09-05 に取り違えを直した)。
+ *   ルーム固有の MCP (社内DB 等) の道具まで巻き添えで捨てていた —— 起動して道具一覧を
+ *   取ったうえで捨てるので、**起動コストだけ払って何も得ていなかった** (接続 4.2s の正体)。
+ *   → ルームごとに `rooms.voice_conversation_tools` で**名指しした道具を上乗せ**できる。
  */
-const ALLOWED_TOOLS = new Set([
+const BASE_TOOLS = new Set([
   'get_messages',
   'search_messages',
   'list_rooms',
@@ -46,6 +59,20 @@ const ALLOWED_TOOLS = new Set([
   'read_document',
   'send_message',   // 昇格 (docs/08 §1.2.2 の成立条件)
 ]);
+
+/**
+ * ★ そのルームで上乗せする道具。**DB の列から来る** (`rooms.voice_conversation_tools`)。
+ *
+ * ★★ `room_settings.json` には置かない。`PUT /config/room/:roomId/settings` は認証のみで
+ *   メンバー確認も管理者確認も無く、**誰でも任意のルームに `execute_sql` を足せてしまう**。
+ *   会話モードを開く判定と同じ場所・同じ門 (`PUT /api/rooms/:id` = requireRoomAdmin) に置く。
+ * ★ 既定は空。**何もしなければ 1 つも増えない。**
+ */
+function extraToolsOf(room: Record<string, unknown>): Set<string> {
+  const raw = room.voice_conversation_tools;
+  if (!Array.isArray(raw)) return new Set();
+  return new Set(raw.filter((x): x is string => typeof x === 'string' && !!x.trim()));
+}
 
 /** MCP の道具 1 つ。inputSchema は JSON Schema そのものなので、そのまま parameters にできる */
 interface McpToolLike {
@@ -161,8 +188,11 @@ router.post('/session', async (req, res) => {
     const workspacePath = path.join(config.WORKSPACE_ROOT, agentId, roomId);
     const servers = await getOrCreateRoomMcp(agentId, roomId, workspacePath) as unknown as McpServerLike[];
 
+    // ★ そのルームで許す道具 = 共通の 6 個 + ルームが名指しした分
+    const allowed = new Set([...BASE_TOOLS, ...extraToolsOf(resolved.room)]);
     const serverOf = new Map<string, McpServerLike>();
     const picked: McpToolLike[] = [];
+    const dropped: string[] = [];
     for (const s of servers) {
       let tools: McpToolLike[];
       try {
@@ -172,7 +202,8 @@ router.post('/session', async (req, res) => {
         continue;
       }
       for (const t of tools) {
-        if (!ALLOWED_TOOLS.has(t.name) || serverOf.has(t.name)) continue;
+        if (serverOf.has(t.name)) continue;
+        if (!allowed.has(t.name)) { dropped.push(t.name); continue; }
         serverOf.set(t.name, s);
         picked.push(t);
       }
@@ -218,7 +249,9 @@ router.post('/session', async (req, res) => {
       issuedAt: Date.now(),
     });
 
-    logger.info(`[voice-chat] session ${sessionId.slice(0, 8)} room=${roomId} tools=${picked.length} by ${userId}`);
+    // ★ 捨てた道具の名前も出す。管理者が「このルームで何を足せるか」を知る手段がこれしかない
+    logger.info(`[voice-chat] session ${sessionId.slice(0, 8)} room=${roomId} tools=${picked.length} by ${userId}`
+      + (dropped.length ? ` (未許可: ${dropped.join(', ')})` : ''));
     res.json({ session_id: sessionId, client_secret: secret.value, model: config.REALTIME_MODEL });
   } catch (err) {
     logger.error(`[voice-chat] session error: ${err instanceof Error ? err.message : String(err)}`);
