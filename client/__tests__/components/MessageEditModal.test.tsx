@@ -85,3 +85,39 @@ describe('MessageEditModal — 添付音声のプレイヤー (#378)', () => {
     expect(onConfirm).toHaveBeenCalledWith('直した本文');
   });
 });
+
+/**
+ * 開いた直後のフォーカス。
+ *
+ * ★ 経緯 (2026-09-05): textarea に autoFocus が付いており、スマホで編集を開くと
+ * 仮想キーボードが自動で立ち上がっていた。編集画面は textarea の**上**に音声プレイヤーと
+ * 時刻シークバーを載せている (#378 / #398) ので、キーボードが画面の半分を占めると
+ * 「聞きながら直す」の**聞く方が先に潰れる**。
+ *
+ * ★ 「どこにも当てない」ではなく **modal-box に当てる**。当てないとフォーカスが body に
+ *   残り、Tab が裏のトーク画面へ抜ける。確定ボタンには当てない (Enter/Space で誤発火する)。
+ *
+ * ★ タップすれば当然キーボードは出る。ここで止めているのは「勝手に出る」だけ。
+ */
+describe('MessageEditModal — 開いた直後のフォーカス', () => {
+  it('★ textarea にフォーカスを当てない (スマホでキーボードが勝手に出ない)', () => {
+    const { container } = render(
+      <MessageEditModal initialText="本文" onConfirm={vi.fn()} onClose={vi.fn()} />,
+    );
+    const textarea = container.querySelector('textarea')!;
+    expect(textarea).not.toHaveAttribute('autofocus');
+    expect(document.activeElement).not.toBe(textarea);
+  });
+
+  it('★ 代わりに modal-box にフォーカスが移る (Tab が裏の画面へ抜けない)', () => {
+    const { container } = render(
+      <MessageEditModal initialText="本文" onConfirm={vi.fn()} onClose={vi.fn()} />,
+    );
+    expect(document.activeElement).toBe(container.querySelector('.modal-box'));
+  });
+
+  it('★ 確定ボタンには当てない (Enter/Space での誤発火を避ける)', () => {
+    render(<MessageEditModal initialText="本文" onConfirm={vi.fn()} onClose={vi.fn()} />);
+    expect(document.activeElement).not.toBe(screen.getByText('確定'));
+  });
+});

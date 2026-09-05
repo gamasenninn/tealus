@@ -52,6 +52,10 @@ function VoiceEditModal({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // ★ 開いた直後のフォーカス先 (2026-09-05)。詳細は textarea 側のコメント。
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { boxRef.current?.focus(); }, []);
+
   // 音声再生 state (#248)
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -196,7 +200,12 @@ function VoiceEditModal({
 
   return (
     <div className="modal-overlay" onClick={handleBack}>
-      <div className="modal-box voice-edit-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={boxRef}
+        tabIndex={-1}
+        className="modal-box voice-edit-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="voice-edit-header">
           <h3>{title}</h3>
           {nav.total > 1 && (
@@ -249,8 +258,14 @@ function VoiceEditModal({
           key={currentId}
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
+          /* ★ autoFocus を外した (2026-09-05)。スマホで開くと仮想キーボードが自動で出て、
+             上の音声プレイヤーが画面から押し出されていた。
+             ★★ **前/次 で移動した後も当てない。** `key={currentId}` で移動のたびに作り直される
+             ため、autoFocus を残すと移動のたびにキーボードが出る。連続編集が 1 タップ増えるが、
+             ★ user 判断は「広いエリアで内容を確認して、修正が必要ならタップする」 ——
+             移動直後は**読む場面**であって打つ場面ではない、という整理。
+             ★ フォーカス先は modal-box (boxRef)。当てないと Tab が裏のトーク画面へ抜ける。 */
           rows={6}
-          autoFocus
         />
 
         {/* 連続編集ナビ: 前/次 で隣の音声へ (未保存は自動保存) */}

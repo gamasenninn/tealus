@@ -121,3 +121,44 @@ describe('VoiceEditModal — 現状の振る舞い (#379 Step 0 特性テスト)
     expect(screen.getByText('確定')).not.toBeDisabled();
   });
 });
+
+/**
+ * 開いた直後 / 移動した直後のフォーカス (2026-09-05)。
+ *
+ * ★ textarea の autoFocus をやめる。スマホで編集を開くと仮想キーボードが自動で立ち上がり、
+ *   textarea の**上**にある音声プレイヤーと時刻シークバーが画面から押し出されていた。
+ *
+ * ★★ **前/次 で移動した後も当てない。** ここは「連続編集が止まる」ので当てる案もあったが、
+ *   user 判断は「広いエリアで内容を確認して、修正が必要ならタップする」。
+ *   つまり移動直後は**読む場面**であって、打つ場面ではない。
+ *   textarea には `key={currentId}` が付いていて移動のたびに作り直されるので、
+ *   autoFocus を残すと移動のたびにキーボードが出る。
+ *
+ * ★ 当てないのではなく modal-box に移す (Tab が裏のトーク画面へ抜けないように)。
+ */
+describe('VoiceEditModal — フォーカス (勝手にキーボードを出さない)', () => {
+  beforeEach(() => {
+    editTranscriptionMock.mockClear();
+    updateTranscriptionMock.mockClear();
+    mockMessages.list = [voice('a', 'AAA'), voice('b', 'BBB'), voice('c', 'CCC')];
+  });
+
+  it('★ 開いた直後、textarea にフォーカスを当てない', () => {
+    const { container } = render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    const textarea = container.querySelector('textarea')!;
+    expect(textarea).not.toHaveAttribute('autofocus');
+    expect(document.activeElement).not.toBe(textarea);
+  });
+
+  it('★ 代わりに modal-box にフォーカスが移る', () => {
+    const { container } = render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(container.querySelector('.modal-box'));
+  });
+
+  it('★★ 次 → で移動した後も当てない (読んでから、必要ならタップする)', async () => {
+    const { container } = render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('次 →'));
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('CCC'));
+    expect(document.activeElement).not.toBe(container.querySelector('textarea'));
+  });
+});

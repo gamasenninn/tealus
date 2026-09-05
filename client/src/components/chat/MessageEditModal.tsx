@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import MediaAudio from '../media/MediaAudio';
 import TranscriptSeekBar from '../media/TranscriptSeekBar';
 import type { MediaItem } from '../../types';
@@ -25,10 +25,20 @@ interface MessageEditModalProps {
  */
 function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEditModalProps) {
   const [text, setText] = useState(initialText);
+  const boxRef = useRef<HTMLDivElement | null>(null);
   const audios = (media ?? []).filter((m) => m.mime_type?.startsWith('audio/'));
+
+  // ★ 開いた直後のフォーカスは箱に置く (2026-09-05)。詳細は textarea 側のコメント。
+  useEffect(() => { boxRef.current?.focus(); }, []);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box voice-edit-modal message-edit-modal" onClick={e => e.stopPropagation()}>
+      <div
+        ref={boxRef}
+        tabIndex={-1}
+        className="modal-box voice-edit-modal message-edit-modal"
+        onClick={e => e.stopPropagation()}
+      >
         <h3>メッセージを編集</h3>
         {/* ★ #380: バブルと同じ部品を使う。markup も 同時再生抑制の配線も 1 か所に持つ */}
         {audios.map((m) => <MediaAudio key={m.id} media={m} />)}
@@ -42,8 +52,14 @@ function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEdi
              ★ しかも前/次ナビを余分に持つのに収まっている = 差は rows だった。
              ★★ PC では flex:1 (flex-basis:0) が高さを支配するので rows は効かない。
              下げても PC の見た目は変わらない。 */
+          /* ★ autoFocus を外した (2026-09-05)。スマホで編集を開いた瞬間に仮想キーボードが
+             立ち上がり、textarea の**上**にある音声プレイヤーと時刻シークバー (#378 / #398)
+             が画面から押し出されていた。通話履歴の修正は「聞きながら直す」ので、
+             ★ 聞く方が先に潰れる。タップすれば当然出る — 止めたのは「勝手に出る」だけ。
+             ★★ 代わりのフォーカス先は modal-box (上の boxRef)。どこにも当てないと body に
+             残り、Tab が裏のトーク画面へ抜ける。確定ボタンには当てない (Enter/Space で誤発火)。
+             ★ rows={6} は 8/29 の判断のまま。タップすればキーボードは出るので理由は生きている。 */
           rows={6}
-          autoFocus
         />
         <div className="voice-edit-buttons">
           <button className="btn-cancel" onClick={onClose}>キャンセル</button>
