@@ -370,7 +370,9 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       setPromoteError(status === undefined
         ? `${message} (サーバに届いていません。通信を確かめて、もう一度押してください)`
         : message);
-      mark('promote_error', { message, status });
+      // ★ undefined は JSON.stringify で**キーごと消える**ので null で残す (#410)。
+      //   消えると「届かなかった」と「記録が古い」が集計で同じ顔になる
+      mark('promote_error', { message, status: status ?? null });
     }
   }, [lastReply, mark]);
 

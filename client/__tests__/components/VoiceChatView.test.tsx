@@ -217,7 +217,9 @@ describe('VoiceChatView — 昇格の失敗 (#408)', () => {
 
     const err = loggedEvents().find((e) => e.type === 'promote_error');
     expect(err).toBeDefined();
-    expect(err?.data?.status).toBeUndefined();
+    // ★ undefined ではなく **null** で残す (#410)。undefined は JSON.stringify でキーごと消え、
+    //   集計で「届かなかった」と「#408 より前の古い記録」が同じ顔になってしまう
+    expect(err?.data?.status).toBeNull();
   });
 });
 
