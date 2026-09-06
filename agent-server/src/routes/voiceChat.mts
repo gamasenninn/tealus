@@ -74,6 +74,24 @@ function extraToolsOf(room: Record<string, unknown>): Set<string> {
   return new Set(raw.filter((x): x is string => typeof x === 'string' && !!x.trim()));
 }
 
+/**
+ * ★ 由来の印 (docs/08 §12.10)。**ルームには普段の AI 応答も出るので、区別が付かないと
+ *   後から見た人が追えない。** 昇格 (人がボタン) と 道具経由 (AI が自分で送る) の
+ *   **両方に付ける** (#417)。
+ *
+ * ★★ 「AI が書けること」自体は直さない (利用者判断 2026-09-06:「むしろ好ましい。
+ *   ユーザが送ることを承諾している」)。★★★ **承諾で解決しないのが印の方**である ——
+ *   承諾したのは送る人で、**後から読む人は知らない**。印は読む人のためのもの。
+ */
+const ORIGIN_MARK = '🎙 会話モードから';
+
+/** 本文の先頭に印を付ける。★ 既に付いていれば足さない (モデルが真似して書くことがある) */
+function withOriginMark(content: string): string {
+  return content.startsWith(ORIGIN_MARK) ? content : `${ORIGIN_MARK}
+
+${content}`;
+}
+
 /** MCP の道具 1 つ。inputSchema は JSON Schema そのものなので、そのまま parameters にできる */
 interface McpToolLike {
   name: string;
@@ -305,6 +323,13 @@ router.post('/tool-call', async (req, res) => {
     return res.json({ output: '引数の JSON が壊れています。組み立て直してください。', elapsed_ms: 0 });
   }
 
+  // ★ AI が自分で送る投稿にも 由来の印を付ける (#417)。昇格と同じ文言・同じ位置。
+  //   ★★ 行き先 (room_id) は固定しない —— 昇格では固定したが、道具では**モデルに選ばせたまま**にする
+  //   (利用者判断 2026-09-06)。誤爆すれば別の部屋に出るが、承知の上。必要になったら固定する。
+  if (name === 'send_message' && typeof args.content === 'string' && args.content.trim()) {
+    args.content = withOriginMark(args.content);
+  }
+
   try {
     const result = await entry.serverOf.get(name)!.callTool(name, args);
     const output = typeof result === 'string' ? result : JSON.stringify(result);
@@ -365,9 +390,7 @@ router.post('/promote', async (req, res) => {
   try {
     // ★ 由来が本文から読める印。ルームには普段の AI 応答も出るので、
     //   区別が付かないと後から見た人が「いつ誰が言ったのか」を追えなくなる。
-    const content = `🎙 会話モードから
-
-${body}`;
+    const content = withOriginMark(body);
     await (server as McpServerLike).callTool('send_message', { room_id: entry.roomId, content });
     logger.info(`[voice-chat] 昇格 room=${entry.roomId} ${body.length}字 by ${userId}`);
     res.json({ ok: true });

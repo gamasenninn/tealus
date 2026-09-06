@@ -596,3 +596,68 @@ describe('POST /voice-chat/promote — 失敗の記録と文言 (#408)', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('送信の道具'));
   });
 });
+
+/**
+ * #417 道具から送った投稿にも 由来の印を付ける。
+ *
+ * ★ 昇格 (`/promote`) には印が付くが、**道具経由 (`/tool-call`) には付いていなかった**。
+ *   2026-09-06 の現場テスト中に、AI が `send_message` を自分で呼んで 2 件投稿し、
+ *   **普段の AI 応答と区別が付かない形**でルームに残った。
+ *
+ * ★★ **「AI が書けること」自体は直さない** (利用者判断 2026-09-06:「むしろ好ましい。
+ *   ユーザが送ることを承諾している」)。★★★ **承諾で解決しないのは印の方** ——
+ *   承諾したのは送る人で、**後から読む人は知らない**。印は読む人のためのもの。
+ */
+describe('POST /voice-chat/tool-call — 由来の印 (#417)', () => {
+  let sessionId: string;
+
+  beforeEach(async () => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue([
+      ...TOOLS,
+      { name: 'send_message', description: '送信', inputSchema: { type: 'object', properties: {} } },
+    ]);
+    mockCallTool.mockReset().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    stubFetch();
+    const res = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
+    sessionId = res.body.session_id;
+  });
+
+  async function call(name: string, args: Record<string, unknown>) {
+    return request(app).post('/voice-chat/tool-call')
+      .set('Authorization', `Bearer ${token('u1')}`)
+      .send({ session_id: sessionId, name, arguments: JSON.stringify(args) });
+  }
+
+  test('★★ 道具から送った投稿にも 印が付く', async () => {
+    await call('send_message', { room_id: 'r1', content: 'テストです' });
+    const [, args] = mockCallTool.mock.calls[0];
+    expect(args.content).toMatch(/会話モードから/);
+    expect(args.content).toContain('テストです');
+  });
+
+  test('★ 印は本文の先頭に付く (昇格と同じ形)', async () => {
+    await call('send_message', { room_id: 'r1', content: '要点はこうです' });
+    const [, args] = mockCallTool.mock.calls[0];
+    expect(String(args.content).startsWith('🎙 会話モードから')).toBe(true);
+  });
+
+  test('★★ 既に印がある本文には 二重に付けない', async () => {
+    await call('send_message', { room_id: 'r1', content: '🎙 会話モードから\n\nもう付いている' });
+    const [, args] = mockCallTool.mock.calls[0];
+    expect(String(args.content).match(/会話モードから/g)).toHaveLength(1);
+  });
+
+  test('★ 他の道具の引数には触らない', async () => {
+    await call('get_messages', { room_id: 'r1', limit: 5 });
+    const [name, args] = mockCallTool.mock.calls[0];
+    expect(name).toBe('get_messages');
+    expect(args).toEqual({ room_id: 'r1', limit: 5 });
+  });
+
+  test('★ content が無くても落ちない (モデルが引数を間違えても会話を止めない)', async () => {
+    const res = await call('send_message', { room_id: 'r1' });
+    expect(res.status).toBe(200);
+  });
+});
