@@ -30,6 +30,31 @@ export const AUTH_FAIL_PATTERNS: AuthFailPattern[] = [
   { kind: 'token_expired', re: /token[_ ]expired|invalid[_ ]token/i },
 ];
 
+/**
+ * ★★ 認証**ではない**と分かっている形 (#422)。★ 認証パターンより先に見る。
+ *
+ * 2026-09-06: codex が古くてモデル一覧を解釈できず落ちたのに「サインインが切れました」と
+ * 案内し、★ 利用者にブラウザログインを繰り返させた。誤判定の理由は
+ * **76KB のモデル一覧 JSON の中の `unauthorized` の 1 語**に中信頼度パターンが反応したこと。
+ */
+export const NON_AUTH_PATTERNS: AuthFailPattern[] = [
+  // codex が新しいモデル一覧を解釈できない (= CLI が古い)
+  { kind: 'cli_outdated', re: /failed to decode models response|codex_models_manager/i },
+];
+
+/**
+ * ★ 判定に使う範囲を絞る (#422)。
+ *
+ * ★★ **`body: {` から後ろは見ない。** サーバから返った JSON の中身であって、
+ *   codex の言い分ではない。そこに出てくる語で原因を決めてはいけない。
+ * ★ さらに先頭 2000 字までに限る (長大な stderr の末尾に紛れた 1 語で判定しない)。
+ */
+export function classifiableSlice(message: string): string {
+  const bodyAt = message.search(/\bbody:\s*[{[]/i);
+  const head = bodyAt >= 0 ? message.slice(0, bodyAt) : message;
+  return head.slice(0, 2000);
+}
+
 export interface CodexAuthErrorResult {
   isAuth: boolean;
   kind: string | null;
@@ -47,12 +72,36 @@ export function detectCodexAuthError(message: string | undefined): CodexAuthErro
   if (!message || typeof message !== 'string') {
     return { isAuth: false, kind: null, raw: message };
   }
+  const target = classifiableSlice(message);
+
+  // ★★ 認証ではないと分かっている形を先に見る (#422)。順序が逆だと、
+  //   モデル一覧の JSON に紛れた語で「認証切れ」と誤判定する。
+  for (const { kind, re } of NON_AUTH_PATTERNS) {
+    if (re.test(target)) {
+      return { isAuth: false, kind, raw: message };
+    }
+  }
   for (const { kind, re } of AUTH_FAIL_PATTERNS) {
-    if (re.test(message)) {
+    if (re.test(target)) {
       return { isAuth: true, kind, raw: message };
     }
   }
   return { isAuth: false, kind: null, raw: message };
+}
+
+/**
+ * ★ 判定の結果から、利用者に出す 1 行を作る (#422)。
+ *
+ * ★★ **分からないときは推測しない。** 間違った案内は、案内が無いより悪い ——
+ *   2026-09-06 に「サインインが切れました」と出して、**利用者を無駄なログインに送り込んだ**。
+ */
+export function buildCodexErrorUserMessage(result: CodexAuthErrorResult): string {
+  if (result.isAuth) return buildAuthFailUserMessage();
+  if (result.kind === 'cli_outdated') {
+    return 'codex が新しい応答を解釈できませんでした。サーバーで codex を更新してください (`npm i -g @openai/codex@alpha`)。';
+  }
+  // ★ 原因が分からないときは、原因を名乗らずに調べ先を出す
+  return 'AI の起動に失敗しました。サーバーのログ (agent-server) を確認してください。';
 }
 
 /**

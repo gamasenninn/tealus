@@ -5,7 +5,7 @@
  * 12 件 = 6/5 fixture / 6/8 fixture 否定 / 4 pattern 個別 / 境界 / 多言語混入。
  */
 
-import { detectCodexAuthError, buildAuthFailUserMessage, AUTH_FAIL_PATTERNS } from '../../src/lib/codexAuthError.mts';
+import { detectCodexAuthError, buildAuthFailUserMessage, buildCodexErrorUserMessage, AUTH_FAIL_PATTERNS } from '../../src/lib/codexAuthError.mts';
 
 describe('detectCodexAuthError (pre-α、#292 follow-up)', () => {
   test('6/5 サポート班 fixture → isAuth=true (= pattern array 順序で session_ended が先 hit)', () => {
@@ -100,5 +100,65 @@ describe('AUTH_FAIL_PATTERNS export', () => {
       expect(p).toHaveProperty('re');
       expect(p.re).toBeInstanceOf(RegExp);
     });
+  });
+});
+
+/**
+ * #423 → #422 ★ 実物のエラー文で、誤判定を固定する。
+ *
+ * ★★ 2026-09-06 に起きたこと: codex が古くてモデル一覧を解釈できず落ちたのに、
+ *   **「ChatGPT のサインインが切れました。`codex login` を実行してください」**と案内した。
+ *   利用者はブラウザで入り直したが直らず、**同じ操作を繰り返した**。
+ *
+ * ★★★ 誤判定の理由は、**76KB のモデル一覧 JSON の中に含まれる `unauthorized` の 1 語**に
+ *   `/\b401\b|\bunauthorized\b/i` が反応したこと。
+ *   → **間違った案内は、案内が無いより悪い** (利用者を無駄な作業へ送り込むため)。
+ */
+describe('detectCodexAuthError — 認証以外を認証と言わない (#422)', () => {
+  /** 2026-09-06 19:12 の実物 (本文は途中まで。実際は 76KB) */
+  const MODELS_DECODE_ERROR =
+    '2026-09-06T10:12:18.638249Z ERROR codex_models_manager::manager: failed to refresh available models: '
+    + 'stream disconnected before completion: failed to decode models response: unknown variant `max`, '
+    + 'expected one of `none`, `minimal`, `low`, `medium`, `high`, `xhigh` at line 1 column 76436; '
+    + 'body: {"models":[{"slug":"gpt-5.5","prefer_websockets":true,"unauthorized":false,'
+    + '"support_verbosity":true,"default_verbosity":"low"}]}';
+
+  test('★★★ モデル一覧のデコード失敗を「認証切れ」と言わない', () => {
+    const r = detectCodexAuthError(MODELS_DECODE_ERROR);
+    expect(r.isAuth).toBe(false);
+  });
+
+  test('★★ その代わり「codex が古い」と分類する', () => {
+    const r = detectCodexAuthError(MODELS_DECODE_ERROR);
+    expect(r.kind).toBe('cli_outdated');
+  });
+
+  test('★★ 案内は codex の更新を指す (ログインではない)', () => {
+    const msg = buildCodexErrorUserMessage(detectCodexAuthError(MODELS_DECODE_ERROR));
+    expect(msg).toMatch(/codex/i);
+    expect(msg).not.toMatch(/サインイン|ログイン/);
+  });
+
+  test('★★★ 本文の後ろの方に紛れた unauthorized では 認証切れにしない', () => {
+    // ★ JSON の body に出てくる語で判定してはいけない
+    const r = detectCodexAuthError('ERROR something else; body: {"x":"unauthorized"}');
+    expect(r.isAuth).toBe(false);
+  });
+
+  test('★ 本物の 401 はこれまでどおり拾う (短いメッセージ)', () => {
+    expect(detectCodexAuthError('HTTP 401 Unauthorized').isAuth).toBe(true);
+    expect(detectCodexAuthError('Your session has ended').isAuth).toBe(true);
+  });
+
+  test('★★ 分からないものは 推測しない (認証とも codex 古いとも言わない)', () => {
+    const r = detectCodexAuthError('ERROR: something we have never seen before');
+    expect(r.isAuth).toBe(false);
+    expect(r.kind).toBe(null);
+  });
+
+  test('★★ 分からないときの案内は「ログを見てほしい」と言う (嘘の原因を出さない)', () => {
+    const msg = buildCodexErrorUserMessage(detectCodexAuthError('ERROR: 見たことのない何か'));
+    expect(msg).toMatch(/ログ/);
+    expect(msg).not.toMatch(/サインイン/);
   });
 });

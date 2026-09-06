@@ -23,7 +23,7 @@ import * as botApi from '../lib/botApi.mts';
 import * as deepRegistry from './deepRegistry.mts';
 import * as config from '../config.mts';
 import { buildLightV2McpConfig } from './lightV2.mts';
-import { detectCodexAuthError, buildAuthFailUserMessage } from '../lib/codexAuthError.mts';
+import { detectCodexAuthError, buildCodexErrorUserMessage } from '../lib/codexAuthError.mts';
 
 /** MCP server 定義 (deep.mts の createDeepMcpConfig 同 form) */
 export interface McpServerDef {
@@ -484,10 +484,13 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
 
       if (code !== 0 && !lastAgentMessage) {
         // pre-α (#292 follow-up): subscription auth 切れを検出して user に案内
+        // ★ #422 認証以外も分類する。分からないものは「分からない」と出す
+        //   (2026-09-06: codex が古いだけなのに「サインインが切れました」と案内し、
+        //    利用者を無駄なブラウザログインに送り込んだ)
         const authResult = detectCodexAuthError(stderr);
-        if (authResult.isAuth) {
-          logger.error(`[DeepCodex] auth failed (${authResult.kind}): ${stderr.slice(0, 500)}`);
-          await postTarget(buildAuthFailUserMessage());
+        if (authResult.isAuth || authResult.kind) {
+          logger.error(`[DeepCodex] 起動に失敗 (${authResult.kind}): ${stderr.slice(0, 500)}`);
+          await postTarget(buildCodexErrorUserMessage(authResult));
           resolve(null);
           return;
         }
@@ -536,9 +539,9 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
       // pre-α (#292 follow-up): spawn 段階で auth 切れも検出 (= まれ event)
       const authResult = detectCodexAuthError(err.message);
-      if (authResult.isAuth) {
-        logger.error(`[DeepCodex] spawn auth failed (${authResult.kind}): ${err.message}`);
-        await postTarget(buildAuthFailUserMessage());
+      if (authResult.isAuth || authResult.kind) {
+        logger.error(`[DeepCodex] spawn 失敗 (${authResult.kind}): ${err.message}`);
+        await postTarget(buildCodexErrorUserMessage(authResult));
         resolve(null);
         return;
       }
