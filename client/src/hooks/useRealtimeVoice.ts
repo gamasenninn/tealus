@@ -56,6 +56,16 @@ interface RealtimeVoice {
  */
 const SPEECH_GATE = { onThreshold: 0.012, offThreshold: 0.006, holdMs: 400 };
 
+/**
+ * ★ 上限 (#414、docs/08 §11 の未決)。**閉じ忘れたまま繋がったままにしない**。
+ *   課金より先に、**マイクを掴んだまま放置される**方が問題になりうる。
+ * ★★ 30 分はサーバの台帳 TTL (`SESSION_TTL_MS`) と同じ値。揃っていないと
+ *   「台帳だけ先に消えて、音声は繋がったまま」という分かりにくい形になる。
+ */
+const IDLE_LIMIT_MS = 5 * 60_000;
+const SESSION_LIMIT_MS = 30 * 60_000;
+const LIMIT_CHECK_MS = 10_000;
+
 export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const [state, setState] = useState<VoiceState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +99,10 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const closingRef = useRef(false);
   // ★ 音声を掴んでいる間の名前 (#413)。掴んだ本人だけが離せる
   const holdIdRef = useRef<string>('');
+  // ★ 上限の見張り (#414)。最後に声が出た時刻 / 開いた時刻
+  const lastSpokeRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const limitTimerRef = useRef<number | null>(null);
 
   const mark = useCallback((type: string, data?: unknown) => {
     eventsRef.current.push({ t: performance.now(), type, data });
@@ -120,6 +134,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
         speakingRef.current = speaking;
         setIsAiSpeaking(speaking);
         mark(speaking ? 'ai_audio_start' : 'ai_audio_end');
+        // ★ AI が喋っている間は「無操作」ではない (#414)
+        if (speaking) lastSpokeRef.current = Date.now();
       }
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -202,11 +218,10 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
    * ★ 接続が死んだ (#409)。会話は続けられないので、**黙らずに画面へ出して**片付ける。
    * docs/08 §7-2「無言で待たせない」——「考えている」と「壊れた」が区別できないのが一番まずい。
    */
-  const failConnection = useCallback((why: string) => {
-    if (closingRef.current || !pcRef.current) return;   // 自分で閉じた分は切断ではない
-    closingRef.current = true;
-    mark('connection_lost', { state: why });
-
+  /** 手元を片付ける (切断でも上限でも同じ)。★ マイクのランプを消すところまで含む */
+  const teardown = useCallback(() => {
+    if (limitTimerRef.current !== null) clearInterval(limitTimerRef.current);
+    limitTimerRef.current = null;
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     audioCtxRef.current?.close().catch(() => {});
@@ -224,34 +239,44 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     setIsTalking(false);
     setIsAiSpeaking(false);
     speakingRef.current = false;
-    setState('error');
-    setError('接続が切れました。もう一度開いてください');
-    // ★ 切れたときも掴みを離す (#413)。離さないと、以後この端末で読み上げが 1 度も鳴らなくなる
+    // ★ 掴みを離す (#413)。離さないと、以後この端末で読み上げが 1 度も鳴らなくなる
     releaseAudio(holdIdRef.current);
     holdIdRef.current = '';
+  }, []);
+
+  const failConnection = useCallback((why: string) => {
+    if (closingRef.current || !pcRef.current) return;   // 自分で閉じた分は切断ではない
+    closingRef.current = true;
+    mark('connection_lost', { state: why });
+    teardown();
+    setState('error');
+    setError('接続が切れました。もう一度開いてください');
     flushLog();
-  }, [mark, flushLog]);
+  }, [mark, flushLog, teardown]);
+
+  /**
+   * ★ 上限で自分から閉じる (#414)。**黙って切らない** —— 理由を画面に出す (docs/08 §7-2)。
+   * ★★ 足りなければ開き直せばよい。会話の文脈は残らないが、
+   *   残すべきものは昇格で残す設計 (docs/08 §1.2.2) なので、それでよい。
+   */
+  const autoClose = useCallback((reason: 'idle' | 'max') => {
+    if (closingRef.current || !pcRef.current) return;
+    closingRef.current = true;
+    mark('auto_closed', { reason });
+    teardown();
+    setState('error');
+    setError(reason === 'idle'
+      ? 'しばらく話していないので、会話を終わりました (もう一度開けます)'
+      : '30 分たったので、会話を終わりました (もう一度開けます)');
+    flushLog();
+  }, [mark, flushLog, teardown]);
 
   const stop = useCallback(() => {
     closingRef.current = true;
     setState('closing');
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    micRef.current = null;
-    dcRef.current = null;
-    pcRef.current?.close();
-    pcRef.current = null;
-    if (audioElRef.current) { audioElRef.current.srcObject = null; audioElRef.current = null; }
-    remoteTrackRef.current = null;
-
     mark('session_end');
-    // ★ 自分の意思で閉じたときだけ通知する (Wake Lock を離す合図)
-    releaseAudio(holdIdRef.current);
-    holdIdRef.current = '';
+    // ★ 片付けは切断・上限と同じ手順 (掴みを離すのもこの中。Wake Lock はそこで解ける)
+    teardown();
     flushLog();
     eventsRef.current = [];
     sessionIdRef.current = '';
@@ -264,9 +289,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     setLastReply(null);
     setPromoteState('idle');
     setPromoteError(null);
-    setIsUnstable(false);
     setState('idle');
-  }, [mark, flushLog]);
+  }, [mark, flushLog, teardown]);
 
   const start = useCallback(async () => {
     setError(null);
@@ -338,6 +362,16 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       //   あとから来た自動の読み上げに譲って止まるのは逆 —— **向こうが始まらない**。
       holdIdRef.current = `voice-chat:${session.session_id}`;
       holdAudio(holdIdRef.current);
+
+      // ★ 上限の見張り (#414)。閉じ忘れたまま繋がったままにしない
+      startedAtRef.current = Date.now();
+      lastSpokeRef.current = Date.now();
+      limitTimerRef.current = window.setInterval(() => {
+        const now = Date.now();
+        if (now - startedAtRef.current >= SESSION_LIMIT_MS) autoClose('max');
+        else if (now - lastSpokeRef.current >= IDLE_LIMIT_MS) autoClose('idle');
+      }, LIMIT_CHECK_MS);
+
       setState('live');
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -352,7 +386,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       pcRef.current?.close();
       pcRef.current = null;
     }
-  }, [roomId, mark, onServerEvent, watchLevel, failConnection]);
+  }, [roomId, mark, onServerEvent, watchLevel, failConnection, autoClose]);
 
   /**
    * ★ 昇格 (R3、docs/08 §1.2.2)。行き先は渡さない —— 会話を開いたルームへ残る。
@@ -405,6 +439,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     }
     if (micRef.current) micRef.current.enabled = true;
     setIsTalking(true);
+    lastSpokeRef.current = Date.now();      // ★ 話している間は「無操作」ではない (#414)
     mark('ptt_press');
   }, [state, send, mark]);
 
@@ -413,6 +448,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     if (micRef.current) micRef.current.enabled = false;
     setIsTalking(false);
     // ★ 話し終わりは人が決める。ここが基準① の起点
+    lastSpokeRef.current = Date.now();
     mark('ptt_release');
     send({ type: 'input_audio_buffer.commit' });
     // ★ 応答が走っている / 道具が動いている間は作らない (上と同じ理由)
@@ -429,6 +465,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    if (limitTimerRef.current !== null) clearInterval(limitTimerRef.current);
   }, []);
 
   return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, isUnstable, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };

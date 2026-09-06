@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
@@ -271,5 +271,58 @@ describe('VoiceChatView — 接続が切れたとき (#409)', () => {
     await waitFor(() => expect(voiceChatLog).toHaveBeenCalled());
     const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
     expect(events.find((e) => e.type === 'connection_lost')?.data?.state).toBe('failed');
+  });
+});
+
+/**
+ * #414 上限が無く、閉じ忘れると繋がったままだった (docs/08 §11 の未決)。
+ *
+ * ★ 課金より先に、**マイクを掴んだまま放置される**方が問題になりうる。
+ * ★★ 黙って切らない —— 切った理由を画面に出す (docs/08 §7-2「無言で待たせない」)。
+ */
+describe('VoiceChatView — 上限で自動的に閉じる (#414)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  async function live() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  }
+
+  it('★★ 最後に話してから 5 分で閉じ、理由が画面に出る', async () => {
+    await live();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000); });
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('話していない'));
+    expect(screen.getByText('押しながら話す').closest('button')).toBeDisabled();
+  });
+
+  it('★ 話していれば、その分だけ延びる (無操作は最後に話した時から数える)', async () => {
+    await live();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60_000); });
+    // 4 分後に一言話す → ここから 5 分に数え直す
+    fireEvent.pointerDown(screen.getByText('押しながら話す').closest('button')!);
+    fireEvent.pointerUp(screen.getByText('押しながら話す').closest('button')!);
+    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60_000); });
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('押しながら話す').closest('button')).toBeEnabled();
+  });
+
+  it('★★ 自動で閉じたことが計測に残る (どちらの上限かも)', async () => {
+    await live();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000); });
+
+    await waitFor(() => expect(voiceChatLog).toHaveBeenCalled());
+    const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
+    expect(events.find((e) => e.type === 'auto_closed')?.data?.reason).toBe('idle');
   });
 });
