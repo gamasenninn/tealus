@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createResponseGate } from '../src/utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../src/utils/speechGate';
+import { readTranscriptEvent } from '../src/utils/realtimeTranscript';
 
 /**
  * #405 実測 (2026-09-05、8 往復) で出た 2 件の不具合を固定する (docs/08 §12)。
@@ -322,5 +323,46 @@ describe('createSpeakingView — 応答の途中で「終わった」と言わ�
     v.update(true, true);
     v.reset();
     expect(v.update(true, true)).toEqual({ shown: true, mark: 'start' });
+  });
+});
+
+/**
+ * #412 人の発話が 1 件も記録されていなかった。
+ *
+ * ★ 受け取りの条件が `type.endsWith('transcript.done')` で、**入力側のイベント名
+ *   (`conversation.item.input_audio_transcription.completed`) に一致しなかった**。
+ *   文字起こし自体は行われていて (session に `transcription` を渡している)、
+ *   **受け取り側だけが取りこぼしていた** —— 実測で transcript 328 件すべて AI 側。
+ *
+ * ★★ docs/08 §12.6 は基準④ を「transcript 全文を人が読んで判定する」と決めている。
+ *   **答えだけ並んでいて、何を聞かれたかが無い**状態では判定できない。
+ */
+describe('readTranscriptEvent — どちら側の発話かを読み取る (#412)', () => {
+  it('★★ 入力側の文字起こし (名前が transcript.done で終わらない) を拾う', () => {
+    expect(readTranscriptEvent({
+      type: 'conversation.item.input_audio_transcription.completed',
+      transcript: '在庫を調べて',
+    })).toEqual({ who: 'user', text: '在庫を調べて' });
+  });
+
+  it('★ AI 側はこれまでどおり', () => {
+    expect(readTranscriptEvent({
+      type: 'response.output_audio_transcript.done',
+      transcript: '確認しますね',
+    })).toEqual({ who: 'ai', text: '確認しますね' });
+  });
+
+  it('★ 中身が空なら残さない (空の行を計測に混ぜない)', () => {
+    expect(readTranscriptEvent({ type: 'conversation.item.input_audio_transcription.completed', transcript: '   ' })).toBeNull();
+    expect(readTranscriptEvent({ type: 'response.output_audio_transcript.done' })).toBeNull();
+  });
+
+  it('★ 途中経過 (delta) や 失敗は拾わない (完了だけ)', () => {
+    expect(readTranscriptEvent({ type: 'conversation.item.input_audio_transcription.delta', transcript: '在庫' })).toBeNull();
+    expect(readTranscriptEvent({ type: 'conversation.item.input_audio_transcription.failed', transcript: '' })).toBeNull();
+  });
+
+  it('★ 関係ないイベントは拾わない', () => {
+    expect(readTranscriptEvent({ type: 'response.done', transcript: 'x' })).toBeNull();
   });
 });

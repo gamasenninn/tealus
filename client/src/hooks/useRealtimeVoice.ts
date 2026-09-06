@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { holdAudio, releaseAudio } from '../utils/audioExclusive';
 import { createResponseGate } from '../utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../utils/speechGate';
+import { readTranscriptEvent } from '../utils/realtimeTranscript';
 
 /**
  * #405 Realtime 音声会話 (docs/08 §12)。
@@ -193,12 +194,14 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       return;
     }
     // transcript は残す唯一のもの (docs/08 §7-4 訂正: 音声原本は存在しない)
-    if (msg.type && msg.type.endsWith('transcript.done') && msg.transcript) {
-      const who = msg.type.includes('input_audio') ? 'user' : 'ai';
-      mark('transcript', { who, text: msg.transcript });
-      // ★ 昇格の対象は AI の発言だけ。新しい発言が来たら「残す」は押せる状態に戻る
-      if (who === 'ai') {
-        setLastReply(msg.transcript);
+    // ★ どちら側かの判定は readTranscriptEvent に 1 か所だけ置く (#412)。
+    //   入力側と出力側でイベント名が違い、**片方だけ見ていて人の発話が 1 件も残っていなかった**。
+    const line = readTranscriptEvent(msg);
+    if (line) {
+      mark('transcript', { who: line.who, text: line.text });
+      // ★ 昇格の対象は AI の発言だけ (docs/08 §12.10)。新しい発言が来たら「残す」は押せる状態に戻る
+      if (line.who === 'ai') {
+        setLastReply(line.text);
         setPromoteState('idle');
         setPromoteError(null);
       }

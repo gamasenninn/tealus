@@ -326,3 +326,38 @@ describe('VoiceChatView — 上限で自動的に閉じる (#414)', () => {
     expect(events.find((e) => e.type === 'auto_closed')?.data?.reason).toBe('idle');
   });
 });
+
+/**
+ * #412 人の発話も計測に残す (docs/08 §12.6 の基準④ は「transcript 全文を人が読んで判定する」)。
+ * ★ ただし **昇格の対象は AI の発言だけ** (docs/08 §12.10) —— そこは変えない。
+ */
+describe('VoiceChatView — 人の発話の記録 (#412)', () => {
+  beforeEach(() => {
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function live() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  }
+
+  it('★★ 入力側の文字起こしが who=user で残る', async () => {
+    await live();
+    emit({ type: 'conversation.item.input_audio_transcription.completed', transcript: '在庫を調べて' });
+
+    fireEvent.click(screen.getByLabelText('閉じる'));
+    const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
+    const line = events.find((e) => e.type === 'transcript' && e.data?.who === 'user');
+    expect(line?.data?.text).toBe('在庫を調べて');
+  });
+
+  it('★★ 人の発話では「残す」は押せないまま (昇格の対象は AI の発言だけ)', async () => {
+    await live();
+    emit({ type: 'conversation.item.input_audio_transcription.completed', transcript: '在庫を調べて' });
+
+    expect(screen.getByText('このルームに残す').closest('button')).toBeDisabled();
+  });
+});
