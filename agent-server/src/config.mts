@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { logger } from './lib/logger.mts';
+import { resolveCodexBin } from './lib/codexBin.mts';
 
 dotenv.config();
 
@@ -50,28 +51,45 @@ logger.info(
 // Codex CLI availability — #276 Deep Codex 用の Claude MAX 代替候補。
 // 起動時に 1 回だけ検出し、不在なら Router が「Codex CLI + ChatGPT subscription 必要」
 // message を返す。テスト用に AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE=true|false で強制 override 可能。
-function detectCodexCli(): boolean {
-  if (process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE === 'true') return true;
-  if (process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE === 'false') return false;
+/**
+ * ★ #423 起動する codex の場所。`AGENT_CODEX_BIN` で明示できる。
+ *
+ * ★★ 指定しないと PATH 任せになるが、**agent-server は `npm start` で起動するので
+ *   PATH の先頭に `node_modules/.bin` が入る**。`@openai/codex-sdk` がローカルの codex を
+ *   連れてくるため、**グローバルを更新しても そちらは使われない** (2026-09-06 に踏んだ)。
+ */
+export const CODEX_BIN = resolveCodexBin();
+
+/** ★ 実際に起動する codex の版。分からなければ null (検出できないこと自体を出す) */
+function detectCodexVersion(): string | null {
   try {
-    const cmd = process.platform === 'win32' ? 'codex.cmd' : 'codex';
-    const result = spawnSync(cmd, ['--version'], {
-      stdio: 'ignore',
+    const result = spawnSync(CODEX_BIN, ['--version'], {
+      encoding: 'utf8',
       shell: process.platform === 'win32',
       timeout: 5000,
     });
-    return result.status === 0;
+    if (result.status !== 0) return null;
+    return (result.stdout || '').trim() || null;
   } catch {
-    return false;
+    return null;
   }
 }
 
+function detectCodexCli(): boolean {
+  if (process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE === 'true') return true;
+  if (process.env.AGENT_DEEP_CODEX_AVAILABLE_OVERRIDE === 'false') return false;
+  return CODEX_VERSION !== null;
+}
+
+export const CODEX_VERSION = detectCodexVersion();
 export const DEEP_CODEX_AVAILABLE = detectCodexCli();
 
+// ★★ どれを起動するかを必ず出す (#423)。手元の `codex --version` は「手元の PATH の答え」で
+//   あって、agent が起動するものとは限らない。**取り違えたまま何時間も探すのを防ぐ。**
 logger.info(
   `Deep Codex agent: ${DEEP_CODEX_AVAILABLE
-    ? 'enabled (codex CLI found)'
-    : 'disabled (codex CLI not found — DEEP_AGENT_PROVIDER=codex 時は要 install)'}`
+    ? `enabled — bin=${CODEX_BIN} version=${CODEX_VERSION}`
+    : `disabled (codex CLI not found — bin=${CODEX_BIN}。DEEP_AGENT_PROVIDER=codex 時は要 install)`}`
 );
 
 // Server

@@ -371,8 +371,8 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
 
     botApi.pushStatus(roomId, 'analyzing', '高度な分析中...').catch(() => {});
 
-    const codexCmd = process.platform === 'win32' ? 'codex.cmd' : 'codex';
-    const proc: TealusChildProcess = spawn(codexCmd, args, {
+    // ★ #423 起動する codex は config で決める (PATH 任せだと node_modules/.bin が勝つ)
+    const proc: TealusChildProcess = spawn(config.CODEX_BIN, args, {
       cwd: workspacePath,
       shell: process.platform === 'win32',
       timeout: config.DEEP_TIMEOUT,
