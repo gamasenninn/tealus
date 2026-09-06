@@ -32,6 +32,9 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
   const label = state === 'requesting' ? '準備しています…'
     : state === 'connecting' ? '接続しています…'
     : state === 'error' ? '接続できませんでした'
+    // ★ 不安定は「押しながら話してください」より先に出す (#409)。戻ることがあるので切らないが、
+    //   黙っていると「AI が答えない」に見える (docs/08 §7-2)
+    : voice.isUnstable ? '接続が不安定です…'
     : voice.isToolRunning ? '調べています…'
     : voice.isTalking ? '聞いています'
     : voice.isAiSpeaking ? '話しています'

@@ -34,6 +34,8 @@ interface RealtimeVoice {
   turns: number;
   /** 道具の実行中か */
   isToolRunning: boolean;
+  /** ★ 接続が不安定 (disconnected)。戻ることがあるので落とさない (#409) */
+  isUnstable: boolean;
   /** ★ 直近の AI の発言 (昇格の対象。無ければ null) */
   lastReply: string | null;
   /** ★ 昇格の状態 */
@@ -61,6 +63,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [turns, setTurns] = useState(0);
   const [isToolRunning, setIsToolRunning] = useState(false);
+  // ★ 接続が不安定 (#409)。`disconnected` は戻ることがあるので、落とさずに表示だけ変える
+  const [isUnstable, setIsUnstable] = useState(false);
   // ★ 昇格 (R3)。直近の AI 発言だけを対象にする。人の発言は今回入れない (docs/08 §12)
   const [lastReply, setLastReply] = useState<string | null>(null);
   const [promoteState, setPromoteState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
@@ -81,6 +85,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const speechGateRef = useRef(createSpeechGate(SPEECH_GATE));
   // ★ 割り込みで即座に黙るために、受信トラックを持っておく (element の mute では残りが後で鳴る)
   const remoteTrackRef = useRef<MediaStreamTrack | null>(null);
+  // ★ 自分で閉じたのか、切れたのか (#409)。pc.close() でも `closed` が飛ぶので、これで区別する
+  const closingRef = useRef(false);
 
   const mark = useCallback((type: string, data?: unknown) => {
     eventsRef.current.push({ t: performance.now(), type, data });
@@ -179,7 +185,51 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     }
   }, [handleToolCall, mark]);
 
+  /**
+   * ★ 計測をサーバへ送って、手元を空にする (#409)。
+   * これまで送るのは `stop()` (= 閉じるを押したとき) だけだった。
+   * **切れたあと画面を離れると、切断の記録ごと消えていた** —— 一番知りたい回だけ残らない。
+   */
+  const flushLog = useCallback(() => {
+    if (!sessionIdRef.current || !eventsRef.current.length) return;
+    void api.voiceChatLog(sessionIdRef.current, eventsRef.current);
+    eventsRef.current = [];
+  }, []);
+
+  /**
+   * ★ 接続が死んだ (#409)。会話は続けられないので、**黙らずに画面へ出して**片付ける。
+   * docs/08 §7-2「無言で待たせない」——「考えている」と「壊れた」が区別できないのが一番まずい。
+   */
+  const failConnection = useCallback((why: string) => {
+    if (closingRef.current || !pcRef.current) return;   // 自分で閉じた分は切断ではない
+    closingRef.current = true;
+    mark('connection_lost', { state: why });
+
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());   // ★ マイクのランプを消す
+    streamRef.current = null;
+    micRef.current = null;
+    dcRef.current = null;
+    pcRef.current?.close();
+    pcRef.current = null;
+    if (audioElRef.current) { audioElRef.current.srcObject = null; audioElRef.current = null; }
+    remoteTrackRef.current = null;
+
+    setIsUnstable(false);
+    setIsTalking(false);
+    setIsAiSpeaking(false);
+    speakingRef.current = false;
+    setState('error');
+    setError('接続が切れました。もう一度開いてください');
+    notifyAudioStopped();
+    flushLog();
+  }, [mark, flushLog]);
+
   const stop = useCallback(() => {
+    closingRef.current = true;
     setState('closing');
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
@@ -197,9 +247,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     mark('session_end');
     // ★ 自分の意思で閉じたときだけ通知する (Wake Lock を離す合図)
     notifyAudioStopped();
-    if (sessionIdRef.current && eventsRef.current.length) {
-      void api.voiceChatLog(sessionIdRef.current, eventsRef.current);
-    }
+    flushLog();
     eventsRef.current = [];
     sessionIdRef.current = '';
     respGateRef.current.reset();
@@ -211,11 +259,13 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     setLastReply(null);
     setPromoteState('idle');
     setPromoteError(null);
+    setIsUnstable(false);
     setState('idle');
-  }, [mark]);
+  }, [mark, flushLog]);
 
   const start = useCallback(async () => {
     setError(null);
+    closingRef.current = false;
     eventsRef.current = [];
     setState('requesting');
     mark('session_start_request');
@@ -250,9 +300,22 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
         watchLevel(ev.streams[0]);
       };
 
+      // ★ 接続の生死を見る (#409)。これが無いと、切れても画面は「押しながら話してください」のまま。
+      //   ★★ `disconnected` は戻ることがあるので落とさない —— 落とすと、直る回まで会話を切ってしまう。
+      pc.onconnectionstatechange = () => {
+        const st = pc.connectionState;
+        mark('connection_state', { state: st });
+        if (st === 'failed' || st === 'closed') failConnection(st);
+        else if (st === 'disconnected') setIsUnstable(true);
+        else if (st === 'connected') setIsUnstable(false);
+      };
+
       const dc = pc.createDataChannel('oai-events');
       dcRef.current = dc;
       dc.onmessage = (ev) => onServerEvent(ev.data as string);
+      // ★ 道具の口が閉じたら、音が生きていても会話は続けられない (押しても送れない)
+      dc.onclose = () => failConnection('datachannel_closed');
+      dc.onerror = () => mark('datachannel_error');
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -281,7 +344,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       pcRef.current?.close();
       pcRef.current = null;
     }
-  }, [roomId, mark, onServerEvent, watchLevel]);
+  }, [roomId, mark, onServerEvent, watchLevel, failConnection]);
 
   /**
    * ★ 昇格 (R3、docs/08 §1.2.2)。行き先は渡さない —— 会話を開いたルームへ残る。
@@ -358,5 +421,5 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
   }, []);
 
-  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };
+  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, isUnstable, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };
 }

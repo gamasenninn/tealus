@@ -30,7 +30,17 @@ import VoiceChatView from '../../src/components/voicechat/VoiceChatView';
 import { VOICE_STARTED, VOICE_STOP_CONTINUOUS } from '../../src/utils/audioExclusive';
 
 /** ★ 直近に作られたデータチャネル。サーバからのイベントを流し込むために持っておく */
-let lastDc: { readyState: string; send: ReturnType<typeof vi.fn>; onmessage?: (ev: { data: string }) => void } | null = null;
+let lastDc: { readyState: string; send: ReturnType<typeof vi.fn>; onmessage?: (ev: { data: string }) => void; onclose?: () => void } | null = null;
+
+/** ★ 直近に作られた接続。切断を起こすために持っておく (#409) */
+let lastPc: { connectionState: string; onconnectionstatechange?: () => void; close: ReturnType<typeof vi.fn> } | null = null;
+
+/** 接続の状態が変わったことにする */
+function setConnectionState(next: string) {
+  if (!lastPc) throw new Error('接続がまだ作られていない');
+  lastPc.connectionState = next;
+  lastPc.onconnectionstatechange?.();
+}
 
 /** サーバ (OpenAI) から来たことにしてイベントを 1 つ流す */
 function emit(msg: unknown) {
@@ -41,19 +51,24 @@ function emit(msg: unknown) {
 function stubWebRTC() {
   const track = { enabled: true, stop: vi.fn() };
   lastDc = null;
+  lastPc = null;
   vi.stubGlobal('isSecureContext', true);
   vi.stubGlobal('navigator', {
     ...navigator,
     mediaDevices: { getUserMedia: vi.fn().mockResolvedValue({ getAudioTracks: () => [track], getTracks: () => [track] }) },
   });
-  vi.stubGlobal('RTCPeerConnection', vi.fn(() => ({
-    addTrack: vi.fn(),
-    createDataChannel: vi.fn(() => { lastDc = { readyState: 'open', send: vi.fn() }; return lastDc; }),
-    createOffer: vi.fn().mockResolvedValue({ sdp: 'v=0' }),
-    setLocalDescription: vi.fn().mockResolvedValue(undefined),
-    setRemoteDescription: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn(),
-  })));
+  vi.stubGlobal('RTCPeerConnection', vi.fn(() => {
+    lastPc = {
+      connectionState: 'connected',
+      addTrack: vi.fn(),
+      createDataChannel: vi.fn(() => { lastDc = { readyState: 'open', send: vi.fn() }; return lastDc; }),
+      createOffer: vi.fn().mockResolvedValue({ sdp: 'v=0' }),
+      setLocalDescription: vi.fn().mockResolvedValue(undefined),
+      setRemoteDescription: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn(),
+    } as never;
+    return lastPc;
+  }));
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => 'v=0 answer' }));
   return track;
 }
@@ -203,5 +218,56 @@ describe('VoiceChatView — 昇格の失敗 (#408)', () => {
     const err = loggedEvents().find((e) => e.type === 'promote_error');
     expect(err).toBeDefined();
     expect(err?.data?.status).toBeUndefined();
+  });
+});
+
+/**
+ * #409 接続が切れたことが画面に出ること。
+ *
+ * ★ これまで `useRealtimeVoice` は接続の生死を見る口を 1 つも持っていなかった。
+ *   切れても state は `live` のままで、画面は「押しながら話してください」と言い続け、
+ *   押しても `dc.readyState !== 'open'` で黙って捨てられていた。
+ *   docs/08 §7-2「無言で待たせない」——「考えている」と「壊れた」が区別できないのが一番まずい。
+ *
+ * ★★ 現場のネットワークでの測り直し (§12.5) の前に入れる。**通らなかったときに画面が何も
+ *   言わない**と、「遅い」と「切れた」を取り違えるため。
+ */
+describe('VoiceChatView — 接続が切れたとき (#409)', () => {
+  beforeEach(() => {
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function live() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  }
+
+  it('★★ failed → 切れたことが画面に出て、押して話すが押せなくなる', async () => {
+    await live();
+    setConnectionState('failed');
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('接続が切れました'));
+    expect(screen.getByText('押しながら話す').closest('button')).toBeDisabled();
+  });
+
+  it('★ disconnected では落とさない (戻ることがある)。不安定だとだけ出す', async () => {
+    await live();
+    setConnectionState('disconnected');
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('接続が不安定'));
+    // ★ 押して話す は生かしておく (戻ったらそのまま続けられる)
+    expect(screen.getByText('押しながら話す').closest('button')).toBeEnabled();
+  });
+
+  it('★★ 切断は計測に残り、閉じるを押さなくても送られる (画面を離れると記録ごと消えていた)', async () => {
+    await live();
+    setConnectionState('failed');
+
+    await waitFor(() => expect(voiceChatLog).toHaveBeenCalled());
+    const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
+    expect(events.find((e) => e.type === 'connection_lost')?.data?.state).toBe('failed');
   });
 });
