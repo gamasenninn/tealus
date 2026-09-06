@@ -146,3 +146,30 @@ describe('summarizeVoiceChat — 基準②③④と昇格 (#410)', () => {
     expect(s.knownRaces).toBe(2);
   });
 });
+
+/**
+ * ★ `--since` の日付は JST で読む。
+ * ★★ `new Date('2026-09-06')` は UTC 0 時 = JST 09:00 で、**午前のセッションが黙って落ちる**。
+ *   2026-09-06 の集計で実際に 8 件が 3 件になり、**残りを「現場テストの結果」と読みかけた**。
+ */
+describe('parseSinceJst — 日付は JST の 0 時 (#410)', () => {
+  const { parseSinceJst } = require('../../src/lib/voiceChatReport.mts') as {
+    parseSinceJst: (arg: string) => Date;
+  };
+
+  test('★★ 日付だけなら JST の 0 時 (= UTC 前日 15 時)', () => {
+    expect(parseSinceJst('2026-09-06').toISOString()).toBe('2026-09-05T15:00:00.000Z');
+  });
+
+  test('★ 前後の空白は無視する', () => {
+    expect(parseSinceJst(' 2026-09-06 ').toISOString()).toBe('2026-09-05T15:00:00.000Z');
+  });
+
+  test('★ 時刻まで書かれていれば、そのまま解釈する', () => {
+    expect(parseSinceJst('2026-09-06T13:00:00+09:00').toISOString()).toBe('2026-09-06T04:00:00.000Z');
+  });
+
+  test('★ 読めない文字列は Invalid Date (呼び出し側で弾ける)', () => {
+    expect(Number.isNaN(parseSinceJst('きのう').getTime())).toBe(true);
+  });
+});

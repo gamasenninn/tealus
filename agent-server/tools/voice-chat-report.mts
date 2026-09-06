@@ -11,13 +11,14 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { summarizeVoiceChat, formatVoiceChatReport, type VoiceChatRecord } from '../src/lib/voiceChatReport.mts';
+import { summarizeVoiceChat, formatVoiceChatReport, parseSinceJst, type VoiceChatRecord } from '../src/lib/voiceChatReport.mts';
 
 const root = path.resolve(process.env.AGENT_WORKSPACE_ROOT || './agent-workspaces');
 const dir = path.join(root, '_voice-chat-logs');
 
 const sinceArg = process.argv.indexOf('--since');
-const since = sinceArg >= 0 ? new Date(process.argv[sinceArg + 1]) : null;
+// ★ 日付だけのときは JST の 0 時として読む (UTC 解釈だと午前のセッションが黙って落ちる)
+const since = sinceArg >= 0 ? parseSinceJst(process.argv[sinceArg + 1]) : null;
 if (since && Number.isNaN(since.getTime())) {
   console.error('--since の日付を読めません (例: --since 2026-09-06)');
   process.exit(1);

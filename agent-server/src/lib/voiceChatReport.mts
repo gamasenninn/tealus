@@ -226,3 +226,18 @@ export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string
   lines.push('', '★ この数字は「基準」ではない。どこで・誰が・いつ測ったかを添えて読むこと (docs/08 §2.3 / §12.7)。');
   return lines.join('\n');
 }
+
+/**
+ * ★ `--since 2026-09-06` のような日付を **JST の 0 時**として読む (#410 の道具の穴)。
+ *
+ * ★★ `new Date('2026-09-06')` は **UTC の 0 時 = JST 09:00** になる。
+ *   そのまま使うと **午前中のセッションが黙って落ちる** —— 実際に 2026-09-06 の集計で
+ *   8 件のうち 5 件が消え、**残った 3 件を「現場テストの結果」と読みかけた**。
+ *   このプロジェクトの時刻はすべて JST ([[feedback_report_timestamp_jst]] と同じ約束)。
+ *
+ * ★ 時刻まで書かれている場合 (`2026-09-06T13:00`) はそのまま解釈する。
+ */
+export function parseSinceJst(arg: string): Date {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(arg.trim());
+  return new Date(dateOnly ? `${arg.trim()}T00:00:00+09:00` : arg);
+}
