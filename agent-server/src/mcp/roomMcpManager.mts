@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
+import { expandEnvRefs } from '../lib/envRefs.mts';
 
 interface McpServerDef {
   command?: string;
@@ -128,7 +129,9 @@ export async function getOrCreateRoomMcp(agentId: string, roomId: string, worksp
   let roomConfig: McpConfigFile = {};
   if (fs.existsSync(roomConfigPath)) {
     try {
-      roomConfig = JSON.parse(fs.readFileSync(roomConfigPath, 'utf8')) as McpConfigFile;
+      // ★ #419 設定には ${VAR} の参照だけを書き、実体は agent-server の .env に置く
+      //   (workspace は filesystem MCP の root なので、平文で置くと read_file で読める)
+      roomConfig = expandEnvRefs(JSON.parse(fs.readFileSync(roomConfigPath, 'utf8')) as McpConfigFile);
     } catch (err) {
       logger.error(`[RoomMCP] Room config parse error: ${err instanceof Error ? err.message : String(err)}`);
     }

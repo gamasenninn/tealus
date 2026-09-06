@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
+import { expandEnvRefs } from '../lib/envRefs.mts';
 import * as botApi from '../lib/botApi.mts';
 import { updateContext } from '../context/sessionManager.mts';
 import * as deepRegistry from './deepRegistry.mts';
@@ -25,8 +26,25 @@ interface DeepMcpConfig {
 }
 
 /**
+ * ★ #419 生成した MCP 設定の置き場。**workspace の外**に置く。
+ *   `<WORKSPACE_ROOT>/_mcp-configs/<agentId>/<roomId>.json`
+ *   (workspacePath = `<WORKSPACE_ROOT>/<agentId>/<roomId>` から 2 つ上が WORKSPACE_ROOT)
+ */
+export function deepMcpConfigPath(workspacePath: string): string {
+  const roomDir = path.basename(workspacePath);
+  const agentDir = path.basename(path.dirname(workspacePath));
+  const workspaceRoot = path.dirname(path.dirname(workspacePath));
+  return path.join(workspaceRoot, '_mcp-configs', agentDir, `${roomDir}.json`);
+}
+
+/**
  * Deep Agent 用の MCP 設定を動的生成
  * Tealus MCP + ルーム固有 MCP を統合
+ *
+ * ★★ #419 **書き出し先は workspace の外**。この設定には bot のパスワードと API キーが入り、
+ *   workspace に置くと **filesystem MCP の root の中**なので `read_file` で読めてしまう
+ *   (2026-09-06 実測: 9 ルームすべてに TEALUS_PASSWORD、6 ルームに OPENAI_API_KEY)。
+ *   #418 で会話モードの読み取り系が全許可になり、**音声からも届くようになった**。
  */
 export function createDeepMcpConfig(workspacePath: string, roomId: string): string {
   const mcpConfig: DeepMcpConfig = {
@@ -57,15 +75,31 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
   if (fs.existsSync(roomMcpPath)) {
     try {
       const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8')) as { mcpServers?: Record<string, McpServerDef> };
-      Object.assign(mcpConfig.mcpServers, roomMcp.mcpServers || {});
+      // ★ #419 設定には ${VAR} の参照だけを書き、実体は .env に置く。子プロセスは参照を解釈しない
+      Object.assign(mcpConfig.mcpServers, expandEnvRefs(roomMcp.mcpServers || {}));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`Failed to load room MCP config: ${message}`);
     }
   }
 
-  const configPath = path.join(workspacePath, '.deep_mcp_config.json');
+  // ★ #419 workspace の外へ書く。<WORKSPACE_ROOT>/_mcp-configs/<agentId>/<roomId>.json
+  //   (filesystem MCP の root は <WORKSPACE_ROOT>/<agentId>/<roomId> なので、ここには届かない)
+  const configPath = deepMcpConfigPath(workspacePath);
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2));
+
+  // ★★ 古いものを消す。**書く先だけ変えても、既に置かれている分は読める**
+  const stale = path.join(workspacePath, '.deep_mcp_config.json');
+  try {
+    if (fs.existsSync(stale)) {
+      fs.unlinkSync(stale);
+      logger.info(`[deep] workspace 内の古い MCP 設定を削除しました (#419): ${stale}`);
+    }
+  } catch (err) {
+    logger.warn(`[deep] 古い MCP 設定を削除できませんでした: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   logger.debug(`Deep MCP config created: ${configPath} (${Object.keys(mcpConfig.mcpServers).length} servers)`);
   return configPath;
 }
@@ -77,7 +111,7 @@ export function buildClaudeArgs({ workspacePath, sessionId }: { workspacePath: s
   const args = ['-p', '-', '--dangerously-skip-permissions'];
 
   // 動的生成された MCP 設定
-  const mcpConfigPath = path.join(workspacePath, '.deep_mcp_config.json');
+  const mcpConfigPath = deepMcpConfigPath(workspacePath);   // ★ #419 workspace の外
   if (fs.existsSync(mcpConfigPath)) {
     args.push('--mcp-config', mcpConfigPath);
   }

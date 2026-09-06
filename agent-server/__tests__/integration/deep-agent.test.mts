@@ -54,7 +54,7 @@ jest.mock('../../src/config.mts', () => ({
   DEEP_MAX_BUFFER: 10485760,
 }));
 
-import { processDeep, buildClaudeArgs } from '../../src/agents/deep.mts';
+import { processDeep, buildClaudeArgs, deepMcpConfigPath } from '../../src/agents/deep.mts';
 import * as botApi from '../../src/lib/botApi.mts';
 import { spawn } from 'node:child_process';
 
@@ -134,14 +134,31 @@ describe('Deep Agent 統合テスト', () => {
   });
 
   // --- 6. --mcp-config ---
-  test('6. .deep_mcp_config.json あり → --mcp-config 引数に含まれる', () => {
-    const tmpPath = fs.mkdtempSync(path.join(os.tmpdir(), 'deep-test-'));
-    // buildClaudeArgs は .deep_mcp_config.json を探す（createDeepMcpConfig が書き出すファイル）
-    fs.writeFileSync(path.join(tmpPath, '.deep_mcp_config.json'), '{}');
+  /**
+   * ★ #419 生成した MCP 設定は **workspace の外**に置くようになった
+   *   (bot のパスワードと API キーが入るため。workspace は filesystem MCP の root)。
+   */
+  test('6. 生成した MCP 設定 (workspace の外) があれば --mcp-config 引数に含まれる', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deep-test-'));
+    const workspacePath = path.join(root, 'agent-1', 'room-1');
+    fs.mkdirSync(workspacePath, { recursive: true });
+    const cfg = deepMcpConfigPath(workspacePath);
+    fs.mkdirSync(path.dirname(cfg), { recursive: true });
+    fs.writeFileSync(cfg, '{}');
 
-    const args = buildClaudeArgs({ workspacePath: tmpPath });
+    const args = buildClaudeArgs({ workspacePath });
     expect(args).toContain('--mcp-config');
+    expect(args).toContain(cfg);
+  });
 
-    fs.rmSync(tmpPath, { recursive: true, force: true });
+  test('★★ 6-2. workspace の中に置かれた古い設定は使わない (#419)', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deep-test-old-'));
+    const workspacePath = path.join(root, 'agent-1', 'room-1');
+    fs.mkdirSync(workspacePath, { recursive: true });
+    // ★ 昔の置き場。ここを見に行くと、資格情報を workspace に置いたままにする理由ができてしまう
+    fs.writeFileSync(path.join(workspacePath, '.deep_mcp_config.json'), '{}');
+
+    const args = buildClaudeArgs({ workspacePath });
+    expect(args).not.toContain('--mcp-config');
   });
 });

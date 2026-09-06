@@ -52,7 +52,7 @@ jest.mock('../../src/agents/deepRegistry.mts', () => ({
 
 import * as childProcess from 'node:child_process';
 const mockSpawn = (childProcess as unknown as { __mockSpawn: jest.Mock }).__mockSpawn;
-import { processDeep, buildClaudeArgs } from '../../src/agents/deep.mts';
+import { processDeep, buildClaudeArgs, createDeepMcpConfig } from '../../src/agents/deep.mts';
 import * as botApi from '../../src/lib/botApi.mts';
 import * as sessionManager from '../../src/context/sessionManager.mts';
 import * as deepRegistry from '../../src/agents/deepRegistry.mts';
@@ -239,5 +239,67 @@ describe('Deep Agent', () => {
 
       jest.useRealTimers();
     });
+  });
+});
+
+/**
+ * #419 ★★ 生成した MCP 設定を workspace の外に書く。
+ *
+ * ★ `createDeepMcpConfig` は **bot のパスワードと API キーを含む設定**を
+ *   `.deep_mcp_config.json` として **workspace の中**に書いていた。
+ *   filesystem MCP の root が同じ workspace なので、**`read_file` で読める**
+ *   (2026-09-06 実測: 9 ルームすべてに TEALUS_PASSWORD、6 ルームに OPENAI_API_KEY)。
+ *
+ * ★★ #418 で読み取り系が全許可になり、**音声からも届くようになった**。
+ *   → 生成先を workspace の外に移し、**古いものは消す**。
+ */
+describe('createDeepMcpConfig — 資格情報を workspace の外に置く (#419)', () => {
+  const fsx = require('node:fs') as typeof import('node:fs');
+  const pathx = require('node:path') as typeof import('node:path');
+  const osx = require('node:os') as typeof import('node:os');
+
+  let root: string;
+  let workspacePath: string;
+
+  beforeEach(() => {
+    root = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'deep-cfg-'));
+    workspacePath = pathx.join(root, 'agent-1', 'room-1');
+    fsx.mkdirSync(workspacePath, { recursive: true });
+  });
+  afterEach(() => fsx.rmSync(root, { recursive: true, force: true }));
+
+  test('★★ 生成先が workspace の外になる', () => {
+    const p = createDeepMcpConfig(workspacePath, 'room-1');
+    expect(fsx.existsSync(p)).toBe(true);
+    // ★ workspace の下に入っていないこと (filesystem MCP の root から出す)
+    expect(pathx.relative(workspacePath, p).startsWith('..')).toBe(true);
+  });
+
+  test('★★★ workspace に残っている古いものを消す (書いた分だけ守っても意味がない)', () => {
+    const stale = pathx.join(workspacePath, '.deep_mcp_config.json');
+    fsx.writeFileSync(stale, '{"mcpServers":{"tealus":{"env":{"TEALUS_PASSWORD":"ひみつ"}}}}');
+
+    createDeepMcpConfig(workspacePath, 'room-1');
+
+    expect(fsx.existsSync(stale)).toBe(false);
+  });
+
+  test('★ 中身はこれまでどおり (tealus MCP が入っている)', () => {
+    const p = createDeepMcpConfig(workspacePath, 'room-1');
+    const c = JSON.parse(fsx.readFileSync(p, 'utf8')) as { mcpServers: Record<string, unknown> };
+    expect(c.mcpServers.tealus).toBeDefined();
+  });
+
+  test('★★ ルーム固有 MCP の ${VAR} は実体に置き換わる (子プロセスは参照を解釈しない)', () => {
+    process.env.TEST_DSN_419 = 'mysql://u:p@h/db';
+    fsx.writeFileSync(pathx.join(workspacePath, 'mcp_config.json'), JSON.stringify({
+      mcpServers: { db: { command: 'npx', args: ['dbhub', '--dsn', '${TEST_DSN_419}'] } },
+    }));
+
+    const p = createDeepMcpConfig(workspacePath, 'room-1');
+    const c = JSON.parse(fsx.readFileSync(p, 'utf8')) as { mcpServers: { db: { args: string[] } } };
+
+    expect(c.mcpServers.db.args).toContain('mysql://u:p@h/db');
+    delete process.env.TEST_DSN_419;
   });
 });

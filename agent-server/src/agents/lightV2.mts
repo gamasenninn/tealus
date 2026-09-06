@@ -22,6 +22,7 @@ import type {
 } from '@openai/codex-sdk';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
+import { expandEnvRefs } from '../lib/envRefs.mts';
 import * as botApi from '../lib/botApi.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
@@ -126,7 +127,8 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
     if (fs.existsSync(roomMcpPath)) {
       try {
         const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8')) as { mcpServers?: Record<string, CodexConfigObject> };
-        Object.assign(mcp_servers, roomMcp.mcpServers || {});
+        // ★ #419 ${VAR} を実体に置き換えてから codex へ渡す (codex は参照を解釈しない)
+        Object.assign(mcp_servers, expandEnvRefs(roomMcp.mcpServers || {}));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(`[LightV2] Failed to load room MCP config: ${message}`);
