@@ -419,6 +419,11 @@ router.post('/log', (req, res) => {
   try {
     const dir = path.join(config.WORKSPACE_ROOT, '_voice-chat-logs');
     fs.mkdirSync(dir, { recursive: true });
+    // ★ 掃除は書き込みのたびに行う (#389 でそう決めたが、#407 まで呼び忘れていた)。
+    //   常駐のタイマーを増やさないため —— 会話を開かなければログも増えないので、
+    //   書き込み時に掃除すれば足りる。
+    const removed = pruneVoiceChatLogs(dir, VOICE_LOG_RETENTION_MS);
+    if (removed) logger.info(`[voice-chat] 期限切れの逐語を ${removed} 件消しました`);
     const line = JSON.stringify({
       session_id: sessionId,
       user_id: userId,

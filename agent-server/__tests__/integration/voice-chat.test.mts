@@ -467,3 +467,70 @@ describe('POST /voice-chat/session — ルーム固有の指示', () => {
     expect(instructions()).not.toContain('このルームの決まり');
   });
 });
+
+/**
+ * #407 逐語の掃除が **経路を通って** 効くこと。
+ *
+ * ★ ユニットテスト (voiceChatLogPrune.test.mts) は `pruneVoiceChatLogs` を直接呼んでいるので、
+ *   **配線が無くても緑になる**。実際 #389 で入れた掃除は 1 度も呼ばれていなかった。
+ *   → ここは必ず `POST /voice-chat/log` から入る。
+ */
+describe('POST /voice-chat/log — 逐語の掃除 (#407)', () => {
+  const fsx = require('node:fs') as typeof import('node:fs');
+  const pathx = require('node:path') as typeof import('node:path');
+  const logDir = pathx.join(process.env.AGENT_WORKSPACE_ROOT as string, '_voice-chat-logs');
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** 指定した日数だけ古い逐語ログを置く */
+  function putLog(name: string, ageMs: number): string {
+    fsx.mkdirSync(logDir, { recursive: true });
+    const p = pathx.join(logDir, name);
+    fsx.writeFileSync(p, '{"events":[{"type":"transcript","data":{"text":"逐語"}}]}\n');
+    const t = new Date(Date.now() - ageMs);
+    fsx.utimesSync(p, t, t);
+    return p;
+  }
+
+  beforeEach(() => {
+    voiceChat._resetForTest();
+    fsx.rmSync(logDir, { recursive: true, force: true });
+  });
+
+  test('★★ 1 週間より古い逐語は、次の書き込みで消える', async () => {
+    const old = putLog('old-session.jsonl', 8 * DAY);
+
+    const res = await request(app).post('/voice-chat/log')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ session_id: 's-new', events: [{ t: 1, type: 'ptt_press' }] });
+
+    expect(res.status).toBe(200);
+    expect(fsx.existsSync(old)).toBe(false);
+    // 今書いた分は残る (掃除が新しいものまで巻き込まない)
+    expect(fsx.existsSync(pathx.join(logDir, 's-new.jsonl'))).toBe(true);
+  });
+
+  test('★ 期限内のものは消えない (測り直しに要る)', async () => {
+    const recent = putLog('recent-session.jsonl', 6 * DAY);
+
+    await request(app).post('/voice-chat/log')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ session_id: 's-new', events: [{ t: 1, type: 'ptt_press' }] });
+
+    expect(fsx.existsSync(recent)).toBe(true);
+  });
+
+  test('★ 掃除が失敗しても 200 を返す (会話を止めない)', async () => {
+    const old = putLog('old-session.jsonl', 8 * DAY);
+    const spy = jest.spyOn(fsx, 'unlinkSync').mockImplementation(() => { throw new Error('EBUSY'); });
+    try {
+      const res = await request(app).post('/voice-chat/log')
+        .set('Authorization', `Bearer ${token()}`)
+        .send({ session_id: 's-new', events: [{ t: 1, type: 'ptt_press' }] });
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(fsx.existsSync(old)).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
