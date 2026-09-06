@@ -125,12 +125,24 @@ describe('summarizeVoiceChat — 基準②③④と昇格 (#410)', () => {
     expect(s.promote.byStatus['届かず']).toBe(1);
   });
 
-  test('★ 切断とサーバのエラーを数える (#409 で残るようになった)', () => {
+  test('★ 切断を数える (#409 で残るようになった)', () => {
     const s = summarizeVoiceChat([rec([
       { t: 0, type: 'connection_lost', data: { state: 'failed' } },
-      { t: 10, type: 'server_error', data: { message: 'Cancellation failed: no active response found' } },
+      { t: 10, type: 'server_error', data: { message: 'なにか知らないエラー' } },
     ])]);
     expect(s.connectionLost).toBe(1);
     expect(s.serverErrors).toBe(1);
+  });
+
+  test('★★ 既知の競合はエラーに数えない (#416)。分けて数える', () => {
+    const s = summarizeVoiceChat([rec([
+      // ★ docs/08 §12.8 で原因が特定済み。割り込みが効いているときほど出る
+      { t: 0, type: 'server_error', data: { message: 'Cancellation failed: no active response found' } },
+      { t: 10, type: 'server_error', data: { message: 'Cancellation failed: no active response found' } },
+      { t: 20, type: 'server_error', data: { message: '知らないエラー' } },
+    ])]);
+    // ★ 既知の競合に埋もれると、新しいエラーが 1 件出ても気づけない
+    expect(s.serverErrors).toBe(1);
+    expect(s.knownRaces).toBe(2);
   });
 });

@@ -51,6 +51,19 @@ function dataOf(e: VoiceEventLike): Record<string, unknown> {
   return (e.data && typeof e.data === 'object' ? e.data : {}) as Record<string, unknown>;
 }
 
+/**
+ * ★ 原因が特定済みの競合か (#416、docs/08 §12.8)。
+ *
+ * 「割り込みで送った `response.cancel` が、モデルが**喋る速さより速く作り終えている**ために
+ *  失敗する」——**割り込みが効いているときほど出る**。実測で割り込み 64 回に対して 8 件。
+ *
+ * ★★ 黙らせるのではなく**分けて数える**。エラーに混ぜると計器が常に鳴っている状態になり、
+ *   **新しいエラーが 1 件出ても気づけない** (docs/05「静音化は原因特定の後」を満たす)。
+ */
+function isKnownRace(message: unknown): boolean {
+  return typeof message === 'string' && message.includes('Cancellation failed');
+}
+
 export interface VoiceChatSummary {
   sessions: number;
   turns: number;
@@ -72,6 +85,8 @@ export interface VoiceChatSummary {
   promote: { started: number; done: number; error: number; byStatus: Record<string, number> };
   connectionLost: number;
   serverErrors: number;
+  /** ★ 原因が特定済みの競合 (docs/08 §12.8)。エラーと分けて数える (#416) */
+  knownRaces: number;
 }
 
 /**
@@ -89,6 +104,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
   let skippedNotPlaying = 0;
   let connectionLost = 0;
   let serverErrors = 0;
+  let knownRaces = 0;
 
   for (const rec of records) {
     const ev = (rec.events || []).filter((e) => e && typeof e.t === 'number' && typeof e.type === 'string');
@@ -141,7 +157,10 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
           : String(d.status);
         promote.byStatus[key] = (promote.byStatus[key] || 0) + 1;
       } else if (e.type === 'connection_lost') connectionLost += 1;
-      else if (e.type === 'server_error') serverErrors += 1;
+      else if (e.type === 'server_error') {
+        if (isKnownRace(d.message)) knownRaces += 1;
+        else serverErrors += 1;
+      }
     }
     turnsEach.push(turns);
   }
@@ -175,6 +194,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
     promote,
     connectionLost,
     serverErrors,
+    knownRaces,
   };
 }
 
@@ -195,7 +215,8 @@ export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string
     '',
     `昇格   ${s.promote.started} 回押して 成功 ${s.promote.done} / 失敗 ${s.promote.error}`
       + (s.promote.error ? ` (内訳 ${Object.entries(s.promote.byStatus).map(([k, v]) => `${k}=${v}`).join(', ')})` : ''),
-    `切断   ${s.connectionLost} 件 / サーバのエラー ${s.serverErrors} 件`,
+    `切断   ${s.connectionLost} 件 / サーバのエラー ${s.serverErrors} 件`
+      + (s.knownRaces ? ` (別に、原因特定済みの競合が ${s.knownRaces} 件。docs/08 §12.8)` : ''),
     `返らず ${s.latency.noReplyCount} 往復 (押して離したのに声が鳴らなかった)`,
   ];
   if (s.latency.overLimitMs.length) {
