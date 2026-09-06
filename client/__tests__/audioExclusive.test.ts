@@ -3,6 +3,7 @@ import {
   VOICE_STARTED, VOICE_STOP_CONTINUOUS,
   notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted,
   requestAudioSeek, subscribeAudioSeek,
+  holdAudio, releaseAudio, isAudioHeld,
 } from '../src/utils/audioExclusive';
 
 /**
@@ -120,5 +121,41 @@ describe('シーク要求', () => {
     off();
     requestAudioSeek('a', { to: 1 });
     expect(got).toEqual([]);
+  });
+});
+
+/**
+ * #413 「掴んでいる (hold)」を足す。
+ *
+ * ★ 規約は「**後から始まった方が勝つ**」形だが、**会話は 1 回の再生ではなく続いているセッション**で、
+ *   あとから来た読み上げに譲って会話が止まるのは逆。
+ *   → 掴んでいる間は、**自動の読み上げを始めない**ための問い合わせ口を足す。
+ */
+describe('audioExclusive — 掴む / 離す (#413)', () => {
+  const heard: Array<{ type: string; id?: string }> = [];
+  const rec2 = (e: Event) => heard.push({
+    type: e.type,
+    id: (e as CustomEvent<{ messageId?: string }>).detail?.messageId,
+  });
+  beforeEach(() => { heard.length = 0; window.addEventListener(VOICE_STARTED, rec2); });
+  afterEach(() => { window.removeEventListener(VOICE_STARTED, rec2); releaseAudio('voice-chat:s1'); });
+
+  it('★ 掴むと、他は「掴まれている」ことを知れる', () => {
+    expect(isAudioHeld()).toBe(false);
+    holdAudio('voice-chat:s1');
+    expect(isAudioHeld()).toBe(true);
+    releaseAudio('voice-chat:s1');
+    expect(isAudioHeld()).toBe(false);
+  });
+
+  it('★ 掴んだときは、これまでどおり開始の合図も流す (他の再生は止まる)', () => {
+    holdAudio('voice-chat:s1');
+    expect(heard).toEqual([{ type: 'voice:started', id: 'voice-chat:s1' }]);
+  });
+
+  it('★★ 掴んだ本人以外は離せない (別の会話が終わっても、続いている会話の掴みを外さない)', () => {
+    holdAudio('voice-chat:s1');
+    releaseAudio('voice-chat:other');
+    expect(isAudioHeld()).toBe(true);
   });
 });

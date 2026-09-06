@@ -6,6 +6,7 @@ import { getSocket } from '../services/socket';
 import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
 import { playTtsSrc } from '../services/ttsAudioPlayer';
+import { isAudioHeld } from '../utils/audioExclusive';
 import type { Message, Reaction, LinkPreview, Transcription } from '../types';
 
 // --- Socket.IO event payload (client が消費するフィールドのみ最小型付け) ---
@@ -213,6 +214,9 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     const handleTtsSpeak = (data: TtsSpeakPayload) => {
       if (data.room_id && data.room_id !== roomId) return;
       if (data.sender_id === user?.id) return;  // 自分が送ったテキストは読まない
+      // ★ 会話モードが音声を掴んでいる間は読み上げない (#413)。重なると会話にならない。
+      //   飛ばしてもメッセージ自体はルームに残るので、失われるものは無い。
+      if (isAudioHeld()) return;
       speakAuto(data.text);
     };
 
@@ -225,6 +229,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       if (data.sender_id === user?.id) return;
       if (!data.url) return;
       if (localStorage.getItem('ttsReadAloud') !== 'on') return;
+      // ★ 会話モードが掴んでいる間は始めない (#413)。**取りに行きもしない** (無駄な取得をしない)
+      if (isAudioHeld()) return;
 
       try {
         const token = localStorage.getItem('token');

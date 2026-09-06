@@ -35,6 +35,33 @@ export function notifyAudioStopped(): void {
 }
 
 /**
+ * ★ 音声を「掴んでいる」もの (#413)。会話モードのように **1 回の再生ではなく続くもの**が使う。
+ *
+ * ★★ 規約そのものは「**後から始まった方が勝つ**」形で、それは再生には正しい。
+ *   だが会話は続いているセッションなので、**あとから来た読み上げに譲って止まるのは逆**。
+ *   → 掴んでいる間は、**自動の読み上げの方が始まらない** (判断は鳴らす側が持つ)。
+ */
+let heldBy: string | null = null;
+
+/** 掴む。開始の合図も流すので、他の再生はこれまでどおり止まる */
+export function holdAudio(id: string): void {
+  heldBy = id;
+  notifyAudioStarted(id);
+}
+
+/** 離す。★ 掴んだ本人だけが離せる (別のものの終了で、続いている会話の掴みを外さない) */
+export function releaseAudio(id: string): void {
+  if (heldBy !== id) return;
+  heldBy = null;
+  notifyAudioStopped();
+}
+
+/** いま誰かが掴んでいるか。★ 自動で鳴らす側は、始める前にこれを見る */
+export function isAudioHeld(): boolean {
+  return heldBy !== null;
+}
+
+/**
  * 他の音声が始まったら通知を受ける。
  * @returns 購読解除関数
  */

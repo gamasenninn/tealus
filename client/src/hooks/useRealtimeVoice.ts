@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
-import { notifyAudioStarted, notifyAudioStopped } from '../utils/audioExclusive';
+import { holdAudio, releaseAudio } from '../utils/audioExclusive';
 import { createResponseGate } from '../utils/realtimeResponseGate';
 import { createSpeechGate } from '../utils/speechGate';
 
@@ -87,6 +87,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const remoteTrackRef = useRef<MediaStreamTrack | null>(null);
   // ★ 自分で閉じたのか、切れたのか (#409)。pc.close() でも `closed` が飛ぶので、これで区別する
   const closingRef = useRef(false);
+  // ★ 音声を掴んでいる間の名前 (#413)。掴んだ本人だけが離せる
+  const holdIdRef = useRef<string>('');
 
   const mark = useCallback((type: string, data?: unknown) => {
     eventsRef.current.push({ t: performance.now(), type, data });
@@ -224,7 +226,9 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     speakingRef.current = false;
     setState('error');
     setError('接続が切れました。もう一度開いてください');
-    notifyAudioStopped();
+    // ★ 切れたときも掴みを離す (#413)。離さないと、以後この端末で読み上げが 1 度も鳴らなくなる
+    releaseAudio(holdIdRef.current);
+    holdIdRef.current = '';
     flushLog();
   }, [mark, flushLog]);
 
@@ -246,7 +250,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
 
     mark('session_end');
     // ★ 自分の意思で閉じたときだけ通知する (Wake Lock を離す合図)
-    notifyAudioStopped();
+    releaseAudio(holdIdRef.current);
+    holdIdRef.current = '';
     flushLog();
     eventsRef.current = [];
     sessionIdRef.current = '';
@@ -329,7 +334,10 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       await pc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
 
       mark('connected');
-      notifyAudioStarted(`voice-chat:${session.session_id}`);
+      // ★★ 「知らせる」ではなく「掴む」(#413)。会話は 1 回の再生ではなく続くセッションなので、
+      //   あとから来た自動の読み上げに譲って止まるのは逆 —— **向こうが始まらない**。
+      holdIdRef.current = `voice-chat:${session.session_id}`;
+      holdAudio(holdIdRef.current);
       setState('live');
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

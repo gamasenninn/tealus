@@ -38,6 +38,16 @@ const fakeSocket = {
 vi.mock('../src/services/socket', () => ({ getSocket: () => fakeSocket }));
 
 import { useSocketSync } from '../src/hooks/useSocketSync';
+import { playTtsSrc } from '../src/services/ttsAudioPlayer';
+import { speakAuto } from '../src/services/browserTts';
+import { holdAudio, releaseAudio } from '../src/utils/audioExclusive';
+
+// #413 読み上げの取得は fetch で始まる。掴まれている間は**取りに行きもしない**ことを見る
+globalThis.fetch = vi.fn(async () => ({
+  ok: true, status: 200, blob: async () => new Blob(['x']),
+})) as unknown as typeof fetch;
+globalThis.URL.createObjectURL = vi.fn(() => 'blob:tts');
+globalThis.URL.revokeObjectURL = vi.fn();
 
 describe('useSocketSync 再接続リセット (#考え中残り bug)', () => {
   beforeEach(() => { fakeSocket.handlers = {}; });
@@ -61,5 +71,58 @@ describe('useSocketSync 再接続リセット (#考え中残り bug)', () => {
 
     act(() => fakeSocket.trigger('connect'));
     expect(Object.keys(result.current.typingUsers)).toHaveLength(0);
+  });
+});
+
+/**
+ * #413 会話中に他ルームの読み上げが重なって鳴っていた。
+ *
+ * ★ 会話は「1 回の再生」ではなく「続いているセッション」なので、
+ *   あとから来た読み上げに譲って会話が止まるのは逆。**自動の読み上げの方が始まらない**。
+ * ★ 読み上げを飛ばしてもメッセージ自体はルームに残るので、失われるものは無い。
+ */
+describe('useSocketSync — 会話が音声を掴んでいる間の自動読み上げ (#413)', () => {
+  beforeEach(() => {
+    fakeSocket.handlers = {};
+    localStorage.setItem('ttsReadAloud', 'on');
+    vi.mocked(playTtsSrc).mockClear();
+    vi.mocked(speakAuto).mockClear();
+    vi.mocked(globalThis.fetch).mockClear();
+    releaseAudio('voice-chat:s1');
+  });
+
+  it('★★ 掴まれている間は読み上げを始めない (音声ファイルの経路)', async () => {
+    renderHook(() => useSocketSync('room1'));
+    holdAudio('voice-chat:s1');
+
+    await act(async () => {
+      fakeSocket.trigger('tts:audio', { room_id: 'room1', sender_id: 'other', url: '/media/tts-1.mp3' });
+    });
+
+    expect(playTtsSrc).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();   // ★ 取りに行きもしない
+  });
+
+  it('★★ ブラウザの読み上げ (tts:speak) も始めない', async () => {
+    renderHook(() => useSocketSync('room1'));
+    holdAudio('voice-chat:s1');
+
+    await act(async () => {
+      fakeSocket.trigger('tts:speak', { room_id: 'room1', sender_id: 'other', text: 'お知らせです' });
+    });
+
+    expect(speakAuto).not.toHaveBeenCalled();
+  });
+
+  it('★ 離されたら、また読み上げる', async () => {
+    renderHook(() => useSocketSync('room1'));
+    holdAudio('voice-chat:s1');
+    releaseAudio('voice-chat:s1');
+
+    await act(async () => {
+      fakeSocket.trigger('tts:audio', { room_id: 'room1', sender_id: 'other', url: '/media/tts-1.mp3' });
+    });
+
+    expect(playTtsSrc).toHaveBeenCalled();
   });
 });

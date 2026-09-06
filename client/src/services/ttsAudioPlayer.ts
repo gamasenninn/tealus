@@ -12,6 +12,7 @@
  */
 import { TTS_VOLUME_BOOST } from '../constants/ui';
 import { useTtsStore } from '../stores/ttsStore';
+import { notifyAudioStarted, subscribeAudioStarted } from '../utils/audioExclusive';
 
 let audioContext: AudioContext | null = null;
 function getAudioContext(): AudioContext | null {
@@ -32,9 +33,20 @@ function getAudioContext(): AudioContext | null {
 let currentAudio: HTMLAudioElement | null = null;
 
 /**
+ * ★ #413 (#380 の宿題) 同時再生の規約に参加する。
+ *
+ * これまでは **独自の `currentAudio` で 1 つに絞っていただけ**で、規約 (`voice:started`) には
+ *   参加していなかった。だから音声メッセージや会話モードと**重なって鳴っていた**。
+ * ★ 参加 = (1) 自分が鳴ることを知らせる (2) 他が鳴り始めたら止まる の両方。
+ */
+let unsubscribeOther: (() => void) | null = null;
+let playCounter = 0;
+
+/**
  * 現在再生中の TTS を停止する (UI の stop button から呼ばれる)
  */
 export function stopCurrentTts(): void {
+  if (unsubscribeOther) { unsubscribeOther(); unsubscribeOther = null; }
   if (currentAudio) {
     try {
       currentAudio.pause();
@@ -65,6 +77,12 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
   const audio = new Audio(src);
   currentAudio = audio;
   useTtsStore.getState().setPlaying(true);
+
+  // ★ 規約に乗る (#413)。自分の id では止まらない (subscribeAudioStarted が selfId を無視する)
+  const selfId = `tts:${++playCounter}`;
+  if (unsubscribeOther) unsubscribeOther();
+  unsubscribeOther = subscribeAudioStarted(selfId, () => stopCurrentTts());
+  notifyAudioStarted(selfId);
   const volPct = parseInt(localStorage.getItem('voiceVolume') || '80', 10);
   const baseGain = Math.max(0, Math.min(1, volPct / 100)); // 0-1 の audio.volume 部分
   audio.volume = baseGain;
@@ -92,6 +110,7 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
     if (currentAudio === audio) {
       currentAudio = null;
       useTtsStore.getState().setPlaying(false);
+      if (unsubscribeOther) { unsubscribeOther(); unsubscribeOther = null; }
     }
     if (onEnded) onEnded();
   };
@@ -99,6 +118,7 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
     if (currentAudio === audio) {
       currentAudio = null;
       useTtsStore.getState().setPlaying(false);
+      if (unsubscribeOther) { unsubscribeOther(); unsubscribeOther = null; }
     }
     if (onError) onError(err);
   };
