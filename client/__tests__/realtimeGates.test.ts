@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createResponseGate } from '../src/utils/realtimeResponseGate';
-import { createSpeechGate } from '../src/utils/speechGate';
+import { createSpeechGate, createSpeakingView } from '../src/utils/speechGate';
 
 /**
  * #405 実測 (2026-09-05、8 往復) で出た 2 件の不具合を固定する (docs/08 §12)。
@@ -262,5 +262,65 @@ describe('道具名の入力を区切る', () => {
   });
   it('空なら空 (何も足さない)', () => {
     expect(parse('   ')).toEqual([]);
+  });
+});
+
+/**
+ * #415 「話しています」のちらつきを、もう 1 つの信号と合わせて止める。
+ *
+ * ★ `speechGate` だけでは、**400ms を超える発話の切れ目**で消えて出る (実測で 1 応答あたり
+ *   中央値 4 回、計測ログの 64% がこの上下だった)。
+ * ★★ サーバ側の「応答の音声を配信中か」と合わせる。ただし **立ち上がりの時刻は門のまま** ——
+ *   配信開始の合図で前倒しすると、基準① の計器が AnalyserNode でなくなる (#410 の決定が崩れる)。
+ */
+describe('createSpeakingView — 応答の途中で「終わった」と言わない (#415)', () => {
+  it('★ 門が鳴ったら、その時刻で立ち上がる (配信中でなくても)', () => {
+    const v = createSpeakingView();
+    expect(v.update(true, false)).toEqual({ shown: true, mark: 'start' });
+  });
+
+  it('★★ 配信が先に始まっても、立ち上がりの印は出さない (① の計器を前倒ししない)', () => {
+    const v = createSpeakingView();
+    expect(v.update(false, true)).toEqual({ shown: true, mark: null });   // 表示は出す
+    expect(v.update(true, true)).toEqual({ shown: true, mark: 'start' }); // 印は門が鳴ってから
+  });
+
+  it('★★ 応答の途中の切れ目 (門が落ちても配信中) では終わりにしない', () => {
+    const v = createSpeakingView();
+    v.update(true, true);
+    expect(v.update(false, true)).toEqual({ shown: true, mark: null });
+    expect(v.update(true, true)).toEqual({ shown: true, mark: null });   // ★ 2 回目の start を出さない
+  });
+
+  it('★ 両方落ちたら終わり', () => {
+    const v = createSpeakingView();
+    v.update(true, true);
+    expect(v.update(false, false)).toEqual({ shown: false, mark: 'end' });
+  });
+
+  it('★★ 配信の終わりの合図が来なくても、門が落ちれば終われる (止まらなくならない)', () => {
+    const v = createSpeakingView();
+    v.update(true, false);
+    expect(v.update(false, false)).toEqual({ shown: false, mark: 'end' });
+  });
+
+  it('★ 次の応答では、また立ち上がりの印が出る', () => {
+    const v = createSpeakingView();
+    v.update(true, true);
+    v.update(false, false);
+    expect(v.update(true, true)).toEqual({ shown: true, mark: 'start' });
+  });
+
+  it('★ 変化がなければ何も返さない (同じ状態で印を出し続けない)', () => {
+    const v = createSpeakingView();
+    v.update(true, true);
+    expect(v.update(true, true)).toEqual({ shown: true, mark: null });
+  });
+
+  it('★ reset で元に戻る (セッションを張り直したときに持ち越さない)', () => {
+    const v = createSpeakingView();
+    v.update(true, true);
+    v.reset();
+    expect(v.update(true, true)).toEqual({ shown: true, mark: 'start' });
   });
 });

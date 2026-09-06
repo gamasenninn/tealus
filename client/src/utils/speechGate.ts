@@ -47,3 +47,51 @@ export function createSpeechGate(opts: SpeechGateOptions): SpeechGate {
     reset() { speaking = false; lastLoudAt = 0; },
   };
 }
+
+/**
+ * #415 「話しています」の見せ方を、2 つの信号から決める。
+ *
+ * ★ 問題: `SpeechGate` だけだと **400ms を超える発話の切れ目**で消えて出る
+ *   (実測で 1 応答あたり中央値 4 回、計測ログの 64% がこの上下だった)。
+ *
+ * ★★ そこで **サーバ側の「応答の音声を配信中か」** と合わせる。ただし
+ *   **立ち上がりの印だけは門 (AnalyserNode) が鳴った時に出す** ——
+ *   配信開始の合図で前倒しすると、**基準① の計器が AnalyserNode でなくなる**
+ *   (#410 で「AnalyserNode を正」と決めた判断が、表示直しのついでに崩れる)。
+ *
+ * ```
+ * 表示        門が鳴っている または 配信中
+ * 立ち上がり   ★ 門だけ。1 つの応答につき 1 回
+ * 終わり      両方が落ちてから (★ 配信の終わりの合図が来なくても、門が落ちれば終われる)
+ * ```
+ */
+export interface SpeakingView {
+  /** 門の判定と「配信中か」を渡し、表示すべき状態と、計測に残す印を返す */
+  update: (gateSpeaking: boolean, playing: boolean) => { shown: boolean; mark: 'start' | 'end' | null };
+  reset: () => void;
+}
+
+export function createSpeakingView(): SpeakingView {
+  let shown = false;
+  let startMarked = false;
+
+  return {
+    update(gateSpeaking, playing) {
+      const next = gateSpeaking || playing;
+      let mark: 'start' | 'end' | null = null;
+
+      // ★ 立ち上がりは門が鳴ったときだけ。1 つの応答につき 1 回
+      if (gateSpeaking && !startMarked) {
+        startMarked = true;
+        mark = 'start';
+      } else if (!next && shown) {
+        // ★ 終わりは両方落ちてから。印を出したかに関わらず、次の応答のために戻す
+        if (startMarked) mark = 'end';
+        startMarked = false;
+      }
+      shown = next;
+      return { shown, mark };
+    },
+    reset() { shown = false; startMarked = false; },
+  };
+}

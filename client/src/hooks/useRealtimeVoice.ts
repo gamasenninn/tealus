@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { holdAudio, releaseAudio } from '../utils/audioExclusive';
 import { createResponseGate } from '../utils/realtimeResponseGate';
-import { createSpeechGate } from '../utils/speechGate';
+import { createSpeechGate, createSpeakingView } from '../utils/speechGate';
 
 /**
  * #405 Realtime 音声会話 (docs/08 §12)。
@@ -93,6 +93,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   // ★ 応答の二重生成と、立ち上がり検知のバタつきを塞ぐ門 (どちらも 2026-09-05 の実測で出た)
   const respGateRef = useRef(createResponseGate());
   const speechGateRef = useRef(createSpeechGate(SPEECH_GATE));
+  // ★ 表示のちらつきを止める門 (#415)。★★ 立ち上がりの時刻は AnalyserNode のまま
+  const speakingViewRef = useRef(createSpeakingView());
   // ★ 割り込みで即座に黙るために、受信トラックを持っておく (element の mute では残りが後で鳴る)
   const remoteTrackRef = useRef<MediaStreamTrack | null>(null);
   // ★ 自分で閉じたのか、切れたのか (#409)。pc.close() でも `closed` が飛ぶので、これで区別する
@@ -129,14 +131,18 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       let sum = 0;
       for (const v of buf) sum += v * v;
       const rms = Math.sqrt(sum / buf.length);
-      const speaking = speechGateRef.current.feed(rms, performance.now());
-      if (speaking !== speakingRef.current) {
-        speakingRef.current = speaking;
-        setIsAiSpeaking(speaking);
-        mark(speaking ? 'ai_audio_start' : 'ai_audio_end');
-        // ★ AI が喋っている間は「無操作」ではない (#414)
-        if (speaking) lastSpokeRef.current = Date.now();
+      // ★ 門の判定と「配信中か」を合わせて見せ方を決める (#415)。
+      //   応答の途中の切れ目 (400ms を超えることがある) で「終わった」と言わないため。
+      //   ★★ 立ち上がりの印は門が鳴ったときだけ = 基準① の計器は AnalyserNode のまま (#410)。
+      const gateSpeaking = speechGateRef.current.feed(rms, performance.now());
+      const view = speakingViewRef.current.update(gateSpeaking, respGateRef.current.isOutputAudioPlaying());
+      if (view.mark) mark(view.mark === 'start' ? 'ai_audio_start' : 'ai_audio_end');
+      if (view.shown !== speakingRef.current) {
+        speakingRef.current = view.shown;
+        setIsAiSpeaking(view.shown);
       }
+      // ★ AI が喋っている間は「無操作」ではない (#414)
+      if (view.shown) lastSpokeRef.current = Date.now();
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -282,6 +288,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     sessionIdRef.current = '';
     respGateRef.current.reset();
     speechGateRef.current.reset();
+    speakingViewRef.current.reset();
     speakingRef.current = false;
     setIsAiSpeaking(false);
     setIsTalking(false);
