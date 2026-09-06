@@ -29,9 +29,18 @@ vi.mock('../../src/services/api', () => ({
 import VoiceChatView from '../../src/components/voicechat/VoiceChatView';
 import { VOICE_STARTED, VOICE_STOP_CONTINUOUS } from '../../src/utils/audioExclusive';
 
+/** ★ 直近に作られたデータチャネル。サーバからのイベントを流し込むために持っておく */
+let lastDc: { readyState: string; send: ReturnType<typeof vi.fn>; onmessage?: (ev: { data: string }) => void } | null = null;
+
+/** サーバ (OpenAI) から来たことにしてイベントを 1 つ流す */
+function emit(msg: unknown) {
+  lastDc?.onmessage?.({ data: JSON.stringify(msg) });
+}
+
 /** WebRTC とマイクの最小のふり。中身の挙動は実機でしか確かめられない */
 function stubWebRTC() {
   const track = { enabled: true, stop: vi.fn() };
+  lastDc = null;
   vi.stubGlobal('isSecureContext', true);
   vi.stubGlobal('navigator', {
     ...navigator,
@@ -39,7 +48,7 @@ function stubWebRTC() {
   });
   vi.stubGlobal('RTCPeerConnection', vi.fn(() => ({
     addTrack: vi.fn(),
-    createDataChannel: vi.fn(() => ({ readyState: 'open', send: vi.fn() })),
+    createDataChannel: vi.fn(() => { lastDc = { readyState: 'open', send: vi.fn() }; return lastDc; }),
     createOffer: vi.fn().mockResolvedValue({ sdp: 'v=0' }),
     setLocalDescription: vi.fn().mockResolvedValue(undefined),
     setRemoteDescription: vi.fn().mockResolvedValue(undefined),
@@ -142,5 +151,57 @@ describe('VoiceChatView — 昇格 (R3)', () => {
     render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
     expect(screen.getByText('このルームに残す').closest('button')).toBeDisabled();
+  });
+});
+
+/**
+ * #408 昇格が失敗したときに、**理由が残る / 分かる**こと。
+ *
+ * ★ 実測 (as of 2026-09-06 12:23 JST): 昇格 7 回中 3 回失敗。うち 2 件は client の既定文言
+ *   「残せませんでした」だけが残り、**HTTP status も無く、サーバの log にも 1 行も無かった**。
+ *   → (a) status を計測に残す (b) サーバに届かなかったときは、その旨が分かる文言にする。
+ */
+describe('VoiceChatView — 昇格の失敗 (#408)', () => {
+  beforeEach(() => {
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    promoteMock.mockReset();
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** AI が 1 度喋った状態にして「残す」を押せるようにする */
+  async function speakThenPromote() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+    emit({ type: 'response.output_audio_transcript.done', transcript: '要点はこうです' });
+    await waitFor(() => expect(screen.getByText('このルームに残す').closest('button')).toBeEnabled());
+    fireEvent.click(screen.getByText('このルームに残す'));
+  }
+
+  /** 閉じたときに送られる計測イベント */
+  function loggedEvents(): Array<{ type: string; data?: Record<string, unknown> }> {
+    fireEvent.click(screen.getByLabelText('閉じる'));
+    const last = voiceChatLog.mock.calls.at(-1) as unknown[] | undefined;
+    return (last?.[1] ?? []) as Array<{ type: string; data?: Record<string, unknown> }>;
+  }
+
+  it('★★ サーバが断った (403) → 文言をそのまま出し、status を計測に残す', async () => {
+    promoteMock.mockRejectedValue(Object.assign(new Error('会話を開き直すと残せます (接続が切れました)'), { status: 403 }));
+    await speakThenPromote();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('開き直す'));
+
+    const err = loggedEvents().find((e) => e.type === 'promote_error');
+    expect(err?.data?.status).toBe(403);
+  });
+
+  it('★★ サーバに届かなかった (status が取れない) → 届いていないことが分かる文言にする', async () => {
+    promoteMock.mockRejectedValue(new Error('残せませんでした'));
+    await speakThenPromote();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('届いていません'));
+
+    const err = loggedEvents().find((e) => e.type === 'promote_error');
+    expect(err).toBeDefined();
+    expect(err?.data?.status).toBeUndefined();
   });
 });

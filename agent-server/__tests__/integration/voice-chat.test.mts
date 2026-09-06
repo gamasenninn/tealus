@@ -21,6 +21,11 @@ process.env.TEALUS_API_URL = 'http://tealus.test';
 process.env.AGENT_WORKSPACE_ROOT = require('node:fs')
   .mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'vc-ws-'));
 
+// #408 昇格の失敗が log に残ることを見るため、logger を差し替える
+jest.mock('../../src/lib/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+
 jest.mock('../../src/webhook/routes.mts', () => {
   const express = require('express');
   return { router: express.Router() };
@@ -532,5 +537,62 @@ describe('POST /voice-chat/log — 逐語の掃除 (#407)', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+/**
+ * #408 昇格の失敗が、両側のどこにも残っていなかった。
+ *
+ * ★ 実測 (as of 2026-09-06 12:23 JST): promote_start=7 / done=4 / **error=3**。
+ *   そのうち agent-server の log に残っていたのは **0 件** (成功 4 件の info だけ)。
+ *   403 と 409 は `return` するだけで書いていなかった。
+ *
+ * ★★ 「残ったと思って残っていない」を作らないために失敗は必ず返す設計 (docs/08 §12.10) なのに、
+ *   **なぜ失敗したかを後から追えない**。返すことと、記録に残すことは別の仕事だった。
+ */
+describe('POST /voice-chat/promote — 失敗の記録と文言 (#408)', () => {
+  const { logger } = require('../../src/lib/logger.mts') as { logger: { warn: jest.Mock; info: jest.Mock } };
+  let sessionId: string;
+
+  beforeEach(async () => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue([
+      ...TOOLS,
+      { name: 'send_message', description: '送信', inputSchema: { type: 'object', properties: {} } },
+    ]);
+    mockCallTool.mockReset().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    stubFetch();
+    logger.warn.mockClear();
+    const res = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
+    sessionId = res.body.session_id;
+  });
+
+  test('★★ 台帳に無い session → 「開き直す」を促す (再起動で消えただけなので、行動につながる文言にする)', async () => {
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: 'nope', text: 'あ' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('開き直');
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('昇格'));
+  });
+
+  test('★ 別人の session は文言を変えない (どの検査で落ちたかを外に教えない)', async () => {
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u2')}`).send({ session_id: sessionId, text: 'あ' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).not.toContain('開き直');
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('別の利用者'));
+  });
+
+  test('★ 送信の道具が無い (409) も log に残す', async () => {
+    voiceChat._resetForTest();
+    mockListTools.mockResolvedValue(TOOLS);     // send_message 無し
+    const s = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
+    logger.warn.mockClear();
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ session_id: s.body.session_id, text: 'あ' });
+    expect(res.status).toBe(409);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('送信の道具'));
   });
 });

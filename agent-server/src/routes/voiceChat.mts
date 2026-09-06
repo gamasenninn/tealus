@@ -337,8 +337,19 @@ router.post('/promote', async (req, res) => {
   const { session_id: sessionId, text } = req.body || {};
   if (!userId) return res.status(401).json({ error: '認証が必要です' });
 
+  // ★★ 失敗は必ず log に残す (#408)。実測で 7 回中 3 回失敗していたのに、
+  //   サーバの log には成功 4 件しか無かった —— **返すことと、記録に残すことは別の仕事**。
+  const short = String(sessionId).slice(0, 8);
   const entry = typeof sessionId === 'string' ? sessions.get(sessionId) : undefined;
-  if (!entry || entry.userId !== userId) {
+  if (!entry) {
+    // ★ 台帳は in-memory なので、agent-server の再起動と 30 分の TTL で消える。
+    //   利用者から見れば「さっきまで話せていたのに残せない」なので、**行動につながる文言**にする。
+    logger.warn(`[voice-chat] 昇格を拒否 (台帳に session が無い): session=${short} by ${userId}`);
+    return res.status(403).json({ error: '会話を開き直すと残せます (接続が切れました)' });
+  }
+  if (entry.userId !== userId) {
+    // ★ こちらは文言を変えない。どの検査で落ちたかを外に教えない (tool-call と同じ方針)
+    logger.warn(`[voice-chat] 昇格を拒否 (別の利用者の session): session=${short} by ${userId}`);
     return res.status(403).json({ error: 'この会話では残せません' });
   }
   const body = typeof text === 'string' ? text.trim() : '';
@@ -347,6 +358,7 @@ router.post('/promote', async (req, res) => {
   const server = entry.serverOf.get('send_message');
   if (!server) {
     // ★ 黙って捨てない。このルームでは送信の道具が使えない、と正直に返す
+    logger.warn(`[voice-chat] 昇格できず (送信の道具がこのルームで使えない): room=${entry.roomId} by ${userId}`);
     return res.status(409).json({ error: 'このルームには残せません (送信の道具が使えません)' });
   }
 

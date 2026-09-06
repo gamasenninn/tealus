@@ -297,9 +297,17 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       setPromoteState('done');
       mark('promote_done');
     } catch (e) {
+      // ★ status が取れるかで、失敗の意味が違う (#408):
+      //   有り = サーバが断った (文言はサーバのものをそのまま出す)
+      //   無し = そもそも届いていない (通信 / proxy)。**押した本人には同じ「失敗」に見えるので、
+      //          届いていないことを文言で分ける** —— 実測の 3 件中 2 件がこちらだった
+      const status = (e as { status?: number }).status;
+      const message = e instanceof Error ? e.message : String(e);
       setPromoteState('error');
-      setPromoteError(e instanceof Error ? e.message : String(e));
-      mark('promote_error', { message: e instanceof Error ? e.message : String(e) });
+      setPromoteError(status === undefined
+        ? `${message} (サーバに届いていません。通信を確かめて、もう一度押してください)`
+        : message);
+      mark('promote_error', { message, status });
     }
   }, [lastReply, mark]);
 

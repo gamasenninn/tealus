@@ -319,7 +319,9 @@ class ApiClient {
         if (fallback !== undefined) return fallback;
         let err = errorMessage;
         try { const j = await res.json() as { error?: string }; err = j.error || err; } catch {}
-        throw new Error(err);
+        // ★ status も載せる (#408)。**サーバが断ったのか、そもそも届かなかったのか**が
+        //   呼び出し側で区別できないと、失敗の理由を後から追えない
+        throw Object.assign(new Error(err), { status: res.status });
       }
       return (as === 'blob' ? await res.blob() : await res.json()) as T;
     } catch (e) {
