@@ -32,46 +32,78 @@ import { getBotIdentity } from '../webhook/handler.mts';
 export const router = express.Router();
 
 /**
- * ★ 会話モードに出す道具は明示リストで絞る。理由が 2 つある:
- *   1. 破壊的な道具を音声から誤爆させない (「消しといて」が通ると戻せない)
- *   2. ~~関数方式は道具の説明文を毎セッション渡すので、増えるほど遅くなる~~
- *      ★★ **訂正 (2026-09-05): 測ったら効かなかった。** 6 → 9 に増やして比較:
- *      ```
- *      tools=6  n=54  中央値 1.05s  2 秒以内 52/54
- *      tools=9  n=22  中央値 1.02s  2 秒以内 20/22   ← ★ むしろ速い (誤差)
- *      ```
- *      **この規模 (数個) では観測されない。** 大きく増やしたときは測り直すこと。
- *      ★ したがって**このリストが立っている根拠は 1 だけ**である。
- * 試作は read 系 + 昇格用の送信だけ。増やすときは①を測り直してから。
- * ★ 参考 (2026-09-05 実測): `tavily_search` が 5220ms かかったターンでも**声は 2.14s で返った**。
- *   「道具を呼ぶ前に一言つなぐ」を instructions に入れてあるので、**道具の遅さは①に出にくい**。
+ * ★ 会話モードに出す道具の決まり方 (#418、docs/08 §12.17)。
  *
- * ★★ **ここは「tealus の破壊的な道具」を守るためのリストである** (2026-09-05 に取り違えを直した)。
- *   ルーム固有の MCP (社内DB 等) の道具まで巻き添えで捨てていた —— 起動して道具一覧を
- *   取ったうえで捨てるので、**起動コストだけ払って何も得ていなかった** (接続 4.2s の正体)。
- *   → ルームごとに `rooms.voice_conversation_tools` で**名指しした道具を上乗せ**できる。
+ * ★★ 2026-09-06 に **許可リストから「既定で全許可 + 外す」へ転回した**。利用者提案:
+ *   「許可リストは案外ユーザに負荷がかかる。既定はすべて許可して、ドロップダウンで外す方が
+ *    認知負荷が低い。SQL の書き込みは運用の問題で、読み込みだけに抑えるなら DB 側で
+ *    VIEW だけ解放すればよく、MCP の問題ではない」
+ *
+ * ★ 許可リストが立っていた根拠は 2 つあったが、**1 つは実測で消えた**:
+ *   ~~道具が増えると遅くなる~~ → 6→9 で中央値 1.05s → 1.02s (2026-09-05、docs/08 §12.11)
+ *   破壊的な道具の誤爆を防ぐ  → ★ これだけが残り、DEFAULT_DENY になった
+ *
+ * ★★ 実際に困っていたこと: 管理者が道具の名前を知る手段が起動ログしかなく、
+ *   1 ルームあたり **30 個が落ちていた** (有用な tavily 検索・社内DB 検索を含む)。
  */
-const BASE_TOOLS = new Set([
-  'get_messages',
-  'search_messages',
-  'list_rooms',
-  'list_tags',
-  'read_document',
-  'send_message',   // 昇格 (docs/08 §1.2.2 の成立条件)
+const DEFAULT_DENY = new Set([
+  'delete_room',
+  'create_room',
+  'write_file',
+  'edit_file',
+  'move_file',
 ]);
 
 /**
- * ★ そのルームで上乗せする道具。**DB の列から来る** (`rooms.voice_conversation_tools`)。
+ * ★★ 外せない道具。**`/promote` (昇格) が `serverOf` 経由で使う**ので、
+ *   ここが消えると「このルームに残す」が 409 になる (docs/08 §1.2.2 の成立条件が壊れる)。
+ * ★ モデルへの宣言から外れることはあってよいが、**実行できる集合からは外さない**。
+ */
+const PROTECTED_TOOLS = new Set(['send_message']);
+
+/**
+ * ★ 1 つの道具を出すか決める。
+ *
+ * ```
+ * PROTECTED       → 許可 (denied に書かれていても無視)
+ * denied に在る    → 拒否
+ * DEFAULT_DENY    → restored に在れば許可、無ければ拒否
+ * それ以外         → 許可
+ * ```
+ * ★ denied と restored の両方に在るときは **denied が勝つ** (安全側に倒す)。
+ */
+function isToolAllowed(name: string, restored: Set<string>, denied: Set<string>): boolean {
+  if (PROTECTED_TOOLS.has(name)) return true;
+  if (denied.has(name)) return false;
+  if (DEFAULT_DENY.has(name)) return restored.has(name);
+  return true;
+}
+
+/**
+ * ★ そのルームの設定。**DB の列から来る** (`rooms.voice_conversation_*`)。
  *
  * ★★ `room_settings.json` には置かない。`PUT /config/room/:roomId/settings` は認証のみで
- *   メンバー確認も管理者確認も無く、**誰でも任意のルームに `execute_sql` を足せてしまう**。
+ *   メンバー確認も管理者確認も無く、**誰でも任意のルームの道具の門を開けてしまう**。
  *   会話モードを開く判定と同じ場所・同じ門 (`PUT /api/rooms/:id` = requireRoomAdmin) に置く。
- * ★ 既定は空。**何もしなければ 1 つも増えない。**
+ *
+ * ★★★ `voice_conversation_tools` は 028 では「足す道具」だったが、#418 で
+ *   **「既定で外れている道具を戻す」に読み替えた**。新方式ではどちらも同じ『明示許可』なので、
+ *   既存データ (社内DB検索の execute_sql 等) は**既定で許可される = no-op** になる。
+ *   ★ 意味を反転させて使い回すと、その実データが「外す」に化けるので、外す方は新しい列にした。
  */
-function extraToolsOf(room: Record<string, unknown>): Set<string> {
-  const raw = room.voice_conversation_tools;
-  if (!Array.isArray(raw)) return new Set();
+function nameSetOf(raw: unknown): Set<string> {
+  if (!Array.isArray(raw)) return new Set();   // ★ 壊れた値は無視する (勝手に開けも閉めもしない)
   return new Set(raw.filter((x): x is string => typeof x === 'string' && !!x.trim()));
+}
+
+/** 既定で外れているものを、このルームでは戻す */
+function restoredToolsOf(room: Record<string, unknown>): Set<string> {
+  return nameSetOf(room.voice_conversation_tools);
+}
+
+/** このルームでは外す */
+function deniedToolsOf(room: Record<string, unknown>): Set<string> {
+  return nameSetOf(room.voice_conversation_denied_tools);
 }
 
 /**
@@ -227,8 +259,9 @@ router.post('/session', async (req, res) => {
     const workspacePath = path.join(config.WORKSPACE_ROOT, agentId, roomId);
     const servers = await getOrCreateRoomMcp(agentId, roomId, workspacePath) as unknown as McpServerLike[];
 
-    // ★ そのルームで許す道具 = 共通の 6 個 + ルームが名指しした分
-    const allowed = new Set([...BASE_TOOLS, ...extraToolsOf(resolved.room)]);
+    // ★ そのルームで許す道具 = 全部 − 既定で外す分 − ルームが外した分 + ルームが戻した分 (#418)
+    const restored = restoredToolsOf(resolved.room);
+    const denied = deniedToolsOf(resolved.room);
     const serverOf = new Map<string, McpServerLike>();
     const picked: McpToolLike[] = [];
     const dropped: string[] = [];
@@ -242,9 +275,11 @@ router.post('/session', async (req, res) => {
       }
       for (const t of tools) {
         if (serverOf.has(t.name)) continue;
-        if (!allowed.has(t.name)) { dropped.push(t.name); continue; }
+        if (!isToolAllowed(t.name, restored, denied)) { dropped.push(t.name); continue; }
         serverOf.set(t.name, s);
-        picked.push(t);
+        // ★ 外せない道具は実行できる集合には残すが、モデルへの宣言からは
+        //   ルームの指定どおり外す (昇格は動かしたまま、声からは呼ばせない)
+        if (!denied.has(t.name)) picked.push(t);
       }
     }
 
@@ -288,13 +323,75 @@ router.post('/session', async (req, res) => {
       issuedAt: Date.now(),
     });
 
-    // ★ 捨てた道具の名前も出す。管理者が「このルームで何を足せるか」を知る手段がこれしかない
+    // ★ 外した道具の名前も出す。設定画面が無かった頃はこれが唯一の手段だった (#418 で画面が付く)
     logger.info(`[voice-chat] session ${sessionId.slice(0, 8)} room=${roomId} tools=${picked.length} by ${userId}`
-      + (dropped.length ? ` (未許可: ${dropped.join(', ')})` : ''));
+      + (dropped.length ? ` (外した: ${dropped.join(', ')})` : ''));
     res.json({ session_id: sessionId, client_secret: secret.value, model: config.REALTIME_MODEL });
   } catch (err) {
     logger.error(`[voice-chat] session error: ${err instanceof Error ? err.message : String(err)}`);
     res.status(500).json({ error: '音声セッションの開始に失敗しました' });
+  }
+});
+
+/**
+ * GET /voice-chat/tools — そのルームで使える道具の一覧 (#418、docs/08 §12.17)。
+ *
+ * ★ 設定画面が「何を外せるか」を出すために要る。**これまで名前を知る手段は起動ログしか無かった。**
+ *
+ * ★★ MCP を起こすので数秒かかる (冷間は最悪 30 秒級)。`getOrCreateRoomMcp` はキャッシュ済みなので
+ *   子プロセスは増えず、**副次効果として設定画面で温まり、直後の /session が速くなる**。
+ *
+ * ★ `default_denied` と `protected` も返すのは、**client に同じリストを二重持ちさせない**ため
+ *   (2 か所に置くと、片方だけ直して食い違う)。
+ */
+router.get('/tools', async (req, res) => {
+  const userId = callerId(req);
+  const roomId = typeof req.query.room_id === 'string' ? req.query.room_id : '';
+  if (!userId) return res.status(401).json({ error: '認証が必要です' });
+  if (!roomId) return res.status(400).json({ error: 'room_id が必要です' });
+
+  try {
+    const resolved = await resolveRoom(req, roomId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: 'このルームの道具は見られません' });
+    }
+    // ★ 開けていないルームのために MCP を温めない (/session と同じ判定)
+    if (!resolved.room.voice_conversation_enabled) {
+      return res.status(403).json({ error: 'このルームでは会話モードが有効になっていません' });
+    }
+
+    const agentId = getBotIdentity().user_id;
+    if (!agentId) return res.status(503).json({ error: 'アシスタントが起動していません' });
+
+    const workspacePath = path.join(config.WORKSPACE_ROOT, agentId, roomId);
+    const servers = await getOrCreateRoomMcp(agentId, roomId, workspacePath) as unknown as McpServerLike[];
+
+    const seen = new Set<string>();
+    const tools: Array<{ name: string; description: string }> = [];
+    for (const s of servers) {
+      let list: McpToolLike[];
+      try {
+        list = await s.listTools();
+      } catch (err) {
+        // ★ 1 つ落ちても画面は出す (全部揃わないと設定できない、にしない)
+        logger.warn(`[voice-chat] listTools 失敗 (この MCP は一覧から外す): ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
+      for (const t of list) {
+        if (seen.has(t.name)) continue;   // ★ 先勝ち (/session の選別と同じ規則)
+        seen.add(t.name);
+        tools.push({ name: t.name, description: t.description || '' });
+      }
+    }
+
+    res.json({
+      tools,
+      default_denied: [...DEFAULT_DENY],
+      protected: [...PROTECTED_TOOLS],
+    });
+  } catch (err) {
+    logger.error(`[voice-chat] tools error: ${err instanceof Error ? err.message : String(err)}`);
+    res.status(500).json({ error: '道具の一覧を取得できませんでした' });
   }
 });
 

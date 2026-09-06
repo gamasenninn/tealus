@@ -292,6 +292,14 @@ class ApiClient {
     return this._agentApi('POST', '/voice-chat/promote', { session_id: sessionId, text }, { errorMessage: '残せませんでした' });
   }
 
+  /**
+   * ★ そのルームで使える道具の一覧 (#418、docs/08 §12.17)。
+   * ★★ MCP を起こすので数秒〜数十秒かかる。設定画面を開いた時に 1 回だけ呼ぶ。
+   */
+  getVoiceChatTools(roomId: string): Promise<{ tools: Array<{ name: string; description: string }>; default_denied: string[]; protected: string[] }> {
+    return this._agentApi('GET', `/voice-chat/tools?room_id=${encodeURIComponent(roomId)}`);
+  }
+
   /** 計測イベントの送信 (docs/08 §12.6)。★ 失敗しても会話は止めない */
   voiceChatLog(sessionId: string, events: unknown[]): Promise<{ ok: boolean }> {
     return this._agentApi('POST', '/voice-chat/log', { session_id: sessionId, events }, { fallback: { ok: false } });

@@ -42,8 +42,13 @@ export interface Room {
   allow_member_transcription_edit?: boolean;
   /** #405 Realtime 音声会話モードを開けるルームか (docs/08 §12)。既定 false */
   voice_conversation_enabled?: boolean;
-  /** #405 会話モードで上乗せする道具の名前。既定は空 = 何も増えない */
+  /**
+   * #405 → ★ #418 で意味を「**既定で外れている道具を戻す**」に読み替えた (docs/08 §12.17)。
+   * 列名はそのまま (既存データが no-op になるので移行が要らない)
+   */
   voice_conversation_tools?: string[];
+  /** #418 会話モードで**外す**道具。既定は空 = 何もしなければ 1 つも外れない */
+  voice_conversation_denied_tools?: string[];
   app_urls?: AppUrl[];
   is_announcement?: boolean;
   my_role?: string;

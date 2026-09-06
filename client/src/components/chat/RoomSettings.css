@@ -202,3 +202,52 @@
   background: var(--bg-disabled);
   cursor: not-allowed;
 }
+
+/* #418 会話モードの道具 (docs/08 §12.17)。既定は全許可で、ここでは外す方を選ぶ */
+.voice-tools {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-color, #e5e5e5);
+}
+.voice-tools-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.voice-tools-note {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  margin: 4px 0 8px;
+  line-height: 1.5;
+}
+.voice-tools-error {
+  font-size: 12px;
+  color: var(--error-color, #c33);
+  margin: 4px 0 8px;
+}
+.voice-tools-error button {
+  margin-left: 8px;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+/* ★ 一覧は長くなる (1 ルーム 36 個)。中でスクロールさせ、設定画面全体を伸ばさない */
+.voice-tools .voice-tool-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 2px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.voice-tools .voice-tool-item input[type="checkbox"] {
+  flex-shrink: 0;
+}
+.voice-tool-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.voice-tool-desc {
+  color: var(--text-secondary, #666);
+  font-size: 12px;
+}

@@ -67,6 +67,41 @@ describe('Room Edit API', () => {
       expect(res.status).toBe(403);
     });
 
+    /**
+     * #418 会話モードの道具を「既定で全許可 + 外す」に変える (docs/08 §12.17)。
+     *
+     * ★ 外す道具は **会話モードを開く判定と同じ門 (requireRoomAdmin)** に置く。
+     *   room_settings.json 側の PUT は認証のみで、誰でも任意のルームを書き換えられるため
+     *   (docs/08 §12.11 が 028 の列を DB に置いた理由と同じ)。
+     */
+    it('★ admin は 会話モードで外す道具を更新できる (#418)', async () => {
+      const res = await request(app)
+        .put(`/api/rooms/${groupId}`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ voice_conversation_denied_tools: ['execute_sql', 'tavily_search'] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.room.voice_conversation_denied_tools).toEqual(['execute_sql', 'tavily_search']);
+    });
+
+    it('★ 非 admin は 外す道具を更新できない (声から道具の門を開けられない)', async () => {
+      const res = await request(app)
+        .put(`/api/rooms/${groupId}`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ voice_conversation_denied_tools: [] });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('★ 既定は空 (何もしなければ 1 つも外れない)', async () => {
+      const res = await request(app)
+        .get(`/api/rooms/${groupId}`)
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.room.voice_conversation_denied_tools).toEqual([]);
+    });
+
     it('should reject on direct room', async () => {
       const directRes = await request(app)
         .post('/api/rooms/direct')

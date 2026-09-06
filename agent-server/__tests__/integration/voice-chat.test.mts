@@ -301,26 +301,37 @@ describe('POST /voice-chat/promote — 昇格 (R3)', () => {
 });
 
 /**
- * ★ ルームごとに、道具を足せるようにする (2026-09-05)。
+ * #418 ★ 会話モードの道具を「許可リスト」から「既定で全許可 + 外す」に変えた (docs/08 §12.17)。
  *
- * これまで許可リストは**コードに固定の 6 個**で、ルーム固有 MCP (社内DB 等) の道具は
- * **起動して道具一覧まで取ったうえで捨てていた**。守る対象を取り違えていた ——
- * 許可リストは *tealus の破壊的な道具* を守るためのもので、
- * **管理者がそのルームのために意図的に設定した MCP まで巻き添えにしていた**。
+ * ★ 利用者提案 (2026-09-06):「許可リストは案外ユーザに負荷がかかる。既定はすべて許可して、
+ *   ドロップダウンで外す方が認知負荷が低い。SQL の書き込みは運用の問題で、読み込みだけに
+ *   抑えるなら DB 側で VIEW だけ解放すればよく、MCP の問題ではない」
  *
- * ★★ 置き場は **DB の列** (`rooms.voice_conversation_tools`)。`room_settings.json` には置かない ——
- *   `PUT /config/room/:roomId/settings` は認証のみでメンバー確認も管理者確認も無く、
- *   **誰でも任意のルームに `execute_sql` を足せてしまう**。
- *   会話モードを開く判定 (`voice_conversation_enabled`) と同じ場所・同じ門にする。
+ * ★★ 許可リストが立っていた根拠は 2 つあったが、**1 つは 2026-09-05 の実測で否定済み**
+ *   (道具を 6→9 に増やしても①は変わらない、docs/08 §12.11)。残るのは破壊的な道具の誤爆だけ。
  *
- * ★ 既定は空。**何もしなければ 1 つも増えない。**
+ * ★★★ 新しい式:
+ * ```
+ * PROTECTED (send_message)  → 許可 (denied に書かれていても無視。★ /promote が使うため)
+ * denied に在る             → 拒否
+ * DEFAULT_DENY の 5 つ       → restored (voice_conversation_tools) に在れば許可、無ければ拒否
+ * それ以外                   → 許可
+ * ```
+ *
+ * ★ 028 の `voice_conversation_tools` は **意味を「戻す道具」に読み替えて続用**する。
+ *   新方式では「上乗せ」も「戻す」も同じ『明示許可』なので、既存データは no-op になり移行が要らない。
  */
-describe('POST /voice-chat/session — ルームごとの道具の上乗せ', () => {
-  const withTools = (extra: unknown) => {
+describe('POST /voice-chat/session — 既定で全許可 + 外す (#418)', () => {
+  /** room の JSON を組み立てる。restored = 戻す道具、denied = 外す道具 */
+  const withRoom = (opts: { restored?: unknown; denied?: unknown } = {}) => {
     global.fetch = jest.fn(async (url: string) => {
       if (String(url).includes('/api/rooms/')) {
         return { ok: true, status: 200, json: async () => ({
-          room: { id: 'r1', name: '営業報告', voice_conversation_enabled: true, voice_conversation_tools: extra },
+          room: {
+            id: 'r1', name: '営業報告', voice_conversation_enabled: true,
+            voice_conversation_tools: opts.restored,
+            voice_conversation_denied_tools: opts.denied,
+          },
         }) };
       }
       return { ok: true, status: 200, json: async () => ({ value: 'ek_1' }) };
@@ -330,10 +341,15 @@ describe('POST /voice-chat/session — ルームごとの道具の上乗せ', ()
     const c = (global.fetch as jest.Mock).mock.calls.find((x) => String(x[0]).includes('client_secrets'));
     return JSON.parse(c[1].body).session.tools.map((t: { name: string }) => t.name);
   };
+  /** そのルームの MCP が出す道具。★ 消す系と読み取り系を混ぜてある */
   const ROOM_TOOLS = [
     ...TOOLS,
     { name: 'execute_sql', description: '社内DB', inputSchema: { type: 'object', properties: {} } },
     { name: 'search_objects', description: 'DB 検索', inputSchema: { type: 'object', properties: {} } },
+    { name: 'tavily_search', description: 'ニュース検索', inputSchema: { type: 'object', properties: {} } },
+    { name: 'read_file', description: 'ファイルを読む', inputSchema: { type: 'object', properties: {} } },
+    { name: 'write_file', description: '★ 消す系', inputSchema: { type: 'object', properties: {} } },
+    { name: 'send_message', description: '送信', inputSchema: { type: 'object', properties: {} } },
   ];
 
   beforeEach(() => {
@@ -342,60 +358,50 @@ describe('POST /voice-chat/session — ルームごとの道具の上乗せ', ()
     mockCallTool.mockReset();
   });
 
-  test('★ 既定 (設定なし) では 1 つも増えない', async () => {
-    withTools(undefined);
+  test('★★ 既定 (設定なし) で、名指ししていない道具が通る', async () => {
+    withRoom();
     await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
-    expect(names()).not.toContain('execute_sql');
-    expect(names()).toContain('get_messages');
-  });
-
-  test('★★ 名指しした道具だけ増える', async () => {
-    withTools(['search_objects']);
-    await request(app).post('/voice-chat/session')
-      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
-    expect(names()).toContain('search_objects');
-    expect(names()).not.toContain('execute_sql');   // ★ 名指ししていないものは増えない
-  });
-
-  test('★★★★ 名指しすれば破壊的な道具も通る (管理者が明示的に許した時だけ)', async () => {
-    withTools(['execute_sql']);
-    await request(app).post('/voice-chat/session')
-      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
-    expect(names()).toContain('execute_sql');
-  });
-
-  test('★ 上乗せしても、もとの 6 個は残る', async () => {
-    withTools(['execute_sql']);
-    await request(app).post('/voice-chat/session')
-      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
-    // ★ モックが出す道具のうち、もともと許可されている 2 つ
-    for (const n of ['get_messages', 'search_messages']) {
+    // ★ 旧方式ではどれも落ちていた。管理者が名前を知らなくても使える、が今回の狙い
+    for (const n of ['execute_sql', 'search_objects', 'tavily_search', 'get_messages']) {
       expect(names()).toContain(n);
     }
-    expect(names()).not.toContain('delete_room');   // ★ 上乗せしても、危ないものは通らない
   });
 
-  test('★ 壊れた値 (配列でない / 文字列でない要素) では増やさない', async () => {
-    withTools({ nope: true });
+  test('★★ 読み取り系も既定で通る (利用者判断 2026-09-06)', async () => {
+    withRoom();
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    // ★ workspace の資格情報が読めるリスクは説明済みで、その上で全許可を選んだ (#419 で別に扱う)
+    expect(names()).toContain('read_file');
+  });
+
+  test('★★★ 消す系は既定で出ない (delete_room / write_file)', async () => {
+    withRoom();
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).not.toContain('delete_room');
+    expect(names()).not.toContain('write_file');
+  });
+
+  test('★★ 消す系はルームごとに戻せる', async () => {
+    withRoom({ restored: ['write_file'] });
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).toContain('write_file');
+    expect(names()).not.toContain('delete_room');   // ★ 戻すのは名指しした 1 つだけ
+  });
+
+  test('★★ ルームが外した道具は出ない', async () => {
+    withRoom({ denied: ['execute_sql'] });
     await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
     expect(names()).not.toContain('execute_sql');
+    expect(names()).toContain('search_objects');    // ★ 外したもの以外は残る
   });
 
-  test('★★ 上乗せしたものも、道具の口の検証を通る (session ごとに効く)', async () => {
-    withTools(['execute_sql']);
-    const s = await request(app).post('/voice-chat/session')
-      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
-    mockCallTool.mockResolvedValue('done');
-    const ok = await request(app).post('/voice-chat/tool-call')
-      .set('Authorization', `Bearer ${token()}`)
-      .send({ session_id: s.body.session_id, call_id: 'c', name: 'execute_sql', arguments: '{}' });
-    expect(ok.status).toBe(200);
-  });
-
-  test('★★★ 上乗せしていないルームでは、口へ直接投げても実行しない', async () => {
-    withTools(undefined);
+  test('★★★ 外すと、道具の口へ直接投げても実行しない (二段目の検証にも効く)', async () => {
+    withRoom({ denied: ['execute_sql'] });
     const s = await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
     const ng = await request(app).post('/voice-chat/tool-call')
@@ -403,6 +409,33 @@ describe('POST /voice-chat/session — ルームごとの道具の上乗せ', ()
       .send({ session_id: s.body.session_id, call_id: 'c', name: 'execute_sql', arguments: '{}' });
     expect(ng.status).toBe(403);
     expect(mockCallTool).not.toHaveBeenCalled();
+  });
+
+  test('★★ 外すと戻すの両方に在れば、外す方が勝つ (安全側に倒す)', async () => {
+    withRoom({ restored: ['write_file'], denied: ['write_file'] });
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).not.toContain('write_file');
+  });
+
+  test('★ 壊れた値 (配列でない) は無視する', async () => {
+    withRoom({ restored: { nope: true }, denied: 'execute_sql' });
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).toContain('execute_sql');       // ★ 壊れた denied で外れてしまわない
+    expect(names()).not.toContain('write_file');    // ★ 壊れた restored で戻ってしまわない
+  });
+
+  test('★★★★ send_message は外せない (昇格が壊れないこと)', async () => {
+    withRoom({ denied: ['send_message'] });
+    const s = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    // ★ モデルへの宣言からは消えていてよいが、★★ 昇格 (人がボタンを押す) は動き続ける
+    mockCallTool.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    const res = await request(app).post('/voice-chat/promote')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ session_id: s.body.session_id, text: '要点はこうです' });
+    expect(res.status).toBe(200);
   });
 });
 
@@ -659,5 +692,95 @@ describe('POST /voice-chat/tool-call — 由来の印 (#417)', () => {
   test('★ content が無くても落ちない (モデルが引数を間違えても会話を止めない)', async () => {
     const res = await call('send_message', { room_id: 'r1' });
     expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * #418 ★ 設定画面に出す「そのルームで使える道具の一覧」を返す口 (docs/08 §12.17)。
+ *
+ * ★ これまで管理者が道具の名前を知る手段は**起動ログしか無かった**。
+ *   「既定で全許可 + 外す」にするなら、**外す対象を選べる画面**が要る。
+ *
+ * ★★ MCP を起こすので数秒かかる (冷間は最悪 30 秒級)。`getOrCreateRoomMcp` は
+ *   キャッシュ済みなので子プロセスは増えず、**副次効果として設定画面で温まる**。
+ */
+describe('GET /voice-chat/tools — 道具の一覧 (#418)', () => {
+  const ROOM_TOOLS = [
+    { name: 'get_messages', description: '履歴', inputSchema: { type: 'object', properties: {} } },
+    { name: 'delete_room', description: '★ 消す系', inputSchema: { type: 'object', properties: {} } },
+    { name: 'send_message', description: '送信', inputSchema: { type: 'object', properties: {} } },
+  ];
+
+  beforeEach(() => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue(ROOM_TOOLS);
+    stubFetch();
+  });
+
+  test('認証なし → 401', async () => {
+    const res = await request(app).get('/voice-chat/tools?room_id=r1');
+    expect(res.status).toBe(401);
+  });
+
+  test('room_id が無ければ 400', async () => {
+    const res = await request(app).get('/voice-chat/tools')
+      .set('Authorization', `Bearer ${token()}`);
+    expect(res.status).toBe(400);
+  });
+
+  test('★ 非メンバー (本体が 403) → 403', async () => {
+    stubFetch({ roomStatus: 403 });
+    const res = await request(app).get('/voice-chat/tools?room_id=r1')
+      .set('Authorization', `Bearer ${token()}`);
+    expect(res.status).toBe(403);
+  });
+
+  test('★ 開けていないルーム → 403 (無効なルームのために MCP を温めない)', async () => {
+    stubFetch({ enabled: false });
+    const res = await request(app).get('/voice-chat/tools?room_id=r1')
+      .set('Authorization', `Bearer ${token()}`);
+    expect(res.status).toBe(403);
+  });
+
+  test('★★ 一覧と、既定で外れている名前・外せない名前を返す', async () => {
+    const res = await request(app).get('/voice-chat/tools?room_id=r1')
+      .set('Authorization', `Bearer ${token()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.tools.map((t: { name: string }) => t.name)).toEqual(
+      expect.arrayContaining(['get_messages', 'delete_room', 'send_message']),
+    );
+    // ★ 既定で外れているものも一覧には出す (画面で「戻す」を選べるように)
+    expect(res.body.default_denied).toEqual(
+      expect.arrayContaining(['delete_room', 'create_room', 'write_file', 'edit_file', 'move_file']),
+    );
+    // ★★ client にリストを二重持ちさせない (ここが唯一の出どころ)
+    expect(res.body.protected).toEqual(['send_message']);
+  });
+
+  test('★ 道具には説明も付ける (名前だけでは選べない)', async () => {
+    const res = await request(app).get('/voice-chat/tools?room_id=r1')
+      .set('Authorization', `Bearer ${token()}`);
+    const t = res.body.tools.find((x: { name: string }) => x.name === 'delete_room');
+    expect(t.description).toBe('★ 消す系');
+  });
+
+  test('★ listTools が失敗した MCP は飛ばして 200 (1 つ落ちても画面を出す)', async () => {
+    mockListTools.mockRejectedValue(new Error('boom'));
+    const res = await request(app).get('/voice-chat/tools?room_id=r1')
+      .set('Authorization', `Bearer ${token()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.tools).toEqual([]);
+  });
+
+  test('★ 同じ名前は先勝ち (session の選別と同じ規則)', async () => {
+    mockListTools.mockResolvedValue([
+      { name: 'get_messages', description: '先', inputSchema: {} },
+      { name: 'get_messages', description: '後', inputSchema: {} },
+    ]);
+    const res = await request(app).get('/voice-chat/tools?room_id=r1')
+      .set('Authorization', `Bearer ${token()}`);
+    expect(res.body.tools).toHaveLength(1);
+    expect(res.body.tools[0].description).toBe('先');
   });
 });

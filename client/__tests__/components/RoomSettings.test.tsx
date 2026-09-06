@@ -22,6 +22,17 @@ vi.mock('../../src/services/api', () => ({
     getRoomClaudeMd: vi.fn(() => Promise.resolve({ content: 'claude md content' })),
     updateRoomClaudeMd: vi.fn(() => Promise.resolve({ success: true })),
     updateRoom: vi.fn(() => Promise.resolve()),
+    // #418 会話モードの道具の一覧 (docs/08 §12.17)
+    getVoiceChatTools: vi.fn(() => Promise.resolve({
+      tools: [
+        { name: 'get_messages', description: '履歴を引く' },
+        { name: 'execute_sql', description: '社内DB' },
+        { name: 'send_message', description: '送信' },
+        { name: 'write_file', description: 'ファイルを書く' },
+      ],
+      default_denied: ['delete_room', 'create_room', 'write_file', 'edit_file', 'move_file'],
+      protected: ['send_message'],
+    })),
   },
 }));
 
@@ -149,5 +160,92 @@ describe('RoomSettings — エージェント設定 section (#156)', () => {
         expect(api.updateRoomClaudeMd).toHaveBeenCalledWith('room-1', 'new deep prompt');
       });
     });
+  });
+});
+
+/**
+ * #418 ★ 会話モードの道具を「既定で全許可 + 外す」にした (docs/08 §12.17)。
+ *
+ * ★ 旧: カンマ区切りのテキスト入力に**足す道具の名前を書く**。
+ *   → 管理者が名前を知る手段が起動ログしか無く、負荷が高かった (利用者指摘)。
+ * ★★ 新: **一覧をサーバから取ってきてチェックを外す**。checked = 許可。
+ */
+describe('RoomSettings — 会話モードの道具 (#418)', () => {
+  const voiceRoom = {
+    id: 'room-1', name: '営業報告', type: 'group',
+    voice_conversation_enabled: true,
+  } as unknown as Room;
+
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('★ 会話モードが開いているときだけ 一覧を取りに行く', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(api.getVoiceChatTools).toHaveBeenCalledWith('room-1'));
+  });
+
+  it('★ 開いていないルームでは 取りに行かない (MCP を温めない)', async () => {
+    const off = { ...voiceRoom, voice_conversation_enabled: false } as Room;
+    render(<RoomSettings {...baseProps} currentRoom={off} isAdmin={true} isSysAdmin={false} />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.getVoiceChatTools).not.toHaveBeenCalled();
+  });
+
+  it('★★ 取得中は そう分かる文言を出す (数十秒かかることがある)', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    expect(screen.getByText(/取得しています/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/get_messages/)).toBeInTheDocument());
+  });
+
+  it('★★ 既定では 消す系だけ外れている (それ以外は許可)', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(screen.getByLabelText(/execute_sql/)).toBeInTheDocument());
+
+    expect(screen.getByLabelText(/execute_sql/)).toBeChecked();
+    expect(screen.getByLabelText(/get_messages/)).toBeChecked();
+    expect(screen.getByLabelText(/write_file/)).not.toBeChecked();   // ★ 消す系は既定で外れる
+  });
+
+  it('★★ チェックを外すと 外す道具として保存される', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(screen.getByLabelText(/execute_sql/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText(/execute_sql/));
+
+    await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('room-1', expect.objectContaining({
+      voice_conversation_denied_tools: ['execute_sql'],
+    })));
+  });
+
+  it('★★ 消す系にチェックを入れると 戻す道具として保存される', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(screen.getByLabelText(/write_file/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText(/write_file/));
+
+    await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('room-1', expect.objectContaining({
+      voice_conversation_tools: ['write_file'],
+    })));
+  });
+
+  it('★★★ send_message は外せない (昇格に要るため)', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(screen.getByLabelText(/send_message/)).toBeInTheDocument());
+
+    expect(screen.getByLabelText(/send_message/)).toBeDisabled();
+    expect(screen.getByLabelText(/send_message/)).toBeChecked();
+  });
+
+  it('★★ 消す系を戻すときは 何が起きるかを画面に書く', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(screen.getByLabelText(/write_file/)).toBeInTheDocument());
+    // ★ 「このルームの設定ファイルも書き換えられる」ことを、戻す前に読める場所に置く
+    expect(screen.getByText(/設定ファイル/)).toBeInTheDocument();
+  });
+
+  it('★ 取得に失敗したら 理由と やり直しを出す', async () => {
+    vi.mocked(api.getVoiceChatTools).mockRejectedValueOnce(new Error('繋がりません'));
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText(/やり直す/)).toBeInTheDocument());
   });
 });

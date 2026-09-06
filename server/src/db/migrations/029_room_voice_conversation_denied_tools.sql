@@ -1,0 +1,17 @@
+-- #418 会話モードの道具を「既定で全許可 + 外す」に変える (docs/08 §12.17)
+--
+-- ★ これまでは 028 の voice_conversation_tools に「足す道具」を名指しする許可リスト方式だった。
+--   管理者が道具の名前を知る手段が起動ログしかなく、1 ルームあたり 30 個が落ちていた。
+--   許可リストが立っていた根拠のうち「増やすと遅くなる」は 2026-09-05 の実測で否定済み (§12.11)。
+--
+-- ★★ 新方式: 既定は全許可。ただし「消す系」5 つ (delete_room / create_room /
+--   write_file / edit_file / move_file) だけコード側で既定で外し、この列でルームごとに更に外す。
+--
+-- ★★★ 028 の voice_conversation_tools は **意味を「戻す道具」に読み替えて続用**する。
+--   新方式では「上乗せ」も「戻す」も同じ『明示許可』なので、既存データ
+--   (["execute_sql","search_objects","tavily_search"]) は既定で許可される = no-op になり、
+--   移行 SQL が要らない。★ 意味を反転させて使い回すと、この実データが「外す」に化ける。
+--
+-- ★ 既定は空 = 何もしなければ 1 つも外れない。
+-- ★ 書き換えは requireRoomAdmin で守られている (028 と同じ理由)。
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS voice_conversation_denied_tools JSONB DEFAULT '[]';

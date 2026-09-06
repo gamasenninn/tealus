@@ -37,8 +37,14 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
   const [messageEditPolicy, setMessageEditPolicy] = useState<string>(currentRoom?.message_edit_policy || 'none');
   // #405 Realtime 音声会話 (docs/08 §12)。★ 既定 false = 明示的に開けたルームだけ
   const [voiceConversation, setVoiceConversation] = useState<boolean>(!!currentRoom?.voice_conversation_enabled);
-  // ★ 会話モードで上乗せする道具 (このルームの MCP のもの)。既定は空 = 何も増えない
-  const [voiceTools, setVoiceTools] = useState<string>((currentRoom?.voice_conversation_tools || []).join(', '));
+  // ★ #418 会話モードの道具。既定は全許可で、ここでは**外す**方を選ぶ (docs/08 §12.17)
+  const [toolCatalog, setToolCatalog] = useState<{ tools: Array<{ name: string; description: string }>; default_denied: string[]; protected: string[] } | null>(null);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolsError, setToolsError] = useState<string | null>(null);
+  const [toolsReload, setToolsReload] = useState(0);
+  // ★ 外す道具 / 既定で外れているものを戻す道具。どちらも DB の列から来る
+  const [deniedTools, setDeniedTools] = useState<string[]>(currentRoom?.voice_conversation_denied_tools || []);
+  const [restoredTools, setRestoredTools] = useState<string[]>(currentRoom?.voice_conversation_tools || []);
   const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
   const [appUrls, setAppUrls] = useState<AppUrl[]>(currentRoom?.app_urls || []);
@@ -129,6 +135,55 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
    * #405 会話モードの可否 (docs/08 §4.1)。★ 全ルーム解放にしない根拠は §4 の理由② ——
    * 会話モードは未知の失敗をするので、壊れたときにその 1 ルームで止まる方がよい。
    */
+  /**
+   * ★ #418 そのルームで使える道具の一覧を取りに行く (docs/08 §12.17)。
+   *
+   * ★★ MCP を起こすので数秒〜数十秒かかる。**開いているルームでだけ**呼ぶ
+   *   (開いていないルームのために MCP を温めない)。
+   * ★ 副次効果として、設定画面を開くと次の会話の接続が速くなる。
+   */
+  useEffect(() => {
+    if (!isAdmin || !roomId || !voiceConversation) return;
+    let cancelled = false;
+    setToolsLoading(true);
+    setToolsError(null);
+    (async () => {
+      try {
+        const c = await api.getVoiceChatTools(roomId);
+        if (!cancelled) setToolCatalog(c);
+      } catch (err) {
+        if (!cancelled) setToolsError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!cancelled) setToolsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [roomId, isAdmin, voiceConversation, toolsReload]);
+
+  /**
+   * ★ チェックを切り替える。**checked = 許可**。
+   *   既定で外れているもの (消す系) は「戻す」側の配列へ、それ以外は「外す」側の配列へ入れる。
+   */
+  const handleToolToggle = async (name: string, nowAllowed: boolean) => {
+    const isDefaultDenied = (toolCatalog?.default_denied || []).includes(name);
+    const nextDenied = isDefaultDenied
+      ? deniedTools
+      : nowAllowed ? deniedTools.filter((t) => t !== name) : [...deniedTools, name];
+    const nextRestored = isDefaultDenied
+      ? nowAllowed ? [...restoredTools, name] : restoredTools.filter((t) => t !== name)
+      : restoredTools;
+
+    setDeniedTools(nextDenied);
+    setRestoredTools(nextRestored);
+    try {
+      await api.updateRoom(roomId, {
+        voice_conversation_denied_tools: nextDenied,
+        voice_conversation_tools: nextRestored,
+      });
+      await selectRoom(roomId);
+    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+  };
+
   const handleVoiceConversationChange = async (value: string) => {
     const enabled = value === 'on';
     try {
@@ -144,16 +199,6 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
    *   認証のみで誰でも書けるので、`execute_sql` の許可を置くと危ない。
    * ★ 道具の名前は agent-server のログに出る (会話を開くと「未許可: ...」で列挙される)。
    */
-  const handleVoiceToolsSave = async () => {
-    // ★ カンマでも空白でも区切れるようにする (2026-09-05)。
-    //   カンマ区切りだけにしていたら、空白で入力されて **1 つの文字列**として保存された。
-    //   区切り文字を人に覚えさせない。
-    const tools = voiceTools.split(/[\s,、]+/).map((t) => t.trim()).filter(Boolean);
-    try {
-      await api.updateRoom(roomId, { voice_conversation_tools: tools });
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
-  };
 
   const handleMessageEditChange = async (value: string) => {
     try {
@@ -271,15 +316,56 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
             </select>
           </div>
           {voiceConversation && (
-            <div className="room-setting-select">
-              <label>会話で使う道具を足す</label>
-              <input
-                type="text"
-                value={voiceTools}
-                onChange={(e) => setVoiceTools(e.target.value)}
-                onBlur={handleVoiceToolsSave}
-                placeholder="例: search_objects tavily_search（空白かカンマ区切り）"
-              />
+            <div className="voice-tools">
+              <label className="voice-tools-label">会話で使える道具</label>
+              {/*
+                ★ #418 既定は全許可。ここでは**外す**方を選ぶ (docs/08 §12.17)。
+                ★★ 消す系 5 つは既定で外れており、戻すとそのルームの設定ファイルまで
+                   書き換えられるようになるので、警告をここに置く。
+              */}
+              {toolsLoading && (
+                <p className="voice-tools-note">道具の一覧を取得しています…（初回は数十秒かかることがあります）</p>
+              )}
+              {toolsError && (
+                <p className="voice-tools-error">
+                  一覧を取得できませんでした: {toolsError}
+                  <button type="button" onClick={() => setToolsReload((n) => n + 1)}>やり直す</button>
+                </p>
+              )}
+              {toolCatalog && !toolsLoading && (
+                <>
+                  <p className="voice-tools-note">
+                    チェックを外すと、このルームの会話では使えなくなります。
+                    ★ 消す系は既定で外れています（戻すと<strong>このルームの設定ファイルも書き換えられます</strong>）。
+                  </p>
+                  {toolCatalog.tools.map((t) => {
+                    const isProtected = toolCatalog.protected.includes(t.name);
+                    const isDefaultDenied = toolCatalog.default_denied.includes(t.name);
+                    const checked = isProtected
+                      ? true
+                      : isDefaultDenied
+                        ? restoredTools.includes(t.name)
+                        : !deniedTools.includes(t.name);
+                    return (
+                      <label key={t.name} className="voice-tool-item">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={isProtected}
+                          aria-label={`${t.name} — ${t.description}`}
+                          onChange={() => handleToolToggle(t.name, !checked)}
+                        />
+                        <span className="voice-tool-name">{t.name}</span>
+                        <span className="voice-tool-desc">
+                          {t.description}
+                          {isProtected && '（昇格に必要なので外せません）'}
+                          {isDefaultDenied && '（既定で外れています）'}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </>
+              )}
             </div>
           )}
           <div className="room-setting-select">
