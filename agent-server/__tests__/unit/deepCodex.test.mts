@@ -29,6 +29,7 @@ jest.mock('../../src/agents/deepRegistry.mts', () => ({
 
 import {
   prepareCodexHome,
+  codexHomePath,
   writeBackCodexAuth,
   serializeMcpServersToToml,
   tomlEscape,
@@ -104,50 +105,84 @@ describe('serializeMcpServersToToml', () => {
   });
 });
 
-describe('prepareCodexHome', () => {
+/**
+ * ★★ #419 CODEX_HOME は **workspace の外**に置く。
+ *
+ * `prepareCodexHome` は `<workspace>/.codex_home/` に **auth.json (ChatGPT の OAuth トークン)** と
+ * **config.toml (OPENAI_API_KEY / GOOGLE_API_KEY / TEALUS_PASSWORD)** を書いていた。
+ * ★ workspace は filesystem MCP の root なので、`read_file` で**そのまま読める**。
+ *
+ * ★★★ `.deep_mcp_config.json` (211abea で直した) と**同じ形がもう 1 つあった**。
+ *   1 つ直して満足し、同じ形をもう一度探さなかったのがこの取りこぼし。
+ *   → **「コードが workspace の中に書く」ものは全部同じ扱いにする。**
+ *
+ * ★ `sessions/rollout-*.jsonl` (codex のセッション記録。中身に鍵が写り込む) も
+ *   `.codex_home` の中なので、置き場を移せば同時に外へ出る。
+ */
+describe('prepareCodexHome — #419 workspace の外に置く', () => {
+  let tmpRoot: string;
   let tmpWorkspace: string;
+  const AGENT = 'agent-1';
+  const ROOM = 'room-1';
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
 
   beforeEach(() => {
-    tmpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-home-test-'));
+    // ★ 本番と同じ形にする: <WORKSPACE_ROOT>/<agentId>/<roomId>
+    //   平らな temp dir で測ると、置き場の計算が本番と違っていても気づけない
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-root-'));
+    tmpWorkspace = path.join(tmpRoot, AGENT, ROOM);
+    fs.mkdirSync(tmpWorkspace, { recursive: true });
   });
 
   afterEach(() => {
-    fs.rmSync(tmpWorkspace, { recursive: true, force: true });
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
     if (originalHome === undefined) delete process.env.HOME;
     else process.env.HOME = originalHome;
     if (originalUserProfile === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = originalUserProfile;
   });
 
-  test('.codex_home dir 作成', () => {
-    prepareCodexHome(tmpWorkspace, {});
-    expect(fs.existsSync(path.join(tmpWorkspace, '.codex_home'))).toBe(true);
+  /** filesystem MCP の root (= workspace) から届く範囲 */
+  const inWorkspace = () => path.join(tmpWorkspace, '.codex_home');
+  /** 届かない範囲 */
+  const outside = () => path.join(tmpRoot, '_codex-homes', AGENT, ROOM);
+
+  test('★★ 置き場は <WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId> (_mcp-configs と同じ考え方)', () => {
+    expect(codexHomePath(tmpWorkspace)).toBe(outside());
   });
 
-  test('config.toml 生成 (mcp_servers content 確認)', () => {
+  test('★★ workspace の中には作らない', () => {
+    const home = prepareCodexHome(tmpWorkspace, {});
+    expect(home).toBe(outside());
+    expect(fs.existsSync(outside())).toBe(true);
+    expect(fs.existsSync(inWorkspace())).toBe(false);   // ★ read_file の届く場所には無い
+  });
+
+  test('config.toml は外に生成される (mcp_servers の中身は従来どおり)', () => {
     prepareCodexHome(tmpWorkspace, {
       foo: { command: 'cmdF', args: ['a'], env: { K: 'V' } },
     });
-    const tomlPath = path.join(tmpWorkspace, '.codex_home', 'config.toml');
+    const tomlPath = path.join(outside(), 'config.toml');
     expect(fs.existsSync(tomlPath)).toBe(true);
     const content = fs.readFileSync(tomlPath, 'utf8');
     expect(content).toContain('[mcp_servers.foo]');
     expect(content).toContain('command = "cmdF"');
     expect(content).toContain('K = "V"');
+    expect(fs.existsSync(path.join(tmpWorkspace, '.codex_home', 'config.toml'))).toBe(false);
   });
 
-  test('codexHomeSrc 指定で auth.json copy', () => {
+  test('codexHomeSrc 指定で auth.json は外へ copy される', () => {
     const fakeCodex = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-codex-'));
     const authContent = '{"OPENAI_API_KEY":"sub-token-fake"}';
     fs.writeFileSync(path.join(fakeCodex, 'auth.json'), authContent);
 
     try {
       prepareCodexHome(tmpWorkspace, {}, { codexHomeSrc: fakeCodex });
-      const destAuth = path.join(tmpWorkspace, '.codex_home', 'auth.json');
+      const destAuth = path.join(outside(), 'auth.json');
       expect(fs.existsSync(destAuth)).toBe(true);
       expect(fs.readFileSync(destAuth, 'utf8')).toBe(authContent);
+      expect(fs.existsSync(path.join(tmpWorkspace, '.codex_home', 'auth.json'))).toBe(false);
     } finally {
       fs.rmSync(fakeCodex, { recursive: true, force: true });
     }
@@ -155,17 +190,32 @@ describe('prepareCodexHome', () => {
 
   test('codexHomeSrc 不在時は warn (= no throw、config.toml は生成)', () => {
     const noCodex = fs.mkdtempSync(path.join(os.tmpdir(), 'no-codex-'));
-    // codexHomeSrc dir は作るが auth.json は不在
     try {
       expect(() => prepareCodexHome(tmpWorkspace, {}, { codexHomeSrc: noCodex })).not.toThrow();
-      const destAuth = path.join(tmpWorkspace, '.codex_home', 'auth.json');
-      expect(fs.existsSync(destAuth)).toBe(false);
-      // config.toml は生成される
-      const tomlPath = path.join(tmpWorkspace, '.codex_home', 'config.toml');
-      expect(fs.existsSync(tomlPath)).toBe(true);
+      expect(fs.existsSync(path.join(outside(), 'auth.json'))).toBe(false);
+      expect(fs.existsSync(path.join(outside(), 'config.toml'))).toBe(true);
     } finally {
       fs.rmSync(noCodex, { recursive: true, force: true });
     }
+  });
+
+  test('★★★ workspace に残っている古い .codex_home は消す (書く先だけ変えても既存分は読める)', () => {
+    const stale = inWorkspace();
+    fs.mkdirSync(path.join(stale, 'sessions', '2026', '06', '15'), { recursive: true });
+    fs.writeFileSync(path.join(stale, 'auth.json'), '{"token":"old"}');
+    fs.writeFileSync(path.join(stale, 'config.toml'), 'K = "V"');
+    fs.writeFileSync(path.join(stale, 'sessions', '2026', '06', '15', 'rollout-x.jsonl'), '{}');
+
+    prepareCodexHome(tmpWorkspace, {});
+
+    // ★ sessions ごと消える (rollout-*.jsonl にも鍵が写り込む)
+    expect(fs.existsSync(stale)).toBe(false);
+    expect(fs.existsSync(outside())).toBe(true);
+  });
+
+  test('★ 古いものが無ければ何もしない (毎回消しに行って落ちない)', () => {
+    expect(() => prepareCodexHome(tmpWorkspace, {})).not.toThrow();
+    expect(fs.existsSync(inWorkspace())).toBe(false);
   });
 });
 

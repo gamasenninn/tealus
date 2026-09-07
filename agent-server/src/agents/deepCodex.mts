@@ -6,7 +6,7 @@
  *
  * 設計判断:
  * - CLI spawn pattern: codex CLI も Claude `-p` 同型の stdin/stdout pipe (= codex exec - --json)
- * - MCP config: ~/.codex/config.toml 直接編集を避け、CODEX_HOME を workspace 配下に切替で room-specific 完全制御
+ * - MCP config: ~/.codex/config.toml 直接編集を避け、CODEX_HOME を room 別に切替 (★ #419 で workspace の外へ移した)
  * - auth: subscription path (= ~/.codex/auth.json) を copy で継承、API key fallback は env で明示 opt-in
  * - approval / sandbox: --dangerously-bypass-approvals-and-sandbox + --sandbox danger-full-access
  *
@@ -108,11 +108,35 @@ export function serializeMcpServersToToml(mcp_servers: McpServersConfig): string
 }
 
 /**
- * workspace 配下に .codex_home/ を準備:
+ * ★ #419 CODEX_HOME の置き場。**workspace の外**に置く。
+ *   `<WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId>`
+ *   (`deepMcpConfigPath` と同じ考え方。workspacePath から 2 つ上が WORKSPACE_ROOT)
+ */
+export function codexHomePath(workspacePath: string): string {
+  const roomDir = path.basename(workspacePath);
+  const agentDir = path.basename(path.dirname(workspacePath));
+  const workspaceRoot = path.dirname(path.dirname(workspacePath));
+  return path.join(workspaceRoot, '_codex-homes', agentDir, roomDir);
+}
+
+/**
+ * CODEX_HOME を準備する:
  * - ~/.codex/auth.json を copy (= subscription auth path 継承)
  * - config.toml 動的生成 (= mcp_servers 定義)
  *
  * spawn 時 env CODEX_HOME=<返り値> で切替する。
+ *
+ * ★★ #419 **書き出し先は workspace の外**。ここには **ChatGPT の OAuth トークン (auth.json)** と
+ *   **OPENAI_API_KEY / GOOGLE_API_KEY / TEALUS_PASSWORD (config.toml)** が入る。
+ *   workspace は filesystem MCP の root なので、置くと `read_file` で**そのまま読める**
+ *   (2026-09-06 実測: 14 ルームすべてに両方)。
+ *
+ * ★★★ `.deep_mcp_config.json` (211abea) と**同じ形がもう 1 つあった**。1 つ直して満足し、
+ *   同じ形をもう一度探さなかったのが取りこぼしの理由。
+ *   → **「コードが workspace の中に書く」ものは全部同じ扱いにする。**
+ *
+ * ★ codex が作る `sessions/rollout-*.jsonl` (中身に鍵が写り込む) も CODEX_HOME の下なので、
+ *   置き場を移すと同時に外へ出る。
  *
  * options.codexHomeSrc: auth.json の copy 元 dir (= default ~/.codex)、test で fake home 用
  */
@@ -121,13 +145,14 @@ export function prepareCodexHome(
   mcp_servers: McpServersConfig | null | undefined,
   options: { codexHomeSrc?: string } = {}
 ): string {
-  const codexHomePath = path.join(workspacePath, '.codex_home');
-  fs.mkdirSync(codexHomePath, { recursive: true });
+  // ★ #419 workspace の外へ。<WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId>
+  const homePath = codexHomePath(workspacePath);
+  fs.mkdirSync(homePath, { recursive: true });
 
   // auth.json copy (subscription auth path 継承)
   const codexHomeSrc = options.codexHomeSrc || getDefaultCodexHome();
   const srcAuthPath = path.join(codexHomeSrc, 'auth.json');
-  const destAuthPath = path.join(codexHomePath, 'auth.json');
+  const destAuthPath = path.join(homePath, 'auth.json');
   if (fs.existsSync(srcAuthPath)) {
     fs.copyFileSync(srcAuthPath, destAuthPath);
     logger.debug(`[deepCodex] auth.json copied: ${srcAuthPath} -> ${destAuthPath}`);
@@ -137,20 +162,32 @@ export function prepareCodexHome(
 
   // config.toml 動的生成
   const tomlContent = serializeMcpServersToToml(mcp_servers || {});
-  const configTomlPath = path.join(codexHomePath, 'config.toml');
+  const configTomlPath = path.join(homePath, 'config.toml');
   fs.writeFileSync(configTomlPath, tomlContent);
   logger.debug(`[deepCodex] config.toml written: ${configTomlPath} (${Object.keys(mcp_servers || {}).length} mcp_servers)`);
 
-  return codexHomePath;
+  // ★★ 古いものを消す。**書く先だけ変えても、既に置かれている分は読める** (deep.mts と同じ扱い)。
+  //   sessions/rollout-*.jsonl も中に入っているので、まとめて外す。
+  const stale = path.join(workspacePath, '.codex_home');
+  try {
+    if (fs.existsSync(stale)) {
+      fs.rmSync(stale, { recursive: true, force: true });
+      logger.info(`[deepCodex] workspace 内の古い CODEX_HOME を削除しました (#419): ${stale}`);
+    }
+  } catch (err) {
+    logger.warn(`[deepCodex] 古い CODEX_HOME を削除できませんでした: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return homePath;
 }
 
 /**
  * #307: codex が rotation した auth.json を source (= ~/.codex) に書き戻す。
  *
- * codex は CODEX_HOME(=workspace/.codex_home) 配下の auth.json に refresh 後の新トークンを
+ * codex は CODEX_HOME (★ #419 で <WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId>) 配下の auth.json に refresh 後の新トークンを
  * 書き戻すが、prepareCodexHome は起動毎に source からコピー上書きするため rotation 結果が
  * 失われ、使用済み refresh token を引き戻して refresh_token_reused で失敗する。これを防ぐため
- * exec 完了後に workspace 側 auth.json を source へ書き戻す。
+ * exec 完了後に CODEX_HOME 側 auth.json を source へ書き戻す。
  *
  * 安全策:
  * - workspace 側が無い → 何もしない
@@ -355,13 +392,14 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
     const finalMcpServers = mcpServers || buildLightV2McpConfig(workspacePath);
 
     // CODEX_HOME 準備 (= auth.json copy + config.toml 生成)
-    const codexHomePath = prepareCodexHome(workspacePath, finalMcpServers);
+    // ★ 名前を関数 codexHomePath() と分ける (同じ名前で隠すと読み違える)
+    const codexHome = prepareCodexHome(workspacePath, finalMcpServers);
 
     const useSubscription = (config.DEEP_CODEX_AUTH || 'subscription') === 'subscription';
     const model = config.AGENT_DEEP_CODEX_MODEL || 'gpt-5.4';
     const args = buildCodexExecArgs({ workspacePath, model });
     const spawnEnv = buildCodexExecEnv({
-      codexHomePath,
+      codexHomePath: codexHome,
       openaiApiKey: config.OPENAI_API_KEY,
       useSubscription,
     });
@@ -460,7 +498,7 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
       // #307: codex が rotation した auth.json を source (~/.codex) に書き戻す。並列 Deep 実行中の
       //       clobber を避けるため sole-running 時 (他室の Deep が無い) のみ。内容不変/壊れた時は no-op。
       if (deepRegistry.count() === 0) {
-        writeBackCodexAuth(codexHomePath, getDefaultCodexHome());
+        writeBackCodexAuth(codexHome, getDefaultCodexHome());
       }
 
       if (proc._tealusCancelled) {
