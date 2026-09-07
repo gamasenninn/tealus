@@ -148,6 +148,88 @@ describe('summarizeVoiceChat — 基準②③④と昇格 (#410)', () => {
 });
 
 /**
+ * ★★ #420 —— ① が遅い往復を「どの道具を呼んだか」で分ける。
+ *
+ * 2026-09-06 の見立ては「社内DB検索ルームだけ遅い。8.8KB の light_prompt.md が疑わしい」だった。
+ * ★ 310 往復を引き直したら **ルームではなく往復で割れていた**:
+ *   ```
+ *   execute_sql を呼んだ往復  n=31  中央値 1.78s  2 秒超 12
+ *   道具を呼ばなかった往復     n=206 中央値 1.18s  2 秒超 25
+ *   ```
+ *   同じ部屋の中でも execute_sql の往復だけが遅い (社内DB検索: 1.78s / 1.34s / 1.19s)。
+ *   light_prompt.md は 9/05 15:28:04 以降ずっと同じで、**定数は変数を説明できない**。
+ *
+ * ★★★ 道具の**実行時間**は既に `tools` で見えていた (execute_sql は 8〜80ms)。
+ *   見えていなかったのは「**その道具を呼ぶ往復は、声が返り始めるのが遅い**」方。
+ *   分けて数えられないと、次も「ルームが遅い」から始めてしまう。
+ */
+describe('summarizeVoiceChat — ① を道具ごとに分ける (#420)', () => {
+  /** 往復 + その往復で呼ばれた道具 */
+  function turnWithTools(at: number, replyAfterMs: number, names: string[]) {
+    const ev = turn(at, replyAfterMs);
+    names.forEach((name, i) => ev.push({ t: at + 500 + replyAfterMs + 100 + i, type: 'tool_call_start', data: { name } }));
+    return ev;
+  }
+
+  test('★★ 道具を呼んだ往復と呼ばなかった往復を分けて数える', () => {
+    const s = summarizeVoiceChat([rec([
+      ...turnWithTools(0, 3000, ['execute_sql']),
+      ...turnWithTools(20_000, 1800, ['execute_sql']),
+      ...turn(40_000, 1000),
+      ...turn(60_000, 1200),
+    ])]);
+    const sql = s.latencyByTool.find((x) => x.name === 'execute_sql');
+    expect(sql).toMatchObject({ n: 2, medianMs: 3000, overLimit: 1 });   // ★ 2 秒超は 3000 の 1 件だけ
+    const none = s.latencyByTool.find((x) => x.name === '(道具なし)');
+    expect(none).toMatchObject({ n: 2, medianMs: 1200, overLimit: 0 });
+  });
+
+  test('★ 1 往復で 2 種類呼んだら、両方に 1 回ずつ数える (往復は 1 つ)', () => {
+    const s = summarizeVoiceChat([rec(turnWithTools(0, 1500, ['execute_sql', 'search_objects']))]);
+    expect(s.latencyByTool.find((x) => x.name === 'execute_sql')).toMatchObject({ n: 1, medianMs: 1500 });
+    expect(s.latencyByTool.find((x) => x.name === 'search_objects')).toMatchObject({ n: 1, medianMs: 1500 });
+    expect(s.latency.n).toBe(1);   // ★ ① の分母は往復数のまま (二重に数えない)
+  });
+
+  test('★ 同じ道具を 1 往復で 3 回呼んでも、その往復は 1 回として数える', () => {
+    const s = summarizeVoiceChat([rec(turnWithTools(0, 1500, ['execute_sql', 'execute_sql', 'execute_sql']))]);
+    expect(s.latencyByTool.find((x) => x.name === 'execute_sql')).toMatchObject({ n: 1 });
+  });
+
+  test('★★ 区切りは ① と同じ「次に押すまで」。応答の後半で呼ばれた道具も、その往復のものにする', () => {
+    const s = summarizeVoiceChat([rec([
+      ...turn(0, 1000),                                                    // 鳴り始めは 1500
+      { t: 5000, type: 'tool_call_start', data: { name: 'execute_sql' } }, // ★ 鳴った後・次の押下より前
+      ...turnWithTools(10_000, 1200, ['search_objects']),                  // ★ ここからは次の往復
+    ].sort((a, b) => a.t - b.t))]);
+    // ★ 区切りを ① と別に作ると対応がずれて「ルームが遅い」に見える (#420 の見立てが外れた理由)
+    expect(s.latencyByTool.find((x) => x.name === 'execute_sql')).toMatchObject({ n: 1, medianMs: 1000 });
+    expect(s.latencyByTool.find((x) => x.name === 'search_objects')).toMatchObject({ n: 1, medianMs: 1200 });
+    expect(s.latencyByTool.find((x) => x.name === '(道具なし)')).toBeUndefined();
+  });
+
+  test('★ 声が返らなかった往復は ① に入らないので、道具ごとの分母にも入れない', () => {
+    const s = summarizeVoiceChat([rec([
+      { t: 0, type: 'ptt_press' },
+      { t: 500, type: 'ptt_release' },
+      { t: 700, type: 'tool_call_start', data: { name: 'execute_sql' } },
+      { t: 9000, type: 'session_end' },     // ★ 鳴らないまま終わった
+    ])]);
+    expect(s.latency.noReplyCount).toBe(1);
+    expect(s.latencyByTool).toEqual([]);
+  });
+
+  test('★ 多い順に並べる (少ない道具が上に来ると読み違える)', () => {
+    const s = summarizeVoiceChat([rec([
+      ...turnWithTools(0, 1000, ['list_rooms']),
+      ...turnWithTools(20_000, 1000, ['list_rooms']),
+      ...turnWithTools(40_000, 1000, ['execute_sql']),
+    ])]);
+    expect(s.latencyByTool.map((x) => x.name)).toEqual(['list_rooms', 'execute_sql']);
+  });
+});
+
+/**
  * ★ `--since` の日付は JST で読む。
  * ★★ `new Date('2026-09-06')` は UTC 0 時 = JST 09:00 で、**午前のセッションが黙って落ちる**。
  *   2026-09-06 の集計で実際に 8 件が 3 件になり、**残りを「現場テストの結果」と読みかけた**。

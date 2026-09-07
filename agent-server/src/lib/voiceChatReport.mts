@@ -32,6 +32,12 @@ export interface VoiceChatRecord {
 export const LATENCY_LIMIT_MS = 2000;
 export const LATENCY_PASS_RATIO = 0.9;
 
+/**
+ * ★ 道具を呼ばなかった往復の見出し (#420)。
+ * 「道具ごと」の表にこれを並べておかないと、比べる相手が無くて速い/遅いが言えない。
+ */
+export const NO_TOOL_LABEL = '(道具なし)';
+
 /** ★ 表示の桁は 0.1ms まで。performance.now() は小数が長く、そのまま出すと読めない */
 function round(x: number): number {
   return Math.round(x * 10) / 10;
@@ -81,7 +87,16 @@ export interface VoiceChatSummary {
     overLimitMs: number[];
   };
   interrupt: { n: number; medianMs: number; maxMs: number; skippedNotPlaying: number };
+  /** ★ 道具の**実行時間** (`tool_call_end` の elapsed_ms)。①とは別物 */
   tools: Array<{ name: string; n: number; medianMs: number; maxMs: number }>;
+  /**
+   * ★ #420: ① を「その往復で呼んだ道具」で分けたもの。道具を呼ばなかった往復は
+   * `NO_TOOL_LABEL` に入り、比べる相手になる。
+   *
+   * ★★ 見たいのは道具の速さではなく「**その道具を呼ぶ往復は、声が返り始めるのが遅いか**」。
+   * 合計だけ見ていると「ルームが遅い」に見える —— それが #420 で外した見立て。
+   */
+  latencyByTool: Array<{ name: string; n: number; medianMs: number; maxMs: number; overLimit: number }>;
   promote: { started: number; done: number; error: number; byStatus: Record<string, number> };
   connectionLost: number;
   serverErrors: number;
@@ -99,6 +114,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
   const toolMs = new Map<string, number[]>();
   const turnsEach: number[] = [];
   const durations: number[] = [];
+  const latencyByTool = new Map<string, number[]>();
   const promote = { started: 0, done: 0, error: 0, byStatus: {} as Record<string, number> };
   let noReply = 0;
   let skippedNotPlaying = 0;
@@ -119,13 +135,27 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
       if (e.type === 'ptt_release') {
         turns += 1;
         // ★ ① 声が返り始めるまで。**次に押すまで**の間で最初の `ai_audio_start` を探す
+        // ★★ 同じ区切りで「この往復で呼ばれた道具」も集める (#420)。
+        //    区切りを別に作ると、① と道具の対応がずれて「ルームが遅い」に見える
         let hit: number | null = null;
+        const names = new Set<string>();                // ★ 同じ道具を 3 回呼んでも往復は 1 つ
         for (let j = i + 1; j < ev.length; j++) {
           if (ev[j].type === 'ptt_press') break;
-          if (ev[j].type === 'ai_audio_start') { hit = ev[j].t; break; }
+          if (ev[j].type === 'ai_audio_start' && hit === null) hit = ev[j].t;
+          if (ev[j].type === 'tool_call_start') {
+            const n = dataOf(ev[j]).name;
+            names.add(typeof n === 'string' ? n : '(不明)');
+          }
         }
         if (hit === null) noReply += 1;                 // ★ 返らなかった回も数える
-        else latencies.push(hit - e.t);
+        else {
+          latencies.push(hit - e.t);
+          // ★ 返らなかった往復は ① の分母に無いので、道具ごとの分母にも入れない
+          const ms = hit - e.t;
+          for (const n of names.size ? names : [NO_TOOL_LABEL]) {
+            latencyByTool.set(n, [...(latencyByTool.get(n) || []), ms]);
+          }
+        }
         continue;
       }
 
@@ -191,6 +221,17 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
     tools: [...toolMs.entries()]
       .map(([name, xs]) => ({ name, n: xs.length, medianMs: median(xs), maxMs: max(xs) }))
       .sort((a, b) => b.n - a.n),
+    // ★ #420: ① を「その往復で呼んだ道具」で分ける。道具の**実行時間** (上の tools) とは別物で、
+    //   見たいのは「その道具を呼ぶ往復は、声が返り始めるのが遅いか」。
+    latencyByTool: [...latencyByTool.entries()]
+      .map(([name, xs]) => ({
+        name,
+        n: xs.length,
+        medianMs: median(xs),
+        maxMs: max(xs),
+        overLimit: xs.filter((x) => x > LATENCY_LIMIT_MS).length,
+      }))
+      .sort((a, b) => b.n - a.n),
     promote,
     connectionLost,
     serverErrors,
@@ -219,6 +260,15 @@ export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string
       + (s.knownRaces ? ` (別に、原因特定済みの競合が ${s.knownRaces} 件。docs/08 §12.8)` : ''),
     `返らず ${s.latency.noReplyCount} 往復 (押して離したのに声が鳴らなかった)`,
   ];
+  // ★ #420: ① を「その往復で呼んだ道具」で分ける。合計だけ見ていると
+  //   「ルームが遅い」に見える (実測: execute_sql の往復だけ中央値が 0.6 秒 遅い)
+  if (s.latencyByTool.length > 1) {
+    lines.push('', '★ ① を「その往復で呼んだ道具」で分ける (道具の実行時間ではなく、声が返り始めるまで)');
+    lines.push('', '| その往復で呼んだ道具 | n | 中央値 | 最大 | 2 秒超 |', '|---|---|---|---|---|');
+    for (const t of s.latencyByTool) {
+      lines.push(`| ${t.name} | ${t.n} | ${sec(t.medianMs)}s | ${sec(t.maxMs)}s | ${t.overLimit} |`);
+    }
+  }
   if (s.latency.overLimitMs.length) {
     lines.push('', `★ 2 秒を超えた回 (遅い順、秒): ${s.latency.overLimitMs.map((x) => sec(x)).join(', ')}`);
   }
