@@ -536,3 +536,36 @@ describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', ()
   //   逆に「ホタカ」→「保坂」(6/6 → 3/6) のように **正しい正規化を止める** 実例が出た。
   //   経緯と数字は buildOrganonCorrectionPrompt の doc comment と #371 に残してある。
 });
+
+/**
+ * #424 buildVocabularyTerms — gemini backend の custom_vocabulary 用の語彙リスト。
+ * ★ buildGlossary と違い、読みは併記しない (実験は term のみで測った。string[] で返す)。
+ */
+describe('buildVocabularyTerms (#424: gemini backend の音響段語彙)', () => {
+  test('vocabulary が空なら空配列', () => {
+    expect(configModule.buildVocabularyTerms({ vocabulary: [] })).toEqual([]);
+    expect(configModule.buildVocabularyTerms({})).toEqual([]);
+    expect(configModule.buildVocabularyTerms(null)).toEqual([]);
+  });
+
+  test('term を trim して配列で返す (読みは併記しない)', () => {
+    const t = configModule.buildVocabularyTerms({
+      vocabulary: [{ term: ' JU愛知 ' }, { term: '畦塗機', reading: 'あぜぬりき' }],
+    });
+    expect(t).toEqual(['JU愛知', '畦塗機']);
+  });
+
+  test('重複 term と空 term を除去する', () => {
+    const t = configModule.buildVocabularyTerms({
+      vocabulary: [{ term: 'ガマ' }, { term: '' }, { term: 'ガマ' }, { term: null }, { term: 'イセキ' }],
+    });
+    expect(t).toEqual(['ガマ', 'イセキ']);
+  });
+
+  test('alias は含めない (崩れた表記を語彙に入れると誤りを固定する)', () => {
+    const t = configModule.buildVocabularyTerms({
+      vocabulary: [{ term: 'イセキ', aliases: ['伊関', '移籍'] }],
+    });
+    expect(t).toEqual(['イセキ']);
+  });
+});

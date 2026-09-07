@@ -236,6 +236,30 @@ export function buildGlossary(config: TranscriptionGuideline | null | undefined)
 }
 
 /**
+ * gemini STT backend 用の語彙リストを構築 (#424)。
+ *
+ * buildGlossary との違い:
+ * - string[] で返す (Gemini の custom_vocabulary は配列で受ける)
+ * - ★ 読みは併記しない・alias も含めない — 2026-09-07 の実測 (37 便、固有名詞 50%→85%) は
+ *   term のみで取った数字。測っていない形は渡さない。alias は「崩れた表記」なので、
+ *   語彙に入れると誤りを canonical として固定してしまう。
+ *
+ * @param config - loadGuideline() の戻り (vocabulary を参照)
+ */
+export function buildVocabularyTerms(config: TranscriptionGuideline | null | undefined): string[] {
+  const vocabulary = (config && Array.isArray(config.vocabulary)) ? config.vocabulary : [];
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const v of vocabulary) {
+    const term = v && typeof v.term === 'string' ? v.term.trim() : '';
+    if (!term || seen.has(term)) continue;
+    seen.add(term);
+    terms.push(term);
+  }
+  return terms;
+}
+
+/**
  * Whisper prompt hallucination 検出
  *
  * Whisper API は音声内容が薄い (無音 / ノイズ / 短すぎる発話) 場合、

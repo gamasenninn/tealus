@@ -5,7 +5,7 @@ import { execSync } from 'node:child_process';
 import OpenAI from 'openai';
 import { pool } from '../db/pool.mts';
 import { formatTranscription } from './formatting.mts';
-import { loadGuideline, buildWhisperPrompt, buildGlossary, isWhisperPromptHallucination, getTranscriptionMode } from './transcriptionConfig.mts';
+import { loadGuideline, buildWhisperPrompt, buildGlossary, buildVocabularyTerms, isWhisperPromptHallucination, getTranscriptionMode } from './transcriptionConfig.mts';
 import { transcribeAudio } from './sttBackend.mts';
 import { fireWebhooks } from './webhook.mts';
 import type { Server } from 'socket.io';
@@ -139,6 +139,10 @@ export async function transcribeMessage(
     // → organon 補正段は STT エンジンに依存せず効く (Exp9: Whisper生 + organon補正 = legacy比 +3)。
     //   Qwen は「訂正可能な誤り方」で更に上を取る品質アップグレード (Exp6)、GPU があれば STT_BACKEND=local。
     //   organon は「音響stageのbias」でなく「補正stageの知識源」で効かせるので vocab prompt / glossary は渡さない。
+    //   ★ 例外 (#424): gemini backend だけは organon モードでも vocabTerms (音響段語彙) を渡す。
+    //     2026-09-07 実測 (37 便): 語彙なし 47% / 語彙 286 語 85% / 現行 50% — +35pt は全部
+    //     音響段語彙から来ており、補正段では構造的に届かない (崩れが正当な語になると補正段は触れない)。
+    //     openai / local 経路の挙動は従来どおり (vocabTerms は gemini 分岐しか読まない)。
     const guideline = loadGuideline();
     const mode = getTranscriptionMode();
     const isOrganon = mode === 'organon';
@@ -149,6 +153,8 @@ export async function transcribeMessage(
       whisperPrompt,
       model: WHISPER_MODEL,
       glossary: isOrganon ? '' : buildGlossary(guideline),
+      vocabTerms: buildVocabularyTerms(guideline),   // ★ モード無関係 (上の例外コメント参照)
+      videoAudio: isVideo,                           // ★ 動画抽出音声は gemini 対象外 (#424、未測定)
       // backend は指定しない = 両モードとも STT_BACKEND env を尊重 (軸2 を独立させる)。
       openaiClient: openai,
     });

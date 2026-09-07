@@ -279,3 +279,198 @@ describe('transcribeAudio - local 中国語誤検出 → openai fallback (#332)'
     expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * #424 gemini backend — gemini-3.5-transcribe + 音響段語彙 (custom_vocabulary)。
+ *
+ * ★ 2026-09-07 実測 (37 便、report/gemini-vocab/): 固有名詞 現行 50% → 語彙 286 語 85%。
+ *   差は全部 音響段語彙から来ている (語彙なし Gemini は 47% で現行より悪い)。
+ *
+ * fail-open の型は local と同じ。★ 空文字も fallback する — gemini が静かに壊れたとき
+ * (鍵切れ・応答形の変更) に全便が空になる事故を防ぐ。無音便は openai 側でも空なので実害なし。
+ */
+describe('transcribeAudio - gemini backend (#424)', () => {
+  /** wav ヘッダつきの一時ファイルを作る (byteRate と本体サイズで秒数を偽装できる) */
+  function writeWav(file: string, byteRate: number, dataBytes: number) {
+    const header = Buffer.alloc(44);
+    header.write('RIFF', 0, 'ascii');
+    header.writeUInt32LE(36 + dataBytes, 4);
+    header.write('WAVE', 8, 'ascii');
+    header.write('fmt ', 12, 'ascii');
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);            // PCM
+    header.writeUInt16LE(1, 22);            // mono
+    header.writeUInt32LE(44100, 24);        // sampleRate (参考値)
+    header.writeUInt32LE(byteRate, 28);     // ★ byteRate — 秒数 = dataBytes / byteRate
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write('data', 36, 'ascii');
+    header.writeUInt32LE(dataBytes, 40);
+    fs.writeFileSync(file, Buffer.concat([header, Buffer.alloc(dataBytes)]));
+  }
+
+  function geminiResponse(text: string) {
+    return jsonResponse({ id: 'x', status: 'completed', steps: [{ content: [{ text }] }] });
+  }
+
+  const VOCAB = ['ガマ', '鹿沼店', 'イセキ'];
+
+  beforeEach(() => {
+    process.env.STT_BACKEND = 'gemini';
+    process.env.GEMINI_API_KEY = 'test-key';
+  });
+  afterEach(() => {
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.STT_GEMINI_MODEL;
+    delete process.env.STT_GEMINI_TIMEOUT_MS;
+  });
+
+  test('interactions へ POST し、鍵ヘッダ・語彙・mime を正しく送って text を返す', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse('ガマ、お昼に入ります。'));
+    const openaiClient = fakeOpenAI('should-not-be-used');
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl,
+    });
+    expect(text).toBe('ガマ、お昼に入ります。');
+    expect(openaiClient.audio.transcriptions.create).not.toHaveBeenCalled();
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/interactions');
+    expect(init.headers['x-goog-api-key']).toBe('test-key');
+    const body = JSON.parse(init.body);
+    expect(body.model).toBe('gemini-3.5-transcribe');
+    expect(body.input[0].mime_type).toBe('audio/wav');
+    expect(typeof body.input[0].data).toBe('string');           // base64
+    const tc = body.generation_config.transcription_config;
+    expect(tc.language_codes).toEqual(['ja-JP']);
+    expect(tc.custom_vocabulary).toEqual(VOCAB);
+  });
+
+  test('STT_GEMINI_MODEL で model を差し替えられる', async () => {
+    process.env.STT_GEMINI_MODEL = 'gemini-next-transcribe';
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse('x'));
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB,
+      openaiClient: fakeOpenAI('y'), fetchImpl,
+    });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).model).toBe('gemini-next-transcribe');
+  });
+
+  test('429 → openai へ fail-open し warn を残す', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse({ error: { message: 'quota' } }, false, 429));
+    const openaiClient = fakeOpenAI('fallback-text');
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('fallback-text');
+    expect(openaiClient.audio.transcriptions.create).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  test('fetch reject (ネットワーク) → openai へ fail-open', async () => {
+    const fetchImpl = jest.fn().mockRejectedValue(new Error('ECONNRESET'));
+    const openaiClient = fakeOpenAI('fallback-text');
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('fallback-text');
+  });
+
+  test('★ 空文字 → openai へ fail-open (静かに壊れても全便が空にならない)', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse(''));
+    const openaiClient = fakeOpenAI('fallback-text');
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('fallback-text');
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  test('GEMINI_API_KEY 未設定 → openai へ fail-open (設定ミスで文字起こしを止めない)', async () => {
+    delete process.env.GEMINI_API_KEY;
+    const fetchImpl = jest.fn();
+    const openaiClient = fakeOpenAI('fallback-text');
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('fallback-text');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  // ★ 切断ガード — 実測の 2 件 (28 秒 → 10 字 / 13 秒 → 15 字。呼びかけだけ残して用件が消えた) を固定。
+  //   誤検知の代償は openai 呼び出し 1 回 (= 現行と同じ結果) なので安全側に倒す。
+  test('★ 切断疑い (28 秒の音声に 10 字) → openai へ fail-open', async () => {
+    writeWav(tmpAudio, 1000, 28_000);                            // 28 秒ぶん
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse('ガマさん取れますか？'));  // 10 字
+    const openaiClient = fakeOpenAI('fallback-text');
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl, log,
+    });
+    expect(text).toBe('fallback-text');
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  test('★ 切断疑い (13 秒に 15 字) も fallback / 33 秒に 100 字は通常どおり通す', async () => {
+    writeWav(tmpAudio, 1000, 13_000);
+    const openaiClient = fakeOpenAI('fallback-text');
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const short = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient,
+      fetchImpl: jest.fn().mockReturnValue(geminiResponse('ガマさん、ガマさん取れますか？')), log,  // 15 字
+    });
+    expect(short).toBe('fallback-text');
+
+    writeWav(tmpAudio, 1000, 33_000);
+    const longText = 'あ'.repeat(100);
+    const ok = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient: fakeOpenAI('no'),
+      fetchImpl: jest.fn().mockReturnValue(geminiResponse(longText)), log,
+    });
+    expect(ok).toBe(longText);
+  });
+
+  test('10 秒未満の短い便は文字数が少なくてもガードしない (「了解です」だけの便は正当)', async () => {
+    writeWav(tmpAudio, 1000, 6_000);                             // 6 秒
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse('了解です。'));
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB,
+      openaiClient: fakeOpenAI('no'), fetchImpl,
+    });
+    expect(text).toBe('了解です。');
+  });
+
+  test('★ videoAudio=true → gemini を叩かず openai 直行 (実測は 33 秒以下の voice クリップのみ)', async () => {
+    const fetchImpl = jest.fn();
+    const openaiClient = fakeOpenAI('openai-text');
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'mp3', model: 'm', vocabTerms: VOCAB, videoAudio: true,
+      openaiClient, fetchImpl,
+    });
+    expect(text).toBe('openai-text');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('★ 語彙 0 件 → openai 直行 (語彙なし Gemini 47% は現行 50% より悪い実測)', async () => {
+    const fetchImpl = jest.fn();
+    const openaiClient = fakeOpenAI('openai-text');
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: [], openaiClient, fetchImpl,
+    });
+    expect(text).toBe('openai-text');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('backend 引数 gemini が env を上書きする (既存 override と同型)', async () => {
+    delete process.env.STT_BACKEND;
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse('via-arg'));
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', backend: 'gemini', vocabTerms: VOCAB,
+      openaiClient: fakeOpenAI('no'), fetchImpl,
+    });
+    expect(text).toBe('via-arg');
+  });
+});
