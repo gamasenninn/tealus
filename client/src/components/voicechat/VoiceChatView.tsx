@@ -37,6 +37,11 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
     : voice.isUnstable ? '接続が不安定です…'
     : voice.isToolRunning ? '調べています…'
     : voice.isTalking ? '聞いています'
+    // ★★ 送れなかったことは「話しています」より先に出す (#421)。黙って捨てると
+    //   話しかけたのに無視されたように見え、実測 4 件のうち 2 件はこの直後に閉じられている。
+    //   ★ 文言は門の言い分 (「前の返事が続いています」) ではなく **起きたこと** にする ——
+    //   何も鳴っていないのに断られた形が実測で 1 件あり、そこでは前者が嘘になる。
+    : voice.wasSkipped ? 'いまの声は送れませんでした。もう一度どうぞ'
     : voice.isAiSpeaking ? '話しています'
     : '押しながら話してください';
 

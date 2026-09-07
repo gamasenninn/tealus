@@ -60,6 +60,47 @@ describe('createResponseGate — 応答を二重に走らせない', () => {
     g.reset();
     expect(g.canCreate()).toBe(true);
   });
+
+  /**
+   * ★★ #421 —— 断ったときに **なぜ断ったか** を外から読めるようにする。
+   *
+   * 2026-09-07 に 318 往復のログを引いたら `response_create_skipped` は 4 件あり、
+   * **3 つの別々の形**だった:
+   * ```
+   * 1  割り込みの直後   音は消えたのに応答は走ったまま → 次の発話が落ちた (利用者は 1.3 秒後に閉じた)
+   * 2  ★ 門が開かない   最後の音が終わって 161 秒、何も鳴っていないのに断られた (利用者は黙って閉じた)
+   * 3  押している間に    押した時は鳴っていない → 割り込みが走らない。保持中に AI が喋り始めた
+   * ```
+   * ★ 2 は「前の返事が続いています」では**嘘になる**。断った理由を記録に残さないと、
+   *   画面に出す文言も、次の直し方も決められない。
+   */
+  it('★★ 断った理由を読めるようにする (走っている応答 / 動いている道具 の別)', () => {
+    const g = createResponseGate();
+    expect(g.whyCannotCreate()).toBe(null);          // ★ 作れるときは理由が無い
+
+    g.onServerEvent('response.created');
+    expect(g.whyCannotCreate()).toBe('responding');
+
+    g.onServerEvent('response.done');
+    g.beginTool();
+    expect(g.whyCannotCreate()).toBe('tool');
+  });
+
+  it('★ 両方あるときは「応答が走っている」を先に返す (道具は応答の中で動くため)', () => {
+    const g = createResponseGate();
+    g.onServerEvent('response.created');
+    g.beginTool();
+    expect(g.whyCannotCreate()).toBe('responding');
+  });
+
+  it('★ 動いている道具の数も読める (1 つずつ減るのを外から数えられる)', () => {
+    const g = createResponseGate();
+    expect(g.pendingTools()).toBe(0);
+    g.beginTool(); g.beginTool();
+    expect(g.pendingTools()).toBe(2);
+    g.endTool();
+    expect(g.pendingTools()).toBe(1);
+  });
 });
 
 describe('createSpeechGate — 言葉の切れ目で「話し終わった」にしない', () => {

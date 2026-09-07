@@ -17,10 +17,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const createSession = vi.fn();
 const voiceChatLog = vi.fn().mockResolvedValue({ ok: true });
 const promoteMock = vi.fn().mockResolvedValue({ ok: true });
+/** ★ 道具の実行。#421 で「道具が動いている最中」を作るために、終わらせない形にできる必要がある */
+const toolCall = vi.fn().mockResolvedValue({ output: 'ok', elapsed_ms: 1 });
 vi.mock('../../src/services/api', () => ({
   api: {
     createVoiceChatSession: (...a: unknown[]) => createSession(...a),
-    voiceChatToolCall: vi.fn(),
+    voiceChatToolCall: (...a: unknown[]) => toolCall(...a),
     voiceChatLog: (...a: unknown[]) => voiceChatLog(...a),
     voiceChatPromote: (...a: unknown[]) => promoteMock(...a),
   },
@@ -359,5 +361,92 @@ describe('VoiceChatView — 人の発話の記録 (#412)', () => {
     emit({ type: 'conversation.item.input_audio_transcription.completed', transcript: '在庫を調べて' });
 
     expect(screen.getByText('このルームに残す').closest('button')).toBeDisabled();
+  });
+});
+
+/**
+ * #421 前の応答が走っている間に押して話すと、黙って捨てられていた。
+ *
+ * ★ 実測 (2026-09-07、318 往復): `response_create_skipped` は 4 件。**3 つの別々の形**があり、
+ *   うち 2 件は **利用者がその直後に会話を閉じている** (話しかけて何も返らなかった)。
+ *
+ * ★★ docs/08 §7-2「無言で待たせない」に正面から当たる。#409 (切れても画面が変わらない) と同じ型で、
+ *   **記録はしていたが画面に出していなかった**。
+ *
+ * ★ 文言は**門の言い分ではなく、起きたこと**にする —— 「前の返事が続いています」は、
+ *   161 秒 何も鳴っていないのに断られた形 (実測 1 件) では嘘になる。
+ */
+describe('VoiceChatView — 声が送られなかったとき (#421)', () => {
+  beforeEach(() => {
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    voiceChatLog.mockClear();
+    toolCall.mockReset().mockResolvedValue({ output: 'ok', elapsed_ms: 1 });
+    stubWebRTC();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function live() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  }
+
+  /** 押して離す (1 往復ぶんの操作) */
+  async function speak() {
+    const btn = screen.getByText('押しながら話す').closest('button')!;
+    await act(async () => { fireEvent.pointerDown(btn); });
+    await act(async () => { fireEvent.pointerUp(btn); });
+  }
+
+  it('★★ 送れなかったら画面に出す (無言で待たせない — §7-2)', async () => {
+    await live();
+    emit({ type: 'response.created' });     // ★ 前の応答が走っている
+    await speak();
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('送れませんでした'));
+  });
+
+  it('★ もう一度押したら消える (前の知らせが残り続けない)', async () => {
+    await live();
+    emit({ type: 'response.created' });
+    await speak();
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('送れませんでした'));
+
+    const btn = screen.getByText('押しながら話す').closest('button')!;
+    await act(async () => { fireEvent.pointerDown(btn); });
+    expect(screen.getByRole('status')).toHaveTextContent('聞いています');
+  });
+
+  it('★ 前の応答が終われば、次は普通に送れて知らせも出ない', async () => {
+    await live();
+    emit({ type: 'response.created' });
+    emit({ type: 'response.done' });
+    await speak();
+
+    expect(screen.getByRole('status')).not.toHaveTextContent('送れませんでした');
+    expect(lastDc!.send.mock.calls.map((c) => JSON.parse(c[0] as string).type)).toContain('response.create');
+  });
+
+  it('★★ 断った理由を計測に残す (4 件が 3 つの別々の形だった。合計だけでは分けられない)', async () => {
+    await live();
+    emit({ type: 'response.created' });
+    await speak();
+
+    fireEvent.click(screen.getByLabelText('閉じる'));
+    const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
+    const skipped = events.find((e) => e.type === 'response_create_skipped');
+    expect(skipped?.data).toMatchObject({ why: 'responding', pending_tools: 0, playing: false });
+  });
+
+  it('★★ 道具が動いていて断った場合は、そう分かる形で残す', async () => {
+    // ★ 終わらない道具にして「実行中」を作る (既定の mock は即終わるので pending が 0 に戻る)
+    toolCall.mockReturnValueOnce(new Promise(() => {}));
+    await live();
+    emit({ type: 'response.function_call_arguments.done', call_id: 'c1', name: 'execute_sql', arguments: '{}' });
+    await speak();
+
+    fireEvent.click(screen.getByLabelText('閉じる'));
+    const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
+    const skipped = events.find((e) => e.type === 'response_create_skipped');
+    expect(skipped?.data?.why).toBe('tool');
   });
 });

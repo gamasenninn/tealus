@@ -37,6 +37,8 @@ interface RealtimeVoice {
   isToolRunning: boolean;
   /** ★ 接続が不安定 (disconnected)。戻ることがあるので落とさない (#409) */
   isUnstable: boolean;
+  /** ★★ 直前の発話が送られなかった (#421)。次に押したら消える */
+  wasSkipped: boolean;
   /** ★ 直近の AI の発言 (昇格の対象。無ければ null) */
   lastReply: string | null;
   /** ★ 昇格の状態 */
@@ -76,6 +78,9 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const [isToolRunning, setIsToolRunning] = useState(false);
   // ★ 接続が不安定 (#409)。`disconnected` は戻ることがあるので、落とさずに表示だけ変える
   const [isUnstable, setIsUnstable] = useState(false);
+  // ★★ 直前の発話が送られなかった (#421)。押して離したのに応答を作れなかった状態。
+  //   実測 4 件のうち 2 件は、この直後に利用者が会話を閉じている (何も返らなかったため)
+  const [wasSkipped, setWasSkipped] = useState(false);
   // ★ 昇格 (R3)。直近の AI 発言だけを対象にする。人の発言は今回入れない (docs/08 §12)
   const [lastReply, setLastReply] = useState<string | null>(null);
   const [promoteState, setPromoteState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
@@ -448,6 +453,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       mark('interrupt', { was_responding: gate.isResponding(), was_playing: gate.isOutputAudioPlaying() });
     }
     if (micRef.current) micRef.current.enabled = true;
+    setWasSkipped(false);      // ★ 話し始めたら前の知らせは消す (#421)
     setIsTalking(true);
     lastSpokeRef.current = Date.now();      // ★ 話している間は「無操作」ではない (#414)
     mark('ptt_press');
@@ -462,10 +468,19 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     mark('ptt_release');
     send({ type: 'input_audio_buffer.commit' });
     // ★ 応答が走っている / 道具が動いている間は作らない (上と同じ理由)
-    if (respGateRef.current.canCreate()) {
+    const gate = respGateRef.current;
+    if (gate.canCreate()) {
       send({ type: 'response.create' });
+      setWasSkipped(false);
     } else {
-      mark('response_create_skipped');
+      // ★★ #421 黙って捨てない。**記録するだけでは画面に出ない** (#409 と同じ型)。
+      //   理由も残す —— 実測 4 件は 3 つの別々の形で、合計だけでは分けられなかった。
+      mark('response_create_skipped', {
+        why: gate.whyCannotCreate(),
+        pending_tools: gate.pendingTools(),
+        playing: gate.isOutputAudioPlaying(),
+      });
+      setWasSkipped(true);
     }
     setTurns((n) => n + 1);
   }, [isTalking, send, mark]);
@@ -478,5 +493,5 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     if (limitTimerRef.current !== null) clearInterval(limitTimerRef.current);
   }, []);
 
-  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, isUnstable, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };
+  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, isUnstable, wasSkipped, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };
 }

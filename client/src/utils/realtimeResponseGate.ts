@@ -25,6 +25,16 @@ export interface ResponseGate {
   endTool: () => boolean;
   /** いま `response.create` を送ってよいか */
   canCreate: () => boolean;
+  /**
+   * ★ 送れないときの理由 (#421)。送れるときは null。
+   *
+   * ★★ 実測 (2026-09-07、318 往復) で `response_create_skipped` は 4 件あり、**3 つの別々の形**だった。
+   *   うち 1 件は「最後の音が終わって 161 秒、何も鳴っていないのに断られた」——
+   *   **合計だけ数えていると、この形が「前の返事が続いています」に埋もれる。**
+   */
+  whyCannotCreate: () => 'responding' | 'tool' | null;
+  /** ★ いま動いている道具の数 (#421。断った理由を記録に残すため) */
+  pendingTools: () => number;
   /** 応答が走っているか (= `response.cancel` を送る意味があるか) */
   isResponding: () => boolean;
   /** 出力音声が実際に鳴っているか (★ `output_audio_buffer.*` 由来 = まともな計器) */
@@ -63,6 +73,9 @@ export function createResponseGate(): ResponseGate {
       return pending === 0;
     },
     canCreate() { return !active && pending === 0; },
+    // ★ 応答を先に返す。道具は応答の中で動くので、両方立っているときの主因はこちら
+    whyCannotCreate() { return active ? 'responding' : pending > 0 ? 'tool' : null; },
+    pendingTools() { return pending; },
     isResponding() { return active; },
     isOutputAudioPlaying() { return outputAudio; },
     activeItemId() { return itemId; },
