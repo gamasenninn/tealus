@@ -110,6 +110,84 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
+### → 未リリース（ルームの workspace から資格情報を追い出す）
+
+> **★ 影響範囲**: **`DEEP_AGENT_PROVIDER=codex` を使ったことがある環境だけ**に、**手を動かす作業があります**（[#419](https://github.com/gamasenninn/tealus/issues/419)）。使っていない環境と新規インストールは、**何もする必要がありません**。
+
+**なぜ手作業が要るのか（★ pull しただけでは終わりません）**
+
+`prepareCodexHome` は `<WORKSPACE_ROOT>/<agentId>/<roomId>/.codex_home/` を作っていました。ここは
+**filesystem MCP の root の中**なので、agent が `read_file` で読めます。中身は:
+
+```
+auth.json           ChatGPT の OAuth トークン
+config.toml         OPENAI_API_KEY / GOOGLE_API_KEY / TEALUS_PASSWORD
+sessions/rollout-*  codex のセッション記録（★ 中身に鍵が写り込みます）
+*.sqlite            codex の会話履歴 / memories / logs
+```
+
+新しいコードは `<WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId>` に書き、**workspace 内の古いものを見つけたら消します**。
+このため、**何もしないと次の 2 つが起きます**:
+
+```
+Deep が走ったルーム    → 古い .codex_home は自動で消える
+                        ★★ ただし コードは「消す」。codex のセッション記録ごと消えます
+Deep が走らないルーム  → ★ 残ったまま。読める状態が続きます
+```
+
+**必須の作業（★ 削除ではなく「移動」させてから更新する）:**
+
+1. **移す**（セッション記録を残したまま、読める場所から外す）
+
+   ```bash
+   cd agent-server
+   node --env-file=.env scripts/migrate-codex-homes.mts          # 下見（何もしません）
+   node --env-file=.env scripts/migrate-codex-homes.mts --apply  # 移動
+   ```
+
+   ★ 下見が「workspace の中に .codex_home はありません」と出たら、**この節は読み飛ばして構いません**。
+   ★ 実行すると **移行前後のファイル総数が一致するか**を出します。一致しなければ止めて確認してください。
+
+2. **agent-server の再起動** — 反映に要ります。それまでは古いコードが動くので、Deep が走ったルームでは
+   `.codex_home` が作り直されます。
+
+3. **確認**（★ 全深さで走査します。`ripgrep` / `grep -r` は**既定で dot-dir を飛ばす**ので使わないでください）
+
+   ```bash
+   node --env-file=.env scripts/scan-workspace-secrets.mts
+   ```
+
+   次の 2 行が出れば完了です。
+
+   ```
+   ★ 資格情報らしきものは 0 件でした (値は一切出していません)
+   コードが workspace に書くもの (.codex_home / .deep_mcp_config.json): 0 件
+   ```
+
+   ★ このスクリプトは**値を一切出しません**（ファイル名と種類だけ）。
+
+**★ 手書きの `mcp_config.json` に資格情報を入れている場合は、別途 1 つ:**
+
+ルーム固有 MCP の設定に接続文字列を直接書いている場合、**それは自動では移りません**。
+`${VAR}` の参照に書き換え、実体を `agent-server/.env` に置いてください（展開は `lib/envRefs.mts`）。
+
+```jsonc
+// 変更前
+"args": ["-y", "@bytebase/dbhub@latest", "--transport", "stdio", "mysql://user:pass@host:3306/db"]
+// 変更後（実体は agent-server/.env の HKSDB_DSN へ）
+"args": ["-y", "@bytebase/dbhub@latest", "--transport", "stdio", "${HKSDB_DSN}"]
+```
+
+★ 未定義の変数は**そのまま残ります**（空文字にすると `mysql://:@host/db` のような
+「それらしく見えて壊れている」値になり、原因が分からなくなるため）。起動ログの `envRefs` の警告で気づけます。
+
+**DB migration: この版では追加ゼロ**です。
+
+**★ 鍵を入れ替えるかどうか**は、環境ごとに判断してください。判断材料の集め方（いつから読める状態だったか /
+読まれた形跡があるか）は [#419](https://github.com/gamasenninn/tealus/issues/419) のコメントに実例があります。
+★ 本家の環境では「外部公開されておらず、到達できたのは社内メンバーだけで、読まれた証拠が無い」ため
+**入れ替えない**判断をしました。★★ ただし「読まれていない」ことが証明されたわけではありません。
+
 ### → v0.9.0（停止と寿命切断を必ず予告する / フォームの表示）
 
 > **★ 影響範囲**: **フォームを使っている場合は全員に画面の変化があります**（[#370](https://github.com/gamasenninn/tealus/issues/370)）。それ以外（停止予告・寿命切断の理由）は **cc-bridge（`@cc-*`）を使っている環境にのみ**効きます。
