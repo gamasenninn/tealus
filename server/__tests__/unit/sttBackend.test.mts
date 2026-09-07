@@ -8,6 +8,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+// ★ 既定 logger を黙らせる (#424 で気づいた)。log を注入しないテストは `defaultLogger` を掴み、
+//   **本番のログファイルに書き込んでいた** —— 2026-09-07 の本番ログに、fixture の値そのままの
+//   `[stt] gemini ok 0ms vocab=3` と `「حسن」`「每句一个」が残っていた。
+//   `[stt] gemini` の件数を後から数えて効果を見る (#424 の検証手順) ので、計測が汚れる。
+//   他の 5 テストで既に使われている形をここにも入れる。
+jest.mock('../../src/utils/logger.mts', () => ({ logger: {
+  info: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  error: jest.fn(),
+} }));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mod: any;
 let tmpAudio: string;
