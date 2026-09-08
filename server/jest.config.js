@@ -5,6 +5,9 @@ module.exports = {
     '**/__tests__/**/*.test.mts',
   ],
   setupFiles: ['./jest.setup.js'],
+  // ★ ログの出力先を全テストで潰す (2026-09-08)。個別の jest.mock だと 81 中 11 しか塞げず、
+  //   本番ログにテストの行が混ざって「本番の状態」と誤読する事故が起きた。入口で止める。
+  setupFilesAfterEnv: ['./jest.setupAfterEnv.js'],
   testTimeout: 15000,
   // #330 TS 移行: 変換済み .mts を CJS に transform して JS テストと混在させる
   // (拡張子なし require は moduleFileExtensions の順で .mts も解決される)
