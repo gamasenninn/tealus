@@ -11,6 +11,8 @@ export const AUTH_INVALID_CREDENTIALS = 'ユーザーIDまたはパスワード�
 export const AUTH_REGISTER_REQUIRED = 'ユーザーID、表示名、パスワードは必須です';
 export const AUTH_DUPLICATE_LOGIN_ID = 'このユーザーIDは既に登録されています';
 export const AUTH_LOGIN_REQUIRED = 'ユーザーIDとパスワードは必須です';
+// #362 login の失敗が短時間に続いたとき。★ ID が存在するかを漏らさない文面にする
+export const AUTH_TOO_MANY_ATTEMPTS = 'ログインの試行が多すぎます。しばらく待ってからやり直してください';
 export const AUTH_PASSWORD_WRONG = '現在のパスワードが正しくありません';
 export const AUTH_PASSWORD_REQUIRED = '現在のパスワードと新しいパスワードは必須です';
 export const ADMIN_REQUIRED = '管理者権限が必要です';

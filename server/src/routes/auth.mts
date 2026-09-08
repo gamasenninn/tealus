@@ -6,6 +6,9 @@ import bcrypt from 'bcrypt';
 import multer from 'multer';
 import { pool } from '../db/pool.mts';
 import { generateToken, authenticate } from '../middleware/auth.mts';
+// #362 login の総当たり抑止 (失敗だけ数える) と、存在しない ID との応答時間差の解消
+import { createLoginThrottleMiddleware, loginThrottle } from '../middleware/loginThrottle.mts';
+import { verifyPassword } from '../services/passwordVerify.mts';
 import type { AuthUser } from '../types.mts';
 
 const AVATAR_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'avatars');
@@ -80,13 +83,16 @@ router.post('/register', async (req, res) => {
  * POST /api/auth/login
  * Login with login_id and password
  */
-router.post('/login', async (req, res) => {
+router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
   const { login_id, password } = req.body;
 
   // Validation
   if (!login_id || !password) {
     return res.status(400).json({ error: E.AUTH_LOGIN_REQUIRED });
   }
+
+  // #362 失敗だけ数える鍵 (ミドルウェアが載せる)。成功したら消す = cc-bridge は当たらない
+  const throttleKey = req.loginThrottleKey;
 
   try {
     // Find user
@@ -95,22 +101,21 @@ router.post('/login', async (req, res) => {
       [login_id]
     );
 
-    if (result.rows.length === 0) {
-      logger.debug(`login: fail login_id=${login_id} reason=not_found`);
-      return res.status(401).json({ error: E.AUTH_INVALID_CREDENTIALS });
-    }
-
     const user = result.rows[0];
 
-    // Verify password
-    const isValid = await bcrypt.compare(password, user.password_hash ?? '');
+    // ★ #362 ユーザーが居なくても同じだけ計算する。以前は bcrypt を踏まずに即 401 を返しており、
+    //   応答時間 (1〜2ms vs 約 51ms) で「その ID は存在するか」が外から判別できた。
+    const isValid = await verifyPassword(password, user?.password_hash);
     if (!isValid) {
+      if (throttleKey) loginThrottle.recordFailure(throttleKey);
+      logger.debug(`login: fail login_id=${login_id} reason=${user ? 'bad_password' : 'not_found'}`);
       return res.status(401).json({ error: E.AUTH_INVALID_CREDENTIALS });
     }
 
     // Remove password_hash from response
     delete user.password_hash;
 
+    if (throttleKey) loginThrottle.recordSuccess(throttleKey);
     const token = generateToken(user);
     logger.debug(`login: success login_id=${login_id} user=${user.display_name}`);
     res.json({ token, user });

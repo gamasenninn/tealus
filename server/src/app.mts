@@ -16,6 +16,11 @@ import { checkMigrations } from './services/migrationCheck.mts';
 import { ensureMediaDirs } from './utils/mediaSetup.mts';
 import { MEDIA_ROOT } from './middleware/upload.mts';
 import { runStartupEnvCheck } from './utils/envCheck.mts';
+import {
+  DEFAULT_MAX_FAILURES as LOGIN_THROTTLE_MAX_FAILURES,
+  DEFAULT_WINDOW_MS as LOGIN_THROTTLE_WINDOW_MS,
+} from './services/loginThrottle.mts';
+import { loginThrottle } from './middleware/loginThrottle.mts';
 import { setupSocketHandlers } from './socket/index.mts';
 import { setIo } from './io-registry.mts';
 import { createSignalHandler, realSleep, realDeadline } from './utils/shutdown.mts';
@@ -67,6 +72,22 @@ logger.info(`Media dirs ensured at ${MEDIA_ROOT}`);
 runStartupEnvCheck(logger);
 
 export const app = express();
+
+// ★ #362 login のレート制限が鍵に使う IP を実物にする。
+//   経路は client → Cloudflare → NAS(nginx) → 本体 なので、既定では req.ip が NAS の IP になり、
+//   外から来た全員が同じ鍵に集まる = 攻撃者が 5 回失敗するだけで正規利用者を締め出せる。
+//   TRUST_PROXY に「信頼する前段の IP」を入れると、そこから来たときだけ X-Forwarded-For を見る。
+//   ★ 未設定なら X-Forwarded-For は信用しない (直接 origin を叩ける経路があるため、
+//     無条件に信じると IP を詐称して制限をすり抜けられる)。
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', process.env.TRUST_PROXY);
+  logger.info(`[login-throttle] client ip source: X-Forwarded-For (TRUST_PROXY=${process.env.TRUST_PROXY})`);
+} else {
+  logger.warn('[login-throttle] TRUST_PROXY 未設定 — req.ip は前段プロキシの IP になります。'
+    + 'リバースプロキシの内側で動かしているなら TRUST_PROXY を設定してください (#362)');
+}
+logger.info(`[login-throttle] ${LOGIN_THROTTLE_MAX_FAILURES} failures / ${LOGIN_THROTTLE_WINDOW_MS / 60000}min per (ip, login_id) — 成功はカウントしない`);
+
 export const server = http.createServer(app);
 export const io = new Server(server, {
   cors: {
@@ -296,6 +317,7 @@ if (import.meta.main) {
   let capabilityWatcher: typeof import('./services/capabilityWatcher.mts') | null = null;
   let organonWatcher: typeof import('./services/organonWatcher.mts') | null = null;
   let roomTriggers: typeof import('./services/roomTriggerRunner.mts') | null = null;
+  let loginThrottlePruneTimer: NodeJS.Timeout | null = null;
 
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
@@ -317,6 +339,10 @@ if (import.meta.main) {
     import('./services/roomTriggerRunner.mts')
       .then(rt => { roomTriggers = rt; rt.startRoomTriggers(); })
       .catch((err) => logger.warn(`[room-triggers] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
+    // #362 login の失敗カウンタの掃除。★ 口は外から到達できるので鍵は攻撃者が自由に作れる。
+    //   窓を過ぎた鍵を定期的に落とす (上限での追い出しもあるが、平時はこちらで減る)。
+    loginThrottlePruneTimer = setInterval(() => loginThrottle.prune(), LOGIN_THROTTLE_WINDOW_MS);
+    loginThrottlePruneTimer.unref();  // ★ 停止を妨げない (#368 graceful shutdown)
   });
 
   // ★ #368 graceful shutdown。これが無いと停止時にハンドラを通らずプロセスが死に、
@@ -337,7 +363,10 @@ if (import.meta.main) {
       });
       if (notified > 0) logger.info(`[shutdown] cc-queue の購読者 ${notified} 件に再起動を予告しました`);
     },
-    stopTimers: () => { capabilityWatcher?.stop(); organonWatcher?.stop(); roomTriggers?.stopRoomTriggers(); },
+    stopTimers: () => {
+      capabilityWatcher?.stop(); organonWatcher?.stop(); roomTriggers?.stopRoomTriggers();
+      if (loginThrottlePruneTimer) { clearInterval(loginThrottlePruneTimer); loginThrottlePruneTimer = null; }
+    },
     // ★ server.close() は await しない — cc-queue の中継は終わらないので callback が来ない
     closeServer: () => { server.close(); },
     closeConnections: () => { server.closeAllConnections(); },
