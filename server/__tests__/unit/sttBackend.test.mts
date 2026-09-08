@@ -486,3 +486,82 @@ describe('transcribeAudio - gemini backend (#424)', () => {
     expect(text).toBe('via-arg');
   });
 });
+
+/**
+ * ★★ #424 429 の本文を丸ごと残す (2026-09-08)。
+ *
+ * 実運用で 429 が 4 件出たが、★ ログには「どの上限か」が残っていなかった。
+ * 実装が `data.error.message` を使っており、message の **2 行目**にある
+ * `Quota exceeded for metric: … limit: N` が改行のあとに続くため、
+ * 読む側で切れて見えていた (実物は 1 つの文字列だが、ログ整形と grep で落ちる)。
+ *
+ * ★ 昨日「429 の本文にはどの上限かが書いてある。切り詰めるな」と docs に書いた当人が、
+ *   同じところで同じものを落としていた。今回は **改行を潰して 1 行にし、全文を残す**。
+ *
+ * 実物 (2026-09-08 実測):
+ *   無料枠  metric: generate_content_free_tier_requests,  limit: 25
+ *   課金    metric: generate_requests_per_model_per_day,  limit: 100
+ *   → ★ 「free_tier が名前に入っているか」で 枠の種類が分かる。ここが消えると判別できない。
+ */
+describe('transcribeAudio - gemini の 429 は本文を丸ごと残す (#424)', () => {
+  const QUOTA_BODY = {
+    error: {
+      code: 429,
+      message: 'You exceeded your current quota, please check your plan and billing details.\n'
+        + '* Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day, '
+        + 'limit: 100, model: gemini-3.5-transcribe\nPlease retry in 19h49m14s.',
+      status: 'RESOURCE_EXHAUSTED',
+    },
+  };
+
+  beforeEach(() => {
+    process.env.STT_BACKEND = 'gemini';
+    process.env.GEMINI_API_KEY = 'test-key';
+  });
+  afterEach(() => { delete process.env.GEMINI_API_KEY; });
+
+  test('★★ warn に metric 名と limit が残る (どの上限か が後から分かる)', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse(QUOTA_BODY, false, 429));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: ['ガマ'],
+      openaiClient: fakeOpenAI('fallback'), fetchImpl, log,
+    });
+    const msg = String(log.warn.mock.calls[0][0]);
+    expect(msg).toContain('generate_requests_per_model_per_day');
+    expect(msg).toContain('limit: 100');
+    expect(msg).toContain('Please retry in 19h49m14s');
+  });
+
+  test('★ 改行は潰して 1 行にする (ログの 1 行として grep できる形)', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse(QUOTA_BODY, false, 429));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: ['ガマ'],
+      openaiClient: fakeOpenAI('fallback'), fetchImpl, log,
+    });
+    expect(String(log.warn.mock.calls[0][0])).not.toContain('\n');
+  });
+
+  test('★ free_tier かどうかが判別できる (枠の種類が消えない)', async () => {
+    const free = { error: { message: 'quota\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 25' } };
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse(free, false, 429));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: ['ガマ'],
+      openaiClient: fakeOpenAI('fallback'), fetchImpl, log,
+    });
+    expect(String(log.warn.mock.calls[0][0])).toContain('free_tier');
+  });
+
+  test('message が無い形のエラーでも、本文そのものを残す (握りつぶさない)', async () => {
+    const weird = { unexpected: 'shape', detail: 'no message field here' };
+    const fetchImpl = jest.fn().mockReturnValue(jsonResponse(weird, false, 503));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: ['ガマ'],
+      openaiClient: fakeOpenAI('fallback'), fetchImpl, log,
+    });
+    expect(String(log.warn.mock.calls[0][0])).toContain('no message field here');
+  });
+});

@@ -258,7 +258,14 @@ async function transcribeGemini({ inputPath, ext, vocabTerms, fetchImpl }: {
     const data = (await res.json().catch(() => null)) as
       { steps?: Array<{ content?: Array<{ text?: string }> }>; error?: { message?: string } } | null;
     if (!res.ok) {
-      throw new Error(`gemini HTTP ${res.status}${data?.error?.message ? `: ${data.error.message}` : ''}`);
+      // ★★ 本文を丸ごと残す (2026-09-08)。429 の message は 2 行目に
+      //   「Quota exceeded for metric: … limit: N」を持ち、**そこにしか枠の種類が書いていない**
+      //   (free_tier なのか per_model_per_day なのか)。
+      //   ★ 当初 error.message だけを使っていて、実運用の 429 四件でどの上限か判別できなかった。
+      //   ★★ 改行は潰す —— ログの 1 行として grep できないと、結局読めないのは同じ。
+      //   message が無い形のエラーもありうるので、その場合は本文そのものを出す (握りつぶさない)。
+      const detail = data?.error?.message || (data ? JSON.stringify(data) : '');
+      throw new Error(`gemini HTTP ${res.status}${detail ? `: ${detail.replace(/\s*\n\s*/g, ' ')}` : ''}`);
     }
     return (data?.steps || []).flatMap((s) => s.content || []).map((c) => c.text || '').join('').trim();
   } finally {
