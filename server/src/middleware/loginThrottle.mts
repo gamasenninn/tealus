@@ -11,8 +11,14 @@
  * `trust proxy` を設定しないと `req.ip` は **NAS の IP** になり、外から来た全員が
  * 同じ鍵に集まる。そうなると鍵は実質 login_id だけになり、
  * ★★ **攻撃者が 5 回失敗するだけで、その ID の正規利用者 (cc-bridge を含む) を締め出せる。**
- * → `app.set('trust proxy', <proxy の IP>)` を入れて `req.ip` を実物にすること (`app.mts`)。
- *   env `TRUST_PROXY` で指定する。未設定なら起動ログが警告する。
+ * → `app.set('trust proxy', <proxy の IP>)` を入れること (`app.mts`、env `TRUST_PROXY`)。
+ *   未設定なら起動ログが警告する。
+ *
+ * ★★ ただし **取れるのは実 client ではない**。実測 (2026-09-08):
+ *     Cloudflare 経由 → Cloudflare のエッジ IP / origin 直撃 → 攻撃者の実 IP。
+ *     どちらも詐称できない (nginx が追記した最後の 1 つを採るため) が、
+ *     **同じエッジを共有する利用者は 1 つの鍵に集まる**。分かった上で選んでいる。
+ *     ★ `CF-Connecting-IP` は採らない —— origin 直撃も同じ nginx を通るので自分で付けられる。
  *
  * ## ★ この仕組みが止められないもの (承知の上で選んでいる)
  *
