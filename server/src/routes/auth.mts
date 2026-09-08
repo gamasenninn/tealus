@@ -108,7 +108,9 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
     const isValid = await verifyPassword(password, user?.password_hash);
     if (!isValid) {
       if (throttleKey) loginThrottle.recordFailure(throttleKey);
-      logger.debug(`login: fail login_id=${login_id} reason=${user ? 'bad_password' : 'not_found'}`);
+      // ★ ip を添える (#362): TRUST_PROXY が効いていれば実 client の IP、効いていなければ
+      //   前段プロキシの IP がそのまま並ぶ = 設定が効いたかをログで確かめられる
+      logger.debug(`login: fail login_id=${login_id} ip=${req.ip} reason=${user ? 'bad_password' : 'not_found'}`);
       return res.status(401).json({ error: E.AUTH_INVALID_CREDENTIALS });
     }
 
@@ -117,7 +119,7 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
 
     if (throttleKey) loginThrottle.recordSuccess(throttleKey);
     const token = generateToken(user);
-    logger.debug(`login: success login_id=${login_id} user=${user.display_name}`);
+    logger.debug(`login: success login_id=${login_id} ip=${req.ip} user=${user.display_name}`);
     res.json({ token, user });
   } catch (err) {
     logger.error('Login error:', err);
