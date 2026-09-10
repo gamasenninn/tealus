@@ -85,6 +85,28 @@ function loadSystemPrompt(): string {
  *   3. ルーム固有 MCP (workspace/mcp_config.json があればマージ)
  *   4. グローバル MCP (agent-server/mcp_config.json があればマージ、filesystem は除外)
  */
+/**
+ * 起動ログ 1 行を組み立てる (2026-09-10)
+ *
+ * ★ なぜ関数に出したか: 2026-09-10 の朝礼で Light が 400 で落ちたとき
+ *   ("The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account")、
+ *   ★★ **起動ログに model が無く、どのモデルで走っていたかをログから言えなかった。**
+ *   Deep 側は #423 で `model=` を出しており、Light だけ取り残されていた。
+ *
+ * ★★★ 呼び出し側は **この関数に渡す model と、thread に渡す model を同じ変数にする**こと。
+ *   config を 2 回別々に読むと、片方だけ変えたときに静かにずれて**計器が嘘をつく**。
+ */
+export function formatLightV2StartupLog(args: {
+  apiKey: string | undefined;
+  mcpServers: string[];
+  model: string | undefined;
+}): string {
+  // ★ model 未設定を空文字で出さない。「出し忘れ」と区別が付かなくなる
+  const model = args.model || '(未設定)';
+  return `[LightV2] auth=${args.apiKey ? 'API key' : 'subscription'} `
+    + `mcp_servers=${args.mcpServers.join(',')} model=${model}`;
+}
+
 export function buildLightV2McpConfig(workspacePath: string | undefined): Record<string, CodexConfigObject> {
   const mcp_servers: Record<string, CodexConfigObject> = {};
 
@@ -234,7 +256,12 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       codexOpts.apiKey = config.OPENAI_API_KEY;
     }
     const codex = new Codex(codexOpts);
-    logger.info(`[LightV2] auth=${codexOpts.apiKey ? 'API key' : 'subscription'} mcp_servers=${Object.keys(mcp_servers).join(',')}`);
+    // ★ model は 1 か所で決めて、ログと thread の両方に同じ変数を使う (2026-09-10)。
+    //   2 回読むと片方だけ変わって計器が嘘をつく。
+    const lightModel = config.AGENT_LIGHT_MODEL;
+    logger.info(formatLightV2StartupLog({
+      apiKey: codexOpts.apiKey, mcpServers: Object.keys(mcp_servers), model: lightModel,
+    }));
 
     // memory + system prompt 構築
     let systemPrompt = loadSystemPrompt();
@@ -267,7 +294,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     // この sandboxMode で問題ない (codex の本来用途は untrusted code execution、
     // Tealus AI agent は trusted code path)。
     const thread = codex.startThread({
-      model: config.AGENT_LIGHT_MODEL,
+      model: lightModel,   // ★ 上のログと同じ変数 (2026-09-10)
       workingDirectory: workspacePath,
       sandboxMode: 'danger-full-access',
       approvalPolicy: 'never',

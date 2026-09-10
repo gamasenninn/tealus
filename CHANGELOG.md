@@ -19,6 +19,15 @@
 - **★ client を本番ビルドし直す** — #421 は client のみの変更なので、ビルドしないと**画面は何も変わらない**。エラーは出ないので静かに変化ゼロになる。
 - **鍵を入れ替えるかは環境ごとの判断** — 判断材料の集め方 (いつから読める状態だったか / 読まれた形跡があるか) は #419 のコメントに実例がある。★ 本家は「外部公開されておらず、到達できたのは社内メンバーだけで、読まれた証拠が無い」ため**入れ替えない**判断をした。★★ 「読まれていない」ことが証明されたわけではない (テキスト経路は道具の呼び出しをログに残しておらず、ログの保存期間 31 日は露出していた 99 日に届かない)。
 
+### Fixed
+
+- **Light v2 が ChatGPT アカウントで 400 になるのを直した** (2026-09-10 の朝礼で発生): `AGENT_LIGHT_MODEL` を `gpt-5.4-mini` → **`gpt-5.5`**。
+  - ★ **mini 系は系統ごと使えない** — 実測: `gpt-5.4-mini` ✗ / `gpt-5.5-mini` ✗ / `gpt-5.4` ✗ / `gpt-5.5` ○ / `gpt-5.6-luna` ○。エラーは `"The '<model>' model is not supported when using Codex with a ChatGPT account"`。
+  - ★★ **同じことが 2026-09-06 に Deep で起きており、`.env` に記録も残っていた**のに `AGENT_LIGHT_MODEL` だけ取り残されていた。→ docs/05 に「1 つ落ちたら同じ経路の他の設定も同時に見る」として記録。
+  - ★★★ **subscription 経路では「Light は安いモデル」が成り立たない** (Light も Deep と同じ `gpt-5.5`)。差は道具と prompt だけになる。`.env.example` に明記。
+  - ★ **起動ログに `model=` を足した** (Light は出しておらず、どのモデルで走っていたかをログから言えなかった。Deep は #423 で既に出していた)。ログに出す model と thread に渡す model は**同じ変数**にし、ずれないようテストで固定 (agent-server 745 tests PASS)。
+  - ★ 画面に出るのは子プロセス kill の文字化け (`Failed to parse item: ...PID...`) で**原因が見えない**。agent-server ログの `stream error` を見ること。
+
 ### Security
 
 - **`POST /api/auth/login` に総当たり抑止を入れた** ([#362](https://github.com/gamasenninn/tealus/issues/362)): **15 分に 5 回失敗**で 429 (`Retry-After` つき)。鍵は **(client IP, login_id)**。
