@@ -333,6 +333,85 @@ describe('VoiceChatView — 上限で自動的に閉じる (#414)', () => {
  * #412 人の発話も計測に残す (docs/08 §12.6 の基準④ は「transcript 全文を人が読んで判定する」)。
  * ★ ただし **昇格の対象は AI の発言だけ** (docs/08 §12.10) —— そこは変えない。
  */
+describe('VoiceChatView — もう一度つなぐ (#429)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  async function live() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  }
+
+  /** 無操作の上限まで進めて、自分から閉じた状態を作る */
+  async function timedOut() {
+    await live();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000); });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/会話を終わりました/));
+  }
+
+  it('★ 話している間はボタンを出さない (戻る必要がない)', async () => {
+    await live();
+    expect(screen.queryByRole('button', { name: /もう一度つなぐ/ })).toBeNull();
+  });
+
+  it('★★ 上限で閉じたら「もう一度つなぐ」が出る (画面を閉じるしか道がない状態を作らない)', async () => {
+    await timedOut();
+    expect(screen.getByRole('button', { name: /もう一度つなぐ/ })).toBeInTheDocument();
+  });
+
+  it('★★★ 押すと繋ぎ直して、また話せるようになる', async () => {
+    await timedOut();
+    createSession.mockClear();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /もう一度つなぐ/ })); });
+    // ★ 新しいセッションを取りに行く (= 使い捨てトークンの作り直し)
+    await waitFor(() => expect(createSession).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  });
+
+  it('★★ 繋ぎ直したら前の知らせは消える (終わったという表示が残らない)', async () => {
+    await timedOut();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /もう一度つなぐ/ })); });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('★★★★ 自動では繋ぎ直さない (課金が動機なので、人が押すまで繋がない)', async () => {
+    await timedOut();
+    createSession.mockClear();
+    // ★ たっぷり待っても、勝手に繋ぎ直さないこと
+    await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60_000); });
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it('★ 接続に失敗したときも「もう一度つなぐ」から戻れる', async () => {
+    createSession.mockReset().mockRejectedValue(new Error('boom-net'));
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('接続できませんでした'));
+    expect(screen.getByRole('button', { name: /もう一度つなぐ/ })).toBeInTheDocument();
+  });
+
+  it('★★ 繋ぎ直しも計測に残る (何回やり直したかが分かる)', async () => {
+    await timedOut();
+    voiceChatLog.mockClear();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /もう一度つなぐ/ })); });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+    // ★★ 記録は「そのセッションが終わるとき」に送られる。だから閉じてから確かめる
+    //   (★ ここを待たずに見ると、実装ではなくタイミングを測ってしまう)
+    await act(async () => { fireEvent.click(screen.getByLabelText('閉じる')); });
+    const sent = voiceChatLog.mock.calls.flatMap((c) => (c[1] as { type: string; data?: Record<string, unknown> }[]) || []);
+    const started = sent.filter((e) => e.type === 'session_start_request');
+    expect(started.length).toBeGreaterThan(0);
+    // ★★★ 初回と区別が付くこと。同じ印だと「やり直した回数」が測れない
+    expect(started.some((e) => e.data?.reconnect === true)).toBe(true);
+    expect(started.some((e) => e.data?.attempt === 2)).toBe(true);
+  });
+});
+
 describe('VoiceChatView — 人の発話の記録 (#412)', () => {
   beforeEach(() => {
     createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });

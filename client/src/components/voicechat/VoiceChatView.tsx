@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Mic, X, ArrowUpToLine } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Mic, X, ArrowUpToLine, RotateCcw } from 'lucide-react';
 import { useRealtimeVoice } from '../../hooks/useRealtimeVoice';
 import './VoiceChatView.css';
 
@@ -25,7 +25,17 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
   const voice = useRealtimeVoice(roomId);
   const { state, start, stop } = voice;
 
-  useEffect(() => { void start(); }, [start]);
+  // ★ 初回だけ自分から繋ぐ (#429)。★★ 止まった後は **人が押すまで繋がない** ——
+  //   課金が動機なので (業務メモ 2026-09-06)、黙って繋ぎ直すのは依頼と逆になる。
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void start();
+  }, [start]);
+
+  // ★ 止まっている = 戻る道を出す状態。★★ error だけを見る (live / connecting では出さない)
+  const isStopped = state === 'error';
 
   const close = () => { stop(); onClose(); };
 
@@ -60,6 +70,20 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
         <p className="voice-chat-status" role="status">{label}</p>
         {voice.error && <p className="voice-chat-error" role="alert">{voice.error}</p>}
         {state === 'live' && <p className="voice-chat-turns">{voice.turns} 往復</p>}
+
+        {/*
+          ★ #429 戻る道。これが無いと、上限で閉じた後は **画面を閉じて開き直すしかなかった**。
+          ★★ 自動では繋ぎ直さない —— 「接続しているだけで課金対象」が依頼の動機なので、
+            勝手に繋ぐのは逆。★★★ 押したときだけ繋ぐ。
+          ★ MCP は agent-server 側で 30 分キャッシュされており (roomMcpManager、MCP_CACHE_TTL)、
+            音声セッションには紐づかない。なので **繋ぎ直しは初回ほど待たされない**。
+        */}
+        {isStopped && (
+          <button className="voice-chat-reconnect" onClick={() => void start()}>
+            <RotateCcw size={16} />
+            <span>もう一度つなぐ</span>
+          </button>
+        )}
       </div>
 
       {/*

@@ -71,6 +71,8 @@ const LIMIT_CHECK_MS = 10_000;
 
 export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const [state, setState] = useState<VoiceState>('idle');
+  /** ★ #429 この画面で何回 start したか (1 = 初回、2 以上 = 繋ぎ直し) */
+  const attemptRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [isTalking, setIsTalking] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -312,7 +314,11 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     closingRef.current = false;
     eventsRef.current = [];
     setState('requesting');
-    mark('session_start_request');
+    // ★ #429 何回目の開始かを残す。★★ 初回と繋ぎ直しが同じ印だと
+    //   「やり直した回数」が測れない (= 上限や切断が現場でどれだけ邪魔しているかが分からない)。
+    //   ★ 記録は新しいセッションの側に乗るので、そのセッションが終わるときに送られる。
+    attemptRef.current += 1;
+    mark('session_start_request', { attempt: attemptRef.current, reconnect: attemptRef.current > 1 });
 
     try {
       // 1. 使い捨てトークンをもらう (★ ここで MCP が温まるので、初回は数十秒かかりうる)

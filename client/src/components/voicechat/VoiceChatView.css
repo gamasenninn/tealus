@@ -128,3 +128,24 @@
   color: #9fe6b8;
   opacity: 1;
 }
+
+/*
+ * ★ #429 戻る道。上限やエラーで止まったときだけ出る。
+ *   ★★ 昇格ボタンと同じ形にしてあるのは、どちらも「押したら何か起きる」系で、
+ *     押せる場所を覚え直させないため。★ 色は控えめ — 主役は「押しながら話す」のまま。
+ */
+.voice-chat-reconnect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: #f2f4f6;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.voice-chat-reconnect:hover { background: rgba(255, 255, 255, 0.08); }
