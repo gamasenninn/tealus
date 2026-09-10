@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Mic, X, ArrowUpToLine, RotateCcw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Mic, X, ArrowUpToLine, RotateCcw, Send } from 'lucide-react';
 import { useRealtimeVoice } from '../../hooks/useRealtimeVoice';
 import './VoiceChatView.css';
 
@@ -36,6 +36,10 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
 
   // ★ 止まっている = 戻る道を出す状態。★★ error だけを見る (live / connecting では出さない)
   const isStopped = state === 'error';
+
+  // ★ #428 手入力。音声だけだと固有名詞の誤変換を直す層が無い (業務メモ 2026-09-06)
+  const [draft, setDraft] = useState('');
+  const submit = () => { if (voice.sendText(draft)) setDraft(''); };
 
   const close = () => { stop(); onClose(); };
 
@@ -108,6 +112,33 @@ function VoiceChatView({ roomId, roomName, onClose }: VoiceChatViewProps) {
         </button>
         {/* ★ 失敗は必ず見せる。残ったと思って残っていない、を作らない */}
         {voice.promoteError && <p className="voice-chat-error" role="alert">{voice.promoteError}</p>}
+      </div>
+
+      {/*
+        ★ #428 手入力。**音声の置き換えではなく併存** (主は押して話す)。
+        ★★ 会話モードは Realtime の音声認識で、本体の STT 経路 (organon 整形段) を通らない。
+          整形段は本体側で +111 語 / 壊した語 0 の効き方をする層 (2026-09-10、#426) で、
+          それが会話モードには無い。**固有名詞を確実に入れる道**として要る。
+        ★ Enter でも送れる (打ってすぐ送りたいので、ボタンまで手を動かさせない)。
+      */}
+      <div className="voice-chat-text">
+        <input
+          className="voice-chat-text-box"
+          type="text"
+          value={draft}
+          placeholder="打って送る (人名・機種名など)"
+          disabled={state !== 'live'}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+        />
+        <button
+          className="voice-chat-text-send"
+          disabled={state !== 'live' || !draft.trim()}
+          onClick={submit}
+          aria-label="送る"
+        >
+          <Send size={18} />
+        </button>
       </div>
 
       <div className="voice-chat-footer">

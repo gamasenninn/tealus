@@ -149,3 +149,40 @@
   transition: background 0.15s;
 }
 .voice-chat-reconnect:hover { background: rgba(255, 255, 255, 0.08); }
+
+/*
+ * ★ #428 手入力。押して話すの上に置く (主役は下のまま)。
+ *   ★★ iOS PWA では font-size を 16px 未満にすると勝手に拡大されるので 16px 固定
+ *     (feedback: iOS の input autozoom)。
+ */
+.voice-chat-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 10px;
+}
+.voice-chat-text-box {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2f4f6;
+  font-size: 16px;
+}
+.voice-chat-text-box::placeholder { color: rgba(242, 244, 246, 0.45); }
+.voice-chat-text-box:disabled { opacity: 0.4; }
+.voice-chat-text-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: #f2f4f6;
+  cursor: pointer;
+}
+.voice-chat-text-send:disabled { opacity: 0.35; cursor: default; }

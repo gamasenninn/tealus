@@ -412,6 +412,103 @@ describe('VoiceChatView — もう一度つなぐ (#429)', () => {
   });
 });
 
+describe('VoiceChatView — 手入力 (#428)', () => {
+  beforeEach(() => {
+    createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });
+    voiceChatLog.mockClear();
+    stubWebRTC();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function live() {
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+  }
+
+  const box = () => screen.getByPlaceholderText(/打って送る/);
+  const sendBtn = () => screen.getByRole('button', { name: /送る/ });
+
+  it('★ 繋がっていないうちは使えない', () => {
+    createSession.mockReset().mockResolvedValue(new Promise(() => {}) as never);
+    render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+    expect(box()).toBeDisabled();
+  });
+
+  it('★★ 打って送ると、テキストとして会話に入る', async () => {
+    await live();
+    fireEvent.change(box(), { target: { value: '保坂さんの在庫を調べて' } });
+    fireEvent.click(sendBtn());
+    const sent = lastDc!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    const item = sent.find((m) => m.type === 'conversation.item.create');
+    expect(item.item.role).toBe('user');
+    expect(item.item.content[0]).toEqual({ type: 'input_text', text: '保坂さんの在庫を調べて' });
+    // ★ 応答も作る (音声の releaseTalk と同じ)
+    expect(sent.some((m) => m.type === 'response.create')).toBe(true);
+  });
+
+  it('★ 送ったら入力欄は空になる (二重送信を作らない)', async () => {
+    await live();
+    fireEvent.change(box(), { target: { value: 'テスト' } });
+    fireEvent.click(sendBtn());
+    expect((box() as HTMLInputElement).value).toBe('');
+  });
+
+  it('★★ 空では送らない (空白だけも送らない)', async () => {
+    await live();
+    fireEvent.change(box(), { target: { value: '   ' } });
+    fireEvent.click(sendBtn());
+    const sent = lastDc!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(sent.some((m) => m.type === 'conversation.item.create')).toBe(false);
+  });
+
+  it('★★★ 人の入力として記録に残る (who=user。音声と同じ扱い)', async () => {
+    await live();
+    fireEvent.change(box(), { target: { value: '保坂さん' } });
+    fireEvent.click(sendBtn());
+    fireEvent.click(screen.getByLabelText('閉じる'));
+    const events = (voiceChatLog.mock.calls.at(-1) as unknown[])[1] as Array<{ type: string; data?: Record<string, unknown> }>;
+    const line = events.find((e) => e.type === 'transcript' && e.data?.who === 'user');
+    expect(line?.data?.text).toBe('保坂さん');
+    // ★ 音声と区別が付くこと (どちらの経路で入ったかが分からないと、誤変換の回避になったか測れない)
+    expect(line?.data?.source).toBe('text');
+  });
+
+  it('★★★★ AI が喋っている最中に送ったら割り込む (音声を押したときと同じ規則)', async () => {
+    await live();
+    emit({ type: 'response.created' });
+    emit({ type: 'output_audio_buffer.started' });
+    lastDc!.send.mockClear();
+    fireEvent.change(box(), { target: { value: '違う、そっちじゃない' } });
+    fireEvent.click(sendBtn());
+    const sent = lastDc!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    // ★ 公式の 2 段 (docs/08 §12 / pressTalk と同じ)
+    expect(sent.some((m) => m.type === 'response.cancel')).toBe(true);
+    expect(sent.some((m) => m.type === 'output_audio_buffer.clear')).toBe(true);
+  });
+
+  it('★ Enter でも送れる', async () => {
+    await live();
+    fireEvent.change(box(), { target: { value: 'エンターで送る' } });
+    fireEvent.keyDown(box(), { key: 'Enter' });
+    const sent = lastDc!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(sent.some((m) => m.type === 'conversation.item.create')).toBe(true);
+  });
+
+  it('★★ 手入力は「無操作」を止める (打っている間に上限で切られない)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<VoiceChatView roomId="r1" roomName="営業報告" onClose={vi.fn()} />);
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('押しながら話してください'));
+      await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60_000); });
+      fireEvent.change(box(), { target: { value: 'まだ使っている' } });
+      fireEvent.click(sendBtn());
+      await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60_000); });
+      // ★ 送ってから 4 分なので、まだ閉じない
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('VoiceChatView — 人の発話の記録 (#412)', () => {
   beforeEach(() => {
     createSession.mockReset().mockResolvedValue({ session_id: 's1', client_secret: 'ek_1', model: 'm' });

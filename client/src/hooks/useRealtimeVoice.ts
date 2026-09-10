@@ -48,6 +48,11 @@ interface RealtimeVoice {
   promote: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => void;
+  /**
+   * ★ #428 手入力で送る。★★ 割り込みの規則は音声と同じ (人が行動したら AI は譲る)。
+   * @returns 送ったら true (空文字 / 未接続なら false)
+   */
+  sendText: (text: string) => boolean;
   pressTalk: () => void;
   releaseTalk: () => void;
 }
@@ -491,6 +496,61 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     setTurns((n) => n + 1);
   }, [isTalking, send, mark]);
 
+  /**
+   * ★ #428 手入力。**音声だけだと固有名詞の誤変換を直す層が無い** (業務メモ 2026-09-06)。
+   *
+   * ★★ 会話モードは Realtime の音声認識で、**本体の STT 経路 (organon 整形段) を通らない**。
+   *   整形段は本体側の実測で +111 語 / 壊した語 0 (2026-09-10、#426) の効き方をする層で、
+   *   それが**会話モードには無い**。だから打てることが回避策になる。
+   *
+   * ★★★ 割り込みの規則は **音声と同じ** にした (pressTalk と同じ 2 段)。
+   *   「人が行動したら AI は譲る」を経路ごとに変えると、**どちらを使っているかで挙動が変わる**。
+   *
+   * @returns 送ったら true (空文字や未接続なら false)
+   */
+  const sendText = useCallback((text: string): boolean => {
+    if (state !== 'live') return false;
+    const body = text.trim();
+    if (!body) return false;
+
+    // ★ 音声を押したときと同じ 2 段の割り込み (理由は pressTalk のコメント参照)
+    if (speakingRef.current || respGateRef.current.isOutputAudioPlaying()) {
+      const g = respGateRef.current;
+      if (g.isResponding()) send({ type: 'response.cancel' });
+      send({ type: 'output_audio_buffer.clear' });
+      if (remoteTrackRef.current) remoteTrackRef.current.enabled = false;
+      mark('interrupt', { was_responding: g.isResponding(), was_playing: g.isOutputAudioPlaying(), source: 'text' });
+    }
+
+    // ★ 打っている間は「無操作」ではない (#414 の上限に掛からないようにする)
+    lastSpokeRef.current = Date.now();
+    // ★★ 人の入力として音声と同じ欄に残す。★ source で経路が分かるようにする ——
+    //   これが無いと「手入力が誤変換の回避になったか」を後から測れない
+    mark('transcript', { who: 'user', text: body, source: 'text' });
+
+    send({
+      type: 'conversation.item.create',
+      item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: body }] },
+    });
+
+    const gate = respGateRef.current;
+    if (gate.canCreate()) {
+      send({ type: 'response.create' });
+      setWasSkipped(false);
+    } else {
+      // ★ 音声と同じ扱い (#421)。黙って捨てない
+      mark('response_create_skipped', {
+        why: gate.whyCannotCreate(),
+        pending_tools: gate.pendingTools(),
+        playing: gate.isOutputAudioPlaying(),
+        source: 'text',
+      });
+      setWasSkipped(true);
+    }
+    setTurns((n) => n + 1);
+    return true;
+  }, [state, send, mark]);
+
   // 画面を離れたら必ず切る (音声の常時接続は作らない — docs/08 §10)
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -499,5 +559,5 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     if (limitTimerRef.current !== null) clearInterval(limitTimerRef.current);
   }, []);
 
-  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, isUnstable, wasSkipped, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk };
+  return { state, error, isTalking, isAiSpeaking, turns, isToolRunning, isUnstable, wasSkipped, lastReply, promoteState, promoteError, promote, start, stop, pressTalk, releaseTalk, sendText };
 }
