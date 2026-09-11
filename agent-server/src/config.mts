@@ -132,7 +132,15 @@ export const DEEP_AGENT_PROVIDER = process.env.DEEP_AGENT_PROVIDER || 'claude';
 export const DEEP_CODEX_AUTH = process.env.DEEP_CODEX_AUTH || 'subscription';
 
 // Deep Codex model (#276): codex exec の -m 引数
-export const AGENT_DEEP_CODEX_MODEL = process.env.AGENT_DEEP_CODEX_MODEL || 'gpt-5.4';
+//
+// ★★★ 既定を gpt-5.4 → gpt-5.5 に上げた (2026-09-11)。★ 採用者環境 (v0.9) で Deep Codex が
+//   全面停止し、真因がこの既定値だった (サポート班の報告 2026-09-10、採用者#2 が自力で特定)。
+//   gpt-5.4 は ChatGPT アカウントでは使えず、codex がモデル一覧のデコードに失敗して stream が切れる。
+// ★★ 表示は `auth failed (unauthorized)` になるため **再ログインへ誤誘導する** (#422 は v0.9 に未収録)。
+// ★ 実測 (2026-09-10): gpt-5.4 ✗ / gpt-5.4-mini ✗ / gpt-5.5-mini ✗ / gpt-5.6 ✗ / gpt-5.5 ○ / gpt-5.6-luna ○
+//   → ★★ mini は系統ごと不可。★★★ 「新しければ良い」でもない (名前ごとに違う)。
+// ★ 設定の取り違えは起動時に warn する (utils/codexModelGuard.mts)。**止めはしない**。
+export const AGENT_DEEP_CODEX_MODEL = process.env.AGENT_DEEP_CODEX_MODEL || 'gpt-5.5';
 
 // Tavily
 export const TAVILY_API_KEY = process.env.TAVILY_API_KEY;

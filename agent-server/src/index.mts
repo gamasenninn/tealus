@@ -12,6 +12,7 @@ import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
 import { broadcastShutdown } from './webhook/ccSubscribers.mts';
 import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
+import { checkCodexModels } from './utils/codexModelGuard.mts';
 
 // Start server
 const server = app.listen(config.PORT, async () => {
@@ -21,6 +22,17 @@ const server = app.listen(config.PORT, async () => {
   // TTS provider のログは config.mts の load 時に出力済み（責務分離）
   logOrganonInjectState(); // organon inject の ON/OFF を起動時に明示（#304、default OFF）
   logVocabInjectState();   // STT vocab inject の ON/OFF を起動時に明示（default OFF、opt-in）
+  // ★ codex 経路のモデル可否 (2026-09-11)。採用者環境で Deep が全面停止し、表示が
+  //   `auth failed` だったため再ログインへ誤誘導した。★★ ここで「何を設定すればよいか」を出す。
+  //   ★★★ 止めはしない —— モデルの可否は外部で変わるので、コードが止めると正しい設定でも動かない。
+  for (const w of checkCodexModels({
+    deepProvider: config.DEEP_AGENT_PROVIDER,
+    deepAuth: config.DEEP_CODEX_AUTH,
+    deepModel: config.AGENT_DEEP_CODEX_MODEL,
+    lightBackend: config.AGENT_LIGHT_BACKEND,
+    lightAuth: config.LIGHTV2_AUTH,
+    lightModel: config.AGENT_LIGHT_MODEL,
+  })) logger.warn(w.message);
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   await initializeAgent();

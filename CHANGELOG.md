@@ -33,6 +33,14 @@
 
 ### Fixed
 
+- **★ 採用者環境で Deep Codex が全面停止していたのを直した** (サポート班の報告 2026-09-10、採用者#2 が自力で真因を特定): 既定値 `AGENT_DEEP_CODEX_MODEL` を **`gpt-5.4` → `gpt-5.5`**。
+  - ★★ `gpt-5.4` は ChatGPT アカウントでは使えず、codex がモデル一覧のデコードに失敗して stream が切れる。★★★ **表示が `auth failed (unauthorized)` になるため再ログインへ誤誘導する** (#422 の修正は v0.9 に未収録)。サポート班は「CLI が古い」と 2 回誤診している。
+  - ★★★★ **起動時ガードを追加** (`agent-server/src/utils/codexModelGuard.mts`): codex 経路 × 既知の使えないモデルを検出し、**「何を設定すればよいか」と「認証の問題ではない」を 1 行で出す**。★ **止めはしない** — モデルの可否は外部で変わるので、コードが止めると正しい設定でも動かなくなる。
+  - ★ **経路を見分ける**: Router / Light v1 は OpenAI API 経路なので **mini の制限は無い** → 既定を触っていない。`DEEP_AGENT_PROVIDER` の既定は `claude` なので、★★ **既定のままの環境は壊れない** (壊れるのは codex を明示した環境)。
+  - ★ 実測 2026-09-10: `gpt-5.4` ✗ / `gpt-5.4-mini` ✗ / `gpt-5.5-mini` ✗ / `gpt-5.6` ✗ / `gpt-5.5` ○ / `gpt-5.6-luna` ○ → ★★ **mini は系統ごと不可。「新しければ良い」でもない。**
+  - ★ テストは**値ではなく「既知の使えないモデルを既定にしない」を固定** (★★ 値だけ書くと、次に使えなくなったときテストが古い値を守る側に回る)。agent-server 765 tests PASS。
+
+
 - **Light v2 が ChatGPT アカウントで 400 になるのを直した** (2026-09-10 の朝礼で発生): `AGENT_LIGHT_MODEL` を `gpt-5.4-mini` → **`gpt-5.5`**。
   - ★ **mini 系は系統ごと使えない** — 実測: `gpt-5.4-mini` ✗ / `gpt-5.5-mini` ✗ / `gpt-5.4` ✗ / `gpt-5.5` ○ / `gpt-5.6-luna` ○。エラーは `"The '<model>' model is not supported when using Codex with a ChatGPT account"`。
   - ★★ **同じことが 2026-09-06 に Deep で起きており、`.env` に記録も残っていた**のに `AGENT_LIGHT_MODEL` だけ取り残されていた。→ docs/05 に「1 つ落ちたら同じ経路の他の設定も同時に見る」として記録。
