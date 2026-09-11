@@ -4,6 +4,7 @@ import { holdAudio, releaseAudio } from '../utils/audioExclusive';
 import { createResponseGate } from '../utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../utils/speechGate';
 import { readTranscriptEvent } from '../utils/realtimeTranscript';
+import { readResponseLifecycleEvent } from '../utils/realtimeResponseLifecycle';
 
 /**
  * #405 Realtime 音声会話 (docs/08 §12)。
@@ -189,9 +190,23 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   }, [mark, send]);
 
   const onServerEvent = useCallback((raw: string) => {
-    let msg: { type?: string; name?: string; call_id?: string; arguments?: string; transcript?: string; item?: { id?: string }; error?: { message?: string } };
+    let msg: { type?: string; name?: string; call_id?: string; arguments?: string; transcript?: string; item?: { id?: string }; response?: { id?: string; status?: string }; error?: { message?: string } };
     try { msg = JSON.parse(raw); } catch { return; }
     if (msg.type) respGateRef.current.onServerEvent(msg.type, msg);
+    // ★ #423 応答の一生を記録に残す。**門の挙動は変えていない** —— まず見えるようにする段。
+    //   `active` は門が**このイベントを処理したあと**の思い込みなので、
+    //   `kind='finished'` なのに `active=true` のままなら「門が見ていない名前で終わった」が確定する。
+    //   ★★ 逆に created から終わりの印が 1 つも来ていなければ「そもそも来ない」の側。
+    const lifecycle = readResponseLifecycleEvent(msg.type);
+    if (lifecycle) {
+      mark('response_lifecycle', {
+        event: msg.type,
+        kind: lifecycle,
+        response_id: msg.response?.id ?? null,
+        status: msg.response?.status ?? null,
+        active: respGateRef.current.isResponding(),
+      });
+    }
     // ★ 出力音声の生死は計器になる (AnalyserNode は手元のバッファを捨てても鳴って見えるので、
     //   基準③ の判定にはこちらを使う)。★★ track を戻すのは「離したとき」ではなく
     //   「次の音声が始まったとき」—— 離した時に戻すと、古い応答の残りが鳴る。

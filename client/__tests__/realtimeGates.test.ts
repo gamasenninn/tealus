@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createResponseGate } from '../src/utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../src/utils/speechGate';
 import { readTranscriptEvent } from '../src/utils/realtimeTranscript';
+import { readResponseLifecycleEvent } from '../src/utils/realtimeResponseLifecycle';
 
 /**
  * #405 実測 (2026-09-05、8 往復) で出た 2 件の不具合を固定する (docs/08 §12)。
@@ -405,5 +406,66 @@ describe('readTranscriptEvent — どちら側の発話かを読み取る (#412)
 
   it('★ 関係ないイベントは拾わない', () => {
     expect(readTranscriptEvent({ type: 'response.done', transcript: 'x' })).toBeNull();
+  });
+});
+
+/**
+ * ★ #423 応答が終わっているのに門が「走っている」と思い込んだまま戻らない。
+ *
+ * ★★ **まだ直さない。まず見えるようにする。** 実測 (2026-09-05、通話履歴ルーム) では
+ *   最後の音が鳴り終わって **161.5 秒**経ってから押した発話が断られ、利用者はそのまま閉じた。
+ *   原因の候補は 3 つあるが、`response.created` / `response.done` を**記録に残していない**ので
+ *   どれなのか測れない:
+ *   ```
+ *   a  終わりの合図が届いていない
+ *   b  ★ 門が見ていない**別の名前**で終わった (門は response.done だけを見ている)
+ *   c  created と done の順序が入れ替わった
+ *   ```
+ * ★★★ この関数は**応答の一生に関わるイベントだけ**を拾う。子イベント (delta / output_item /
+ *   逐語) を混ぜると量が多すぎて読めず、しかも `response.audio_transcript.done` のように
+ *   **`.done` で終わるのに応答の終わりではない**ものが紛れる。
+ *   → 段の数 (`response.<名前>` = 2 つ) で切る。
+ */
+describe('readResponseLifecycleEvent — 応答の一生だけを記録に残す (#423)', () => {
+  it('★ 始まりを拾う', () => {
+    expect(readResponseLifecycleEvent('response.created')).toBe('created');
+  });
+
+  it('★ 門が見ている終わり方を拾う', () => {
+    expect(readResponseLifecycleEvent('response.done')).toBe('finished');
+  });
+
+  it('★★ 門が見ていない終わり方も「終わり」として拾う (候補 b の受け皿)', () => {
+    for (const t of ['response.failed', 'response.cancelled', 'response.canceled', 'response.incomplete', 'response.completed']) {
+      expect(readResponseLifecycleEvent(t)).toBe('finished');
+    }
+  });
+
+  it('★★★ 見たことのない response.* は unknown で残す (捨てると候補 b が永久に見えない)', () => {
+    expect(readResponseLifecycleEvent('response.aborted_by_server')).toBe('unknown');
+  });
+
+  it('★★ 子イベントは拾わない (delta / output_item / content_part)', () => {
+    for (const t of ['response.audio.delta', 'response.output_item.added', 'response.content_part.done']) {
+      expect(readResponseLifecycleEvent(t)).toBeNull();
+    }
+  });
+
+  it('★★★ .done で終わる子イベントも拾わない (逐語の完了は応答の終わりではない)', () => {
+    expect(readResponseLifecycleEvent('response.output_audio_transcript.done')).toBeNull();
+    expect(readResponseLifecycleEvent('response.function_call_arguments.done')).toBeNull();
+  });
+
+  it('★ response 以外は拾わない', () => {
+    expect(readResponseLifecycleEvent('output_audio_buffer.started')).toBeNull();
+    expect(readResponseLifecycleEvent('conversation.item.created')).toBeNull();
+    expect(readResponseLifecycleEvent('error')).toBeNull();
+  });
+
+  it('★ 型が無い / 空でも落ちない', () => {
+    expect(readResponseLifecycleEvent(undefined)).toBeNull();
+    expect(readResponseLifecycleEvent('')).toBeNull();
+    expect(readResponseLifecycleEvent('response')).toBeNull();
+    expect(readResponseLifecycleEvent('response.')).toBeNull();
   });
 });

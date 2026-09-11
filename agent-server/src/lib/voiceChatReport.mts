@@ -102,6 +102,30 @@ export interface VoiceChatSummary {
   serverErrors: number;
   /** ★ 原因が特定済みの競合 (docs/08 §12.8)。エラーと分けて数える (#416) */
   knownRaces: number;
+  /**
+   * ★ #423 門が「走っている」と思い込んだまま戻らない形の内訳。
+   *
+   * ★★ **この欄はまだ「直した」を意味しない。** 2026-09-05 の実測では、最後の音が鳴り終わって
+   *   161.5 秒後に押した発話が断られたが、`response.created` / `response.done` を記録に
+   *   残していなかったので**なぜ戻らなかったかが測れなかった**。候補と欄の対応:
+   *   ```
+   *   a  終わりの合図が来ない            → skippedWithNoFinish
+   *   b  門が見ていない名前で終わった     → finishedButStillActive / unknownEvents
+   *   c  created が二重に来た (順序入替)  → createdWhileAwaiting
+   *   ```
+   */
+  responseGate: {
+    created: number;
+    finished: number;
+    /** ★ 終わりの印が来たのに、門は走ったままだった (= 門が `response.done` しか見ていない) */
+    finishedButStillActive: number;
+    /** ★ 始まりに対する終わりの印が 1 つも来ないまま断られた回数 */
+    skippedWithNoFinish: number;
+    /** ★ 終わりを待っている間に、もう 1 つ始まりが来た回数 */
+    createdWhileAwaiting: number;
+    /** ★ 門が見ていない `response.*` の名前ごとの件数 (次に門へ足す名前がここに出る) */
+    unknownEvents: Record<string, number>;
+  };
 }
 
 /**
@@ -121,12 +145,24 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
   let connectionLost = 0;
   let serverErrors = 0;
   let knownRaces = 0;
+  // ★ #423 門が戻らない形の内訳。**直す前に、どの候補なのかを数字で決めるための欄**
+  const gate = {
+    created: 0,
+    finished: 0,
+    finishedButStillActive: 0,
+    skippedWithNoFinish: 0,
+    createdWhileAwaiting: 0,
+    unknownEvents: {} as Record<string, number>,
+  };
 
   for (const rec of records) {
     const ev = (rec.events || []).filter((e) => e && typeof e.t === 'number' && typeof e.type === 'string');
     if (!ev.length) continue;
     durations.push((ev[ev.length - 1].t - ev[0].t) / 1000);
     let turns = 0;
+    // ★ #423 始まりに対する終わりの印を待っているか。**セッションごとに数え直す**
+    //   (跨いで持ち越すと、前の回の取りこぼしが次の回の断りに付く)
+    let awaitingFinish = false;
 
     for (let i = 0; i < ev.length; i++) {
       const e = ev[i];
@@ -191,6 +227,32 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
         if (isKnownRace(d.message)) knownRaces += 1;
         else serverErrors += 1;
       }
+
+      // ★ #423 門が「走っている」と思い込んだまま戻らない形を**分けて**数える。
+      //   合計 1 つにすると 3 つの候補が埋もれる (#421 で 4 件が 3 つの別形だった、と同じ型)。
+      if (e.type === 'response_lifecycle') {
+        if (d.kind === 'created') {
+          gate.created += 1;
+          // ★ 候補 c: 終わりを待っている間に、もう 1 つ始まりが来た
+          if (awaitingFinish) gate.createdWhileAwaiting += 1;
+          awaitingFinish = true;
+        } else {
+          if (d.kind === 'finished') {
+            gate.finished += 1;
+            // ★ 候補 b-i: 終わりの印が来たのに門は走ったまま = 門が見ていない名前で終わった
+            if (d.active === true) gate.finishedButStillActive += 1;
+          } else {
+            // ★ 候補 b-ii: 見たことのない名前。**名前のまま残す** ——
+            //   件数だけにすると、次に門へ何を足すかを決められない
+            const name = typeof d.event === 'string' ? d.event : '(名前なし)';
+            gate.unknownEvents[name] = (gate.unknownEvents[name] || 0) + 1;
+          }
+          awaitingFinish = false;
+        }
+      } else if (e.type === 'response_create_skipped' && d.why === 'responding' && awaitingFinish) {
+        // ★ 候補 a: 終わりの印が 1 つも来ないまま断られた (2026-09-05 の 161 秒の形)
+        gate.skippedWithNoFinish += 1;
+      }
     }
     turnsEach.push(turns);
   }
@@ -236,6 +298,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
     connectionLost,
     serverErrors,
     knownRaces,
+    responseGate: gate,
   };
 }
 
@@ -243,6 +306,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
 export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string {
   const sec = (ms: number) => (ms / 1000).toFixed(2);
   const pct = (r: number) => `${Math.round(r * 100)}%`;
+  const g = s.responseGate;
   const lines = [
     `会話モード 計測まとめ (as of ${asOf})`,
     `母集団  ${s.sessions} セッション / ${s.turns} 往復 / 通話 ${s.durationMin} 分`,
@@ -259,7 +323,19 @@ export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string
     `切断   ${s.connectionLost} 件 / サーバのエラー ${s.serverErrors} 件`
       + (s.knownRaces ? ` (別に、原因特定済みの競合が ${s.knownRaces} 件。docs/08 §12.8)` : ''),
     `返らず ${s.latency.noReplyCount} 往復 (押して離したのに声が鳴らなかった)`,
+    // ★ #423 門の内訳。★★ 記録が無い回を「0 件」と書かない ——
+    //   計器より前のログは「分からない」であって「問題が無かった」ではない
+    g.created || g.finished
+      ? `門     始まり ${g.created} / 終わり ${g.finished}`
+        + ` (終わったのに走ったまま ${g.finishedButStillActive}`
+        + ` / 終わりが来ないまま断られた ${g.skippedWithNoFinish}`
+        + ` / 二重の始まり ${g.createdWhileAwaiting})`
+      : '門     記録なし (#423 の計器より前のログ。★ 0 件ではなく「分からない」)',
   ];
+  // ★ 門が見ていない名前は**名前のまま**出す。次に門へ足す名前がここに出る (候補 b-ii)
+  if (Object.keys(g.unknownEvents).length) {
+    lines.push('', `★ 門が見ていない response.* : ${Object.entries(g.unknownEvents).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  }
   // ★ #420: ① を「その往復で呼んだ道具」で分ける。合計だけ見ていると
   //   「ルームが遅い」に見える (実測: execute_sql の往復だけ中央値が 0.6 秒 遅い)
   if (s.latencyByTool.length > 1) {

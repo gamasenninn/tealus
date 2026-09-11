@@ -255,3 +255,127 @@ describe('parseSinceJst — 日付は JST の 0 時 (#410)', () => {
     expect(Number.isNaN(parseSinceJst('きのう').getTime())).toBe(true);
   });
 });
+
+/**
+ * ★ #423 応答が終わっているのに門が「走っている」と思い込んだまま戻らない。
+ *
+ * ★★ **直す前に数える段。** ブラウザ側が `response_lifecycle` を残すようにしたので、
+ *   ここで**候補を数字に割り当てる**。合計だけ数えると 3 つの形が 1 つに埋もれる (#421 の教訓)。
+ *   ```
+ *   a  終わりの合図が来ない            → ★ skippedWithNoFinish
+ *   b  門が見ていない名前で終わった     → ★ finishedButStillActive / unknownEvents
+ *   c  created が二重に来た (順序入替)  → ★ createdWhileAwaiting
+ *   ```
+ * ★★★ **未知の名前は名前のまま残す** (件数だけにすると、次に何を門へ足すか決められない)。
+ */
+describe('summarizeVoiceChat — 門が戻らない形を分けて数える (#423)', () => {
+  const lifecycle = (t: number, event: string, kind: string, active: boolean, id = 'resp_1') =>
+    ({ t, type: 'response_lifecycle', data: { event, kind, active, response_id: id, status: null } });
+
+  test('★ 正常な 1 往復は、始まり 1 / 終わり 1 で、どの形にも数えない', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true),
+      lifecycle(2000, 'response.done', 'finished', false),
+    ])]);
+    expect(s.responseGate.created).toBe(1);
+    expect(s.responseGate.finished).toBe(1);
+    expect(s.responseGate.finishedButStillActive).toBe(0);
+    expect(s.responseGate.skippedWithNoFinish).toBe(0);
+    expect(s.responseGate.createdWhileAwaiting).toBe(0);
+    expect(s.responseGate.unknownEvents).toEqual({});
+  });
+
+  test('★★ 候補 b-i: 終わりの印が来たのに門は走ったまま (門が見ていない名前で終わった)', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true),
+      lifecycle(2000, 'response.incomplete', 'finished', true),   // ★ active が降りていない
+    ])]);
+    expect(s.responseGate.finishedButStillActive).toBe(1);
+  });
+
+  test('★★★ 候補 b-ii: 見たことのない名前は、名前ごとに数える', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true),
+      lifecycle(2000, 'response.aborted_by_server', 'unknown', true),
+      lifecycle(3000, 'response.aborted_by_server', 'unknown', true),
+    ])]);
+    expect(s.responseGate.unknownEvents).toEqual({ 'response.aborted_by_server': 2 });
+  });
+
+  test('★★ 候補 a: 終わりの印が 1 つも来ないまま断られた (161 秒後に押した実測の形)', () => {
+    const s = summarizeVoiceChat([rec([
+      { t: 100, type: 'response_lifecycle', data: { event: 'response.created', kind: 'created', active: true } },
+      { t: 5000, type: 'output_audio_stopped', data: { event: 'output_audio_buffer.stopped' } },
+      { t: 166500, type: 'ptt_press' },
+      { t: 168000, type: 'ptt_release' },
+      { t: 168001, type: 'response_create_skipped', data: { why: 'responding', pending_tools: 0, playing: false } },
+    ])]);
+    expect(s.responseGate.skippedWithNoFinish).toBe(1);
+  });
+
+  test('★ 終わりの印が来たあとの「断られた」は、この形に数えない (道具などの別の理由)', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true),
+      lifecycle(2000, 'response.done', 'finished', false),
+      { t: 3000, type: 'response_create_skipped', data: { why: 'tool', pending_tools: 1, playing: false } },
+    ])]);
+    expect(s.responseGate.skippedWithNoFinish).toBe(0);
+  });
+
+  test('★★ 候補 c: 終わりを待っている間にもう 1 つ始まりが来た', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true, 'resp_1'),
+      lifecycle(2000, 'response.created', 'created', true, 'resp_2'),
+      lifecycle(3000, 'response.done', 'finished', false, 'resp_2'),
+    ])]);
+    expect(s.responseGate.createdWhileAwaiting).toBe(1);
+    expect(s.responseGate.created).toBe(2);
+  });
+
+  test('★ 古いログ (response_lifecycle が無い) でも落ちず、全部 0 になる', () => {
+    const s = summarizeVoiceChat([rec(turn(0, 1000))]);
+    expect(s.responseGate).toEqual({
+      created: 0, finished: 0, finishedButStillActive: 0,
+      skippedWithNoFinish: 0, createdWhileAwaiting: 0, unknownEvents: {},
+    });
+  });
+});
+
+/**
+ * ★ #423 計器を足しても、**表示に出なければ読まれない**。
+ *
+ * ★★ この repo で 1 度踏んでいる型: 前方互換の「安全に捨てる」は「効かない」と同じ ——
+ *   受け手が選んだ欄しか出さないので、集計に足しただけでは新しい信号が届かない。
+ * ★★★ そして **記録が無いときに 0 と書かない**。#423 より前のログは「門の記録が無い」だけで、
+ *   「問題が無かった」ではない (壊れた値は沈黙より悪い、の裏返し)。
+ */
+describe('formatVoiceChatReport — 門の内訳を表に出す (#423)', () => {
+  const { formatVoiceChatReport } = require('../../src/lib/voiceChatReport.mts') as {
+    formatVoiceChatReport: (s: ReturnType<typeof summarizeVoiceChat>, asOf: string) => string;
+  };
+  const lifecycle = (t: number, event: string, kind: string, active: boolean) =>
+    ({ t, type: 'response_lifecycle', data: { event, kind, active, response_id: 'r', status: null } });
+
+  test('★ 記録があれば、始まり / 終わり と 3 つの内訳を出す', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true),
+      lifecycle(2000, 'response.done', 'finished', false),
+    ])]);
+    const out = formatVoiceChatReport(s, '2026-09-11 14:00');
+    expect(out).toContain('始まり 1');
+    expect(out).toContain('終わり 1');
+  });
+
+  test('★★★ 記録が無い回は「0 件」ではなく「記録なし」と書く (0 を「問題なし」と読ませない)', () => {
+    const out = formatVoiceChatReport(summarizeVoiceChat([rec(turn(0, 1000))]), '2026-09-11 14:00');
+    expect(out).toContain('記録なし');
+  });
+
+  test('★★ 門が見ていない名前は、名前を出す (次に何を足すかが決まる)', () => {
+    const s = summarizeVoiceChat([rec([
+      lifecycle(100, 'response.created', 'created', true),
+      lifecycle(2000, 'response.aborted_by_server', 'unknown', true),
+    ])]);
+    expect(formatVoiceChatReport(s, '2026-09-11 14:00')).toContain('response.aborted_by_server');
+  });
+});
