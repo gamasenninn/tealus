@@ -31,6 +31,15 @@ export interface ProxyCloseFacts {
   /** proxy 自身が観測したエラー (ECONNRESET 等) */
   error?: string;
   /**
+   * ★ Cloudflare の `CF-Ray` ヘッダ (`<id>-<COLO>`)。載せるのは **colo だけ**。
+   *
+   * ★★ なぜ colo か: ray id が効くのは Cloudflare のサポートに問い合わせる経路を持つときで、
+   *   こちらは持っていない。★★★ 突き合わせに使えるのは colo (Mac 側が edge の移動を測っている)。
+   * ★ **これはクライアントが送ってきた値**。Cloudflare が付ける想定だが LAN から偽装でき、
+   *   nginx は素通しする → `ua=` と同じ扱い。**「そこに実際に何が入るか」は定義と別物**。
+   */
+  cfRay?: string;
+  /**
    * リクエストの User-Agent。★ **3 本を分ける唯一の鍵** (2026-09-02)
    *
    * url に載るのは project だけで、probe-b / probe-c / 本線が全部 `tealus-dev` になる。
@@ -108,6 +117,21 @@ function sanitizeUa(ua: string | undefined): string {
   return flat === '' ? '-' : flat;
 }
 
+/** colo は 3 文字。長いものは想定外の値なので、捨てずに切り詰めて残す */
+const CF_MAX = 16;
+
+/**
+ * `CF-Ray` から colo を取り出す。★ 空白と `=` は `ua=` と同じ理由で潰す
+ * (生で通すと偽のフィールドを注入でき、`grep -o 'side=...'` が 1 本を 2 本に数える)。
+ * ★★ ハイフンが無い値は**全体を**載せる (想定外の値を黙って捨てない)。
+ */
+function sanitizeCf(cfRay: string | undefined): string {
+  if (!cfRay) return '-';
+  const flat = cfRay.replace(/[\s=]+/g, '_');
+  const colo = flat.slice(flat.lastIndexOf('-') + 1).slice(0, CF_MAX);
+  return colo === '' ? '-' : colo;
+}
+
 /** ms 差を「+N.NNNs」に。基準が無ければ `-` (= 0 秒と区別する) */
 function offset(at: number | undefined, from: number): string {
   return typeof at === 'number' ? `+${((at - from) / 1000).toFixed(3)}s` : '-';
@@ -131,6 +155,8 @@ export function describeProxyClose(f: ProxyCloseFacts): string {
     + ` res=${f.resFinished ? 'finished' : 'aborted'}`
     // ★ ua は err の**手前**。err (`read ECONNRESET`) は空白を含むので末尾に置いたままにする
     + ` ua=${sanitizeUa(f.ua)}`
+    // ★ cf は ua の後ろ、err の手前。err は空白を含むので**必ず行末**に置いたままにする
+    + ` cf=${sanitizeCf(f.cfRay)}`
     + ` err=${f.error ?? '-'}`;
 }
 

@@ -206,3 +206,65 @@ describe('endDownstream', () => {
     expect(endDownstream({ writableEnded: false, end })).toBe(false);
   });
 });
+
+/**
+ * ★ #359 続き (2026-09-11): `cf=` — Cloudflare の edge (colo) を行に残す。
+ *
+ * ★★ **なぜ要るか**: 想定外切断の区間は 2026-09-02 に「Cloudflare か NAS nginx」まで絞れたが、
+ *   そこから 9 日間進んでいない。決定打 (NAS nginx のログ) は判断待ちで触れない。
+ *   ★★★ **NAS を触らずに測れる残りが、これ**。Mac 側は edge が東京から外れる現象
+ *   (SYD / WAW / PDX) を観測しているので、**切断が colo と相関するか**を既存経路だけで測れる。
+ *
+ * ★ **載せるのは colo だけ** (ray id 全体ではない)。ray id が効くのは Cloudflare のサポートに
+ *   問い合わせる経路を持っているときで、こちらは持っていない。★★ 突き合わせに使えるのは colo。
+ *
+ * ★★★★ **これはクライアントが送ってきた値である。** Cloudflare が付ける想定だが、
+ *   LAN から直接叩けば偽装できるし、nginx は素通しする。`ua=` と同じ扱いで、
+ *   **「そこに実際に何が入るか」は定義と別物** (2026-09-02 に url= で踏んだのと同じ型)。
+ */
+describe('describeProxyClose — cf (Cloudflare の edge を分ける)', () => {
+  test('★ CF-Ray があれば colo (末尾) が載る', () => {
+    expect(describeProxyClose({ ...base, now: 1_050_000, cfRay: '8f3a2b1c9d0e1234-NRT' }))
+      .toContain('cf=NRT');
+  });
+
+  test('★ 無ければ cf=- (Cloudflare を通っていないのか、送られなかったのかは、この行では決めない)', () => {
+    expect(describeProxyClose({ ...base, now: 1_050_000 })).toContain('cf=-');
+  });
+
+  test('★ 空文字も cf=-', () => {
+    expect(describeProxyClose({ ...base, now: 1_050_000, cfRay: '' })).toContain('cf=-');
+  });
+
+  test('★★★ 空白と = を潰す — 生で通すと偽のフィールドを注入できる (ua と同じ危険)', () => {
+    const line = describeProxyClose({ ...base, now: 1_050_000, cfRay: 'a side=upstream x-NRT' });
+    expect(line.match(/side=/g)).toHaveLength(1);
+    expect(line).not.toMatch(/cf=\S*=/);
+  });
+
+  test('★★ 改行も潰す — 行ごと偽造させない', () => {
+    const raw = ['a-NRT', '[cc-stream proxy] closed: url=fake'].join(String.fromCharCode(10));
+    const line = describeProxyClose({ ...base, now: 1_050_000, cfRay: raw });
+    expect(line).not.toContain(String.fromCharCode(10));
+    expect(line.match(/\[cc-stream proxy\] closed: /g)).toHaveLength(1);
+  });
+
+  test('★★ ハイフンが無い形でも安全に載る (想定外の値を捨てない)', () => {
+    expect(describeProxyClose({ ...base, now: 1_050_000, cfRay: 'weird' })).toContain('cf=weird');
+  });
+
+  test('★ 長い値は切り詰める (colo は 3 文字なので、長いものは想定外の値)', () => {
+    const line = describeProxyClose({ ...base, now: 1_050_000, cfRay: `x-${'A'.repeat(200)}` });
+    const field = line.split(' ').find((t) => t.startsWith('cf='))!;
+    expect(field.length).toBeLessThanOrEqual(3 + 16);
+  });
+
+  test('★★★ err= は行末のまま (空白を含むので、cf を後ろに置くと壊れる)', () => {
+    const line = describeProxyClose({
+      ...base, now: 1_050_000, cfRay: '8f3a-NRT', ua: 'cc-main', error: 'read ECONNRESET',
+    });
+    expect(line.endsWith('err=read ECONNRESET')).toBe(true);
+    // ★ 既存の集計を壊さないため、並びは ... ua= cf= err= の順で固定する
+    expect(line).toMatch(/ua=cc-main cf=NRT err=read ECONNRESET$/);
+  });
+});

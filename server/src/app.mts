@@ -134,9 +134,15 @@ app.use('/agent-api', createProxyMiddleware({
         startedAt: Date.now(),
         bytes: 0,
         ua: req.headers['user-agent'],
+        // ★ Cloudflare の edge (colo) を残す (2026-09-11)。切断区間は 9/02 に
+        //   「Cloudflare か NAS nginx」まで絞れたが、決定打の NAS のログは判断待ちで触れない。
+        //   ★★ NAS を触らずに測れる残りがこれ —— Mac 側が edge の移動 (SYD / WAW / PDX) を
+        //   観測しているので、**切断が colo と相関するか**を既存経路だけで測れる。
+        //   ★★★ ua と同じく**クライアントが送ってきた値**で、偽装できる (詳細は ccStreamProxyLog)。
+        cfRay: req.headers['cf-ray'] as string | undefined,
       } as {
         url: string; startedAt: number; bytes: number;
-        upstreamClosedAt?: number; error?: string; ua?: string;
+        upstreamClosedAt?: number; error?: string; ua?: string; cfRay?: string;
       };
       // ★ 1 リクエストに 1 つだけ持たせる。proxyRes / error / close の 3 か所から書き込む
       (req as unknown as { _ccProxyFacts?: typeof facts })._ccProxyFacts = facts;
