@@ -147,11 +147,19 @@ Monitor (
 ```sh
 P={project_name}; API={本体の origin}; STREAM={stream_url}
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
-FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s)
+FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=
+get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
+              -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
+fetch_meta() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P"; }
+auth_prepare() {                                    # ★ #427 トークンは使い回し、401 のときだけ取り直す
+  [ -n "$TOKEN" ] || TOKEN=$(get_token)             # 初回だけ login を踏む
+  RAW=$(fetch_meta); CODE=$(printf '%s\n' "$RAW" | tail -1); META=$(printf '%s\n' "$RAW" | sed '$d')
+  [ "$CODE" = "401" ] || return 0                   # ★ 401 以外はそのまま (000/404 は「古いサーバ / 到達不能」の道へ)
+  TOKEN=$(get_token)                                # ★ 失効した → 1 回だけ取り直す
+  RAW=$(fetch_meta); CODE=$(printf '%s\n' "$RAW" | tail -1); META=$(printf '%s\n' "$RAW" | sed '$d')
+}                                                   # ★★ 2 回目も 401 なら諦めて戻る (速い再接続ループに入らない)
 while true; do
-  TOKEN=$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
-          -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}")
-  META=$(curl -s -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P")
+  auth_prepare
   MAX_AGE=$(printf '%s' "$META" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).max_age_ms/1000);Number.isFinite(v)?v:0}catch(e){0}")
   if [ "$MAX_AGE" = "0" ]; then                     # 古いサーバ / 到達できない → 仮定値で続行
     MAX_AGE=3300
@@ -211,7 +219,7 @@ done
 | 部分 | なぜ必要か |
 |---|---|
 | `while true` … `sleep 5` | ★ Monitor は `persistent: true` のとき **exit で監視ごと終わる**。curl がネットワーク断や nginx のタイムアウトで死ぬと、**セッションは黙って聞かなくなる**。`tail -F` には無い HTTP 固有の失敗モードなので、自力で張り直す。`sleep 5` はビジーループ防止 |
-| 毎周の `login` | トークンは 7 日で失効する。周回ごとに取り直せば失効が構造的に起きない。**長寿命 JWT は使わない** (本体の `authenticate` は `decoded.id` で users を引くため、`{userId:...}` 形式の手製トークンでは `/api/rooms` が引けず認可できない) |
+| `auth_prepare` (トークンの使い回し) | ★ **2026-09-11 に「毎周 login」から変えた** (#427)。以前の理由は「トークンは 7 日で失効するので周回ごとに取り直せば失効が構造的に起きない」だったが、**認可の取り直し (#360 の目的) はトークンを使い回しても果たされる** —— `allowedRooms` は接続ごとに `/api/rooms` を引いて作られ (JWT に入っていない)、`is_active` はリクエストごとに見られる。★★ 実測 (2026-09-11): bridge の login は **1 日 83 回**で全 login の 55%、bcrypt は 1 回 約 51ms = **4.2 秒/日**。★★★ 効くのは CPU より**平文の資格情報を 1 日 83 回 送っていた**方で、これが約 1/180 になる。★ 代わりに **401 の分岐が要る**: `/pending` の status を `-w` で取り、401 なら 1 回だけ取り直す。**2 回目も 401 なら諦めて戻る** (繰り返すと速い再接続ループになる)。★★ `{userId:...}` 形式の手製トークンは相変わらず使えない (本体の `authenticate` は `decoded.id` で users を引く)。★★★ **テストがある**: `agent-server/__tests__/unit/listenTealusSkillAuth.test.mts` が**この文面から関数を読み出して実行する** (写しを持たないので、ここを直せばテストも同じものを見る) |
 | `>> "$LOG"` + `SINCE` | ★ **受信済みカーソル**。`.last_processed` (watermark) は reply 成功時にしか進まないので、それを `since` に使うと **L2 で保留中の mention が再接続のたびに再提示される**。受信した時点で進むカーソルを別に持つことで、「切断中のイベントは拾う / 未処理は再送しない」を両立する |
 | ★ `case` による **許可方式**の仕分け | **除外方式 (`grep -v '"__hb"'`) にしてはいけない。** proxy の 504 などで返る **HTML / テキストのエラー本文が素通りして受信ログに混ざり、`SINCE` の計算が壊れて空になる** = 再接続で切断中の mention を丸ごと取りこぼす。`{"id"` で始まる行だけをログに入れる。**2026-08-01 の dogfood で実際に踏んだ** |
 | `SINCE` を `grep '^{"id"'` 経由で取る | 同じ理由の二重防御。ログに非 JSON 行が混ざってもカーソルが壊れない |
@@ -237,7 +245,7 @@ done
 | ★ 寿命切断も `__bye` で予告される (#366) | **切断の理由を知っているのはサーバだけ**。経過秒から逆算する方式 (上の窓) は `date +%s` が単調増加する前提に乗っていて、**時計が動いた瞬間に誤判定する**。サーバが `{"__bye":{"reason":"max_age"}}` を送れば、時計がずれても丸めがどうでも判定は変わらない。<br>`expect_back_ms` は停止時より**短い** (サーバは動き続けているので即座に繋ぎ直せる)。長くすると、寿命切断の直後に起きた本物の障害がその分だけ黙って見過ごされる |
 | ★ `__bye` の中身を stderr に 1 行残す | 猶予窓を張るだけだと **理由 (`shutdown` / `max_age`) が消える**。stdout に出すと起こしてしまうので stderr へ。**通知はしないが記録は残す**、の使い分け |
 | ★ クラッシュでは `__bye` が出ない | これは欠陥ではなく**意図した振る舞い**。計画的な停止 (SIGINT / SIGTERM) だけが静かになり、クラッシュ・電源断・`kill -9` は異常として残る。**予告できるものは予告し、予告できないものは異常として残る** —— 仕組みから自然にそうなるので、例外処理を書く必要がない |
-| `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。`/api/auth/login` は毎回 bcrypt を踏むので CPU がスパイクする。3〜12 秒に散らす。`RANDOM` は POSIX `sh` に無いので PID で代用する |
+| `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。3〜12 秒に散らす。★ **以前は「login が毎回 bcrypt を踏むので CPU がスパイクする」を理由に挙げていたが、#427 でトークンを使い回すようになったので、その理由は消えた**。★★ **jitter 自体は残す** —— 同時刻に N セッションが同じ口へ殺到すること自体は変わらない。`RANDOM` は POSIX `sh` に無いので PID で代用する |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 
 > ★ **接続コマンドを変えたら、配布前に構文を通すこと。**
