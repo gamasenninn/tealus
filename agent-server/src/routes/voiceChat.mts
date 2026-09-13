@@ -28,6 +28,9 @@ import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { getOrCreateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { getBotIdentity } from '../webhook/handler.mts';
+// ★ #437 Light と同じ 2 つを、会話モードにも載せる (どちらも env で opt-in)
+import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
+import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 
 export const router = express.Router();
 
@@ -196,12 +199,43 @@ function toFunctionTools(tools: McpToolLike[]): Array<Record<string, unknown>> {
 }
 
 /**
- * ★ instructions は最小にする。
- *   既存経路が毎ターン約 96,000 tokens を読んでいて、それが遅さの正体だった (docs/08 §2.4)。
- *   **同じことを Realtime で繰り返さない** — 辞書も light_prompt.md も入れない。
- *   過去のやりとりは「毎回読ませる」のではなく「必要なときに道具で引く」に変える。
+ * ★ instructions の中身。**「最小にする」から「Light と同じ知識を載せる」へ 2 段で変わった。**
+ *
+ * ```
+ * 2026-09-05 当初  ★ 最小。辞書も light_prompt.md も入れない
+ *                  根拠: 既存経路が毎ターン約 96,000 tokens = 遅さの正体 (docs/08 §2.4)
+ * 2026-09-05 訂正  ★★ light_prompt.md を戻した —— 「十把一絡げだった」。
+ *                  大きいのは辞書 (57KB) だけで light_prompt は 8.8KB
+ * 2026-09-13 #437  ★★★ organon と業務語彙も載せた (利用者の判断)
+ * ```
+ * ★★★★ #437 の根拠 (どちらも実測):
+ * ```
+ * ★ 大きさ   organon 21.8KB / 業務語彙 13.8KB —— ★★ 辞書は 57KB ではなかった
+ *            (prompt に載るのは alias を持つ語だけ = 214 行)
+ * ★★ 速さ    2026-09-13 の実測で 53 回・中央値 2,022ms・2 秒以内 49% = ★ 基準① は既に未達
+ *            → **外しても速さは買えていない**
+ * ★★★ 精度  利用者の指摘「ルームの会話精度と会話モードの精度が違いすぎる」。
+ *            ★ Light は organon + 辞書を受け取り、会話モードだけ受け取っていなかった
+ * ```
+ * ★ 過去のやりとりは、いまも「毎回読ませる」のではなく「必要なときに道具で引く」。
+ * ★★ `default_system_prompt.md` は**入れないまま** (毎ターン道具の往復が挟まり、基準① と衝突する)。
  */
-function buildInstructions(roomName: string, workspacePath: string): string {
+export interface InstructionDeps {
+  organon: () => string;
+  vocab: () => string;
+}
+
+/** ★ #437 既定は本番と同じ経路 (Light と同じ 2 つを読む) */
+const DEFAULT_INSTRUCTION_DEPS: InstructionDeps = {
+  organon: () => loadOrganonPolysemeForPrompt(),
+  vocab: () => loadVocabForPrompt(),
+};
+
+export function buildInstructions(
+  roomName: string,
+  workspacePath: string,
+  deps: InstructionDeps = DEFAULT_INSTRUCTION_DEPS,
+): string {
   const base = [
     `あなたは社内メッセンジャー Tealus の「${roomName}」ルームで、音声で会話するアシスタントです。`,
     '過去のやりとりは道具 (get_messages / search_messages) で引けます。必要になったときだけ引いてください。',
@@ -219,17 +253,42 @@ function buildInstructions(roomName: string, workspacePath: string): string {
   // ★★★ `default_system_prompt.md` は入れない。**サイズではなく中身の理由**:
   //   「応答前に必ず get_messages で直近を確認」「latency より質を優先」と書いてあり、
   //   毎ターン道具の往復が挟まる = 基準① (2 秒) と正面から衝突する。
+  const parts = [base];
+
   try {
     const roomPrompt = path.join(workspacePath, 'light_prompt.md');
     if (fs.existsSync(roomPrompt)) {
       const text = fs.readFileSync(roomPrompt, 'utf8').trim();
-      if (text) return `${base}\n\n## このルームの決まり\n\n${text}`;
+      if (text) parts.push(`## このルームの決まり\n\n${text}`);
     }
   } catch (err) {
     // 読めなくても会話は始める (指示が薄くなるだけ)
     logger.warn(`[voice-chat] light_prompt.md を読めませんでした: ${err instanceof Error ? err.message : String(err)}`);
   }
-  return base;
+
+  // ★★★★ #437 organon と業務語彙を載せる (2026-09-13、利用者の判断)。
+  //
+  // ★ 発端: 「ルームの会話精度と会話モードの精度があまりにも違いすぎる」。
+  //   実物を読むと **会話モードだけが organon も辞書も受け取っていなかった** ——
+  //   Light v1/v2 は自分で、Deep は dispatcher が呼んでおり、ここだけ別ルートだった。
+  //
+  // ★★ 外していた根拠 (§2.4「毎ターン約 96,000 tokens が遅さの正体」) は、実測で当てはまらない:
+  //   organon 21.8KB / 業務語彙 13.8KB (★ 57KB ではない。alias を持つ語だけ) / light_prompt 8.8KB。
+  //   ★★★ そして速さの基準はすでに未達 (2026-09-13: 53 回・中央値 2,022ms・2 秒以内 49%)。
+  //   **外しても速さは買えていない。**
+  //
+  // ★ どちらも env で opt-in (ORGANON_INJECT / VOCAB_INJECT)。OFF なら空文字が返るので何も足さない。
+  // ★★ 落ちても会話は始める —— 知識が薄くなるだけで、止める理由にはしない。
+  for (const [name, load] of [['organon', deps.organon], ['業務語彙', deps.vocab]] as const) {
+    try {
+      const block = load().trim();
+      if (block) parts.push(block);
+    } catch (err) {
+      logger.warn(`[voice-chat] ${name} を読めませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return parts.join('\n\n');
 }
 
 /**
@@ -284,11 +343,15 @@ router.post('/session', async (req, res) => {
     }
 
     const roomName = typeof resolved.room.name === 'string' ? resolved.room.name : 'このルーム';
+    // ★ #437 大きさを記録に残す。次に「遅い」と言うときの材料になる ——
+    //   ★★ 2026-09-05 に「96,000 tokens が遅さの正体」と書いたときは、**何がどれだけ大きいかを
+    //   測っていなかった** (実際は辞書 57KB の話で、light_prompt は 8.8KB だった)。黙って膨らませない。
+    const instructions = buildInstructions(roomName, workspacePath);
     const sessionConfig = {
       session: {
         type: 'realtime',
         model: config.REALTIME_MODEL,
-        instructions: buildInstructions(roomName, workspacePath),
+        instructions,
         tools: toFunctionTools(picked),
         tool_choice: 'auto',
         audio: {
@@ -324,7 +387,8 @@ router.post('/session', async (req, res) => {
     });
 
     // ★ 外した道具の名前も出す。設定画面が無かった頃はこれが唯一の手段だった (#418 で画面が付く)
-    logger.info(`[voice-chat] session ${sessionId.slice(0, 8)} room=${roomId} tools=${picked.length} by ${userId}`
+    logger.info(`[voice-chat] session ${sessionId.slice(0, 8)} room=${roomId} tools=${picked.length} `
+      + `instructions=${Buffer.byteLength(instructions, 'utf8')}B by ${userId}`
       + (dropped.length ? ` (外した: ${dropped.join(', ')})` : ''));
     res.json({ session_id: sessionId, client_secret: secret.value, model: config.REALTIME_MODEL });
   } catch (err) {

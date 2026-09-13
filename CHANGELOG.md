@@ -39,6 +39,13 @@
 
 ### Fixed
 
+- **★★★ 会話モードが organon も辞書も受け取っていなかったのを直した** ([#437](https://github.com/gamasenninn/tealus/issues/437)): 利用者の指摘「**ルームの会話精度と会話モードの精度があまりにも違いすぎる**」。
+  - ★ 原因は経路の取り残し —— Light は自分で、Deep は dispatcher が organon / 業務語彙を読んでいたが、**会話モードだけ別ルートでどちらも読んでいなかった**。★★ 道具からも引けない (共有 MCP は tealus と tavily、filesystem は workspace 配下だけ)。
+  - ★★ 外していた根拠 (「毎ターン 96,000 tokens が遅さの正体」) は実測で外れていた: **organon 21.8KB / 業務語彙 13.8KB** (★ 辞書は 57KB ではない。prompt に載るのは alias を持つ語だけ) で、既に戻してある `light_prompt.md` (8.8KB) と同じ桁。
+  - ★★★ そして**速さの基準はもう満たしていない** (2026-09-13 実測: 53 回・中央値 2,022ms・2 秒以内 49%、基準は 9 割) —— **外しても速さは買えていなかった**。
+  - ★ env の opt-in は維持 (`ORGANON_INJECT` / `VOCAB_INJECT` が OFF なら 1 文字も足さない)。ルームの決まり (`light_prompt.md`) も落とさない。★★ 起動ログに `instructions=NNNN B` を出すようにした (次に「遅い」と言うときの材料)。
+  - ★ 設計書 `docs/08` §12.12.1 に、**「辞書は入れない」を覆した理由 3 つ**を残した。
+
 - **★★ エラー案内が「codex を更新してください」と誤誘導していたのを直した** ([#431](https://github.com/gamasenninn/tealus/issues/431)): `codex_models_manager: failed to refresh available models` を **「CLI が古い」と決め打ち**していた。
   - ★★★ **同じ 1 行が 2 つの原因で出る** — 2026-09-06 は確かに codex が古かったが、2026-09-11 の採用者環境は **codex は新しく、モデルが使えなかった**。★ それでも同じ行が出る。**サポート班はこの誤診で更新作業を 2 回させている。**
   - ★ 案内を**両義**にした:「まず設定しているモデル名 (`AGENT_LIGHT_MODEL` / `AGENT_DEEP_CODEX_MODEL`) を確認、直らなければ codex を更新」。★★ **順番は安い方から** (モデル名の確認は 1 分、codex の更新は数分 + 再起動)。
