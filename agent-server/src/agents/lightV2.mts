@@ -27,7 +27,12 @@ import * as botApi from '../lib/botApi.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
-import { detectCodexAuthError, buildAuthFailUserMessage } from '../lib/codexAuthError.mts';
+import {
+  detectCodexAuthError,
+  buildAuthFailUserMessage,
+  buildKnownCauseUserMessage,
+  type CodexAuthErrorResult,
+} from '../lib/codexAuthError.mts';
 import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
 
@@ -230,6 +235,9 @@ export interface ProcessLightV2Args {
  */
 export async function processLightV2({ roomId, prompt, workspacePath, suppressAutoPost = false }: ProcessLightV2Args): Promise<string | null> {
   let lastAgentMessage: string | null = null;
+  // ★★★ #431 stream の途中で原因が分かったら覚えておく。**最後の例外より確かなことがある** ——
+  //   2026-09-11 の採用者環境では、断定的な 400 本文が先に来て、両義な codex の落ち跡が後に来た。
+  let streamCause: CodexAuthErrorResult | null = null;
   // #292 follow-up: LLM が同 room へ send_message tool を call した場合は、
   // 最終 response auto-post を skip (= cross-room delegation の「2 件返信」防止、
   // 6/13 12:40 業務メモ dogfood で観察)
@@ -401,7 +409,10 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
               await botApi.pushStatus(roomId, 'idle').catch(() => {});
               return null;
             }
-            logger.error(`[LightV2] stream error: ${event.message}`);
+            // ★ #431 分類できた原因は覚えておき、最後に部屋へ出す 1 行に使う。
+            //   ★★ ここでは投げない (このあと例外で catch に落ちるので、2 通出てしまう)
+            if (authResult.kind) streamCause = authResult;
+            logger.error(`[LightV2] stream error (${authResult.kind ?? '不明'}): ${event.message}`);
           }
         } catch (eventErr) {
           const message = eventErr instanceof Error ? eventErr.message : String(eventErr);
@@ -488,7 +499,12 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     }
     try {
       // ★ 部屋には全文を投げない。codex が落ちると 16 万字が user に届く (2026-08-30 実測)
-      await botApi.pushMessage(roomId, `Light v2 でエラーが発生しました: ${briefError(message, 500)}`);
+      // ★★ #431 原因が分かっているときは案内に差し替える。分からないときは生の抜粋のまま
+      await botApi.pushMessage(roomId, buildLightV2FailureMessage({
+        streamCause,
+        finalCause: authResult,
+        rawExcerpt: briefError(message, 500),
+      }));
     } catch (pushErr) {
       const pushMessage = pushErr instanceof Error ? pushErr.message : String(pushErr);
       logger.error(`Failed to send error message: ${pushMessage}`);
@@ -497,6 +513,30 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
   } finally {
     lightRegistry.unregister(roomId);
   }
+}
+
+/**
+ * ★★★★ #431 Light v2 が落ちたときに部屋へ出す 1 行を決める (2026-09-12)。
+ *
+ * ★ 情報は **2 つのタイミング**で来る。2026-09-11 の採用者環境がその実例:
+ * ```
+ * ① stream の途中  400 「そのモデルは ChatGPT アカウントの codex では使えない」 ★ 断定的
+ * ② 最後の例外      codex_models_manager: failed to refresh available models      ★★ 両義 (#431)
+ * ```
+ * ★★★ **先に来る ① の方が確かなことが多い** (相手のサービスが名指ししている)。
+ * ② は codex が落ちた跡で、**モデルが原因でも CLI が古くても同じ行**が出る。
+ *
+ * ★★★★★ **分からないときは差し替えない。** 案内文にすると
+ * 「AI の起動に失敗しました。ログを確認してください」になり、**生の抜粋より情報が減る**。
+ */
+export function buildLightV2FailureMessage(args: {
+  streamCause: CodexAuthErrorResult | null;
+  finalCause: CodexAuthErrorResult;
+  rawExcerpt: string;
+}): string {
+  const known = (args.streamCause ? buildKnownCauseUserMessage(args.streamCause) : null)
+    ?? buildKnownCauseUserMessage(args.finalCause);
+  return known ?? `Light v2 でエラーが発生しました: ${args.rawExcerpt}`;
 }
 
 export function splitMessage(text: string, maxLength: number): string[] {

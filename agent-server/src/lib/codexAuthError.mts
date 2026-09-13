@@ -38,8 +38,14 @@ export const AUTH_FAIL_PATTERNS: AuthFailPattern[] = [
  * **76KB のモデル一覧 JSON の中の `unauthorized` の 1 語**に中信頼度パターンが反応したこと。
  */
 export const NON_AUTH_PATTERNS: AuthFailPattern[] = [
-  // codex が新しいモデル一覧を解釈できない (= CLI が古い)
-  { kind: 'cli_outdated', re: /failed to decode models response|codex_models_manager/i },
+  // ★★★★ #431: **断定できる形を先に置く。**
+  //   2026-09-11 の採用者環境では、この 400 本文の**あとに** codex_models_manager の行が出た。
+  //   後ろの両義な行に先に当たると、**確実に言えることを曖昧な案内に落としてしまう**。
+  { kind: 'model_not_supported', re: /not supported when using Codex with a ChatGPT account/i },
+  // ★★★ #431: 名前を `cli_outdated` から変えた。**これは観測であって、原因ではない。**
+  //   2026-09-06 は確かに CLI が古かったが、2026-09-11 は **CLI は新しく、モデルが使えなかった**。
+  //   ★ 同じ行が 2 つの原因で出る以上、名前でも案内でも原因を断定しない。
+  { kind: 'models_refresh_failed', re: /failed to decode models response|codex_models_manager/i },
 ];
 
 /**
@@ -97,11 +103,34 @@ export function detectCodexAuthError(message: string | undefined): CodexAuthErro
  */
 export function buildCodexErrorUserMessage(result: CodexAuthErrorResult): string {
   if (result.isAuth) return buildAuthFailUserMessage();
-  if (result.kind === 'cli_outdated') {
-    return 'codex が新しい応答を解釈できませんでした。サーバーで codex を更新してください (`npm i -g @openai/codex@alpha`)。';
+  if (result.kind === 'model_not_supported') {
+    // ★ 断定してよい形。相手 (OpenAI) が「使えない」と名指ししている
+    return 'そのモデルは ChatGPT アカウントの codex では使えません。'
+      + 'サーバーの設定 (AGENT_LIGHT_MODEL / AGENT_DEEP_CODEX_MODEL) を確認してください。';
+  }
+  if (result.kind === 'models_refresh_failed') {
+    // ★★★ #431: 両義なので両方出す。★ 順番は「安い方から」——
+    //   モデル名の確認は 1 分、codex の更新は数分 + 再起動。
+    //   ★★ 2026-09-06 は codex が古く、2026-09-11 はモデルだった。**どちらも起きている。**
+    return 'モデル一覧の取得に失敗しました。まず設定しているモデル名 '
+      + '(AGENT_LIGHT_MODEL / AGENT_DEEP_CODEX_MODEL) を確認してください。'
+      + '直らなければサーバーで codex を更新してください (`npm i -g @openai/codex@alpha`)。';
   }
   // ★ 原因が分からないときは、原因を名乗らずに調べ先を出す
   return 'AI の起動に失敗しました。サーバーのログ (agent-server) を確認してください。';
+}
+
+/**
+ * ★★★ #431 原因が**分かったときだけ** 1 行を返す (分からなければ `null`)。
+ *
+ * ★ `buildCodexErrorUserMessage` は原因不明でも「ログを確認してください」を返すので、
+ *   **生のエラー本文を出している呼び出し側がそれに差し替えると、情報が減る**。
+ *   実際 2026-09-11 の 400 本文は、**そのまま読めば原因が分かる文**だった。
+ * → ★★ 「分かったときは案内文、分からないときは呼び出し側の既存の出し方」を選べるようにする。
+ */
+export function buildKnownCauseUserMessage(result: CodexAuthErrorResult): string | null {
+  if (!result.isAuth && !result.kind) return null;
+  return buildCodexErrorUserMessage(result);
 }
 
 /**

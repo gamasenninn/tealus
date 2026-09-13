@@ -5,7 +5,13 @@
  * 12 件 = 6/5 fixture / 6/8 fixture 否定 / 4 pattern 個別 / 境界 / 多言語混入。
  */
 
-import { detectCodexAuthError, buildAuthFailUserMessage, buildCodexErrorUserMessage, AUTH_FAIL_PATTERNS } from '../../src/lib/codexAuthError.mts';
+import {
+  detectCodexAuthError,
+  buildAuthFailUserMessage,
+  buildCodexErrorUserMessage,
+  buildKnownCauseUserMessage,
+  AUTH_FAIL_PATTERNS,
+} from '../../src/lib/codexAuthError.mts';
 
 describe('detectCodexAuthError (pre-α、#292 follow-up)', () => {
   test('6/5 サポート班 fixture → isAuth=true (= pattern array 順序で session_ended が先 hit)', () => {
@@ -128,14 +134,19 @@ describe('detectCodexAuthError — 認証以外を認証と言わない (#422)',
     expect(r.isAuth).toBe(false);
   });
 
-  test('★★ その代わり「codex が古い」と分類する', () => {
+  /**
+   * ★ #431 (2026-09-12) で名前を変えた。
+   * 旧: `cli_outdated` —— **観測 (models の取得に失敗した) ではなく、推測した原因 (CLI が古い)** を
+   * 名前にしていた。実際は **モデルが使えないときにも同じ行が出る** (下の #431 の block)。
+   * → ★★ 名前は観測の方に寄せる。**推測を名前にすると、その推測が案内文に出る。**
+   */
+  test('★★ その代わり「モデル一覧の取得に失敗」と分類する (原因は名乗らない)', () => {
     const r = detectCodexAuthError(MODELS_DECODE_ERROR);
-    expect(r.kind).toBe('cli_outdated');
+    expect(r.kind).toBe('models_refresh_failed');
   });
 
-  test('★★ 案内は codex の更新を指す (ログインではない)', () => {
+  test('★★ 案内はログインを指さない', () => {
     const msg = buildCodexErrorUserMessage(detectCodexAuthError(MODELS_DECODE_ERROR));
-    expect(msg).toMatch(/codex/i);
     expect(msg).not.toMatch(/サインイン|ログイン/);
   });
 
@@ -160,5 +171,105 @@ describe('detectCodexAuthError — 認証以外を認証と言わない (#422)',
     const msg = buildCodexErrorUserMessage(detectCodexAuthError('ERROR: 見たことのない何か'));
     expect(msg).toMatch(/ログ/);
     expect(msg).not.toMatch(/サインイン/);
+  });
+});
+
+/**
+ * ★★★★★ #431 — `codex_models_manager` は「CLI が古い」の印ではない (2026-09-12 実測)
+ *
+ * ## 何が起きたか
+ *
+ * 採用者#2 環境 (2026-09-11 20:12:31) で Light v2 が落ちたときのログ:
+ *
+ * ```
+ * [LightV2] stream error: 400
+ *   {"type":"invalid_request_error",
+ *    "message":"The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account."}
+ * [LightV2] auth failed (unauthorized): Codex Exec exited with code 1
+ *   ERROR codex_models_manager::manager: failed to refresh available models: ... unknown variant `max` ...
+ * ```
+ *
+ * ★ **この環境の codex は古くなかった。** 原因は**モデル**だったのに、`codex_models_manager` の行は出る。
+ * → ★★ **同じ 1 行が 2 つの原因で出る。** #422 はそれを「CLI が古い」と決め打ちしていた。
+ * → ★★★ `f8ac2f1` のコミットメッセージに書いたとおり、**サポート班はこの誤診で更新作業を 2 回させている。**
+ *   その誤診を**コードが自動でやる**形になっていた。
+ *
+ * ## 直し方の方針
+ *
+ * ```
+ * ★ 400 本文は 曖昧でない (「ChatGPT アカウントでは使えない」と名指し) → 断定してよい
+ * ★★ codex_models_manager は 両義 → ★★★ 案内も両義にする。順番は「モデル設定が先」
+ *    (モデル設定の確認は 1 分、codex の更新は数分 + 再起動。安い方から試させる)
+ * ```
+ */
+describe('detectCodexAuthError — 印が両義のときは断定しない (#431)', () => {
+  /** 2026-09-11 20:12:31 の実物 (Light v2 の event.message) */
+  const MODEL_NOT_SUPPORTED_400 =
+    '400 {"type":"invalid_request_error","message":"The \'gpt-5.4-mini\' model is not supported '
+    + 'when using Codex with a ChatGPT account."}';
+
+  /** 同じ落ち方の、少しあとに出る stderr (外側 catch に来る方) */
+  const MODELS_REFRESH_STDERR =
+    'Codex Exec exited with code 1\n'
+    + '  ERROR codex_models_manager::manager: failed to refresh available models: unknown variant `max`';
+
+  test('★★★ 400 本文は「認証切れ」ではない', () => {
+    expect(detectCodexAuthError(MODEL_NOT_SUPPORTED_400).isAuth).toBe(false);
+  });
+
+  test('★★★★ 400 本文は model_not_supported として拾う (今は kind=null で何も言えていない)', () => {
+    expect(detectCodexAuthError(MODEL_NOT_SUPPORTED_400).kind).toBe('model_not_supported');
+  });
+
+  test('★★★ その案内はモデルの設定を指す (codex の更新でもログインでもない)', () => {
+    const msg = buildCodexErrorUserMessage(detectCodexAuthError(MODEL_NOT_SUPPORTED_400));
+    expect(msg).toMatch(/モデル/);
+    expect(msg).not.toMatch(/サインイン|ログイン/);
+    expect(msg).not.toMatch(/npm i -g/);
+  });
+
+  test('★★★★★ 両方が 1 つの文字列に混ざったら、断定できる方 (400 本文) が勝つ', () => {
+    const mixed = `${MODEL_NOT_SUPPORTED_400}\n${MODELS_REFRESH_STDERR}`;
+    expect(detectCodexAuthError(mixed).kind).toBe('model_not_supported');
+  });
+
+  test('★★★★ models の取得失敗の案内は 両義にする —— モデル設定にも触れる', () => {
+    const msg = buildCodexErrorUserMessage(detectCodexAuthError(MODELS_REFRESH_STDERR));
+    expect(msg).toMatch(/モデル/);      // ★ 藤井さんの原因はこちらだった
+    expect(msg).toMatch(/codex/i);      // ★ CLI が古い可能性も残す (両義なので両方出す)
+  });
+
+  test('★★ 両義の案内は「モデル」を先に出す (安い方から試させる)', () => {
+    const msg = buildCodexErrorUserMessage(detectCodexAuthError(MODELS_REFRESH_STDERR));
+    expect(msg.indexOf('モデル')).toBeLessThan(msg.search(/codex/i));
+  });
+});
+
+/**
+ * ★★★ #431 — 分からないときに「分かったふり」をさせないための入口
+ *
+ * `buildCodexErrorUserMessage` は **原因不明でも 1 行を返す**
+ * (「AI の起動に失敗しました。ログを確認してください」)。
+ * ★ Light v2 の現行はこれを使わず、**生のエラー抜粋 500 字**を部屋に出している。
+ * ★★ 生の抜粋の方が情報量が多い場面がある —— 実際、2026-09-11 の 400 本文は
+ *   **そのまま読めば原因が分かる文**だった。
+ * → ★★★ **原因が分かったときだけ案内文に差し替える**ための関数を分ける。
+ *   (呼び出し側が「分かったかどうか」を自分で判定しなくてよくする)
+ */
+describe('buildKnownCauseUserMessage — 分かったときだけ 1 行を返す (#431)', () => {
+  test('★★ 認証切れなら auth の案内', () => {
+    const msg = buildKnownCauseUserMessage(detectCodexAuthError('Your session has ended'));
+    expect(msg).toBe(buildAuthFailUserMessage());
+  });
+
+  test('★★ 分かっている非認証の形なら、その案内', () => {
+    const msg = buildKnownCauseUserMessage(
+      detectCodexAuthError('400 The \'gpt-5.4-mini\' model is not supported when using Codex with a ChatGPT account.'),
+    );
+    expect(msg).toMatch(/モデル/);
+  });
+
+  test('★★★★ 分からないときは null (= 呼び出し側が生の抜粋を出せる)', () => {
+    expect(buildKnownCauseUserMessage(detectCodexAuthError('ERROR: 見たことのない何か'))).toBe(null);
   });
 });
