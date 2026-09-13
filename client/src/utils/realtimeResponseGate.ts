@@ -43,11 +43,43 @@ export interface ResponseGate {
   activeItemId: () => string | null;
   /** truncate 用に item_id を取り出す。★ 一度取ったら消える (二度 truncate しない) */
   takeItemForTruncate: () => string | null;
+  /**
+   * ★★★ #432 道具の取り残しだけを 0 に戻す。戻り値 = 取り残していた本数。
+   *
+   * ★ **応答の生死 (`active`) には触らない** —— 直すのは道具の数だけで、
+   *   「応答が走っているから作れない」は正しい状態なので残す。
+   * ★★ 呼ぶ側は「本当に 0 本か」を自分で確かめてから呼ぶこと (`shouldRecoverToolGate`)。
+   */
+  clearTools: () => number;
   /** セッションを張り直すときに前の状態を持ち越さない */
   reset: () => void;
 }
 
-export function createResponseGate(): ResponseGate {
+/** ★ #432 道具の数が動いた瞬間の記録 (計器)。`pending` は動いた**あと**の本数 */
+export interface ToolCountEvent {
+  reason: 'begin' | 'end' | 'clear' | 'reset';
+  pending: number;
+}
+
+/**
+ * ★★★★ #432 門の数を 0 に戻してよい場面か。
+ *
+ * ★ 2026-09-13 の KAIROS で、**記録上は道具が 2 対 2 で釣り合っているのに、
+ *   門だけ「1 本走っている」と思い込んだまま残った**。門の数を 0 に戻す口は
+ *   `stop()` しか無く、**会話を終えるまで話しかけが断られ続けた**。
+ *
+ * ★★ 判定は「**実際に待っている道具が 1 本も無いのに、門が 1 本以上と思っている**」だけ。
+ *   時間では測らない —— 待ち時間の上限を決めると、**遅いだけの道具を殺す**。
+ *   (2026-09-10 に MCP のタイムアウトまで 30 秒かかった道具が実在する)
+ *
+ * @param pendingInGate 門が思っている本数
+ * @param inFlight 呼び出し側が実際に待っている本数
+ */
+export function shouldRecoverToolGate(pendingInGate: number, inFlight: number): boolean {
+  return pendingInGate > 0 && inFlight === 0;
+}
+
+export function createResponseGate(onToolCount?: (e: ToolCountEvent) => void): ResponseGate {
   let pending = 0;                       // 実行中の道具の数
   let active = false;                    // 応答が走っているか
   let itemId: string | null = null;      // いま喋っている item
@@ -67,10 +99,22 @@ export function createResponseGate(): ResponseGate {
         outputAudio = type.endsWith('started');
       }
     },
-    beginTool() { pending += 1; },
+    // ★ #432 増減は必ずここを通す。通らない +1 があるなら、それが今回の犯人になる
+    beginTool() {
+      pending += 1;
+      onToolCount?.({ reason: 'begin', pending });
+    },
     endTool() {
       pending = Math.max(0, pending - 1);
+      onToolCount?.({ reason: 'end', pending });
       return pending === 0;
+    },
+    clearTools() {
+      const stale = pending;
+      if (!stale) return 0;   // ★ 取り残しが無いときは記録も残さない (雑音を増やさない)
+      pending = 0;
+      onToolCount?.({ reason: 'clear', pending });
+      return stale;
     },
     canCreate() { return !active && pending === 0; },
     // ★ 応答を先に返す。道具は応答の中で動くので、両方立っているときの主因はこちら
@@ -84,6 +128,10 @@ export function createResponseGate(): ResponseGate {
       itemId = null;
       return id;
     },
-    reset() { pending = 0; active = false; itemId = null; outputAudio = false; },
+    reset() {
+      pending = 0; active = false; itemId = null; outputAudio = false;
+      // ★ #432 止めたのか漏れたのかを、あとから分けられるようにする
+      onToolCount?.({ reason: 'reset', pending });
+    },
   };
 }

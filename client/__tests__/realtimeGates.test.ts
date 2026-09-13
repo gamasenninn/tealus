@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createResponseGate } from '../src/utils/realtimeResponseGate';
+import { createResponseGate, shouldRecoverToolGate } from '../src/utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../src/utils/speechGate';
 import { readTranscriptEvent } from '../src/utils/realtimeTranscript';
 import { readResponseLifecycleEvent } from '../src/utils/realtimeResponseLifecycle';
@@ -467,5 +467,110 @@ describe('readResponseLifecycleEvent — 応答の一生だけを記録に残す
     expect(readResponseLifecycleEvent('')).toBeNull();
     expect(readResponseLifecycleEvent('response')).toBeNull();
     expect(readResponseLifecycleEvent('response.')).toBeNull();
+  });
+});
+
+/**
+ * ★★★★★ #432 — 門の道具の数が、記録と食い違ったまま残る (2026-09-13 実測)
+ *
+ * ## 実物 (KAIROS ルーム、session `b8906972`)
+ *
+ * ```
+ * 17.7s  tool_call_start list_rooms     / 17.7s tool_call_end (8ms)
+ * 19.7s  tool_call_start get_messages   / 19.8s tool_call_end (20ms)
+ *        → ★ 記録の開始と終了は 2 対 2 で釣り合っている
+ * 23.8s  ★★★★ response_create_skipped {"why":"tool","pending_tools":1}
+ *        → ★★ 道具は両方返っているのに、門は「1 本走っている」と思い込んでいる
+ * ```
+ * ★★★ 門の数を 0 に戻す口は `stop()` (会話を終える) だけなので、**止めるまで会話が死ぬ**。
+ * ★ 画面は「調べています…」のまま、話しかけても `why='tool'` で断られ続ける。
+ *
+ * ## ここで入れるもの
+ *
+ * ```
+ * ★ (1) 計器     増減のたびに「門がいま何本だと思っているか」を外へ出す
+ *                → ★★ 記録に出ていない +1 がどこで起きたかを、次に出たとき 1 行で見る
+ * ★ (2) 自己回復  実際に動いている道具が 0 なのに門だけ > 0 なら、0 に戻して記録を残す
+ * ```
+ * ★★★ **(2) は原因を隠す。** だから (1) と必ず一緒に入れる —— 発火したこと自体が、
+ *   (1) で捕まえるべき瞬間の印になる。
+ */
+describe('道具の数の計器 (#432)', () => {
+  it('★ 増減のたびに、理由と いまの本数を知らせる', () => {
+    const seen: Array<{ reason: string; pending: number }> = [];
+    const g = createResponseGate((e) => seen.push(e));
+    g.beginTool();
+    g.beginTool();
+    g.endTool();
+    expect(seen).toEqual([
+      { reason: 'begin', pending: 1 },
+      { reason: 'begin', pending: 2 },
+      { reason: 'end', pending: 1 },
+    ]);
+  });
+
+  it('★ reset でも知らせる (止めたのか、漏れたのかを後から分ける)', () => {
+    const seen: Array<{ reason: string; pending: number }> = [];
+    const g = createResponseGate((e) => seen.push(e));
+    g.beginTool();
+    g.reset();
+    expect(seen[seen.length - 1]).toEqual({ reason: 'reset', pending: 0 });
+  });
+
+  it('★ 観測者を渡さなくても、これまでどおり動く', () => {
+    const g = createResponseGate();
+    g.beginTool();
+    expect(g.pendingTools()).toBe(1);
+    expect(g.endTool()).toBe(true);
+  });
+});
+
+describe('clearTools — 取り残しだけを 0 に戻す (#432)', () => {
+  it('★★ 何本取り残していたかを返す', () => {
+    const g = createResponseGate();
+    g.beginTool(); g.beginTool();
+    expect(g.clearTools()).toBe(2);
+    expect(g.pendingTools()).toBe(0);
+  });
+
+  it('★★★ 応答が走っている状態は触らない (道具の取り残しだけを直す)', () => {
+    const g = createResponseGate();
+    g.onServerEvent('response.created', {});
+    g.beginTool();
+    g.clearTools();
+    expect(g.pendingTools()).toBe(0);
+    // ★ 応答は走ったまま = canCreate は false のまま (理由が変わる)
+    expect(g.isResponding()).toBe(true);
+    expect(g.whyCannotCreate()).toBe('responding');
+  });
+
+  it('★ 取り残しが無いときは 0 を返し、何も知らせない', () => {
+    const seen: Array<{ reason: string; pending: number }> = [];
+    const g = createResponseGate((e) => seen.push(e));
+    expect(g.clearTools()).toBe(0);
+    expect(seen).toEqual([]);
+  });
+
+  it('★ 戻したことは計器にも出る', () => {
+    const seen: Array<{ reason: string; pending: number }> = [];
+    const g = createResponseGate((e) => seen.push(e));
+    g.beginTool();
+    g.clearTools();
+    expect(seen[seen.length - 1]).toEqual({ reason: 'clear', pending: 0 });
+  });
+});
+
+describe('shouldRecoverToolGate — 直してよい場面か (#432)', () => {
+  it('★★★★ 実際に動いている道具が 0 なのに門が > 0 なら、直してよい', () => {
+    expect(shouldRecoverToolGate(1, 0)).toBe(true);
+  });
+
+  it('★★ 本当に動いているなら触らない (待っている最中に割り込まない)', () => {
+    expect(shouldRecoverToolGate(1, 1)).toBe(false);
+    expect(shouldRecoverToolGate(2, 1)).toBe(false);
+  });
+
+  it('★ 門が 0 なら何もしない', () => {
+    expect(shouldRecoverToolGate(0, 0)).toBe(false);
   });
 });

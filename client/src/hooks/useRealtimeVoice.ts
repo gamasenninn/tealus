@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { holdAudio, releaseAudio } from '../utils/audioExclusive';
-import { createResponseGate } from '../utils/realtimeResponseGate';
+import { createResponseGate, shouldRecoverToolGate } from '../utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../utils/speechGate';
 import { readTranscriptEvent } from '../utils/realtimeTranscript';
 import { readResponseLifecycleEvent } from '../utils/realtimeResponseLifecycle';
@@ -105,7 +105,13 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   const eventsRef = useRef<VoiceEvent[]>([]);
   const speakingRef = useRef(false);
   // ★ 応答の二重生成と、立ち上がり検知のバタつきを塞ぐ門 (どちらも 2026-09-05 の実測で出た)
-  const respGateRef = useRef(createResponseGate());
+  // ★★ #432 道具の増減を全部記録に残す。2026-09-13 の KAIROS で、**記録の開始/終了は
+  //   2 対 2 で釣り合っているのに門だけ 1 本残った**。通らない +1 があるなら、ここで出る。
+  const respGateRef = useRef(createResponseGate((e) => {
+    eventsRef.current.push({ t: performance.now(), type: 'tool_count', data: e });
+  }));
+  // ★ #432 こちらが実際に待っている道具の数。門の数と突き合わせる相手
+  const inFlightToolsRef = useRef(0);
   const speechGateRef = useRef(createSpeechGate(SPEECH_GATE));
   // ★ 表示のちらつきを止める門 (#415)。★★ 立ち上がりの時刻は AnalyserNode のまま
   const speakingViewRef = useRef(createSpeakingView());
@@ -165,6 +171,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   /** モデルからの道具の要求を、サーバに投げ返して実行してもらう */
   const handleToolCall = useCallback(async (callId: string, name: string, args: string) => {
     setIsToolRunning(true);
+    inFlightToolsRef.current += 1;   // ★ #432 門の数と突き合わせるための、こちら側の数
     respGateRef.current.beginTool();
     mark('tool_call_start', { name });
     let output: string;
@@ -180,6 +187,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     //   1 ターンで道具が 2 つ並行に呼ばれると、それぞれが response.create を送って
     //   2 通目が弾かれる (2026-09-05 実測で 1 件)。
     send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output } });
+    inFlightToolsRef.current = Math.max(0, inFlightToolsRef.current - 1);
     const isLast = respGateRef.current.endTool();
     if (isLast) {
       setIsToolRunning(false);
@@ -188,6 +196,20 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       mark('tool_call_batched', { name });
     }
   }, [mark, send]);
+
+  /**
+   * ★★★★ #432 門が道具を取り残していたら 0 に戻す (自己回復)。
+   *
+   * ★ **原因は分かっていない。** これは原因の修理ではなく、**会話を殺さないための戻し**で、
+   *   ★★ 戻したことは必ず記録に残す —— **発火そのものが「計器で捕まえるべき瞬間」の印**になる。
+   * ★★★ 判定に時間を使わない理由は `shouldRecoverToolGate` のコメント (遅い道具を殺さないため)。
+   */
+  const recoverToolGateIfStale = useCallback(() => {
+    const gate = respGateRef.current;
+    if (!shouldRecoverToolGate(gate.pendingTools(), inFlightToolsRef.current)) return;
+    const stale = gate.clearTools();
+    mark('tool_gate_recovered', { stale_pending: stale });
+  }, [mark]);
 
   const onServerEvent = useCallback((raw: string) => {
     let msg: { type?: string; name?: string; call_id?: string; arguments?: string; transcript?: string; item?: { id?: string }; response?: { id?: string; status?: string }; error?: { message?: string } };
@@ -494,6 +516,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     mark('ptt_release');
     send({ type: 'input_audio_buffer.commit' });
     // ★ 応答が走っている / 道具が動いている間は作らない (上と同じ理由)
+    recoverToolGateIfStale();   // ★ #432 取り残しがあれば、断る前に戻す
     const gate = respGateRef.current;
     if (gate.canCreate()) {
       send({ type: 'response.create' });
@@ -548,6 +571,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: body }] },
     });
 
+    recoverToolGateIfStale();   // ★ #432 取り残しがあれば、断る前に戻す
     const gate = respGateRef.current;
     if (gate.canCreate()) {
       send({ type: 'response.create' });
