@@ -28,6 +28,7 @@ import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { partsFor } from '../lib/promptKnowledge.mts';
+import { loadSystemPrompt } from '../lib/systemPrompt.mts';
 import {
   detectCodexAuthError,
   buildAuthFailUserMessage,
@@ -57,25 +58,7 @@ async function getCodex(): Promise<typeof CodexClass> {
   return CodexCtor;
 }
 
-// AGENT_CONFIG_DIR env で override 可能 (test isolation 用、production では unset で default)
-const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(import.meta.dirname, '..', '..', 'config');
-
-const MIN_CUSTOM_PROMPT_LENGTH = 50;
-
-function loadSystemPrompt(): string {
-  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
-  const defaultPath = path.join(CONFIG_DIR, 'default_system_prompt.md');
-  try {
-    if (fs.existsSync(customPath)) {
-      const content = fs.readFileSync(customPath, 'utf8').trim();
-      if (content && content.length >= MIN_CUSTOM_PROMPT_LENGTH) return content;
-    }
-    if (fs.existsSync(defaultPath)) {
-      return fs.readFileSync(defaultPath, 'utf8').trim();
-    }
-  } catch {}
-  return 'あなたはTealusのAIアシスタントです。';
-}
+// ★ #439 Step 5: loadSystemPrompt は lib/systemPrompt.mts へ移した (light.mts と重複していた)。
 
 /**
  * Light v2 用 MCP 設定を直接構築 (codex SDK 形式 = TOML mcp_servers)
@@ -277,7 +260,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     //   並べ方 (system → ルーム固有 → 記憶 → organon → 語彙) はここに残す。
     //   ★★ 表を 1 か所直せば Light v1 / v2 / 委譲が同時に追随する = 片方だけ直る事故が消える。
     const parts = partsFor('lightV2');
-    let systemPrompt = loadSystemPrompt();
+    let systemPrompt = parts.includes('system') ? loadSystemPrompt() : '';
     // ルーム固有 Light プロンプト (Light v1 と parity、#258 follow-up)
     if (parts.includes('roomPrompt') && workspacePath) {
       const lightPromptPath = path.join(workspacePath, 'light_prompt.md');

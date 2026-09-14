@@ -13,6 +13,7 @@ import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { partsFor } from '../lib/promptKnowledge.mts';
+import { loadSystemPrompt } from '../lib/systemPrompt.mts';
 import { createTools } from './lightTools.mts';
 import { getSetting } from '../context/settingsManager.mts';
 import * as lightRegistry from './lightRegistry.mts';
@@ -20,32 +21,8 @@ import { briefError } from '../lib/briefError.mts';
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
-// AGENT_CONFIG_DIR env で override 可能 (test isolation 用、production では unset で default)
-const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(import.meta.dirname, '..', '..', 'config');
-
-// admin UI が「カスタムプロンプト」のような placeholder text を保存することがあり、
-// 短すぎる custom は default に fallback (D4 哲学の MCP-first 指示が消えるのを防ぐ)
-const MIN_CUSTOM_PROMPT_LENGTH = 50;
-
-/**
- * システムプロンプトを取得
- * 1. config/system_prompt.md があればそれを使う（カスタム、ただし MIN_CUSTOM_PROMPT_LENGTH 以上）
- * 2. なければ config/default_system_prompt.md を使う（デフォルト）
- */
-function loadSystemPrompt(): string {
-  const customPath = path.join(CONFIG_DIR, 'system_prompt.md');
-  const defaultPath = path.join(CONFIG_DIR, 'default_system_prompt.md');
-  try {
-    if (fs.existsSync(customPath)) {
-      const content = fs.readFileSync(customPath, 'utf8').trim();
-      if (content && content.length >= MIN_CUSTOM_PROMPT_LENGTH) return content;
-    }
-    if (fs.existsSync(defaultPath)) {
-      return fs.readFileSync(defaultPath, 'utf8').trim();
-    }
-  } catch {}
-  return 'あなたはTealusのAIアシスタントです。';
-}
+// ★ #439 Step 5: loadSystemPrompt は lib/systemPrompt.mts へ移した。
+//   light.mts と lightV2.mts に **バイト単位で同じ実装**が 2 つあった (定数も同じ)。
 
 /**
  * Light Agent を作成
@@ -59,9 +36,11 @@ export function createLightAgent(workspacePath: string, mcpServers: MCPServer[] 
   const agent = new Agent({
     name: 'TealusAssistant',
     instructions: () => {
-      let prompt = loadSystemPrompt();
+      // ★ #439 Step 3/5: 何を載せるかは宣言表に聞く。並べ方はここに残す。
+      const parts = partsFor('lightV1');
+      let prompt = parts.includes('system') ? loadSystemPrompt() : '';
       // ルーム固有 Light プロンプト
-      if (workspacePath) {
+      if (parts.includes('roomPrompt') && workspacePath) {
         const lightPromptPath = path.join(workspacePath, 'light_prompt.md');
         if (fs.existsSync(lightPromptPath)) {
           const roomPrompt = fs.readFileSync(lightPromptPath, 'utf8').trim();
@@ -72,8 +51,6 @@ export function createLightAgent(workspacePath: string, mcpServers: MCPServer[] 
         const normalizedPath = workspacePath.replace(/\\/g, '/');
         prompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のワークスペースパスを使ってください:\n${normalizedPath}\n例: ${normalizedPath}/hello.txt`;
       }
-      // ★ #439 Step 3: 何を載せるかは宣言表 (promptKnowledge) に聞く。並べ方はここに残す。
-      const parts = partsFor('lightV1');
       if (parts.includes('memory')) {
         const memory = loadMemoryForPrompt(workspacePath);
         if (memory) {

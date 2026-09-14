@@ -49,6 +49,7 @@ describe('#439 Step 4 ① — 知識 loader を直接 import してよい file',
     'agents/light.mts', // 経路 lightV1 (★ partsFor 経由で使う)
     'agents/lightV2.mts', // 経路 lightV2
     'lib/organonContext.mts', // loader 本体
+    'lib/systemPrompt.mts', // loader 本体 (★ #439 Step 5 で 2 か所の重複を 1 本に)
     'lib/vocabContext.mts', // loader 本体
     'memory/fileMemory.mts', // loader 本体
     'routes/voiceChat.mts', // 経路 conversation
@@ -56,14 +57,21 @@ describe('#439 Step 4 ① — 知識 loader を直接 import してよい file',
   ];
 
   it('凍結したリストと一致する', () => {
-    expect(filesMatching(/load(OrganonPolysemeForPrompt|VocabForPrompt|MemoryForPrompt)/)).toEqual(
-      ALLOWED,
-    );
+    // ★ system も部品の 1 つ。#439 Step 5 まで中央に無く 2 か所で重複していたので、
+    //   ここにも入れて「新しい経路が system prompt を手で読む」も捕まえる。
+    expect(
+      filesMatching(/load(OrganonPolysemeForPrompt|VocabForPrompt|MemoryForPrompt|SystemPrompt)/),
+    ).toEqual(ALLOWED);
   });
 
   it('★ loader を使う経路 file は、必ず partsFor も呼んでいる', () => {
     // ★ import しているのに表を見ていない = 手配線がそのまま残っている、を捕まえる。
-    const loaderOwners = ['lib/organonContext.mts', 'lib/vocabContext.mts', 'memory/fileMemory.mts'];
+    const loaderOwners = [
+      'lib/organonContext.mts',
+      'lib/systemPrompt.mts',
+      'lib/vocabContext.mts',
+      'memory/fileMemory.mts',
+    ];
     for (const f of ALLOWED) {
       if (loaderOwners.includes(f)) continue;
       const text = fs.readFileSync(path.join(SRC, f), 'utf8');
