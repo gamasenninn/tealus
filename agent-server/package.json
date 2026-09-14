@@ -14,7 +14,8 @@
     "test:watch": "jest --runInBand --watch",
     "typecheck": "tsc --noEmit",
     "license-check": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --summary",
-    "license-fail-on-gpl": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'"
+    "license-fail-on-gpl": "npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --failOn 'GPL;AGPL-1.0;AGPL-3.0'",
+    "doctor": "node scripts/doctor.mts"
   },
   "dependencies": {
     "@openai/agents": "^0.8.3",

@@ -12,7 +12,7 @@ import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
 import { broadcastShutdown } from './webhook/ccSubscribers.mts';
 import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
-import { checkCodexModels } from './utils/codexModelGuard.mts';
+import { runDoctor } from './lib/doctor.mts';
 
 // Start server
 const server = app.listen(config.PORT, async () => {
@@ -25,14 +25,16 @@ const server = app.listen(config.PORT, async () => {
   // ★ codex 経路のモデル可否 (2026-09-11)。採用者環境で Deep が全面停止し、表示が
   //   `auth failed` だったため再ログインへ誤誘導した。★★ ここで「何を設定すればよいか」を出す。
   //   ★★★ 止めはしない —— モデルの可否は外部で変わるので、コードが止めると正しい設定でも動かない。
-  for (const w of checkCodexModels({
-    deepProvider: config.DEEP_AGENT_PROVIDER,
-    deepAuth: config.DEEP_CODEX_AUTH,
-    deepModel: config.AGENT_DEEP_CODEX_MODEL,
-    lightBackend: config.AGENT_LIGHT_BACKEND,
-    lightAuth: config.LIGHTV2_AUTH,
-    lightModel: config.AGENT_LIGHT_MODEL,
-  })) logger.warn(w.message);
+  //
+  // ★ #438: 起動時の診断を doctor に一本化した。checkCodexModels は doctor が中で呼ぶ
+  //   (表の照合は f8ac2f1 の実装のまま。作り直していない)。
+  //   ★★ 手動の口は `npm run doctor`。同じ判定を人が確かめたいときに叩ける。
+  //   ★★★ 外部は叩かない。実測が要るものは別の口に分ける (#438「2 段にする」)。
+  for (const f of runDoctor(process.env)) {
+    // ★ info も出す。「片方の経路だけ直した」に気づけるのは、警告ではなく一覧の方。
+    if (f.level === 'warn') logger.warn(`[doctor] ${f.detail}\n  → ${f.fix}`);
+    else logger.info(`[doctor] ${f.id}\n  ${f.detail.split('\n').join('\n  ')}`);
+  }
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   await initializeAgent();
