@@ -1,9 +1,14 @@
 /**
- * #381 organon 由来 alias の掃除 (prune)。
+ * #381 organon 由来 alias の掃除 (prune) / #384 語 (term) の撤去。
  *
- * `sync_organon_dict.mts` は upsert しかしない (DELETE を持たない) ため、
- * **射影を絞っても DB は収束しない**。落とした行は明示的に消す必要がある。
- * その「消してよい行」を決めるのがこのモジュール。
+ * `sync_organon_dict.mts` は upsert しかしない (撤去を持たない) ため、
+ * **射影を絞っても DB は収束しない**。落とした行は明示的に落とす必要がある。
+ * その「落としてよい行」を決めるのがこのモジュール。
+ *
+ * ★ 2026-09-14、alias も **削除から tombstone に変えた** (term と揃えた)。理由は
+ *   「なぜ消したかが残る」だけではない —— organon からは auto / manual が原理的に見えず、
+ *   DELETE だと自己成長辞書が同じ文字列を入れた瞬間に organon の**判断**が消える
+ *   (§6.2.4「撤去漏れの害は『古い語が残る』ではなく『保留の判断が勝手に確定される』」)。
  *
  * ★ 絞りは **alias 自身の `source`** で行う。用語 (`dictionary_terms.source`) ではない。
  *   2026-08-27、手書き SQL で用語側の source で絞ってしまい、organon 由来の用語に
@@ -13,7 +18,7 @@
  *
  * 使い方 (既定は dry-run = DB を書き換えない):
  *   ORGANON_TTL_PATH=... node scripts/organonDictPrune.mts            ← 差分を数えるだけ
- *   ORGANON_TTL_PATH=... node scripts/organonDictPrune.mts --apply    ← 実際に消す
+ *   ORGANON_TTL_PATH=... node scripts/organonDictPrune.mts --apply    ← 実際に落とす
  *
  * ★ dry-run は「ズレの検知器」でもある。DB の organon alias 数が射影より多ければ、
  *   **畳み込みが効いていない状態で pull が回っている** (= サーバが古いコードを掴んだまま)。
@@ -39,13 +44,16 @@ export interface AliasRow {
   term: string;
   alias: string;
   source: string;
+  /** ★ 省略時は active 扱い。既に tombstone 済みの行を二度対象にしないため (#384)。 */
+  status?: string;
+  id?: string;
 }
 
 /** organon が入れた alias だけが掃除の対象。他の出所は射影に載らないので触らない。 */
 const PRUNABLE_SOURCE = 'organon';
 
 /**
- * 現在の alias 行のうち、射影に含まれないものを返す (= 削除してよい行)。
+ * 現在の alias 行のうち、射影に含まれないものを返す (= 撤去してよい行)。
  * 判定は (term, alias) の組で行う。同じ alias 文字列でも用語が違えば別扱い。
  */
 export function selectPrunableAliases(projected: ProjectedTerm[], rows: AliasRow[]): AliasRow[] {
@@ -55,7 +63,15 @@ export function selectPrunableAliases(projected: ProjectedTerm[], rows: AliasRow
   for (const p of projected) {
     for (const a of p.aliases) keep.add(key(p.term, a));
   }
-  return rows.filter((r) => r.source === PRUNABLE_SOURCE && !keep.has(key(r.term, r.alias)));
+  return rows.filter(
+    (r) =>
+      r.source === PRUNABLE_SOURCE &&
+      // ★ 既に tombstone 済みは対象外 (#384)。撤去を DELETE から tombstone に変えると
+      //   落とした行が DB に残るので、status を見ないと同じ行を毎回数え続けて収束しない。
+      //   件数の上限を、済んだ分だけで食い潰すことにもなる。
+      (r.status ?? 'active') !== 'rejected' &&
+      !keep.has(key(r.term, r.alias)),
+  );
 }
 
 /**
@@ -89,7 +105,7 @@ async function loadSyncRuns(limit: number): Promise<Date[]> {
 /** DB 上の alias 行 (出所つき) を全部読む。判定は呼び出し側 = selectPrunableAliases。 */
 async function loadAliasRows(): Promise<AliasRow[]> {
   const { rows } = await pool.query<AliasRow>(
-    `SELECT t.term, a.alias, a.source
+    `SELECT a.id, t.term, a.alias, a.source, a.status
        FROM dictionary_aliases a
        JOIN dictionary_terms t ON t.id = a.term_id`
   );
@@ -113,7 +129,7 @@ if (import.meta.main) {
       console.log(
         `DB        organon alias ${organonRows.length} 行 (他の出所 ${rows.length - organonRows.length} 行は対象外)`
       );
-      console.log(`削除対象  ${prunable.length} 行`);
+      console.log(`撤去対象  ${prunable.length} 行 (★ tombstone。削除しない)`);
 
       // ★ #384 語 (term) の撤去。alias と違い tombstone (削除しない)。
       const termRows = await loadActiveOrganonTerms();
@@ -166,15 +182,25 @@ if (import.meta.main) {
       }
 
       if (apply && aliasPlan.action === 'apply') {
+        // ★ #384 削除ではなく tombstone。理由は「なぜ消したかが残る」だけではない ——
+        //   organon から **auto / manual は原理的に見えない** (2026-09-01 実測で
+        //   organon 555 / manual 83 / auto 51)。organon が alias を外すのは掃除ではなく
+        //   **判断**で、「どちらに寄せるか決められない」という保留の宣言であることがある。
+        //   DELETE だと、自己成長辞書 (auto) が同じ文字列を入れた瞬間にその判断が消える。
+        //   しかも organon からは入ったことが見えないので、**外したつもりのまま静かに戻る**。
+        //   = §6.2.4 の「撤去漏れの害は『古い語が残る』ではなく『保留の判断が勝手に確定される』」。
+        //   ★ upsertAlias は rejected を尊重して no-op なので、tombstone なら供給元をまたいで効く。
         const res = await pool.query(
-          `DELETE FROM dictionary_aliases a
-             USING dictionary_terms t
+          `UPDATE dictionary_aliases a
+              SET status = 'rejected'
+             FROM dictionary_terms t
             WHERE t.id = a.term_id
               AND a.source = 'organon'
+              AND a.status <> 'rejected'
               AND (t.term, a.alias) NOT IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
           [projected.flatMap((p) => p.aliases.map(() => p.term)), projected.flatMap((p) => p.aliases)]
         );
-        console.log(`alias 削除しました: ${res.rowCount} 行`);
+        console.log(`alias tombstone しました: ${res.rowCount} 行 (★ 削除ではない)`);
       }
       if (apply && termPlan.action === 'apply') {
         for (const r of staleWithId) {

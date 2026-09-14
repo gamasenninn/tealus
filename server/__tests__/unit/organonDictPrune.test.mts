@@ -52,4 +52,21 @@ describe('selectPrunableAliases', () => {
     ];
     expect(selectPrunableAliases(projected, rows)).toEqual([rows[0]]);
   });
+
+  it('★ 既に tombstone 済みの alias は、もう対象にしない (#384)', () => {
+    // ★ 撤去を DELETE から tombstone に変えると、落とした行が **DB に残り続ける**。
+    //   status を見ずに選ぶと、同じ行を毎回「対象」に数え続けて収束しない。
+    //   件数の上限 (planRetraction の 5 件) を、済んだ分だけで食い潰すことにもなる。
+    //   ★ 2026-09-14 時点で organon の alias tombstone は実データに 2 件あった。
+    const rows: AliasRow[] = [
+      { term: '旧会社', alias: '旧', source: 'organon', status: 'rejected' },
+      { term: '旧会社', alias: 'きゅう', source: 'organon', status: 'active' },
+    ];
+    expect(selectPrunableAliases(projected, rows)).toEqual([rows[1]]);
+  });
+
+  it('status が無い行は active とみなす (既存の呼び出しを壊さない)', () => {
+    const rows: AliasRow[] = [{ term: '旧会社', alias: '旧', source: 'organon' }];
+    expect(selectPrunableAliases(projected, rows)).toEqual(rows);
+  });
 });
