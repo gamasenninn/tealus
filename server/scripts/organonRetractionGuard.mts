@@ -23,7 +23,7 @@
  *   (a) 下振れ  射影が DB の現勢より RATIO 以上 少なければ 撤去しない
  *               ★ 比較対象は DB 自身なので、前回値を保存しなくてよい
  *   (b) 上限    1 回に落とせる件数の上限。超えたら **実行せず** 人へ回す
- *   (c) 滞留    「今回の射影に無い」だけでは足りず、**STALE_DAYS 以上ずっと不在**を要求する
+ *   (c) 滞留    「今回の射影に無い」だけでは足りず、**STALE_PULLS 回ずっと不在**を要求する
  *               ★ upsertTerm が present な行に必ず updated_at = NOW() を打つので、
  *                 「触られていない期間」がそのまま「不在の期間」になる。
  *                 organon 班が 8/30 に見つけた「updated_at が片方だけ止まる」が指紋。
@@ -43,8 +43,11 @@
 export const DEFAULT_MAX_VICTIMS = 5;
 /** 射影が DB の現勢のこの割合を下回ったら撤去しない。 */
 export const DEFAULT_MIN_RATIO = 0.8;
-/** この日数ずっと射影に現れていない語だけを対象にする。 */
-export const DEFAULT_STALE_DAYS = 3;
+/**
+ * この回数ずっと射影に現れていない語だけを対象にする。
+ * ★ 「日数」ではなく **pull の回数**。pull が止まっていた期間は不在の証拠にならない。
+ */
+export const DEFAULT_STALE_PULLS = 3;
 
 export interface ActiveTermRow {
   term: string;
@@ -53,23 +56,43 @@ export interface ActiveTermRow {
 }
 
 /**
+ * 「K 回前の pull」の時刻を返す。これが撤去の基準線になる。
+ *
+ * ★★★★ **日数で切ってはいけない。** 初版 (2026-09-14) は `now - 3日` で切っていたが、
+ *   これは「3 回連続で不在」を保証しない:
+ *
+ *     ttl が 10 日 変わらない → pull が走らない → 全行の updated_at が 10 日古いまま
+ *     11 日目に 1 語 deprecated → pull が走る → present な行だけ今に更新
+ *     → 消えた語は「3 日以上 不在」に見えるが、★ 実際の不在は 1 回だけ
+ *
+ *   **pull が止まっていた期間は、不在の証拠にならない。** organon 班の
+ *   「同じ指紋 (updated_at の停止) を逆の意味で読むので混ざらないように」(9/14) が当たった形。
+ *
+ * ★ 記録が K 回に満たなければ `null` = 撤去しない。**不在が続いたことを証明できないものは消さない。**
+ *
+ * @param runsDesc pull の実行時刻 (新しい順)
+ */
+export function staleCutoff(runsDesc: Date[], k: number = DEFAULT_STALE_PULLS): Date | null {
+  if (runsDesc.length < k) return null;
+  return runsDesc[k - 1];
+}
+
+/**
  * 撤去してよい語を選ぶ。
  *
  * ★ 絞りは **語自身の source**。manual / auto の語は射影に出てこないのが当たり前なので、
  *   出所で絞らないと必ず巻き添えになる (2026-08-27 に alias 側で実際にやった事故と同じ型)。
- * ★★ 「今回の射影に無い」だけでは足りない。ttl が 1 日だけ短くても落ちないように、
- *   staleDays 以上 触られていないことを要求する。
+ * ★★ 「今回の射影に無い」だけでは足りない。`cutoff` (= K 回前の pull 時刻) より前で
+ *   止まっていること、つまり **K 回続けて payload に入っていなかった**ことを要求する。
  */
 export function selectStaleTerms(
   projectedTerms: string[],
   rows: ActiveTermRow[],
-  now: Date,
-  staleDays: number = DEFAULT_STALE_DAYS,
+  cutoff: Date,
 ): ActiveTermRow[] {
   const keep = new Set(projectedTerms);
-  const cutoff = now.getTime() - staleDays * 24 * 60 * 60 * 1000;
   return rows.filter(
-    (r) => r.source === 'organon' && !keep.has(r.term) && r.updatedAt.getTime() < cutoff,
+    (r) => r.source === 'organon' && !keep.has(r.term) && r.updatedAt.getTime() < cutoff.getTime(),
   );
 }
 

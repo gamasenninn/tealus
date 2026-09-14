@@ -39,6 +39,19 @@ export async function syncFromOrganon(ttlPath: string): Promise<SyncResult> {
       aliases += 1;
     }
   }
+  // ★ #384 pull が走ったことを残す。撤去の条件「K 回続けて射影に無い」を判定するには
+  //   **pull がいつ走ったか**が要る。updated_at の古さで代用すると、pull が止まっていた
+  //   期間まで「不在」に数えてしまう (= 1 回の不在で落ちる)。
+  //   ★ 記録に失敗しても sync は落とさない。撤去は「記録が K 回に満たなければ何もしない」
+  //     側に倒れるので、記録漏れは **消しすぎではなく消さなすぎ**に出る。
+  try {
+    await pool.query(
+      'INSERT INTO organon_sync_runs (terms, aliases, ttl_path) VALUES ($1, $2, $3)',
+      [terms, aliases, ttlPath]
+    );
+  } catch (err) {
+    console.warn(`[organon] sync run の記録に失敗 (sync は成功しています): ${String(err)}`);
+  }
   return { terms, aliases };
 }
 

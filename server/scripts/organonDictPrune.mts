@@ -26,7 +26,8 @@ import { projectOrganonDict, type ProjectedTerm } from './organonDictProjection.
 import {
   planRetraction,
   selectStaleTerms,
-  DEFAULT_STALE_DAYS,
+  staleCutoff,
+  DEFAULT_STALE_PULLS,
   type ActiveTermRow,
 } from './organonRetractionGuard.mts';
 
@@ -71,6 +72,20 @@ async function loadActiveOrganonTerms(): Promise<(ActiveTermRow & { id: string }
   return rows.map((r) => ({ id: r.id, term: r.term, source: r.source, updatedAt: r.updated_at }));
 }
 
+/**
+ * pull の実行時刻を新しい順に読む (#384)。★ 撤去の基準線は「K 回前の pull」。
+ *
+ * ★★ ここが空 / 足りない = **判定材料が無い**。呼び出し側はそのとき撤去しない。
+ *   記録漏れは「消しすぎ」ではなく「消さなすぎ」に倒れる。
+ */
+async function loadSyncRuns(limit: number): Promise<Date[]> {
+  const { rows } = await pool.query<{ ran_at: Date }>(
+    `SELECT ran_at FROM organon_sync_runs ORDER BY ran_at DESC LIMIT $1`,
+    [limit]
+  );
+  return rows.map((r) => r.ran_at);
+}
+
 /** DB 上の alias 行 (出所つき) を全部読む。判定は呼び出し側 = selectPrunableAliases。 */
 async function loadAliasRows(): Promise<AliasRow[]> {
   const { rows } = await pool.query<AliasRow>(
@@ -102,12 +117,26 @@ if (import.meta.main) {
 
       // ★ #384 語 (term) の撤去。alias と違い tombstone (削除しない)。
       const termRows = await loadActiveOrganonTerms();
-      const stale = selectStaleTerms(projected.map((p) => p.term), termRows, new Date());
+      const runs = await loadSyncRuns(DEFAULT_STALE_PULLS);
+      const cutoff = staleCutoff(runs, DEFAULT_STALE_PULLS);
+      // ★ 記録が K 回に満たなければ撤去しない。**不在が続いたことを証明できないものは消さない。**
+      const stale = cutoff ? selectStaleTerms(projected.map((p) => p.term), termRows, cutoff) : [];
       const staleWithId = stale as (ActiveTermRow & { id: string })[];
       console.log(
-        `\n語(term)  DB の organon active ${termRows.length} 件 / ` +
-        `★ ${DEFAULT_STALE_DAYS} 日以上ずっと射影に無いもの ${stale.length} 件`
+        `\n語(term)  DB の organon active ${termRows.length} 件 / pull の記録 ${runs.length} 件`
       );
+      if (!cutoff) {
+        console.log(
+          `          ★ pull の記録が ${DEFAULT_STALE_PULLS} 回に満たないので撤去しない ` +
+          `(★★ 不在が ${DEFAULT_STALE_PULLS} 回続いたことを証明できない)`
+        );
+      } else {
+        console.log(
+          `          基準線 = ${DEFAULT_STALE_PULLS} 回前の pull ` +
+          `${cutoff.toISOString().slice(0, 16).replace('T', ' ')} / ` +
+          `それより前で止まっているもの ${stale.length} 件`
+        );
+      }
       for (const r of staleWithId) {
         console.log(`  - ${r.term}  最終更新 ${r.updatedAt.toISOString().slice(0, 16).replace('T', ' ')}`);
       }
