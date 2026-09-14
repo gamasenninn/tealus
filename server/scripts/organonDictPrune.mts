@@ -23,6 +23,12 @@ import fs from 'node:fs';
 import dotenv from 'dotenv';
 import { pool } from '../src/db/pool.mts';
 import { projectOrganonDict, type ProjectedTerm } from './organonDictProjection.mts';
+import {
+  planRetraction,
+  selectStaleTerms,
+  DEFAULT_STALE_DAYS,
+  type ActiveTermRow,
+} from './organonRetractionGuard.mts';
 
 dotenv.config();
 
@@ -49,6 +55,20 @@ export function selectPrunableAliases(projected: ProjectedTerm[], rows: AliasRow
     for (const a of p.aliases) keep.add(key(p.term, a));
   }
   return rows.filter((r) => r.source === PRUNABLE_SOURCE && !keep.has(key(r.term, r.alias)));
+}
+
+/**
+ * DB 上で active な organon 由来の語を読む (#384)。
+ * ★ alias と違い、語は **削除ではなく tombstone** (status='rejected')。
+ *   `upsertTerm` の guard が rejected を尊重するので次の取り込みで復活しない (#375)。
+ */
+async function loadActiveOrganonTerms(): Promise<(ActiveTermRow & { id: string })[]> {
+  const { rows } = await pool.query<{ id: string; term: string; source: string; updated_at: Date }>(
+    `SELECT id, term, source, updated_at
+       FROM dictionary_terms
+      WHERE source = 'organon' AND status = 'active'`
+  );
+  return rows.map((r) => ({ id: r.id, term: r.term, source: r.source, updatedAt: r.updated_at }));
 }
 
 /** DB 上の alias 行 (出所つき) を全部読む。判定は呼び出し側 = selectPrunableAliases。 */
@@ -79,12 +99,44 @@ if (import.meta.main) {
         `DB        organon alias ${organonRows.length} 行 (他の出所 ${rows.length - organonRows.length} 行は対象外)`
       );
       console.log(`削除対象  ${prunable.length} 行`);
-      if (prunable.length > 0 && !apply) {
-        console.log('\n★ DB が射影より多い = 畳み込みが効いていない pull が回っている可能性。');
-        console.log('  サーバの起動時刻と射影の更新時刻を比べること (古いコードのままなら再起動が先)。');
-        console.log('  消してよいなら --apply を付けて再実行。');
+
+      // ★ #384 語 (term) の撤去。alias と違い tombstone (削除しない)。
+      const termRows = await loadActiveOrganonTerms();
+      const stale = selectStaleTerms(projected.map((p) => p.term), termRows, new Date());
+      const staleWithId = stale as (ActiveTermRow & { id: string })[];
+      console.log(
+        `\n語(term)  DB の organon active ${termRows.length} 件 / ` +
+        `★ ${DEFAULT_STALE_DAYS} 日以上ずっと射影に無いもの ${stale.length} 件`
+      );
+      for (const r of staleWithId) {
+        console.log(`  - ${r.term}  最終更新 ${r.updatedAt.toISOString().slice(0, 16).replace('T', ' ')}`);
       }
-      if (apply && prunable.length > 0) {
+
+      // ★ 歯止め。alias / term それぞれの母数で判定する (#384、organon 班の Day 52 指摘)。
+      const aliasPlan = planRetraction({
+        projectedCount: projectedAliases,
+        dbActiveCount: organonRows.length,
+        victimCount: prunable.length,
+      });
+      const termPlan = planRetraction({
+        projectedCount: projected.length,
+        dbActiveCount: termRows.length,
+        victimCount: stale.length,
+      });
+      console.log(`\n歯止め    alias: ${aliasPlan.action} — ${aliasPlan.reason}`);
+      console.log(`          term : ${termPlan.action} — ${termPlan.reason}`);
+
+      if (!apply) {
+        if (prunable.length > 0) {
+          console.log('\n★ DB が射影より多い = 畳み込みが効いていない pull が回っている可能性。');
+          console.log('  サーバの起動時刻と射影の更新時刻を比べること (古いコードのままなら再起動が先)。');
+        }
+        if (prunable.length > 0 || stale.length > 0) {
+          console.log('  ★ 書き込みには --apply が要る (既定は dry-run)。');
+        }
+      }
+
+      if (apply && aliasPlan.action === 'apply') {
         const res = await pool.query(
           `DELETE FROM dictionary_aliases a
              USING dictionary_terms t
@@ -93,7 +145,23 @@ if (import.meta.main) {
               AND (t.term, a.alias) NOT IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
           [projected.flatMap((p) => p.aliases.map(() => p.term)), projected.flatMap((p) => p.aliases)]
         );
-        console.log(`削除しました: ${res.rowCount} 行`);
+        console.log(`alias 削除しました: ${res.rowCount} 行`);
+      }
+      if (apply && termPlan.action === 'apply') {
+        for (const r of staleWithId) {
+          await pool.query(
+            `UPDATE dictionary_terms SET status = 'rejected', updated_at = NOW() WHERE id = $1`,
+            [r.id]
+          );
+          console.log(`term tombstone: ${r.term}`);
+        }
+        // ★ 行を書き換えただけでは在庫の語彙は入れ替わらない。refreshVocabFromTable を
+        //   呼ばないと「直したのに効いていない」が次の再起動まで続く (2026-09-14 に踏みかけた)。
+        console.log('★ 語彙の在庫を入れ替えるには、サーバ側で refreshVocabFromTable が要る');
+        console.log('  (管理画面で語を 1 つ操作するか、サーバを再起動すると走る)');
+      }
+      if (apply && (aliasPlan.action === 'skip' || termPlan.action === 'skip')) {
+        console.log('\n★★ 歯止めに当たったため、その分は書き込んでいません。');
       }
       await pool.end();
     })
