@@ -83,9 +83,9 @@ const CONVERSATION: Profile = {
   // ★ 会話モードは Realtime のセッション instructions を使う。Light の system prompt は形が違う。
   system: { use: false, reason: 'Realtime のセッション instructions を使う (形が違う)' },
   roomPrompt: { use: true },
-  // ★★ 未記録。#437 で organon と語彙は入れたが、memory を入れなかった理由は
-  //   どこにも書かれていない。**「意図」と書けないので、そう書く。**
-  memory: { use: false, reason: '★ 理由が未記録 (#437 で入れなかったが判断の記録が無い)' },
+  // ★★ 2026-09-14 に小野さんが「単に忘れていた。入れたほうがよい」と判定。
+  //   → 契約は use: true。**現状の配線はまだ false** なので KNOWN_GAPS に出す。
+  memory: { use: true },
   organon: { use: true },
   vocab: { use: true },
 };
@@ -121,6 +121,8 @@ export interface KnownGap {
   evidence: string[];
   /** ★ 覆る条件。書けない判定は判定ではない。 */
   overturnedIf: string;
+  /** ★ 直す順番に制約があるなら書く (★★ 測定条件を壊す変更は、測り終える前に入れない)。 */
+  note?: string;
   issue: string;
 }
 
@@ -135,6 +137,23 @@ export const KNOWN_GAPS: KnownGap[] = [
       '同じ関数の中で Light v2 分岐は自己配線で受け取っている (= 「統合には要らない」なら両分岐とも外すはず)',
     ],
     overturnedIf: '当時「統合には語彙を渡さない」と判断した記録が出てきたら取り下げる (現在は記録が 1 つも無いことが根拠)',
+    issue: '#439',
+  },
+  {
+    route: 'conversation',
+    missing: ['memory'],
+    verdict: 'oversight',
+    evidence: [
+      '#437 (2026-09-13) で organon と語彙は入れたが、memory だけ入れていない',
+      'memory を外す判断の記録が、issue にも commit にも設計書にも 1 つも無い',
+      '2026-09-14 小野さんが「単に忘れていた。入れたほうがよい」と判定 (= 人の明示)',
+    ],
+    overturnedIf: '会話モードで memory を外す理由が実測で出たら取り下げる (例: 接頭辞が伸びて立ち上がりが有意に遅くなる)',
+    // ★★ 直す順番の制約。#437 の「立ち上がりの速さを n>50 で引き直す」が未了で、
+    //   memory を先に足すと **prompt の量が変わって前後比較が壊れる**。
+    //   2026-09-13 に組み込んだ 45KB の効果を測り終えてから入れる。
+    //   ★ 「直せると分かっている」と「今直してよい」は別。
+    note: '★ #437 の立ち上がり速度を n>50 で引き直してから入れる (先に足すと測定条件が変わる)',
     issue: '#439',
   },
 ];
