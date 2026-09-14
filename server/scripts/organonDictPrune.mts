@@ -172,7 +172,12 @@ if (import.meta.main) {
       console.log(`          term : ${termPlan.action} — ${termPlan.reason}`);
 
       if (!apply) {
-        if (prunable.length > 0) {
+        // ★ この警告は「DB の organon alias が射影より多い」ときだけ出す。撤去対象がある
+        //   だけでは出さない —— 2026-09-14、DB 604 < 射影 608 の状態でこれが出ており、
+        //   読んだ人を「サーバが古いコードを掴んでいる」の調査へ送り込むところだった
+        //   (★ その日は実際に再起動した直後で、疑う理由まで揃っていた)。
+        //   ★★ 壊れた値は沈黙より悪い。条件を実際の不等号に合わせる。
+        if (organonRows.length > projectedAliases) {
           console.log('\n★ DB が射影より多い = 畳み込みが効いていない pull が回っている可能性。');
           console.log('  サーバの起動時刻と射影の更新時刻を比べること (古いコードのままなら再起動が先)。');
         }
