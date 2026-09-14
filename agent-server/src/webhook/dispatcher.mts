@@ -146,8 +146,11 @@ export function stripAutoPostMark(content: string | null | undefined): string {
 
 /**
  * Light/Light2 用 prompt 構築 (#295: 通常 dispatch と委譲 runAgent で共有)
+ *
+ * ★ #439 Step 0: 特性化テストから呼ぶため export した。**組み立ては 1 byte も変えていない。**
+ *   一本化 (promptKnowledge) へ移す前に、現在の出力を固定するのが唯一の防壁。
  */
-function buildLightPrompt(roomId: string, userPrompt: string, replyHint = ''): string {
+export function buildLightPrompt(roomId: string, userPrompt: string, replyHint = ''): string {
   return `現在のルーム ID: ${roomId}${replyHint}
 
 ユーザーの質問: ${userPrompt}`;
@@ -155,8 +158,12 @@ function buildLightPrompt(roomId: string, userPrompt: string, replyHint = ''): s
 
 /**
  * Deep 用 prompt 構築 (#295: 通常 dispatch と委譲 runAgent で共有)
+ *
+ * ★ #439 Step 0: 特性化テストから呼ぶため export した。**組み立ては 1 byte も変えていない。**
+ *   ★★ この関数を通らない経路が 1 つある (`synthesize` の Deep Codex 分岐)。
+ *     意図か忘れかは #439 Step 1 で判定する。ここでは触らない。
  */
-function buildDeepPrompt(roomId: string, userPrompt: string, replyHint = ''): string {
+export function buildDeepPrompt(roomId: string, userPrompt: string, replyHint = ''): string {
   return `あなたは Tealus メッセンジャーの AI アシスタントです。
 Tealus MCP ツール（tealus サーバー）を使って情報を取得し、ユーザーの質問に回答してください。
 
