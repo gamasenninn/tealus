@@ -16,6 +16,7 @@ import { processDeep } from '../agents/deep.mts';
 import { processDeepCodex } from '../agents/deepCodex.mts';
 import { loadLightBackend } from '../agents/lightBackendLoader.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
+import { partsFor, type RouteId } from '../lib/promptKnowledge.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { getOrCreateContext, updateStatus } from '../context/sessionManager.mts';
 import { getOrCreateRoomMcp } from '../mcp/roomMcpManager.mts';
@@ -145,6 +146,24 @@ export function stripAutoPostMark(content: string | null | undefined): string {
 }
 
 /**
+ * #439 Step 2 — その経路で渡す知識を、宣言表に従って組み立てる。
+ *
+ * ★ **「何を渡すか」は中央 (promptKnowledge) が決め、「どう並べるか」はここが決める。**
+ *   並び (質問の直後に organon → 語彙) は dispatcher の都合で、経路ごとに違ってよい
+ *   (会話モードはセッションの安定接頭辞、Light は system prompt 側)。
+ *   文字列連結まで共通化すると壊れる、が #439 の設計前提。
+ *
+ * ★★ Light 系は agent が自分で読むので、ここを通さない (通すと二重に入る)。
+ */
+function knowledgeSuffix(route: RouteId): string {
+  const parts = partsFor(route);
+  return (
+    (parts.includes('organon') ? loadOrganonPolysemeForPrompt() : '') +
+    (parts.includes('vocab') ? loadVocabForPrompt() : '')
+  );
+}
+
+/**
  * Light/Light2 用 prompt 構築 (#295: 通常 dispatch と委譲 runAgent で共有)
  *
  * ★ #439 Step 0: 特性化テストから呼ぶため export した。**組み立ては 1 byte も変えていない。**
@@ -177,7 +196,7 @@ Tealus MCP ツール（tealus サーバー）を使って情報を取得し、�
 3. **未登録 / 確信度低**: 本文に **[要確認: 音声上「元音声」]** marker のみ (= 推測なし)。
 4. **末尾 section 必須**: 本文に [要確認] が 1 つでもあれば、議事録末尾に **「## organon 記法 注意事項」** section を **必ず** 追加してください。各 [要確認] 項目の reasoning (= 該当 organon entry / alias family / sub-family pattern / 揺らぎ pattern / 推測根拠 等) を集約。[要確認] が 0 件なら section 省略 OK。
 
-ユーザーの質問: ${userPrompt}${loadOrganonPolysemeForPrompt()}${loadVocabForPrompt()}`;
+ユーザーの質問: ${userPrompt}${knowledgeSuffix('deep')}`;
 }
 
 /**
@@ -333,7 +352,10 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
         const sectionText = sections.map((s) => `【${s.name} より】\n${s.text}`).join('\n\n');
         const synthPrompt = `あなたは複数ルームから集めた結果を、ユーザの依頼に従って1つに統合します。\nユーザの依頼: ${r.prompt || task}\n\n以下は各ルームからの結果です。依頼に沿って統合してください（「(応答なし)」は無理に補完しない）。\n\n${sectionText}`;
         if (useDeepCodex) {
-          return processDeepCodex({ roomId, prompt: synthPrompt, workspacePath: octx.workspace_path, agentId, sessionId: octx.session_id, suppressAutoPost: true });
+          // ★ #439 Step 2: ここだけ buildDeepPrompt を通らず素の prompt で走っていた
+          //   (2026-06-15 に synthesize を新設したときの取り残し。判定 = 忘れ)。
+          //   ★★ Light v2 分岐は agent が自分で読むので付けない (付けると二重になる)。
+          return processDeepCodex({ roomId, prompt: synthPrompt + knowledgeSuffix('synthesize'), workspacePath: octx.workspace_path, agentId, sessionId: octx.session_id, suppressAutoPost: true });
         }
         return processLightV2({ roomId, prompt: synthPrompt, workspacePath: octx.workspace_path, suppressAutoPost: true });
       };

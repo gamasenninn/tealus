@@ -63,11 +63,12 @@ describe('#439 Step 1 — 宣言表', () => {
 });
 
 describe('#439 Step 1 — 契約と現状のズレ', () => {
-  it('★ 既知のズレは 2 件 (★★ synthesize / conversation)', () => {
+  it('★ 既知のズレは 1 件 (★★ conversation の memory)', () => {
     // 増えたら「新しい取り残しが入った」。減ったら「直った」。
     // どちらもこのテストが落ちて、人に気づかせる。
-    // ★ 2 件目は表を書いたことで見つかったもの (会話モードの memory)。
-    expect(KNOWN_GAPS.map((g) => g.route)).toEqual(['synthesize', 'conversation']);
+    // ★ synthesize は Step 2 で解消したので、この行を 2 → 1 に **直させられた**。
+    //   仕組みが設計どおり働いた例として残す。
+    expect(KNOWN_GAPS.map((g) => g.route)).toEqual(['conversation']);
   });
 
   it('★★★★ 直す順番に制約があるズレは、その制約を書いている', () => {

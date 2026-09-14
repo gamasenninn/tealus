@@ -10,7 +10,7 @@
  *   - **呼び出し側が組む**   … dispatcher (Deep / 委譲 / 統合) / 会話モード
  * 片方の流派で新しい入口を作ると、もう片方の規律が効かない。**実績が 2 件ある**:
  *   - #437 会話モードだけ organon も語彙も受け取っていなかった (2026-09-13 に発覚)
- *   - `synthesize` の Deep Codex 分岐が `buildDeepPrompt` を通らない (同日、調査中に発覚)
+ *   - `synthesize` の Deep Codex 分岐が `buildDeepPrompt` を通らない (同日、調査中に発覚) → ★ Step 2 で解消
  *
  * ## 表は「契約」であって「現状」ではない
  *
@@ -127,18 +127,9 @@ export interface KnownGap {
 }
 
 export const KNOWN_GAPS: KnownGap[] = [
-  {
-    route: 'synthesize',
-    missing: ['organon', 'vocab'],
-    verdict: 'oversight',
-    evidence: [
-      '2026-06-14 16:20 buildDeepPrompt を「通常 dispatch と委譲で共有するため」に抽出 (コミットに明記)',
-      '2026-06-15 17:07 その翌日に synthesize を新設し、通さず直渡し。コミットは再入防止まで細かいのに知識の判断は一言も無い',
-      '同じ関数の中で Light v2 分岐は自己配線で受け取っている (= 「統合には要らない」なら両分岐とも外すはず)',
-    ],
-    overturnedIf: '当時「統合には語彙を渡さない」と判断した記録が出てきたら取り下げる (現在は記録が 1 つも無いことが根拠)',
-    issue: '#439',
-  },
+  // ★ synthesize は #439 Step 2 (2026-09-14) で解消済み。**行ごと消した。**
+  //   直ったズレを「直った」と書いて残すと、一覧が「未解決の一覧」でなくなる。
+  //   経緯は commit と #439 に残っている。
   {
     route: 'conversation',
     missing: ['memory'],
