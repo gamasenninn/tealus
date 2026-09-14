@@ -99,6 +99,69 @@ export function trimToChangedWindow(
   };
 }
 
+/** text 中の word の出現数。★ 重なりは数えない (indexOf を語長で進める)。 */
+function countOccurrences(text: string, word: string): number {
+  if (!word) return 0;
+  let n = 0;
+  for (let i = text.indexOf(word); i >= 0; i = text.indexOf(word, i + word.length)) n += 1;
+  return n;
+}
+
+export interface RateRow {
+  word: string;
+  /** 本来出るべき回数 = 最終版 (人が直したあと) の出現数 */
+  expected: number;
+  /** 機械が出せた回数 = 最古の版 (機械の出力) の出現数。★ 本来を超える分は切る */
+  produced: number;
+  garbled: number;
+  rate: number;
+}
+
+/**
+ * 語ごとに「本来 / 出せた / 崩れ」と率を出す。★ 純関数。
+ *
+ * ★ なぜ件数ではなく率か (2026-09-14 の実測で判明)
+ *   崩れの件数だけで並べると順位が誤る。同じ日に実際に踏んだ:
+ *     `鹿沼`  101 箇所中 53 崩れ = 52.5% / `宇都宮` 97 箇所中 4 崩れ = 4.1%
+ *   件数の 53 と 4 で「13 倍ひどい」と読めたのは **出現数がほぼ同じだったから**で、
+ *   偶然に助けられている。出現 5 回で 5 回とも崩れる語は、件数では下位に沈む。
+ *   ★ 台帳の目的は「上から潰す」なので、順位が誤ると潰す相手を間違える。
+ *
+ * ★★ 分母は **最終版の出現数**。機械が正しく出した回は人が触らないので、
+ *   無編集の通話も分母に入る (= 母集団の一部)。
+ *
+ * ★★★ 最終版に 1 度も出ない語は **行を作らない**。率が定義できないのに 0% と書くと
+ *   「完璧に出せている」に読める —— 2026-09-14 の `真岡` (30 日で最終版に 0 回) がそれ。
+ */
+export function buildRateRows(
+  words: string[],
+  docs: Array<{ final: string; orig: string }>,
+): RateRow[] {
+  const out: RateRow[] = [];
+  for (const word of words) {
+    let expected = 0;
+    let produced = 0;
+    for (const d of docs) {
+      const e = countOccurrences(d.final, word);
+      if (!e) continue;
+      expected += e;
+      // ★ 機械が余分に出した回 (誤産出) で崩れを負にしない。負を足すと、他の通話の
+      //   崩れが相殺されて母集団全体が過小になる。
+      produced += Math.min(countOccurrences(d.orig, word), e);
+    }
+    if (!expected) continue;
+    const garbled = expected - produced;
+    out.push({
+      word,
+      expected,
+      produced,
+      garbled,
+      rate: Math.round((1000 * garbled) / expected) / 10,
+    });
+  }
+  return out;
+}
+
 const LABEL: Record<CorrectionKind, string> = {
   garble: '崩れ (canon の語へ直された)',
   normalize: '表記の寄せ (どちらも canon = 誤りではない)',
@@ -152,6 +215,24 @@ async function loadEditPairs(room: string, days: number): Promise<Array<{ old: s
   return out;
 }
 
+/**
+ * 率の分母を取るための文書対。★ **編集されていない通話も含める** ——
+ * 機械が正しく出した回は人が触らないので、そこを落とすと分母が「誤りのあった通話」だけになり、
+ * 率が必ず高く出る (★ 2026-09-14 に踏んだ選択効果)。
+ */
+async function loadDocs(room: string, days: number): Promise<Array<{ final: string; orig: string }>> {
+  const { rows } = await pool.query<{ final: string; orig: string }>(
+    `SELECT m.content AS final,
+            COALESCE((SELECT e.content FROM message_edits e
+                       WHERE e.message_id = m.id ORDER BY e.version LIMIT 1), m.content) AS orig
+       FROM messages m JOIN rooms r ON r.id = m.room_id
+      WHERE r.name = $1 AND m.type = 'file' AND m.is_deleted = false
+        AND m.created_at > now() - ($2 || ' days')::interval`,
+    [room, String(days)],
+  );
+  return rows;
+}
+
 function argOf(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
@@ -190,7 +271,9 @@ if (import.meta.main) {
       for (const ex of extractAliasPairs(w.old, w.neu, terms)) {
         const kind = classifyPair(ex, canon);
         if (!kind) continue;
-        const key = `${ex.from} ${ex.to}`;
+        // * 区切りは JSON にする (organonDictPrune と同じ形)。以前は NUL を区切りに使っていて、
+        //   この file が grep に binary 判定され、検索で黙って飛ばされていた。
+        const key = JSON.stringify([ex.from, ex.to]);
         const cur = counts.get(key) || { from: ex.from, to: ex.to, kind, n: 0 };
         cur.n += 1;
         counts.set(key, cur);
@@ -218,6 +301,25 @@ if (import.meta.main) {
       for (const c of all.filter((x) => x.kind === 'garble').slice(0, top)) {
         console.log(`  ${c.from} → ${c.to}  ×${c.n}`);
       }
+
+      // ★ 件数の順位は「出現数がほぼ同じ」ときしか読めない。率を必ず併記する。
+      //   2026-09-14 に、件数 53 vs 4 を「13 倍ひどい」と読んだ。出現数が偶然ほぼ同じ
+      //   (101 vs 97) だったので結果的に合っていたが、根拠になっていなかった。
+      const targets = [...new Set(all.filter((x) => x.kind === 'garble').map((x) => x.to))];
+      const docs = await loadDocs(room, days);
+      const rates = buildRateRows(targets, docs).sort((a, b) => b.rate - a.rate);
+      console.log('\n--- 語ごとの崩れ率 (★ 分母 = 最終版の出現数。★★ 無編集の通話も含む) ---');
+      console.log(`  ${'語'.padEnd(12)}本来  出せた  崩れ      率`);
+      for (const r of rates) {
+        console.log(
+          `  ${r.word.padEnd(12)}${String(r.expected).padStart(4)}${String(r.produced).padStart(8)}` +
+          `${String(r.garbled).padStart(6)}${String(r.rate).padStart(7)}%`,
+        );
+      }
+      console.log('  ★ 最終版に 1 度も出ない語は行を作らない (★★ 率が定義できないため)');
+      // ★ 入れ子の語は二重に数える (「飛行船」の出現数は「飛行船アグリ」の分を含む)。
+      //   率どうしの比較には効かないが、★★ 合計を足し上げると 1 を超える。黙らせない。
+      console.log('  ★ 入れ子の語は二重に数える (例: 「飛行船」は「飛行船アグリ」の分を含む)');
     }
     await pool.end();
   })().catch(async (err) => {

@@ -15,7 +15,7 @@
  *   raw の保存は 2026-09-14 12:57:52 に別リポ側へ入れたばかりで、それ以前の便には無い。
  *   ★ 「まだ分からない」を「崩れ」に混ぜないため、`unknown` を独立の値にする。
  */
-import { classifyPair, trimToChangedWindow } from '../../scripts/correctionLedger.mts';
+import { classifyPair, trimToChangedWindow, buildRateRows } from '../../scripts/correctionLedger.mts';
 
 describe('trimToChangedWindow — ★ 長文を抽出器に通せる形にする', () => {
   /**
@@ -83,5 +83,46 @@ describe('classifyPair', () => {
   it('空文字は分類しない', () => {
     expect(classifyPair({ from: '', to: '鹿沼' }, canon)).toBeNull();
     expect(classifyPair({ from: '鹿沼', to: '' }, canon)).toBeNull();
+  });
+});
+
+describe('buildRateRows — ★ 崩れの件数ではなく「率」で並べる', () => {
+  /**
+   * ★ なぜ要るか (2026-09-14 の実測で判明)
+   *   崩れの件数だけで並べると順位が誤る。同じ日に実際に踏んだ:
+   *     `鹿沼`  101 箇所中 53 崩れ = 52.5%
+   *     `宇都宮` 97 箇所中  4 崩れ =  4.1%
+   *   件数だけ見ると 53 と 4 で「鹿沼が 13 倍ひどい」に見えるが、**出現数がほぼ同じ**
+   *   だったからそう読めただけ。出現 5 回で 5 回とも崩れる語は、件数では下位に沈む。
+   *   ★ 台帳の目的は「上から潰す」なので、順位が誤ると潰す相手を間違える。
+   *
+   * ★★ 分母は **最終版 (人が直したあと) の出現数**。「本来出るべき回数」。
+   *   機械が正しく出した回は人が触らないので、★ 無編集の通話も分母に入る。
+   */
+  const docs = [
+    { final: '鹿沼市の話と鹿沼の件', orig: '神山市の話と神山の件' },   // 2/2 崩れ
+    { final: '宇都宮の件', orig: '宇都宮の件' },                        // 0/1 崩れ
+    { final: '鹿沼です', orig: '鹿沼です' },                            // 0/1 崩れ
+  ];
+
+  it('本来 / 出せた / 崩れ と率を出す', () => {
+    const rows = buildRateRows(['鹿沼', '宇都宮'], docs);
+    expect(rows).toEqual([
+      { word: '鹿沼', expected: 3, produced: 1, garbled: 2, rate: 66.7 },
+      { word: '宇都宮', expected: 1, produced: 1, garbled: 0, rate: 0 },
+    ]);
+  });
+
+  it('★ 機械が余分に出した回は 崩れを負にしない', () => {
+    // 機械が「真岡」を誤って産出した通話では、orig の出現数が final を上回りうる。
+    // 負の崩れを足すと、他の通話の崩れが相殺されて母集団全体が過小になる。
+    const rows = buildRateRows(['真岡'], [{ final: '真岡の件', orig: '真岡と真岡の件' }]);
+    expect(rows[0].garbled).toBe(0);
+  });
+
+  it('★★ 最終版に 1 度も出ない語は 行を作らない (分母 0)', () => {
+    // 2026-09-14 実測: `真岡` は 30 日で最終版に 0 回。★ 率が定義できない。
+    // 0% と書くと「完璧に出せている」に読める。**行ごと出さない。**
+    expect(buildRateRows(['真岡'], [{ final: 'あ', orig: 'い' }])).toEqual([]);
   });
 });
