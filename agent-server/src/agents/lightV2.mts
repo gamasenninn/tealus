@@ -27,6 +27,7 @@ import * as botApi from '../lib/botApi.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
+import { partsFor } from '../lib/promptKnowledge.mts';
 import {
   detectCodexAuthError,
   buildAuthFailUserMessage,
@@ -272,21 +273,27 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     }));
 
     // memory + system prompt 構築
+    // ★ #439 Step 3: 何を載せるかは宣言表 (promptKnowledge) に聞く。
+    //   並べ方 (system → ルーム固有 → 記憶 → organon → 語彙) はここに残す。
+    //   ★★ 表を 1 か所直せば Light v1 / v2 / 委譲が同時に追随する = 片方だけ直る事故が消える。
+    const parts = partsFor('lightV2');
     let systemPrompt = loadSystemPrompt();
     // ルーム固有 Light プロンプト (Light v1 と parity、#258 follow-up)
-    if (workspacePath) {
+    if (parts.includes('roomPrompt') && workspacePath) {
       const lightPromptPath = path.join(workspacePath, 'light_prompt.md');
       if (fs.existsSync(lightPromptPath)) {
         const roomPrompt = fs.readFileSync(lightPromptPath, 'utf8').trim();
         if (roomPrompt) systemPrompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
       }
     }
-    const memory = loadMemoryForPrompt(workspacePath);
-    if (memory) systemPrompt += `\n\n## 記憶\n${memory}`;
+    if (parts.includes('memory')) {
+      const memory = loadMemoryForPrompt(workspacePath);
+      if (memory) systemPrompt += `\n\n## 記憶\n${memory}`;
+    }
     // #276 follow-up: organon polyseme.sql_mapping を DB 検索精度向上のため inject
-    systemPrompt += loadOrganonPolysemeForPrompt();
+    if (parts.includes('organon')) systemPrompt += loadOrganonPolysemeForPrompt();
     // vocab inject: STT vocab (別名→正規名) を OCR/文章読みの正規化用に inject (opt-in)
-    systemPrompt += loadVocabForPrompt();
+    if (parts.includes('vocab')) systemPrompt += loadVocabForPrompt();
     if (workspacePath) {
       const normalizedPath = workspacePath.replace(/\\/g, '/');
       systemPrompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のパスを使ってください:\n${normalizedPath}`;

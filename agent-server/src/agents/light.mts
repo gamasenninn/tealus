@@ -12,6 +12,7 @@ import * as botApi from '../lib/botApi.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
+import { partsFor } from '../lib/promptKnowledge.mts';
 import { createTools } from './lightTools.mts';
 import { getSetting } from '../context/settingsManager.mts';
 import * as lightRegistry from './lightRegistry.mts';
@@ -71,14 +72,18 @@ export function createLightAgent(workspacePath: string, mcpServers: MCPServer[] 
         const normalizedPath = workspacePath.replace(/\\/g, '/');
         prompt += `\n\n## ワークスペース\nファイル操作ツールを使う際は、以下のワークスペースパスを使ってください:\n${normalizedPath}\n例: ${normalizedPath}/hello.txt`;
       }
-      const memory = loadMemoryForPrompt(workspacePath);
-      if (memory) {
-        prompt += `\n\n## 記憶\n${memory}`;
+      // ★ #439 Step 3: 何を載せるかは宣言表 (promptKnowledge) に聞く。並べ方はここに残す。
+      const parts = partsFor('lightV1');
+      if (parts.includes('memory')) {
+        const memory = loadMemoryForPrompt(workspacePath);
+        if (memory) {
+          prompt += `\n\n## 記憶\n${memory}`;
+        }
       }
       // #276 follow-up: organon polyseme.sql_mapping を DB 検索精度向上のため inject
-      prompt += loadOrganonPolysemeForPrompt();
+      if (parts.includes('organon')) prompt += loadOrganonPolysemeForPrompt();
       // vocab inject: STT vocab (別名→正規名) を OCR/文章読みの正規化用に inject (opt-in)
-      prompt += loadVocabForPrompt();
+      if (parts.includes('vocab')) prompt += loadVocabForPrompt();
       logger.debug(`[Light] System prompt: ${prompt.length} chars`);
       return prompt;
     },

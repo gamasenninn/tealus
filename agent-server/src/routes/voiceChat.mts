@@ -31,6 +31,7 @@ import { getBotIdentity } from '../webhook/handler.mts';
 // ★ #437 Light と同じ 2 つを、会話モードにも載せる (どちらも env で opt-in)
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
+import { partsFor } from '../lib/promptKnowledge.mts';
 
 export const router = express.Router();
 
@@ -255,9 +256,16 @@ export function buildInstructions(
   //   毎ターン道具の往復が挟まる = 基準① (2 秒) と正面から衝突する。
   const parts = [base];
 
+  // ★ #439 Step 3: 何を載せるかは宣言表 (promptKnowledge) に聞く。
+  //   並べ方はここに残す —— 会話モードの instructions は **セッションの安定接頭辞**で、
+  //   途中で変わると Realtime のセッションが崩れる。連結まで共通化してはいけない。
+  // ★★ `memory` は表では use: true だが **まだ配線していない** (KNOWN_GAPS に記録済み)。
+  //   #437 の立ち上がり速度を n>50 で引き直すまで入れない = 先に足すと測定条件が変わる。
+  const use = partsFor('conversation');
+
   try {
     const roomPrompt = path.join(workspacePath, 'light_prompt.md');
-    if (fs.existsSync(roomPrompt)) {
+    if (use.includes('roomPrompt') && fs.existsSync(roomPrompt)) {
       const text = fs.readFileSync(roomPrompt, 'utf8').trim();
       if (text) parts.push(`## このルームの決まり\n\n${text}`);
     }
@@ -279,7 +287,11 @@ export function buildInstructions(
   //
   // ★ どちらも env で opt-in (ORGANON_INJECT / VOCAB_INJECT)。OFF なら空文字が返るので何も足さない。
   // ★★ 落ちても会話は始める —— 知識が薄くなるだけで、止める理由にはしない。
-  for (const [name, load] of [['organon', deps.organon], ['業務語彙', deps.vocab]] as const) {
+  for (const [name, part, load] of [
+    ['organon', 'organon', deps.organon],
+    ['業務語彙', 'vocab', deps.vocab],
+  ] as const) {
+    if (!use.includes(part)) continue;
     try {
       const block = load().trim();
       if (block) parts.push(block);
