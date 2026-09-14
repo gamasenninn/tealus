@@ -117,12 +117,34 @@ async function lastFiredAtFromRoom(t: RoomTrigger): Promise<Date | null> {
   return rows[0]?.at ?? null;
 }
 
-/** 該当種別の直近投稿。★ 本文は見ない (§6: 条件は種別のみ) */
-async function latestMatchAtFromRoom(t: RoomTrigger): Promise<Date | null> {
+/**
+ * 該当種別の直近投稿。★ 本文は見ない (§6: 条件は種別のみ)
+ *
+ * ★★ **エージェント (users.is_bot) の投稿は数えない** (#433)。
+ *   `#382` は外せない条件の 1 つ目に「エージェントの投稿では発火しない
+ *   (ループが構造的に不可能になる)」と書いているが、**実装は sender を見ていなかった**。
+ *   成り立っていたのは **設定が `video` だけで、エージェントは text しか投げないから**で、
+ *   構造ではなく偶然だった。
+ *
+ * ★★★ 第 2 段 (出品写真 = `image`) を入れると崩れる —— エージェントには画像を投稿する道具が
+ *   ある (`generate_and_send_image` / `send_image`)。AI が画像を 1 枚出すとトリガーが撃ち、
+ *   その投稿がまた AI を起こす。**閉じたはずのループが開く。**
+ *
+ * ★ 入れる前に測った (2026-09-14): 本番のトリガー 2 ルームで、直近 60 日の video / image は
+ *   **全部人間の投稿** (bot 0 件)。→ **今の挙動は 1 つも変わらない。**
+ *
+ * ★★ 既知の限界: 「材料そのものを bot が供給するルーム」ではこの除外が邪魔になる
+ *   (例: 通話履歴は 通話履歴ボット が file を投げる)。★★★ **今はそういう every/immediate の
+ *   トリガーが 1 件も無いので、設定を増やさない。** 必要になったときに、
+ *   そのトリガーだけ除外を外せる形を足すこと (★ 先回りして設定を作らない)。
+ */
+export async function latestMatchAtFromRoom(t: RoomTrigger): Promise<Date | null> {
   if (t.types.length === 0) return null;
   const { rows } = await pool.query<{ at: Date | null }>(
-    `SELECT MAX(created_at) AS at FROM messages
-      WHERE room_id = $1 AND is_deleted = false AND type = ANY($2::text[])`,
+    `SELECT MAX(m.created_at) AS at FROM messages m
+       JOIN users u ON u.id = m.sender_id
+      WHERE m.room_id = $1 AND m.is_deleted = false AND m.type = ANY($2::text[])
+        AND u.is_bot = false`,
     [t.room_id, t.types],
   );
   return rows[0]?.at ?? null;
