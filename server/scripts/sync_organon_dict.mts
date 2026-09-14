@@ -16,6 +16,7 @@ import dotenv from 'dotenv';
 import * as repo from '../src/services/dictionaryRepo.mts';
 import { pool } from '../src/db/pool.mts';
 import { projectOrganonDict, type ProjectedTerm } from './organonDictProjection.mts';
+import { buildPullState, writePullState } from '../src/services/organonPullState.mts';
 
 dotenv.config();
 
@@ -52,6 +53,9 @@ export async function syncFromOrganon(ttlPath: string): Promise<SyncResult> {
   } catch (err) {
     console.warn(`[organon] sync run の記録に失敗 (sync は成功しています): ${String(err)}`);
   }
+  // ★ #384 引ける口。organon 班は通知を受け取れないことがあるので、毎日 Step 5 のときに
+  //   自分で引ける形を 1 つ置く (= 通知と口の両方が落ちて初めて見えなくなる)。
+  writePullState(buildPullState({ ranAt: new Date(), terms, aliases, ttlPath }));
   return { terms, aliases };
 }
 
