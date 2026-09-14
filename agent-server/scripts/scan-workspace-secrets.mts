@@ -31,64 +31,92 @@ const PATTERNS: Array<{ name: string; re: RegExp }> = [
 const BINARY_EXT = new Set(['.sqlite', '.sqlite-wal', '.sqlite-shm', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp3', '.mp4', '.wav', '.zip', '.pdf', '.node', '.wasm']);
 const MAX_BYTES = 2_000_000;
 
-interface Hit { file: string; kinds: string[] }
-const hits: Hit[] = [];
-let scanned = 0, skippedBig = 0, binary = 0;
+export interface Hit { file: string; kinds: string[] }
 
-function walk(dir: string) {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    const p = path.join(dir, e.name);
-    // ★ 隠しディレクトリも入る (前回の見落としがここ)
-    if (e.isDirectory()) { walk(p); continue; }
-    if (!e.isFile()) continue;
-    const ext = path.extname(e.name).toLowerCase();
-    if (BINARY_EXT.has(ext)) { binary += 1; continue; }
-    let st: fs.Stats;
-    try { st = fs.statSync(p); } catch { continue; }
-    if (st.size > MAX_BYTES) { skippedBig += 1; continue; }
-    let text: string;
-    try { text = fs.readFileSync(p, 'utf8'); } catch { continue; }
-    scanned += 1;
-    const kinds = PATTERNS.filter((x) => x.re.test(text)).map((x) => x.name);
-    if (kinds.length) hits.push({ file: path.relative(root, p), kinds });
+export interface ScanResult {
+  hits: Hit[];
+  scanned: number;
+  skippedBig: number;
+  binary: number;
+  /** コードが workspace に書き戻すもの (.codex_home / .deep_mcp_config.json) の数 */
+  backAgain: number;
+  backAgainFiles: string[];
+  targets: string[];
+}
+
+/** コードが workspace に書くもの。★ 名前だけで数える (中身は見ない)。 */
+const WRITTEN_BY_CODE = ['.codex_home', '.deep_mcp_config.json'];
+
+/**
+ * workspace を全深さ歩いて、資格情報「らしきもの」の **種類と場所だけ** を返す。
+ *
+ * ★ #438 Step: doctor から呼べるよう関数に出した (2026-09-14)。**判定は変えていない**。
+ *   元は top-level の手続きで、import しただけで走って console に書いていた。
+ * ★★ 値は返さない。呼び出し側が誤って出さないよう、そもそも持たない。
+ * ★★★ 読めない root でも落ちない (診断は止めない)。
+ */
+export function scanWorkspaceSecrets(rootDir: string): ScanResult {
+  const hits: Hit[] = [];
+  let scanned = 0, skippedBig = 0, binary = 0;
+  const backAgainFiles: string[] = [];
+
+  function walk(dir: string): void {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      // ★ 名前だけで数える (中身は見ない)
+      if (WRITTEN_BY_CODE.includes(e.name)) backAgainFiles.push(path.relative(rootDir, p));
+      // ★ 隠しディレクトリも入る (2026-09-06 の見落としがここ)
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!e.isFile()) continue;
+      const ext = path.extname(e.name).toLowerCase();
+      if (BINARY_EXT.has(ext)) { binary += 1; continue; }
+      let st: fs.Stats;
+      try { st = fs.statSync(p); } catch { continue; }
+      if (st.size > MAX_BYTES) { skippedBig += 1; continue; }
+      let text: string;
+      try { text = fs.readFileSync(p, 'utf8'); } catch { continue; }
+      scanned += 1;
+      const kinds = PATTERNS.filter((x) => x.re.test(text)).map((x) => x.name);
+      if (kinds.length) hits.push({ file: path.relative(rootDir, p), kinds });
+    }
   }
+
+  // ★ ルームの workspace = <root>/<agentId>/<roomId>。`_` 始まりは workspace の外なので対象外
+  const targets: string[] = [];
+  try {
+    for (const agent of fs.readdirSync(rootDir, { withFileTypes: true })) {
+      if (!agent.isDirectory() || agent.name.startsWith('_')) continue;
+      targets.push(path.join(rootDir, agent.name));
+    }
+  } catch { /* ★ 読めなくても落ちない */ }
+
+  for (const t of targets) walk(t);
+  return {
+    hits, scanned, skippedBig, binary,
+    backAgain: backAgainFiles.length,
+    backAgainFiles,
+    targets: targets.map((t) => path.relative(rootDir, t)),
+  };
 }
 
-// ★ ルームの workspace = <root>/<agentId>/<roomId>。`_` 始まりは workspace の外なので対象外
-const targets: string[] = [];
-for (const agent of fs.readdirSync(root, { withFileTypes: true })) {
-  if (!agent.isDirectory() || agent.name.startsWith('_')) continue;
-  targets.push(path.join(root, agent.name));
-}
-
-const asOf = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-console.log(`走査対象 (= filesystem MCP から読める範囲)  as of ${asOf} JST`);
-for (const t of targets) console.log(`  ${path.relative(root, t)}`);
-console.log('');
-for (const t of targets) walk(t);
-
-console.log(`テキストを読んだ ${scanned} 件 / 大きすぎて飛ばした ${skippedBig} 件 / バイナリ ${binary} 件`);
-console.log('');
-if (!hits.length) {
-  console.log('★ 資格情報らしきものは 0 件でした (値は一切出していません)');
-} else {
-  console.log(`★★ ${hits.length} 件ありました —— ファイル名と種類だけ出します`);
-  for (const h of hits) console.log(`  ${h.kinds.join(' / ')}\n    ${h.file}`);
-}
-
-// ★ 参考: workspace の中に「コードが書く」ものが戻っていないか (名前だけで数える)
-const NAMES = ['.codex_home', '.deep_mcp_config.json'];
-let backAgain = 0;
-function countNames(dir: string) {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-  for (const e of entries) {
-    if (NAMES.includes(e.name)) { backAgain += 1; console.log(`  ★ 戻っている: ${path.relative(root, path.join(dir, e.name))}`); }
-    if (e.isDirectory()) countNames(path.join(dir, e.name));
+if (import.meta.main) {
+  const r = scanWorkspaceSecrets(root);
+  const asOf = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  console.log(`走査対象 (= filesystem MCP から読める範囲)  as of ${asOf} JST`);
+  for (const t of r.targets) console.log(`  ${t}`);
+  console.log('');
+  console.log(`テキストを読んだ ${r.scanned} 件 / 大きすぎて飛ばした ${r.skippedBig} 件 / バイナリ ${r.binary} 件`);
+  console.log('');
+  if (!r.hits.length) {
+    console.log('★ 資格情報らしきものは 0 件でした (値は一切出していません)');
+  } else {
+    console.log(`★★ ${r.hits.length} 件ありました —— ファイル名と種類だけ出します`);
+    for (const h of r.hits) console.log(`  ${h.kinds.join(' / ')}
+    ${h.file}`);
   }
+  console.log('');
+  for (const f of r.backAgainFiles) console.log(`  ★ 戻っている: ${f}`);
+  console.log(`コードが workspace に書くもの (.codex_home / .deep_mcp_config.json): ${r.backAgain} 件`);
 }
-console.log('');
-for (const t of targets) countNames(t);
-console.log(`コードが workspace に書くもの (.codex_home / .deep_mcp_config.json): ${backAgain} 件`);

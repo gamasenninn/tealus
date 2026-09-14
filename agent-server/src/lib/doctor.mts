@@ -29,6 +29,7 @@
  */
 import crypto from 'node:crypto';
 import { checkCodexModels } from '../utils/codexModelGuard.mts';
+import { scanWorkspaceSecrets } from '../../scripts/scan-workspace-secrets.mts';
 
 export interface Finding {
   id: string;
@@ -164,12 +165,55 @@ export function runDoctor(env: DoctorEnv): Finding[] {
     level: 'info',
     detail: [
       '確かめた項目: 既知の使えないモデル表 / 経路ごとのモデル設定 / 必須 env / 資格情報の有無',
-      '★ この版で確かめていないもの: 外部サービスの疎通 / DB migration の適用状態 / workspace の資格情報走査',
+      '★ この版で確かめていないもの: 外部サービスの疎通 / DB migration の適用状態',
+      '★★ workspace の資格情報走査は `npm run doctor` (手動の口) でだけ走ります',
       '★★ 表に無いモデルは「実測していない」だけで、安全の保証ではありません',
     ].join('\n'),
     fix: '実測が要るものは別の口に分けます (#438「2 段にする」)',
   });
 
+  return out;
+}
+
+/**
+ * ★ 手動の口だけで走らせる診断 (`npm run doctor`)。
+ *
+ * ★★ **起動時には呼ばない。** workspace を全深さ歩くので、ルームが増えるほど遅くなる。
+ *   起動を遅くしない、が #438 の「2 段にする」の約束。
+ *
+ * ★★★ ここは採用第 2 号が踏んだ 3 件目 (2026-09-06 workspace に資格情報) に当たる。
+ *   走査そのものは #419 の実装をそのまま使う (作り直さない)。
+ */
+export function runDeepChecks(env: DoctorEnv): Finding[] {
+  const out: Finding[] = [];
+  const root = env.AGENT_WORKSPACE_ROOT || './agent-workspaces';
+  try {
+    const r = scanWorkspaceSecrets(root);
+    out.push({
+      id: 'workspace-secrets',
+      level: r.hits.length > 0 ? 'warn' : 'info',
+      detail: [
+        `走査 ${r.targets.length} agent / テキスト ${r.scanned} 件 (大きすぎて飛ばした ${r.skippedBig} / バイナリ ${r.binary})`,
+        r.hits.length > 0
+          ? `★★ 資格情報らしきもの ${r.hits.length} 件:\n` +
+            r.hits.map((h) => `  ${h.kinds.join(' / ')}\n    ${h.file}`).join('\n')
+          : '★ 資格情報らしきものは 0 件 (★★ 値は一切見ていません)',
+        `コードが workspace に書くもの (.codex_home 等): ${r.backAgain} 件`,
+      ].join('\n'),
+      fix:
+        r.hits.length > 0
+          ? '★ filesystem MCP から読める範囲なので、workspace の外へ移してください (#419)'
+          : '★ 0 件は「今は無い」であって「入らない」ではありません (★★ 書き戻りは上の件数で見ます)',
+    });
+  } catch (err) {
+    // ★ 走査が失敗しても診断は続ける。★★ ただし黙らない —— 0 件と区別が付かなくなる。
+    out.push({
+      id: 'workspace-secrets',
+      level: 'warn',
+      detail: `workspace を走査できませんでした: ${err instanceof Error ? err.message : String(err)}`,
+      fix: '★ AGENT_WORKSPACE_ROOT を確かめてください (★★ 「0 件」ではありません)',
+    });
+  }
   return out;
 }
 

@@ -6,10 +6,10 @@
  * ★★★ 値は 1 文字も出さない (指紋のみ)。結果を外部へ送らない。
  */
 import dotenv from 'dotenv';
-import { runDoctor, formatFindings } from '../src/lib/doctor.mts';
+import { runDoctor, runDeepChecks, formatFindings } from '../src/lib/doctor.mts';
 
 dotenv.config();
-const findings = runDoctor(process.env);
-console.log(formatFindings(findings));
+// ★ 起動時と同じ判定 + 手動の口だけで走らせる分 (workspace 走査)。
+console.log(formatFindings([...runDoctor(process.env), ...runDeepChecks(process.env)]));
 // ★ 止めない。warn があっても exit 0 (= 起動を妨げない、という約束と揃える)。
 //   ★★ CI から使いたくなったら --strict のような別の口を足す (既定は変えない)。
