@@ -59,11 +59,38 @@ const REQUIRED: Array<{ key: string; why: string }> = [
   { key: 'TEALUS_API_URL', why: 'Tealus 本体の URL (既定 http://localhost:3000)' },
 ];
 
-/** 経路ごとのモデル設定。★ 片方だけ直した状態に気づけるよう、必ず並べて出す。 */
-const ROUTE_MODELS: Array<{ key: string; route: string }> = [
-  { key: 'AGENT_LIGHT_MODEL', route: 'Light' },
-  { key: 'AGENT_ROUTER_MODEL', route: 'Router' },
-  { key: 'AGENT_DEEP_CODEX_MODEL', route: 'Deep (codex)' },
+/**
+ * 経路ごとのモデル設定。★ 片方だけ直した状態に気づけるよう、必ず並べて出す。
+ *
+ * ★★ **どの経路が codex の制限を受けるかも並記する。** これを書かないと、制限を受けない
+ *   経路のモデルまで「揃っていない」と読まれる —— 2026-09-14 に実際に起きた。
+ *   Router は OpenAI API 直 (`OPENAI_API_KEY`) なので使えないモデル表は当たらないのに、
+ *   3 行を並べただけの一覧を見て「ここだけ世代が違う」と誤って報告した。
+ *   ★★★ **誤診を防ぐための道具が、誤診を作った。** 一覧は「並べれば分かる」ではなく、
+ *   **何を比べてよいか**まで書いて初めて読める。
+ */
+const ROUTE_MODELS: Array<{ key: string; route: string; authOf: (env: DoctorEnv) => string }> = [
+  {
+    key: 'AGENT_LIGHT_MODEL',
+    route: 'Light',
+    // ★ LIGHTV2_AUTH=subscription のときだけ codex の制限を受ける (未設定 = API key 経路)。
+    authOf: (env) => (env.LIGHTV2_AUTH === 'subscription' ? 'codex(subscription)' : 'OpenAI API'),
+  },
+  {
+    key: 'AGENT_ROUTER_MODEL',
+    route: 'Router',
+    // ★ router/index.mts は OpenAI client を直接使う。codex を経由しない。
+    authOf: () => 'OpenAI API',
+  },
+  {
+    key: 'AGENT_DEEP_CODEX_MODEL',
+    route: 'Deep',
+    authOf: (env) =>
+      (env.DEEP_AGENT_PROVIDER ?? 'claude') === 'codex' &&
+      (env.DEEP_CODEX_AUTH ?? 'subscription') === 'subscription'
+        ? 'codex(subscription)'
+        : 'OpenAI API / 他 provider',
+  },
 ];
 
 /**
@@ -103,8 +130,12 @@ export function runDoctor(env: DoctorEnv): Finding[] {
   out.push({
     id: 'route-models',
     level: 'info',
-    detail: ROUTE_MODELS.map((m) => `${m.key}=${env[m.key] ?? '(既定)'} … ${m.route}`).join('\n'),
-    fix: '★ 片方の経路だけ直していないか、3 行を見比べてください',
+    detail: ROUTE_MODELS.map(
+      (m) => `${m.route}: ${m.key}=${env[m.key] ?? '(既定)'} … 経由=${m.authOf(env)}`,
+    ).join('\n'),
+    // ★ 「見比べてください」だけでは足りない。**比べてよい相手**まで書く。
+    fix: '★ 経由が codex(subscription) の行どうしで見比べてください'
+      + ' (★★ OpenAI API の行は使えないモデル表の対象外なので、世代が違っていても問題ではありません)',
   });
 
   const missing = REQUIRED.filter((r) => !env[r.key]);

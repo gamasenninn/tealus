@@ -52,6 +52,31 @@ describe('#438 doctor — 採用第 2 号が踏んだ 3 件', () => {
     expect(table.detail).toContain('AGENT_LIGHT_MODEL');
     expect(table.detail).toContain('AGENT_DEEP_CODEX_MODEL');
   });
+
+  it('★★★★ どの経路が codex の制限を受けるかを並記する', () => {
+    // ★ これを書かないと、制限を受けない経路のモデルまで「揃っていない」と読まれる。
+    //   2026-09-14 に実際に起きた —— Router は OpenAI API 直 (OPENAI_API_KEY) なので
+    //   codex の使えないモデル表は当たらないのに、3 行を並べただけの一覧を見て
+    //   「ここだけ世代が違う」と誤って報告した。★★ 誤診を防ぐ道具が誤診を作った。
+    const f = runDoctor({
+      AGENT_LIGHT_BACKEND: 'v2', LIGHTV2_AUTH: 'subscription',
+      DEEP_AGENT_PROVIDER: 'codex', DEEP_CODEX_AUTH: 'subscription',
+    });
+    const line = (t: string, route: string): string =>
+      t.split('\n').find((l) => l.includes(route)) ?? '';
+    const table = f.find((x) => x.id === 'route-models')!;
+    expect(line(table.detail, 'Router')).toContain('API'); // ★ 制限の外
+    expect(line(table.detail, 'Light')).toContain('codex'); // ★ 制限の中
+    expect(line(table.detail, 'Deep')).toContain('codex');
+  });
+
+  it('★ API key 経路なら Light も制限の外と書く', () => {
+    // LIGHTV2_AUTH 未設定 = API key 経路。checkCodexModels も警告しない。
+    const f = runDoctor({ AGENT_LIGHT_BACKEND: 'v2' });
+    const table = f.find((x) => x.id === 'route-models')!;
+    const lightLine = table.detail.split('\n').find((l) => l.includes('Light')) ?? '';
+    expect(lightLine).toContain('API');
+  });
 });
 
 describe('#438 doctor — 必須 env', () => {
