@@ -33,6 +33,23 @@ export interface PullState {
   last_pull_at: string;
   terms: number;
   aliases: number;
+  /**
+   * ★ pull 直後の「DB に居る organon 由来の active な語」の数 (2026-09-15)。
+   * ★★ null = 引けなかった。**0 と書かない** (引く側が「1 件も無い」と読む)。
+   */
+  db_organon_active_terms: number | null;
+  /**
+   * ★ `db_organon_active_terms - terms`。**pull 直後なら 0 のはず。**
+   *
+   * ★★ なぜ生の数字ではなく差を置くか: organon 班は DB を引けないので、
+   *   「DB の active 数」を 1 つ足しても **比べる相手がいない**。差にして初めて
+   *   **1 file だけで読める不変条件**になる。
+   * ★★★ 正 = 射影から外れた語が DB に残っている (撤去が届いていない)。
+   *   負 = 射影にある語が DB に無い (sync が途中で落ちた等)。
+   * ★★★★ 実績: 2026-09-15 の撤去前は 射影 257 / DB 259 = drift 2 だった。
+   *   **この欄があれば #384 の積み残しは毎日見えていた。**
+   */
+  drift: number | null;
   ttl_path: string;
   note: string;
 }
@@ -55,20 +72,30 @@ export function buildPullState({
   terms,
   aliases,
   ttlPath,
+  dbOrganonActiveTerms,
 }: {
   ranAt: Date;
   terms: number;
   aliases: number;
   ttlPath: string;
+  /** ★ 省略 / undefined = 引けなかった。★★ 0 を渡すのは「本当に 0 件」のときだけ。 */
+  dbOrganonActiveTerms?: number | null;
 }): PullState {
+  const dbActive = dbOrganonActiveTerms ?? null;
   return {
     last_pull_at: ranAt.toISOString(),
     terms,
     aliases,
+    db_organon_active_terms: dbActive,
+    drift: dbActive === null ? null : dbActive - terms,
     ttl_path: ttlPath,
     // ★ file 自身に意味を書く。後から開く人が「最後に成功した pull」なのか
     //   「最後に試した pull」なのかを判断できないと、止まっているか動いているかを読み違える。
-    note: 'tealus が最後に成功した pull。失敗した回では更新されない (= この時刻より後に成功していない)',
+    note:
+      'tealus が最後に成功した pull。失敗した回では更新されない (= この時刻より後に成功していない)。'
+      + ' drift = db_organon_active_terms - terms で、pull 直後なら 0。'
+      + ' 正 = 射影から外れた語が DB に残っている (撤去が届いていない)。'
+      + ' null = DB を引けなかった (0 件ではない)',
   };
 }
 

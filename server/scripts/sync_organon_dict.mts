@@ -55,7 +55,20 @@ export async function syncFromOrganon(ttlPath: string): Promise<SyncResult> {
   }
   // ★ #384 引ける口。organon 班は通知を受け取れないことがあるので、毎日 Step 5 のときに
   //   自分で引ける形を 1 つ置く (= 通知と口の両方が落ちて初めて見えなくなる)。
-  writePullState(buildPullState({ ranAt: new Date(), terms, aliases, ttlPath }));
+  // ★★ 2026-09-15 追加: DB 側の実数も一緒に置く。向こうは DB を引けないので、
+  //   生の数字ではなく **射影との差 (drift)** にして初めて 1 file で読める
+  //   (組み立ては buildPullState 側)。★★★ 引けなければ null —— 0 と書かない。
+  let dbOrganonActiveTerms: number | null = null;
+  try {
+    const { rows } = await pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM dictionary_terms WHERE source = 'organon' AND status = 'active'"
+    );
+    dbOrganonActiveTerms = Number(rows[0].n);
+  } catch (err) {
+    // ★ 黙らない。null のまま書くと「引けなかった」が残るが、理由はログにしか無い。
+    console.warn(`[organon] DB の active 語数を引けませんでした (sync は成功しています): ${String(err)}`);
+  }
+  writePullState(buildPullState({ ranAt: new Date(), terms, aliases, ttlPath, dbOrganonActiveTerms }));
   return { terms, aliases };
 }
 
