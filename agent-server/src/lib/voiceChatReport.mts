@@ -119,8 +119,14 @@ export interface VoiceChatSummary {
     finished: number;
     /** ★ 終わりの印が来たのに、門は走ったままだった (= 門が `response.done` しか見ていない) */
     finishedButStillActive: number;
-    /** ★ 始まりに対する終わりの印が 1 つも来ないまま断られた回数 */
+    /** ★ 始まりに対する終わりの印が 1 つも来ないまま断られた回数 (★★ `playing=false` のときだけ) */
     skippedWithNoFinish: number;
+    /**
+     * ★ AI が話している最中に押された = **正常な割り込み** (2026-09-15 に分離)。
+     * ★★ `skippedWithNoFinish` に混ざっていて、#423 の終了条件 (600 往復で 0 件) を
+     *   **原理的に達成できなくしていた**。★★★ 0 にせず別欄に残す —— 消すと「起きていない」と読める。
+     */
+    bargeInWhilePlaying: number;
     /** ★ 終わりを待っている間に、もう 1 つ始まりが来た回数 */
     createdWhileAwaiting: number;
     /** ★ 門が見ていない `response.*` の名前ごとの件数 (次に門へ足す名前がここに出る) */
@@ -151,6 +157,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
     finished: 0,
     finishedButStillActive: 0,
     skippedWithNoFinish: 0,
+    bargeInWhilePlaying: 0,
     createdWhileAwaiting: 0,
     unknownEvents: {} as Record<string, number>,
   };
@@ -250,8 +257,14 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
           awaitingFinish = false;
         }
       } else if (e.type === 'response_create_skipped' && d.why === 'responding' && awaitingFinish) {
-        // ★ 候補 a: 終わりの印が 1 つも来ないまま断られた (2026-09-05 の 161 秒の形)
-        gate.skippedWithNoFinish += 1;
+        // ★ 2026-09-15: **`playing` で分ける。** ここを分けないと、AI が話している最中に
+        //   PTT を押す = **正常な割り込み** (直後に `interrupt` が処理する) まで数えてしまう。
+        //   ★★ 実害: #423 の終了条件は「累計 600 往復で 0 件なら閉じる」。正常な割り込みが
+        //   加算されるので **その条件は原理的に達成できなかった**。
+        //   ★★★ `playing` が無い古い記録は「戻らない形」に倒す —— 不明を割り込みに倒すと
+        //   本物の #423 が消える。**安全側は数える方。**
+        if (d.playing === true) gate.bargeInWhilePlaying += 1;
+        else gate.skippedWithNoFinish += 1;
       }
     }
     turnsEach.push(turns);
@@ -329,6 +342,7 @@ export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string
       ? `門     始まり ${g.created} / 終わり ${g.finished}`
         + ` (終わったのに走ったまま ${g.finishedButStillActive}`
         + ` / 終わりが来ないまま断られた ${g.skippedWithNoFinish}`
+        + ` / ★ 正常な割り込み ${g.bargeInWhilePlaying}`
         + ` / 二重の始まり ${g.createdWhileAwaiting})`
       : '門     記録なし (#423 の計器より前のログ。★ 0 件ではなく「分からない」)',
   ];

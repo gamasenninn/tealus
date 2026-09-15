@@ -336,7 +336,7 @@ describe('summarizeVoiceChat — 門が戻らない形を分けて数える (#42
     const s = summarizeVoiceChat([rec(turn(0, 1000))]);
     expect(s.responseGate).toEqual({
       created: 0, finished: 0, finishedButStillActive: 0,
-      skippedWithNoFinish: 0, createdWhileAwaiting: 0, unknownEvents: {},
+      skippedWithNoFinish: 0, bargeInWhilePlaying: 0, createdWhileAwaiting: 0, unknownEvents: {},
     });
   });
 });
@@ -377,5 +377,56 @@ describe('formatVoiceChatReport — 門の内訳を表に出す (#423)', () => {
       lifecycle(2000, 'response.aborted_by_server', 'unknown', true),
     ])]);
     expect(formatVoiceChatReport(s, '2026-09-11 14:00')).toContain('response.aborted_by_server');
+  });
+});
+
+/**
+ * ★ 2026-09-15 — **計器の欄と、判定の規則が食い違っていた。**
+ *
+ * `report/voice-gate-tally.md` の警報条件はこう書いてある:
+ *   「★ 読む   why='responding' **かつ playing=false** の skip が 1 件でも出たら、その場で読む」
+ *
+ * ★★ ところが `skippedWithNoFinish` は **`playing` を見ていなかった**。
+ *   AI が話している最中に PTT を押す = **正常な割り込み** (直後に `interrupt` が処理する) でも
+ *   加算される。
+ *
+ * ★★★★ 実害: #423 の終了条件は「**累計 600 往復で 0 件なら閉じる**」。
+ *   正常な割り込みが加算されるので、**この条件は原理的に達成できない**。
+ *   実測 (2026-09-15): 変更後 39 往復で 1 件出たが、中身は `playing: true` の正常な割り込みだった。
+ *
+ * ★ 直し: `playing === false` のときだけ「戻らない形」に数える。
+ *   ★★ 割り込みは **消さずに別の欄**へ (0 にすると「起きていない」と読める)。
+ */
+describe('★ 割り込み (playing=true) を「戻らない形」に数えない (2026-09-15)', () => {
+  test('★★★★ AI が話している最中の skip は正常な割り込み —— 別の欄に数える', () => {
+    const s = summarizeVoiceChat([rec([
+      { t: 100, type: 'response_lifecycle', data: { event: 'response.created', kind: 'created', active: true } },
+      { t: 5000, type: 'output_audio_started', data: { event: 'output_audio_buffer.started' } },
+      { t: 6000, type: 'ptt_release' },
+      { t: 6001, type: 'response_create_skipped', data: { why: 'responding', pending_tools: 0, playing: true } },
+      { t: 6100, type: 'interrupt', data: { was_responding: true, was_playing: true } },
+    ])]);
+    expect(s.responseGate.skippedWithNoFinish).toBe(0);
+    expect(s.responseGate.bargeInWhilePlaying).toBe(1);
+  });
+
+  test('★ playing=false の形はこれまでどおり数える (161 秒の実測の形)', () => {
+    const s = summarizeVoiceChat([rec([
+      { t: 100, type: 'response_lifecycle', data: { event: 'response.created', kind: 'created', active: true } },
+      { t: 5000, type: 'output_audio_stopped', data: { event: 'output_audio_buffer.stopped' } },
+      { t: 168001, type: 'response_create_skipped', data: { why: 'responding', pending_tools: 0, playing: false } },
+    ])]);
+    expect(s.responseGate.skippedWithNoFinish).toBe(1);
+    expect(s.responseGate.bargeInWhilePlaying).toBe(0);
+  });
+
+  test('★★ playing が無い記録は「戻らない形」に倒す (★ 古い記録を取りこぼさない)', () => {
+    // ★ playing を記録していなかった頃の jsonl がまだ残っている。
+    //   ★★ 不明を「割り込み」に倒すと、本物の #423 が消える。**安全側は「戻らない形」。**
+    const s = summarizeVoiceChat([rec([
+      { t: 100, type: 'response_lifecycle', data: { event: 'response.created', kind: 'created', active: true } },
+      { t: 168001, type: 'response_create_skipped', data: { why: 'responding', pending_tools: 0 } },
+    ])]);
+    expect(s.responseGate.skippedWithNoFinish).toBe(1);
   });
 });
