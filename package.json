@@ -13,7 +13,7 @@
   "scripts": {
     "test": "jest --config scripts/jest.config.js",
     "typecheck": "tsc --noEmit",
-    "doctor": "npm --prefix agent-server run doctor"
+    "doctor": "npm --prefix agent-server run doctor --"
   },
   "devDependencies": {
     "@swc/core": "^1.15.43",

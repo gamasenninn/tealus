@@ -28,6 +28,8 @@
  *   **作り直さずに doctor から呼ぶ形**を次の版で足す。
  */
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { checkCodexModels } from '../utils/codexModelGuard.mts';
 import { scanWorkspaceSecrets } from '../../scripts/scan-workspace-secrets.mts';
 
@@ -165,11 +167,14 @@ export function runDoctor(env: DoctorEnv): Finding[] {
     level: 'info',
     detail: [
       '確かめた項目: 既知の使えないモデル表 / 経路ごとのモデル設定 / 必須 env / 資格情報の有無',
-      '★ この版で確かめていないもの: 外部サービスの疎通 / DB migration の適用状態',
-      '★★ workspace の資格情報走査は `npm run doctor` (手動の口) でだけ走ります',
+      // ★ ここは **起動時の口が何を見たか** を言う欄。★★ 手動の口で増えた項目を書くと、
+      //   起動時にも見たことになってしまう (#442 で実際に古くなった行を直した)。
+      '★ 起動時のこの口が見ていないもの: 外部サービスの疎通 / DB migration の適用状態 /',
+      '  辞書オーバーレイの掛け違い / 本線 (cc-main) の生死 / workspace の資格情報走査',
+      '★★ 上の 5 つは `npm run doctor` (手動の口) で走ります。★★★ 外部疎通だけは `--probe` を付けたときだけ',
       '★★ 表に無いモデルは「実測していない」だけで、安全の保証ではありません',
     ].join('\n'),
-    fix: '実測が要るものは別の口に分けます (#438「2 段にする」)',
+    fix: '実測が要るものは別の口に分けます (#438「2 段にする」/ #442)',
   });
 
   return out;
@@ -214,7 +219,214 @@ export function runDeepChecks(env: DoctorEnv): Finding[] {
       fix: '★ AGENT_WORKSPACE_ROOT を確かめてください (★★ 「0 件」ではありません)',
     });
   }
+  // #442 (2) 本線の生死。★ fs だけで済むのでここに置く (DB / 外部は別の口)。
+  out.push(judgeMainline(minutesSinceMainlineClose(env), MAINLINE_WARN_MINUTES));
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// #442 実測する口。★ 判定は純関数、読み取りは別の関数。
+//   理由: 第 1 版のテストは env を注入するだけで全部書けた。DB / fs / 外部が混ざると
+//   そこが崩れて「テストのために実物を用意する」方へ倒れる。**判定だけは注入で書ける形を保つ。**
+// ---------------------------------------------------------------------------
+
+/**
+ * #442 (2) 本線の close が途絶えてから warn にするまで。
+ *
+ * ★ 55.1 分は丸めた実測値ではなく、**向こうの定数から出る値**である (2026-09-15 に送り手が内訳を出した):
+ * ```
+ * max_age 3300 秒 (= 55.000 分) + backoff 3〜12 秒 + login 約 0.1 秒 → ★ 55.05〜55.20 分
+ * ```
+ * ★★ 2 時間にした理由も数字で決まっている:
+ * ```
+ * ★ 上流障害では 本線は生きたまま間隔が伸びる (FAILS>5 で backoff ×4 = 12〜48 秒)
+ * ★★ 2026-09-06 の WAN 障害では 約 20 分 繋がらなかった
+ * → ★★★ 60〜70 分にすると障害のたびに鳴る。2 時間なら 1 時間級の障害を許容しつつ、死は 2 周期以内に捕まる
+ * ```
+ */
+export const MAINLINE_WARN_MINUTES = 120;
+
+/**
+ * #442 (1) migration の適用状態。
+ * @param pending 未適用のファイル名。★ **null = 引けなかった** (0 件ではない)
+ * @param appliedCount 適用済みの件数。null = 引けなかった
+ */
+export function judgeMigrations(pending: string[] | null, appliedCount: number | null): Finding {
+  if (pending === null) {
+    return {
+      id: 'db-migrations',
+      level: 'warn',
+      detail: '★ 適用状態を引けませんでした (★★ 「未適用 0 件」ではありません)',
+      fix: '★ DB に届いているかを確かめてください (DATABASE_URL / docker compose up)',
+    };
+  }
+  if (pending.length === 0) {
+    return {
+      id: 'db-migrations',
+      level: 'info',
+      detail: `適用済み ${appliedCount ?? '?'} 件 / 未適用 0 件`,
+      fix: '★ 台帳 (schema_migrations) にある分だけを見ています。★★ 台帳より前に手で当てた分は見えません',
+    };
+  }
+  return {
+    id: 'db-migrations',
+    level: 'warn',
+    detail: `★ 未適用 ${pending.length} 件 (適用済み ${appliedCount ?? '?'} 件):\n` +
+      pending.map((f) => `  ${f}`).join('\n'),
+    fix: '★ `npm run migrate` を流してください (★★ 台帳が無い DB では先に `npm run migrate -- --baseline`)',
+  };
+}
+
+/**
+ * #442 (2) 本線 (cc-main) の生死。
+ *
+ * ★ **見張りを立て直さない、という判断の実装**である (2026-09-15)。
+ *   こちらの見張り (`cc_stream_unexpected.py`) は 19 日 止まっていたのに、その沈黙が
+ *   「異常なし」と見分けられなかった。**新しい見張りを増やすと、同じ形が増える。**
+ *   proxy ログの `ua=cc-main` は **生死と異常が同じ 1 欄で読める**ので、引ける口に置くだけにする。
+ *
+ * @param minutes 最後の close からの経過分。★ **null = 1 度も見つからなかった**
+ */
+export function judgeMainline(minutes: number | null, warnAfter: number): Finding {
+  if (minutes === null) {
+    return {
+      id: 'cc-main-heartbeat',
+      level: 'warn',
+      detail: '★ 本線 (ua=cc-main) の close がログに 1 件も見つかりませんでした',
+      fix: '★ ログの保存期間 (14 日) を超えたか、本線が一度も繋いでいません。★★ 沈黙は「異常なし」ではありません',
+    };
+  }
+  const over = minutes > warnAfter;
+  return {
+    id: 'cc-main-heartbeat',
+    level: over ? 'warn' : 'info',
+    detail: over
+      ? `★ 本線の最後の close から ${minutes} 分 (${warnAfter} 分を超過)`
+      : `本線の最後の close から ${minutes} 分`,
+    fix: over
+      ? '★ 向こうのセッションが落ちている可能性があります (セッション終了 / Monitor 死 / 本線死 / 忘れ)'
+      : `★ 本線は 55.05〜55.20 分ごとに張り直します (max_age 3300 秒 + backoff 3〜12 秒)。${warnAfter} 分超で warn。★★ 数えているのは本線 1 本だけです (probe や他の購読者は含みません)`,
+  };
+}
+
+/**
+ * #442 (3) 辞書オーバーレイの掛け違い (#384)。
+ *
+ * ★ DB の行を直しても、在庫の語彙は `refreshVocabFromTable` を呼ぶまで入れ替わらない。
+ *   ★★ 走るのは 起動時 / admin endpoint / organon watcher の 3 つだけで、watcher は
+ *   **ttl の内容 hash が変わったときしか発火しない**。= organon が ttl を変えない日は治らない。
+ * ★★★ 2026-09-15 に `organonDictPrune --apply` の直後に実測し、消費側 2 か所とも古いままだった。
+ *   **黙って続く**のが害なので、引ける口に出す (自動で直すことはしない)。
+ */
+export function judgeOverlayDrift(dbActive: number | null, overlayTerms: number | null): Finding {
+  if (dbActive === null || overlayTerms === null) {
+    return {
+      id: 'dict-overlay-drift',
+      level: 'warn',
+      detail: `★ 突き合わせできませんでした (DB=${dbActive ?? '引けず'} / 在庫=${overlayTerms ?? '引けず'})`,
+      fix: '★ DB への到達と local.ttl の場所を確かめてください (★★ 「ずれ 0」ではありません)',
+    };
+  }
+  if (dbActive === overlayTerms) {
+    return {
+      id: 'dict-overlay-drift',
+      level: 'info',
+      detail: `DB の active な語 ${dbActive} 件 = 在庫の語彙 ${overlayTerms} 件`,
+      fix: '★ 件数が同じだけで、中身までは突き合わせていません',
+    };
+  }
+  return {
+    id: 'dict-overlay-drift',
+    level: 'warn',
+    detail:
+      `★ DB の active な語 ${dbActive} 件 に対して 在庫の語彙 ${overlayTerms} 件 (差 ${overlayTerms - dbActive})\n` +
+      `  ★★ ${overlayTerms > dbActive ? '在庫の方が多い = DB で落とした語がまだ効いています' : '在庫の方が少ない = DB で足した語がまだ効いていません'}`,
+    fix: '★ `POST /api/admin/transcription/reload-vocab` を叩くか、本体サーバを再起動してください (★★ DB を直しただけでは入れ替わりません)',
+  };
+}
+
+/** #442 (4) 1 経路の疎通結果。★ status は 3 値。 */
+export interface ProbeResult {
+  route: string;
+  model: string;
+  /** どの資格情報でその経路に届くのか。★ 「何を比べてよいか」を読み手に渡す */
+  via: string;
+  /** ok = 叩いて通った / failed = 叩いて通らなかった / not-probed = 叩いていない */
+  status: 'ok' | 'failed' | 'not-probed';
+  note: string;
+}
+
+/**
+ * #442 (4) 外部疎通。
+ * ★ **「叩けなかった」と「叩かなかった」を区別する。** 沈黙と同じにしないための 3 値。
+ */
+export function judgeProbe(results: ProbeResult[]): Finding {
+  const failed = results.filter((r) => r.status === 'failed');
+  const probed = results.filter((r) => r.status !== 'not-probed');
+  const lines = results.map(
+    (r) => `  [${r.status}] ${r.route}: ${r.model} … 経由=${r.via}${r.note ? ` … ${r.note}` : ''}`
+  );
+  return {
+    id: 'external-reachability',
+    level: failed.length > 0 ? 'warn' : 'info',
+    detail: [
+      `叩いた ${probed.length} / ${results.length} 経路 (通った ${probed.length - failed.length} / 通らなかった ${failed.length})`,
+      ...lines,
+      probed.length === 0 ? '★ この実行では 1 経路も叩いていません (= 失敗ではありません)' : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    fix:
+      failed.length > 0
+        ? '★ 通らなかった経路のモデル名と鍵を確かめてください (★★ ログインし直しても直りません)'
+        : '★ 言えるのは「叩いて通った」ことだけです。not-probed の経路については何も確かめていません',
+  };
+}
+
+/** ログの 1 行から close 時刻を読む。★ 形が変わったら null (推測しない)。 */
+const LOG_TS = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/;
+
+/**
+ * #442 (2) の読み取り。★ **新しいファイルから遡る** (最新ログだけ見ると、
+ * 本線が数日前に死んだ場合に「見つからない」と「今日は静か」が混ざる)。
+ */
+export function lastMainlineCloseAt(logDir: string): Date | null {
+  let files: string[];
+  try {
+    files = fs
+      .readdirSync(logDir)
+      .filter((f) => f.endsWith('.log'))
+      .sort()
+      .reverse();
+  } catch {
+    return null; // ★ ディレクトリが無い = 例外にしない (診断は続ける)
+  }
+  for (const f of files) {
+    let lines: string[];
+    try {
+      lines = fs.readFileSync(path.join(logDir, f), 'utf8').split('\n');
+    } catch {
+      continue;
+    }
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const ln = lines[i];
+      // ★ `ua=cc-main` は本線だけが送る。★★ `ua=curl/8.7.1` は probe-b と区別が付かないので数えない。
+      if (!ln.includes('ua=cc-main')) continue;
+      const m = LOG_TS.exec(ln);
+      if (!m) continue;
+      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    }
+  }
+  return null;
+}
+
+/** 本線の最後の close からの経過分。★ 見つからなければ null。 */
+export function minutesSinceMainlineClose(env: DoctorEnv, now: Date = new Date()): number | null {
+  const dir =
+    env.TEALUS_SERVER_LOG_DIR || path.resolve(import.meta.dirname, '../../../server/logs');
+  const at = lastMainlineCloseAt(dir);
+  if (!at) return null;
+  return Math.floor((now.getTime() - at.getTime()) / 60000);
 }
 
 /** 人が読む 1 本のテキストにする。★ 出力そのものは呼び出し側が決める (ログ / 標準出力)。 */
