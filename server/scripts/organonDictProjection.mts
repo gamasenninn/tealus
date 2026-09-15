@@ -78,17 +78,18 @@ function foldRedundantAliases(term: string, aliases: string[]): string[] {
   });
 }
 
-export function projectOrganonDict(ttl: string): ProjectedTerm[] {
-  const parser = new Parser();
-  const quads = parser.parse(ttl);
-
+/**
+ * ttl を subject 単位にまとめる。★ 射影と「全 kind の表層」で **同じ読み方**を使うために切り出した
+ * (2026-09-15)。★★ 2 か所で別々に parse すると、片方だけ述語を足したときに静かにずれる。
+ */
+function parseSubjects(ttl: string): Map<string, SubjectAcc> {
+  const quads = new Parser().parse(ttl);
   const bySubject = new Map<string, SubjectAcc>();
   const acc = (s: string): SubjectAcc => {
     let a = bySubject.get(s);
     if (!a) { a = { aliases: [] }; bySubject.set(s, a); }
     return a;
   };
-
   for (const q of quads) {
     const s = q.subject.value;
     const p = q.predicate.value;
@@ -99,7 +100,11 @@ export function projectOrganonDict(ttl: string): ProjectedTerm[] {
     else if (p === `${ORG}vendorClass`) acc(s).vendorClass = o;
     else if (p === `${ORG}alias`) acc(s).aliases.push(o);
   }
+  return bySubject;
+}
 
+export function projectOrganonDict(ttl: string): ProjectedTerm[] {
+  const bySubject = parseSubjects(ttl);
   const out: ProjectedTerm[] = [];
   for (const a of bySubject.values()) {
     if (a.status !== 'confirmed') continue;
@@ -116,6 +121,40 @@ export function projectOrganonDict(ttl: string): ProjectedTerm[] {
     // #381 恒等・敬称重複を畳む (organon 側は触らず、消費者側の粒度に合わせる)
     const aliases = foldRedundantAliases(term, deduped);
     out.push({ term, category, aliases });
+  }
+  return out;
+}
+
+/**
+ * ★ **消費側が 2 つあるので、ものさしを分ける** (2026-09-15)。
+ *
+ * `projectOrganonDict` は **Role / Organization だけ**を残す —— 辞書テーブル経由の消費者
+ * (朝礼 / 本体の補正段) に合わせた粒度で、Location / Polyseme 等は落ちる。
+ * ★★ 一方 **通話履歴 (別リポ) は organon.ttl を全 kind 直読み**していて、
+ *   Location も Polyseme も prompt に載る。
+ *
+ * ★★★ 実測 (2026-09-15): 射影の表層 **867** / 全 kind **1,298**。
+ *   `鹿沼` `芝駐` `宇都宮` は射影に無い (Location)。
+ *   → ★ 通話履歴の訂正を射影の canon で測ると **地名の訂正が丸ごと「canon 外」に落ちる**。
+ *   実際 `神山 → 鹿沼` が canon 外として上位に出ていた (14 日で 7 件)。
+ *
+ * ★★★★ この区別は `correctionLedger.mts` の doc コメントに書いてあったのに、
+ *   **実装は射影を選んでいた。** 書いてあることと、していることが違っていた。
+ *
+ * ★ status は `confirmed` のみ —— 通話履歴側 (`load_organon_aliases.build`) と揃える。
+ * ★★ label も表層に入れる。organon の entry は正式名を alias に含めないことがあり、
+ *   alias だけ見ると素の正式名が「未収載」に化ける (向こうの実装と同じ判断)。
+ */
+export function collectConfirmedSurfaces(ttl: string): Set<string> {
+  const out = new Set<string>();
+  for (const p of parseSubjects(ttl).values()) {
+    if (p.status !== 'confirmed') continue;
+    const label = (p.label || '').trim();
+    if (label) out.add(label);
+    for (const a of p.aliases) {
+      const t = a.trim();
+      if (t) out.add(t);
+    }
   }
   return out;
 }

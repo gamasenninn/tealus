@@ -29,7 +29,7 @@ import path from 'node:path';
 import dotenv from 'dotenv';
 import { pool } from '../src/db/pool.mts';
 import { extractAliasPairs } from '../src/services/aliasMiner.mts';
-import { projectOrganonDict } from './organonDictProjection.mts';
+import { projectOrganonDict, collectConfirmedSurfaces } from './organonDictProjection.mts';
 
 dotenv.config();
 
@@ -319,18 +319,29 @@ if (import.meta.main) {
     || 'C:/OneDrive/ドキュメント/PY_SRC/SP2TXT/temp/raw');
 
   (async () => {
-    const canonSrc = argOf('canon', 'organon'); // ★ 既定は通話履歴の経路に合わせる
+    // ★ 既定は `ttl` = **通話履歴が実際に読んでいる形** (全 kind・confirmed のみ)。
+    //   ★★ 2026-09-15 まで既定は `organon` (= 射影) だった。射影は Role / Organization しか
+    //   残さないので、**Location の訂正が丸ごと「canon 外」に落ちていた**。
+    //   実測: 射影の表層 867 / 全 kind 1,298。`鹿沼` `芝駐` `宇都宮` は射影に無い。
+    //   ★★★ この区別は下の `loadCanonSurfaces` の doc に書いてあったのに、
+    //   **実装が射影を選んでいた**。書いてあることと、していることが違っていた。
+    const canonSrc = argOf('canon', 'ttl');
     let canon: Set<string>;
     if (canonSrc === 'dict') {
       canon = await loadCanonSurfaces();
     } else {
       const ttl = process.env.ORGANON_TTL_PATH;
       if (!ttl) throw new Error('ORGANON_TTL_PATH が要る (--canon dict なら不要)');
-      const projected = projectOrganonDict(fs.readFileSync(ttl, 'utf8'));
-      canon = new Set<string>();
-      for (const p of projected) {
-        canon.add(p.term);
-        for (const a of p.aliases) canon.add(a);
+      const text = fs.readFileSync(ttl, 'utf8');
+      if (canonSrc === 'ttl') {
+        canon = collectConfirmedSurfaces(text);
+      } else {
+        // ★ `organon` = 射影。**朝礼 / 本体の補正段**を測るときはこちら
+        canon = new Set<string>();
+        for (const p of projectOrganonDict(text)) {
+          canon.add(p.term);
+          for (const a of p.aliases) canon.add(a);
+        }
       }
     }
     const pairs = await loadEditPairs(room, days);

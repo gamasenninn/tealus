@@ -1,7 +1,7 @@
 /**
  * #331 organon.ttl → 辞書射影 (Option 1: proper noun のみ) の unit test。
  */
-import { projectOrganonDict } from '../../scripts/organonDictProjection.mts';
+import { projectOrganonDict, collectConfirmedSurfaces } from '../../scripts/organonDictProjection.mts';
 
 const TTL = `
 @prefix org1: <https://tealus.local/organon/> .
@@ -161,5 +161,58 @@ org1:T a org1:Role ; rdfs:label "田島" ; org1:alias "田島" ; org1:status "co
 `);
     expect(r).toHaveLength(1);
     expect(r[0]).toEqual({ term: '田島', category: 'person', aliases: [] });
+  });
+});
+
+/**
+ * ★ 2026-09-15 — **消費側が 2 つある。ものさしを取り違えない。**
+ *
+ * ★★ 射影 (`projectOrganonDict`) は **Role / Organization だけ**を残す。
+ *   これは辞書テーブル経由の消費者 (朝礼 / 本体の補正段) に合わせた粒度。
+ * ★★★ **通話履歴 (別リポ) は organon.ttl を全 kind 直読み**している。
+ *   Location / Polyseme / Protocol / Shared も prompt に載る。
+ *
+ * ★★★★ 実測 (2026-09-15): 射影の表層 867 / ttl 直読み 1,298。
+ *   **`鹿沼` `芝駐` `宇都宮` は射影に無い** (Location のため)。
+ *   → ★ 通話履歴の訂正を射影の canon で測ると、**地名の訂正が丸ごと「canon 外」に落ちる**。
+ *   実際 `神山 → 鹿沼` が canon 外として上位に出た (14 日で 7 件)。
+ *
+ * ★ この区別は `correctionLedger.mts` の doc コメントに書いてあったが、
+ *   **実装は射影を選んでいた**。書いてあることと、していることが違っていた。
+ */
+describe('collectConfirmedSurfaces — ★ ttl 直読みの経路に合わせた表層 (2026-09-15)', () => {
+  const ttl = `
+@prefix org1: <https://tealus.local/organon/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<x:a> a org1:Role ; rdfs:label "草野" ; org1:status "confirmed" ; org1:alias "くさの" .
+<x:b> a org1:Location ; rdfs:label "鹿沼" ; org1:status "confirmed" ; org1:alias "神山市" .
+<x:c> a org1:Polyseme ; rdfs:label "アグリ" ; org1:status "confirmed" .
+<x:d> a org1:Location ; rdfs:label "未確定地" ; org1:status "candidate" ; org1:alias "みてい" .
+`;
+
+  it('★ Role 以外の kind も表層に入る (射影は落とす)', () => {
+    const s = collectConfirmedSurfaces(ttl);
+    expect(s.has('鹿沼')).toBe(true);     // Location
+    expect(s.has('神山市')).toBe(true);   // Location の alias
+    expect(s.has('アグリ')).toBe(true);   // Polyseme
+    expect(s.has('草野')).toBe(true);     // Role
+    expect(s.has('くさの')).toBe(true);
+  });
+
+  it('★★ confirmed でないものは入らない (ttl 直読み側も confirmed のみ)', () => {
+    const s = collectConfirmedSurfaces(ttl);
+    expect(s.has('未確定地')).toBe(false);
+    expect(s.has('みてい')).toBe(false);
+  });
+
+  it('★★★ 射影より必ず広い (射影は Role/Organization だけ)', () => {
+    const projected = new Set<string>();
+    for (const p of projectOrganonDict(ttl)) {
+      projected.add(p.term);
+      for (const a of p.aliases) projected.add(a);
+    }
+    const all = collectConfirmedSurfaces(ttl);
+    for (const w of projected) expect(all.has(w)).toBe(true);
+    expect(all.size).toBeGreaterThan(projected.size);
   });
 });
