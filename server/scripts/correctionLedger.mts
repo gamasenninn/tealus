@@ -25,6 +25,7 @@
  *   node scripts/correctionLedger.mts [--days 14] [--room 通話履歴] [--top 20]
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import dotenv from 'dotenv';
 import { pool } from '../src/db/pool.mts';
 import { extractAliasPairs } from '../src/services/aliasMiner.mts';
@@ -97,6 +98,36 @@ export function trimToChangedWindow(
     old: a.slice(from, a.length - tail + context),
     neu: b.slice(from, b.length - tail + context),
   };
+}
+
+/**
+ * ★ 2026-09-15 — raw が揃ったので `unknown` を実際に判定できるようになった。
+ *
+ * ★★ 鍵は本文にある: 通話履歴の本文 1 行目が `【通話】sum_<vid> / ...` で、
+ *   raw は `raw_<vid>.txt`。**新しい対応表を作らない。**
+ */
+export function extractVid(content: string): string | null {
+  const m = /sum_(\d+)/.exec(content || '');
+  return m ? m[1] : null;
+}
+
+/** 訂正前の語が STT の生出力に在ったか。★ 3 値 —— 「raw が無い」を「崩れ」に倒さない。 */
+export type RawVerdict = 'stt' | 'stage' | 'no-raw';
+
+/**
+ * 訂正前の語が raw に在るかで、崩れの出所を決める。★ 純関数。
+ *
+ * ```
+ * ★ raw に在る   → STT が出した     (= 崩れ ①)
+ * ★ raw に無い   → 後段が作った     (= 誤り ②)   ★★ 補正段が実在の語に化けさせた形
+ * ★★★ raw が無い → 決めない
+ * ```
+ * ★ raw は 2026-09-14 12:57:52 から。それ以前の便には無いので `no-raw` が普通に出る。
+ *   **件数を必ず出すこと** —— 黙ると「②が 0 件」に読める。
+ */
+export function judgeByRaw(from: string, rawText: string | null): RawVerdict {
+  if (!from || rawText === null) return 'no-raw';
+  return rawText.includes(from) ? 'stt' : 'stage';
 }
 
 /** text 中の word の出現数。★ 重なりは数えない (indexOf を語長で進める)。 */
@@ -196,7 +227,41 @@ async function loadCanonSurfaces(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.s).filter(Boolean));
 }
 
-/** 同じ message の連続する版を (旧, 新) で並べる。★ 版が飛んでいても順序で組む。 */
+/**
+ * 同じ message の版を (旧, 新) で並べる。★ 純関数。
+ *
+ * ★★★★ **最後の遷移を落とさないこと。** `message_edits` が持つのは **過去の版**で、
+ *   **最終版は `messages.content`** にある。版の間だけを組むと、
+ *   **人が受け入れた最後の訂正が丸ごと落ちる**。
+ *
+ * ★ 実測 (通話履歴 / 直近 14 日、2026-09-15):
+ * ```
+ * 編集のあったメッセージ 310 件 / edit 行 702 行
+ * ★ 版の間だけ        392 組
+ * ★★★★ 落ちていた分   310 組 (44%)。うち 1 回だけ編集の 127 件は **対が 0 件**
+ * ★★ 310 件すべてで 最後の edit 行 ≠ messages.content (= 最後の遷移は実在する)
+ * ```
+ * ★★ 最終版が引けないメッセージには最後の遷移を作らない (★ 推測しない)。
+ */
+export function pairVersions(
+  rows: Array<{ message_id: string; version: number; content: string }>,
+  finals: Map<string, string>,
+): Array<{ old: string; neu: string }> {
+  const out: Array<{ old: string; neu: string }> = [];
+  for (let i = 0; i < rows.length; i++) {
+    const cur = rows[i];
+    const next = rows[i + 1];
+    if (next && next.message_id === cur.message_id) {
+      out.push({ old: cur.content, neu: next.content });
+      continue;
+    }
+    // ★ このメッセージの最後の版 → 最終版
+    const fin = finals.get(cur.message_id);
+    if (fin !== undefined && fin !== cur.content) out.push({ old: cur.content, neu: fin });
+  }
+  return out;
+}
+
 async function loadEditPairs(room: string, days: number): Promise<Array<{ old: string; neu: string }>> {
   const { rows } = await pool.query<{ message_id: string; version: number; content: string }>(
     `SELECT e.message_id, e.version, e.content
@@ -207,12 +272,16 @@ async function loadEditPairs(room: string, days: number): Promise<Array<{ old: s
       ORDER BY e.message_id, e.version`,
     [room, String(days)],
   );
-  const out: Array<{ old: string; neu: string }> = [];
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].message_id !== rows[i - 1].message_id) continue;
-    out.push({ old: rows[i - 1].content, neu: rows[i].content });
-  }
-  return out;
+  const { rows: finalRows } = await pool.query<{ id: string; content: string }>(
+    `SELECT m.id, m.content
+       FROM messages m JOIN rooms r ON r.id = m.room_id
+      WHERE r.name = $1 AND m.is_deleted = false
+        AND EXISTS (SELECT 1 FROM message_edits e
+                     WHERE e.message_id = m.id
+                       AND e.created_at > now() - ($2 || ' days')::interval)`,
+    [room, String(days)],
+  );
+  return pairVersions(rows, new Map(finalRows.map((r) => [r.id, r.content])));
 }
 
 /**
@@ -243,6 +312,11 @@ if (import.meta.main) {
   const room = argOf('room', '通話履歴');
   const top = parseInt(argOf('top', '20'), 10);
   const focus = argOf('focus', '');
+  // ★ raw の置き場所。★★ 別リポ (SP2TXT) が書くので env / 引数で差し替えられる形にする。
+  const rawDir = argOf('raw', process.env.TLS_RAW_DIR
+    // ★ 区切りは `/` にする。Windows の Node はどちらでも開けるが、`\t` `\r` が
+    //   エスケープとして解釈されて黙って別のパスになる (2026-09-15 に実際に踏んだ)。
+    || 'C:/OneDrive/ドキュメント/PY_SRC/SP2TXT/temp/raw');
 
   (async () => {
     const canonSrc = argOf('canon', 'organon'); // ★ 既定は通話履歴の経路に合わせる
@@ -264,13 +338,34 @@ if (import.meta.main) {
 
     const counts = new Map<string, { from: string; to: string; kind: CorrectionKind; n: number }>();
     const byKind = new Map<CorrectionKind, number>();
+    // ★ #440 の unknown 列。raw が揃ったので出所を決める (2026-09-15)。
+    const byRaw = new Map<RawVerdict, number>();
+    const stageMade: Array<{ from: string; to: string; vid: string }> = [];
+    const rawCache = new Map<string, string | null>();
+    const readRaw = (vid: string | null): string | null => {
+      if (!vid) return null;
+      if (!rawCache.has(vid)) {
+        try {
+          rawCache.set(vid, fs.readFileSync(path.join(rawDir, `raw_${vid}.txt`), 'utf8'));
+        } catch {
+          rawCache.set(vid, null); // ★ 無い = 決めない。0 件ではない
+        }
+      }
+      return rawCache.get(vid) ?? null;
+    };
+
     for (const p of pairs) {
+      // ★ vid は本文 1 行目にある (【通話】sum_<vid>)。★★ 対応表を作らない。
+      const raw = readRaw(extractVid(p.old));
       // ★ 長文をそのまま渡すと LCS の上限 (400 字) で黙って捨てられる。変わった窓だけ渡す。
       const w = trimToChangedWindow(p.old, p.neu, 60);
       if (!w.old && !w.neu) continue;
       for (const ex of extractAliasPairs(w.old, w.neu, terms)) {
         const kind = classifyPair(ex, canon);
         if (!kind) continue;
+        const verdict = judgeByRaw(ex.from, raw);
+        byRaw.set(verdict, (byRaw.get(verdict) || 0) + 1);
+        if (verdict === 'stage') stageMade.push({ from: ex.from, to: ex.to, vid: extractVid(p.old) || '?' });
         // * 区切りは JSON にする (organonDictPrune と同じ形)。以前は NUL を区切りに使っていて、
         //   この file が grep に binary 判定され、検索で黙って飛ばされていた。
         const key = JSON.stringify([ex.from, ex.to]);
@@ -289,6 +384,22 @@ if (import.meta.main) {
     for (const k of ['garble', 'unknown', 'normalize', 'outside'] as CorrectionKind[]) {
       const n = byKind.get(k) || 0;
       if (total) console.log(`  ${String(n).padStart(4)} (${Math.round((100 * n) / total)}%)  ${LABEL[k]}`);
+    }
+
+    // ★ #440 の unknown 列を raw で解く (2026-09-15)。★★ canon の分類とは独立の軸。
+    //   ★★★ 分母を必ず出す —— raw は 2026-09-14 12:57 からしか無いので、
+    //   「後段が作った 0 件」と「raw が無いから決めていない」を混ぜない。
+    const nStt = byRaw.get('stt') || 0;
+    const nStage = byRaw.get('stage') || 0;
+    const nNoRaw = byRaw.get('no-raw') || 0;
+    console.log(`\n--- 出所 (★ raw と突き合わせた。分母 ${nStt + nStage + nNoRaw}) ---`);
+    console.log(`  ${String(nStt).padStart(4)}  ① 崩れ        (訂正前の語が raw に在った = STT が出した)`);
+    console.log(`  ${String(nStage).padStart(4)}  ② 後段が作った (訂正前の語が raw に無い)`);
+    console.log(`  ${String(nNoRaw).padStart(4)}  ★ 決めていない (raw が無い便。★★ 0 件ではない)`);
+    console.log(`  ★ raw の置き場所: ${rawDir}`);
+    if (stageMade.length) {
+      console.log('  ★★ ② の内訳:');
+      for (const s of stageMade.slice(0, 20)) console.log(`     ${s.from} → ${s.to}  (sum_${s.vid})`);
     }
 
     if (focus) {

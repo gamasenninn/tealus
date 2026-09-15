@@ -15,7 +15,7 @@
  *   raw の保存は 2026-09-14 12:57:52 に別リポ側へ入れたばかりで、それ以前の便には無い。
  *   ★ 「まだ分からない」を「崩れ」に混ぜないため、`unknown` を独立の値にする。
  */
-import { classifyPair, trimToChangedWindow, buildRateRows } from '../../scripts/correctionLedger.mts';
+import { classifyPair, trimToChangedWindow, buildRateRows, pairVersions, extractVid, judgeByRaw } from '../../scripts/correctionLedger.mts';
 
 describe('trimToChangedWindow — ★ 長文を抽出器に通せる形にする', () => {
   /**
@@ -124,5 +124,125 @@ describe('buildRateRows — ★ 崩れの件数ではなく「率」で並べる
     // 2026-09-14 実測: `真岡` は 30 日で最終版に 0 回。★ 率が定義できない。
     // 0% と書くと「完璧に出せている」に読める。**行ごと出さない。**
     expect(buildRateRows(['真岡'], [{ final: 'あ', orig: 'い' }])).toEqual([]);
+  });
+});
+
+/**
+ * ★ 2026-09-15 — **台帳が最後の 1 手を見ていなかった。**
+ *
+ * `message_edits` は **過去の版**を持ち、**最終版は `messages.content`** にある。
+ * 版を連続で組むだけだと、**最後の遷移 (= 人が受け入れた訂正) が丸ごと落ちる**。
+ *
+ * ★★ 実測 (通話履歴 / 直近 14 日、2026-09-15):
+ * ```
+ * 編集のあったメッセージ 310 件 / edit 行 702 行
+ * ★ 版を連続で組んだ対        392 組   ← 台帳が見ていた分
+ * ★★★★ 落ちていた最後の遷移   310 組 (44%)
+ * ★★ うち 1 回だけ編集された 127 件は **対が 0 件** = 丸ごと不可視
+ * ★★★ 310 件すべてで 最後の edit 行 ≠ messages.content (= 最後の遷移は実在する)
+ * ```
+ * ★ これは「10 倍の開き」の形をしていて、issue 本文の別手段の実測 (14 日で 663) と
+ *   台帳の出力 (71) が合わなかった理由の一つ。
+ */
+describe('pairVersions — ★ 最終版を対に含める (2026-09-15)', () => {
+  const rows = [
+    { message_id: 'a', version: 1, content: 'あ1' },
+    { message_id: 'a', version: 2, content: 'あ2' },
+    { message_id: 'b', version: 1, content: 'い1' },
+  ];
+  const finals = new Map([['a', 'あ最終'], ['b', 'い最終']]);
+
+  it('★ 版の間に加えて、最後の版 → 最終版 も対にする', () => {
+    const out = pairVersions(rows, finals);
+    expect(out).toEqual([
+      { old: 'あ1', neu: 'あ2' },
+      { old: 'あ2', neu: 'あ最終' },
+      { old: 'い1', neu: 'い最終' },
+    ]);
+  });
+
+  it('★★ 1 回だけ編集されたメッセージが 見えるようになる (これまで 0 組だった)', () => {
+    const out = pairVersions([{ message_id: 'b', version: 1, content: 'い1' }], finals);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual({ old: 'い1', neu: 'い最終' });
+  });
+
+  it('★ 最終版が引けないメッセージは 最後の遷移を作らない (推測しない)', () => {
+    const out = pairVersions([{ message_id: 'z', version: 1, content: 'ざ1' }], new Map());
+    expect(out).toHaveLength(0);
+  });
+
+  it('★★ 最終版が最後の版と同じなら 対にしない (変化なし)', () => {
+    const out = pairVersions(
+      [{ message_id: 'c', version: 1, content: '同じ' }],
+      new Map([['c', '同じ']]),
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('★★★ メッセージが混ざっても取り違えない', () => {
+    const out = pairVersions(
+      [
+        { message_id: 'a', version: 1, content: 'あ1' },
+        { message_id: 'b', version: 1, content: 'い1' },
+        { message_id: 'b', version: 2, content: 'い2' },
+      ],
+      finals,
+    );
+    expect(out).toEqual([
+      { old: 'あ1', neu: 'あ最終' },
+      { old: 'い1', neu: 'い2' },
+      { old: 'い2', neu: 'い最終' },
+    ]);
+  });
+});
+
+/**
+ * ★ 2026-09-15 — **raw が揃ったので「後段が作った誤り」を判定できるようになった。**
+ *
+ * ★★ #440 は列を 3 値にしたが、`unknown` (= 後段が作った疑い) は
+ *   **raw が無いと決められない**ので判定を保留していた。
+ *   2026-09-14 から `raw_store.py` が 1 通話 1 file で raw を残すようになったので、
+ *   **同一便の raw を引いて決められる**:
+ *
+ * ```
+ * ★ 訂正前の語が raw に在る   → STT が出した = ★★ 崩れ (①)
+ * ★ 訂正前の語が raw に無い   → 後段が作った  = ★★ 誤り (②)
+ * ★★★ raw が無い              → ★ **決めない** (「無い」を「①」に倒さない)
+ * ```
+ *
+ * ★★★★ 鍵は本文にある: 通話履歴の本文 1 行目が `【通話】sum_<vid> / ...` で、
+ *   raw は `raw_<vid>.txt`。**新しい対応表を作る必要は無い。**
+ */
+describe('extractVid — ★ 本文から raw への鍵', () => {
+  it('★ 1 行目の sum_<vid> を拾う', () => {
+    expect(extractVid('【通話】sum_84966 / 2026-09-14 17:05\n【カテゴリ】…')).toBe('84966');
+  });
+
+  it('見つからなければ null (推測しない)', () => {
+    expect(extractVid('【通話】なし')).toBeNull();
+    expect(extractVid('')).toBeNull();
+  });
+
+  it('★★ 本文の後ろに別の sum_ が出ても 最初のものを使う', () => {
+    expect(extractVid('【通話】sum_100 / x\n本文に sum_999 と書いてある')).toBe('100');
+  });
+});
+
+describe('judgeByRaw — ★ 3 値。「raw が無い」を「崩れ」に倒さない', () => {
+  it('★ 訂正前の語が raw に在れば STT が出した (= 崩れ)', () => {
+    expect(judgeByRaw('午前', 'はい、午前です。')).toBe('stt');
+  });
+
+  it('★★ raw に無ければ 後段が作った', () => {
+    expect(judgeByRaw('久保田', 'はい、久保部長お願いします。')).toBe('stage');
+  });
+
+  it('★★★ raw が引けなければ 決めない', () => {
+    expect(judgeByRaw('午前', null)).toBe('no-raw');
+  });
+
+  it('★ 空の訂正前は決めない (差分の取り違え)', () => {
+    expect(judgeByRaw('', 'なんでも')).toBe('no-raw');
   });
 });
