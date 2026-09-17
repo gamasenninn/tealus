@@ -252,11 +252,24 @@ export async function pushTtsSpeak(roomId: string, text: string): Promise<unknow
  * room に 'tts:audio' イベント (URL) を emit する。各 client は <audio> で再生。
  * mediasoup を経由しないので rtc-server 不要。
  */
-export async function pushTtsAudio(roomId: string, wavBuffer: Buffer): Promise<unknown> {
+/**
+ * ★ #444: contentType を受け取れるようにした (★★ 既定は従来どおり audio/wav)。
+ *   ★★★ **filename も一緒に直すこと** —— 拡張子と中身が食い違うと、
+ *   受け手 (server の cache → client の `<audio>`) が読み違える。
+ *   ★ server 側は既に `file.mimetype` をそのまま保存して返す (bot.mts:217,246) ので、
+ *   ★★ 送る側を直すだけでフォーマット非依存になる。
+ */
+const MIME_TO_EXT: Record<string, string> = {
+  'audio/wav': 'wav', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
+  'audio/aac': 'aac', 'audio/flac': 'flac', 'audio/pcm': 'pcm',
+};
+
+export async function pushTtsAudio(roomId: string, wavBuffer: Buffer, contentType = 'audio/wav'): Promise<unknown> {
   const { token: t } = await login();
   const form = new FormData();
   form.append('room_id', roomId);
-  form.append('audio', wavBuffer, { filename: 'tts.wav', contentType: 'audio/wav' });
+  const ext = MIME_TO_EXT[contentType.split(';')[0].trim()] || 'bin';
+  form.append('audio', wavBuffer, { filename: `tts.${ext}`, contentType });
 
   const res = await fetch(`${config.TEALUS_API_URL}/api/bot/tts-audio`, {
     method: 'POST',

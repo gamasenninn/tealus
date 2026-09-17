@@ -7,7 +7,7 @@ describe('GET /api/config', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('tts_provider');
     expect(res.body).toHaveProperty('vapid_public_key');
-    expect(['browser', 'aivis-cloud', 'none']).toContain(res.body.tts_provider);
+    expect(['browser', 'aivis-cloud', 'openai', 'none']).toContain(res.body.tts_provider);
   });
 
   it('returns vapid_public_key from server env', async () => {

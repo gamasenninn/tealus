@@ -16,6 +16,6 @@ describe('GET /public-config', () => {
     const res = await request(app).get('/public-config');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('tts_provider');
-    expect(['browser', 'aivis-cloud', 'none']).toContain(res.body.tts_provider);
+    expect(['browser', 'aivis-cloud', 'openai', 'none']).toContain(res.body.tts_provider);
   });
 });

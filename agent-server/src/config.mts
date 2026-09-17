@@ -9,9 +9,14 @@ import { resolveCodexBin } from './lib/codexBin.mts';
 
 dotenv.config();
 
-// TTS Provider — 'browser' | 'aivis-cloud' | 'none'
+// TTS Provider — 'browser' | 'aivis-cloud' | 'openai' | 'none'
 // unset 時は AIVIS_API_KEY の有無で自動判定（既存ユーザー保護）。
 // 解決結果をモジュール load 時にログ出力 — OSS 採用者のトラブルシュート用。
+//
+// ★★★★ #444: 'openai' は **自動判定に入れない。**
+//   OPENAI_API_KEY は agent 機能 (Light / Router / 会話モード) で常時設定済みなので、
+//   ★ 有無で自動切替すると **全採用者の声が黙って変わる**。
+//   ★★ 'openai' を使うには TTS_PROVIDER の明示が要る。
 export const TTS_PROVIDER = process.env.TTS_PROVIDER
   || (process.env.AIVIS_API_KEY ? 'aivis-cloud' : 'browser');
 

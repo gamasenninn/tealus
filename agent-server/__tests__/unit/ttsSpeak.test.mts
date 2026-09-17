@@ -26,6 +26,11 @@ jest.mock('../../src/lib/tts-core.mts', () => ({
   sendViaPlainTransport: (...args: unknown[]) => mockSendViaPlainTransport(...args),
 }));
 
+const mockSynthesizeOpenai = jest.fn();
+jest.mock('../../src/lib/tts-openai.mts', () => ({
+  synthesizeOpenai: (...args: unknown[]) => mockSynthesizeOpenai(...args),
+}));
+
 const mockPushTtsSpeak = jest.fn();
 const mockPushTtsAudio = jest.fn();
 jest.mock('../../src/lib/botApi.mts', () => ({
@@ -78,7 +83,8 @@ describe('ttsSpeak speakMessage', () => {
     await flushAsync();
 
     expect(mockSynthesize).toHaveBeenCalled();
-    expect(mockPushTtsAudio).toHaveBeenCalledWith('room-1', expect.any(Buffer));
+    // ★ #444: contentType を明示して渡すようになった。★★ aivis 側は wav のまま (回帰の見張り)
+    expect(mockPushTtsAudio).toHaveBeenCalledWith('room-1', expect.any(Buffer), 'audio/wav');
     expect(mockPushTtsSpeak).not.toHaveBeenCalled();
     expect(mockSendViaPlainTransport).not.toHaveBeenCalled(); // BROADCAST_MEDIASOUP デフォルト false
   });
@@ -164,5 +170,68 @@ describe('preprocessText hard cap (Aivis 3000 文字上限)', () => {
     const out = preprocessText(body, { truncate: false });
     expect(out.endsWith('以下省略。')).toBe(false);
     expect(out.length).toBeLessThanOrEqual(3000);
+  });
+});
+
+/**
+ * #444 段 1 — TTS_PROVIDER=openai の分岐。
+ *
+ * ★ aivis-cloud と **同じ形**に乗る: 合成 → pushTtsAudio → Socket.IO 配信。
+ *   ★★ 違うのは合成関数と contentType だけ。★★★ fallback / queue / 排他は既存のまま。
+ */
+describe('ttsSpeak speakMessage — ★ TTS_PROVIDER=openai (#444)', () => {
+  let originalOpenaiKey: string | undefined;
+
+  beforeEach(() => {
+    jest.resetModules();
+    originalOpenaiKey = process.env.OPENAI_API_KEY;
+    mockSynthesizeOpenai.mockReset().mockResolvedValue({ buffer: Buffer.from('fake-openai-wav'), contentType: 'audio/wav' });
+    mockPushTtsSpeak.mockReset().mockResolvedValue(undefined);
+    mockPushTtsAudio.mockReset().mockResolvedValue({ ok: true });
+    mockSynthesize.mockReset().mockResolvedValue(Buffer.from('fake-wav'));
+  });
+
+  afterEach(() => {
+    if (originalOpenaiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalOpenaiKey;
+  });
+
+  function flush(ms = 30): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+  test('openai + OPENAI_API_KEY 設定済 → ★ synthesizeOpenai + pushTtsAudio (contentType つき)', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'test-key' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', 'テスト');
+    await flush();
+
+    expect(mockSynthesizeOpenai).toHaveBeenCalled();
+    expect(mockSynthesize).not.toHaveBeenCalled();            // ★ Aivis は叩かない
+    expect(mockPushTtsAudio).toHaveBeenCalledWith('room-1', expect.any(Buffer), 'audio/wav');
+    expect(mockPushTtsSpeak).not.toHaveBeenCalled();
+  });
+
+  test('openai + 合成失敗 → ★ browser に fallback (★★ aivis と同じ形)', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    mockSynthesizeOpenai.mockRejectedValueOnce(new Error('OpenAI 500'));
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'test-key' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', 'テスト');
+    await flush(50);
+
+    expect(mockPushTtsSpeak).toHaveBeenCalledWith('room-1', 'テスト');
+    expect(mockPushTtsAudio).not.toHaveBeenCalled();
+  });
+
+  test('★★ openai + OPENAI_API_KEY 未設定 → browser に fallback (★ 黙って止まらない)', async () => {
+    delete process.env.OPENAI_API_KEY;
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: '' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', 'テスト');
+    await flush();
+
+    expect(mockPushTtsSpeak).toHaveBeenCalledWith('room-1', 'テスト');
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+    expect(mockPushTtsAudio).not.toHaveBeenCalled();
   });
 });

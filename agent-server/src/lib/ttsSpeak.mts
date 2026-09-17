@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as ttsCore from './tts-core.mts';
+import { synthesizeOpenai } from './tts-openai.mts';
 import { logger } from './logger.mts';
 import * as config from '../config.mts';
 import { getBotUserId, pushTtsSpeak, pushTtsAudio } from './botApi.mts';
@@ -21,6 +22,9 @@ const MAX_LENGTH = parseInt(process.env.TTS_MAX_LENGTH || "500", 10);
 // truncate 設定に関わらず常に enforce する hard cap。
 const HARD_LIMIT = parseInt(process.env.TTS_HARD_LIMIT || "3000", 10);
 const SSRC = 1111;
+// ★ #444: OpenAI TTS の既定。★★ voice は会話モード (Realtime) の既定と同じ marin に揃える。
+const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
+const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'marin';
 
 /**
  * テキスト前処理（Markdown除去、URL変換、長文切り詰め）
@@ -127,6 +131,8 @@ interface QueueItem {
   roomId: string;
   text: string;
   modelUuid: string;
+  /** ★ #444: どちらで合成するか。★★ 配信より後ろは同じ形 */
+  engine: 'aivis' | 'openai';
 }
 
 const queue: QueueItem[] = [];
@@ -137,18 +143,29 @@ async function processQueue(): Promise<void> {
   isProcessing = true;
 
   while (queue.length > 0) {
-    const { roomId, text, modelUuid } = queue.shift()!;
+    const { roomId, text, modelUuid, engine } = queue.shift()!;
 
     let wavBuf: Buffer;
+    let contentType = 'audio/wav';
     try {
       const startTime = Date.now();
-      wavBuf = await synthesize(text, modelUuid);
+      if (engine === 'openai') {
+        const got = await synthesizeOpenai(text, {
+          apiKey: config.OPENAI_API_KEY,
+          model: OPENAI_TTS_MODEL,
+          voice: OPENAI_TTS_VOICE,
+        });
+        wavBuf = got.buffer;
+        contentType = got.contentType;
+      } else {
+        wavBuf = await synthesize(text, modelUuid);
+      }
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      logger.info(`[TTS] 合成OK (${(wavBuf.length / 1024).toFixed(0)}KB, ${elapsed}s) → room ${roomId}`);
+      logger.info(`[TTS] 合成OK (${(wavBuf.length / 1024).toFixed(0)}KB, ${elapsed}s, ${engine}) → room ${roomId}`);
     } catch (err) {
-      // Aivis 合成失敗 → browser TTS に fallback
+      // 合成失敗 → browser TTS に fallback (★ engine によらず同じ形)
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`[TTS] 合成エラー: ${msg}, falling back to browser TTS`);
+      logger.error(`[TTS] 合成エラー (${engine}): ${msg}, falling back to browser TTS`);
       try {
         await pushTtsSpeak(roomId, text);
       } catch (e2) {
@@ -159,7 +176,7 @@ async function processQueue(): Promise<void> {
 
     // Primary: Socket.IO blob 配信 (rtc 非依存、新設計の主経路)
     try {
-      await pushTtsAudio(roomId, wavBuf);
+      await pushTtsAudio(roomId, wavBuf, contentType);
       logger.info(`[TTS] Socket.IO 配信完了 → room ${roomId}`);
     } catch (err) {
       // Socket.IO 配信失敗 → browser TTS に fallback
@@ -175,7 +192,8 @@ async function processQueue(): Promise<void> {
     }
 
     // Optional: mediasoup broadcast (TTS_BROADCAST_MEDIASOUP=true、transceiver gateway 受信機向け)
-    if (BROADCAST_MEDIASOUP) {
+    // ★ #444: mediasoup 経路は .wav 前提 (tmp file の拡張子が固定)。wav 以外は流さない。
+    if (BROADCAST_MEDIASOUP && contentType.startsWith('audio/wav')) {
       const tmpFile = path.join(import.meta.dirname, `../../.tts-tmp-${Date.now()}.wav`);
       try {
         fs.writeFileSync(tmpFile, wavBuf);
@@ -227,6 +245,19 @@ export function speakMessage(roomId: string, content: string): void {
     return;
   }
 
+  // ★ #444: provider === 'openai'
+  if (provider === 'openai') {
+    if (!config.OPENAI_API_KEY) {
+      logger.warn('[TTS] openai selected but OPENAI_API_KEY not set, falling back to browser');
+      pushTtsSpeak(roomId, text).catch(() => {});
+      return;
+    }
+    logger.info(`[TTS] openai: ${OPENAI_TTS_MODEL} / ${OPENAI_TTS_VOICE} (room: ${roomId})`);
+    queue.push({ roomId, text, modelUuid: '', engine: 'openai' });
+    processQueue();
+    return;
+  }
+
   // provider === 'aivis-cloud'
   if (!AIVIS_API_KEY) {
     logger.warn('[TTS] aivis-cloud selected but AIVIS_API_KEY not set, falling back to browser');
@@ -235,6 +266,6 @@ export function speakMessage(roomId: string, content: string): void {
   }
   const modelUuid = getRoomTtsModel(roomId) || MODEL_UUID;
   logger.info(`[TTS] model: ${modelUuid} (room: ${roomId}, default: ${MODEL_UUID})`);
-  queue.push({ roomId, text, modelUuid });
+  queue.push({ roomId, text, modelUuid, engine: 'aivis' });
   processQueue();
 }
