@@ -122,3 +122,50 @@ describe('buildBody — 自動投稿の印', () => {
     expect(buildBody(t)).toContain(markFor('chourei-gijiroku'));
   });
 });
+
+describe('from_user_ids — ★ 材料の供給元を名指しで許す (#433)', () => {
+  /**
+   * ★★★★ `types: ["text"]` を禁じていたのは **手段**であって目的ではない (docs/06 §6.1.1)。
+   *   ★ 目的は「エージェントの出力を材料にしない」。
+   *   ★★ 許可リストに入れなければ最初から材料でないので、★★★ text を禁じる必要が無くなる。
+   *
+   * ★ したがって: **from_user_ids があるときだけ text を許す。**
+   *   ★★ 無ければ従来どおり禁止 (= 防御を弱めない)。
+   */
+  const base = {
+    id: 't1', room_id: 'r1', room: 'テスト', when: 'immediate',
+    message: '@cc-x やって', as_user_id: 'u1', enabled: true,
+  };
+
+  it('★★★★ from_user_ids が無いまま types に text を入れると 弾かれる (★ 従来どおり)', () => {
+    const { triggers, warnings } = loadTriggersFrom([{ ...base, types: ['text'] }], new Date());
+    expect(triggers).toHaveLength(0);
+    expect(warnings.join()).toMatch(/text/);
+  });
+
+  it('★★★★ from_user_ids があれば types に text を許す', () => {
+    const { triggers, warnings } = loadTriggersFrom(
+      [{ ...base, types: ['text'], from_user_ids: ['line-bridge-id'] }], new Date());
+    expect(warnings).toEqual([]);
+    expect(triggers).toHaveLength(1);
+    expect(triggers[0].from_user_ids).toEqual(['line-bridge-id']);
+  });
+
+  it('★ from_user_ids が空配列なら「無い」と同じ (★★ text は弾かれる)', () => {
+    const { triggers } = loadTriggersFrom([{ ...base, types: ['text'], from_user_ids: [] }], new Date());
+    expect(triggers).toHaveLength(0);
+  });
+
+  it('★★ from_user_ids が配列でなければ弾く', () => {
+    const { triggers, warnings } = loadTriggersFrom(
+      [{ ...base, types: ['video'], from_user_ids: 'line-bridge-id' }], new Date());
+    expect(triggers).toHaveLength(0);
+    expect(warnings.join()).toMatch(/from_user_ids/);
+  });
+
+  it('★ 指定が無ければ from_user_ids は undefined (★★ 既存の設定が 1 bit も変わらない)', () => {
+    const { triggers } = loadTriggersFrom([{ ...base, types: ['video'] }], new Date());
+    expect(triggers).toHaveLength(1);
+    expect(triggers[0].from_user_ids).toBeUndefined();
+  });
+});

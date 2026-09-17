@@ -12,8 +12,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** 種別。★ text は許さない —— ループ防止の本体 (docs/06 §6.1) */
-export const ALLOWED_TYPES = ['image', 'video', 'voice', 'stamp'] as const;
+/**
+ * 種別。★ text は **原則 許さない** —— ループ防止の本体 (docs/06 §6.1)。
+ * ★★★★ 例外: `from_user_ids` を指定したトリガーだけ text を許す (§6.1.1、#433)。
+ *   ★ 許可リストにエージェントを入れなければ **最初から材料でない**ので、
+ *   ★★ types で禁じる必要が無くなる (= 目的は「エージェントの出力を材料にしない」)。
+ */
+export const ALLOWED_TYPES = ['image', 'video', 'voice', 'stamp', 'text'] as const;
 export type TriggerType = (typeof ALLOWED_TYPES)[number];
 
 export type TriggerWhen = 'immediate' | 'every' | 'schedule';
@@ -33,6 +38,15 @@ export interface RoomTrigger {
   interval_minutes?: number;
   /** when === 'schedule' のみ。JST の HH:MM */
   at?: string;
+  /**
+   * ★★★★ 材料の供給元を名指しで許す (#433、docs/06 §4.0.1)。
+   *
+   * ★ 省略  … 従来どおり `u.is_bot = false` (= エージェントの投稿は材料にしない) かつ text 禁止
+   * ★ 指定  … **この送信者の投稿だけ**が材料。`is_bot` は見ない。★★ text を許す
+   *
+   * ★★★ 書くのは user id。表示名は変わるが id は変わらない。
+   */
+  from_user_ids?: string[];
   /**
    * ★ 最後の該当投稿から これだけ静かになってから撃つ (#385)。既定 3 分。
    *
@@ -95,10 +109,20 @@ function validate(raw: unknown, index: number): RoomTrigger | string {
     return `${where} (${r.id}): when が immediate / every / schedule のいずれでもありません`;
   }
 
+  // ★ from_user_ids は「配列でない」を弾く。★★ 空配列は「無い」と同じ扱い (§4.0.1)
+  if (r.from_user_ids !== undefined && !Array.isArray(r.from_user_ids)) {
+    return `${where} (${r.id}): from_user_ids は user id の配列です`;
+  }
+  const fromUserIds = Array.isArray(r.from_user_ids)
+    ? (r.from_user_ids as unknown[]).filter((x): x is string => isNonEmptyString(x))
+    : [];
+
   const types = Array.isArray(r.types) ? r.types : [];
-  // ★ text を許さない = ループ防止の本体 (§6.1)
-  if (types.includes('text')) {
-    return `${where} (${r.id}): types に text は許されません (エージェントの返信で無限ループになります)`;
+  // ★ text を許さない = ループ防止の本体 (§6.1)。
+  //   ★★★★ ただし from_user_ids があれば許す (§6.1.1) —— ★ 許可リストが同じ役を、より正確に果たす
+  if (types.includes('text') && fromUserIds.length === 0) {
+    return `${where} (${r.id}): types に text は許されません `
+      + `(エージェントの返信で無限ループになります。★ from_user_ids で供給元を名指しすれば許されます)`;
   }
   const bad = types.find((t) => !ALLOWED_TYPES.includes(t as TriggerType));
   if (bad !== undefined) return `${where} (${r.id}): types に未知の種別 ${String(bad)} があります`;
@@ -126,6 +150,8 @@ function validate(raw: unknown, index: number): RoomTrigger | string {
     room_id: r.room_id,
     room: isNonEmptyString(r.room) ? r.room : '',
     types: types as TriggerType[],
+    // ★ 空なら undefined にする —— 「指定が無い」と「空配列」を下流で区別させない
+    from_user_ids: fromUserIds.length > 0 ? fromUserIds : undefined,
     when,
     message: r.message,
     as_user_id: r.as_user_id,

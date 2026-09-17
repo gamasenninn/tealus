@@ -140,6 +140,22 @@ async function lastFiredAtFromRoom(t: RoomTrigger): Promise<Date | null> {
  */
 export async function latestMatchAtFromRoom(t: RoomTrigger): Promise<Date | null> {
   if (t.types.length === 0) return null;
+
+  // ★★★★ #433 (2026-09-17): from_user_ids があれば **その送信者だけ**が材料。
+  //   ★ `is_bot` は見ない —— LINE Bridge は bot だが **材料の供給元**だから
+  //     (★★ この節が予告していた「必要になったときに、そのトリガーだけ除外を外せる形」がこれ)。
+  //   ★★★ 許可リストにエージェントを入れなければ、その返信は最初から材料でない
+  //     = ★ ループが開かない。だから `types` に `text` を許してよい (docs/06 §6.1.1)。
+  if (t.from_user_ids && t.from_user_ids.length > 0) {
+    const { rows } = await pool.query<{ at: Date | null }>(
+      `SELECT MAX(m.created_at) AS at FROM messages m
+        WHERE m.room_id = $1 AND m.is_deleted = false AND m.type = ANY($2::text[])
+          AND m.sender_id = ANY($3::uuid[])`,
+      [t.room_id, t.types, t.from_user_ids],
+    );
+    return rows[0]?.at ?? null;
+  }
+
   const { rows } = await pool.query<{ at: Date | null }>(
     `SELECT MAX(m.created_at) AS at FROM messages m
        JOIN users u ON u.id = m.sender_id
