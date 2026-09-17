@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { ArrowLeft, Send } from 'lucide-react';
 import type { Room } from '../../types';
+import { planShare } from './sharePlan';
 import './SharePage.css';
 
 function SharePage() {
@@ -14,6 +15,8 @@ function SharePage() {
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [sharedFiles, setSharedFiles] = useState<File[]>([]);
+  // ★ #445: 送るものが 0 件のときに理由を出す (★★ 黙って遷移しないため)
+  const [error, setError] = useState('');
 
   // 共有データ
   const sharedText = searchParams.get('text') || '';
@@ -65,14 +68,29 @@ function SharePage() {
 
   const handleSend = async (roomId: string) => {
     if (sending) return;
+
+    // ★★★★ #445: 送るものが 0 件なら **遷移しない**。
+    //   ★ 旧実装は何も送らずにルームを開いていたので、★★ 利用者には成功に見えていた
+    //   (★★★ 2026-09-17: 「朝礼ルームは開くが動画が入らない」の正体がこれ)。
+    //   ★ 原因が端末側でも、**黙って失敗しない**ようにするのは独立に効く。
+    const plan = planShare(sharedContent, sharedFiles);
+    if (plan.nothing) {
+      setError(
+        fileCount > 0
+          ? `共有されたファイル ${fileCount} 件を取り出せませんでした。端末の空き容量を確認して、もう一度お試しください。`
+          : '共有するものがありません（テキストもファイルも受け取れていません）。',
+      );
+      return;
+    }
+
     setSending(true);
     try {
       // テキスト/URL があれば送信（socket 優先でリンクプレビュー/webhook を有効化、切断時 REST fallback）
-      if (sharedContent.trim()) {
+      if (plan.willSendText) {
         await sendRoomMessage({ roomId, content: sharedContent.trim() });
       }
       // ファイルがあればアップロード
-      if (sharedFiles.length > 0) {
+      if (plan.willUpload) {
         await api.uploadMedia(roomId, sharedFiles);
       }
       // 該当ルームに遷移
@@ -92,6 +110,9 @@ function SharePage() {
         </button>
         <h1>共有先を選択</h1>
       </header>
+
+      {/* ★ #445: 送れなかった理由。★★ 黙ってルームを開かない */}
+      {error && <div className="share-error" role="alert">{error}</div>}
 
       {/* 共有内容プレビュー */}
       <div className="share-preview">
