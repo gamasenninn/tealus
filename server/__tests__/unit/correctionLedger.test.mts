@@ -15,7 +15,7 @@
  *   raw の保存は 2026-09-14 12:57:52 に別リポ側へ入れたばかりで、それ以前の便には無い。
  *   ★ 「まだ分からない」を「崩れ」に混ぜないため、`unknown` を独立の値にする。
  */
-import { classifyPair, trimToChangedWindow, buildRateRows, pairVersions, extractVid, judgeByRaw, coverageNote } from '../../scripts/correctionLedger.mts';
+import { classifyPair, trimToChangedWindow, buildRateRows, pairVersions, extractVid, judgeByRaw, coverageNote, splitHistoryAndFinals, canonMismatchWarning } from '../../scripts/correctionLedger.mts';
 
 describe('trimToChangedWindow — ★ 長文を抽出器に通せる形にする', () => {
   /**
@@ -289,5 +289,102 @@ describe('coverageNote — ★ 台帳が「自分が見ていない分」を自�
     expect(joined).toContain('voice_transcriptions');
     expect(joined).toContain('another_table');
     expect(joined).toContain('175');        // ★ 100 + 50 + 25
+  });
+});
+
+describe('splitHistoryAndFinals — ★ 版の履歴と最終版を分ける (#440 案 1)', () => {
+  /**
+   * ★ `message_edits` は「過去の版」だけを持ち、最終版は `messages.content` に在る。
+   *   ★★ `voice_transcriptions` は **最終版も同じ表に在る**ので、形を揃える必要がある。
+   *
+   * ★★★ pairVersions は (履歴の行, 最終版の map) を取るので、
+   *   ★★★★ **最大 version を finals へ、それ以外を history へ**分ける。
+   *   ★ ここを間違えると、最終版が「履歴」と対になって **1 組多く数える**。
+   */
+  it('版が 1 つだけなら history は空、finals に入る', () => {
+    const { history, finals } = splitHistoryAndFinals([
+      { message_id: 'm1', version: 1, content: 'A' },
+    ]);
+    expect(history).toEqual([]);
+    expect(finals.get('m1')).toBe('A');
+  });
+
+  it('版が 2 つなら v1 が history、v2 が finals', () => {
+    const { history, finals } = splitHistoryAndFinals([
+      { message_id: 'm1', version: 1, content: 'A' },
+      { message_id: 'm1', version: 2, content: 'B' },
+    ]);
+    expect(history.map((r) => r.content)).toEqual(['A']);
+    expect(finals.get('m1')).toBe('B');
+  });
+
+  it('★ 3 版なら v1,v2 が history、v3 が finals', () => {
+    const { history, finals } = splitHistoryAndFinals([
+      { message_id: 'm1', version: 1, content: 'A' },
+      { message_id: 'm1', version: 2, content: 'B' },
+      { message_id: 'm1', version: 3, content: 'C' },
+    ]);
+    expect(history.map((r) => r.content)).toEqual(['A', 'B']);
+    expect(finals.get('m1')).toBe('C');
+  });
+
+  it('★★ 複数メッセージが混ざっていても message_id ごとに分かれる', () => {
+    const { history, finals } = splitHistoryAndFinals([
+      { message_id: 'm1', version: 1, content: 'A1' },
+      { message_id: 'm1', version: 2, content: 'A2' },
+      { message_id: 'm2', version: 1, content: 'B1' },
+    ]);
+    expect(history.map((r) => r.content).sort()).toEqual(['A1']);
+    expect(finals.get('m1')).toBe('A2');
+    expect(finals.get('m2')).toBe('B1');
+  });
+
+  it('★★★ 版の順序が崩れた入力でも 最大 version が finals になる', () => {
+    const { history, finals } = splitHistoryAndFinals([
+      { message_id: 'm1', version: 3, content: 'C' },
+      { message_id: 'm1', version: 1, content: 'A' },
+      { message_id: 'm1', version: 2, content: 'B' },
+    ]);
+    expect(finals.get('m1')).toBe('C');
+    expect(history.map((r) => r.content).sort()).toEqual(['A', 'B']);
+  });
+
+  it('★ 空入力で壊れない', () => {
+    const { history, finals } = splitHistoryAndFinals([]);
+    expect(history).toEqual([]);
+    expect(finals.size).toBe(0);
+  });
+});
+
+describe('canonMismatchWarning — ★ 経路とものさしの食い違いを黙らせない (#440 案 1)', () => {
+  /**
+   * ★★★★ このファイル冒頭が既に警告している:
+   * ```
+   * 通話履歴 (別リポ)  organon.ttl を直読み   → 鹿沼 は在る
+   * 朝礼 / 補正段      辞書テーブル (射影)    → 鹿沼 は無い
+   * ```
+   * ★ 案 1 で voice_transcriptions を取り込んだことで、★★ **既定 (ttl) のまま
+   *   本体の音声経路を測れてしまう**ようになった。★★★ 実測で数字が変わる
+   *   (トランシーバー履歴 30 日: 崩れ ttl 357 / dict 296)。
+   * → ★★★★ **自動で選ばない。** 選ぶのは人。★ ただし **食い違っていたら言う**。
+   */
+  it('★ voice 由来が在るのに canon=ttl なら警告する', () => {
+    const w = canonMismatchWarning('ttl', 708, 0);
+    expect(w).not.toBeNull();
+    expect(w).toContain('dict');
+  });
+
+  it('voice 由来が在って canon=dict なら警告しない', () => {
+    expect(canonMismatchWarning('dict', 708, 0)).toBeNull();
+  });
+
+  it('★ voice 由来が無ければ ttl でも警告しない (★★ 通話履歴は ttl が正しい)', () => {
+    expect(canonMismatchWarning('ttl', 0, 1131)).toBeNull();
+  });
+
+  it('★★★★ 両方の在り処が混ざったら、どちらの canon でも警告する', () => {
+    // ★ 1 つのルームに 2 経路が混ざると、★★ **単一の canon では正しく測れない**
+    expect(canonMismatchWarning('ttl', 10, 10)).not.toBeNull();
+    expect(canonMismatchWarning('dict', 10, 10)).not.toBeNull();
   });
 });

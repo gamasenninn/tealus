@@ -297,6 +297,70 @@ export function coverageNote(covered: number, uncovered: UncoveredSource[]): str
   return lines;
 }
 
+/**
+ * ★★★★ 版の履歴と最終版を分ける (#440 案 1、2026-09-17)
+ *
+ * ★ `message_edits` は「過去の版」だけを持ち、最終版は `messages.content` に在る。
+ *   ★★ `voice_transcriptions` は **最終版も同じ表に在る**ので、形を揃える必要がある。
+ *
+ * ★★★ `pairVersions` は (履歴の行, 最終版の map) を取るので、
+ *   ★ **最大 version を finals へ、それ以外を history へ**分ける。
+ *   ★★★★ ここを間違えると、最終版が「履歴」と対になって **1 組多く数える**。
+ *
+ * ★ 入力の順序に依存しない (★★ 版が崩れて来ても 最大 version を拾う)。
+ */
+/**
+ * ★★★★★ 経路とものさしの食い違いを黙らせない (#440 案 1、2026-09-17)
+ *
+ * ★ このファイル冒頭が既に書いているとおり、canon の参照先は **経路に合わせる**:
+ * ```
+ * 通話履歴 (別リポ)  organon.ttl を直読み   → 鹿沼 は在る
+ * 朝礼 / 本体の音声  辞書テーブル (射影)    → 鹿沼 は無い
+ * ```
+ * ★★ 案 1 で `voice_transcriptions` を取り込んだことで、★★★ **既定 (ttl) のまま
+ *   本体の音声経路を測れてしまう**ようになった。★ 実測で数字が変わる
+ *   (トランシーバー履歴 30 日: 崩れ ttl 357 / dict 296)。
+ *
+ * ★★★★ **自動で選ばない。** ★ 選ぶのは人。★★ ただし **食い違っていたら必ず言う**。
+ */
+export function canonMismatchWarning(
+  canonSrc: string,
+  voicePairCount: number,
+  editPairCount: number,
+): string | null {
+  const hasVoice = voicePairCount > 0;
+  const hasEdit = editPairCount > 0;
+  if (hasVoice && hasEdit) {
+    return '★★★★ 1 つのルームに 2 経路が混ざっている '
+      + `(message_edits ${editPairCount} 組 / voice_transcriptions ${voicePairCount} 組)。`
+      + ' ★ 単一の canon では正しく測れない —— 経路ごとに分けて測ること';
+  }
+  if (hasVoice && canonSrc !== 'dict') {
+    return `★★★★ voice_transcriptions 由来 ${voicePairCount} 組を canon=${canonSrc} で測っている。`
+      + ' ★ 本体の音声経路が読むのは **辞書テーブル** —— `--canon dict` を付けること';
+  }
+  return null;
+}
+
+export function splitHistoryAndFinals(
+  rows: Array<{ message_id: string; version: number; content: string }>,
+): { history: Array<{ message_id: string; version: number; content: string }>; finals: Map<string, string> } {
+  const maxVer = new Map<string, number>();
+  for (const r of rows) {
+    const cur = maxVer.get(r.message_id);
+    if (cur === undefined || r.version > cur) maxVer.set(r.message_id, r.version);
+  }
+  const finals = new Map<string, string>();
+  const history: typeof rows = [];
+  for (const r of rows) {
+    if (r.version === maxVer.get(r.message_id)) finals.set(r.message_id, r.content);
+    else history.push(r);
+  }
+  // ★ pairVersions は「同じ message_id が連続している」前提で次の行を見る
+  history.sort((a, b) => (a.message_id === b.message_id ? a.version - b.version : a.message_id.localeCompare(b.message_id)));
+  return { history, finals };
+}
+
 export function pairVersions(
   rows: Array<{ message_id: string; version: number; content: string }>,
   finals: Map<string, string>,
@@ -335,6 +399,30 @@ async function loadVoiceEditCount(room: string, days: number): Promise<number> {
     [room, String(days)],
   );
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * ★★★★ 台帳が見ていなかった訂正を、★ 同じ形で取り込む (#440 案 1、2026-09-17)
+ *
+ * ★ 文字起こしの訂正は `message_edits` ではなく `voice_transcriptions` の新しい版に入る。
+ *   ★★ 実測 (30 日): トランシーバー履歴 703 件 / 通話履歴 0 件 —— **部屋によって在り処が違う**。
+ * ★★★ bot (アシスタント) の版は人手ではないので除く。
+ * ★ 既存の器 (pairVersions → trimToChangedWindow → extractAliasPairs) がそのまま通る
+ *   ことを 2026-09-17 に確認済み (★★ 30 日で 289 組 / 抽出率 41.2%)。
+ */
+async function loadVoicePairs(room: string, days: number): Promise<Array<{ old: string; neu: string }>> {
+  const { rows } = await pool.query<{ message_id: string; version: number; content: string }>(
+    `SELECT v.message_id, v.version, v.formatted_text AS content
+       FROM voice_transcriptions v
+       JOIN messages m ON m.id = v.message_id
+       JOIN rooms r ON r.id = m.room_id
+      WHERE r.name = $1 AND v.formatted_text <> ''
+        AND v.created_at > now() - ($2 || ' days')::interval
+      ORDER BY v.message_id, v.version`,
+    [room, String(days)],
+  );
+  const { history, finals } = splitHistoryAndFinals(rows);
+  return pairVersions(history, finals);
 }
 
 async function loadEditPairs(room: string, days: number): Promise<Array<{ old: string; neu: string }>> {
@@ -419,9 +507,11 @@ if (import.meta.main) {
         }
       }
     }
-    const pairs = await loadEditPairs(room, days);
-    // ★ 台帳が見ていない在り処を、**同じルーム・同じ窓**で数える (#440、2026-09-17)。
-    //   ★★ 窓が違う数字を並べると「増えた」のか「窓が広い」のかが読めない。
+    // ★ #440 案 1 (2026-09-17): 2 つの在り処を **同じ窓**で合流させる。
+    //   ★★ どちらから来たかは出す —— ★★★ 「増えた」のが取り込みなのか実態なのかを区別するため。
+    const editPairs = await loadEditPairs(room, days);
+    const voicePairs = await loadVoicePairs(room, days);
+    const pairs = [...editPairs, ...voicePairs];
     const voiceEdits = await loadVoiceEditCount(room, days);
     const terms = [...canon];
 
@@ -469,17 +559,22 @@ if (import.meta.main) {
 
     // ★ 分母を必ず出す。「何便を対象にしたか」を書かない率は読めない (#435 の決めごと)。
     console.log(`ルーム ${room} / 直近 ${days} 日 / 版の対 ${pairs.length} 組 / canon=${canonSrc} 表層 ${canon.size}`);
+    // ★ 在り処ごとの内訳 (#440 案 1)。★★ 合算だけ出すと、どちらが効いているか読めない
+    console.log(`  内訳: message_edits ${editPairs.length} 組 / voice_transcriptions ${voicePairs.length} 組`);
+    const mismatch = canonMismatchWarning(canonSrc, voicePairs.length, editPairs.length);
+    if (mismatch) console.log(`  ${mismatch}`);
     console.log(`訂正 延べ ${total} / 異なり ${all.length}`);
 
     // ★★★★ 台帳が見ていない在り処を、台帳自身に言わせる (#440、2026-09-17)。
     //   ★ 2026-09-15 の「人手のコストは通話履歴に集中」は、★★ voice_transcriptions 側の
     //   707 件 (30 日) を 1 行も見ずに出していた。★★★ 順位は正しかったので誰も気づけなかった。
-    for (const line of coverageNote(
-      total,
-      voiceEdits > 0
-        ? [{ where: 'voice_transcriptions', n: voiceEdits, note: '文字起こしの訂正はこちらに入る' }]
-        : [],
-    )) console.log(line);
+    // ★★★★ #440 案 1 で voice_transcriptions を取り込んだので、★ もう「見ていない先」ではない。
+    //   ★★ ただし **割合は出さない** —— 他の在り処が無いことは確かめていない
+    //   (★★★ 2026-09-15 の「通話履歴に集中」は、まさにそれを確かめずに出した数字だった)。
+    for (const line of coverageNote(total, [])) console.log(line);
+    if (voiceEdits > 0) {
+      console.log(`  ★ うち voice_transcriptions 由来: 人の訂正 ${voiceEdits} 件から ${voicePairs.length} 組`);
+    }
     for (const k of ['garble', 'unknown', 'normalize', 'outside'] as CorrectionKind[]) {
       const n = byKind.get(k) || 0;
       if (total) console.log(`  ${String(n).padStart(4)} (${Math.round((100 * n) / total)}%)  ${LABEL[k]}`);
