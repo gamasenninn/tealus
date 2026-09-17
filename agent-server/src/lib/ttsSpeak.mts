@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as ttsCore from './tts-core.mts';
 import { synthesizeOpenai } from './tts-openai.mts';
+import { applyReadingHints } from './tts-reading.mts';
 import { logger } from './logger.mts';
 import * as config from '../config.mts';
 import { getBotUserId, pushTtsSpeak, pushTtsAudio } from './botApi.mts';
@@ -150,7 +151,15 @@ async function processQueue(): Promise<void> {
     try {
       const startTime = Date.now();
       if (engine === 'openai') {
-        const got = await synthesizeOpenai(text, {
+        // ★★★★ #446: OpenAI は固有名詞を読み違える (鹿沼 → シカヌマ)。
+        //   ★ TTS に渡す文だけ読みを当てる。★★ 保存される本文は 1 文字も変わらない。
+        //   ★★★ aivis 経路には当てない —— 正しく読めているものを触って壊す理由が無い。
+        const hinted = applyReadingHints(text);
+        if (hinted.applied.length) {
+          // ★ 黙って書き換えない。何をいくつ置換したかを必ず出す
+          logger.info(`[TTS/読み] ${hinted.applied.map((a) => `${a.term}→${a.reading}×${a.count}`).join(' ')}`);
+        }
+        const got = await synthesizeOpenai(hinted.text, {
           apiKey: config.OPENAI_API_KEY,
           model: OPENAI_TTS_MODEL,
           voice: OPENAI_TTS_VOICE,

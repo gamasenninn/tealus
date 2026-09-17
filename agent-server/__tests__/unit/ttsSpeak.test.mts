@@ -223,6 +223,28 @@ describe('ttsSpeak speakMessage — ★ TTS_PROVIDER=openai (#444)', () => {
     expect(mockPushTtsAudio).not.toHaveBeenCalled();
   });
 
+  test('★★★★ openai は読みを当ててから合成する (#446) —— ★ 鹿沼 → カヌマ', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'test-key' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', '鹿沼の現場に行きます');
+    await flush();
+
+    expect(mockSynthesizeOpenai).toHaveBeenCalledWith('カヌマの現場に行きます', expect.any(Object));
+  });
+
+  test('★★★★ aivis は読みを当てない (#446) —— ★ Aivis は正しく読めるので触らない', async () => {
+    process.env.AIVIS_API_KEY = 'test-key';
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'aivis-cloud' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', '鹿沼の現場に行きます');
+    await flush();
+
+    // ★ 原文のまま渡る (★★ 置換して壊す理由が無い)
+    expect(mockSynthesize).toHaveBeenCalledWith('鹿沼の現場に行きます', expect.anything());
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+  });
+
   test('★★ openai + OPENAI_API_KEY 未設定 → browser に fallback (★ 黙って止まらない)', async () => {
     delete process.env.OPENAI_API_KEY;
     jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: '' }));
