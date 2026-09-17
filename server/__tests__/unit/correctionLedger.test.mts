@@ -15,7 +15,7 @@
  *   raw の保存は 2026-09-14 12:57:52 に別リポ側へ入れたばかりで、それ以前の便には無い。
  *   ★ 「まだ分からない」を「崩れ」に混ぜないため、`unknown` を独立の値にする。
  */
-import { classifyPair, trimToChangedWindow, buildRateRows, pairVersions, extractVid, judgeByRaw } from '../../scripts/correctionLedger.mts';
+import { classifyPair, trimToChangedWindow, buildRateRows, pairVersions, extractVid, judgeByRaw, coverageNote } from '../../scripts/correctionLedger.mts';
 
 describe('trimToChangedWindow — ★ 長文を抽出器に通せる形にする', () => {
   /**
@@ -244,5 +244,50 @@ describe('judgeByRaw — ★ 3 値。「raw が無い」を「崩れ」に倒さ
 
   it('★ 空の訂正前は決めない (差分の取り違え)', () => {
     expect(judgeByRaw('', 'なんでも')).toBe('no-raw');
+  });
+});
+
+describe('coverageNote — ★ 台帳が「自分が見ていない分」を自分で言う (#440)', () => {
+  /**
+   * ★ 2026-09-17 実測: 台帳は `message_edits` で作っているが、文字起こしの訂正は
+   *   `voice_transcriptions` に入るので **1 行も見えていなかった** (30 日で 707 回 = 人手の 37.4%)。
+   *
+   * ★★ 「順位は正しいが分母が足りない」型の誤りは、★★★ **台帳自身が言わないと気づけない。**
+   *   #441 の「沈黙を正常の合図にしない」と同じ形を、台帳の出力に入れる。
+   *
+   * ★★★★ **いちばん大事な性質**: 見ていない先が 0 件でも **「100%」と言わせない。**
+   *   知っている取りこぼしが無いことは、取りこぼしが無いことの証拠ではない。
+   */
+  it('見ていない先があるとき、割合と中身の両方を出す', () => {
+    const lines = coverageNote(1182, [{ where: 'voice_transcriptions', n: 707, note: '文字起こしの訂正' }]);
+    const joined = lines.join('\n');
+    expect(joined).toContain('1182');
+    expect(joined).toContain('1889');       // ★ 合計を出す (分母を隠さない)
+    expect(joined).toContain('62.6%');
+    expect(joined).toContain('voice_transcriptions');
+    expect(joined).toContain('707');
+    expect(joined).toContain('文字起こしの訂正');
+  });
+
+  it('★ 見ていない先が 0 件でも「100%」とは言わない', () => {
+    const joined = coverageNote(1182, []).join('\n');
+    expect(joined).not.toContain('100%');
+    expect(joined).toContain('未調査');      // ★ 「無い」ではなく「調べていない」と言う
+  });
+
+  it('★ 0 件でも壊れない (ゼロ除算を出さない)', () => {
+    const joined = coverageNote(0, []).join('\n');
+    expect(joined).not.toContain('NaN');
+    expect(joined).not.toContain('Infinity');
+  });
+
+  it('★ 複数の取りこぼし先を全部出す', () => {
+    const joined = coverageNote(100, [
+      { where: 'voice_transcriptions', n: 50, note: 'A' },
+      { where: 'another_table', n: 25, note: 'B' },
+    ]).join('\n');
+    expect(joined).toContain('voice_transcriptions');
+    expect(joined).toContain('another_table');
+    expect(joined).toContain('175');        // ★ 100 + 50 + 25
   });
 });

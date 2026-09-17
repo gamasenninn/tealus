@@ -243,6 +243,60 @@ async function loadCanonSurfaces(): Promise<Set<string>> {
  * ```
  * ★★ 最終版が引けないメッセージには最後の遷移を作らない (★ 推測しない)。
  */
+/** 台帳が見ていない訂正の在り処 */
+export interface UncoveredSource {
+  /** どの表 / どの経路か */
+  where: string;
+  /** その件数 */
+  n: number;
+  /** 何がそこに入るのか (★ 人が読んで分かる言葉で) */
+  note?: string;
+}
+
+/**
+ * ★★★★★ 台帳が「自分が見ていない分」を自分で言う (#440、2026-09-17)
+ *
+ * ★ 実測で分かったこと: 台帳は `message_edits` で作っているが、**文字起こしの訂正は
+ *   `voice_transcriptions` に入る**ので 1 行も見えていなかった (★★ 30 日で 707 回 = 人手の 37.4%)。
+ *   ★★★ 順位そのものは正しかったので、**誰も気づけなかった**。
+ *
+ * ★★ この型の誤りは「出した数字が間違っている」ではなく「**分母が足りない**」なので、
+ *   ★★★ 出力を読んだだけでは分からない。**台帳自身に言わせるしかない。**
+ *
+ * ★★★★ **いちばん大事な性質**: 既知の取りこぼしが 0 件のとき **割合を出さない。**
+ *   ★ そこで「100%」と出すと、**「調べていない」が「無い」に化ける。**
+ *   ★★ 知っている取りこぼしが無いことは、取りこぼしが無いことの証拠ではない
+ *   (= #441 の「沈黙を正常の合図にしない」と同じ形)。
+ */
+export function coverageNote(covered: number, uncovered: UncoveredSource[]): string[] {
+  const missing = uncovered.reduce((a, u) => a + u.n, 0);
+  const total = covered + missing;
+
+  if (total === 0) {
+    return [
+      '--- カバー率 ---',
+      '  ★ この窓では訂正が 0 件。★★ 「訂正が無い」ではなく「この窓では出なかった」',
+    ];
+  }
+
+  const lines = ['--- カバー率 (★ 台帳が見ている範囲) ---'];
+
+  if (uncovered.length === 0) {
+    // ★ 割合を出さない。分母を知らないのに割合を出すと、それ自体が嘘になる
+    lines.push(`  台帳が見ている訂正 ${covered} 件`);
+    lines.push('  ★ 既知の取りこぼし先は 0 件。★★ ただし他の在り処は **未調査**');
+    lines.push('  ★★★ = 「見ていない分が無い」ではない。割合は出せない');
+    return lines;
+  }
+
+  lines.push(`  台帳が見ている訂正 ${covered} / ${total} (${((covered / total) * 100).toFixed(1)}%)`);
+  for (const u of uncovered) {
+    lines.push(`  ★ 見ていない ${u.n}: ${u.where}${u.note ? ` (★★ ${u.note})` : ''}`);
+  }
+  lines.push('  ★★ 上は **既知の** 取りこぼしだけ。★★★ 他に無いことは確かめていない');
+  return lines;
+}
+
 export function pairVersions(
   rows: Array<{ message_id: string; version: number; content: string }>,
   finals: Map<string, string>,
@@ -260,6 +314,27 @@ export function pairVersions(
     if (fin !== undefined && fin !== cur.content) out.push({ old: cur.content, neu: fin });
   }
   return out;
+}
+
+/**
+ * ★ 台帳が見ていない訂正を、**同じルーム・同じ窓**で数える (#440、2026-09-17)。
+ *
+ * ★★ 文字起こしの訂正は `message_edits` ではなく `voice_transcriptions` の新しい版として入る。
+ *   ★★★ 実測 (30 日): トランシーバー履歴 703 件 / 通話履歴 0 件 —— **部屋によって在り処が違う**。
+ * ★ bot (アシスタント) の版は人手ではないので除く。
+ */
+async function loadVoiceEditCount(room: string, days: number): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `SELECT COUNT(*) AS n
+       FROM voice_transcriptions v
+       JOIN messages m ON m.id = v.message_id
+       JOIN rooms r ON r.id = m.room_id
+       JOIN users u ON u.id = v.edited_by
+      WHERE r.name = $1 AND u.is_bot = false
+        AND v.created_at > now() - ($2 || ' days')::interval`,
+    [room, String(days)],
+  );
+  return Number(rows[0]?.n ?? 0);
 }
 
 async function loadEditPairs(room: string, days: number): Promise<Array<{ old: string; neu: string }>> {
@@ -345,6 +420,9 @@ if (import.meta.main) {
       }
     }
     const pairs = await loadEditPairs(room, days);
+    // ★ 台帳が見ていない在り処を、**同じルーム・同じ窓**で数える (#440、2026-09-17)。
+    //   ★★ 窓が違う数字を並べると「増えた」のか「窓が広い」のかが読めない。
+    const voiceEdits = await loadVoiceEditCount(room, days);
     const terms = [...canon];
 
     const counts = new Map<string, { from: string; to: string; kind: CorrectionKind; n: number }>();
@@ -392,6 +470,16 @@ if (import.meta.main) {
     // ★ 分母を必ず出す。「何便を対象にしたか」を書かない率は読めない (#435 の決めごと)。
     console.log(`ルーム ${room} / 直近 ${days} 日 / 版の対 ${pairs.length} 組 / canon=${canonSrc} 表層 ${canon.size}`);
     console.log(`訂正 延べ ${total} / 異なり ${all.length}`);
+
+    // ★★★★ 台帳が見ていない在り処を、台帳自身に言わせる (#440、2026-09-17)。
+    //   ★ 2026-09-15 の「人手のコストは通話履歴に集中」は、★★ voice_transcriptions 側の
+    //   707 件 (30 日) を 1 行も見ずに出していた。★★★ 順位は正しかったので誰も気づけなかった。
+    for (const line of coverageNote(
+      total,
+      voiceEdits > 0
+        ? [{ where: 'voice_transcriptions', n: voiceEdits, note: '文字起こしの訂正はこちらに入る' }]
+        : [],
+    )) console.log(line);
     for (const k of ['garble', 'unknown', 'normalize', 'outside'] as CorrectionKind[]) {
       const n = byKind.get(k) || 0;
       if (total) console.log(`  ${String(n).padStart(4)} (${Math.round((100 * n) / total)}%)  ${LABEL[k]}`);
