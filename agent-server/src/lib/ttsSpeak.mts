@@ -102,6 +102,40 @@ export function synthesize(text: string, modelUuid?: string): Promise<Buffer> {
 }
 
 /**
+ * ★★★★★ 合成の分岐は **ここ 1 か所**だけ (#444 段 2)
+ *
+ * ★ 自動読み上げ (processQueue) と 手動ボタン (routes/tts.mts) の両方がここを通る。
+ *   ★★ 記憶「同じ仕事が 2 か所にあると壊れを隠す」—— ★★★ 分岐を 2 度書かない。
+ *
+ * ★ 読みを当てるかどうか (#446) も ここで決まる:
+ *   ★★ openai だけに当てる。★★★ aivis は正しく読めているので触らない。
+ *
+ * ★ 失敗は throw する。★★ fallback するかどうかは **呼び出し側**が決める
+ *   (自動読み上げは browser TTS へ / 手動ボタンは 500 を返す)。
+ */
+export async function synthesizeByEngine(
+  engine: 'aivis' | 'openai',
+  text: string,
+  modelUuid?: string,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  if (engine === 'openai') {
+    // ★ #446: OpenAI は固有名詞を読み違える (鹿沼 → シカヌマ)。
+    //   ★★ TTS に渡す文だけ書き換える。保存される本文は 1 文字も変わらない。
+    const hinted = applyReadingHints(text);
+    if (hinted.applied.length) {
+      // ★ 黙って書き換えない
+      logger.info(`[TTS/読み] ${hinted.applied.map((a) => `${a.term}→${a.reading}×${a.count}`).join(' ')}`);
+    }
+    return synthesizeOpenai(hinted.text, {
+      apiKey: config.OPENAI_API_KEY,
+      model: OPENAI_TTS_MODEL,
+      voice: OPENAI_TTS_VOICE,
+    });
+  }
+  return { buffer: await synthesize(text, modelUuid), contentType: 'audio/wav' };
+}
+
+/**
  * PlainTransport で RTP 送信（tts-core の薄いラッパー）
  */
 function sendViaPlainTransport(wavPath: string, roomId: string): Promise<number | null> {
@@ -150,25 +184,10 @@ async function processQueue(): Promise<void> {
     let contentType = 'audio/wav';
     try {
       const startTime = Date.now();
-      if (engine === 'openai') {
-        // ★★★★ #446: OpenAI は固有名詞を読み違える (鹿沼 → シカヌマ)。
-        //   ★ TTS に渡す文だけ読みを当てる。★★ 保存される本文は 1 文字も変わらない。
-        //   ★★★ aivis 経路には当てない —— 正しく読めているものを触って壊す理由が無い。
-        const hinted = applyReadingHints(text);
-        if (hinted.applied.length) {
-          // ★ 黙って書き換えない。何をいくつ置換したかを必ず出す
-          logger.info(`[TTS/読み] ${hinted.applied.map((a) => `${a.term}→${a.reading}×${a.count}`).join(' ')}`);
-        }
-        const got = await synthesizeOpenai(hinted.text, {
-          apiKey: config.OPENAI_API_KEY,
-          model: OPENAI_TTS_MODEL,
-          voice: OPENAI_TTS_VOICE,
-        });
-        wavBuf = got.buffer;
-        contentType = got.contentType;
-      } else {
-        wavBuf = await synthesize(text, modelUuid);
-      }
+      // ★ 分岐は synthesizeByEngine に集約 (#444 段 2)。★★ ここで 2 度目を書かない
+      const got = await synthesizeByEngine(engine, text, modelUuid);
+      wavBuf = got.buffer;
+      contentType = got.contentType;
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logger.info(`[TTS] 合成OK (${(wavBuf.length / 1024).toFixed(0)}KB, ${elapsed}s, ${engine}) → room ${roomId}`);
     } catch (err) {

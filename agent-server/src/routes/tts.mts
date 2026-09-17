@@ -6,7 +6,8 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { synthesize, preprocessText } from '../lib/ttsSpeak.mts';
+import { synthesizeByEngine, preprocessText } from '../lib/ttsSpeak.mts';
+import * as config from '../config.mts';
 import * as botApi from '../lib/botApi.mts';
 import { logger } from '../lib/logger.mts';
 
@@ -68,8 +69,12 @@ router.post('/synthesize', async (req, res) => {
   }
 
   try {
-    const wavBuf = await synthesize(cleaned, resolvedModel);
-    res.type('audio/wav').send(wavBuf);
+    // ★ #444 段 2: 分岐は synthesizeByEngine に集約されている (★★ ここで 2 度目を書かない)。
+    //   ★★★ openai のときは #446 の読み当ても そちらで行われる —— ★ 手動ボタンでも 鹿沼 が カヌマ になる。
+    const engine = config.TTS_PROVIDER === 'openai' ? 'openai' : 'aivis';
+    const { buffer, contentType } = await synthesizeByEngine(engine, cleaned, resolvedModel);
+    // ★ audio/wav 固定をやめる。★★ 合成結果の Content-Type をそのまま返す
+    res.type(contentType).send(buffer);
   } catch (err) {
     logger.error(`[TTS] synthesize error: ${err instanceof Error ? err.message : String(err)}`);
     res.status(500).json({ error: 'TTS synthesis failed', detail: err instanceof Error ? err.message : String(err) });

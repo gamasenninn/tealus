@@ -257,3 +257,59 @@ describe('ttsSpeak speakMessage — ★ TTS_PROVIDER=openai (#444)', () => {
     expect(mockPushTtsAudio).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * #444 段 2 — ★ 合成の分岐を **1 か所**に集約する (synthesizeByEngine)。
+ *
+ * ★★ 自動読み上げ (processQueue) と 手動ボタン (routes/tts.mts) が
+ *   **同じ関数**を呼ぶ形にする。★★★ 記憶「同じ仕事が 2 か所にあると壊れを隠す」。
+ *   → ★ 読みを当てるかどうかも ここ 1 か所で決まる。
+ */
+describe('synthesizeByEngine — ★ 分岐は 1 か所 (#444 段 2)', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockSynthesize.mockReset().mockResolvedValue(Buffer.from('aivis-wav'));
+    mockSynthesizeOpenai.mockReset().mockResolvedValue({ buffer: Buffer.from('openai-wav'), contentType: 'audio/wav' });
+  });
+
+  test('aivis → ★ tts-core で合成し contentType は audio/wav。★★ 読みは当てない', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'aivis-cloud' }));
+    const { synthesizeByEngine } = require('../../src/lib/ttsSpeak');
+    const got = await synthesizeByEngine('aivis', '鹿沼へ行く', 'uuid-1');
+
+    // ★ 原文のまま。★★ ttsSpeak.synthesize は tts-core に {modelUuid, apiKey} で渡す
+    expect(mockSynthesize).toHaveBeenCalledWith('鹿沼へ行く', expect.objectContaining({ modelUuid: 'uuid-1' }));
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+    expect(got.contentType).toBe('audio/wav');
+    expect(got.buffer.toString()).toBe('aivis-wav');
+  });
+
+  test('★★★★ openai → 読みを当ててから合成し、contentType は合成結果のものを使う', async () => {
+    mockSynthesizeOpenai.mockResolvedValueOnce({ buffer: Buffer.from('x'), contentType: 'audio/mpeg' });
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'k' }));
+    const { synthesizeByEngine } = require('../../src/lib/ttsSpeak');
+    const got = await synthesizeByEngine('openai', '鹿沼へ行く');
+
+    expect(mockSynthesizeOpenai).toHaveBeenCalledWith('カヌマへ行く', expect.any(Object));
+    expect(mockSynthesize).not.toHaveBeenCalled();
+    expect(got.contentType).toBe('audio/mpeg');   // ★ wav 固定にしない
+  });
+
+  /**
+   * ★ 「鍵なし → throw」は **ここでは書かない。**
+   *   ★★ synthesizeOpenai をモックしているので、書いても **モックを試すだけ**になる。
+   *   ★★★ 実物の throw は ttsOpenai.test.mts で固定済み
+   *   (「apiKey が無ければ fetch を叩かずに throw する」)。
+   * → ★ この層で固定すべきなのは **config の鍵がそのまま渡ること**。
+   */
+  test('★★ config の OPENAI_API_KEY がそのまま合成に渡る', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'key-from-config' }));
+    const { synthesizeByEngine } = require('../../src/lib/ttsSpeak');
+    await synthesizeByEngine('openai', 'テスト');
+
+    expect(mockSynthesizeOpenai).toHaveBeenCalledWith(
+      'テスト',
+      expect.objectContaining({ apiKey: 'key-from-config' }),
+    );
+  });
+});
