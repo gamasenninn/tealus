@@ -84,6 +84,22 @@ export interface VoiceChatSummary {
     pass: boolean;
     /** ★ 押して離したのに、声が 1 度も鳴らなかった往復 */
     noReplyCount: number;
+    /**
+     * ★★★★★ 「返らなかった」の内訳 (2026-09-18)。★ 合計は `noReplyCount` と一致する。
+     *
+     * ★★ 5 件を 1 件ずつ開いたら **本物は 1 件だけ**だった。残りは
+     *   **利用者が待っていない回**と、**計器の取りこぼし**。
+     *   ★★★ 09-15 に直した「`skippedWithNoFinish` が playing を見ていなかった」と **同じ形**が
+     *   別の欄で起きていた —— ★ 「返らなかった」に 3 つの意味が同居していた。
+     */
+    noReplyBreakdown: {
+      /** ★ 本当に返らなかった。★★ ここだけが直すべき数 */
+      gaveUp: number;
+      /** ★ 次の押下が 2 秒以内 = 返事を待っていない (割り込み / 二度押し) */
+      notWaited: number;
+      /** ★ AI は答えている (AI の transcript / response.done completed) のに `ai_audio_start` が無い */
+      audioStartMissed: number;
+    };
     overLimitMs: number[];
   };
   interrupt: { n: number; medianMs: number; maxMs: number; skippedNotPlaying: number };
@@ -147,6 +163,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
   const latencyByTool = new Map<string, number[]>();
   const promote = { started: 0, done: 0, error: 0, byStatus: {} as Record<string, number> };
   let noReply = 0;
+  const noReplyBreakdown = { gaveUp: 0, notWaited: 0, audioStartMissed: 0 };
   let skippedNotPlaying = 0;
   let connectionLost = 0;
   let serverErrors = 0;
@@ -182,15 +199,34 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
         //    区切りを別に作ると、① と道具の対応がずれて「ルームが遅い」に見える
         let hit: number | null = null;
         const names = new Set<string>();                // ★ 同じ道具を 3 回呼んでも往復は 1 つ
+        // ★★★★ 2026-09-18: 「返らなかった」を分けるための材料も同じ区切りで集める。
+        //   ★ 区切りを別に作ると、①と内訳の対応がずれる (道具のときと同じ理由)
+        let spoke = false;        // ★ AI が答えた証拠 (AI の transcript / response.done completed)
+        let nextPress: number | null = null;
         for (let j = i + 1; j < ev.length; j++) {
-          if (ev[j].type === 'ptt_press') break;
+          if (ev[j].type === 'ptt_press') { nextPress = ev[j].t; break; }
           if (ev[j].type === 'ai_audio_start' && hit === null) hit = ev[j].t;
           if (ev[j].type === 'tool_call_start') {
             const n = dataOf(ev[j]).name;
             names.add(typeof n === 'string' ? n : '(不明)');
           }
+          // ★ 人の発話は証拠にしない。★★ who を見ないと「利用者が喋った」を「AI が答えた」と読む
+          if (ev[j].type === 'transcript' && dataOf(ev[j]).who === 'ai') spoke = true;
+          if (ev[j].type === 'response_lifecycle') {
+            const d = dataOf(ev[j]);
+            if (d.kind === 'finished' && d.status === 'completed') spoke = true;
+          }
         }
-        if (hit === null) noReply += 1;                 // ★ 返らなかった回も数える
+        if (hit === null) {
+          noReply += 1;                                 // ★ 総数は変えない (台帳との比較のため)
+          // ★★★★ **順序は仕様**。上から順に、最初に当たったものに入れる:
+          //   ① 答えた証拠がある → 計器の取りこぼし (★ 押し直しが速くても、これが勝つ)
+          //   ② 2 秒以内に押し直した → 待っていない
+          //   ③ それ以外 → 本物
+          if (spoke) noReplyBreakdown.audioStartMissed += 1;
+          else if (nextPress !== null && nextPress - e.t <= LATENCY_LIMIT_MS) noReplyBreakdown.notWaited += 1;
+          else noReplyBreakdown.gaveUp += 1;
+        }
         else {
           latencies.push(hit - e.t);
           // ★ 返らなかった往復は ① の分母に無いので、道具ごとの分母にも入れない
@@ -285,6 +321,7 @@ export function summarizeVoiceChat(records: VoiceChatRecord[]): VoiceChatSummary
       // ★ 標本が無いときに「合格」と言わない
       pass: latencies.length > 0 && within / latencies.length >= LATENCY_PASS_RATIO,
       noReplyCount: noReply,
+      noReplyBreakdown,
       overLimitMs: latencies.filter((x) => x > LATENCY_LIMIT_MS).sort((a, b) => b - a),
     },
     interrupt: {

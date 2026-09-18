@@ -430,3 +430,95 @@ describe('★ 割り込み (playing=true) を「戻らない形」に数えな�
     expect(s.responseGate.skippedWithNoFinish).toBe(1);
   });
 });
+
+/**
+ * ★★★★★ 2026-09-18: 「返らなかった」を 3 つに分ける。
+ *
+ * ★ 利用者の指摘で、測る対象が変わった —— **痛いのは遅さではなく「返ってこない」**。
+ * ★★ ところが残っている 5 件を 1 件ずつ開いたら、**本物は 1 件だけ**だった:
+ *
+ * ```
+ * ① 874ms 後に押し直し                      → ★ 待っていない
+ * ② skipped(responding/playing) → 187ms      → ★ 正常な割り込み
+ * ③ ★★★★ skipped(why=tool) → 106 秒 沈黙 → session_end  → ★ 本物
+ * ④ response.created → 159ms で押し直し      → ★ 二度押し
+ * ⑤ AI の transcript + response.done completed が有る → ★★ 計器の取りこぼし
+ * ```
+ * ★★★ **09-15 に直した「playing を見ていなかった」と同じ形**が、別の欄で起きていた。
+ *
+ * ★ 「待っていない」の線は **`LATENCY_LIMIT_MS` (2 秒) を流用**する。
+ *   ★★ 新しい数字を発明しない —— ①の合否ラインが 2 秒なので、2 秒以内に押し直した回は
+ *   **そもそも返事を待っていない**と言える。
+ */
+describe('★★★★ 返らなかった回の内訳 (2026-09-18)', () => {
+  const rec = (events: Array<{ t: number; type: string; data?: unknown }>) =>
+    [{ session_id: 's', received_at: '2026-09-18T00:00:00Z', events }] as unknown as VoiceChatRecord[];
+
+  const lifecycle = (t: number, event: string, status: string) =>
+    ({ t, type: 'response_lifecycle', data: { event, kind: event === 'response.created' ? 'created' : 'finished', status } });
+
+  it('★ 2 秒以内に押し直したら「待っていない」', () => {
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' },
+      lifecycle(600, 'response.created', 'in_progress'),
+      { t: 700, type: 'ptt_press' },   // ★ 200ms 後に押し直し
+    ]));
+    expect(s.latency.noReplyCount).toBe(1);
+    expect(s.latency.noReplyBreakdown.notWaited).toBe(1);
+    expect(s.latency.noReplyBreakdown.gaveUp).toBe(0);
+  });
+
+  it('★★★★ 2 秒を過ぎても返らず、押し直しも無ければ「本物」', () => {
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' },
+      { t: 502, type: 'response_create_skipped', data: { why: 'tool', pending_tools: 1, playing: false } },
+      lifecycle(600, 'response.created', 'in_progress'),
+      { t: 106_670, type: 'session_end' },
+    ]));
+    expect(s.latency.noReplyBreakdown.gaveUp).toBe(1);
+    expect(s.latency.noReplyBreakdown.notWaited).toBe(0);
+  });
+
+  it('★★★ AI が答えているのに ai_audio_start が無ければ「計器の取りこぼし」', () => {
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' },
+      lifecycle(600, 'response.created', 'in_progress'),
+      { t: 3_600, type: 'transcript', data: { who: 'ai', text: 'そういうことだね' } },
+      lifecycle(3_700, 'response.done', 'completed'),
+      { t: 7_300, type: 'ptt_press' },
+    ]));
+    expect(s.latency.noReplyBreakdown.audioStartMissed).toBe(1);
+    expect(s.latency.noReplyBreakdown.gaveUp).toBe(0);
+    expect(s.latency.noReplyBreakdown.notWaited).toBe(0);
+  });
+
+  it('★★★★ 順序は仕様 — ★ 答えている証拠があれば、2 秒以内に押し直していても「取りこぼし」', () => {
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' },
+      { t: 800, type: 'transcript', data: { who: 'ai', text: 'はい' } },
+      { t: 900, type: 'ptt_press' },   // ★ 400ms 後。★★ それでも「答えていた」が勝つ
+    ]));
+    expect(s.latency.noReplyBreakdown.audioStartMissed).toBe(1);
+    expect(s.latency.noReplyBreakdown.notWaited).toBe(0);
+  });
+
+  it('★ 内訳の合計は noReplyCount と一致する (★★ どこにも入らない回を作らない)', () => {
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' }, { t: 700, type: 'ptt_press' },
+      { t: 1000, type: 'ptt_release' }, { t: 1100, type: 'transcript', data: { who: 'ai', text: 'x' } },
+      { t: 9000, type: 'ptt_press' }, { t: 9500, type: 'ptt_release' }, { t: 60_000, type: 'session_end' },
+    ]));
+    const b = s.latency.noReplyBreakdown;
+    expect(b.gaveUp + b.notWaited + b.audioStartMissed).toBe(s.latency.noReplyCount);
+  });
+
+  it('★ 人の transcript は「答えた」証拠にしない (★★ who を見る)', () => {
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' },
+      { t: 800, type: 'transcript', data: { who: 'user', text: 'いや、このルームだよ。' } },
+      { t: 60_000, type: 'session_end' },
+    ]));
+    expect(s.latency.noReplyBreakdown.gaveUp).toBe(1);
+    expect(s.latency.noReplyBreakdown.audioStartMissed).toBe(0);
+  });
+});
