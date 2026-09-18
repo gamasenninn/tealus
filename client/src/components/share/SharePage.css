@@ -150,3 +150,13 @@
   font-size: 14px;
   line-height: 1.6;
 }
+
+/* ★ #445: 点呼。★★ 主文の邪魔をせず、そのまま読み上げ / スクショできる大きさにする */
+.share-error-detail {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  opacity: 0.8;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

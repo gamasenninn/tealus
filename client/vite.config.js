@@ -99,7 +99,23 @@ export default defineConfig(({ mode }) => {
               title: 'title',
               text: 'text',
               url: 'url',
-              files: [{ name: 'media', accept: ['image/*', 'video/*'] }],
+              // ★★★★ 2026-09-18 (#445): 具体的な MIME を併記する。
+              //   ★ 09-17 から「共有先には出る / text は通る / ファイルだけ落ちる」が続き、
+              //     ★★ 切り分けの結果 **Chrome 153 で壊れ、141 では動く**ところまで来た
+              //     (★★★ 同じ manifest・同じ SW・同じビルドで、端末を変えると通る)。
+              //   ★★ 新しい Chrome が **ワイルドカードだけの accept から WebAPK の
+              //     intent-filter を作らなくなった**、というのが今の読み。★★★ 推測である。
+              //   ★ ワイルドカードは残すので 141 側の挙動は変わらない (★★ 後方互換)。
+              //   ★★★★ **manifest を変えても、端末が PWA を入れ直すまで効かない**
+              //     (intent-filter はインストール時に焼き込まれる)。
+              files: [{
+                name: 'media',
+                accept: [
+                  'image/*', 'video/*',
+                  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
+                  'video/mp4', 'video/quicktime', 'video/webm', 'video/3gpp',
+                ],
+              }],
             },
           },
         },

@@ -45,27 +45,78 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // --- Web Share Target ---
+//
+// ★★★★★ 2026-09-18 (#445): 受け取った中身の「点呼」を 1 件だけ残す。
+//
+// ★ 09-17 から「共有すると画面は開くがファイルが入らない」が続き、端末に触れないまま
+//   黒箱で 7 つ潰して、★★ 最後は **Chrome のバージョン差** (153 で壊れ / 141 で動く) に着いた。
+//   ★★★ リリースノートにも既知の記録が無い = **次も推測で追うことになる**。
+// → ★★★★ 次に失敗したとき、推測ではなく **1 行の事実**が残るようにする。
+//
+// ★★ 記録は **一度きり** (画面が読んだら消す)。★★★ URL に印を置くと
+//   **再訪 (履歴 / 再読み込み) で残って、生きている失敗と見分けがつかなくなる**。
+const SW_VERSION = '2026-09-18a';
+
+/** 画面からの問い合わせに答える。★ 旧版はこの listener を持たないので **黙る** = 版が分かる。 */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'share-diag') {
+    const port = event.ports && event.ports[0];
+    if (port) port.postMessage({ type: 'share-diag-reply', version: SW_VERSION });
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.pathname === '/share' && event.request.method === 'POST') {
     event.respondWith((async () => {
-      const formData = await event.request.formData();
-      const text = formData.get('text') || '';
-      const title = formData.get('title') || '';
-      const shareUrl = formData.get('url') || '';
-      const files = formData.getAll('media').filter((f) => f.size > 0);
+      const cache = await caches.open('share-target');
+      // ★ 前回の残りを先に消す (★★ 記録もファイルもまとめて。再訪で古い記録を読ませない)
+      const keys = await cache.keys();
+      await Promise.all(keys.map((k) => cache.delete(k)));
 
-      // ファイルがあれば Cache API に一時保存
-      if (files.length > 0) {
-        const cache = await caches.open('share-target');
-        // 古いキャッシュをクリア
-        const keys = await cache.keys();
-        await Promise.all(keys.map((k) => cache.delete(k)));
-        // 新しいファイルを保存
-        for (let i = 0; i < files.length; i++) {
-          await cache.put(`/share-file-${i}`, new Response(files[i]));
-        }
+      let fields = [];
+      let media = [];
+      let text = '';
+      let title = '';
+      let shareUrl = '';
+      let parseError = '';
+      try {
+        const formData = await event.request.formData();
+        // ★ 点呼は **絞る前**に取る。★★ 「media が 0 件」と「media フィールドが無い」は別の話
+        for (const key of formData.keys()) if (!fields.includes(key)) fields.push(key);
+        text = formData.get('text') || '';
+        title = formData.get('title') || '';
+        shareUrl = formData.get('url') || '';
+        media = formData.getAll('media');
+      } catch (err) {
+        // ★ 黙って落とさない。★★ respondWith が reject するとブラウザのエラー画面になり、
+        //   **こちらには何も残らない**
+        parseError = String((err && err.message) || err);
       }
+
+      const sizes = media.map((f) => (f && typeof f.size === 'number' ? f.size : -1));
+      const files = media.filter((f) => f && f.size > 0);
+
+      for (let i = 0; i < files.length; i++) {
+        await cache.put(`/share-file-${i}`, new Response(files[i]));
+      }
+
+      // ★★★★ 一度きりの記録。★ 画面が読んだら消す
+      await cache.put(
+        '/share-diag',
+        new Response(
+          JSON.stringify({
+            fields,
+            mediaCount: media.length,
+            zeroSized: sizes.filter((s) => s === 0).length,
+            sizes,
+            parseError,
+            swVersion: SW_VERSION,
+            t: Date.now(),
+          }),
+          { headers: { 'Content-Type': 'application/json' } }
+        )
+      );
 
       // GET にリダイレクト
       const params = new URLSearchParams();
@@ -73,6 +124,9 @@ self.addEventListener('fetch', (event) => {
       if (title) params.set('title', title);
       if (shareUrl) params.set('url', shareUrl);
       if (files.length > 0) params.set('files', files.length);
+      // ★ 二重の保険 (★★ 判定の主は「記録の有無」であって、これではない)
+      params.set('via', 'sw');
+      params.set('t', String(Date.now()));
 
       return Response.redirect(`/share?${params}`, 303);
     })());
