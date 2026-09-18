@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diagnoseShare, type ShareDiagnosisInput, type ShareRecord } from '../src/components/share/shareDiagnosis';
+import { diagnoseShare, isEmptyMultipart, type ShareDiagnosisInput, type ShareRecord } from '../src/components/share/shareDiagnosis';
 
 /**
  * #445 共有が失敗したときに **何が起きなかったか**を名指しする。
@@ -162,5 +162,62 @@ describe('#445 ★★★★ 本文のバイト数と content-type を点呼に�
   it('★★ field が空でなければ「解釈できていません」は出さない', () => {
     const d = diagnoseShare(input({ record: rec({ fields: ['title'], mediaCount: 0, sizes: [], bodyBytes: 900 }) }));
     expect(d.detail).not.toContain('解釈できていません');
+  });
+});
+
+/**
+ * ★★★★★ 2026-09-18 第 4 版: 「中身ゼロの multipart」を **名指しする**。
+ *
+ * ★ 実測 (Chrome 153):
+ * ```
+ * type: multipart/form-data; boundary=----MultipartBoundary--M3JeXv…JdL----   (★ boundary 69 字)
+ * 本文 75 バイト  = ★★ '--' + boundary + '--' + CRLF = 69 + 6   ← ★★★★ 差 0
+ * ```
+ * → ★ 本文は **終端区切りだけ**。★★ パートが 1 つも無い = `formData()` の 0 件は **正しい読み**。
+ *
+ * ★★★ だから前版の「本文はあるのに解釈できていません」は **言い方が誤り**だった。
+ *   ★ 解釈はできていて、中身が無いのが正しい。★★ ここを直す。
+ */
+const CT = (b: string) => `multipart/form-data; boundary=${b}`;
+const B69 = '----MultipartBoundary--M3JeXvGeZvoZoqCOKRcIDg8kN1s887DFnzYGHzfJdL----';
+
+describe('#445 ★★★★ 中身ゼロの multipart を名指しする', () => {
+  it('★ boundary から期待値を計算して突き合わせる (★★ 75 という数字を焼き込まない)', () => {
+    expect(isEmptyMultipart(CT(B69), B69.length + 6)).toBe(true);
+    expect(isEmptyMultipart(CT(B69), B69.length + 7)).toBe(false);
+    expect(isEmptyMultipart(CT(B69), 0)).toBe(false);
+  });
+
+  it('★ boundary が引用符つきでも読む', () => {
+    expect(isEmptyMultipart(`multipart/form-data; boundary="${B69}"`, B69.length + 6)).toBe(true);
+  });
+
+  it('★ boundary が無ければ判定しない (★★ 憶測で true にしない)', () => {
+    expect(isEmptyMultipart('multipart/form-data', 75)).toBe(false);
+    expect(isEmptyMultipart('text/plain', 75)).toBe(false);
+  });
+
+  it('★★★★ 中身ゼロと分かったら「解釈できていません」ではなく「パート 0 件」と書く', () => {
+    const d = diagnoseShare(input({
+      record: rec({ fields: [], mediaCount: 0, sizes: [], contentType: CT(B69), bodyBytes: B69.length + 6 }),
+    }));
+    expect(d.detail).toContain('パート 0 件');
+    expect(d.detail).not.toContain('解釈できていません');
+  });
+
+  it('★★★★★ 利用者には ＋ボタン を案内する (★ 行き止まりで止めない)', () => {
+    const d = diagnoseShare(input({
+      record: rec({ fields: [], mediaCount: 0, sizes: [], contentType: CT(B69), bodyBytes: B69.length + 6 }),
+    }));
+    expect(d.message).toContain('ボタン');
+    expect(d.code).toBe('sw-handled');
+  });
+
+  it('★ 期待値より大きい本文なら、従来どおり「解釈できていません」', () => {
+    const d = diagnoseShare(input({
+      record: rec({ fields: [], mediaCount: 0, sizes: [], contentType: CT(B69), bodyBytes: 51234 }),
+    }));
+    expect(d.detail).toContain('解釈できていません');
+    expect(d.detail).not.toContain('パート 0 件');
   });
 });

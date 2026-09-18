@@ -100,6 +100,32 @@ export interface ShareDiagnosis {
   detail: string;
 }
 
+/** content-type から boundary を取り出す。★ 引用符つきも読む。無ければ null (★★ 憶測しない)。 */
+function parseBoundary(contentType: string): string | null {
+  const m = /boundary=("?)([^";]+)\1/i.exec(contentType || '');
+  return m ? m[2] : null;
+}
+
+/**
+ * ★★★★★ 本文が「終端区切りだけ」= **パートが 1 つも無い** multipart か。
+ *
+ * ★ 実測 (2026-09-18 / Chrome 153):
+ * ```
+ * boundary 69 字 / 本文 75 バイト = '--' + boundary + '--' + CRLF = 69 + 6   ← ★★ 差 0
+ * ```
+ * ★★★ つまり `formData()` が 0 件を返したのは **正しい読み**で、器は壊れていない。
+ *   ★ 「解釈できていません」と書くのは誤り。**中身が無い**のが事実。
+ *
+ * ★★★★ 75 という数字は焼き込まない。**boundary から期待値を計算して突き合わせる**
+ *   (★ 別の端末では boundary の長さが違う)。
+ */
+export function isEmptyMultipart(contentType: string, bodyBytes: number): boolean {
+  const b = parseBoundary(contentType);
+  if (!b) return false;
+  // '--' + boundary + '--' + CRLF
+  return bodyBytes === b.length + 6;
+}
+
 /** launchQueue 側を 1 語にする。★ 4 つを書き分ける (見ていない / 非対応 / 0 件 / N 件)。 */
 function launchNote(l: LaunchStateLike | null): string {
   if (!l || !l.checked) return 'launchQueue: 見ていません';
@@ -114,8 +140,11 @@ function census(r: ShareRecord | null, l: LaunchStateLike | null): string {
   const hasMediaField = r.fields.includes('media');
   // ★ -1 は「測れなかった」。★★ 0 と同じ顔をさせない
   const body = r.bodyBytes < 0 ? '本文: 測れず' : `本文 ${r.bodyBytes} バイト`;
-  // ★★★★ バイトはあるのに field が空 = 送り手ではなく **こちらが読めていない**
-  const unparsed = r.bodyBytes > 0 && r.fields.length === 0 ? '★ 本文はあるのに解釈できていません' : '';
+  // ★★★★ 中身ゼロと分かるなら そう書く。★ 「解釈できていません」は誤りだった (2026-09-18 訂正)
+  const empty = isEmptyMultipart(r.contentType, r.bodyBytes);
+  const unparsed = empty
+    ? '★ 本文は終端区切りのみ = パート 0 件'
+    : (r.bodyBytes > 0 && r.fields.length === 0 ? '★ 本文はあるのに解釈できていません' : '');
   return [
     `field: [${r.fields.join(', ')}]`,
     hasMediaField ? `media ${r.mediaCount} 件` : 'media フィールド自体が来ていません',
@@ -140,6 +169,18 @@ export function diagnoseShare(input: ShareDiagnosisInput): ShareDiagnosis {
   if (input.record) {
     const r = input.record;
     if (r.mediaCount === 0) {
+      // ★★★★★ 2026-09-18 実測: Chrome 153 は **中身ゼロの multipart** を POST してくる。
+      //   ★ 本文は終端区切りだけ (boundary 69 字 / 本文 75 バイト = 69 + 6、差 0)。
+      //   ★★ launchQueue にも来ていない。★★★ 同じ manifest・同じ SW が Chrome 141 では通る。
+      //   → ★★★★ **こちらでは直せない。** ★ だから行き止まりで止めず、**次の手を案内する**
+      //     (★★ ＋ボタンからの添付は実測で通っている: 09-17 に 58.2MB / 9 秒)。
+      if (isEmptyMultipart(r.contentType, r.bodyBytes)) {
+        return {
+          code: 'sw-handled',
+          message: 'この端末のブラウザでは、共有からファイルを送れません（中身が空で届いています）。お手数ですが、ルームを開いて ＋ ボタンから添付してください。',
+          detail,
+        };
+      }
       return {
         code: 'sw-handled',
         // ★ ここで空き容量を持ち出さない。**渡ってきていない**のであって、置けなかったのではない
