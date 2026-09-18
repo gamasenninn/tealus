@@ -2,6 +2,7 @@ import type {
   User, Room, RoomMember, Message, Tag, MessageTag, StampPack, Stamp, MediaItem,
   PortalLink, Webhook, DictionaryTerm, DictionaryAlias,
 } from '../types';
+import { trimEventsForKeepalive } from './voiceLogPayload';
 
 const API_BASE = '/api';
 
@@ -303,6 +304,32 @@ class ApiClient {
   /** 計測イベントの送信 (docs/08 §12.6)。★ 失敗しても会話は止めない */
   voiceChatLog(sessionId: string, events: unknown[]): Promise<{ ok: boolean }> {
     return this._agentApi('POST', '/voice-chat/log', { session_id: sessionId, events }, { fallback: { ok: false } });
+  }
+
+  /**
+   * ★★★★ 離脱中 (リロード / タブを閉じる) に計測を送る。
+   *
+   * ★ 通常の `fetch` は離脱で打ち切られるので届かない。★★ `keepalive: true` を使う。
+   * ★★★ `navigator.sendBeacon` は **ヘッダを付けられない**ので使えない (認証が Bearer)。
+   * ★★★★ 本文に 64KB の上限があるため、**古い方から捨てて末尾を守る** (`trimEventsForKeepalive`)。
+   *
+   * ★ 戻り値は「送ろうとしたか」だけ。**届いたかは分からない** (離脱後は結果を受け取れない)。
+   */
+  voiceChatLogKeepalive(sessionId: string, events: unknown[]): { sent: boolean; dropped: number } {
+    if (!sessionId || !events.length) return { sent: false, dropped: 0 };
+    const { events: kept, dropped } = trimEventsForKeepalive(sessionId, events);
+    try {
+      void fetch('/agent-api/voice-chat/log', {
+        method: 'POST',
+        keepalive: true,
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, events: kept }),
+      }).catch(() => {});
+      return { sent: true, dropped };
+    } catch {
+      // ★ 離脱中なので出せる場所が無い。★★ 会話の後片付けは止めない
+      return { sent: false, dropped };
+    }
   }
 
   // === Room agent settings (#156) — agent-server /config/room/:roomId/... proxy 経由 ===

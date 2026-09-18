@@ -273,6 +273,41 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
   }, []);
 
   /**
+   * ★★★★★ 離脱 (リロード / タブを閉じる) でも送る (2026-09-18)。
+   *
+   * ★ #409 で「切断」と「自動で閉じる」は塞いだが、★★ **利用者が固まって自分でリロードした回**が
+   *   まだ残っていなかった。★★★ 利用者にとっていちばん痛いのは「返ってこない回」で、
+   *   **そういう回ほど人はリロードする** —— ★★★★ **いちばん困った回だけ記録が無い**状態だった。
+   *
+   * ★ 実測 (2026-09-18): 残っている記録では 95 往復中 5 回が「押したのに声が鳴らなかった」。
+   *   ★★ これは **下限**で、リロードされた回は数に入っていない。
+   *
+   * ★★ 通常の `fetch` は離脱で打ち切られるので `keepalive` を使う (api 側)。
+   * ★★★ `pagehide` を主に使う —— `beforeunload` は iOS Safari で発火しないことがある。
+   *   ★ `visibilitychange` (hidden) も拾う (アプリを切り替えてそのまま戻らない場合)。
+   */
+  const flushLogOnLeave = useCallback(() => {
+    if (!sessionIdRef.current || !eventsRef.current.length) return;
+    // ★ 「なぜ飛んだか」を残す。★★ stop() で終えた便と区別できないと、
+    //   「固まって離脱した」の件数が数えられない
+    eventsRef.current.push({ t: performance.now(), type: 'log_flush_on_leave' });
+    const { dropped } = api.voiceChatLogKeepalive(sessionIdRef.current, eventsRef.current);
+    if (dropped > 0) console.warn(`[voice-chat] 離脱時の記録を ${dropped} 件 落としました (64KB 上限)`);
+    eventsRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    const onLeave = () => flushLogOnLeave();
+    const onHidden = () => { if (document.visibilityState === 'hidden') flushLogOnLeave(); };
+    window.addEventListener('pagehide', onLeave);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', onLeave);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [flushLogOnLeave]);
+
+  /**
    * ★ 接続が死んだ (#409)。会話は続けられないので、**黙らずに画面へ出して**片付ける。
    * docs/08 §7-2「無言で待たせない」——「考えている」と「壊れた」が区別できないのが一番まずい。
    */
