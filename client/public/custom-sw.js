@@ -55,7 +55,7 @@ self.addEventListener('notificationclick', (event) => {
 //
 // ★★ 記録は **一度きり** (画面が読んだら消す)。★★★ URL に印を置くと
 //   **再訪 (履歴 / 再読み込み) で残って、生きている失敗と見分けがつかなくなる**。
-const SW_VERSION = '2026-09-18a';
+const SW_VERSION = '2026-09-18b';
 
 /** 画面からの問い合わせに答える。★ 旧版はこの listener を持たないので **黙る** = 版が分かる。 */
 self.addEventListener('message', (event) => {
@@ -80,6 +80,18 @@ self.addEventListener('fetch', (event) => {
       let title = '';
       let shareUrl = '';
       let parseError = '';
+      // ★★★★ 2026-09-18 第 3 版: **本文にバイトがあるか**を先に測る。
+      //   ★ formData() が空を返したのは「0 件」であって、**本文が空であることの証明ではない**。
+      //   ★★ バイトがあるのに解釈できていないなら、直すのは **こちら側**。
+      //   ★★★ 本文を二度読めないので、**消費する前に clone する**。
+      let contentType = event.request.headers.get('content-type') || '(なし)';
+      let bodyBytes = -1; // ★ -1 = 測れなかった (0 と混ぜない)
+      try {
+        const buf = await event.request.clone().arrayBuffer();
+        bodyBytes = buf.byteLength;
+      } catch (err) {
+        parseError = `本文を測れませんでした: ${String((err && err.message) || err)}`;
+      }
       try {
         const formData = await event.request.formData();
         // ★ 点呼は **絞る前**に取る。★★ 「media が 0 件」と「media フィールドが無い」は別の話
@@ -110,6 +122,8 @@ self.addEventListener('fetch', (event) => {
             mediaCount: media.length,
             zeroSized: sizes.filter((s) => s === 0).length,
             sizes,
+            contentType,
+            bodyBytes,
             parseError,
             swVersion: SW_VERSION,
             t: Date.now(),

@@ -14,7 +14,8 @@ import { diagnoseShare, type ShareDiagnosisInput, type ShareRecord } from '../sr
  */
 
 const rec = (over: Partial<ShareRecord> = {}): ShareRecord => ({
-  fields: ['title', 'text', 'media'], mediaCount: 1, zeroSized: 0, sizes: [1234], t: 1000, ...over,
+  fields: ['title', 'text', 'media'], mediaCount: 1, zeroSized: 0, sizes: [1234], t: 1000,
+  contentType: 'multipart/form-data; boundary=x', bodyBytes: 2048, ...over,
 });
 
 const input = (over: Partial<ShareDiagnosisInput> = {}): ShareDiagnosisInput => ({
@@ -124,5 +125,42 @@ describe('#445 ★ launchQueue の状態を点呼に出す', () => {
     const base = input({ hasShareParams: true });
     expect(diagnoseShare(base).code).toBe('revisit');
     expect(diagnoseShare({ ...base, launch: { checked: true, supported: true, fileCount: 3 } }).code).toBe('revisit');
+  });
+});
+
+/**
+ * ★★★★★ 2026-09-18 第 3 版: **本文にバイトがあるか**を出す。
+ *
+ * ★ `formData()` が空を返したのは「0 件」であって、★★ **本文が空であることの証明ではない**。
+ *   ★★★ バイトがあるのに解釈できていないなら、直すのは **こちら側**。
+ * ★★★★ 「0 件が出たら まず器を疑う」を、★ Chromium に上げる前にもう一度やる。
+ */
+describe('#445 ★★★★ 本文のバイト数と content-type を点呼に出す', () => {
+  it('★ 本文が 0 バイトなら そう書く (★★ 送り手が空を寄越したことの証拠になる)', () => {
+    const d = diagnoseShare(input({ record: rec({ fields: [], mediaCount: 0, sizes: [], bodyBytes: 0 }) }));
+    expect(d.detail).toContain('本文 0 バイト');
+  });
+
+  it('★★★★ 本文にバイトがあるのに field が空なら、★ 「解釈できていない」と分かる形で出す', () => {
+    const d = diagnoseShare(input({ record: rec({ fields: [], mediaCount: 0, sizes: [], bodyBytes: 51234 }) }));
+    expect(d.detail).toContain('51234');
+    // ★ ここが出たら 犯人は Chrome ではなく こちらの読み取り側
+    expect(d.detail).toContain('解釈できていません');
+  });
+
+  it('★ 測れなかったときは -1 を そのまま出さない (★★ 「測れず」と書く)', () => {
+    const d = diagnoseShare(input({ record: rec({ bodyBytes: -1 }) }));
+    expect(d.detail).toContain('本文: 測れず');
+    expect(d.detail).not.toContain('-1');
+  });
+
+  it('★ content-type を そのまま出す (★★ 送り手が何と名乗ったか)', () => {
+    const d = diagnoseShare(input({ record: rec({ contentType: 'text/plain' }) }));
+    expect(d.detail).toContain('text/plain');
+  });
+
+  it('★★ field が空でなければ「解釈できていません」は出さない', () => {
+    const d = diagnoseShare(input({ record: rec({ fields: ['title'], mediaCount: 0, sizes: [], bodyBytes: 900 }) }));
+    expect(d.detail).not.toContain('解釈できていません');
   });
 });

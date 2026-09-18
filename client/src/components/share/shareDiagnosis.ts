@@ -40,6 +40,18 @@ export interface ShareRecord {
   zeroSized: number;
   /** 各サイズ (byte) */
   sizes: number[];
+  /**
+   * ★ 送り手が名乗った content-type。
+   * ★★ 「何として送ってきたか」は、こちらが読み違えているかの手掛かりになる。
+   */
+  contentType: string;
+  /**
+   * ★★★★ 本文のバイト数。★ **-1 = 測れなかった** (0 と混ぜない)。
+   *
+   * ★★ `formData()` が空を返したのは「0 件」であって、**本文が空であることの証明ではない**。
+   *   ★★★ バイトがあるのに field が空なら、犯人は送り手ではなく **こちらの読み取り側**。
+   */
+  bodyBytes: number;
   /** SW が書いた時刻 (★ 二重の保険。判定の主ではない) */
   t: number;
 }
@@ -100,13 +112,20 @@ function census(r: ShareRecord | null, l: LaunchStateLike | null): string {
   const tail = launchNote(l);
   if (!r) return `記録なし（SW からの受け取り記録がありません） / ${tail}`;
   const hasMediaField = r.fields.includes('media');
+  // ★ -1 は「測れなかった」。★★ 0 と同じ顔をさせない
+  const body = r.bodyBytes < 0 ? '本文: 測れず' : `本文 ${r.bodyBytes} バイト`;
+  // ★★★★ バイトはあるのに field が空 = 送り手ではなく **こちらが読めていない**
+  const unparsed = r.bodyBytes > 0 && r.fields.length === 0 ? '★ 本文はあるのに解釈できていません' : '';
   return [
     `field: [${r.fields.join(', ')}]`,
     hasMediaField ? `media ${r.mediaCount} 件` : 'media フィールド自体が来ていません',
     `うち 0 バイト ${r.zeroSized} 件`,
     r.sizes.length > 0 ? `サイズ: ${r.sizes.join(', ')}` : 'サイズ: なし',
+    `type: ${r.contentType}`,
+    body,
+    unparsed,
     tail,
-  ].join(' / ');
+  ].filter(Boolean).join(' / ');
 }
 
 /**

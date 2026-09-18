@@ -81,6 +81,9 @@ function SharePage() {
             mediaCount: Number(d.mediaCount) || 0,
             zeroSized: Number(d.zeroSized) || 0,
             sizes: Array.isArray(d.sizes) ? d.sizes : [],
+            contentType: typeof d.contentType === 'string' ? d.contentType : '(不明)',
+            // ★ 旧 SW の記録には bodyBytes が無い。★★ 0 に倒すと「空だった」という嘘になるので -1
+            bodyBytes: typeof d.bodyBytes === 'number' ? d.bodyBytes : -1,
             t: Number(d.t) || 0,
           });
           // ★ SW 側で拾えた例外も捨てない (★★ 画面にしか出せる場所が無い)
