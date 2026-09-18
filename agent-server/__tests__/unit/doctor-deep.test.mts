@@ -108,7 +108,7 @@ describe('#442 (2) 本線 (cc-main) の生死', () => {
 
 describe('#442 (3) 辞書オーバーレイの掛け違い (#384)', () => {
   it('★ DB と在庫の語彙がずれていたら warn。★★ 「どちらが新しいか」まで書く', () => {
-    const f = judgeOverlayDrift(257, 259);
+    const f = judgeOverlayDrift({ dbTerms: 257, overlayTerms: 259, dbAliases: 700, overlayAliases: 700 });
     expect(f.level).toBe('warn');
     expect(f.detail).toContain('257');
     expect(f.detail).toContain('259');
@@ -117,14 +117,43 @@ describe('#442 (3) 辞書オーバーレイの掛け違い (#384)', () => {
   });
 
   it('一致していれば info', () => {
-    const f = judgeOverlayDrift(299, 299);
+    const f = judgeOverlayDrift({ dbTerms: 299, overlayTerms: 299, dbAliases: 700, overlayAliases: 700 });
     expect(f.level).toBe('info');
   });
 
   it('★ どちらかが引けなければ warn。★★ 「ずれ 0」と言わない', () => {
-    expect(judgeOverlayDrift(null, 299).level).toBe('warn');
-    expect(judgeOverlayDrift(299, null).level).toBe('warn');
-    expect(judgeOverlayDrift(null, null).detail).not.toContain('一致');
+    const base = { dbAliases: 700, overlayAliases: 700 };
+    expect(judgeOverlayDrift({ ...base, dbTerms: null, overlayTerms: 299 }).level).toBe('warn');
+    expect(judgeOverlayDrift({ ...base, dbTerms: 299, overlayTerms: null }).level).toBe('warn');
+    expect(judgeOverlayDrift({ ...base, dbTerms: null, overlayTerms: null }).detail).not.toContain('一致');
+  });
+
+  // ★ 2026-09-18 実地: 語は 303 = 303 のまま、別名だけを 1 行 動かした。
+  //   ★★ 語しか見ていなかった当時の口は「ずれ 0」と答える = 掛け違いを 1 件も検知できない。
+  it('★★★ 語の件数が一致していても、別名がずれていたら warn', () => {
+    const f = judgeOverlayDrift({ dbTerms: 303, overlayTerms: 303, dbAliases: 758, overlayAliases: 757 });
+    expect(f.level).toBe('warn');
+    expect(f.detail).toContain('758');
+    expect(f.detail).toContain('757');
+    expect(f.detail).toContain('別名');
+    expect(f.fix).toContain('reload-vocab');
+  });
+
+  it('★ 語も別名も一致して初めて info', () => {
+    expect(judgeOverlayDrift({ dbTerms: 303, overlayTerms: 303, dbAliases: 758, overlayAliases: 758 }).level).toBe('info');
+  });
+
+  it('★★ 別名を引けなければ warn。★★★ 語が一致していても「ずれ 0」と言わない', () => {
+    const f = judgeOverlayDrift({ dbTerms: 303, overlayTerms: 303, dbAliases: null, overlayAliases: 758 });
+    expect(f.level).toBe('warn');
+    expect(f.detail).not.toContain('ずれ 0');
+  });
+
+  // ★ 渡し忘れを 0 件と読まない (★★ 省略できる引数は「妥当に見える嘘」を返す)
+  it('★★★★ 別名の件数を渡し忘れたら warn。★ 0 件と読まない', () => {
+    const f = judgeOverlayDrift({ dbTerms: 303, overlayTerms: 303 } as never);
+    expect(f.level).toBe('warn');
+    expect(f.detail).not.toContain('0 件');
   });
 });
 

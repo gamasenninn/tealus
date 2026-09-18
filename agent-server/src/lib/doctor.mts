@@ -310,38 +310,87 @@ export function judgeMainline(minutes: number | null, warnAfter: number): Findin
 }
 
 /**
+ * #442 (3) が突き合わせる 4 つの件数。
+ *
+ * ★ **省略できる形にしない。** 省いたものが 0 件に化けると、口は「ずれ 0」という
+ *   **妥当に見える嘘**を返す (= 掛け違いが起きている最中に info が出る)。
+ *   ★★ 引けなかったときは呼び出し側が明示的に null を入れる。
+ */
+export interface OverlayCounts {
+  /** DB の active な語 */
+  dbTerms: number | null;
+  /** 在庫 (local.ttl) の語 */
+  overlayTerms: number | null;
+  /** DB の active な別名 (active な語に属するものだけ) */
+  dbAliases: number | null;
+  /** 在庫 (local.ttl) の別名 */
+  overlayAliases: number | null;
+}
+
+const RELOAD_FIX =
+  '★ `POST /api/admin/transcription/reload-vocab` を叩くか、本体サーバを再起動してください (★★ DB を直しただけでは入れ替わりません)';
+
+/** 1 対の件数を 1 行に整形する。★ 差の向きを言葉にするのはここだけ (2 か所に書かない)。 */
+function driftLine(label: string, db: number, overlay: number): string {
+  return (
+    `★ DB の active な${label} ${db} 件 に対して 在庫の${label} ${overlay} 件 (差 ${overlay - db})\n` +
+    `  ★★ ${overlay > db ? `在庫の方が多い = DB で落とした${label}がまだ効いています` : `在庫の方が少ない = DB で足した${label}がまだ効いていません`}`
+  );
+}
+
+/**
  * #442 (3) 辞書オーバーレイの掛け違い (#384)。
  *
  * ★ DB の行を直しても、在庫の語彙は `refreshVocabFromTable` を呼ぶまで入れ替わらない。
- *   ★★ 走るのは 起動時 / admin endpoint / organon watcher の 3 つだけで、watcher は
- *   **ttl の内容 hash が変わったときしか発火しない**。= organon が ttl を変えない日は治らない。
- * ★★★ 2026-09-15 に `organonDictPrune --apply` の直後に実測し、消費側 2 か所とも古いままだった。
+ *   ★★ 走るのは 起動時 / admin endpoint / organon watcher / **自己成長辞書の昇格** の 4 つ。
+ *   watcher は **ttl の内容 hash が変わったときしか発火しない**ので、organon が ttl を
+ *   変えない日は そこからは治らない。
+ *   ★★★ 2026-09-18 実測: 別件の昇格 (`高坂→保坂`) の副作用で 76 秒後に揃った。
+ *   **対になっていないのではなく、対になったり ならなかったりする** ——
+ *   だから「揃っているはず」と読めず、引ける口が要る。
+ * ★★★★ 2026-09-15 に `organonDictPrune --apply` の直後に実測し、消費側 2 か所とも古いままだった。
  *   **黙って続く**のが害なので、引ける口に出す (自動で直すことはしない)。
+ *
+ * ★★★★★ 2026-09-18: **別名 (alias) も見る。** それまでは語の件数しか見ておらず、
+ *   同日に 語 303 = 303 のまま alias を 1 行だけ動かした実例が **1 件も引っかからなかった**。
+ *   ★ organon の撤去も 自己成長辞書も 動かすのは主に alias 側なので、語だけでは薄い。
  */
-export function judgeOverlayDrift(dbActive: number | null, overlayTerms: number | null): Finding {
-  if (dbActive === null || overlayTerms === null) {
+export function judgeOverlayDrift(counts: OverlayCounts): Finding {
+  // ★ undefined (渡し忘れ) を 0 と読まない。引けなかったのと同じ扱いに倒す
+  const dbTerms = counts?.dbTerms ?? null;
+  const overlayTerms = counts?.overlayTerms ?? null;
+  const dbAliases = counts?.dbAliases ?? null;
+  const overlayAliases = counts?.overlayAliases ?? null;
+
+  if (dbTerms === null || overlayTerms === null || dbAliases === null || overlayAliases === null) {
     return {
       id: 'dict-overlay-drift',
       level: 'warn',
-      detail: `★ 突き合わせできませんでした (DB=${dbActive ?? '引けず'} / 在庫=${overlayTerms ?? '引けず'})`,
+      detail:
+        `★ 突き合わせできませんでした\n` +
+        `  語   DB=${dbTerms ?? '引けず'} / 在庫=${overlayTerms ?? '引けず'}\n` +
+        `  別名 DB=${dbAliases ?? '引けず'} / 在庫=${overlayAliases ?? '引けず'}`,
       fix: '★ DB への到達と local.ttl の場所を確かめてください (★★ 「ずれ 0」ではありません)',
     };
   }
-  if (dbActive === overlayTerms) {
+
+  const lines: string[] = [];
+  if (dbTerms !== overlayTerms) lines.push(driftLine('語', dbTerms, overlayTerms));
+  if (dbAliases !== overlayAliases) lines.push(driftLine('別名', dbAliases, overlayAliases));
+
+  if (lines.length === 0) {
     return {
       id: 'dict-overlay-drift',
       level: 'info',
-      detail: `DB の active な語 ${dbActive} 件 = 在庫の語彙 ${overlayTerms} 件`,
+      detail: `DB の active な語 ${dbTerms} 件 = 在庫の語 ${overlayTerms} 件 / 別名 ${dbAliases} 件 = 在庫の別名 ${overlayAliases} 件`,
       fix: '★ 件数が同じだけで、中身までは突き合わせていません',
     };
   }
   return {
     id: 'dict-overlay-drift',
     level: 'warn',
-    detail:
-      `★ DB の active な語 ${dbActive} 件 に対して 在庫の語彙 ${overlayTerms} 件 (差 ${overlayTerms - dbActive})\n` +
-      `  ★★ ${overlayTerms > dbActive ? '在庫の方が多い = DB で落とした語がまだ効いています' : '在庫の方が少ない = DB で足した語がまだ効いていません'}`,
-    fix: '★ `POST /api/admin/transcription/reload-vocab` を叩くか、本体サーバを再起動してください (★★ DB を直しただけでは入れ替わりません)',
+    detail: lines.join('\n'),
+    fix: RELOAD_FIX,
   };
 }
 

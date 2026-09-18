@@ -71,23 +71,44 @@ export async function runDbChecks(env: DoctorEnv): Promise<Finding[]> {
     out.push(judgeMigrations(planMigrations(files, mig), mig.size));
   }
 
-  // (3) ★ DB の active な語 vs 在庫の語彙 (agent-server が実際に読む local.ttl)
-  const dbActive = await withClient(env, async (c) => {
-    const { rows } = await c.query<{ n: string }>(
+  // (3) ★ DB の active な語/別名 vs 在庫 (agent-server が実際に読む local.ttl)
+  //   ★★ 2026-09-18 に別名を足した。語だけでは、organon の撤去も自己成長辞書の昇格も
+  //   **主に別名を動かす**ので、掛け違いが件数に出ない (同日に実例が 1 件あった)。
+  const dbCounts = await withClient(env, async (c) => {
+    const terms = await c.query<{ n: string }>(
       "SELECT count(*) AS n FROM dictionary_terms WHERE status = 'active'"
     );
-    return Number(rows[0].n);
+    // ★ active な語に属する別名だけを数える。local.ttl は active な語しか書き出さないので、
+    //   ここで語の status を見ないと **落とした語の別名まで数えて 恒常的にずれる**。
+    const aliases = await c.query<{ n: string }>(
+      `SELECT count(*) AS n
+         FROM dictionary_aliases a JOIN dictionary_terms t ON t.id = a.term_id
+        WHERE a.status = 'active' AND t.status = 'active'`
+    );
+    return { terms: Number(terms.rows[0].n), aliases: Number(aliases.rows[0].n) };
   });
-  let overlay: number | null = null;
+  let overlayTerms: number | null = null;
+  let overlayAliases: number | null = null;
   try {
     const entries = loadVocabEntriesFromTtl();
     // ★ 0 件は「ファイルが無い / parse 失敗」でも返る (loadVocabEntriesFromTtl は throw しない)。
     //   ★★ 「在庫 0」と「引けなかった」を同じにしないため、0 は null に倒す。
-    overlay = entries.length > 0 ? entries.length : null;
+    if (entries.length > 0) {
+      overlayTerms = entries.length;
+      overlayAliases = entries.reduce((s, e) => s + (e.aliases?.length ?? 0), 0);
+    }
   } catch {
-    overlay = null;
+    overlayTerms = null;
+    overlayAliases = null;
   }
-  out.push(judgeOverlayDrift(dbActive, overlay));
+  out.push(
+    judgeOverlayDrift({
+      dbTerms: dbCounts?.terms ?? null,
+      overlayTerms,
+      dbAliases: dbCounts?.aliases ?? null,
+      overlayAliases,
+    })
+  );
 
   return out;
 }
