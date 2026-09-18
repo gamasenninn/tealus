@@ -44,6 +44,13 @@ export interface ShareRecord {
   t: number;
 }
 
+/** launchQueue 側の状態。★ null = 見ていない (★★ 「非対応」「0 件」と混ぜない) */
+export interface LaunchStateLike {
+  checked: boolean;
+  supported: boolean;
+  fileCount: number;
+}
+
 export interface ShareDiagnosisInput {
   /** 一度きりの記録。★ 無ければ null */
   record: ShareRecord | null;
@@ -53,6 +60,12 @@ export interface ShareDiagnosisInput {
   swReplied: boolean;
   /** URL に共有由来のパラメータ (files / text / via) が残っているか */
   hasShareParams: boolean;
+  /**
+   * ★ launchQueue 側の状態。★★ null = 見ていない。
+   * ★★★ **判定 (code) は変えない。点呼にだけ出す** —— 受け口がどちらだったかを
+   *   次の 1 枚で確定させるための欄で、判定の筋を増やすためのものではない。
+   */
+  launch: LaunchStateLike | null;
 }
 
 export type ShareDiagnosisCode =
@@ -75,15 +88,24 @@ export interface ShareDiagnosis {
   detail: string;
 }
 
+/** launchQueue 側を 1 語にする。★ 4 つを書き分ける (見ていない / 非対応 / 0 件 / N 件)。 */
+function launchNote(l: LaunchStateLike | null): string {
+  if (!l || !l.checked) return 'launchQueue: 見ていません';
+  if (!l.supported) return 'launchQueue: 非対応';
+  return `launchQueue: ファイル ${l.fileCount} 件`;
+}
+
 /** 記録を 1 行の点呼にする。★ 「media が 0 件」と「media が無い」を分けて書く。 */
-function census(r: ShareRecord | null): string {
-  if (!r) return '記録なし（SW からの受け取り記録がありません）';
+function census(r: ShareRecord | null, l: LaunchStateLike | null): string {
+  const tail = launchNote(l);
+  if (!r) return `記録なし（SW からの受け取り記録がありません） / ${tail}`;
   const hasMediaField = r.fields.includes('media');
   return [
     `field: [${r.fields.join(', ')}]`,
     hasMediaField ? `media ${r.mediaCount} 件` : 'media フィールド自体が来ていません',
     `うち 0 バイト ${r.zeroSized} 件`,
     r.sizes.length > 0 ? `サイズ: ${r.sizes.join(', ')}` : 'サイズ: なし',
+    tail,
   ].join(' / ');
 }
 
@@ -93,7 +115,7 @@ function census(r: ShareRecord | null): string {
  * ★★★★ **判定の順序は仕様**。上から順に、最初に当たったものを返す。
  */
 export function diagnoseShare(input: ShareDiagnosisInput): ShareDiagnosis {
-  const detail = census(input.record);
+  const detail = census(input.record, input.launch);
 
   // ① 記録がある = SW が POST を処理した。★ 他が何であれこれが勝つ (いちばん強い事実)
   if (input.record) {

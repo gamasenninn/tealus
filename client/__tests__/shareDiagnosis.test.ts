@@ -18,7 +18,7 @@ const rec = (over: Partial<ShareRecord> = {}): ShareRecord => ({
 });
 
 const input = (over: Partial<ShareDiagnosisInput> = {}): ShareDiagnosisInput => ({
-  record: null, controlled: true, swReplied: true, hasShareParams: false, ...over,
+  record: null, controlled: true, swReplied: true, hasShareParams: false, launch: null, ...over,
 });
 
 describe('#445 共有の診断 — ★ 5 通りを名指しする', () => {
@@ -88,5 +88,41 @@ describe('#445 ★★★★ 昨日の誤診を出さない —— ★ 再訪で�
     const d = diagnoseShare(input({ record: rec({ fields: ['title', 'text'], mediaCount: 0, zeroSized: 0, sizes: [] }) }));
     expect(d.message).not.toContain('空き容量');
     expect(d.detail).toContain('media');
+  });
+});
+
+/**
+ * ★★★★ 2026-09-18 第 2 版: launchQueue の状態も点呼に出す。
+ *
+ * ★ Chrome 153 は POST 本体を **空**で寄越す (実測 `field: []`)。★★ `LaunchParams.files` が
+ *   もう 1 本の受け口かもしれない —— ★★★ **当たっても外れても、次の 1 枚で確定する**ように
+ *   「見ていない / 非対応 / 0 件 / N 件」の 4 つを書き分ける。
+ */
+describe('#445 ★ launchQueue の状態を点呼に出す', () => {
+  it('★ 見ていなければ「見ていない」と書く (★★ 「非対応」と混ぜない)', () => {
+    expect(diagnoseShare(input({ launch: null })).detail).toContain('見ていません');
+  });
+
+  it('★ 非対応なら「非対応」(★★ 0 件と言わない)', () => {
+    const d = diagnoseShare(input({ launch: { checked: true, supported: false, fileCount: 0 } }));
+    expect(d.detail).toContain('非対応');
+    expect(d.detail).not.toContain('0 件');
+  });
+
+  it('★★ 対応していて 0 件なら、そう書く', () => {
+    const d = diagnoseShare(input({ launch: { checked: true, supported: true, fileCount: 0 } }));
+    expect(d.detail).toContain('launchQueue');
+    expect(d.detail).toContain('0 件');
+  });
+
+  it('★★★★ N 件来ていたら件数を出す (★ ここに数字が出たら 受け口はこちらだった)', () => {
+    const d = diagnoseShare(input({ launch: { checked: true, supported: true, fileCount: 2 } }));
+    expect(d.detail).toContain('2 件');
+  });
+
+  it('★ launch の欄は 判定 (code) を変えない (★★ 点呼にだけ出る)', () => {
+    const base = input({ hasShareParams: true });
+    expect(diagnoseShare(base).code).toBe('revisit');
+    expect(diagnoseShare({ ...base, launch: { checked: true, supported: true, fileCount: 3 } }).code).toBe('revisit');
   });
 });

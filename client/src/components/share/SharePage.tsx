@@ -7,6 +7,7 @@ import { ArrowLeft, Send } from 'lucide-react';
 import type { Room } from '../../types';
 import { planShare } from './sharePlan';
 import { diagnoseShare, type ShareRecord } from './shareDiagnosis';
+import { getLaunchState, takeLaunchFiles, onLaunchFiles } from '../../services/launchFiles';
 import './SharePage.css';
 
 /**
@@ -114,6 +115,17 @@ function SharePage() {
     return () => { alive = false; };
   }, []);
 
+  // ★★★★ #445 (2026-09-18): launchQueue 経由で届いたファイルも受け取る。
+  //   ★ Chrome 153 は POST 本体を空で寄越す (実測 field: [])。★★ 受け口は 2 本ある前提で書く。
+  //   ★★★ 入口で既に届いている場合 (takeLaunchFiles) と、後から届く場合 (onLaunchFiles) の両方。
+  useEffect(() => {
+    const already = takeLaunchFiles();
+    if (already.length > 0) setSharedFiles((prev) => (prev.length > 0 ? prev : already));
+    return onLaunchFiles((files) => {
+      setSharedFiles((prev) => (prev.length > 0 ? prev : files));
+    });
+  }, []);
+
   const getRoomDisplayName = (room: Room): string => {
     if (room.type === 'group') return room.name!;
     return room.partner_display_name || 'トーク';
@@ -143,6 +155,7 @@ function SharePage() {
         controlled: Boolean(navigator.serviceWorker?.controller),
         swReplied,
         hasShareParams: searchParams.has('files') || searchParams.has('via') || searchParams.has('text'),
+        launch: getLaunchState(),
       });
       setError(d.message);
       setDiagDetail((prev) => [prev, `[${d.code}] ${d.detail}`].filter(Boolean).join(' / '));
