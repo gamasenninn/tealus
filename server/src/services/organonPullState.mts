@@ -50,6 +50,32 @@ export interface PullState {
    *   **この欄があれば #384 の積み残しは毎日見えていた。**
    */
   drift: number | null;
+  /**
+   * ★ organon 由来で active な **別名** の数 (2026-09-18、organon 班の依頼)。
+   * ★★ null = 引けなかった。0 と書かない。
+   */
+  db_organon_active_aliases: number | null;
+  /**
+   * ★ **語の drift と式が違う。** `db_organon_active_aliases - aliases` **ではない。**
+   *
+   * ★★ 理由: `upsertAlias` は source を上書きしない (= 意図的な約束) ので、`source` は
+   *   「今どこから来ているか」ではなく **「誰が最初に入れたか」**を記録している。
+   *   射影に載っている別名でも、先に自己成長辞書が入れた行は source='auto' のまま残る。
+   *   ★★★ 実測 (2026-09-18): 射影 614 / organon 由来 active 607。差 -7 は
+   *   **tombstone 1 + 先に別の出所が入った 6** で、どれも正常。引き算を drift と呼ぶと
+   *   **毎日 -7 が出て「sync が落ちた」と読まれる**。
+   *
+   * ★★★★ なので **「射影から外れたのに DB に残っている organon 由来の active 別名」**
+   *   = 撤去の積み残し、だけを drift_aliases とする。**正常は 0**、正 = 撤去が届いていない。
+   */
+  drift_aliases: number | null;
+  /**
+   * ★ 射影には載っているが、organon 由来の active 行になっていない組の数。
+   * ★★ **異常ではない** (tombstone / 先に別の出所が入った行)。
+   *   ★★★ この欄が無いと、引く側が `aliases - db_organon_active_aliases` を自分で計算して
+   *   「届いていない」と読む。**読み違えを防ぐためだけに置いている。**
+   */
+  aliases_held_by_other_source: number | null;
   ttl_path: string;
   note: string;
 }
@@ -73,6 +99,9 @@ export function buildPullState({
   aliases,
   ttlPath,
   dbOrganonActiveTerms,
+  dbOrganonActiveAliases,
+  aliasesNotInProjection,
+  aliasesHeldByOtherSource,
 }: {
   ranAt: Date;
   terms: number;
@@ -80,6 +109,12 @@ export function buildPullState({
   ttlPath: string;
   /** ★ 省略 / undefined = 引けなかった。★★ 0 を渡すのは「本当に 0 件」のときだけ。 */
   dbOrganonActiveTerms?: number | null;
+  /** ★ organon 由来で active な別名の総数。★★ 省略 = 引けなかった。 */
+  dbOrganonActiveAliases?: number | null;
+  /** ★ そのうち射影に無いもの = 撤去の積み残し。★★ これが `drift_aliases` になる。 */
+  aliasesNotInProjection?: number | null;
+  /** ★ 射影にあるが organon 由来の active 行になっていない組の数 (tombstone / 別の出所)。 */
+  aliasesHeldByOtherSource?: number | null;
 }): PullState {
   const dbActive = dbOrganonActiveTerms ?? null;
   return {
@@ -88,6 +123,9 @@ export function buildPullState({
     aliases,
     db_organon_active_terms: dbActive,
     drift: dbActive === null ? null : dbActive - terms,
+    db_organon_active_aliases: dbOrganonActiveAliases ?? null,
+    drift_aliases: aliasesNotInProjection ?? null,
+    aliases_held_by_other_source: aliasesHeldByOtherSource ?? null,
     ttl_path: ttlPath,
     // ★ file 自身に意味を書く。後から開く人が「最後に成功した pull」なのか
     //   「最後に試した pull」なのかを判断できないと、止まっているか動いているかを読み違える。
@@ -95,7 +133,12 @@ export function buildPullState({
       'tealus が最後に成功した pull。失敗した回では更新されない (= この時刻より後に成功していない)。'
       + ' drift = db_organon_active_terms - terms で、pull 直後なら 0。'
       + ' 正 = 射影から外れた語が DB に残っている (撤去が届いていない)。'
-      + ' null = DB を引けなかった (0 件ではない)',
+      + ' null = DB を引けなかった (0 件ではない)。'
+      // ★ 別名は式が違う。★★ ここに書いておかないと、引く側が語と同じ引き算をして読み違える
+      + ' drift_aliases は語とは式が違う: db_organon_active_aliases - aliases ではなく,'
+      + ' 「射影から外れたのに DB に残っている organon 由来の active 別名」の数 (= 撤去の積み残し、正常は 0)。'
+      + ' aliases_held_by_other_source は射影にあるが organon 由来の active 行でない組の数で,'
+      + ' tombstone や「先に別の出所が入った行」= 正常 (source は今の供給元ではなく最初に入れた側を記録する)',
   };
 }
 

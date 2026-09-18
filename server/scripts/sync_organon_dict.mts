@@ -68,7 +68,40 @@ export async function syncFromOrganon(ttlPath: string): Promise<SyncResult> {
     // ★ 黙らない。null のまま書くと「引けなかった」が残るが、理由はログにしか無い。
     console.warn(`[organon] DB の active 語数を引けませんでした (sync は成功しています): ${String(err)}`);
   }
-  writePullState(buildPullState({ ranAt: new Date(), terms, aliases, ttlPath, dbOrganonActiveTerms }));
+  // ★ 2026-09-18 別名側 (organon 班の依頼)。★★ 語と同じ引き算にしないこと ——
+  //   `source` は「今の供給元」ではなく **「最初に入れた側」**を記録する (upsertAlias が
+  //   source を上書きしないため)。射影 614 に対し organon 由来 active は 607 で、
+  //   差 -7 は tombstone 1 + 先に別の出所が入った 6 = すべて正常。
+  //   ★★★ なので出すのは「射影から外れたのに残っている数」(= 撤去の積み残し、正常は 0)。
+  let dbOrganonActiveAliases: number | null = null;
+  let aliasesNotInProjection: number | null = null;
+  let aliasesHeldByOtherSource: number | null = null;
+  try {
+    // ★ 語が active な行だけを見る。在庫 (local.ttl) も active な語しか書き出さないので、
+    //   ここで語の status を外すと 落とした語の別名まで数えて 恒常的にずれる。
+    const { rows } = await pool.query<{ term: string; alias: string; source: string }>(
+      `SELECT t.term, a.alias, a.source
+         FROM dictionary_aliases a JOIN dictionary_terms t ON t.id = a.term_id
+        WHERE a.status = 'active' AND t.status = 'active'`
+    );
+    // ★ 区切りは alias に現れない文字にする (organonDictPrune の key と同じ形)
+    const key = (t: string, a: string): string => JSON.stringify([t, a]);
+    const projectedPairs = new Set<string>();
+    for (const p of projected) for (const a of p.aliases) projectedPairs.add(key(p.term, a));
+    const organonActive = new Set<string>();
+    for (const r of rows) if (r.source === 'organon') organonActive.add(key(r.term, r.alias));
+    dbOrganonActiveAliases = organonActive.size;
+    aliasesNotInProjection = [...organonActive].filter((k) => !projectedPairs.has(k)).length;
+    aliasesHeldByOtherSource = [...projectedPairs].filter((k) => !organonActive.has(k)).length;
+  } catch (err) {
+    console.warn(`[organon] DB の active 別名を引けませんでした (sync は成功しています): ${String(err)}`);
+  }
+  writePullState(
+    buildPullState({
+      ranAt: new Date(), terms, aliases, ttlPath, dbOrganonActiveTerms,
+      dbOrganonActiveAliases, aliasesNotInProjection, aliasesHeldByOtherSource,
+    })
+  );
   return { terms, aliases };
 }
 

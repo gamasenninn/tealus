@@ -122,3 +122,64 @@ describe('buildPullState — ★ 掛け違いが 1 file で読める形 (2026-09
     expect(s.note).toContain('成功した pull');
   });
 });
+
+/**
+ * ★ 2026-09-18 organon 班からの依頼で別名側も置く。
+ *
+ * ★★ ただし **語と同じ式にしてはいけない**。`upsertAlias` は source を上書きしないので、
+ *   `source` は「今どこから来ているか」ではなく **「誰が最初に入れたか」**を記録している。
+ *   → 射影に載っている別名でも、先に自己成長辞書が入れていれば source='auto' のまま。
+ *   ★★★ 実測 (2026-09-18): 射影 614 に対し organon 由来 active は 607。
+ *     差 -7 は **tombstone 1 + 先に別の出所が入った 6** で、どれも正常。
+ *     `db - 射影` を drift と呼ぶと、**毎日 -7 が出て「sync が落ちた」と読まれる**。
+ */
+describe('buildPullState — ★★★★ 別名側の drift (2026-09-18)', () => {
+  const ranAt = new Date('2026-09-18T03:00:00Z');
+  const base = { ranAt, terms: 261, aliases: 614, ttlPath: 'x' };
+
+  it('★ organon 由来 active 別名の実数を持つ', () => {
+    const s = buildPullState({ ...base, dbOrganonActiveAliases: 607 });
+    expect(s.db_organon_active_aliases).toBe(607);
+  });
+
+  it('★★★★ drift_aliases は「射影から外れたのに残っている数」= 撤去の積み残し。★ 射影との引き算ではない', () => {
+    const s = buildPullState({
+      ...base, dbOrganonActiveAliases: 607, aliasesNotInProjection: 0, aliasesHeldByOtherSource: 7,
+    });
+    // ★ 607 - 614 = -7 を drift と呼ばない。正常な状態は 0 で出る
+    expect(s.drift_aliases).toBe(0);
+    expect(s.aliases_held_by_other_source).toBe(7);
+  });
+
+  it('★★ 撤去が届いていなければ 正の drift_aliases として出る', () => {
+    const s = buildPullState({
+      ...base, dbOrganonActiveAliases: 610, aliasesNotInProjection: 3, aliasesHeldByOtherSource: 7,
+    });
+    expect(s.drift_aliases).toBe(3);
+  });
+
+  it('★ 引けなかったら null。★★ 0 と書かない', () => {
+    const s = buildPullState(base);
+    expect(s.db_organon_active_aliases).toBeNull();
+    expect(s.drift_aliases).toBeNull();
+    expect(s.aliases_held_by_other_source).toBeNull();
+  });
+
+  it('★★★ note に「語と別名で式が違う」ことが書いてある (引く側が引き算し直さないため)', () => {
+    const s = buildPullState({
+      ...base, dbOrganonActiveAliases: 607, aliasesNotInProjection: 0, aliasesHeldByOtherSource: 7,
+    });
+    expect(s.note).toContain('drift_aliases');
+    expect(s.note).toContain('aliases_held_by_other_source');
+  });
+
+  it('★ 既存の欄は 1 つも変えない (向こうが既に読んでいる)', () => {
+    const s = buildPullState({
+      ...base, dbOrganonActiveTerms: 261, dbOrganonActiveAliases: 607, aliasesNotInProjection: 0,
+    });
+    expect(s.terms).toBe(261);
+    expect(s.aliases).toBe(614);
+    expect(s.drift).toBe(0);
+    expect(s.db_organon_active_terms).toBe(261);
+  });
+});
