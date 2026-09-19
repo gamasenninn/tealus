@@ -8,9 +8,13 @@ import path from 'node:path';
 import type { EventEmitter as EventEmitterType } from 'node:events';
 
 // 各テストで使う一時的な workspace ディレクトリ（MCP config 書込用に実在させる）
-const TEST_WORKSPACE = fs.mkdtempSync(path.join(os.tmpdir(), 'tealus-deep-int-'));
+// ★ 契約どおり <WORKSPACE_ROOT>/<agentId>/<roomId> の 2 階層にする (deepMcpConfigPath)。
+//   1 階層だと _mcp-configs が temp の外に作られる。★★ unit/deep.test.mts と同じ穴。
+const TEST_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'tealus-deep-int-'));
+const TEST_WORKSPACE = path.join(TEST_ROOT, 'agent1', 'room1');
+fs.mkdirSync(TEST_WORKSPACE, { recursive: true });
 afterAll(() => {
-  try { fs.rmSync(TEST_WORKSPACE, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(TEST_ROOT, { recursive: true, force: true }); } catch {}
 });
 
 interface MockChildProcess extends EventEmitterType {

@@ -59,10 +59,17 @@ import * as deepRegistry from '../../src/agents/deepRegistry.mts';
 import { logger } from '../../src/lib/logger.mts';
 
 // 各テストで使う一時的な workspace ディレクトリ（実在させて path.join が成功するように）
-const TEST_WORKSPACE = fs.mkdtempSync(path.join(os.tmpdir(), 'tealus-deep-test-'));
+// ★ 契約どおり <WORKSPACE_ROOT>/<agentId>/<roomId> の 2 階層にすること (deepMcpConfigPath)。
+//   1 階層だと workspaceRoot が tmpdir の親になり、_mcp-configs が **temp の外**に作られる:
+//     Linux   /tmp/xxx  →  /_mcp-configs/...   ← ★ root 直下。EACCES で CI だけ落ちる
+//     Windows Local/Temp/xxx  →  Local/_mcp-configs/...  ← ★★ 書けてしまうので気づけない
+//   ★★★ 2026-09-07 から CI が赤だったのはこれ (手元 Windows では 12 日間 緑のまま)。
+const TEST_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'tealus-deep-test-'));
+const TEST_WORKSPACE = path.join(TEST_ROOT, 'agent1', 'room1');
+fs.mkdirSync(TEST_WORKSPACE, { recursive: true });
 
 afterAll(() => {
-  try { fs.rmSync(TEST_WORKSPACE, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(TEST_ROOT, { recursive: true, force: true }); } catch {}
 });
 
 describe('Deep Agent', () => {
