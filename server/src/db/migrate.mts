@@ -22,18 +22,10 @@ import dotenv from 'dotenv';
 
 const LEDGER = 'schema_migrations';
 
-/** 未適用のファイルを、ファイル名の昇順で返す */
-export function planMigrations(files: string[], applied: Set<string>): string[] {
-  return [...files].sort().filter((f) => !applied.has(f));
-}
-
-/**
- * 台帳が無い DB に対して、そのまま流してよいか。
- * ★ テーブルが既に在るなら止める (fail-loud)。黙って進めると、未適用のものを飛ばして静かに壊れる。
- */
-export function needsBaseline(hasLedger: boolean, hasUserTables: boolean): boolean {
-  return !hasLedger && hasUserTables;
-}
+// ★ 純粋な判断は pg を import しないファイルに置く (#406 / 2026-09-19)。
+//   agent-server 側はそちらを直接 import すること (ここを経由すると pg まで要求される)。
+import { planMigrations, needsBaseline } from './migrationPlan.mts';
+export { planMigrations, needsBaseline };
 
 function listMigrationFiles(dir: string): string[] {
   return fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();

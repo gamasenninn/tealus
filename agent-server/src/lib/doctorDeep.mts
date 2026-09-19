@@ -22,7 +22,9 @@ import {
   type Finding,
   type ProbeResult,
 } from './doctor.mts';
-import { planMigrations } from '../../../server/src/db/migrate.mts';
+// ★ migrate.mts ではなく migrationPlan.mts を見る —— 前者は pg を import するので
+//   agent-server の型検査が server の依存を要求し、CI だけ落ちる (2026-09-19)
+import { planMigrations } from '../../../server/src/db/migrationPlan.mts';
 import { loadVocabEntriesFromTtl } from './vocabContext.mts';
 
 const SERVER_DB_DIR = path.resolve(import.meta.dirname, '../../../server/src/db');
