@@ -53,6 +53,26 @@ export interface AliasRow {
 const PRUNABLE_SOURCE = 'organon';
 
 /**
+ * ★ #384 撤去対象の alias を名指しする行を組み立てる (2026-09-19)。
+ *
+ * ★ なぜ要るか: term 側は 1 行ずつ列挙するのに alias 側は件数しか出さなかった。
+ *   2026-09-19 の実地で、curator は **何が消えるか確定できないまま** `--apply` を判断し、
+ *   撤去後に local.ttl の差分を取って初めて名前が分かった。
+ *   ★★ 撤去は tombstone なので戻せるが、**消えたものは後から数えられない**。撃つ前に出す。
+ *
+ * ★ 上限を超えた分は「黙って切らない」—— 省いた件数を最後の 1 行で必ず言う。
+ *   (件数だけ出して中身を伏せるのは、この関数が直そうとしている状態そのもの)
+ */
+export function formatPrunableAliases(rows: AliasRow[], limit = 50): string[] {
+  const shown = rows.slice(0, limit);
+  const lines = shown.map((r) => `  - ${r.term} ← ${r.alias}`);
+  if (rows.length > shown.length) {
+    lines.push(`  ... 他 ${rows.length - shown.length} 件 (★ 省いた。--apply では全部が対象)`);
+  }
+  return lines;
+}
+
+/**
  * 現在の alias 行のうち、射影に含まれないものを返す (= 撤去してよい行)。
  * 判定は (term, alias) の組で行う。同じ alias 文字列でも用語が違えば別扱い。
  */
@@ -130,6 +150,8 @@ if (import.meta.main) {
         `DB        organon alias ${organonRows.length} 行 (他の出所 ${rows.length - organonRows.length} 行は対象外)`
       );
       console.log(`撤去対象  ${prunable.length} 行 (★ tombstone。削除しない)`);
+      // ★ #384 何が消えるかを撃つ前に出す (term 側と同じ扱いに揃える)
+      for (const line of formatPrunableAliases(prunable)) console.log(line);
 
       // ★ #384 語 (term) の撤去。alias と違い tombstone (削除しない)。
       const termRows = await loadActiveOrganonTerms();

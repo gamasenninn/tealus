@@ -70,3 +70,45 @@ describe('selectPrunableAliases', () => {
     expect(selectPrunableAliases(projected, rows)).toEqual(rows);
   });
 });
+
+/**
+ * ★ #384 撤去対象の alias を名指しする (2026-09-19)。
+ *
+ * ★ なぜ要るか = 2026-09-19 の実地で起きたこと。
+ *   term 側は 1 行ずつ列挙するのに alias 側は件数しか出さないので、
+ *   `--apply` の直前に **何が消えるのか分からない**。
+ *   この日は curator が「victim を確定できていない」と承知のうえで判断し、
+ *   撤去した後に local.ttl の差分を取って初めて名前が分かった。
+ *   ★★ 消えたものは後から数えられない。**撃つ前に名前を出す**。
+ */
+import { formatPrunableAliases } from '../../scripts/organonDictPrune.mts';
+
+describe('formatPrunableAliases', () => {
+  it('撤去対象を term ← alias の形で 1 行ずつ出す', () => {
+    const rows: AliasRow[] = [
+      { term: '飛行船', alias: '飛行船アグリ', source: 'organon' },
+      { term: '五月女', alias: 'ソウトメさん', source: 'organon' },
+    ];
+    expect(formatPrunableAliases(rows)).toEqual([
+      '  - 飛行船 ← 飛行船アグリ',
+      '  - 五月女 ← ソウトメさん',
+    ]);
+  });
+
+  it('対象が無ければ 1 行も出さない', () => {
+    expect(formatPrunableAliases([])).toEqual([]);
+  });
+
+  it('★ 上限を超えたら「黙って切らない」— 省いた件数を出す', () => {
+    const rows: AliasRow[] = Array.from({ length: 5 }, (_, i) => ({
+      term: 't' + i,
+      alias: 'a' + i,
+      source: 'organon',
+    }));
+    const out = formatPrunableAliases(rows, 3);
+    expect(out).toHaveLength(4);
+    expect(out.slice(0, 3)).toEqual(['  - t0 ← a0', '  - t1 ← a1', '  - t2 ← a2']);
+    expect(out[3]).toContain('2');
+    expect(out[3]).toMatch(/省|残|他/);
+  });
+});
