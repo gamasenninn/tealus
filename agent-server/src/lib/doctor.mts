@@ -484,3 +484,121 @@ export function formatFindings(findings: Finding[]): string {
     .map((f) => `[doctor:${f.level}] ${f.id}\n  ${f.detail.split('\n').join('\n  ')}\n  → ${f.fix}`)
     .join('\n');
 }
+
+/**
+ * #384 撤去待ち —— **射影 → DB** の段に残っている organon 由来の行。
+ *
+ * ★ 撤去は 2 段ある。★★ 下の段 (DB → 在庫) は `dict-overlay-drift` が既に見ている。
+ *   ここは **上の段**: organon が deprecated にした語が、まだ DB で active なまま。
+ *
+ * ★★★ 手で tombstone したのは 8/23・8/30・9/14 の 3 回。★ いずれも **別件を調べていた途中で
+ *   偶然**見つかっている (気づく口が無かった)。
+ *
+ * ★★★★ **A (sync に自動撤去を組み込む) / B (手動 + 検知) のどちらでも要る**:
+ *   A を選んでも歯止め (上限 5 件 / 下振れ / 滞留) に当たれば **撤去は静かに止まる**ので、
+ *   止まったまま残っている件数を数える口が無いと、同じ穴がもう一度開く。
+ *
+ * ★★★★★ 約束:
+ *   - **引けなかったら「0 件」と言わない** (= 壊れた値は沈黙より悪い)
+ *   - **pull の記録が足りなければ判定しない** —— 不在が続いた証拠が無いものを「待ち」と数えない
+ *     (★ 日数ではなく pull 回数で切る、は `staleCutoff` 側で決めている)
+ *   - **別名は件数だけ**。★ victim を名指ししない (#384 の約束。1 件だと「あれだろう」と埋める)
+ *   - **自動で直さない。** ★ 次の手は dry-run から案内する
+ */
+export interface RetractionBacklog {
+  /**
+   * ★★★★ DB に届いたか。★ false = 届いていない。
+   *
+   * ★★ これが無いと「届かなかった」と「pull の記録が足りない」を **呼ぶ側が区別できず**、
+   *   どちらかに寄せて嘘を書くことになる (★★★ 表せない状態がある入力の形は、それ自体が穴)。
+   */
+  reachable: boolean;
+  /** 撤去待ちの語。★ null = 引けなかった */
+  staleTerms: string[] | null;
+  /**
+   * 撤去待ちの別名の件数。★ **null = この口では数えていない**。
+   *
+   * ★★★★ 別名の撤去対象は **射影との対の突き合わせ**で決まる
+   *   (`(term, alias) NOT IN unnest(...)`)。★ updated_at では決まらないので、
+   *   DB だけを引く この口からは **正しく数えられない**。
+   *   ★★ それらしい数を出すより「数えていない」と書く (= 壊れた値は沈黙より悪い)。
+   */
+  staleAliasCount: number | null;
+  /** 基準線 = K 回前の pull 時刻。★ null = pull の記録が K 回に満たない */
+  cutoff: Date | null;
+  /** 記録されている pull の回数 */
+  pullsRecorded: number;
+}
+
+/** ★ 1 行に並べる語の上限 */
+const RETRACTION_SHOW_MAX = 5;
+/** ★ 歯止め (b) の既定値。★★ server 側の DEFAULT_MAX_VICTIMS と同じ値を **予告にだけ**使う */
+const RETRACTION_MAX_VICTIMS = 5;
+
+export function judgeRetractionBacklog(b: RetractionBacklog): Finding {
+  const id = 'organon-retraction';
+
+  // ★ 届かなかったのが最優先。★★ 届いていないのに「記録が足りない」と書かない
+  if (!b.reachable) {
+    return {
+      id,
+      level: 'warn',
+      detail: '★ 撤去待ちを引けませんでした (★★ DB に届いていない可能性)',
+      fix: '★ DB への到達を確かめてください。★★ 引けないことと「残っていないこと」は別です',
+    };
+  }
+  if (b.cutoff === null) {
+    return {
+      id,
+      level: 'info',
+      detail: `★ pull の記録が ${b.pullsRecorded} 回しかないため判定していません (★★ 不在が続いた証拠になりません)`,
+      fix: '★ organon の pull が数回 走ってからもう一度引いてください',
+    };
+  }
+  if (b.staleTerms === null) {
+    return {
+      id,
+      level: 'warn',
+      detail: '★ 撤去待ちを引けませんでした (★★ DB に届いていない可能性)',
+      fix: '★ DB への到達を確かめてください。★★ 引けないことと「残っていないこと」は別です',
+    };
+  }
+  // ★ 別名を数えていない旨は、どの枝でも同じ 1 行で出す (★★ 2 か所に書かない)
+  const aliasNote =
+    b.staleAliasCount === null
+      ? '  ★ 別名はこの口では数えていません (★★ 射影との対の突き合わせが要るため。dry-run の側で見ます)'
+      : null;
+
+  const cut = b.cutoff.toISOString().slice(0, 16).replace('T', ' ');
+  if (b.staleTerms.length === 0 && (b.staleAliasCount ?? 0) === 0) {
+    return {
+      id,
+      level: 'info',
+      detail: [`★ 撤去待ちの語はありません (基準線 ${cut} UTC / pull ${b.pullsRecorded} 回)`, aliasNote]
+        .filter(Boolean)
+        .join('\n'),
+      fix: '★ 件数だけを見ています。中身の突き合わせは organonDictPrune の dry-run で',
+    };
+  }
+
+  const head = b.staleTerms.slice(0, RETRACTION_SHOW_MAX).join(' / ');
+  const tail = b.staleTerms.length > RETRACTION_SHOW_MAX ? ` ほか ${b.staleTerms.length - RETRACTION_SHOW_MAX} 件` : '';
+  const aliasPart = b.staleAliasCount === null ? '' : ` / 別名 ${b.staleAliasCount} 件`;
+  const lines = [
+    `★ 射影に無いのに DB で active な organon 由来の行: 語 ${b.staleTerms.length} 件${aliasPart}`,
+    `  ★★ 基準線 ${cut} UTC より前で止まっています (pull ${b.pullsRecorded} 回)`,
+  ];
+  if (b.staleTerms.length > 0) lines.push(`  語: ${head}${tail}`);
+  if (aliasNote) lines.push(aliasNote);
+  // ★ 別名は件数だけ (名指ししない)
+  if (b.staleTerms.length > RETRACTION_MAX_VICTIMS) {
+    // ★★★★ 「叩けば消える」と読ませない。★ 歯止め (b) に当たって **実行されない**
+    lines.push(`  ★★★ 1 回の上限 ${RETRACTION_MAX_VICTIMS} 件を超えているので、叩いても撤去は実行されません`);
+  }
+  return {
+    id,
+    level: 'warn',
+    detail: lines.join('\n'),
+    fix: '★ `npx tsx server/scripts/organonDictPrune.mts` (既定 dry-run) で中身を見てから、人が `--apply` を判断してください',
+  };
+}

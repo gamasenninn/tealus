@@ -17,6 +17,7 @@ import OpenAI from 'openai';
 import {
   judgeMigrations,
   judgeOverlayDrift,
+  judgeRetractionBacklog,
   judgeProbe,
   type DoctorEnv,
   type Finding,
@@ -25,6 +26,9 @@ import {
 // ★ migrate.mts ではなく migrationPlan.mts を見る —— 前者は pg を import するので
 //   agent-server の型検査が server の依存を要求し、CI だけ落ちる (2026-09-19)
 import { planMigrations } from '../../../server/src/db/migrationPlan.mts';
+// ★ #384 撤去の基準線の規則。★★ pg を import しない純 module なので、上と同じ理由で安全
+//   (★★★ ここで書き直すと「日数で切ってはいけない」という 2026-09-14 の訂正が 1 か所にしか残らない)
+import { staleCutoff, DEFAULT_STALE_PULLS } from '../../../server/scripts/organonRetractionGuard.mts';
 import { loadVocabEntriesFromTtl } from './vocabContext.mts';
 
 const SERVER_DB_DIR = path.resolve(import.meta.dirname, '../../../server/src/db');
@@ -110,6 +114,45 @@ export async function runDbChecks(env: DoctorEnv): Promise<Finding[]> {
       dbAliases: dbCounts?.aliases ?? null,
       overlayAliases,
     })
+  );
+
+  // (5) ★ #384 撤去待ち —— **射影 → DB** の段 (★★ 上の (3) は DB → 在庫 の段)
+  //
+  // ★★★ 基準線は **日数ではなく pull の回数**で切る。★ 規則は server 側の staleCutoff を
+  //   そのまま使う (★★ 同じ仕事を 2 か所に書くと、片方だけ直して壊れを隠す)。
+  // ★★★★ `upsertTerm` は present な行に **必ず** `updated_at = NOW()` を打つので、
+  //   「K 回の pull で触られていない」= 「K 回続けて射影に居なかった」になる。
+  //   ★ 射影そのものは読まない (ttl の読み直しは server 側の仕事)。
+  const backlog = await withClient(env, async (c) => {
+    const runs = await c.query<{ ran_at: Date }>(
+      'SELECT ran_at FROM organon_sync_runs ORDER BY ran_at DESC LIMIT $1',
+      [DEFAULT_STALE_PULLS]
+    );
+    const cutoff = staleCutoff(runs.rows.map((r) => r.ran_at), DEFAULT_STALE_PULLS);
+    if (cutoff === null) {
+      return { staleTerms: null, staleAliasCount: null, cutoff: null, pullsRecorded: runs.rows.length };
+    }
+    const stale = await c.query<{ term: string }>(
+      `SELECT term FROM dictionary_terms
+        WHERE source = 'organon' AND status = 'active' AND updated_at < $1
+        ORDER BY updated_at`,
+      [cutoff]
+    );
+    // ★ 別名は数えない (★★ 撤去対象が 射影との対の突き合わせで決まるため。判定側がそう書く)
+    return {
+      staleTerms: stale.rows.map((r) => r.term),
+      staleAliasCount: null,
+      cutoff,
+      pullsRecorded: runs.rows.length,
+    };
+  });
+  out.push(
+    judgeRetractionBacklog(
+      backlog === null
+        ? // ★ 届かなかった。★★ 「pull の記録が 0 回」ではないので、その旨は reachable で伝える
+          { reachable: false, staleTerms: null, staleAliasCount: null, cutoff: null, pullsRecorded: 0 }
+        : { reachable: true, ...backlog }
+    )
   );
 
   return out;
