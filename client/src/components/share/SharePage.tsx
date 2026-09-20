@@ -84,6 +84,9 @@ function SharePage() {
             contentType: typeof d.contentType === 'string' ? d.contentType : '(不明)',
             // ★ 旧 SW の記録には bodyBytes が無い。★★ 0 に倒すと「空だった」という嘘になるので -1
             bodyBytes: typeof d.bodyBytes === 'number' ? d.bodyBytes : -1,
+            // ★ 旧 SW の記録には stored が無い。★★ 0 に倒すと「1 件も置けなかった」という嘘になる
+            stored: typeof d.stored === 'number' ? d.stored : -1,
+            storeError: typeof d.storeError === 'string' ? d.storeError : '',
             t: Number(d.t) || 0,
           });
           // ★ SW 側で拾えた例外も捨てない (★★ 画面にしか出せる場所が無い)

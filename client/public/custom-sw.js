@@ -55,7 +55,7 @@ self.addEventListener('notificationclick', (event) => {
 //
 // ★★ 記録は **一度きり** (画面が読んだら消す)。★★★ URL に印を置くと
 //   **再訪 (履歴 / 再読み込み) で残って、生きている失敗と見分けがつかなくなる**。
-const SW_VERSION = '2026-09-18b';
+const SW_VERSION = '2026-09-20a';
 
 /** 画面からの問い合わせに答える。★ 旧版はこの listener を持たないので **黙る** = 版が分かる。 */
 self.addEventListener('message', (event) => {
@@ -109,35 +109,61 @@ self.addEventListener('fetch', (event) => {
       const sizes = media.map((f) => (f && typeof f.size === 'number' ? f.size : -1));
       const files = media.filter((f) => f && f.size > 0);
 
-      for (let i = 0; i < files.length; i++) {
-        await cache.put(`/share-file-${i}`, new Response(files[i]));
+      // ★★★★★ 2026-09-20 (#445 受け入れ条件 ②③): **置く段**を握りつぶさない。
+      //
+      // ★ ここは 27〜87MB の動画を Cache に書く段で、★★ 容量で落ちうる **唯一の段**。
+      //   ★★★ 旧実装は try/catch の外にあり、落ちると respondWith ごと reject = ブラウザの
+      //     エラー画面になって **こちらには何も残らなかった**。
+      // ★★★★ 置けた件数を数え、★ 落ちた理由を記録に載せる
+      //   (★★ 「SW は N 件 見た」と「画面に M 件 届く」の差が、ここで初めて言える)。
+      let stored = 0;
+      let storeError = '';
+      try {
+        for (let i = 0; i < files.length; i++) {
+          await cache.put(`/share-file-${i}`, new Response(files[i]));
+          stored++;
+        }
+      } catch (err) {
+        storeError = String((err && err.message) || err);
       }
 
       // ★★★★ 一度きりの記録。★ 画面が読んだら消す
-      await cache.put(
-        '/share-diag',
-        new Response(
-          JSON.stringify({
-            fields,
-            mediaCount: media.length,
-            zeroSized: sizes.filter((s) => s === 0).length,
-            sizes,
-            contentType,
-            bodyBytes,
-            parseError,
-            swVersion: SW_VERSION,
-            t: Date.now(),
-          }),
-          { headers: { 'Content-Type': 'application/json' } }
-        )
-      );
+      // ★★ 記録を置く段で落ちても **遷移までは通す** (★★★ ここで reject すると
+      //   ブラウザのエラー画面になり、★ 画面側の 5 通りの判定に 1 つも入れなくなる)
+      try {
+        await cache.put(
+          '/share-diag',
+          new Response(
+            JSON.stringify({
+              fields,
+              mediaCount: media.length,
+              zeroSized: sizes.filter((s) => s === 0).length,
+              stored,
+              storeError,
+              sizes,
+              contentType,
+              bodyBytes,
+              parseError,
+              swVersion: SW_VERSION,
+              t: Date.now(),
+            }),
+            { headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      } catch (err) {
+        // ★ ここに来たら記録は残らない。★★ 画面は「記録なし」として判定する
+        console.error('[share-sw] 記録を置けませんでした:', err);
+      }
 
       // GET にリダイレクト
       const params = new URLSearchParams();
       if (text) params.set('text', text);
       if (title) params.set('title', title);
       if (shareUrl) params.set('url', shareUrl);
-      if (files.length > 0) params.set('files', files.length);
+      // ★★★★ **置けた件数**を渡す (★ 見た件数ではない)。
+      //   ★★ 画面は files=N を見て Cache を N 回引くので、★★★ 置けていない番号を
+      //     引かせると「無い」が 2 通りの意味になる (置けなかった / 読めなかった)。
+      if (stored > 0) params.set('files', stored);
       // ★ 二重の保険 (★★ 判定の主は「記録の有無」であって、これではない)
       params.set('via', 'sw');
       params.set('t', String(Date.now()));

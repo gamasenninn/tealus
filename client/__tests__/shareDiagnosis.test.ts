@@ -15,7 +15,9 @@ import { diagnoseShare, isEmptyMultipart, type ShareDiagnosisInput, type ShareRe
 
 const rec = (over: Partial<ShareRecord> = {}): ShareRecord => ({
   fields: ['title', 'text', 'media'], mediaCount: 1, zeroSized: 0, sizes: [1234], t: 1000,
-  contentType: 'multipart/form-data; boundary=x', bodyBytes: 2048, ...over,
+  contentType: 'multipart/form-data; boundary=x', bodyBytes: 2048,
+  // ★ 既定は「測れなかった」= 旧版の記録。★★ 0 (= 1 件も置けなかった) と混ぜない
+  stored: -1, storeError: '', ...over,
 });
 
 const input = (over: Partial<ShareDiagnosisInput> = {}): ShareDiagnosisInput => ({
@@ -219,5 +221,69 @@ describe('#445 ★★★★ 中身ゼロの multipart を名指しする', () =>
     }));
     expect(d.detail).toContain('解釈できていません');
     expect(d.detail).not.toContain('パート 0 件');
+  });
+});
+
+/**
+ * ★★★★★ 2026-09-20 第 5 版: 「受け取りました」を **エラー枠の中で言わない**。
+ *
+ * ★ この関数は **送るものが 0 件のときにしか呼ばれない** (呼び出し側は SharePage の
+ *   `plan.nothing` の枝 1 か所だけ)。★★ にもかかわらず、記録に N 件あって 0 バイトが
+ *   無ければ `ファイルを N 件 受け取りました。` を返していた。
+ *   → ★★★ **赤いエラー枠の中に成功の文面が出る。** ★ 利用者は何をすればいいか分からない。
+ *
+ * ★★★★ ここに来る経路は実在する: SW は `cache.put` で 1 件ずつ置いているが、
+ *   ★ その loop は **try/catch の外**にあり、容量で落ちれば respondWith ごと reject する。
+ *   ★★ 部分的に置けた場合は「SW は N 件見た / 画面には M 件しか無い」が起きる。
+ *   ★★★ だから SW 側に **置けた件数** (`stored`) と **落ちた理由** (`storeError`) を持たせ、
+ *     ★ 記録と画面の食い違いを **段で名指しする**。
+ *
+ * ★★ 旧版の記録には `stored` が無い。★★★ 0 に倒すと「1 件も置けなかった」という嘘になるので
+ *   **-1 = 測れなかった** (bodyBytes と同じ約束)。
+ */
+describe('#445 ★★★★★ 記録に N 件あるのに画面に届いていない場合', () => {
+  const arrived = (over: Partial<ShareRecord> = {}) =>
+    rec({ mediaCount: 2, zeroSized: 0, sizes: [1000, 2000], stored: 2, storeError: '', ...over });
+
+  it('★★★★ 成功の言い方をしない (★ エラー枠の中で「受け取りました」と言わない)', () => {
+    const d = diagnoseShare(input({ record: arrived() }));
+    expect(d.message).not.toContain('受け取りました');
+    expect(d.code).toBe('sw-handled');
+  });
+
+  it('★★ 画面まで届いていないことを名指しする', () => {
+    const d = diagnoseShare(input({ record: arrived() }));
+    expect(d.message).toContain('2');
+    expect(d.message).toContain('届いて');
+  });
+
+  it('★★★★ 置けなかったと分かっていれば、★ 端末内の受け渡しで落ちたと書く', () => {
+    const d = diagnoseShare(input({ record: arrived({ stored: 0, storeError: 'QuotaExceededError' }) }));
+    expect(d.message).toContain('端末');
+    // ★ 行き止まりで止めない (★★ ＋ボタンは実測で通っている)
+    expect(d.message).toContain('ボタン');
+  });
+
+  it('★ 落ちた理由は捨てない (★★ 画面にしか出せる場所が無い)', () => {
+    const d = diagnoseShare(input({ record: arrived({ stored: 0, storeError: 'QuotaExceededError' }) }));
+    expect(d.detail).toContain('QuotaExceededError');
+  });
+
+  it('★★★ 一部だけ置けた場合も 段が分かる (★ SW 2 件 / 置けた 1 件)', () => {
+    const d = diagnoseShare(input({ record: arrived({ stored: 1 }) }));
+    expect(d.detail).toContain('置けた 1 件');
+    expect(d.message).not.toContain('受け取りました');
+  });
+
+  it('★★ 旧版の記録 (stored が無い) でも 成功の言い方はしない。★★★ 件数は「不明」と書く', () => {
+    const d = diagnoseShare(input({ record: arrived({ stored: -1 }) }));
+    expect(d.message).not.toContain('受け取りました');
+    expect(d.detail).toContain('置けた 不明');
+    expect(d.detail).not.toContain('-1');
+  });
+
+  it('★ 0 バイトが混じっていれば、そちらが先 (★★ 行の順序は仕様)', () => {
+    const d = diagnoseShare(input({ record: arrived({ zeroSized: 1, sizes: [0, 2000], stored: 0 }) }));
+    expect(d.message).toContain('空き容量');
   });
 });

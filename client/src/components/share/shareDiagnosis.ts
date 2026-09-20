@@ -52,6 +52,15 @@ export interface ShareRecord {
    *   ★★★ バイトがあるのに field が空なら、犯人は送り手ではなく **こちらの読み取り側**。
    */
   bodyBytes: number;
+  /**
+   * ★★★★ Cache に **実際に置けた** 件数。★ **-1 = 測れなかった** (旧版の記録。0 と混ぜない)。
+   *
+   * ★★ SW が form で見た件数 (`mediaCount`) と、画面が拾える件数はここで分かれる。
+   *   ★★★ 容量で落ちるのはこの段なので、**見た件数だけでは「どこで消えたか」が言えない**。
+   */
+  stored: number;
+  /** ★ 置けなかったときの理由。★★ '' = 落ちていない (★★★ 捨てない: 画面にしか出せる場所が無い) */
+  storeError: string;
   /** SW が書いた時刻 (★ 二重の保険。判定の主ではない) */
   t: number;
 }
@@ -145,10 +154,14 @@ function census(r: ShareRecord | null, l: LaunchStateLike | null): string {
   const unparsed = empty
     ? '★ 本文は終端区切りのみ = パート 0 件'
     : (r.bodyBytes > 0 && r.fields.length === 0 ? '★ 本文はあるのに解釈できていません' : '');
+  // ★ 旧版の記録は stored を持たない。★★ 0 と書くと「1 件も置けなかった」という嘘になる
+  const stored = r.stored < 0 ? '置けた 不明' : `置けた ${r.stored} 件`;
   return [
     `field: [${r.fields.join(', ')}]`,
     hasMediaField ? `media ${r.mediaCount} 件` : 'media フィールド自体が来ていません',
     `うち 0 バイト ${r.zeroSized} 件`,
+    stored,
+    r.storeError ? `置けなかった理由: ${r.storeError}` : '',
     r.sizes.length > 0 ? `サイズ: ${r.sizes.join(', ')}` : 'サイズ: なし',
     `type: ${r.contentType}`,
     body,
@@ -196,7 +209,26 @@ export function diagnoseShare(input: ShareDiagnosisInput): ShareDiagnosis {
         detail,
       };
     }
-    return { code: 'sw-handled', message: `ファイルを ${r.mediaCount} 件 受け取りました。`, detail };
+    // ★★★★★ 2026-09-20: ここは **エラー枠の中**である。
+    //   ★ この関数は「送るものが 0 件」のときにしか呼ばれない (呼び出し側 1 か所)。
+    //   ★★ 旧実装は `ファイルを N 件 受け取りました。` を返していた —— **成功の文面**。
+    //   ★★★ 利用者には「入ったのに入っていない」としか読めず、次の手が無い。
+    // → ★★★★ **どの段で消えたか**を名指しする。★ SW は見た / Cache に置けなかった、を分ける。
+    if (r.stored === 0 && r.mediaCount > 0) {
+      const why = r.storeError ? `(${r.storeError}) ` : '';
+      return {
+        code: 'sw-handled',
+        // ★ 「端末の中で落ちた」であって、渡ってこなかったのではない (★★ 段を取り違えない)
+        message: `ファイルは ${r.mediaCount} 件 届きましたが、端末の中での受け渡しに失敗しました${why ? ' ' + why : ''}。お手数ですが、ルームを開いて ＋ ボタンから添付してください。`,
+        detail,
+      };
+    }
+    return {
+      code: 'sw-handled',
+      // ★ 置けた件数が 1 件以上 / 不明なのに画面に無い = ★★ Cache と画面の間で消えている
+      message: `ファイルが ${r.mediaCount} 件 記録されていますが、この画面まで届いていません。お手数ですが、ルームを開いて ＋ ボタンから添付してください。`,
+      detail,
+    };
   }
 
   // ② SW が効いていない。★ 再訪と同時に真になれるが、**打てる手がある方**を先に返す
