@@ -18,6 +18,8 @@ import { runDoctor, runDeepChecks, formatFindings, type Finding } from '../src/l
 import { runDbChecks, runProbeChecks } from '../src/lib/doctorDeep.mts';
 // ★ ci-status は **既定で走る唯一の「読みに行く」口**。理由は下の注記。
 import { judgeCiStatus, fetchCiRuns } from '../src/lib/doctorCi.mts';
+// ★ 索引が本文に追いついているか (#447 系)。★★ repo の file を読むだけ = 外を叩かない
+import { checkDocsIndex } from '../src/lib/docsIndex.mts';
 
 dotenv.config();
 
@@ -28,6 +30,7 @@ const findings: Finding[] = [
   ...runDeepChecks(process.env),
   ...(await runDbChecks(process.env)),
   judgeCiStatus(await fetchCiRuns(), new Date()),
+  await checkDocsIndex(),
   ...(probe ? await runProbeChecks(process.env) : []),
 ];
 

@@ -19,6 +19,27 @@
 
 設計書の内容と矛盾する実装をしないこと。設計変更が必要な場合は、まず設計書を更新してから実装に反映する。
 
+### ★ 残りの 10 本 (2026-09-20 追加) — 必要になったら開く
+
+★★ **上の 8 本が「必ず参照」、ここは「用が出たら開く」。** ★ 上だけを見て「設計書は 8 本」と読むと、
+**存在する 10 本を見ないまま実装や議論を始める** (2026-09-19 の申し送りで実際に起きた)。
+
+- `docs/00_what-is-tealus.md` — 入り口 doc。LP より深く `04` より浅い。★ **外向けに 1 枚で説明するときはここから**
+- `docs/04_オーガニックオントロジー構造.md` — 概念設計書 (組織の意味構造がどう結晶化するか)。★★ **64 KB。#279 の議論はここが土台**
+- `docs/upgrade-guide.md` — **更新する側 (採用者)** の手順。★ 急所は migrate と client build の 2 つ (#334)
+- `docs/release-checklist.md` — **出す側**の手順。★★ version の source of truth は **git タグ** (`package.json` を「上げ忘れ」と誤認して直さないこと)
+- `docs/setup-ai-agent.md` — agent-server 連携 (`@AI_AGENT` が返すまで) の完全手順
+- `docs/setup-cc-tealus-bridge.md` — Claude Code ↔ Tealus 双方向 (MCP 送信 + `@cc-{project}` で起こす)
+- `docs/setup-cc-remote.md` — **別マシン**の Claude Code をつなぐ (#214)。★ CC 自身が読んで実行する手順書
+- `docs/setup-cross-machine-syncthing.md` — 上の当面の繋ぎ解 (cc-queue を P2P sync)。★ HTTP 化したら不要になる
+- `docs/setup-line-bridge.md` — LINE 連携 (Phase 1〜2.3、Day 21 で scope 凍結)
+- `docs/setup-rtc-mediasoup.md` — rtc-server (通話 / トランシーバー)。★ チャットだけなら不要
+- `docs/claude-code-skills.md` — skill の書き方 (下の「Claude Code skill の書き方」から参照)
+- `docs/presentation/` — 対外資料 9 本 (ピッチ / デモ台本 / 数字 / 思想)。★ **ここは索引しない** (中身が入れ替わる)
+
+★★★ **この 2 つのリストで `docs/` 直下の .md 19 本すべて**を指している (2026-09-20 実測)。
+★ **doc を足したらここにも 1 行足すこと。** ★★ 落ちても気づけるよう `npm run doctor` の `docs-index` が数える。
+
 ## Claude Code skill の書き方
 
 このプロジェクトで `/<name>` slash command (custom skill) を作る時は **`.claude/skills/<name>/SKILL.md`** (ディレクトリ構造) で配置すること。flat `.md` file (`.claude/skills/<name>.md`) は読み込まれない。詳細仕様 / トラブルシューティングは [`docs/claude-code-skills.md`](docs/claude-code-skills.md) 参照。
