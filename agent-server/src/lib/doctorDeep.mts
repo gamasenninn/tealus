@@ -18,6 +18,7 @@ import {
   judgeMigrations,
   judgeOverlayDrift,
   judgeRetractionBacklog,
+  judgeTriggerLiveness,
   judgeProbe,
   type DoctorEnv,
   type Finding,
@@ -30,6 +31,9 @@ import { planMigrations } from '../../../server/src/db/migrationPlan.mts';
 //   (★★★ ここで書き直すと「日数で切ってはいけない」という 2026-09-14 の訂正が 1 か所にしか残らない)
 import { staleCutoff, DEFAULT_STALE_PULLS } from '../../../server/scripts/organonRetractionGuard.mts';
 import { loadVocabEntriesFromTtl } from './vocabContext.mts';
+// ★ トリガーの「印」と設定の読み方は本体が正。★★ roomTriggers は node:fs/path しか引かないので
+//   上と同じ理由で安全 (★★★ 印を書き写すと、文面を変えたとき この口だけ黙って外れる)
+import { loadTriggers, markFor } from '../../../server/src/services/roomTriggers.mts';
 
 const SERVER_DB_DIR = path.resolve(import.meta.dirname, '../../../server/src/db');
 
@@ -152,6 +156,37 @@ export async function runDbChecks(env: DoctorEnv): Promise<Finding[]> {
         ? // ★ 届かなかった。★★ 「pull の記録が 0 回」ではないので、その旨は reachable で伝える
           { reachable: false, staleTerms: null, staleAliasCount: null, cutoff: null, pullsRecorded: 0 }
         : { reachable: true, ...backlog }
+    )
+  );
+
+  // ★★★★ #433 系 — 有効なトリガーが直近いつ撃ったか。★ 材料は **投稿に残る印**で、
+  //   サーバログではない (★★ ログは 14 日で消えるうえ、grep しないと読めない)
+  const triggers = (() => {
+    try {
+      const path = env.ROOM_TRIGGERS_PATH;
+      return loadTriggers(path).triggers.filter((t) => t.enabled).map((t) => t.id);
+    } catch {
+      return null; // ★ 読めなかった。★★ 「有効 0 本」と混ぜない
+    }
+  })();
+  const fired = await withClient(env, async (c) => {
+    const out: Record<string, Date> = {};
+    for (const id of triggers ?? []) {
+      // ★ LIKE ではなく strpos —— id に `_` が入ると LIKE では 1 文字ワイルドカードになる
+      const r = await c.query<{ last: Date | null }>(
+        'SELECT MAX(created_at) AS last FROM messages WHERE strpos(content, $1) > 0',
+        [markFor(id)]
+      );
+      const last = r.rows[0]?.last;
+      if (last) out[id] = last;
+    }
+    return out;
+  });
+  out.push(
+    judgeTriggerLiveness(
+      fired === null
+        ? { reachable: false, enabledIds: triggers, lastFired: {}, now: new Date() }
+        : { reachable: true, enabledIds: triggers, lastFired: fired, now: new Date() }
     )
   );
 

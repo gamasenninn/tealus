@@ -602,3 +602,76 @@ export function judgeRetractionBacklog(b: RetractionBacklog): Finding {
     fix: '★ `npx tsx server/scripts/organonDictPrune.mts` (既定 dry-run) で中身を見てから、人が `--apply` を判断してください',
   };
 }
+
+/**
+ * ルームトリガーが生きているか (2026-09-21)。★ 材料は **投稿そのものに残る印**。
+ *
+ * ★★★★ なぜ要るか: 2026-09-21 に、**正常に動いているトリガーが「壊れている」と見えた**。
+ *   確かめる手が「サーバログを grep」しかなく、★ 120 分間隔の待ちを故障と読んだ。
+ *   ★★ 同じ日に「置いたものが生きているか見る口が無い」が 3 件 出ている。
+ *
+ * ★★★ **停滞の閾値は置かない。** 撃っていないことは異常とは限らない (材料が無ければ撃たない)。
+ *   ★ 閾値を置くと定休・閑散日に誤報する —— #441 で同じ罠を踏みかけた。
+ *   ★★★★ **warn にするのは「見に行けなかったとき」だけ** (= 壊れた値は沈黙より悪い)。
+ */
+export interface TriggerLiveness {
+  /** DB に届いたか。★ false = 「撃っていない」ではなく「見ていない」 */
+  reachable: boolean;
+  /** 有効なトリガーの id。★ null = 設定を読めなかった (★★ 「有効 0 本」と混ぜない) */
+  enabledIds: string[] | null;
+  /** trigger id → 最終発火時刻。★ 印は roomTriggers.mts:85 が書く (docs/06 §10) */
+  lastFired: Record<string, Date>;
+  now: Date;
+}
+
+/** ★ 経過を 1 語で。★★ 読む側に毎回 引き算させない */
+function sinceLabel(from: Date, now: Date): string {
+  const min = Math.max(0, Math.round((now.getTime() - from.getTime()) / 60000));
+  if (min < 60) return `${min} 分前`;
+  if (min < 60 * 24) return `${Math.round(min / 60)} 時間前`;
+  return `${Math.round(min / (60 * 24))} 日前`;
+}
+
+export function judgeTriggerLiveness(t: TriggerLiveness): Finding {
+  const id = 'room-triggers';
+  const limit =
+    '★ 撃っていないこと自体は異常ではありません (★★ 材料が無ければ撃たないのが正しい)。'
+    + '★★★ この口が warn にするのは **見に行けなかったとき**だけです';
+
+  if (!t.reachable) {
+    return {
+      id,
+      level: 'warn',
+      detail: '★ 発火の記録を引けませんでした (★★ DB に届いていない可能性)',
+      fix: '★ DB への到達を確かめてください。★★ 引けないことと「撃っていないこと」は別です',
+    };
+  }
+  if (t.enabledIds === null) {
+    return {
+      id,
+      level: 'warn',
+      detail: '★ トリガーの設定を読めませんでした (★★ 有効なトリガーが無いこととは別です)',
+      fix: '★ server/config/room-triggers.json が読めるか確かめてください (★★ path は ROOM_TRIGGERS_PATH で変えられます)',
+    };
+  }
+  if (t.enabledIds.length === 0) {
+    return {
+      id,
+      level: 'info',
+      detail: '★ 有効なトリガーはありません',
+      fix: '★ server/config/room-triggers.json の enabled を見てください',
+    };
+  }
+
+  // ★ 並べるのは **設定に在るものだけ**。★★ 止めたトリガーの残骸は数えない
+  const lines = [`★ 有効 ${t.enabledIds.length} 本`];
+  for (const tid of t.enabledIds) {
+    const at = t.lastFired[tid];
+    lines.push(
+      at
+        ? `  ${tid}: 最終発火 ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC (${sinceLabel(at, t.now)})`
+        : `  ${tid}: ★ まだ 1 度も撃っていません`
+    );
+  }
+  return { id, level: 'info', detail: lines.join('\n'), fix: limit };
+}
