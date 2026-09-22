@@ -757,6 +757,28 @@ describe('detectUnroutedAddressHint (#359 (a))', () => {
     test('★ 素で行頭に書けている便には掛からない (既存の経路の担当)', () => {
       expect(detectUnroutedAddressHint('@cc-Tealus 進捗どう')).toBe('malformed-cc-mention');
     });
+
+    /**
+     * ★★★★★ 同報便で誤検知しないこと (Mac セッションの照会、2026-09-22)。
+     *
+     * ★ 2 つ目以降の `@cc-` は **行頭ではない**。それでも配送されている。
+     *   もし検知の条件を「自分の mention が行頭か」で書いていたら、
+     *   **全員が起きている便に「飾りで潰した」と出る**ことになる。
+     * ★★ 実際には 2 重に守られている:
+     *   ① 配送できた便では detectUnroutedAddressHint が **そもそも呼ばれない** (handler の else)
+     *   ② 呼ばれても addressRunCcNames が非空なので冒頭で null を返す
+     */
+    test('★★★★ 同報便 (1 行に 3 宛先) では鳴らない — 2 つ目以降は行頭でないが届いている', () => {
+      const fanout = '@cc-organon @cc-tealus-dev @cc-tealus-apps\n\n本文';
+      expect(extractCcProjects(fanout)).toEqual(['organon', 'tealus-dev', 'tealus-apps']);
+      expect(detectUnroutedAddressHint(fanout)).toBeNull();
+    });
+
+    test('★★ 宛名欄の前に @アシスタント が付く形でも鳴らない (#393 の経路)', () => {
+      const s = '@アシスタント @cc-organon @cc-tealus-dev\n\n本文';
+      expect(extractCcProjects(s)).toEqual(['organon', 'tealus-dev']);
+      expect(detectUnroutedAddressHint(s)).toBeNull();
+    });
   });
 });
 
