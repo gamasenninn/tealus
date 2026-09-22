@@ -61,6 +61,15 @@ export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResu
       [roomId, sender.id],
     );
     if (member.rows.length === 0) {
+      // #451 弾いたことを残す。★ 成功した投稿だけが名前と部屋を残していたので、
+      //   403 が出ても **誰が・どの部屋に**出そうとしたのか分からなかった
+      //   (アクセスログは `POST /api/bot/push 403 2ms` のみ。room_id は body にあり path に出ない)。
+      // ★★ 2026-09-21 にこれで名義を推定で埋めて外し、他班との切り分けが 1 日止まった。
+      // ★★★ 実測: 全期間で bot push の 403 は 8 件。**鳴っても年に数回**なので雑音にならない。
+      logger.warn(
+        `メンバーでないルームへの投稿を拒否しました: `
+        + `actor=${sender.display_name}(${sender.id}) room=${roomId} type=${type}`,
+      );
       return { ok: false, code: 'not_member', reason: 'このルームのメンバーではありません' };
     }
 

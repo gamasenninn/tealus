@@ -30,6 +30,7 @@ jest.mock('../../src/utils/logger.mts', () => ({
 }));
 
 import { postAsUser } from '../../src/services/postAsUser.mts';
+import { logger } from '../../src/utils/logger.mts';
 
 const ROOM = '00000000-0000-0000-0000-000000000002';
 const USER = '00000000-0000-0000-0000-000000000001';
@@ -48,6 +49,7 @@ beforeEach(() => {
   mockEmit.mockReset();
   mockTo.mockReset().mockReturnValue({ emit: mockEmit });
   mockFireWebhooks.mockReset();
+  (logger.warn as jest.Mock).mockReset();
 });
 
 describe('postAsUser', () => {
@@ -72,6 +74,34 @@ describe('postAsUser', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
     expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * #451 弾いた投稿を **記録する**。
+   *
+   * ★ 2026-09-21 の実害: `POST /api/bot/push` が 403 を 3 本返したが、
+   *   アクセスログには `POST /api/bot/push 403 2ms` しか残らず、**誰が・どの部屋に**
+   *   出そうとしたのか分からなかった。★★ room_id は body にあるので path にも出ない。
+   * ★★★ 結果、こちらが名義を推定で埋めて外し、他班との切り分けが 1 日止まった。
+   *
+   * ★★★★ ここ (postAsUser) に置く理由: not_member を決めているのがここ 1 か所で、
+   *   bot push と ルームトリガー の**両方**が通る。呼び出し側に書くと片方だけ直る。
+   */
+  test('★★★★ 非メンバーで弾いたら actor と room を warn に残す (#451)', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+
+    const warned = (logger.warn as jest.Mock).mock.calls.map(c => String(c[0]));
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain(USER);            // ★ 誰が (id — 表示名は変わりうる)
+    expect(warned[0]).toContain('テスト太郎');      // ★ 誰が (人が読む側)
+    expect(warned[0]).toContain(ROOM);            // ★★ どの部屋に
+  });
+
+  test('★ 投稿が通ったときは warn を出さない (雑音にしない)', async () => {
+    happyPath();
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   test('★ users を引かない (DB query はメンバー確認と INSERT の 2 回だけ)', async () => {
