@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__tealus__get_messages",
+      "mcp__tealus__search_messages",
+      "mcp__tealus__get_message_media",
+      "mcp__tealus__get_message_edit_history",
+      "mcp__tealus__list_rooms",
+      "mcp__tealus__list_tags",
+      "mcp__tealus__read_document",
+      "mcp__tealus-support__get_messages",
+      "mcp__tealus-support__list_rooms",
+      "mcp__dbhub-hksdb__search_objects",
+      "mcp__dbhub-mysql__search_objects",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__find",
+      "Bash(npx tsc --noEmit)",
+      "Bash(node report/tools/*)"
+    ]
+  }
+}
