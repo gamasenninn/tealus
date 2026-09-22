@@ -96,4 +96,25 @@ describe('#359 (a) handler の配線', () => {
 
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * #450 宛名を **強調**で潰した便。2026-09-21 に 3 通が不着になった形。
+   * ★ 送り手は投稿が 200 で返り部屋にも残るので気づけない。**ログが唯一の口**になる。
+   */
+  test('★★★★ 宛名を ** で囲った便を拾い、直し方まで出す', async () => {
+    await handleWebhook(payload('**@cc-organon** 【本体班 → organon 班】合っています'));
+
+    const logs = unroutedLogs();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('decorated-address');
+    expect(logs[0]).toContain('甲野太郎');
+    // ★ 何をすれば届くのかが 同じ 1 行に出ていること (ログを見た人がそのまま直せる)
+    expect(logs[0]).toContain('行頭に飾りを付けずに');
+  });
+
+  test('★★ code span で規約を説明しているだけの便では鳴らない', async () => {
+    await handleWebhook(payload('`@cc-organon` を先頭に置いてください'));
+
+    expect(unroutedLogs()).toHaveLength(0);
+  });
 });

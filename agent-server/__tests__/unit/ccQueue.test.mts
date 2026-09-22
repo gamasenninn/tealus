@@ -710,6 +710,54 @@ describe('detectUnroutedAddressHint (#359 (a))', () => {
     expect(detectUnroutedAddressHint('@cc-tealus 【organon班 → 本体班】本題')).toBeNull();
     expect(detectUnroutedAddressHint('@cc-organon よろしく')).toBeNull();
   });
+
+  /**
+   * #450 宛名を **強調**や先行空白で潰した便。
+   *
+   * ★ 2026-09-21 の実害: `**@cc-organon**` で 3 通が不着。投稿は 200 で成功し部屋にも
+   *   残るので、**送り手も受け手も気づけない**。3 通とも agent-server のログに 1 行も出ていない。
+   * ★★ 直近 60 日 (`@cc-` を含む 2245 便) で測ると、この形は **3 件・全部が実害**。誤報 0。
+   *   「本文のどこかに @cc- がある」まで広げると 229 件鳴り、ほぼ AI 自身の署名だった。
+   */
+  describe('★★★★ decorated-address (#450)', () => {
+    test('★ 実害ケース: 宛名を ** で囲うと配送も既存 hint も落ちる', () => {
+      expect(detectUnroutedAddressHint('**@cc-organon** 【本体班 → organon 班】合っています'))
+        .toBe('decorated-address');
+      expect(detectUnroutedAddressHint('**@cc-tealus-dev** 【本体班 → Mac セッション】'))
+        .toBe('decorated-address');
+    });
+
+    test('★ 先行する空白も同じ (行頭でなくなるので配送されない)', () => {
+      expect(detectUnroutedAddressHint('  @cc-organon よろしく')).toBe('decorated-address');
+      expect(detectUnroutedAddressHint('\t@cc-organon よろしく')).toBe('decorated-address');
+    });
+
+    test('★ 他の強調記号も剥がす', () => {
+      expect(detectUnroutedAddressHint('__@cc-tealus__ 本題')).toBe('decorated-address');
+      expect(detectUnroutedAddressHint('*@cc-kairos* 本題')).toBe('decorated-address');
+    });
+
+    test('★★ 規約外の project 名でも「書こうとした」ことは分かる', () => {
+      expect(detectUnroutedAddressHint('**@cc-Tealus** 本題')).toBe('decorated-address');
+    });
+
+    /**
+     * ★★★★★ ここが精度の線。`` ` `` と `>` は **剥がさない**。
+     * 規約を説明している便・引用している便で鳴らすと、雑音に埋もれて「見えない」に戻る。
+     */
+    test('★★★★ code span と引用では鳴らない — 規約を説明・引用しているだけ', () => {
+      expect(detectUnroutedAddressHint('`@cc-organon` を先頭に置く')).toBeNull();
+      expect(detectUnroutedAddressHint('> @cc-organon 前回の件')).toBeNull();
+    });
+
+    test('★★ 2 行目以降が飾られていても鳴らない — 見るのは最初の非空行だけ', () => {
+      expect(detectUnroutedAddressHint('了解しました。\n\n**@cc-organon** と書くと届きません')).toBeNull();
+    });
+
+    test('★ 素で行頭に書けている便には掛からない (既存の経路の担当)', () => {
+      expect(detectUnroutedAddressHint('@cc-Tealus 進捗どう')).toBe('malformed-cc-mention');
+    });
+  });
 });
 
 describe('extractCcProjects (#387 同報 — 1 行目の先頭に並べた宛先だけ)', () => {

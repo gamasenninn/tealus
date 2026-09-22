@@ -7,6 +7,7 @@ import { dispatch } from './dispatcher.mts';
 import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
 import * as botSendThrottle from '../lib/botSendThrottle.mts';
+import type { UnroutedAddressHint } from './ccQueue.mts';
 import { extractCcProjects, findDroppedCcMentions, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
 import { isMentioned } from './mention.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
@@ -147,6 +148,19 @@ function warnDroppedCcMentions(
 }
 
 /**
+ * #359 (a) の hint ごとの直し方。★ **同じ 1 行に出す**。
+ *
+ * ★ ログを見る人は「なぜ届かなかったか」より「どう書けば届くか」を要る。種類名だけだと
+ *   規約 (docs/06 §6.1) を引きに行くことになり、★★ 実際 2026-09-21 は 3 通とも
+ *   **送り手自身が規則を知っていたのに**踏んでいる (#450)。
+ */
+const UNROUTED_REMEDY: Record<Exclude<UnroutedAddressHint, null>, string> = {
+  'decorated-address': '。★ 宛名は 1 行目の行頭に飾りを付けずに素で書いてください (`**@cc-x**` は起こしません)',
+  'malformed-cc-mention': '。★ project 名は小文字・英数字とハイフンだけです',
+  'team-arrow': '。★ 起こしたい相手がいるなら 1 行目の行頭に @cc-{project} を書いてください',
+};
+
+/**
  * message.created イベント処理
  */
 async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
@@ -198,7 +212,8 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
     if (hint) {
       const head = (message.content || '').split('\n').find(l => l.trim().length > 0) || '';
       logger.info(`[cc-queue] 宛先未解決のため配送していません (${hint}): `
-        + `room=${room.name || room.id} sender=${message.sender?.display_name || senderId} head="${head.slice(0, 60)}"`);
+        + `room=${room.name || room.id} sender=${message.sender?.display_name || senderId} head="${head.slice(0, 60)}"`
+        + UNROUTED_REMEDY[hint]);
     }
   }
 

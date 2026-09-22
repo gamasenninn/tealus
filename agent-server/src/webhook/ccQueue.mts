@@ -256,9 +256,13 @@ function findDroppedCcMentions(content: string | null | undefined, delivered: re
 const TEAM_ARROW_RE = /→\s*\S*班/;
 // 行頭の `@cc-` 記法を試したが CC_MENTION_RE に届かなかったもの (`@cc-Tealus` / `@cc-` 等)。
 const CC_MENTION_ATTEMPT_RE = /^@cc-/m;
+// #450 宛名の前に付いた **強調** と空白。剥がした先が `@cc-` なら「書こうとした」と読む。
+// ★ `` ` `` と `>` は **入れない**。code span と引用は「説明している / 引用している」便で、
+//   そこで鳴らすと雑音に埋もれて「見えない」に戻る (下の [[detectUnroutedAddressHint]] 参照)。
+const ADDRESS_DECORATION_RE = /^[\s*_~]+/;
 
 /** #359 (a) の判定結果。null = 宛先を書いたようには見えない。 */
-type UnroutedAddressHint = 'team-arrow' | 'malformed-cc-mention' | null;
+type UnroutedAddressHint = 'team-arrow' | 'malformed-cc-mention' | 'decorated-address' | null;
 
 /**
  * 配送されなかった便のうち「宛先を書いたつもり」に見えるものを判別する (#359 (a))。
@@ -270,6 +274,17 @@ type UnroutedAddressHint = 'team-arrow' | 'malformed-cc-mention' | null;
  *   「見えない」に戻る。**鳴らない方に倒し、鳴ったら本物**を狙う:
  * - 見るのは **最初の非空行だけ** — 長い返信が後段で他班のやり取りを引用しても鳴らない
  * - 本文中 (行頭でない) の `@cc-` 引用では鳴らさない — AI 同士が宛先を説明するたびに鳴るため
+ *
+ * ★★★★ #450 `decorated-address` — 宛名を `**@cc-x**` と強調で囲う / 前に空白を置く形。
+ *   2026-09-21 に 3 通が不着になった。**投稿は 200 で成功し部屋にも残る**ので送り手も
+ *   受け手も気づけず、3 通ともログに 1 行も出ていなかった。直近 60 日 (`@cc-` を含む
+ *   2245 便) で測ると:
+ * ```
+ *   本文のどこかに @cc-   229 便 → ★ ほぼ AI 自身の署名 (`📋 Day73 Q0…`)。採れない
+ *   ★ 飾りを剥がして行頭    3 便 → ★★★ 3 件とも実害。誤報 0
+ * ```
+ *   ★★ 剥がすのは 空白と `* _ ~` **だけ**。`` ` `` と `>` を入れると
+ *   「`` `@cc-organon` を先頭に置く ``」のような **説明・引用の便で鳴る**。
  *
  * ★ 呼び出し側は extractCcProject() が null のときだけ呼ぶこと。routing 済みの便に
  *   対して呼んでも null を返すが (下の `!CC_MENTION_RE.test`)、意味のある使い方ではない。
@@ -284,6 +299,8 @@ function detectUnroutedAddressHint(content: string | null | undefined): Unrouted
   if (addressRunCcNames(content).length > 0) return null;
   if (CC_MENTION_RE.test(content)) return null;
   if (CC_MENTION_ATTEMPT_RE.test(firstLine)) return 'malformed-cc-mention';
+  // #450 宛名を **強調**や先行空白で潰した便。★ 剥がしてから見るのは 1 行目だけ
+  if (CC_MENTION_ATTEMPT_RE.test(firstLine.replace(ADDRESS_DECORATION_RE, ''))) return 'decorated-address';
   if (TEAM_ARROW_RE.test(firstLine)) return 'team-arrow';
   return null;
 }
@@ -425,6 +442,8 @@ function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAc
   }, ttlMs);
   if (timer.unref) timer.unref(); // ack timer が process を延命しない
 }
+
+export type { UnroutedAddressHint };
 
 export {
   extractCcProject,
