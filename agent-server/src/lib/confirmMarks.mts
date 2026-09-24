@@ -163,8 +163,15 @@ let cached: { mtimeMs: number; surfaces: Set<string> } | null = null;
 
 /**
  * agent が実際に引ける台帳 (local.ttl) の表層集合。
+ *
  * ★ 読めなければ null —— **空集合を返さない**。空集合は「1 件も登録済が付かない」という
  *   もっともらしい姿になり、台帳が落ちたことに気づけなくなる。
+ *
+ * ★★★★★ **try/catch だけでは足りない。** `loadVocabEntriesFromTtl` は **throw しない** ——
+ *   file が無くても parse に失敗しても **0 件を返す** (doctorDeep にも同じ注記がある)。
+ *   ★ 2026-09-24 の最初の実装はそこを掴めておらず、**docstring の約束を果たしていなかった**。
+ *   ★★ 0 語だったら null にし、**warn に出す** (★★★ 本番の台帳は 1,074 表層なので、
+ *      0 語は「そういう日」ではなく壊れている合図)。
  */
 export function loadLedgerSurfaces(ttlPath: string = DEFAULT_LOCAL_TTL_FILE): Set<string> | null {
   try {
@@ -175,10 +182,15 @@ export function loadLedgerSurfaces(ttlPath: string = DEFAULT_LOCAL_TTL_FILE): Se
       if (e.term) surfaces.add(e.term);
       for (const a of e.aliases) if (a) surfaces.add(a);
     }
+    if (surfaces.size === 0) {
+      // ★ cache しない —— 直ったら次の呼び出しで拾えるように
+      logger.warn(`[confirmMarks] 台帳から 1 語も取れませんでした (印はそのまま出します): ${ttlPath}`);
+      return null;
+    }
     cached = { mtimeMs, surfaces };
     return surfaces;
   } catch (err) {
-    logger.debug(`[confirmMarks] 台帳を読めません (印はそのまま出します): ${String(err)}`);
+    logger.warn(`[confirmMarks] 台帳を読めません (印はそのまま出します): ${String(err)}`);
     return null;
   }
 }

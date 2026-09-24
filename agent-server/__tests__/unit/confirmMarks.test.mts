@@ -14,7 +14,14 @@
  *     (うち Location 24)。★★★★ **不在の主張は、台帳が部分的な分だけ嘘になる。**
  *   ★★★★★ 在ることの主張は、引いた台帳そのもので確かめられる = 空振りしない。
  */
-import { splitConfirmMarks, buildLedgerLookup } from '../../src/lib/confirmMarks.mts';
+jest.mock('../../src/lib/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { logger } from '../../src/lib/logger.mts';
+import { splitConfirmMarks, buildLedgerLookup, loadLedgerSurfaces } from '../../src/lib/confirmMarks.mts';
 
 /** 台帳の表層 (label + alias)。★ 敬称つきは射影が畳むので **入っていない**のが本番の姿 */
 const LEDGER = new Set(['田部井', '五月女', '岡崎ウェスト', '壬生', 'JU愛知']);
@@ -98,5 +105,58 @@ describe('splitConfirmMarks', () => {
     const twice = splitConfirmMarks(once, known);
     expect(twice.text).toBe(once);
     expect(twice.annotated).toBe(0);
+  });
+});
+
+describe('loadLedgerSurfaces — ★★★★★ 空の台帳を「台帳」として返さない', () => {
+  /**
+   * ★ なぜ要るか: `loadVocabEntriesFromTtl` は **throw しない** (file が無くても
+   *   parse に失敗しても 0 件を返す)。★★ だから try/catch だけでは
+   *   **「file は在るが中身が無い」を掴めない**。
+   * ★★★ 空集合を返すと「1 件も登録済が付かない」という **もっともらしい姿**になり、
+   *   台帳が落ちたことに気づけない。★★★★ docstring はそう約束していたのに、
+   *   2026-09-24 の実装は掴めていなかった (この test で捕まえた)。
+   */
+  const tmp = (name: string, body: string): string => {
+    const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), name);
+    fs.writeFileSync(p, body, 'utf8');
+    return p;
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('★ file が無ければ null', () => {
+    expect(loadLedgerSurfaces(path.join(os.tmpdir(), 'no-such-ledger-xyz.ttl'))).toBeNull();
+  });
+
+  it('★★★★ file は在るが 1 語も取れないときも null (★ 空集合を返さない)', () => {
+    expect(loadLedgerSurfaces(tmp('empty.ttl', ''))).toBeNull();
+  });
+
+  it('★★ 中身が壊れていて 0 語のときも null', () => {
+    expect(loadLedgerSurfaces(tmp('broken.ttl', 'これは Turtle ではありません\n{{{'))).toBeNull();
+  });
+
+  it('★★★ 0 語だったことを warn に出す (★ 黙って通さない)', () => {
+    loadLedgerSurfaces(tmp('empty2.ttl', ''));
+    const warned = (logger.warn as jest.Mock).mock.calls.flat().join(' ');
+    expect(warned).toMatch(/台帳/);
+  });
+
+  it('語が取れれば その集合を返す', () => {
+    const ttl = [
+      '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .',
+      '@prefix org1: <https://tealus.local/organon/> .',
+      '',
+      '<https://tealus.local/dict/x>',
+      '  rdfs:label "田部井" ;',
+      '  org1:category "person" ;',
+      '  org1:alias "タブイ" .',
+      '',
+    ].join('\n');
+    const s = loadLedgerSurfaces(tmp('ok.ttl', ttl));
+    expect(s).not.toBeNull();
+    expect(s!.has('田部井')).toBe(true);
+    expect(s!.has('タブイ')).toBe(true);
   });
 });
