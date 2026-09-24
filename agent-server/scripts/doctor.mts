@@ -20,6 +20,9 @@ import { runDbChecks, runProbeChecks } from '../src/lib/doctorDeep.mts';
 import { judgeCiStatus, fetchCiRuns } from '../src/lib/doctorCi.mts';
 // ★ 索引が本文に追いついているか (#447 系)。★★ repo の file を読むだけ = 外を叩かない
 import { checkDocsIndex } from '../src/lib/docsIndex.mts';
+// ★ 期限つきの宿題 (#453 系)。★★ ci-status と同じく **既定で gh を叩く** —— 期限の日に
+//   鳴らない口は、置いた意味が無いため (★★★ 送るものは無い。引けなければ info)。
+import { judgeDueDates, fetchOpenIssues } from '../src/lib/doctorDueDates.mts';
 
 dotenv.config();
 
@@ -30,6 +33,7 @@ const findings: Finding[] = [
   ...runDeepChecks(process.env),
   ...(await runDbChecks(process.env)),
   judgeCiStatus(await fetchCiRuns(), new Date()),
+  judgeDueDates(await fetchOpenIssues(), new Date()),
   await checkDocsIndex(),
   ...(probe ? await runProbeChecks(process.env) : []),
 ];
