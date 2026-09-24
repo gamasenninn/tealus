@@ -8,6 +8,7 @@ import * as config from '../config.mts';
 import { logger } from './logger.mts';
 import * as botSendThrottle from './botSendThrottle.mts';
 import { speakMessage } from './ttsSpeak.mts';
+import { applyConfirmMarkSplit } from './confirmMarks.mts';
 
 /**
  * #292 SPIKE safety: bot 送信 throttle check 共通化。
@@ -129,11 +130,15 @@ async function request<T = unknown>(method: string, path: string, body: unknown 
  */
 export async function pushMessage(roomId: string, content: string): Promise<unknown> {
   _throttleCheck(roomId, 'message');
-  const result = await request('POST', '/bot/push', { room_id: roomId, content });
+  // ★ 〔要確認〕を「台帳に在るか」で割る (#452)。★★ ここに置くのは **唯一の絞り点**だから ——
+  //   light / lightV2 の出力は 4 か所あり、2 か所に置くと片方だけ直す事故になる。
+  //   ★★★ 印が無ければ 1 文字も変えない。台帳が読めないときも本文のまま出す。
+  const body = applyConfirmMarkSplit(content);
+  const result = await request('POST', '/bot/push', { room_id: roomId, content: body });
 
   // TTS 読み上げ（fire-and-forget — メッセージ送信をブロックしない）
   try {
-    speakMessage(roomId, content);
+    speakMessage(roomId, body);   // ★ 部屋に出した本文と同じものを読む
   } catch (err) {
     // TTS エラーはメッセージ送信に影響させない
     logger.debug(`[TTS] skip: ${err instanceof Error ? err.message : String(err)}`);

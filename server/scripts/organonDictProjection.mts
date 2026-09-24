@@ -40,8 +40,14 @@ interface SubjectAcc {
  */
 const HONORIFICS = ['ちゃん', 'さま', 'さん', 'くん', '様', '君'];
 
-/** 末尾の敬称を 1 つだけ外した形。敬称が無い / 外すと空になるなら null */
-function stripHonorific(s: string): string | null {
+/**
+ * 末尾の敬称を 1 つだけ外した形。敬称が無い / 外すと空になるなら null。
+ *
+ * ★ 2026-09-24 に export した。**畳んだ側と引く側で同じ規則を使うため** —— agent-server の
+ *   `confirmMarks.mts` が 〔要確認〕の語を台帳に照らすとき、ここで畳んだ敬称つきは
+ *   台帳に無い。同じ表を 2 か所に置くと、片方に敬称を足したときに静かにずれる。
+ */
+export function stripHonorific(s: string): string | null {
   for (const h of HONORIFICS) {
     if (s.length > h.length && s.endsWith(h)) return s.slice(0, -h.length);
   }
