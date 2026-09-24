@@ -76,7 +76,10 @@
  *     「印の意味が 2 つに分かれる」までである。
  */
 import fs from 'node:fs';
-import { stripHonorific } from '../../../server/scripts/organonDictProjection.mts';
+// ★★★★★ `server/scripts/organonDictProjection.mts` から取らない —— あちらは `n3` を読むので、
+//   agent-server の CI ジョブ (server の node_modules が無い) で型検査が落ちる。
+//   ★ 2026-09-24 に実際に 5 回 赤にした。★★ 手元では server/node_modules が見えるので通ってしまう。
+import { stripHonorific } from '../../../server/src/services/honorific.mts';
 import { loadVocabEntriesFromTtl, DEFAULT_LOCAL_TTL_FILE } from './vocabContext.mts';
 import { logger } from './logger.mts';
 

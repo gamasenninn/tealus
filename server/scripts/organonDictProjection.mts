@@ -12,6 +12,7 @@
  * 射影は Role/Organization + status で絞るため、混じっていても無視される。
  */
 import { Parser } from 'n3';
+import { stripHonorific } from '../src/services/honorific.mts';
 
 const ORG = 'https://tealus.local/organon/';
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
@@ -35,24 +36,15 @@ interface SubjectAcc {
 }
 
 /**
- * 敬称 (#381)。**長いものから試す** — 「くん」と「君」のように片方が他方の部分でなくても、
- * 将来足したときに短い方が先に当たる事故を防ぐため、長さ降順で固定する。
- */
-const HONORIFICS = ['ちゃん', 'さま', 'さん', 'くん', '様', '君'];
-
-/**
- * 末尾の敬称を 1 つだけ外した形。敬称が無い / 外すと空になるなら null。
+ * 敬称の規則 (#381) は `src/services/honorific.mts` に置いてある。
  *
- * ★ 2026-09-24 に export した。**畳んだ側と引く側で同じ規則を使うため** —— agent-server の
- *   `confirmMarks.mts` が 〔要確認〕の語を台帳に照らすとき、ここで畳んだ敬称つきは
- *   台帳に無い。同じ表を 2 か所に置くと、片方に敬称を足したときに静かにずれる。
+ * ★ 2026-09-24 にここから出した。**畳んだ側 (ここ) と引く側 (agent-server の
+ *   `confirmMarks.mts`) で同じ規則を使うため。** ★★ 同じ表を 2 か所に置くと、
+ *   片方に敬称を足したときに静かにずれる。
+ * ★★★★★ **あちらから このファイルを import させない。** ここは `n3` を読むので、
+ *   agent-server の CI ジョブ (server の node_modules が無い) で
+ *   `TS2307: Cannot find module 'n3'` になる (2026-09-24 に 5 回 赤にした)。
  */
-export function stripHonorific(s: string): string | null {
-  for (const h of HONORIFICS) {
-    if (s.length > h.length && s.endsWith(h)) return s.slice(0, -h.length);
-  }
-  return null;
-}
 
 /**
  * 冗長な alias を畳む (#381)。**落とすだけで、新しい語は 1 つも作らない。**
