@@ -13,7 +13,8 @@
   "scripts": {
     "test": "jest --config scripts/jest.config.js",
     "typecheck": "tsc --noEmit",
-    "doctor": "npm --prefix agent-server run doctor --"
+    "doctor": "npm --prefix agent-server run doctor --",
+    "push": "node scripts/pushWatch.mts"
   },
   "devDependencies": {
     "@swc/core": "^1.15.43",
