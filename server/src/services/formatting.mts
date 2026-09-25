@@ -33,10 +33,11 @@ function buildSystemPrompt(): string {
  * 整形段の system prompt を mode で選択する (TRANSCRIPTION_MODE スパイク、Day48)。
  *   legacy  : 現行の汎用整形 + 組織固有語彙リスト (buildSystemPrompt)。出力互換。
  *   organon : organon を「補正の知識源」として使う専用 prompt (buildOrganonCorrectionPrompt)。
+ *             ★ 指示はモデルの系統ごと (luna 系は別の指示)。ORGANON_AI_MODEL を替えれば指示も一緒に替わる
  */
-function systemPromptForMode(mode: ReturnType<typeof getTranscriptionMode>): string {
+function systemPromptForMode(mode: ReturnType<typeof getTranscriptionMode>, model: string): string {
   return mode === 'organon'
-    ? buildOrganonCorrectionPrompt(loadGuideline())
+    ? buildOrganonCorrectionPrompt(loadGuideline(), model)
     : buildSystemPrompt();
 }
 
@@ -85,7 +86,7 @@ export async function formatTranscription(
     const response = await openai.chat.completions.create({
       model,
       messages: [
-        { role: 'system', content: systemPromptForMode(mode) },
+        { role: 'system', content: systemPromptForMode(mode, model) },
         { role: 'user', content: rawText },
       ],
       ...completionParams(model),

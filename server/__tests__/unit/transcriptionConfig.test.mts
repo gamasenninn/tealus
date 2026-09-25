@@ -482,6 +482,21 @@ describe('completionParams (モデル世代別 API パラメータ)', () => {
     expect('max_completion_tokens' in p).toBe(false);
     expect(configModule.completionParams('gpt-4.1-mini').max_tokens).toBe(1000);
   });
+
+  // ★ 2026-09-25: 判定が /^(gpt-5|o\d)/ だったので gpt-6 系に max_tokens が付き、400 → 整形が黙って raw のまま保存された (試験で確認)。
+  test('gpt-6 以降も新世代 (番号で判定する)', () => {
+    for (const m of ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-luna', 'gpt-10']) {
+      const p = configModule.completionParams(m);
+      expect(p).toHaveProperty('max_completion_tokens');
+      expect('max_tokens' in p).toBe(false);
+    }
+  });
+
+  test('gpt-4 系・不明なモデル名・空は旧世代のまま', () => {
+    for (const m of ['gpt-4o', 'gpt-4.1', 'gpt-3.5-turbo', 'unknown', '', null, undefined]) {
+      expect(configModule.completionParams(m)).toHaveProperty('max_tokens');
+    }
+  });
 });
 
 describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', () => {
@@ -528,6 +543,41 @@ describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', ()
     });
     expect(p).toContain('ガマ');
     expect(p).not.toContain('お客様');
+  });
+
+  // ★ 補正の指示はモデルの系統ごと (2026-09-25)。同じ指示を別の系統に当てると逆効果だった:
+  //   luna 用の指示を mini に当てると出だしが悪化 (良い 2 / 悪い 9)、今の指示を luna に当てると正しい便を壊す。
+  describe('モデル系統ごとの指示', () => {
+    const cfg = { vocabulary: [{ term: '整備長', category: 'role', aliases: ['セビ調'] }] };
+    const listOf = (p: string) => p.slice(p.indexOf('# 組織固有名詞リスト'));
+
+    test('model を渡さない / luna 以外は今までと同じ指示 (後方互換)', () => {
+      const base = configModule.buildOrganonCorrectionPrompt(cfg);
+      expect(configModule.buildOrganonCorrectionPrompt(cfg, 'gpt-5.4-mini')).toBe(base);
+      expect(configModule.buildOrganonCorrectionPrompt(cfg, 'gpt-4o-mini')).toBe(base);
+      expect(configModule.buildOrganonCorrectionPrompt(cfg, undefined)).toBe(base);
+    });
+
+    test('luna 系は luna 用の指示 (役職語・愛称を置き換えない / 冒頭を疑う)', () => {
+      for (const m of ['gpt-6-luna', 'gpt-5.6-luna']) {
+        const p = configModule.buildOrganonCorrectionPrompt(cfg, m);
+        expect(p).not.toBe(configModule.buildOrganonCorrectionPrompt(cfg));
+        expect(p).toContain('役職語と愛称');
+        expect(p).toContain('冒頭の語は必ず疑って');
+        expect(p).toContain('絶対禁止');            // 空文字・メタ表現のガードは両方に要る
+      }
+    });
+
+    test('組織固有名詞リストは系統によらず同じ', () => {
+      const a = configModule.buildOrganonCorrectionPrompt(cfg, 'gpt-5.4-mini');
+      const b = configModule.buildOrganonCorrectionPrompt(cfg, 'gpt-6-luna');
+      expect(listOf(b)).toBe(listOf(a));
+      expect(listOf(b)).toContain('セビ調');
+    });
+
+    test('vocab 空でも luna 用の指示を返す', () => {
+      expect(configModule.buildOrganonCorrectionPrompt({ vocabulary: [] }, 'gpt-6-luna')).toContain('役職語と愛称');
+    });
   });
 
   // ★ 棄権ガード (#371) は 2026-08-13 に入れて 08-14 に外した。テストも一緒に外してある。

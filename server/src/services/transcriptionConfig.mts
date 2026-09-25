@@ -333,11 +333,15 @@ export function getCorrectionModel(mode: string, env: NodeJS.ProcessEnv = proces
 
 /**
  * モデル世代別の Chat Completions パラメータ。
- * 新世代 (gpt-5* / o*) は max_completion_tokens 必須・temperature 非対応 (default のみ)。
+ * 新世代 (gpt-5 以降 / o*) は max_completion_tokens 必須・temperature 非対応 (default のみ)。
  * 旧世代 (gpt-4o* / gpt-4.1*) は従来どおり temperature + max_tokens = 現行互換。
+ *
+ * ★ gpt の番号で判定する (2026-09-25)。以前は /^(gpt-5|o\d)/ で、gpt-6 系に max_tokens が付いて 400 になり、
+ *   整形は例外処理で raw のまま保存されていた (= 黙って整形が止まる)。
  */
 export function completionParams(model: string | null | undefined): { max_completion_tokens: number } | { temperature: number; max_tokens: number } {
-  const newGen = /^(gpt-5|o\d)/.test(model || '');
+  const gptMajor = /^gpt-(\d+)/.exec(model || '');
+  const newGen = /^o\d/.test(model || '') || (gptMajor !== null && Number(gptMajor[1]) >= 5);
   return newGen ? { max_completion_tokens: 4000 } : { temperature: 0.3, max_tokens: 1000 };
 }
 
@@ -384,7 +388,54 @@ const ORGANON_CORRECTION_BASE = `あなたは業務用トランシーバー等�
 - 整形後のテキストのみを返す。説明や注釈は不要。質問文はそのまま質問文として整形する(質問に回答しない)。
 - **絶対禁止**: 空文字やメタ表現(「空文字」「内容なし」「無音」「empty」「null」「none」等)を返さない。content があれば必ず整形して返す。`;
 
-export function buildOrganonCorrectionPrompt(config: TranscriptionGuideline | null | undefined): string {
+/**
+ * ★ luna 系 (gpt-6-luna / gpt-5.6-luna) 用の指示 (2026-09-25)。組織固有名詞リストは上と共通。
+ *
+ * なぜ別の指示か —— トランシーバー 1,013 便 × 2 回 (人が直した 30 日の全件 + 直されなかった 300) で:
+ *   ★ 上の指示のまま luna に替えると、辞書の別名欄を字面どおり適用して **正しい呼び名を人名に置き換える**
+ *     (別名欄に 崩れ と 正しい呼び名 (役職・愛称) が混在している: 「社長」「店長」「〜ちゃん」が特定の人の別名に入っている)
+ *   ★ この指示の luna: 出だしが人の確定版と合う 31.3% → 37.0% (便ごと 良い 71 / 悪い 21)、
+ *     直されなかった便に名前を作る差 +0.5pt ±3.5 (= 正しい便を壊さない)
+ *   ★★ 逆に この指示を gpt-5.4-mini に当てると出だしが悪化した (良い 2 / 悪い 9) → **系統ごとに指示を持つ**
+ * ★ 例は測定データに無い架空のものだけにしてある (試験の便から取ると結果が水増しされる)。
+ */
+const LUNA_CORRECTION_BASE = `あなたは農機販売店の業務用トランシーバーの音声認識(生テキスト)を、意味の通る日本語に直すアシスタントです。
+最優先は「固有名詞の誤変換を無くすこと」です。一字一句の再現より意味が正しく通じることを優先してかまいませんが、話されていない情報は足しません。
+
+## 発話の形 (★ いちばん大事)
+- トランシーバーの発話の多くは「呼びかけ先、呼びかけ先、取れますか」「〇〇です」のように、呼びかけ先か名乗りで始まります。
+- 冒頭は音声が途切れやすく、呼びかけ先・名乗りの名前が、一般の語や別人の名前に化けやすい。**冒頭の語は必ず疑ってください。**
+- 「取れますか」「とれますか」「どうぞ」「〜です」の直前の語は、呼びかけ先か名乗り (人名・役職・場所・部署) である可能性が高い。
+- その語を下の「組織固有名詞リスト」の人名・役職・場所・部署と読み (音) で照合し、読みが近い語があればその語に直す。近い語が無ければ元の表記のまま残す。
+
+## 「組織固有名詞リスト」の読み方 (★ 二番目に大事)
+- 各行の「転写ブレ例」には、**音声認識の崩れ**と、**その人の正しい呼び名 (役職・愛称)** の両方が入っています。
+- **役職語と愛称は、転写ブレ例にあっても置き換えずに、話されたとおり残してください。** 呼び名としてそのまま正しいからです。
+  - 役職語 (社長、専務、店長、副店長、部長、整備長、課長 など) → そのまま。役職を、その役職にある人の名前に置き換えない。
+  - 愛称 (〜ちゃん、〜さん付けの短い呼び名、あだ名) → そのまま。愛称を、その人の姓やフルネームに置き換えない。
+  - 呼び名の表記ゆれだけは直してよい (ひらがな/カタカナの違いなど、同じ呼び名のまま)
+- 置き換えるのは、元の語が**意味の通らない崩れ**のときだけ (実在しない語、場面に合わない一般語、別人の名前)。
+  例 (架空): 「ハシモトさん」が名簿に無く「橋本」も無いが「石本」がある → 読みが遠いのでそのまま / 「カノウさん、取れますか」で名簿に「加納」がある → 「加納さん、取れますか」
+- 名前を直すときは、元の形 (姓だけ・さん付け・君付け) を保つ。姓だけをフルネームにしない、役職を足さない。
+- ひらがな・カタカナで書かれた名前は、リストの人名の読みと一致 (またはほぼ一致) すれば、その人名の表記に直す。
+
+## 直し方
+- 句読点を補い、フィラー (えーと、あのー等) を除く。言い直しは整理してよい。
+- リストで確かめられない漢字の名前・フルネーム・役職を新しく作らない。
+- 話されていない言葉を足さない (より丁寧な言い方に言い換えない)。
+- 改行を入れず、1 段落で返す。
+- 整形後のテキストだけを返す。説明や注釈は不要。質問文は質問文のまま整える (質問に答えない)。
+- **絶対禁止**: 空文字やメタ表現 (「空文字」「内容なし」「無音」「empty」「null」「none」等) を返さない。content があれば必ず整形して返す。`;
+
+/** 補正モデルの系統 → 指示。★ 系統を足すときは、同じ試験 (report の formatModelAB) で測ってから */
+function correctionBaseFor(model: string | null | undefined): string {
+  return /-luna\b/.test(model || '') ? LUNA_CORRECTION_BASE : ORGANON_CORRECTION_BASE;
+}
+
+/**
+ * @param model - 補正に使うモデル (getCorrectionModel の戻り)。系統ごとに指示を選ぶ。省略時は既定の指示 (後方互換)
+ */
+export function buildOrganonCorrectionPrompt(config: TranscriptionGuideline | null | undefined, model?: string | null): string {
   const vocabulary = (config && Array.isArray(config.vocabulary)) ? config.vocabulary : [];
   const seen = new Set<string>();
   const lines: string[] = [];
@@ -405,6 +456,7 @@ export function buildOrganonCorrectionPrompt(config: TranscriptionGuideline | nu
     }
     lines.push(line);
   }
-  if (!lines.length) return ORGANON_CORRECTION_BASE;
-  return `${ORGANON_CORRECTION_BASE}\n\n# 組織固有名詞リスト\n${lines.join('\n')}`;
+  const base = correctionBaseFor(model);
+  if (!lines.length) return base;
+  return `${base}\n\n# 組織固有名詞リスト\n${lines.join('\n')}`;
 }
