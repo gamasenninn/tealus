@@ -136,6 +136,39 @@ router.get('/me', authenticate, (req, res) => {
 });
 
 /**
+ * GET /api/auth/authz?room_id=<uuid> — この人は誰か / このルームでの役割は (#458、2026-09-26)
+ *
+ * ★ agent-server が **利用者自身の鍵で** ここを聞き、自分の設定 (/config/*) を触らせてよいかを自分で判断する。
+ * ★★ 返すのは事実だけ (役割・ルームの種類・ルームでの役割)。判断は資源の持ち主 (agent-server) がする。
+ * ★ 無効化した利用者は authenticate が 401 にする (鍵の期限が残っていても)。
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+router.get('/authz', authenticate, async (req, res) => {
+  const user = req.user!;
+  const roomId = typeof req.query.room_id === 'string' ? req.query.room_id : undefined;
+  if (roomId === undefined) {
+    return res.json({ user_id: user.id, role: user.role, room: null });
+  }
+  if (!UUID_RE.test(roomId)) {
+    return res.status(400).json({ error: 'room_id が不正です' });
+  }
+  try {
+    const r = await pool.query<{ id: string; type: string; member_role: string | null }>(
+      `SELECT r.id, r.type, rm.role AS member_role
+         FROM rooms r
+         LEFT JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2
+        WHERE r.id = $1`,
+      [roomId, user.id],
+    );
+    const room = r.rows[0] ? { id: r.rows[0].id, type: r.rows[0].type, member_role: r.rows[0].member_role ?? null } : null;
+    return res.json({ user_id: user.id, role: user.role, room });
+  } catch (err) {
+    logger.error('authz error:', err instanceof Error ? err.message : String(err));
+    return res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
+/**
  * PUT /api/auth/profile
  * Update own display_name and/or status_message
  */

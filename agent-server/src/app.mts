@@ -13,6 +13,7 @@ import { router as agentRoutes } from './routes/agent.mts';
 import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
+import { createConfigAuthz } from './lib/configAuthz.mts';
 
 export const app = express();
 app.use(express.json());
@@ -37,7 +38,9 @@ app.get('/public-config', (req, res) => {
 app.use('/webhook', webhookRoutes);
 
 // Config API（認証必要）
-app.use('/config', authenticate, settingsRoutes);
+// ★ #458 (2026-09-26): 署名だけでなく、**だれが触ってよいか**をここで判断する。
+//   事実は利用者自身の鍵で本体 (GET /api/auth/authz) に聞く。決まりは lib/configAuthz.mts の 1 か所
+app.use('/config', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL }), settingsRoutes);
 
 // Logs API（認証必要）
 app.use('/logs', authenticate, logsRoutes);
