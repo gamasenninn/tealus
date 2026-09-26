@@ -46,6 +46,26 @@ export const READING_HINTS: Record<string, string> = {
   清野: 'キヨノ',
 };
 
+/**
+ * ★ 形で当てる規則 (2026-09-26)。★★ 語の表 (READING_HINTS) と同じく **聞いて確かめたものだけ**。
+ *   一覧はテストで固定してある (`ttsReading.test.mts` の「形の規則も…」)。
+ *
+ * ★ 数字 + 俵: Gemini TTS が「7俵」を「ななたま」と読んだ (Flash / Lite 3 回中 2 回)。
+ *   「7ヒョウ」にすると Lite で 3 回とも「ななひょう」(利用者が聞いて確認)。
+ *   ★★ 「俵」1 文字を語の表に入れると 米俵 / 土俵 を壊すので、**数字の直後だけ**。
+ *   ★★★ 聞いて確かめたのは 7 だけ。3俵 (さんびょう) 等の音の変化は当てていない (「たま」よりはよい)。
+ */
+export interface ReadingPattern {
+  label: string;
+  reading: string;
+  pattern: RegExp;
+  replacement: string;
+}
+
+export const READING_PATTERNS: ReadingPattern[] = [
+  { label: '数字+俵', reading: '数字+ヒョウ', pattern: /([0-9０-９]+)俵/g, replacement: '$1ヒョウ' },
+];
+
 export interface AppliedHint {
   term: string;
   reading: string;
@@ -70,6 +90,7 @@ const NUMERIC_ONLY = /^[0-9０-９]+$/;
 export function applyReadingHints(
   text: string,
   hints: Record<string, string> = READING_HINTS,
+  patterns: ReadingPattern[] = READING_PATTERNS,
 ): ReadingResult {
   if (!text) return { text: '', applied: [] };
 
@@ -85,6 +106,13 @@ export function applyReadingHints(
     if (count === 0) continue;
     out = out.split(term).join(hints[term]);
     applied.push({ term, reading: hints[term], count });
+  }
+  // ★ 語の表の後に、形の規則を当てる (★★ 置き換えた数も同じ形で返す = 黙って書き換えない)
+  for (const p of patterns) {
+    const count = (out.match(p.pattern) || []).length;
+    if (count === 0) continue;
+    out = out.replace(p.pattern, p.replacement);
+    applied.push({ term: p.label, reading: p.reading, count });
   }
   return { text: out, applied };
 }

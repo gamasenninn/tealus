@@ -13,7 +13,7 @@
  *   ③ 数字だけの語は対象外 (★★★ 「44」が term として登録されており 30 日で 292 回当たっていた)
  *   ④ 何をいくつ置換したかを返す (★ 黙って書き換えない)
  */
-import { applyReadingHints, READING_HINTS } from '../../src/lib/tts-reading.mts';
+import { applyReadingHints, READING_HINTS, READING_PATTERNS } from '../../src/lib/tts-reading.mts';
 
 describe('applyReadingHints — ★ 読みを当てる', () => {
   test('★ 表に在る語が読みに置き換わる', () => {
@@ -78,3 +78,40 @@ describe('applyReadingHints — ★ 読みを当てる', () => {
     expect(got.text).toBe('カヌマ店の在庫を見てください');
   });
 });
+
+/**
+ * 2026-09-26 — 「数字 + 俵」を「数字 + ヒョウ」に (★ 語の表とは別の、形で当てる規則)。
+ *
+ * ★ 経緯: Gemini TTS が「7俵」を「ななたま」と読んだ (Flash / Lite 3 回中 2 回)。
+ *   ★★ 「7ヒョウ」にした文は Lite で 3 回とも「ななひょう」と読めた (利用者が聞いて確認)。
+ * ★★★ 「俵」1 文字は語の表に入れられない (1 文字は対象外) し、入れるべきでもない (米俵 / 土俵 を壊す)。
+ *   → ★ **数字の直後だけ**に当てる。
+ * ★ 聞いて確かめたのは 7 だけ。3俵 (さんびょう) などの音の変化は当てていない —— 「さんひょう」は
+ *   少しずれるが、「たま」よりはよい。
+ */
+describe('applyReadingHints — ★ 形で当てる規則 (数字 + 俵)', () => {
+  test('★ 7俵 → 7ヒョウ', () => {
+    const got = applyReadingHints('7俵入る玄米冷蔵庫', {});
+    expect(got.text).toBe('7ヒョウ入る玄米冷蔵庫');
+    expect(got.applied).toEqual([{ term: '数字+俵', reading: '数字+ヒョウ', count: 1 }]);
+  });
+
+  test('全角数字・2 桁も当たる', () => {
+    expect(applyReadingHints('７俵と12俵', {}).text).toBe('７ヒョウと12ヒョウ');
+  });
+
+  test('★★ 数字が前に無い 俵 は変えない (米俵 / 土俵)', () => {
+    const got = applyReadingHints('米俵を土俵に置く', {});
+    expect(got.text).toBe('米俵を土俵に置く');
+    expect(got.applied).toEqual([]);
+  });
+
+  test('★ 語の表と一緒に当たる (鹿沼 + 7俵)', () => {
+    expect(applyReadingHints('鹿沼へ7俵', { 鹿沼: 'カヌマ' }).text).toBe('カヌマへ7ヒョウ');
+  });
+
+  test('★★★★ 形の規則も **聞いて確かめたものだけ** (★ 黙って増やさない)', () => {
+    expect(READING_PATTERNS.map((p) => p.label)).toEqual(['数字+俵']);
+  });
+});
+
