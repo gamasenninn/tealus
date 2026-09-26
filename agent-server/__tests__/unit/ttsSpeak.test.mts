@@ -31,6 +31,11 @@ jest.mock('../../src/lib/tts-openai.mts', () => ({
   synthesizeOpenai: (...args: unknown[]) => mockSynthesizeOpenai(...args),
 }));
 
+const mockSynthesizeGemini = jest.fn();
+jest.mock('../../src/lib/tts-gemini.mts', () => ({
+  synthesizeGemini: (...args: unknown[]) => mockSynthesizeGemini(...args),
+}));
+
 const mockPushTtsSpeak = jest.fn();
 const mockPushTtsAudio = jest.fn();
 jest.mock('../../src/lib/botApi.mts', () => ({
@@ -311,5 +316,94 @@ describe('synthesizeByEngine — ★ 分岐は 1 か所 (#444 段 2)', () => {
       'テスト',
       expect.objectContaining({ apiKey: 'key-from-config' }),
     );
+  });
+});
+
+/**
+ * 2026-09-26 — TTS_PROVIDER=gemini (Gemini 3.8 Flash-Lite TTS)。
+ *
+ * ★ openai と **同じ形**に乗る: 合成 → pushTtsAudio → Socket.IO 配信 / 失敗は browser に fallback。
+ * ★★ 読みも openai と同じく当てる —— 利用者の聞き比べで Gemini も 7俵 を読み違えた (Flash「ななたま」、Lite 3 回中 2 回)。
+ * ★★★ 'gemini' も自動判定には入れない (GOOGLE_API_KEY の有無で全採用者の声が黙って変わるのを防ぐ)。
+ */
+describe('ttsSpeak speakMessage — ★ TTS_PROVIDER=gemini', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockSynthesizeGemini.mockReset().mockResolvedValue({ buffer: Buffer.from('fake-gemini-wav'), contentType: 'audio/wav' });
+    mockSynthesizeOpenai.mockReset();
+    mockPushTtsSpeak.mockReset().mockResolvedValue(undefined);
+    mockPushTtsAudio.mockReset().mockResolvedValue({ ok: true });
+    mockSynthesize.mockReset().mockResolvedValue(Buffer.from('fake-wav'));
+  });
+
+  function flush(ms = 30): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+  test('gemini + GOOGLE_API_KEY 設定済 → ★ synthesizeGemini + pushTtsAudio', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'gemini', GOOGLE_API_KEY: 'g-key' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', 'テスト');
+    await flush();
+
+    expect(mockSynthesizeGemini).toHaveBeenCalledWith('テスト', expect.objectContaining({ apiKey: 'g-key' }));
+    expect(mockSynthesize).not.toHaveBeenCalled();
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+    expect(mockPushTtsAudio).toHaveBeenCalledWith('room-1', expect.any(Buffer), 'audio/wav');
+  });
+
+  test('★★ gemini も読みを当ててから合成する —— ★ 鹿沼 → カヌマ', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'gemini', GOOGLE_API_KEY: 'g-key' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', '鹿沼の現場に行きます');
+    await flush();
+
+    expect(mockSynthesizeGemini).toHaveBeenCalledWith('カヌマの現場に行きます', expect.any(Object));
+  });
+
+  test('gemini + 合成失敗 → ★ browser に fallback', async () => {
+    mockSynthesizeGemini.mockRejectedValueOnce(new Error('Gemini 500'));
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'gemini', GOOGLE_API_KEY: 'g-key' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', 'テスト');
+    await flush(50);
+
+    expect(mockPushTtsSpeak).toHaveBeenCalledWith('room-1', 'テスト');
+    expect(mockPushTtsAudio).not.toHaveBeenCalled();
+  });
+
+  test('★★ gemini + GOOGLE_API_KEY 未設定 → browser に fallback (★ 黙って止まらない)', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'gemini', GOOGLE_API_KEY: '' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-1', 'テスト');
+    await flush();
+
+    expect(mockPushTtsSpeak).toHaveBeenCalledWith('room-1', 'テスト');
+    expect(mockSynthesizeGemini).not.toHaveBeenCalled();
+  });
+
+  test('★ synthesizeByEngine("gemini") → 読みを当て、config の鍵を渡す (★★ 手動ボタンもここを通る)', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'gemini', GOOGLE_API_KEY: 'key-from-config' }));
+    const { synthesizeByEngine } = require('../../src/lib/ttsSpeak');
+    const got = await synthesizeByEngine('gemini', '鹿沼へ行く');
+
+    expect(mockSynthesizeGemini).toHaveBeenCalledWith('カヌマへ行く', expect.objectContaining({ apiKey: 'key-from-config' }));
+    expect(got.contentType).toBe('audio/wav');
+  });
+});
+
+/**
+ * ★ provider → engine の対応は 1 か所 (2026-09-26)。★★ 手動ボタン (routes/tts.mts) がこれを使う。
+ *   以前はルートの中に三項演算子で書いてあり、テストが 1 本も無かった (openai の時から)。
+ */
+describe('engineForProvider — ★ 手動ボタンの engine 選び', () => {
+  beforeEach(() => { jest.resetModules(); jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'aivis-cloud' })); });
+
+  test.each([
+    ['openai', 'openai'],
+    ['gemini', 'gemini'],
+    ['aivis-cloud', 'aivis'],
+    ['browser', 'aivis'],   // ★ 手動ボタンの REST 経路は、browser の時はクライアント側で使われない (既存どおり aivis)
+  ])('%s → %s', (provider, engine) => {
+    const { engineForProvider } = require('../../src/lib/ttsSpeak');
+    expect(engineForProvider(provider)).toBe(engine);
   });
 });

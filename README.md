@@ -205,6 +205,8 @@ AI が音声で応答する仕組みは Provider 形式で選択可能です。
 |----------|---------|------|-----------|
 | `browser` (デフォルト) | 不要 | OS 依存 | **ゼロ設定**、各端末ローカルで合成 |
 | `aivis-cloud` | 必要 | 高品質（凛音エル等） | [Aivis Cloud](https://aivis-project.com) で API key 取得 |
+| `openai` | `OPENAI_API_KEY` | OpenAI TTS (marin) | ★ 明示が要る (自動判定に入らない) |
+| `gemini` | `GOOGLE_API_KEY` | Gemini 3.8 Flash-Lite TTS (Kore) | ★ 明示が要る。有料プランの鍵を使うこと |
 | `none` | - | - | TTS 完全無効 |
 
 **デフォルト判定**: `agent-server/.env` の `TTS_PROVIDER` を未設定の場合:
@@ -214,7 +216,7 @@ AI が音声で応答する仕組みは Provider 形式で選択可能です。
 **設定は `agent-server/.env` の 1 箇所のみ**:
 ```bash
 # agent-server/.env
-TTS_PROVIDER=browser    # browser | aivis-cloud | none
+TTS_PROVIDER=browser    # browser | aivis-cloud | openai | gemini | none
 ```
 
 client は起動時に `GET /api/config` で resolved な provider を runtime 取得するため、設定変更後は **agent-server / server の再起動のみで反映**（client 再ビルド不要）。

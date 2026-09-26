@@ -6,7 +6,7 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { synthesizeByEngine, preprocessText } from '../lib/ttsSpeak.mts';
+import { synthesizeByEngine, preprocessText, engineForProvider } from '../lib/ttsSpeak.mts';
 import * as config from '../config.mts';
 import * as botApi from '../lib/botApi.mts';
 import { logger } from '../lib/logger.mts';
@@ -71,7 +71,7 @@ router.post('/synthesize', async (req, res) => {
   try {
     // ★ #444 段 2: 分岐は synthesizeByEngine に集約されている (★★ ここで 2 度目を書かない)。
     //   ★★★ openai のときは #446 の読み当ても そちらで行われる —— ★ 手動ボタンでも 鹿沼 が カヌマ になる。
-    const engine = config.TTS_PROVIDER === 'openai' ? 'openai' : 'aivis';
+    const engine = engineForProvider(config.TTS_PROVIDER);  // ★ 対応は ttsSpeak の 1 か所 (2026-09-26)
     const { buffer, contentType } = await synthesizeByEngine(engine, cleaned, resolvedModel);
     // ★ audio/wav 固定をやめる。★★ 合成結果の Content-Type をそのまま返す
     res.type(contentType).send(buffer);

@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as ttsCore from './tts-core.mts';
 import { synthesizeOpenai } from './tts-openai.mts';
+import { synthesizeGemini } from './tts-gemini.mts';
 import { applyReadingHints } from './tts-reading.mts';
 import { logger } from './logger.mts';
 import * as config from '../config.mts';
@@ -26,6 +27,23 @@ const SSRC = 1111;
 // ★ #444: OpenAI TTS の既定。★★ voice は会話モード (Realtime) の既定と同じ marin に揃える。
 const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'marin';
+// ★ 2026-09-26: Gemini TTS の既定は tts-gemini.mts (Lite / Kore / 業務連絡の話し方)。★★ env は差し替えたいときだけ
+const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || undefined;
+const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || undefined;
+/** ★ 空文字を「話し方の指定なし」として通すため、未設定だけ undefined にする */
+const GEMINI_TTS_STYLE = process.env.GEMINI_TTS_STYLE;
+
+export type TtsEngine = 'aivis' | 'openai' | 'gemini';
+
+/**
+ * ★ TTS_PROVIDER → 合成 engine の対応 (2026-09-26)。★★ 手動ボタン (routes/tts.mts) はここを使う。
+ *   以前はルートの中に三項演算子で書いてあり、テストが無かった。
+ */
+export function engineForProvider(provider: string | undefined): TtsEngine {
+  if (provider === 'openai') return 'openai';
+  if (provider === 'gemini') return 'gemini';
+  return 'aivis';
+}
 
 /**
  * テキスト前処理（Markdown除去、URL変換、長文切り詰め）
@@ -114,10 +132,23 @@ export function synthesize(text: string, modelUuid?: string): Promise<Buffer> {
  *   (自動読み上げは browser TTS へ / 手動ボタンは 500 を返す)。
  */
 export async function synthesizeByEngine(
-  engine: 'aivis' | 'openai',
+  engine: TtsEngine,
   text: string,
   modelUuid?: string,
 ): Promise<{ buffer: Buffer; contentType: string }> {
+  if (engine === 'gemini') {
+    // ★ 2026-09-26: Gemini も読み違える (7俵 → ななたま)。★★ openai と同じく TTS に渡す文だけ書き換える
+    const hinted = applyReadingHints(text);
+    if (hinted.applied.length) {
+      logger.info(`[TTS/読み] ${hinted.applied.map((a) => `${a.term}→${a.reading}×${a.count}`).join(' ')}`);
+    }
+    return synthesizeGemini(hinted.text, {
+      apiKey: config.GOOGLE_API_KEY,
+      model: GEMINI_TTS_MODEL,
+      voice: GEMINI_TTS_VOICE,
+      style: GEMINI_TTS_STYLE,
+    });
+  }
   if (engine === 'openai') {
     // ★ #446: OpenAI は固有名詞を読み違える (鹿沼 → シカヌマ)。
     //   ★★ TTS に渡す文だけ書き換える。保存される本文は 1 文字も変わらない。
@@ -166,8 +197,8 @@ interface QueueItem {
   roomId: string;
   text: string;
   modelUuid: string;
-  /** ★ #444: どちらで合成するか。★★ 配信より後ろは同じ形 */
-  engine: 'aivis' | 'openai';
+  /** ★ #444: どれで合成するか。★★ 配信より後ろは同じ形 */
+  engine: TtsEngine;
 }
 
 const queue: QueueItem[] = [];
@@ -282,6 +313,19 @@ export function speakMessage(roomId: string, content: string): void {
     }
     logger.info(`[TTS] openai: ${OPENAI_TTS_MODEL} / ${OPENAI_TTS_VOICE} (room: ${roomId})`);
     queue.push({ roomId, text, modelUuid: '', engine: 'openai' });
+    processQueue();
+    return;
+  }
+
+  // ★ 2026-09-26: provider === 'gemini' (openai と同じ形)
+  if (provider === 'gemini') {
+    if (!config.GOOGLE_API_KEY) {
+      logger.warn('[TTS] gemini selected but GOOGLE_API_KEY not set, falling back to browser');
+      pushTtsSpeak(roomId, text).catch(() => {});
+      return;
+    }
+    logger.info(`[TTS] gemini: ${GEMINI_TTS_MODEL || '(既定)'} / ${GEMINI_TTS_VOICE || '(既定)'} (room: ${roomId})`);
+    queue.push({ roomId, text, modelUuid: '', engine: 'gemini' });
     processQueue();
     return;
   }

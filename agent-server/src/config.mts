@@ -9,7 +9,7 @@ import { resolveCodexBin } from './lib/codexBin.mts';
 
 dotenv.config();
 
-// TTS Provider — 'browser' | 'aivis-cloud' | 'openai' | 'none'
+// TTS Provider — 'browser' | 'aivis-cloud' | 'openai' | 'gemini' | 'none'
 // unset 時は AIVIS_API_KEY の有無で自動判定（既存ユーザー保護）。
 // 解決結果をモジュール load 時にログ出力 — OSS 採用者のトラブルシュート用。
 //
@@ -17,6 +17,7 @@ dotenv.config();
 //   OPENAI_API_KEY は agent 機能 (Light / Router / 会話モード) で常時設定済みなので、
 //   ★ 有無で自動切替すると **全採用者の声が黙って変わる**。
 //   ★★ 'openai' を使うには TTS_PROVIDER の明示が要る。
+//   ★★★ 'gemini' (2026-09-26) も同じ理由で自動判定に入れない (GOOGLE_API_KEY は Gemini 系の実験で設定済み)。
 export const TTS_PROVIDER = process.env.TTS_PROVIDER
   || (process.env.AIVIS_API_KEY ? 'aivis-cloud' : 'browser');
 
@@ -112,6 +113,8 @@ export const TEALUS_BOT_PASS = process.env.TEALUS_BOT_PASS;
 
 // OpenAI
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+/** ★ TTS_PROVIDER=gemini の鍵 (2026-09-26)。★★ 有料プランであること (無料枠は送った文が製品改善に使われる) */
+export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
 // #405 Realtime 音声会話のモデル (docs/08 §12)。
 // ★ 既定は mini。成立の基準① (2 秒) が mini で落ちたら flagship (gpt-realtime-2.1) で測り直す、
