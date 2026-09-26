@@ -90,6 +90,8 @@ export function preprocessText(content: string | null | undefined, opts: { trunc
     .replace(/^\s*\d+\.\s+/gm, "")
     // 水平線
     .replace(/^-{3,}$/gm, "")
+    // ★ 強調の ★ / ☆ (2026-09-26 利用者: 「★★… があるとそれを変に読んでしまう」)。後ろの空白ごと取る
+    .replace(/[★☆]+[ \t　]*/g, "")
     // 連続改行
     .replace(/\n{2,}/g, "\n")
     .trim();

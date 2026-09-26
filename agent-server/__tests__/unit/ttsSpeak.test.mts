@@ -407,3 +407,32 @@ describe('engineForProvider — ★ 手動ボタンの engine 選び', () => {
     expect(engineForProvider(provider)).toBe(engine);
   });
 });
+
+/**
+ * 2026-09-26 — ★ 印は読み上げない (利用者: 「★★・・・があるとそれを変に読んでしまう」)。
+ *   ★ AI 班の投稿は「★★ 結論」のように強調に ★ を重ねるので、そのまま渡すと「ほしほし」等と読まれる。
+ *   ★★ 保存される本文は変えない。TTS に渡す文だけ (Markdown の記号を剥がすのと同じ場所)。
+ */
+describe('preprocessText — ★ 印を取り除く', () => {
+  const { preprocessText } = require('../../src/lib/ttsSpeak');
+
+  test('★ 行頭の ★ の連なりと、後ろの空白を取る', () => {
+    expect(preprocessText('★★ 結論です')).toBe('結論です');
+  });
+
+  test('☆ も取る / 文中の ★ も取る', () => {
+    expect(preprocessText('☆注意 と ★★★★ 重要')).toBe('注意 と 重要');
+  });
+
+  test('★ と太字が重なっていても本文だけ残る', () => {
+    expect(preprocessText('★★★ **本番は Aivis**')).toBe('本番は Aivis');
+  });
+
+  test('★ しか無いメッセージは読まない (null)', () => {
+    expect(preprocessText('★★★')).toBeNull();
+  });
+
+  test('★ の無い文は変わらない', () => {
+    expect(preprocessText('鹿沼へ 7俵 運ぶ')).toBe('鹿沼へ 7俵 運ぶ');
+  });
+});
