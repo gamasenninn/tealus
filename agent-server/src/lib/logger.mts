@@ -5,6 +5,7 @@
 import path from 'node:path';
 import { createLogger, format, transports } from 'winston';
 import 'winston-daily-rotate-file';
+import { appendExtras } from './logFormat.mts';
 
 const LOG_DIR = path.join(import.meta.dirname, '..', '..', 'logs');
 
@@ -22,6 +23,7 @@ export const LOG_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH:mm:ss.SSS';
 
 // Console 用フォーマット（人間が読みやすい）
 const consoleFormat = format.combine(
+  appendExtras(),  // ★ 2 つ目以降の引数を捨てない (2026-09-26、logFormat.mts)
   format.timestamp({ format: LOG_TIMESTAMP_FORMAT }),
   format.printf(({ timestamp, level, message }) =>
     `${timestamp} [${level}] [Agent] ${message}`
@@ -30,6 +32,7 @@ const consoleFormat = format.combine(
 
 // ファイル用フォーマット（JSON 行、API でパースしやすい）
 const fileFormat = format.combine(
+  appendExtras(),
   format.timestamp({ format: LOG_TIMESTAMP_FORMAT }),
   format.json()
 );

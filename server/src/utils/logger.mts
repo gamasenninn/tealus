@@ -1,6 +1,7 @@
 import { createLogger, format, transports } from 'winston';
 import 'winston-daily-rotate-file';
 import path from 'node:path';
+import { formatLine } from './logFormat.mts';
 
 /**
  * ★ ミリ秒まで出す (#359 B-1)。agent-server 側と揃える —— 揃っていないと
@@ -15,17 +16,13 @@ export const logger = createLogger({
   format: format.combine(
     format.timestamp({ format: LOG_TIMESTAMP_FORMAT }),
     format.errors({ stack: true }),
-    format.printf(({ timestamp, level, message }) => {
-      return `${timestamp} [${level}] ${message}`;
-    })
+    format.printf(formatLine)
   ),
   transports: [
     new transports.Console({
       format: format.combine(
         format.colorize(),
-        format.printf(({ timestamp, level, message }) => {
-          return `${timestamp} [${level}] ${message}`;
-        })
+        format.printf(formatLine)
       ),
     }),
     new transports.DailyRotateFile({
