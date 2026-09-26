@@ -119,6 +119,11 @@ class AgentApiClient {
   getRoomsList(): Promise<AgentRoomsResponse> {
     return this.request('GET', '/config/rooms');
   }
+  /** ★ 2026-09-26: エージェントごとのルーム数 (一覧 getAgentRooms と同じ数え方) */
+  getAgentRoomCounts(): Promise<{ counts: Record<string, number> }> {
+    return this.request('GET', '/config/agent-room-counts');
+  }
+
   getAgentRooms(agentId: string): Promise<AgentRoomsResponse> {
     return this.request('GET', `/config/rooms/${agentId}`);
   }

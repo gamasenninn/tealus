@@ -588,3 +588,7 @@ body {
   color: var(--text-secondary);
   margin-bottom: 6px;
 }
+
+/* ★ 2026-09-26: エージェント一覧の「ルーム N」/「ルームなし」(ルームを持っているかを一目で) */
+.room-count-btn { padding: 4px 10px; font-size: 13px; }
+.room-count-none { font-size: 13px; color: #9ca3af; }

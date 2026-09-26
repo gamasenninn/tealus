@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { agentApi } from '../services/agentApi';
 import type { User } from '../services/api';
 import { Settings, MessageSquare } from 'lucide-react';
 
 function Agents() {
   const [agents, setAgents] = useState<User[]>([]);
+  // ★ 2026-09-26: エージェントごとのルーム数。取れなかったら null (= 今までどおりのボタンを出す)
+  const [roomCounts, setRoomCounts] = useState<Record<string, number> | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     api.getAgents().then(d => setAgents(d.agents)).catch(() => {});
+    agentApi.getAgentRoomCounts().then(d => setRoomCounts(d.counts)).catch(() => {});
   }, []);
 
   return (
@@ -38,9 +42,16 @@ function Agents() {
               <td><span className={`badge ${a.is_active ? 'active' : 'inactive'}`}>{a.is_active ? '有効' : '無効'}</span></td>
               <td>{new Date(a.created_at).toLocaleDateString('ja-JP')}</td>
               <td>
-                <button className="icon-btn" onClick={() => navigate(`/agents/${a.id}/rooms`)} title="ルーム設定">
-                  <MessageSquare size={16} />
-                </button>
+                {(() => {
+                  // ★ 2026-09-26: 文字の無いアイコンだけだと入口と分からず、ルームの無いエージェントも同じ見た目だった
+                  const n = roomCounts ? (roomCounts[a.id] ?? 0) : null;
+                  if (n === 0) return <span className="room-count-none">ルームなし</span>;
+                  return (
+                    <button className="header-btn room-count-btn" onClick={() => navigate(`/agents/${a.id}/rooms`)} title="ルーム設定を開く">
+                      <MessageSquare size={14} /> {n === null ? 'ルーム' : `ルーム ${n}`}
+                    </button>
+                  );
+                })()}
               </td>
             </tr>
           ))}

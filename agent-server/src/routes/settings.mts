@@ -278,6 +278,30 @@ router.get('/rooms', async (req, res) => {
 /**
  * GET /config/rooms/:agentId — 指定エージェントのルーム一覧
  */
+/**
+ * GET /config/agent-room-counts — エージェントごとのルーム数 (2026-09-26)
+ *
+ * ★ ダッシュボードのエージェント一覧で「ルームを持っているか」を一目で分かるようにする
+ *   (ルームに属しているのはアシスタントだけで、他は押しても空の一覧になっていた)。
+ * ★★ 数え方は GET /config/rooms/:agentId と同じ listAgentRooms (退出済みは数えない) —— 一覧と数を食い違わせない。
+ * ★ `_` で始まるフォルダ (_voice-chat-logs 等) はエージェントではないので数えない。
+ */
+router.get('/agent-room-counts', async (req, res) => {
+  try {
+    const counts: Record<string, number> = {};
+    if (fs.existsSync(WORKSPACE_ROOT)) {
+      for (const name of fs.readdirSync(WORKSPACE_ROOT)) {
+        if (name.startsWith('_')) continue;
+        if (!fs.statSync(path.join(WORKSPACE_ROOT, name)).isDirectory()) continue;
+        counts[name] = (await listAgentRooms(name)).length;
+      }
+    }
+    res.json({ counts });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 router.get('/rooms/:agentId', async (req, res) => {
   try {
     const rooms = await listAgentRooms(req.params.agentId);
