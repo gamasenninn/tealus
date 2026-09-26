@@ -36,6 +36,13 @@ jest.mock('../../src/lib/tts-gemini.mts', () => ({
   synthesizeGemini: (...args: unknown[]) => mockSynthesizeGemini(...args),
 }));
 
+// ★ 2026-09-26 ルームごとのエンジン・声: 読み込みだけ差し替え、決め方 (resolveRoomTts) は本物を使う
+const mockReadRoomTtsSettings = jest.fn().mockReturnValue(null);
+jest.mock('../../src/lib/ttsRoom.mts', () => ({
+  ...jest.requireActual('../../src/lib/ttsRoom.mts'),
+  readRoomTtsSettings: (...args: unknown[]) => mockReadRoomTtsSettings(...args),
+}));
+
 const mockPushTtsSpeak = jest.fn();
 const mockPushTtsAudio = jest.fn();
 jest.mock('../../src/lib/botApi.mts', () => ({
@@ -436,3 +443,87 @@ describe('preprocessText — ★ 印を取り除く', () => {
     expect(preprocessText('鹿沼へ 7俵 運ぶ')).toBe('鹿沼へ 7俵 運ぶ');
   });
 });
+
+/**
+ * 2026-09-26 — ★ ルームごとのエンジン・声 (利用者判断「案 B」)。
+ *   それまでルームの声の選択は Aivis 専用で、全体が OpenAI / Gemini のときは黙って無視されていた。
+ */
+describe('speakMessage — ★ ルームの設定 (エンジン・声) に従う', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockReadRoomTtsSettings.mockReset().mockReturnValue(null);
+    mockSynthesize.mockReset().mockResolvedValue(Buffer.from('aivis-wav'));
+    mockSynthesizeOpenai.mockReset().mockResolvedValue({ buffer: Buffer.from('oa'), contentType: 'audio/wav' });
+    mockSynthesizeGemini.mockReset().mockResolvedValue({ buffer: Buffer.from('gm'), contentType: 'audio/wav' });
+    mockPushTtsSpeak.mockReset().mockResolvedValue(undefined);
+    mockPushTtsAudio.mockReset().mockResolvedValue({ ok: true });
+  });
+  function flush(ms = 30): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+  test('★ 全体が openai でも、ルームが gemini + Aoede なら Gemini の Aoede で読む', async () => {
+    mockReadRoomTtsSettings.mockReturnValue({ tts_engine: 'gemini', tts_voice: 'Aoede' });
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'o', GOOGLE_API_KEY: 'g' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-9', 'テスト');
+    await flush();
+
+    expect(mockReadRoomTtsSettings).toHaveBeenCalledWith('room-9');
+    expect(mockSynthesizeGemini).toHaveBeenCalledWith('テスト', expect.objectContaining({ voice: 'Aoede', apiKey: 'g' }));
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+  });
+
+  test('★ ルームの声 (openai の cedar) が合成に渡る', async () => {
+    mockReadRoomTtsSettings.mockReturnValue({ tts_voice: 'cedar' });
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'o' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-9', 'テスト');
+    await flush();
+
+    expect(mockSynthesizeOpenai).toHaveBeenCalledWith('テスト', expect.objectContaining({ voice: 'cedar' }));
+  });
+
+  test('★ ルームの声が無ければ .env の声 (★ undefined を渡さず既定に任せる)', async () => {
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'o' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-9', 'テスト');
+    await flush();
+
+    const opts = mockSynthesizeOpenai.mock.calls[0][1] as { voice?: string };
+    expect(opts.voice).toBeTruthy();   // ★ OPENAI_TTS_VOICE か既定 marin
+  });
+
+  test('★★ 全体が browser なら、ルームが openai でも browser (★ 端末の動きと食い違わせない)', async () => {
+    mockReadRoomTtsSettings.mockReturnValue({ tts_engine: 'openai' });
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'browser', OPENAI_API_KEY: 'o' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-9', 'テスト');
+    await flush();
+
+    expect(mockPushTtsSpeak).toHaveBeenCalledWith('room-9', 'テスト');
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+  });
+
+  test('★★ ルームが gemini でも鍵が無ければ browser に fallback (★ 黙って止まらない)', async () => {
+    mockReadRoomTtsSettings.mockReturnValue({ tts_engine: 'gemini' });
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'o', GOOGLE_API_KEY: '' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-9', 'テスト');
+    await flush();
+
+    expect(mockPushTtsSpeak).toHaveBeenCalledWith('room-9', 'テスト');
+    expect(mockSynthesizeGemini).not.toHaveBeenCalled();
+  });
+
+  test('★ 全体が openai でもルームが aivis なら、ルームの tts_model_uuid で Aivis', async () => {
+    process.env.AIVIS_API_KEY = 'a';
+    mockReadRoomTtsSettings.mockReturnValue({ tts_engine: 'aivis', tts_model_uuid: 'uuid-room' });
+    jest.doMock('../../src/config.mts', () => ({ TTS_PROVIDER: 'openai', OPENAI_API_KEY: 'o' }));
+    const { speakMessage } = require('../../src/lib/ttsSpeak');
+    speakMessage('room-9', 'テスト');
+    await flush();
+
+    expect(mockSynthesize).toHaveBeenCalledWith('テスト', expect.objectContaining({ modelUuid: 'uuid-room' }));
+    expect(mockSynthesizeOpenai).not.toHaveBeenCalled();
+  });
+});
+

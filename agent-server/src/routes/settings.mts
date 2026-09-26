@@ -10,6 +10,7 @@ import { getAllSettings, saveSettings, loadSettings, type AgentSettings } from '
 import * as botApi from '../lib/botApi.mts';
 import * as config from '../config.mts';
 import { invalidateRoomMcp } from '../mcp/roomMcpManager.mts';
+import { TTS_ENGINES, TTS_VOICES, resolveRoomTts } from '../lib/ttsRoom.mts';
 
 export const router = express.Router();
 
@@ -80,6 +81,30 @@ router.put('/mcp', (req, res) => {
     logger.error(`Save MCP config error: ${err instanceof Error ? err.message : String(err)}`);
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+/**
+ * GET /config/tts-options — ルーム設定の「読み上げエンジン・声」の選択肢 (2026-09-26)
+ *
+ * ★ 一覧は lib/ttsRoom.mts の 1 か所。ダッシュボードはここから受け取る。
+ * ★★ 鍵は「あるか (available)」だけを返し、値は返さない。
+ */
+router.get('/tts-options', (req, res) => {
+  const provider = config.TTS_PROVIDER;
+  const keyOf: Record<string, string | undefined> = {
+    aivis: process.env.AIVIS_API_KEY,
+    openai: config.OPENAI_API_KEY,
+    gemini: config.GOOGLE_API_KEY,
+  };
+  const def = resolveRoomTts(provider, null);
+  res.json({
+    global_provider: provider,
+    // ★ 全体が browser / none のときはルームの設定は効かない (画面に出すため)
+    room_override_effective: def.mode === 'server',
+    default_engine: def.mode === 'server' ? def.engine : null,
+    engines: TTS_ENGINES.map((e) => ({ ...e, available: Boolean(keyOf[e.id]) })),
+    voices: TTS_VOICES,
+  });
 });
 
 /**

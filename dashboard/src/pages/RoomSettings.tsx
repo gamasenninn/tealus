@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { agentApi } from '../services/agentApi';
-import type { RoomSettingsData } from '../services/agentApi';
+import type { RoomSettingsData, TtsOptionsResponse } from '../services/agentApi';
 import { ArrowLeft, Save } from 'lucide-react';
 
 interface RoomInfo {
@@ -11,19 +11,6 @@ interface RoomInfo {
   partner_display_name?: string;
 }
 
-const TTS_MODELS = [
-  { uuid: '', name: 'デフォルト（環境変数）' },
-  { uuid: 'f5017410-fbb5-49e1-97cb-e785f42e15f5', name: '凛音エル（青年女性）' },
-  { uuid: 'a59cb814-0083-4369-8542-f51a29e72af7', name: 'まお（青年女性）' },
-  { uuid: '6d11c6c2-f4a4-4435-887e-23dd60f8b8dd', name: 'にせ（青年男性）' },
-  { uuid: 'e9339137-2ae3-4d41-9394-fb757a7e61e6', name: 'まい（青年女性）' },
-  { uuid: '47e53151-a378-46f3-abee-ce13aa07feb1', name: '阿井田 茂（中年男性）' },
-  { uuid: '71e72188-2726-4739-9aa9-39567396fb2a', name: 'fumifumi（成人男性）' },
-  { uuid: 'baaae3c0-7b22-4605-8ba5-80c959b41a48', name: 'morioki（成人女性）' },
-  { uuid: '696c98a2-c0b7-4fe7-8cf2-c7e9b8a9bd82', name: 'ろてじん/長老ボイス（老年男性）' },
-  { uuid: 'a670e6b8-0852-45b2-8704-1bc9862f2fe6', name: '花音（青年女性）' },
-  { uuid: '22e8ed77-94fe-4ef2-871f-a86f94e9a579', name: 'コハク（青年女性）' },
-];
 
 function RoomSettings() {
   const { roomId, agentId } = useParams() as { roomId: string; agentId?: string };
@@ -31,6 +18,8 @@ function RoomSettings() {
   const [tab, setTab] = useState('basic');
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [settings, setSettings] = useState<RoomSettingsData>({ response_mode: 'auto', enabled: true });
+  // ★ 2026-09-26: 読み上げエンジン・声の選択肢 (一覧は agent-server の 1 か所から受け取る)
+  const [ttsOptions, setTtsOptions] = useState<TtsOptionsResponse | null>(null);
   const [claudeMd, setClaudeMd] = useState('');
   const [lightPrompt, setLightPrompt] = useState('');
   const [mcpText, setMcpText] = useState('');
@@ -47,6 +36,7 @@ function RoomSettings() {
 
     // Agent Server からルーム設定を取得
     agentApi.getRoomSettings(roomId).then(d => setSettings(d.settings)).catch(() => {});
+    agentApi.getTtsOptions().then(setTtsOptions).catch(() => {});
     agentApi.getRoomClaudeMd(roomId).then(d => setClaudeMd(d.content)).catch(() => {});
     agentApi.getRoomLightPrompt(roomId).then(d => setLightPrompt(d.content)).catch(() => {});
     agentApi.getRoomMcp(roomId).then(d => {
@@ -152,16 +142,52 @@ function RoomSettings() {
           </section>
 
           <section className="settings-section">
-            <h3>読み上げ音声モデル</h3>
-            <div className="setting-row">
-              <div>
-                <div className="setting-label">TTS モデル</div>
-                <div className="setting-desc">AIの回答を読み上げる声を選択</div>
-              </div>
-              <select value={settings.tts_model_uuid || ''} onChange={e => setSettings(prev => ({ ...prev, tts_model_uuid: e.target.value || undefined }))} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 14 }}>
-                {TTS_MODELS.map(m => <option key={m.uuid} value={m.uuid}>{m.name}</option>)}
-              </select>
-            </div>
+            <h3>読み上げ</h3>
+            {(() => {
+              // ★ 2026-09-26: エンジン (Aivis / OpenAI / Gemini) をルームごとに選べる。声の一覧はエンジンに合わせて変わる
+              const selectStyle = { padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 14 };
+              const opts = ttsOptions;
+              const defaultLabel = opts?.engines.find(e => e.id === opts.default_engine)?.label ?? '環境変数';
+              const engine = settings.tts_engine || opts?.default_engine || '';
+              const voices = (opts && engine && opts.voices[engine]) || [];
+              // ★ Aivis の声は tts_model_uuid、OpenAI / Gemini は tts_voice (既存の Aivis の設定をそのまま生かす)
+              const voiceKey = engine === 'aivis' ? 'tts_model_uuid' : 'tts_voice';
+              const voiceValue = (engine === 'aivis' ? settings.tts_model_uuid : settings.tts_voice) || '';
+              const engineInfo = opts?.engines.find(e => e.id === engine);
+              return (
+                <>
+                  {opts && !opts.room_override_effective && (
+                    <div className="setting-desc" style={{ color: '#b45309', marginBottom: 8 }}>
+                      全体の設定が「{opts.global_provider}」のため、ここでの選択は効きません (端末の声で読みます)
+                    </div>
+                  )}
+                  <div className="setting-row">
+                    <div>
+                      <div className="setting-label">読み上げエンジン</div>
+                      <div className="setting-desc">このルームの読み上げに使うエンジン</div>
+                    </div>
+                    <select value={settings.tts_engine || ''} disabled={!opts} style={selectStyle}
+                      onChange={e => setSettings(prev => ({ ...prev, tts_engine: e.target.value || undefined }))}>
+                      <option value="">デフォルト（{defaultLabel}）</option>
+                      {opts?.engines.map(e => (
+                        <option key={e.id} value={e.id} disabled={!e.available}>{e.label}{e.available ? '' : '（鍵が未設定）'}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="setting-row">
+                    <div>
+                      <div className="setting-label">声</div>
+                      <div className="setting-desc">{engineInfo ? `${engineInfo.label} の声` : 'AIの回答を読み上げる声'}</div>
+                    </div>
+                    <select value={voiceValue} disabled={!opts} style={selectStyle}
+                      onChange={e => setSettings(prev => ({ ...prev, [voiceKey]: e.target.value || undefined }))}>
+                      <option value="">デフォルト（環境変数）</option>
+                      {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  </div>
+                </>
+              );
+            })()}
           </section>
 
           <button className="save-btn" onClick={handleSettingsSave}>

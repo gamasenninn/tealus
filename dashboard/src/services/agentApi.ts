@@ -28,9 +28,23 @@ export interface RoomSettingsData {
   response_mode?: string;
   enabled?: boolean;
   tts_model_uuid?: string;
+  /** ★ 2026-09-26: 読み上げエンジン ('' / 未設定 = 全体の設定に従う) */
+  tts_engine?: string;
+  /** ★ 2026-09-26: OpenAI / Gemini の声 (Aivis の声は tts_model_uuid) */
+  tts_voice?: string;
   [key: string]: unknown;
 }
 export interface RoomSettingsResponse { settings: RoomSettingsData }
+
+/** ★ 2026-09-26: GET /config/tts-options (一覧は agent-server の lib/ttsRoom.mts の 1 か所) */
+export interface TtsVoice { id: string; name: string }
+export interface TtsOptionsResponse {
+  global_provider: string;
+  room_override_effective: boolean;
+  default_engine: string | null;
+  engines: { id: string; label: string; available: boolean }[];
+  voices: Record<string, TtsVoice[]>;
+}
 export interface RoomContentResponse { content: string }
 export interface RoomMcpResponse { mcpConfig: McpConfig | null }
 
@@ -73,6 +87,10 @@ class AgentApiClient {
 
   updateMcpConfig(mcpConfig: McpConfig): Promise<unknown> {
     return this.request('PUT', '/config/mcp', { mcpConfig });
+  }
+
+  getTtsOptions(): Promise<TtsOptionsResponse> {
+    return this.request('GET', '/config/tts-options');
   }
 
   getEnv(): Promise<EnvResponse> {

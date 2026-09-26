@@ -10,10 +10,11 @@ import path from 'node:path';
 import * as ttsCore from './tts-core.mts';
 import { synthesizeOpenai } from './tts-openai.mts';
 import { synthesizeGemini } from './tts-gemini.mts';
+import { resolveRoomTts, readRoomTtsSettings } from './ttsRoom.mts';
 import { applyReadingHints } from './tts-reading.mts';
 import { logger } from './logger.mts';
 import * as config from '../config.mts';
-import { getBotUserId, pushTtsSpeak, pushTtsAudio } from './botApi.mts';
+import { pushTtsSpeak, pushTtsAudio } from './botApi.mts';
 
 const AIVIS_API_KEY = process.env.AIVIS_API_KEY;
 const MODEL_UUID = process.env.AIVIS_MODEL_UUID || "f5017410-fbb5-49e1-97cb-e785f42e15f5";
@@ -33,7 +34,8 @@ const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || undefined;
 /** ★ 空文字を「話し方の指定なし」として通すため、未設定だけ undefined にする */
 const GEMINI_TTS_STYLE = process.env.GEMINI_TTS_STYLE;
 
-export type TtsEngine = 'aivis' | 'openai' | 'gemini';
+import type { TtsEngine } from './ttsRoom.mts';
+export type { TtsEngine };
 
 /**
  * ★ TTS_PROVIDER → 合成 engine の対応 (2026-09-26)。★★ 手動ボタン (routes/tts.mts) はここを使う。
@@ -137,6 +139,8 @@ export async function synthesizeByEngine(
   engine: TtsEngine,
   text: string,
   modelUuid?: string,
+  /** ★ 2026-09-26: ルームで選んだ声 (openai / gemini)。無ければ .env の声 */
+  voice?: string,
 ): Promise<{ buffer: Buffer; contentType: string }> {
   if (engine === 'gemini') {
     // ★ 2026-09-26: Gemini も読み違える (7俵 → ななたま)。★★ openai と同じく TTS に渡す文だけ書き換える
@@ -147,7 +151,7 @@ export async function synthesizeByEngine(
     return synthesizeGemini(hinted.text, {
       apiKey: config.GOOGLE_API_KEY,
       model: GEMINI_TTS_MODEL,
-      voice: GEMINI_TTS_VOICE,
+      voice: voice || GEMINI_TTS_VOICE,
       style: GEMINI_TTS_STYLE,
     });
   }
@@ -162,7 +166,7 @@ export async function synthesizeByEngine(
     return synthesizeOpenai(hinted.text, {
       apiKey: config.OPENAI_API_KEY,
       model: OPENAI_TTS_MODEL,
-      voice: OPENAI_TTS_VOICE,
+      voice: voice || OPENAI_TTS_VOICE,
     });
   }
   return { buffer: await synthesize(text, modelUuid), contentType: 'audio/wav' };
@@ -178,17 +182,6 @@ function sendViaPlainTransport(wavPath: string, roomId: string): Promise<number 
   });
 }
 
-// --- ルーム設定から TTS モデルを取得 ---
-function getRoomTtsModel(roomId: string): string | null {
-  try {
-    const agentId = getBotUserId();
-    if (!agentId) return null;
-    const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT || path.join(import.meta.dirname, '../../agent-workspaces');
-    const settingsPath = path.join(workspaceRoot, agentId, roomId, 'room_settings.json');
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as { tts_model_uuid?: string };
-    return settings.tts_model_uuid || null;
-  } catch { return null; }
-}
 
 // TTS_BROADCAST_MEDIASOUP=true なら Aivis 合成 WAV を mediasoup PlainTransport
 // でも broadcast (transceiver gateway 受信機向けの legacy 互換)。default false。
@@ -201,6 +194,8 @@ interface QueueItem {
   modelUuid: string;
   /** ★ #444: どれで合成するか。★★ 配信より後ろは同じ形 */
   engine: TtsEngine;
+  /** ★ 2026-09-26: ルームで選んだ声 */
+  voice?: string;
 }
 
 const queue: QueueItem[] = [];
@@ -211,14 +206,14 @@ async function processQueue(): Promise<void> {
   isProcessing = true;
 
   while (queue.length > 0) {
-    const { roomId, text, modelUuid, engine } = queue.shift()!;
+    const { roomId, text, modelUuid, engine, voice } = queue.shift()!;
 
     let wavBuf: Buffer;
     let contentType = 'audio/wav';
     try {
       const startTime = Date.now();
       // ★ 分岐は synthesizeByEngine に集約 (#444 段 2)。★★ ここで 2 度目を書かない
-      const got = await synthesizeByEngine(engine, text, modelUuid);
+      const got = await synthesizeByEngine(engine, text, modelUuid, voice);
       wavBuf = got.buffer;
       contentType = got.contentType;
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -294,11 +289,12 @@ export function speakMessage(roomId: string, content: string): void {
   const text = preprocessText(content);
   if (!text) return;
 
-  const provider = config.TTS_PROVIDER;
+  // ★ 2026-09-26: ルームの設定 (エンジン・声) に従う。全体が browser / none のときはルームの設定は効かない
+  const r = resolveRoomTts(config.TTS_PROVIDER, readRoomTtsSettings(roomId));
 
-  if (provider === 'none') return;
+  if (r.mode === 'none') return;
 
-  if (provider === 'browser') {
+  if (r.mode === 'browser') {
     // Server に通知 → server が Socket.IO で room に emit → 各 client が Web Speech で発声
     pushTtsSpeak(roomId, text).catch((err) => {
       logger.warn(`[TTS] browser provider notify failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -306,40 +302,20 @@ export function speakMessage(roomId: string, content: string): void {
     return;
   }
 
-  // ★ #444: provider === 'openai'
-  if (provider === 'openai') {
-    if (!config.OPENAI_API_KEY) {
-      logger.warn('[TTS] openai selected but OPENAI_API_KEY not set, falling back to browser');
-      pushTtsSpeak(roomId, text).catch(() => {});
-      return;
-    }
-    logger.info(`[TTS] openai: ${OPENAI_TTS_MODEL} / ${OPENAI_TTS_VOICE} (room: ${roomId})`);
-    queue.push({ roomId, text, modelUuid: '', engine: 'openai' });
-    processQueue();
-    return;
-  }
-
-  // ★ 2026-09-26: provider === 'gemini' (openai と同じ形)
-  if (provider === 'gemini') {
-    if (!config.GOOGLE_API_KEY) {
-      logger.warn('[TTS] gemini selected but GOOGLE_API_KEY not set, falling back to browser');
-      pushTtsSpeak(roomId, text).catch(() => {});
-      return;
-    }
-    logger.info(`[TTS] gemini: ${GEMINI_TTS_MODEL || '(既定)'} / ${GEMINI_TTS_VOICE || '(既定)'} (room: ${roomId})`);
-    queue.push({ roomId, text, modelUuid: '', engine: 'gemini' });
-    processQueue();
-    return;
-  }
-
-  // provider === 'aivis-cloud'
-  if (!AIVIS_API_KEY) {
-    logger.warn('[TTS] aivis-cloud selected but AIVIS_API_KEY not set, falling back to browser');
+  // ★ エンジンの鍵が無ければ browser に fallback (★ 黙って止まらない)
+  const key = r.engine === 'openai' ? config.OPENAI_API_KEY : r.engine === 'gemini' ? config.GOOGLE_API_KEY : AIVIS_API_KEY;
+  if (!key) {
+    logger.warn(`[TTS] ${r.engine} selected but its API key is not set, falling back to browser (room: ${roomId})`);
     pushTtsSpeak(roomId, text).catch(() => {});
     return;
   }
-  const modelUuid = getRoomTtsModel(roomId) || MODEL_UUID;
-  logger.info(`[TTS] model: ${modelUuid} (room: ${roomId}, default: ${MODEL_UUID})`);
-  queue.push({ roomId, text, modelUuid, engine: 'aivis' });
+
+  const modelUuid = r.engine === 'aivis' ? (r.modelUuid || MODEL_UUID) : '';
+  const voice = r.mode === 'server' ? r.voice : undefined;
+  const shown = r.engine === 'aivis' ? modelUuid
+    : r.engine === 'openai' ? `${OPENAI_TTS_MODEL} / ${voice || OPENAI_TTS_VOICE}`
+    : `${GEMINI_TTS_MODEL || '(既定)'} / ${voice || GEMINI_TTS_VOICE || '(既定)'}`;
+  logger.info(`[TTS] ${r.engine}: ${shown} (room: ${roomId})`);
+  queue.push({ roomId, text, modelUuid, engine: r.engine, voice });
   processQueue();
 }
