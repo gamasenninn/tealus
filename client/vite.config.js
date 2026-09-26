@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
+import { NAVIGATE_FALLBACK_DENYLIST } from './pwaDenylist.mjs';
 
 // #356 ビルド ID。バンドルに焼き込む値と dist/version.json に書く値を同一にする。
 // 「端末が実行している版」を名乗らせるための識別子で、リリース版数 (git タグ) とは別物。
@@ -66,7 +67,8 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
-          navigateFallbackDenylist: [/^\/media\//, /^\/api\//, /^\/system\//, /^\/agent-api\//, /^\/rtc\//, /^\/mcp\//],
+          // ★ 一覧は pwaDenylist.mjs (テストと共有)。/system はスラッシュ無しも含む (2026-09-26)
+          navigateFallbackDenylist: NAVIGATE_FALLBACK_DENYLIST,
           importScripts: ['/custom-sw.js'],
           // #356 version.json を precache に入れると古い版が返り続け、更新検知そのものが死ぬ
           globIgnores: ['**/version.json'],
