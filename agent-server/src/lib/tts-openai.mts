@@ -17,6 +17,7 @@
  * @module lib/tts-openai
  */
 import { logger } from './logger.mts';
+import { splitForTts, concatWav, mapLimited } from './tts-chunk.mts';
 
 export const OPENAI_SPEECH_URL = 'https://api.openai.com/v1/audio/speech';
 
@@ -24,6 +25,16 @@ export const OPENAI_SPEECH_URL = 'https://api.openai.com/v1/audio/speech';
 export const DEFAULT_MODEL = 'gpt-4o-mini-tts';
 export const DEFAULT_VOICE = 'marin';
 export const DEFAULT_FORMAT = 'wav';
+
+/**
+ * ★ 長い文は分けて並行に合成する (2026-09-26、Gemini と同じ部品 = tts-chunk.mts)。
+ *   1 回の入力は 2000 トークンまで (本番ログ「Input of 2003 tokens is over the maximum input limit」)。
+ *   長さに比例して遅い (自然な文で 250 字 7 秒 / 600 字 14 秒 / 1200 字 29 秒)。
+ * ★ 回数制限は 1 分 10,000 回 (応答の x-ratelimit-limit-requests、2026-09-26) なので回数は気にしなくてよい。
+ * ★★ wav のときだけ分ける (mp3 などはつなげない)。
+ */
+export const MAX_CHUNK_CHARS = 600;
+export const MAX_PARALLEL = 5;
 
 /** response_format → Content-Type (★ 応答ヘッダが無いときの保険) */
 const FORMAT_TO_MIME: Record<string, string> = {
@@ -59,7 +70,7 @@ export interface OpenaiTtsResult {
  */
 export async function synthesizeOpenai(
   text: string,
-  { apiKey, model, voice, format, timeout = 30000, fetchImpl }: SynthesizeOpenaiOptions = {},
+  { apiKey, model, voice, format, timeout = 60000, fetchImpl }: SynthesizeOpenaiOptions = {},
 ): Promise<OpenaiTtsResult> {
   if (!apiKey) throw new Error('OPENAI_API_KEY が設定されていません');
   if (!text) throw new Error('text が空です');
@@ -68,6 +79,23 @@ export async function synthesizeOpenai(
   if (!doFetch) throw new Error('fetch が利用できません');
 
   const fmt = format || DEFAULT_FORMAT;
+  const one = (t: string) => synthesizeOpenaiOne(t, { apiKey, model, voice, fmt, timeout, doFetch });
+  const chunks = fmt === 'wav' ? splitForTts(text, MAX_CHUNK_CHARS) : [text];
+  if (chunks.length === 1) return one(text);
+
+  // ★ 長い文: 分けて並行 → 元の順でつなぐ。★★ 1 つでも失敗したら throw (欠けた音声を返さない)
+  const t0 = Date.now();
+  const parts = await mapLimited(chunks, MAX_PARALLEL, one);
+  const buffer = concatWav(parts.map((p) => p.buffer));
+  logger.info(`[TTS/openai] ${text.length} 字を ${chunks.length} 分割・同時 ${MAX_PARALLEL} 本で合成 (${Date.now() - t0}ms)`);
+  return { buffer, contentType: 'audio/wav' };
+}
+
+/** 1 回分の合成 (★ 分けたかけら 1 つ、または短い文そのもの) */
+async function synthesizeOpenaiOne(
+  text: string,
+  { apiKey, model, voice, fmt, timeout, doFetch }: { apiKey: string; model?: string; voice?: string; fmt: string; timeout: number; doFetch: typeof globalThis.fetch },
+): Promise<OpenaiTtsResult> {
   const res = await doFetch(OPENAI_SPEECH_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
