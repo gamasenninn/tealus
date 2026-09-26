@@ -22,6 +22,22 @@ vi.mock('../../src/services/api', () => ({
     getRoomClaudeMd: vi.fn(() => Promise.resolve({ content: 'claude md content' })),
     updateRoomClaudeMd: vi.fn(() => Promise.resolve({ success: true })),
     updateRoom: vi.fn(() => Promise.resolve()),
+    // ★ 2026-09-26 ルームごとの読み上げエンジン・声 (一覧は agent-server の 1 か所から)
+    getTtsOptions: vi.fn(() => Promise.resolve({
+      global_provider: 'openai',
+      room_override_effective: true,
+      default_engine: 'openai',
+      engines: [
+        { id: 'aivis', label: 'Aivis', available: true },
+        { id: 'openai', label: 'OpenAI', available: true },
+        { id: 'gemini', label: 'Gemini', available: false },
+      ],
+      voices: {
+        aivis: [{ id: 'uuid-el', name: '凛音エル（青年女性）' }],
+        openai: [{ id: 'marin', name: 'marin（おすすめ）' }, { id: 'cedar', name: 'cedar（おすすめ）' }],
+        gemini: [{ id: 'Kore', name: 'Kore' }],
+      },
+    })),
     // #418 会話モードの道具の一覧 (docs/08 §12.17)
     getVoiceChatTools: vi.fn(() => Promise.resolve({
       tools: [
@@ -249,3 +265,81 @@ describe('RoomSettings — 会話モードの道具 (#418)', () => {
     await waitFor(() => expect(screen.getByText(/やり直す/)).toBeInTheDocument());
   });
 });
+
+/**
+ * 2026-09-26 — ★ 読み上げエンジン・声 (ダッシュボードと同じ)。
+ *
+ * ★★ 直した不具合: 応答モード / 音声モデルを変えると、設定を 3 項目 (response_mode / enabled / tts_model_uuid)
+ *   だけで丸ごと上書きしていた → ダッシュボードで選んだ tts_engine / tts_voice (とそれ以外の項目) が消えた。
+ *   → 読み込んだ設定を全部持っておき、変えた項目だけ差し替えて保存する。
+ */
+describe('RoomSettings — 読み上げエンジン・声', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const dm = { ...baseProps, currentRoom: { type: 'direct' } as Room, isAdmin: false, isSysAdmin: false };
+
+  it('★★ 応答モードを変えても、ダッシュボードで決めたエンジン・声・ほかの項目が消えない', async () => {
+    vi.mocked(api.getRoomAgentSettings).mockResolvedValueOnce({
+      settings: { response_mode: 'auto', enabled: true, tts_engine: 'gemini', tts_voice: 'Kore', some_future_key: 1 },
+    } as never);
+    render(<RoomSettings {...dm} />);
+    // ★ 読み込みが済んでから変える (済む前だと古い値で保存しうる)
+    await waitFor(() => expect(screen.getByLabelText('読み上げエンジン')).toHaveValue('gemini'));
+    fireEvent.change(screen.getByLabelText('応答モード'), { target: { value: 'mention' } });
+    await waitFor(() => {
+      expect(api.updateRoomAgentSettings).toHaveBeenCalledWith('room-1', expect.objectContaining({
+        response_mode: 'mention', tts_engine: 'gemini', tts_voice: 'Kore', some_future_key: 1,
+      }));
+    });
+  });
+
+  it('★ エンジンの選択肢は API から (鍵が無いエンジンは選べない)', async () => {
+    render(<RoomSettings {...dm} />);
+    const sel = await screen.findByLabelText('読み上げエンジン');
+    await waitFor(() => expect(sel.querySelectorAll('option')).toHaveLength(4));
+    expect(sel.querySelector('option[value=""]')?.textContent).toBe('デフォルト（OpenAI）');
+    expect((sel.querySelector('option[value="gemini"]') as HTMLOptionElement).disabled).toBe(true);
+  });
+
+  it('★ エンジンを選ぶと tts_engine を保存し、ほかの項目は残す', async () => {
+    vi.mocked(api.getRoomAgentSettings).mockResolvedValueOnce({ settings: { response_mode: 'all', enabled: true } } as never);
+    render(<RoomSettings {...dm} />);
+    await waitFor(() => expect(screen.getByLabelText('応答モード')).toHaveValue('all'));
+    const sel = await screen.findByLabelText('読み上げエンジン');
+    await waitFor(() => expect(sel.querySelectorAll('option')).toHaveLength(4));
+    fireEvent.change(sel, { target: { value: 'aivis' } });
+    await waitFor(() => {
+      expect(api.updateRoomAgentSettings).toHaveBeenCalledWith('room-1', expect.objectContaining({ tts_engine: 'aivis', response_mode: 'all' }));
+    });
+  });
+
+  it('★ 声の一覧はエンジンに合わせて変わる / OpenAI の声は tts_voice に保存', async () => {
+    render(<RoomSettings {...dm} />);
+    const voice = await screen.findByLabelText('声');
+    await waitFor(() => expect(voice.querySelector('option[value="cedar"]')).not.toBeNull());   // ★ 既定 = OpenAI
+    fireEvent.change(voice, { target: { value: 'cedar' } });
+    await waitFor(() => {
+      expect(api.updateRoomAgentSettings).toHaveBeenCalledWith('room-1', expect.objectContaining({ tts_voice: 'cedar' }));
+    });
+  });
+
+  it('★ Aivis の声は今までどおり tts_model_uuid に保存 (★ 既存のルーム設定を生かす)', async () => {
+    vi.mocked(api.getRoomAgentSettings).mockResolvedValueOnce({ settings: { tts_engine: 'aivis' } } as never);
+    render(<RoomSettings {...dm} />);
+    const voice = await screen.findByLabelText('声');
+    await waitFor(() => expect(voice.querySelector('option[value="uuid-el"]')).not.toBeNull());
+    fireEvent.change(voice, { target: { value: 'uuid-el' } });
+    await waitFor(() => {
+      expect(api.updateRoomAgentSettings).toHaveBeenCalledWith('room-1', expect.objectContaining({ tts_engine: 'aivis', tts_model_uuid: 'uuid-el' }));
+    });
+  });
+
+  it('★ 全体がブラウザの声なら「効きません」と出す', async () => {
+    vi.mocked(api.getTtsOptions).mockResolvedValueOnce({
+      global_provider: 'browser', room_override_effective: false, default_engine: null,
+      engines: [], voices: { aivis: [], openai: [], gemini: [] },
+    } as never);
+    render(<RoomSettings {...dm} />);
+    expect(await screen.findByText(/ここでの選択は効きません/)).toBeInTheDocument();
+  });
+});
+

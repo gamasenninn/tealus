@@ -1,27 +1,19 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import { api, type TtsOptions } from '../../services/api';
 import type { AppUrl, Room } from '../../types';
 import './RoomSettings.css';
 
-const TTS_MODELS = [
-  { uuid: '', name: 'デフォルト（環境変数）' },
-  { uuid: 'f5017410-fbb5-49e1-97cb-e785f42e15f5', name: '凛音エル（青年女性）' },
-  { uuid: 'a59cb814-0083-4369-8542-f51a29e72af7', name: 'まお（青年女性）' },
-  { uuid: '6d11c6c2-f4a4-4435-887e-23dd60f8b8dd', name: 'にせ（青年男性）' },
-  { uuid: 'e9339137-2ae3-4d41-9394-fb757a7e61e6', name: 'まい（青年女性）' },
-  { uuid: '47e53151-a378-46f3-abee-ce13aa07feb1', name: '阿井田 茂（中年男性）' },
-  { uuid: '71e72188-2726-4739-9aa9-39567396fb2a', name: 'fumifumi（成人男性）' },
-  { uuid: 'baaae3c0-7b22-4605-8ba5-80c959b41a48', name: 'morioki（成人女性）' },
-  { uuid: '696c98a2-c0b7-4fe7-8cf2-c7e9b8a9bd82', name: 'ろてじん/長老ボイス（老年男性）' },
-  { uuid: 'a670e6b8-0852-45b2-8704-1bc9862f2fe6', name: '花音（青年女性）' },
-  { uuid: '22e8ed77-94fe-4ef2-871f-a86f94e9a579', name: 'コハク（青年女性）' },
-];
 
 /** agent-server /config/room/:roomId/settings 応答の settings 部 */
 interface AgentSettings {
   response_mode?: string;
   enabled?: boolean;
   tts_model_uuid?: string;
+  /** ★ 2026-09-26: 読み上げエンジン (未設定 = 全体の設定) / OpenAI・Gemini の声 */
+  tts_engine?: string;
+  tts_voice?: string;
+  /** ★ ほかの項目 (ダッシュボードで足されたもの等) も保存時に残す */
+  [key: string]: unknown;
 }
 
 interface RoomSettingsProps {
@@ -55,9 +47,11 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
 
   // --- エージェント設定 (#156) ---
   const canEditAgent = currentRoom?.type === 'direct' || isAdmin;
-  const [responseMode, setResponseMode] = useState('auto');
-  const [agentEnabled, setAgentEnabled] = useState(true);
-  const [ttsModelUuid, setTtsModelUuid] = useState('');
+  // ★ 2026-09-26: 読み込んだ設定を丸ごと持つ。保存は「変えた項目だけ差し替え」
+  //   (以前は 3 項目だけで上書きしていて、ダッシュボードで決めた tts_engine / tts_voice が消えた)
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>({ response_mode: 'auto', enabled: true });
+  const [ttsOptions, setTtsOptions] = useState<TtsOptions | null>(null);
+  const responseMode = agentSettings.response_mode || 'auto';
   const [lightPrompt, setLightPrompt] = useState('');
   const [claudeMd, setClaudeMd] = useState('');
 
@@ -75,33 +69,29 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
         ]);
         if (cancelled) return;
         const settings = (s as { settings?: AgentSettings } | null)?.settings;
-        setResponseMode(settings?.response_mode || 'auto');
-        setAgentEnabled(settings?.enabled !== false);
-        setTtsModelUuid(settings?.tts_model_uuid || '');
+        setAgentSettings({ response_mode: 'auto', enabled: true, ...(settings || {}) });
         setLightPrompt(lp?.content || '');
         setClaudeMd(cm?.content || '');
       } catch (err) {
         if (!cancelled) showError(err instanceof Error ? err.message : String(err));
       }
     })();
+    // ★ 選択肢は別に取る (失敗しても他の設定は使える)
+    api.getTtsOptions().then(o => { if (!cancelled) setTtsOptions(o); }).catch(() => {});
     return () => { cancelled = true; };
   }, [roomId, canEditAgent]);
 
-  const handleResponseModeChange = async (value: string) => {
-    const next = { response_mode: value, enabled: agentEnabled, tts_model_uuid: ttsModelUuid };
-    setResponseMode(value);
+  /** ★ 変えた項目だけ差し替えて保存する。undefined にした項目は消す (= 全体の設定に戻す) */
+  const saveAgentSettings = async (patch: Partial<AgentSettings>) => {
+    const next: AgentSettings = { ...agentSettings, ...patch };
+    for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
+    setAgentSettings(next);
     try {
       await api.updateRoomAgentSettings(roomId, next);
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
   };
 
-  const handleTtsModelChange = async (value: string) => {
-    const next = { response_mode: responseMode, enabled: agentEnabled, tts_model_uuid: value };
-    setTtsModelUuid(value);
-    try {
-      await api.updateRoomAgentSettings(roomId, next);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
-  };
+  const handleResponseModeChange = (value: string) => saveAgentSettings({ response_mode: value });
 
   const handleLightPromptBlur = async () => {
     try {
@@ -443,18 +433,49 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
               <option value="off">停止</option>
             </select>
           </div>
-          <div className="room-setting-select">
-            <label htmlFor="agent-tts-model">音声モデル</label>
-            <select
-              id="agent-tts-model"
-              value={ttsModelUuid}
-              onChange={e => handleTtsModelChange(e.target.value)}
-            >
-              {TTS_MODELS.map(m => (
-                <option key={m.uuid || 'default'} value={m.uuid}>{m.name}</option>
-              ))}
-            </select>
-          </div>
+          {(() => {
+            // ★ 2026-09-26: 読み上げエンジン (Aivis / OpenAI / Gemini) と声。ダッシュボードと同じ決め方
+            const opts = ttsOptions;
+            const defaultLabel = opts?.engines.find(e => e.id === opts.default_engine)?.label ?? '環境変数';
+            const engine = agentSettings.tts_engine || opts?.default_engine || '';
+            const voices = (opts && engine && opts.voices[engine]) || [];
+            // ★ Aivis の声は tts_model_uuid、OpenAI / Gemini は tts_voice (既存の Aivis の設定を生かす)
+            const voiceKey = engine === 'aivis' ? 'tts_model_uuid' : 'tts_voice';
+            const voiceValue = String((engine === 'aivis' ? agentSettings.tts_model_uuid : agentSettings.tts_voice) || '');
+            return (
+              <>
+                {opts && !opts.room_override_effective && (
+                  <p className="room-setting-note">全体の設定が「{opts.global_provider}」のため、ここでの選択は効きません (端末の声で読みます)</p>
+                )}
+                <div className="room-setting-select">
+                  <label htmlFor="agent-tts-engine">読み上げエンジン</label>
+                  <select
+                    id="agent-tts-engine"
+                    value={agentSettings.tts_engine || ''}
+                    disabled={!opts}
+                    onChange={e => saveAgentSettings({ tts_engine: e.target.value || undefined })}
+                  >
+                    <option value="">デフォルト（{defaultLabel}）</option>
+                    {opts?.engines.map(e => (
+                      <option key={e.id} value={e.id} disabled={!e.available}>{e.label}{e.available ? '' : '（鍵が未設定）'}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="room-setting-select">
+                  <label htmlFor="agent-tts-voice">声</label>
+                  <select
+                    id="agent-tts-voice"
+                    value={voiceValue}
+                    disabled={!opts}
+                    onChange={e => saveAgentSettings({ [voiceKey]: e.target.value || undefined })}
+                  >
+                    <option value="">デフォルト（環境変数）</option>
+                    {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                </div>
+              </>
+            );
+          })()}
           <div className="room-setting-textarea">
             <label htmlFor="agent-light-prompt">Light Agent プロンプト</label>
             <textarea

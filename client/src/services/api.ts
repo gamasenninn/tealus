@@ -4,6 +4,15 @@ import type {
 } from '../types';
 import { trimEventsForKeepalive } from './voiceLogPayload';
 
+/** ★ 2026-09-26: GET /agent-api/config/tts-options の応答 */
+export interface TtsOptions {
+  global_provider: string;
+  room_override_effective: boolean;
+  default_engine: string | null;
+  engines: { id: string; label: string; available: boolean }[];
+  voices: Record<string, { id: string; name: string }[]>;
+}
+
 const API_BASE = '/api';
 
 // #322: transport 層の間欠失敗（Cloudflare↔オリジン↔回線のストール）に対する client 耐性。
@@ -364,6 +373,11 @@ class ApiClient {
       if (fallback !== undefined) return fallback;
       throw e;
     }
+  }
+
+  /** ★ 2026-09-26: 読み上げエンジン・声の選択肢 (一覧は agent-server の lib/ttsRoom.mts の 1 か所) */
+  getTtsOptions() {
+    return this._agentApi<TtsOptions>('GET', '/config/tts-options');
   }
 
   getRoomAgentSettings(roomId: string) {
