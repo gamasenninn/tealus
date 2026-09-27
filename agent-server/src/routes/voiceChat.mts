@@ -614,6 +614,33 @@ export function pruneVoiceChatLogs(dir: string, maxAgeMs: number, now: number = 
   return removed;
 }
 
+/** 会話ログの置き場 (書き込み・掃除の両方がここを見る) */
+export function voiceChatLogDir(): string {
+  return path.join(config.WORKSPACE_ROOT, '_voice-chat-logs');
+}
+
+/**
+ * ★ 1 週間の約束を、会話モードが使われない間も守る (2026-09-27)。
+ *
+ * それまで掃除は書き込み時だけで (#407「常駐のタイマーを増やさないため」= 実装の都合)、
+ * 9/18 以降 会話モードが使われず **9/13 の逐語が 14 日残っていた**。
+ * 1 週間は利用者判断 (#389) なので、タイマーを避ける都合より約束を優先する。
+ * ★ 起動時に 1 回 + 一定間隔。unref するのでプロセスの終了は妨げない。
+ * @returns 止める関数 (テスト用)
+ */
+export function startVoiceLogJanitor({
+  dir = voiceChatLogDir(), intervalMs = 6 * 60 * 60 * 1000, maxAgeMs = VOICE_LOG_RETENTION_MS,
+}: { dir?: string; intervalMs?: number; maxAgeMs?: number } = {}): () => void {
+  const run = () => {
+    const removed = pruneVoiceChatLogs(dir, maxAgeMs);
+    if (removed) logger.info(`[voice-chat] 期限切れの逐語を ${removed} 件消しました (定期)`);
+  };
+  run();
+  const timer = setInterval(run, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 /**
  * POST /voice-chat/log — ブラウザ側の計測を受け取る (docs/08 §12.6)。
  * ★ 成立の基準 4 項目 (§7.1) を**あとから数えられる形**で残すための口。

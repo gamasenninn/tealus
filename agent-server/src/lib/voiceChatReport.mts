@@ -372,7 +372,10 @@ export function formatVoiceChatReport(s: VoiceChatSummary, asOf: string): string
       + (s.promote.error ? ` (内訳 ${Object.entries(s.promote.byStatus).map(([k, v]) => `${k}=${v}`).join(', ')})` : ''),
     `切断   ${s.connectionLost} 件 / サーバのエラー ${s.serverErrors} 件`
       + (s.knownRaces ? ` (別に、原因特定済みの競合が ${s.knownRaces} 件。docs/08 §12.8)` : ''),
-    `返らず ${s.latency.noReplyCount} 往復 (押して離したのに声が鳴らなかった)`,
+    // ★ 内訳は 09-18 から数えていたが、表示が合計だけだった (09-27 に「5 件」を本物 5 件と読みかけた)
+    `返らず ${s.latency.noReplyCount} 往復 (押して離したのに声が鳴らなかった)`
+      + ` — 本物 ${s.latency.noReplyBreakdown.gaveUp} / 待たずに押し直し ${s.latency.noReplyBreakdown.notWaited}`
+      + ` / 計器の取りこぼし ${s.latency.noReplyBreakdown.audioStartMissed}`,
     // ★ #423 門の内訳。★★ 記録が無い回を「0 件」と書かない ——
     //   計器より前のログは「分からない」であって「問題が無かった」ではない
     g.created || g.finished

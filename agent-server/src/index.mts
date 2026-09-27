@@ -13,6 +13,7 @@ import { broadcastShutdown } from './webhook/ccSubscribers.mts';
 import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
 import { runDoctor } from './lib/doctor.mts';
+import { startVoiceLogJanitor } from './routes/voiceChat.mts';
 
 // Start server
 const server = app.listen(config.PORT, async () => {
@@ -35,6 +36,9 @@ const server = app.listen(config.PORT, async () => {
     if (f.level === 'warn') logger.warn(`[doctor] ${f.detail}\n  → ${f.fix}`);
     else logger.info(`[doctor] ${f.id}\n  ${f.detail.split('\n').join('\n  ')}`);
   }
+
+  // ★ 会話の逐語を 1 週間で消す (#389)。会話モードが使われない間も効かせる (書き込み時だけでは残っていた)
+  startVoiceLogJanitor();
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   await initializeAgent();

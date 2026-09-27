@@ -502,6 +502,21 @@ describe('★★★★ 返らなかった回の内訳 (2026-09-18)', () => {
     expect(s.latency.noReplyBreakdown.notWaited).toBe(0);
   });
 
+  it('★★★★ 表示にも内訳が出る (2026-09-27: 数えていたのに表示は合計だけで、「返らず 5」を本物 5 件と読みかけた)', () => {
+    const { formatVoiceChatReport } = require('../../src/lib/voiceChatReport.mts') as {
+      formatVoiceChatReport: (s: ReturnType<typeof summarizeVoiceChat>, asOf: string) => string;
+    };
+    const s = summarizeVoiceChat(rec([
+      { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' },
+      lifecycle(600, 'response.created', 'in_progress'),
+      { t: 106_670, type: 'session_end' },
+    ]));
+    const line = formatVoiceChatReport(s, '2026-09-27 14:00').split('\n').find((l) => l.startsWith('返らず'))!;
+    expect(line).toContain('本物 1');
+    expect(line).toContain('待たずに押し直し 0');
+    expect(line).toContain('計器の取りこぼし 0');
+  });
+
   it('★ 内訳の合計は noReplyCount と一致する (★★ どこにも入らない回を作らない)', () => {
     const s = summarizeVoiceChat(rec([
       { t: 0, type: 'ptt_press' }, { t: 500, type: 'ptt_release' }, { t: 700, type: 'ptt_press' },
