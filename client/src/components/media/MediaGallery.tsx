@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import ImageViewer from './ImageViewer';
@@ -34,7 +34,12 @@ function MediaGallery() {
   const [videoPlayer, setVideoPlayer] = useState<GalleryMediaItem | null>(null);
   const [roomName, setRoomName] = useState('');
 
+  // ★ 2026-09-27 (#461 と同じ形): 応答を返ってきた順に入れていたので、タグ・種類を切り替えた直後に
+  //   切り替える前の遅い応答が届くと、違う条件の写真で上書きした。最新の要求の応答だけを反映する
+  const reqSeqRef = useRef(0);
+
   const loadMedia = useCallback(async (offset = 0, append = false) => {
+    const seq = ++reqSeqRef.current;
     try {
       setLoading(true);
       const res = await api.getMediaGallery(roomId, {
@@ -43,12 +48,13 @@ function MediaGallery() {
         offset,
         limit: 30,
       });
+      if (seq !== reqSeqRef.current) return;   // ★ もっと新しい要求が出ている
       setMedia(prev => append ? [...prev, ...res.media] : res.media);
       setHasMore(!!res.has_more);
     } catch (err) {
       console.error('Gallery load error:', err);
     } finally {
-      setLoading(false);
+      if (seq === reqSeqRef.current) setLoading(false);
     }
   }, [roomId, selectedTag, selectedCategory]);
 
