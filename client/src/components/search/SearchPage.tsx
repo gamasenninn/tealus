@@ -100,26 +100,30 @@ function SearchPage() {
     }
   };
 
-  const doTagSearch = async (tags: string[], isDone: string, sort: string, offset = 0) => {
+  // ★ q を引数で受ける (2026-09-27): 入力のたびに呼ぶ handleSearch は setQuery の直後に呼ぶので、
+  //   state の query を読むと 1 つ前の入力で検索していた
+  const doTagSearch = async (tags: string[], isDone: string, sort: string, offset = 0, q: string = query) => {
     setSearching(true);
     try {
       const opts: {
         roomId?: string; isDone?: string | boolean; sort?: string;
         offset?: number; tagId?: string; tagNames?: string[];
       } = { roomId: roomId || undefined, isDone, sort, offset };
-      if (roomId && tags.length === 1) {
-        // ルーム内 + 単一タグ: tag_id ベース（高速）
-        const tagObj = allTags.find(t => t.name === tags[0]);
-        if (tagObj) opts.tagId = tagObj.id;
+      // ルーム内 + 単一タグ: tag_id ベース（高速）。
+      // ★ 2026-09-27: id が引けないとき (結果から戻った直後はタグの一覧がまだ届いていない) に
+      //   条件を付けずに投げていた = タグと関係ない結果が出た。引けなければタグ名で絞る
+      const tagObj = roomId && tags.length === 1 ? allTags.find(t => t.name === tags[0]) : undefined;
+      if (tagObj) {
+        opts.tagId = tagObj.id;
       } else {
-        // 複数タグ or 全ルーム: tag_names ベース（AND 検索）
+        // 複数タグ or 全ルーム or id が未取得: tag_names ベース（AND 検索、room_id と併用できる）
         opts.tagNames = tags;
       }
       // q は空文字なら api 側で skip される (旧 code の `|| null` と同挙動)
-      const data = await api.search(query.trim(), opts);
+      const data = await api.search(q.trim(), opts);
       if (offset === 0) {
         setResults(data.results);
-        saveCache(query.trim(), data.results, tags);
+        saveCache(q.trim(), data.results, tags);
       } else {
         setResults(prev => [...prev, ...data.results]);
       }
@@ -155,7 +159,7 @@ function SearchPage() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (selectedTags.length > 0) {
-      debounceRef.current = setTimeout(() => doTagSearch(selectedTags, filterDone, sortBy), 300);
+      debounceRef.current = setTimeout(() => doTagSearch(selectedTags, filterDone, sortBy, 0, q), 300);
       return;
     }
     if (!q.trim() || q.trim().length < 2) {
