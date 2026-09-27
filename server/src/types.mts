@@ -18,5 +18,7 @@ export interface AuthUser {
   status_message: string | null;
   role: UserRole;
   is_active: boolean;
+  /** 機械のアカウント (エージェント・ボット・トランシーバー)。★ 2026-09-27 通知の判定に使うため認証で読むようにした */
+  is_bot?: boolean;
   created_at: Date;
 }

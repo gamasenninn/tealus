@@ -129,6 +129,22 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     };
     io.to(roomId).emit('message:new', fullMessage);
 
+    // ★ 2026-09-27 (#383): 人が上げた写真・動画・ファイルにも通知を鳴らす (テキストと転送には元から鳴っていた)。
+    //   機械 (is_bot) の分は鳴らさない —— ルームごとの通知オフが無いので、機械の流れまで鳴らすと
+    //   OS で Tealus の通知を丸ごと切るしかなくなり、人からの通知まで消える
+    if (!req.user!.is_bot) {
+      try {
+        const typeLabel = messageType === 'image' ? '📷 写真' : messageType === 'video' ? '🎬 動画' : '📎 ファイル';
+        sendPushToOfflineMembers(roomId as string, userId, {
+          title: req.user!.display_name,
+          body: files.length > 1 ? `${typeLabel} (${files.length} 件)` : typeLabel,
+          data: { roomId, messageId: message.id },
+        }, new Set(getOnlineUserIds()));
+      } catch (e) {
+        logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
+      }
+    }
+
     res.status(201).json({
       message,
       media: mediaRecords,

@@ -40,7 +40,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
     const result = await pool.query<AuthUser>(
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, created_at FROM users WHERE id = $1 AND is_active = true',
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, created_at FROM users WHERE id = $1 AND is_active = true',
       [decoded.id]
     );
 

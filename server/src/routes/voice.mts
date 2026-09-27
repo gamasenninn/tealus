@@ -13,6 +13,8 @@ import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { decodeFileName } from '../middleware/upload.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { fetchReplyMessage } from '../socket/handlers/message.mts';
+import { sendPushToOfflineMembers } from '../services/push.mts';
+import { getOnlineUserIds } from '../socket/index.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -131,6 +133,20 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
       room: { id: roomId },
       message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
     });
+
+    // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。機械 (is_bot) の分は鳴らさない
+    //   —— トランシーバーは 1 日 55 件・17 人。ルームごとの通知オフが無いので鳴らすと通知を丸ごと切られる
+    if (!req.user!.is_bot) {
+      try {
+        sendPushToOfflineMembers(roomId, userId, {
+          title: req.user!.display_name,
+          body: '🎤 音声メッセージ',
+          data: { roomId, messageId: message.id },
+        }, new Set(getOnlineUserIds()));
+      } catch (e) {
+        logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
+      }
+    }
 
     res.status(201).json({
       message,
