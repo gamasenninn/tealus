@@ -39,6 +39,9 @@ function SearchPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ★ 2026-09-27: 応答は返ってきた順に画面へ入れていたので、遅い古い検索が新しい結果を上書きした
+  //   (タグを続けて押したとき等)。要求ごとに番号を振り、最新の番号の応答だけを反映する
+  const reqSeqRef = useRef(0);
 
   // タグフィルタ
   const [allTags, setAllTags] = useState<TagRow[]>([]);
@@ -83,9 +86,11 @@ function SearchPage() {
   };
 
   const doSearch = async (q: string, offset = 0) => {
+    const seq = ++reqSeqRef.current;
     setSearching(true);
     try {
       const data = await api.search(q.trim(), { roomId: roomId || undefined, offset });
+      if (seq !== reqSeqRef.current) return;   // ★ もっと新しい検索が出ている
       if (offset === 0) {
         setResults(data.results);
         saveCache(q.trim(), data.results, []);
@@ -96,13 +101,14 @@ function SearchPage() {
     } catch (err) {
       console.error('Search error:', err);
     } finally {
-      setSearching(false);
+      if (seq === reqSeqRef.current) setSearching(false);
     }
   };
 
   // ★ q を引数で受ける (2026-09-27): 入力のたびに呼ぶ handleSearch は setQuery の直後に呼ぶので、
   //   state の query を読むと 1 つ前の入力で検索していた
   const doTagSearch = async (tags: string[], isDone: string, sort: string, offset = 0, q: string = query) => {
+    const seq = ++reqSeqRef.current;
     setSearching(true);
     try {
       const opts: {
@@ -121,6 +127,7 @@ function SearchPage() {
       }
       // q は空文字なら api 側で skip される (旧 code の `|| null` と同挙動)
       const data = await api.search(q.trim(), opts);
+      if (seq !== reqSeqRef.current) return;   // ★ もっと新しい検索が出ている
       if (offset === 0) {
         setResults(data.results);
         saveCache(q.trim(), data.results, tags);
@@ -131,7 +138,7 @@ function SearchPage() {
     } catch (err) {
       console.error('Tag search error:', err);
     } finally {
-      setSearching(false);
+      if (seq === reqSeqRef.current) setSearching(false);
     }
   };
 
@@ -163,6 +170,7 @@ function SearchPage() {
       return;
     }
     if (!q.trim() || q.trim().length < 2) {
+      reqSeqRef.current++;   // ★ 走っている検索の応答を捨てる (空にした画面に後から出さない)
       setResults([]);
       return;
     }
@@ -177,12 +185,14 @@ function SearchPage() {
     if (newTags.length > 0) {
       doTagSearch(newTags, filterDone, sortBy);
     } else {
+      reqSeqRef.current++;   // ★ 走っている検索の応答を捨てる
       setResults([]);
       saveCache(query, [], []);
     }
   };
 
   const clearTags = () => {
+    reqSeqRef.current++;   // ★ 走っている検索の応答を捨てる
     setSelectedTags([]);
     setResults([]);
     saveCache(query, [], []);

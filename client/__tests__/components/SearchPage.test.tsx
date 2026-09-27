@@ -56,6 +56,28 @@ describe('SearchPage — タグを選んでいる間は、必ずタグで絞っ�
     for (const [, opts] of search.mock.calls) expect(hasTagCondition(opts)).toBe(true);
   });
 
+  it('★★ 古い検索の応答があとから届いても、新しい結果を上書きしない', async () => {
+    // 1 本目 (クレーム) は遅く、2 本目 (クレーム+配送) は速く返る
+    let resolveSlow: (v: unknown) => void = () => {};
+    search.mockImplementationOnce(() => new Promise((r) => { resolveSlow = r as (v: unknown) => void; }) as never);
+    search.mockImplementationOnce(() => Promise.resolve({ results: [{ id: 'new', room_id: 'R1', content: '新しい結果', type: 'text', created_at: '2026-09-27T00:00:00Z' }] }) as never);
+    sessionStorage.setItem('searchCache', JSON.stringify({ query: '', selectedTags: [], results: [] }));
+    render(<MemoryRouter initialEntries={['/search?room_id=R1']}><SearchPage /></MemoryRouter>);
+    resolveRoomTags({ tags: [
+      { id: 'tag-claim', name: 'クレーム', is_todo: false, total_usage: 98 },
+      { id: 'tag-del', name: '配送', is_todo: false, total_usage: 563 },
+    ] });
+    fireEvent.click(await screen.findByText(/クレーム/));
+    fireEvent.click(await screen.findByText(/配送/));
+    expect(await screen.findByText(/新しい結果/)).toBeTruthy();
+
+    // ★ 古い方 (1 本目) が今ごろ返ってくる
+    resolveSlow({ results: [{ id: 'old', room_id: 'R1', content: '古い結果', type: 'text', created_at: '2026-09-26T00:00:00Z' }] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/古い結果/)).toBeNull();
+    expect(screen.getByText(/新しい結果/)).toBeTruthy();
+  });
+
   it('タグの一覧が届いた後は、今までどおり tag_id で絞る (速い方)', async () => {
     sessionStorage.setItem('searchCache', JSON.stringify({ query: '', selectedTags: [], results: [] }));
     render(<MemoryRouter initialEntries={['/search?room_id=R1']}><SearchPage /></MemoryRouter>);
