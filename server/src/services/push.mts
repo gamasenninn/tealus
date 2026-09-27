@@ -59,6 +59,21 @@ async function calculateTotalUnreadForUser(userId: string): Promise<number> {
 }
 
 /**
+ * プッシュの失敗を 1 行にする (2026-09-27)。
+ * ★ Apple 宛ての 403 が続いている (9/26 に 47 回) が、状態コードしか残しておらず、
+ *   **相手が返した理由 (本文の reason)** が無いと直し方を決められなかった。
+ * ★ 送り先 URL は鍵のようなもの (知っていれば送れる) なので、ホスト名と登録 id だけ書く。
+ */
+export function describePushFailure(err: unknown, sub: Pick<PushSubscriptionRow, 'id' | 'endpoint' | 'device_name'>): string {
+  const e = err as { statusCode?: number; body?: unknown; message?: string };
+  let host = '?';
+  try { host = new URL(sub.endpoint).host; } catch { /* 壊れた endpoint でもログは書く */ }
+  const body = typeof e.body === 'string' ? e.body.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+  const detail = body || (err instanceof Error ? err.message : String(err));
+  return `Push failed: status=${e.statusCode ?? '-'} reason=${detail || '-'} host=${host} sub=${sub.id.slice(0, 8)} device=${sub.device_name ?? '-'}`;
+}
+
+/**
  * Send push notifications to all subscriptions of a user.
  * @param userId - Target user ID
  * @param payload - Notification payload { title, body, data }
@@ -98,7 +113,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
             [sub.id]
           );
         }
-        logger.error(`Push failed for ${sub.endpoint}:`, statusCode || (err instanceof Error ? err.message : String(err)));
+        // ★ 403 はまだ無効にしない —— 理由を見てから決める
+        logger.error(describePushFailure(err, sub));
       }
     });
 
