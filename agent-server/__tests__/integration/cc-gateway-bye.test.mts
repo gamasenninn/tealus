@@ -41,7 +41,8 @@ const { authenticate } = require('../../src/middleware/auth');
 const { router: ccQueueRoutes } = require('../../src/routes/ccQueue');
 const { addSubscriber, removeSubscriber } = require('../../src/webhook/ccSubscribers');
 
-const token = jwt.sign({ id: 'u1', login_id: 'CLAUDE' }, JWT_SECRET, { expiresIn: '1h' });
+// ★ #459: 呼べるのは本体サーバの鍵 (id=tealus-server、server/src/utils/gatewayBye.mts と同じ形) だけ
+const token = jwt.sign({ id: 'tealus-server', login_id: 'SYSTEM' }, JWT_SECRET, { expiresIn: '1h' });
 
 function makeApp(): Express {
   const app = express();

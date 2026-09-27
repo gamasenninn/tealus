@@ -34,6 +34,15 @@ import { addSubscriber, removeSubscriber, broadcastBye, type CcSubscriber } from
 export const router = express.Router();
 
 /**
+ * 本体サーバが gateway-bye を呼ぶときに名乗る id (server/src/utils/gatewayBye.mts が鍵に入れる)。
+ * ★ 本体のコードは import しない (パッケージをまたぐ import は CI の越境ガードで落ちる)。
+ */
+const GATEWAY_CALLER_ID = 'tealus-server';
+
+/** project 名の形 (agent.mts の cc-projects と同じ)。★ #459: ファイル名になるので ../ を通さない */
+const PROJECT_NAME_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/**
  * 呼び出し元が `expect_back_ms` を寄越さなかった / 壊れていたときの既定 (ms)。
  *
  * ★ env にしていないのは、**値を知っているのは停止する側 (本体サーバ)** だから。
@@ -57,6 +66,13 @@ const DEFAULT_GATEWAY_EXPECT_BACK_MS = 30000;
  * 制御メッセージなので **room の中身は一切載せない** (`broadcastBye` が payload を固定)。
  */
 router.post('/gateway-bye', (req: Request, res: Response) => {
+  // ★ #459: 署名だけでは一般の利用者の鍵でも通り、全購読者の警報を最大 5 分ずつ何度でも黙らせられた。
+  //   呼ぶのは本体サーバだけ (停止時に id=tealus-server の鍵を自分で作って呼ぶ)。
+  const caller = (req as Request & { user?: { id?: unknown } }).user?.id;
+  if (caller !== GATEWAY_CALLER_ID) {
+    logger.warn(`[cc-stream] gateway-bye を拒否 (本体サーバの鍵ではない): by ${String(caller)}`);
+    return res.status(403).json({ error: '本体サーバからのみ呼べます' });
+  }
   const raw = (req.body as { expect_back_ms?: unknown } | undefined)?.expect_back_ms;
   const expectBackMs = (typeof raw === 'number' && Number.isFinite(raw) && raw > 0)
     ? raw
@@ -166,6 +182,10 @@ async function prepare(req: Request, res: Response): Promise<{ project: string; 
   const project = typeof req.query.project === 'string' ? req.query.project : '';
   if (!project) {
     res.status(400).json({ error: 'project が必要です' });
+    return null;
+  }
+  if (!PROJECT_NAME_RE.test(project)) {
+    res.status(400).json({ error: 'project の形が不正です' });
     return null;
   }
 

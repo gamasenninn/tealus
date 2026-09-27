@@ -164,6 +164,9 @@ export function _resetForTest(): void {
 }
 
 /** JWT のペイロードから呼び出し元の user id を取る */
+/** session_id の形 (発行は randomUUID())。ファイル名に使うので、これ以外は受け取らない (#459) */
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function callerId(req: Request): string | null {
   const u = (req as Request & { user?: { id?: string } }).user;
   return u && typeof u.id === 'string' ? u.id : null;
@@ -622,6 +625,12 @@ router.post('/log', (req, res) => {
   if (!userId) return res.status(401).json({ error: '認証が必要です' });
   if (typeof sessionId !== 'string' || !Array.isArray(events)) {
     return res.status(400).json({ error: 'session_id と events が必要です' });
+  }
+  // ★ #459: session_id はそのままファイル名になる。形を見ないと `../` で置き場の外の
+  //   任意の .jsonl (cc-queue 等) に追記できた。発行するのは randomUUID() だけなので UUID に限る。
+  //   ★ 台帳に在るかは見ない —— stop() の記録は台帳が切れた後にも届く (#432)。
+  if (!SESSION_ID_RE.test(sessionId)) {
+    return res.status(400).json({ error: 'session_id の形が不正です' });
   }
 
   try {

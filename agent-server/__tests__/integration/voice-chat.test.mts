@@ -518,6 +518,8 @@ describe('POST /voice-chat/log — 逐語の掃除 (#407)', () => {
   const pathx = require('node:path') as typeof import('node:path');
   const logDir = pathx.join(process.env.AGENT_WORKSPACE_ROOT as string, '_voice-chat-logs');
   const DAY = 24 * 60 * 60 * 1000;
+  // ★ #459 から session_id は UUID の形しか受け取らない (ファイル名になるため)
+  const NEW_SID = '0b6d3c2e-8f41-4d7a-9c15-2e8a4f6b1d90';
 
   /** 指定した日数だけ古い逐語ログを置く */
   function putLog(name: string, ageMs: number): string {
@@ -539,12 +541,12 @@ describe('POST /voice-chat/log — 逐語の掃除 (#407)', () => {
 
     const res = await request(app).post('/voice-chat/log')
       .set('Authorization', `Bearer ${token()}`)
-      .send({ session_id: 's-new', events: [{ t: 1, type: 'ptt_press' }] });
+      .send({ session_id: NEW_SID, events: [{ t: 1, type: 'ptt_press' }] });
 
     expect(res.status).toBe(200);
     expect(fsx.existsSync(old)).toBe(false);
     // 今書いた分は残る (掃除が新しいものまで巻き込まない)
-    expect(fsx.existsSync(pathx.join(logDir, 's-new.jsonl'))).toBe(true);
+    expect(fsx.existsSync(pathx.join(logDir, `${NEW_SID}.jsonl`))).toBe(true);
   });
 
   test('★ 期限内のものは消えない (測り直しに要る)', async () => {
@@ -552,7 +554,7 @@ describe('POST /voice-chat/log — 逐語の掃除 (#407)', () => {
 
     await request(app).post('/voice-chat/log')
       .set('Authorization', `Bearer ${token()}`)
-      .send({ session_id: 's-new', events: [{ t: 1, type: 'ptt_press' }] });
+      .send({ session_id: NEW_SID, events: [{ t: 1, type: 'ptt_press' }] });
 
     expect(fsx.existsSync(recent)).toBe(true);
   });
@@ -563,7 +565,7 @@ describe('POST /voice-chat/log — 逐語の掃除 (#407)', () => {
     try {
       const res = await request(app).post('/voice-chat/log')
         .set('Authorization', `Bearer ${token()}`)
-        .send({ session_id: 's-new', events: [{ t: 1, type: 'ptt_press' }] });
+        .send({ session_id: NEW_SID, events: [{ t: 1, type: 'ptt_press' }] });
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(true);
       expect(fsx.existsSync(old)).toBe(true);

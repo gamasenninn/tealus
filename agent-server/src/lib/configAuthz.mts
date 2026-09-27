@@ -18,13 +18,22 @@
  * ★ 本体に聞けないときは断る (503)。結果は同じ鍵・同じルームで 10 秒覚える
  *   (ルーム設定の画面は 1 度に 4 本呼ぶ)。失敗は覚えない。
  *
+ * ★ #459 (2026-09-27): 同じく署名しか見ていなかった /logs と /agent も、この表で判断する
+ *   (分け方だけを classify で差し替える。判断の表 isAllowed は 1 つのまま)。
+ *   /logs          管理者だけ (★ ログには全ルームの本文 = 道具の結果が入る)
+ *   /agent/cancel  そのルームのメンバー (★ 止めるとボットがそのルームに「中断しました」を出す)
+ *
  * @module lib/configAuthz
  */
 import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from './logger.mts';
 
-export type ConfigPathKind = { kind: 'open' } | { kind: 'global' } | { kind: 'room'; roomId: string };
+export type ConfigPathKind =
+  | { kind: 'open' }
+  | { kind: 'global' }
+  | { kind: 'room'; roomId: string }     // そのルームの設定を変える (管理者 / DM の当人)
+  | { kind: 'member'; roomId: string };  // そのルームに入っていればよい (#459)
 
 export interface AuthzFacts {
   user_id: string;
@@ -50,12 +59,35 @@ export function isAllowed(kind: ConfigPathKind, f: AuthzFacts): boolean {
   if (kind.kind === 'global') return false;
   const room = f.room;
   if (!room) return false;
+  if (kind.kind === 'member') return room.member_role !== null;
   if (room.member_role === 'admin') return true;
   return room.type === 'direct' && room.member_role !== null;
 }
 
+/** 分け方が見る要求の一部 (テストで Request を丸ごと作らなくてよいように) */
+export type AuthzRequest = { method: string; path: string; body?: unknown };
+
+/** ★ #459 /logs はどの道も管理者だけ */
+export function classifyLogsRequest(_req: AuthzRequest): ConfigPathKind {
+  return { kind: 'global' };
+}
+
+/**
+ * ★ #459 /agent。null = ここでは判断しない (room_id が無い → ハンドラが 400 を返す)
+ */
+export function classifyAgentRequest(req: AuthzRequest): ConfigPathKind | null {
+  if (req.method === 'GET' && (req.path === '/identity' || req.path === '/cc-projects')) return { kind: 'open' };
+  if (req.method === 'POST' && req.path === '/cancel') {
+    const roomId = (req.body as { room_id?: unknown } | undefined)?.room_id;
+    return typeof roomId === 'string' && roomId ? { kind: 'member', roomId } : null;
+  }
+  return { kind: 'global' };   // ★ 足した道を黙って開けない
+}
+
 export interface ConfigAuthzOptions {
   apiUrl: string;
+  /** どの種類の呼び出しか (既定は /config の分け方)。null を返すと判断せずハンドラへ渡す */
+  classify?: (req: AuthzRequest) => ConfigPathKind | null;
   fetchImpl?: typeof globalThis.fetch;
   now?: () => number;
   /** ★ 覚えておく時間 (既定 10 秒) */
@@ -64,7 +96,10 @@ export interface ConfigAuthzOptions {
 
 type Lookup = { status: 'ok'; facts: AuthzFacts } | { status: 'unauthorized' };
 
-export function createConfigAuthz({ apiUrl, fetchImpl, now = Date.now, ttlMs = 10_000 }: ConfigAuthzOptions) {
+export function createConfigAuthz({
+  apiUrl, fetchImpl, now = Date.now, ttlMs = 10_000,
+  classify = (req) => classifyConfigPath(req.path),
+}: ConfigAuthzOptions) {
   const cache = new Map<string, { at: number; value: Lookup }>();
 
   async function lookup(token: string, roomId: string | undefined): Promise<Lookup> {
@@ -90,8 +125,8 @@ export function createConfigAuthz({ apiUrl, fetchImpl, now = Date.now, ttlMs = 1
   }
 
   return async function configAuthz(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const kind = classifyConfigPath(req.path);
-    if (kind.kind === 'open') return next();
+    const kind = classify(req);
+    if (kind === null || kind.kind === 'open') return next();
 
     const header = req.headers.authorization;
     const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : '';
@@ -99,7 +134,7 @@ export function createConfigAuthz({ apiUrl, fetchImpl, now = Date.now, ttlMs = 1
 
     let got: Lookup;
     try {
-      got = await lookup(token, kind.kind === 'room' ? kind.roomId : undefined);
+      got = await lookup(token, kind.kind === 'room' || kind.kind === 'member' ? kind.roomId : undefined);
     } catch (err) {
       // ★ 聞けないときは断る (安全側)
       logger.warn(`[config-authz] 本体に権限を確かめられないため断ります: ${err instanceof Error ? err.message : String(err)}`);
@@ -108,8 +143,11 @@ export function createConfigAuthz({ apiUrl, fetchImpl, now = Date.now, ttlMs = 1
     }
     if (got.status === 'unauthorized') { res.status(401).json({ error: 'トークンが無効です' }); return; }
     if (!isAllowed(kind, got.facts)) {
-      logger.info(`[config-authz] 403 ${req.method} /config${req.path} user=${got.facts.user_id} role=${got.facts.role}`);
-      res.status(403).json({ error: kind.kind === 'room' ? 'このルームの設定を変える権限がありません' : '管理者権限が必要です' });
+      logger.info(`[config-authz] 403 ${req.method} ${req.baseUrl ?? ''}${req.path} user=${got.facts.user_id} role=${got.facts.role}`);
+      const message = kind.kind === 'room' ? 'このルームの設定を変える権限がありません'
+        : kind.kind === 'member' ? 'このルームに参加していません'
+          : '管理者権限が必要です';
+      res.status(403).json({ error: message });
       return;
     }
     next();

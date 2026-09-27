@@ -13,7 +13,7 @@ import { router as agentRoutes } from './routes/agent.mts';
 import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
-import { createConfigAuthz } from './lib/configAuthz.mts';
+import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest } from './lib/configAuthz.mts';
 
 export const app = express();
 app.use(express.json());
@@ -43,13 +43,15 @@ app.use('/webhook', webhookRoutes);
 app.use('/config', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL }), settingsRoutes);
 
 // Logs API（認証必要）
-app.use('/logs', authenticate, logsRoutes);
+// ★ #459: ログには全ルームの本文 (道具の結果) が入る → 管理者だけ。判断は /config と同じ表
+app.use('/logs', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL, classify: classifyLogsRequest }), logsRoutes);
 
 // TTS API（認証必要）— #155 個人読み上げ用
 app.use('/tts', authenticate, ttsRoutes);
 
 // Agent control API（認証必要）— #250 Deep agent cancel
-app.use('/agent', authenticate, agentRoutes);
+// ★ #459: cancel はそのルームのメンバーだけ (identity / cc-projects はログインだけ)
+app.use('/agent', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL, classify: classifyAgentRequest }), agentRoutes);
 
 // #405 Realtime 音声会話（認証必要）— docs/08 §12。使い捨てトークンの発行 / 道具の実行 / 計測。
 // 認証は JWT のみなので、route 側でさらに本体 /api/rooms/:id を引いて
