@@ -400,6 +400,28 @@ describe('transcribeAudio - gemini backend (#424)', () => {
     expect(log.warn).toHaveBeenCalled();
   });
 
+  // ★ 2026-09-27: 空応答の warn が 1 日 2〜21 回。無音なのか、gemini が発話を落としたのかを
+  //   ログだけで分けられず、投稿と時刻で突き合わせる羽目になった (11 件中 10 件が無音、1 件は「いいよ」を落としていた)。
+  //   → やり直しの結果の文字数を 1 行残す。0 なら無音、1 以上なら gemini が落とした。
+  test('★★ fallback したら openai の結果の文字数を残す (0 = 無音 / 1 以上 = gemini が落とした)', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse(''));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient: fakeOpenAI('いいよ'), fetchImpl, log,
+    });
+    const lines = log.info.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes('[stt] openai (gemini の後)') && l.includes('chars=3'))).toBe(true);
+  });
+
+  test('gemini が成功したときは openai の行を出さない', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse('ガマ、お昼に入ります。'));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient: fakeOpenAI('x'), fetchImpl, log,
+    });
+    expect(log.info.mock.calls.some((c) => String(c[0]).includes('openai (gemini の後)'))).toBe(false);
+  });
+
   test('GEMINI_API_KEY 未設定 → openai へ fail-open (設定ミスで文字起こしを止めない)', async () => {
     delete process.env.GEMINI_API_KEY;
     const fetchImpl = jest.fn();

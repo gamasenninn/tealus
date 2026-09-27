@@ -136,6 +136,7 @@ export async function transcribeAudio({
   log = defaultLogger,
 }: TranscribeAudioParams): Promise<string> {
   const effectiveBackend = (backend || process.env.STT_BACKEND || 'openai').toLowerCase();
+  let fellBackFromGemini = false;
 
   // #424 gemini: 語彙つき音響段。★ 使わない条件 3 つは静かに openai へ (fail-open とは別の「対象外」)
   //   - videoAudio: 実測した範囲 (短い voice クリップ) の外
@@ -162,6 +163,7 @@ export async function transcribeAudio({
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log.warn(`[stt] gemini backend failed, falling back to openai: ${message}`);
+        fellBackFromGemini = true;
         // fall through to openai
       }
     }
@@ -189,7 +191,13 @@ export async function transcribeAudio({
     }
   }
 
-  return transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiClient });
+  const text = await transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiClient });
+  if (fellBackFromGemini) {
+    // ★ 2026-09-27: 空応答が「無音」か「gemini が発話を落とした」かを、ログだけで分けられるように。
+    //   実測 11 件中 10 件が無音 (chars=0)、1 件は「いいよ」を落としていた
+    log.info?.(`[stt] openai (gemini の後) chars=${text.length}`);
+  }
+  return text;
 }
 
 async function transcribeLocal({ inputPath, glossary, fetchImpl }: {
