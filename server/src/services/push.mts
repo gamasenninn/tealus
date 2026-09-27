@@ -2,8 +2,30 @@ import { logger } from '../utils/logger.mts';
 import webpush from 'web-push';
 import { pool } from '../db/pool.mts';
 
+/**
+ * VAPID の連絡先 (subject) の点検。問題が無ければ null (2026-09-27)
+ * ★ 本番で Apple 宛てが全部 403 {"reason":"BadJwtToken"} だった。連絡先が既定値の
+ *   `mailto:admin@tealus.local` で、Apple は実在しないドメイン (.local / localhost) を受け付けない。
+ *   403 の理由をログに出すまで気づけなかったので、起動時に言う。
+ */
+export function vapidSubjectProblem(subject: string | undefined): string | null {
+  if (!subject) return 'VAPID_SUBJECT が未設定です (既定の mailto:admin@tealus.local では Apple (iPhone) に届きません)';
+  let host: string;
+  if (subject.startsWith('mailto:')) host = subject.slice(7).split('@')[1] ?? '';
+  else if (subject.startsWith('https:')) {
+    try { host = new URL(subject).hostname; } catch { host = ''; }
+  } else return `VAPID_SUBJECT は mailto: か https: で始めてください (現在の形では送り先に断られます)`;
+  host = host.toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.local') || host.endsWith('.localhost')) {
+    return 'VAPID_SUBJECT の連絡先が実在しないドメインです。Apple (iPhone) への通知が 403 BadJwtToken で断られます。実在するメールアドレスか https の URL にしてください';
+  }
+  return null;
+}
+
 // Configure VAPID keys (set in .env)
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  const problem = vapidSubjectProblem(process.env.VAPID_SUBJECT);
+  if (problem) logger.warn(`[push] ${problem}`);
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT || 'mailto:admin@tealus.local',
     process.env.VAPID_PUBLIC_KEY,
