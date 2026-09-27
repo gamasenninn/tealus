@@ -91,8 +91,7 @@ const CONVERSATION: Profile = {
   // ★ 会話モードは Realtime のセッション instructions を使う。Light の system prompt は形が違う。
   system: { use: false, reason: 'Realtime のセッション instructions を使う (形が違う)' },
   roomPrompt: { use: true },
-  // ★★ 2026-09-14 に小野さんが「単に忘れていた。入れたほうがよい」と判定。
-  //   → 契約は use: true。**現状の配線はまだ false** なので KNOWN_GAPS に出す。
+  // ★★ 2026-09-14 に小野さんが「単に忘れていた。入れたほうがよい」と判定。2026-09-27 に配線した。
   memory: { use: true },
   organon: { use: true },
   vocab: { use: true },
@@ -135,24 +134,7 @@ export interface KnownGap {
 }
 
 export const KNOWN_GAPS: KnownGap[] = [
-  // ★ synthesize は #439 Step 2 (2026-09-14) で解消済み。**行ごと消した。**
+  // ★ synthesize は #439 Step 2 (2026-09-14)、会話モードの memory は 2026-09-27 に解消済み。**行ごと消した。**
   //   直ったズレを「直った」と書いて残すと、一覧が「未解決の一覧」でなくなる。
   //   経緯は commit と #439 に残っている。
-  {
-    route: 'conversation',
-    missing: ['memory'],
-    verdict: 'oversight',
-    evidence: [
-      '#437 (2026-09-13) で organon と語彙は入れたが、memory だけ入れていない',
-      'memory を外す判断の記録が、issue にも commit にも設計書にも 1 つも無い',
-      '2026-09-14 小野さんが「単に忘れていた。入れたほうがよい」と判定 (= 人の明示)',
-    ],
-    overturnedIf: '会話モードで memory を外す理由が実測で出たら取り下げる (例: 接頭辞が伸びて立ち上がりが有意に遅くなる)',
-    // ★★ 直す順番の制約。#437 の「立ち上がりの速さを n>50 で引き直す」が未了で、
-    //   memory を先に足すと **prompt の量が変わって前後比較が壊れる**。
-    //   2026-09-13 に組み込んだ 45KB の効果を測り終えてから入れる。
-    //   ★ 「直せると分かっている」と「今直してよい」は別。
-    note: '★ #437 の立ち上がり速度を n>50 で引き直してから入れる (先に足すと測定条件が変わる)',
-    issue: '#439',
-  },
 ];

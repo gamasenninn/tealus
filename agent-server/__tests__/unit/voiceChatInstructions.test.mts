@@ -36,9 +36,12 @@ import { buildInstructions } from '../../src/routes/voiceChat.mts';
 const ORGANON_BLOCK = '\n## 業務 DB 検索時の参考 (= organon polyseme + sql_mapping)\n仕切\n';
 const VOCAB_BLOCK = '\n## 業務語彙の正規化 (= 別名 → 正規名)\n- 山崎 ← マサ\n';
 
-const deps = (organon: string, vocab: string) => ({
+const MEMORY_BLOCK = '## Memory\n- 朝礼の担当は週替わり\n';
+
+const deps = (organon: string, vocab: string, memory = '') => ({
   organon: () => organon,
   vocab: () => vocab,
+  memory: (_workspacePath: string) => memory,
 });
 
 describe('buildInstructions — 知識を載せる (#437)', () => {
@@ -70,8 +73,27 @@ describe('buildInstructions — 知識を載せる (#437)', () => {
 
   test('★★ 読み込みが落ちても会話は始まる (知識が薄くなるだけ)', () => {
     const boom = () => { throw new Error('読めません'); };
-    const s = buildInstructions('朝礼', '/nowhere', { organon: boom, vocab: boom });
+    const s = buildInstructions('朝礼', '/nowhere', { organon: boom, vocab: boom, memory: boom });
     expect(s).toContain('get_messages');
+  });
+
+  // ★ #439 最後のズレ (2026-09-27 利用者判断「今入れる」)。9/14 に「単に忘れていた。入れたほうがよい」。
+  //   止めていたのは「#437 の速さを n>50 で測り直してから」という順番だけで、会話モードが 9/18 以降
+  //   使われず、前後の生ログも 7 日の保持で消えた = 測り直しは成り立たなくなった。
+  test('★★★★ ルームのメモリを載せる (Light と同じ loadMemoryForPrompt、ルームの作業場所から)', () => {
+    const seen: string[] = [];
+    const s = buildInstructions('朝礼', '/ws/agent/room1', {
+      organon: () => '', vocab: () => '',
+      memory: (p: string) => { seen.push(p); return MEMORY_BLOCK; },
+    });
+    expect(s).toContain('朝礼の担当は週替わり');
+    expect(seen).toEqual(['/ws/agent/room1']);
+  });
+
+  test('メモリが空なら 1 文字も足さない', () => {
+    const a = buildInstructions('朝礼', '/nowhere', deps('', '', ''));
+    const b = buildInstructions('朝礼', '/nowhere', deps('', ''));
+    expect(a).toBe(b);
   });
 
   test('★★★ 呼び方をフルネームへ言い換えない指示は残す (辞書を足しても変えない)', () => {

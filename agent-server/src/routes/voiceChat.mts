@@ -32,6 +32,7 @@ import { getBotIdentity } from '../webhook/handler.mts';
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { partsFor } from '../lib/promptKnowledge.mts';
+import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 
 export const router = express.Router();
 
@@ -227,12 +228,15 @@ function toFunctionTools(tools: McpToolLike[]): Array<Record<string, unknown>> {
 export interface InstructionDeps {
   organon: () => string;
   vocab: () => string;
+  /** ★ #439 (2026-09-27): ルームのメモリ。Light と同じ関数を、ルームの作業場所で読む */
+  memory: (workspacePath: string) => string;
 }
 
-/** ★ #437 既定は本番と同じ経路 (Light と同じ 2 つを読む) */
+/** ★ #437 既定は本番と同じ経路 (Light と同じものを読む) */
 const DEFAULT_INSTRUCTION_DEPS: InstructionDeps = {
   organon: () => loadOrganonPolysemeForPrompt(),
   vocab: () => loadVocabForPrompt(),
+  memory: (workspacePath) => loadMemoryForPrompt(workspacePath),
 };
 
 export function buildInstructions(
@@ -262,8 +266,6 @@ export function buildInstructions(
   // ★ #439 Step 3: 何を載せるかは宣言表 (promptKnowledge) に聞く。
   //   並べ方はここに残す —— 会話モードの instructions は **セッションの安定接頭辞**で、
   //   途中で変わると Realtime のセッションが崩れる。連結まで共通化してはいけない。
-  // ★★ `memory` は表では use: true だが **まだ配線していない** (KNOWN_GAPS に記録済み)。
-  //   #437 の立ち上がり速度を n>50 で引き直すまで入れない = 先に足すと測定条件が変わる。
   const use = partsFor('conversation');
 
   try {
@@ -275,6 +277,19 @@ export function buildInstructions(
   } catch (err) {
     // 読めなくても会話は始める (指示が薄くなるだけ)
     logger.warn(`[voice-chat] light_prompt.md を読めませんでした: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // ★★ #439 最後のズレ (2026-09-27 利用者判断「今入れる」)。9/14 に「単に忘れていた。入れたほうがよい」。
+  //   止めていたのは「#437 の速さを n>50 で測り直してから」という順番だけだったが、会話モードは 9/18 以降
+  //   使われず、前後の生ログも 7 日の保持で消えた = 測り直しは成り立たなくなった。
+  //   ★ 入れた後に使われたら、速さを台帳の基準線 (53 往復・中央値 2,022ms) と比べる。遅くなっていたら戻す。
+  if (use.includes('memory')) {
+    try {
+      const block = deps.memory(workspacePath).trim();
+      if (block) parts.push(block);
+    } catch (err) {
+      logger.warn(`[voice-chat] メモリを読めませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // ★★★★ #437 organon と業務語彙を載せる (2026-09-13、利用者の判断)。
