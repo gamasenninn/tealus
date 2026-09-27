@@ -52,8 +52,16 @@ export type PostAsUserResult =
 
 export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResult> {
   const { roomId, sender, type = 'text' } = input;
-  const content = input.content?.trim() ?? '';
+  // ★ NUL 文字は PostgreSQL の text に保存できず、INSERT が 500 で落ちる (2026-09-21 13:44 に実例。
+  //   機械の送り手の本文に混ざり、目に見えないので送り手には原因が分からない)。
+  //   チャットの本文として意味は無いので取り除く。★ 黙って直さず、取り除いたことは残す。
+  const raw = input.content ?? '';
+  const nulCount = raw.split('\u0000').length - 1;
+  const content = (nulCount ? raw.replaceAll('\u0000', '') : raw).trim();
   if (!content) return { ok: false, code: 'empty_content', reason: 'content が空です' };
+  if (nulCount) {
+    logger.warn(`本文の NUL 文字を ${nulCount} 個取り除きました: actor=${sender.display_name}(${sender.id}) room=${roomId}`);
+  }
 
   try {
     const member = await pool.query(

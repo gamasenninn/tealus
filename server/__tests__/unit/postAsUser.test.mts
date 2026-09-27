@@ -152,3 +152,43 @@ describe('postAsUser', () => {
     if (!r.ok) expect(r.code).toBe('error');
   });
 });
+
+/**
+ * ★ 2026-09-21 13:44 に、出品業務の Claude Code の投稿が 500 で落ちた:
+ *   `invalid byte sequence for encoding "UTF8": 0x00` —— 本文に NUL 文字が混ざっていた。
+ *   PostgreSQL の text は NUL を保存できない。送り手が 15 秒後に出し直して救われたが、
+ *   NUL は目に見えないので、送り手 (機械) には何が悪いのか分からない。
+ * → 保存前に取り除き、取り除いたことはログに残す (黙って直さない)。
+ */
+describe('postAsUser — 本文の NUL 文字', () => {
+  test('★★ NUL を取り除いて保存し、成功する', async () => {
+    happyPath();
+    const r = await postAsUser({ roomId: ROOM, sender: SENDER, content: '完了\u0000 36 枚' });
+    expect(r.ok).toBe(true);
+    const insertArgs = mockQuery.mock.calls[1][1] as unknown[];
+    expect(insertArgs[2]).toBe('完了 36 枚');
+    const hook = mockFireWebhooks.mock.calls[0][2] as { message: { content: string } };
+    expect(hook.message.content).toBe('完了 36 枚');
+  });
+
+  test('★ 取り除いたことをログに残す (誰の・何文字)', async () => {
+    happyPath();
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'a\u0000b\u0000' });
+    const warned = (logger.warn as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warned).toContain('NUL');
+    expect(warned).toContain('2');
+    expect(warned).toContain('テスト太郎');
+  });
+
+  test('NUL だけの本文は空として断る', async () => {
+    const r = await postAsUser({ roomId: ROOM, sender: SENDER, content: '\u0000\u0000' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('empty_content');
+  });
+
+  test('NUL が無ければログを出さない', async () => {
+    happyPath();
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
