@@ -181,12 +181,33 @@ Deep が走らないルーム  → ★ 残ったまま。読める状態が続�
 ★ 未定義の変数は**そのまま残ります**（空文字にすると `mysql://:@host/db` のような
 「それらしく見えて壊れている」値になり、原因が分からなくなるため）。起動ログの `envRefs` の警告で気づけます。
 
-**DB migration: この版では追加ゼロ**です。
+**#419 そのものの DB migration は追加ゼロ**です。★ ただし同じ未リリースの版で、ほかの変更が **2 本足しています** (下の「この版のほかの変更」)。
 
 **★ 鍵を入れ替えるかどうか**は、環境ごとに判断してください。判断材料の集め方（いつから読める状態だったか /
 読まれた形跡があるか）は [#419](https://github.com/gamasenninn/tealus/issues/419) のコメントに実例があります。
 ★ 本家の環境では「外部公開されておらず、到達できたのは社内メンバーだけで、読まれた証拠が無い」ため
 **入れ替えない**判断をしました。★★ ただし「読まれていない」ことが証明されたわけではありません。
+
+#### この版のほかの変更 (2026-09-28)
+
+**★ DB migration が 2 本増えました** (031 ルームごとの通知オフ [#463](https://github.com/gamasenninn/tealus/issues/463) / 032 機械の投稿の通知 [#463](https://github.com/gamasenninn/tealus/issues/463))。
+**必ず `npm run migrate` を流してから**本体を再起動してください。
+★ 先に再起動すると、ルームを開く処理 (`GET /api/rooms/:id`) がエラーになり、通知も止まります。
+
+**Redis を使わなくなりました** ([#466](https://github.com/gamasenninn/tealus/issues/466))。
+当初の設計で入れていましたが、コードからは一度も使われていませんでした (キーは常に 0 件)。
+`docker-compose.yml` / `docker-compose.full.yml` から外したので、Redis のコンテナを動かしている環境では:
+
+```bash
+# 開発用の compose で動かしている場合 (データは入っていないので消して構いません)
+docker compose up -d --remove-orphans
+# docker-compose.full.yml で動かしている場合
+docker compose -f docker-compose.full.yml up -d --remove-orphans
+# 残った空のボリュームを消す (任意)
+docker volume ls | grep redisdata
+```
+
+`.env` の `REDIS_URL` はもう読まれません。消しても残しても動きは変わりません。
 
 ### → v0.9.0（停止と寿命切断を必ず予告する / フォームの表示）
 

@@ -14,7 +14,6 @@
 #
 # データ永続化:
 #   - PostgreSQL: pgdata-prod volume
-#   - Redis:      redisdata-prod volume
 #   - Media:      ./media (host bind mount、画像/動画/ファイル)
 #   - Agent ws:   agent-workspaces-prod volume
 
@@ -36,18 +35,6 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: tealus_redis_prod
-    restart: unless-stopped
-    volumes:
-      - redisdata-prod:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   server:
     build:
       context: .
@@ -57,15 +44,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file:
       - ./server/.env
     environment:
       # compose 内で必須の override (env_file よりも優先)
       DB_HOST: postgres
       DB_PORT: 5432
-      REDIS_URL: redis://redis:6379
       AGENT_PORT: 4000
       RTC_PORT: 3100
       MEDIA_ROOT: /app/media
@@ -101,5 +85,4 @@ services:
 
 volumes:
   pgdata-prod:
-  redisdata-prod:
   agent-workspaces-prod:

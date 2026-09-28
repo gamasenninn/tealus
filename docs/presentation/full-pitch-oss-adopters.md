@@ -264,9 +264,9 @@ vocabulary なしだと「タウン駅」「耐雨機」「タオル液」等で
 ```
 [PWA (React)] ──── [Nginx] ──── [Node.js (Express + Socket.IO)]
                                          │
-                ┌───────────┬─────────────┼─────────┐
-                ▼           ▼             ▼         ▼
-          [PostgreSQL]  [Redis]    [OpenAI API] [Aivis (TTS)]
+                ┌─────────────────────────┼─────────┐
+                ▼                         ▼         ▼
+          [PostgreSQL]               [OpenAI API] [Aivis (TTS)]
                                   Whisper, gpt-4o-mini
                                          │
               ┌──────────────────────────┼─────────────┐
@@ -286,7 +286,6 @@ vocabulary なしだと「タウン駅」「耐雨機」「タオル液」等で
 | Frontend | **React + Vite**、PWA、Service Worker |
 | Backend | **Node.js (Express + Socket.IO)** |
 | Database | **PostgreSQL** (RLS で行単位制御) |
-| Cache | **Redis** (WebSocket Pub/Sub、在席状態) |
 | AI | **OpenAI API** + Claude Code + MCP |
 | Deploy | **Docker** (NAS / Linux / Mac) |
 | 通話 (任意) | **mediasoup SFU** |
@@ -299,7 +298,7 @@ vocabulary なしだと「タウン駅」「耐雨機」「タオル液」等で
 
 | compose | 起動内容 | 用途 |
 |---|---|---|
-| `docker-compose.yml` | Postgres + Redis のみ | 開発者環境 |
+| `docker-compose.yml` | Postgres のみ | 開発者環境 |
 | **`docker-compose.full.yml`** | + Node サービス全部 | **NAS / 本番採用者** |
 | `docker-compose.rtc.yml` | + rtc-server (mediasoup) | 通話まで含む完全構成 |
 
@@ -368,7 +367,7 @@ Light/Deep agent 両対応。
 # 1. clone
 git clone https://github.com/gamasenninn/tealus
 
-# 2. .env 設定 (PostgreSQL / Redis / OpenAI API key)
+# 2. .env 設定 (PostgreSQL / OpenAI API key)
 cp server/.env.example server/.env
 vim server/.env
 

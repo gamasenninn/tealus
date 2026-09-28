@@ -27,15 +27,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v7
 
@@ -70,7 +61,6 @@ jobs:
           DB_NAME: tealus_test
           DB_USER: tealus_test
           DB_PASSWORD: tealus_test
-          REDIS_URL: redis://localhost:6379
           JWT_SECRET: ci-test-secret
           # OpenAI SDK がモジュール load 時に apiKey を要求するため dummy 値を設定
           # テストは実 API を叩かない（モックまたはスキップ）

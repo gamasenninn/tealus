@@ -6,7 +6,7 @@
 
 ## 一言で
 
-> **PWA + Node.js + PostgreSQL + Redis** の標準 web stack に、**MCP / mediasoup / OpenAI** を統合した messenger。
+> **PWA + Node.js + PostgreSQL** の標準 web stack に、**MCP / mediasoup / OpenAI** を統合した messenger。
 
 「特殊な technology」を使っていないので OSS として読みやすく、自社で動かしやすい。
 
@@ -31,9 +31,9 @@
 └─┬────────────────┬──────┘         └────────────────────┘
   │                │
 ┌─┴──────────┐  ┌──┴────────┐  ┌────────────────────┐
-│ PostgreSQL │  │   Redis   │  │  外部 AI / TTS     │
-│  (RLS)     │  │ (Pub/Sub  │  │  - OpenAI Whisper  │
-│            │  │  在席状態)│  │  - OpenAI gpt-4o   │
+│ PostgreSQL │  │ 本体の    │  │  外部 AI / TTS     │
+│  (RLS)     │  │ メモリ    │  │  - OpenAI Whisper  │
+│            │  │ (在席状態)│  │  - OpenAI gpt-4o   │
 │            │  │           │  │  - Aivis (TTS)     │
 └────────────┘  └───────────┘  └────────────────────┘
                                          ▲
@@ -65,7 +65,6 @@
 | **Nginx** | リバプロ、SSL 終端、静的ファイル配信 |
 | **Node.js (Express + Socket.IO)** | REST API、WebSocket、Web Push |
 | **PostgreSQL** | 全データ永続化 (RLS で行単位アクセス制御) |
-| **Redis** | WebSocket Pub/Sub、在席状態、セッションキャッシュ |
 | **React PWA** | UI、PWA、Web Push 受信 |
 
 ### AI 連携層
@@ -90,12 +89,12 @@
 ## デプロイ構成 (3 種)
 
 ### 1. **Default** (`docker-compose.yml`)
-- Postgres + Redis のみ Docker
+- Postgres のみ Docker
 - Node サービスはホスト (`npm run dev`)
 - 用途: 開発者環境
 
 ### 2. **Full** (`docker-compose.full.yml`) ← **OSS 採用者の推奨**
-- Postgres + Redis + server + agent-server を Docker
+- Postgres + server + agent-server を Docker
 - 1 ファイル paste & build で起動
 - 用途: NAS / Linux / Mac mini デプロイ
 

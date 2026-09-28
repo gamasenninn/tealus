@@ -70,7 +70,6 @@ npm-debug.log*
 
 # Docker volumes
 pgdata/
-redisdata/
 
 # Test coverage
 coverage/

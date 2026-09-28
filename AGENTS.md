@@ -23,7 +23,6 @@
 - フロントエンド: React + Vite (PWA)
 - バックエンド: Node.js (Express) + Socket.IO
 - DB: PostgreSQL (RLS有効)
-- キャッシュ: Redis
 - コンテナ: Docker Compose
 
 ## 開発ルール

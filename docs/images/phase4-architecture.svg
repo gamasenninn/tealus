@@ -75,7 +75,7 @@
   <text x="902" y="336" font-size="10" fill="#00695C">• トランシーバー</text>
   <text x="902" y="352" font-size="10" fill="#00695C">• 音声・ビデオ通話</text>
 
-  <!-- Lines from server to PostgreSQL / Redis -->
+  <!-- Lines from server to PostgreSQL / in-process memory -->
   <line x1="160" y1="380" x2="160" y2="480" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrow)"/>
   <line x1="260" y1="380" x2="500" y2="480" stroke="#546E7A" stroke-width="1.5" marker-end="url(#arrow)"/>
 
@@ -96,15 +96,15 @@
   <text x="92" y="642" font-size="10" fill="#37474F">• webhook_subscriptions</text>
   <text x="92" y="664" font-size="10" font-style="italic" fill="#546E7A">→ 詳細は 02_DB設計.md</text>
 
-  <!-- Redis -->
+  <!-- 本体のメモリ (Redis は一度も使わず 2026-09-28 に外した、#466) -->
   <rect x="350" y="480" width="240" height="200" fill="#ECEFF1" stroke="#455A64" stroke-width="2" rx="6"/>
-  <text x="470" y="504" text-anchor="middle" font-size="14" font-weight="700" fill="#263238">Redis</text>
-  <text x="470" y="522" text-anchor="middle" font-size="10" fill="#37474F">Phase 1 〜</text>
-  <text x="362" y="546" font-size="10" fill="#37474F">• Socket.IO Pub/Sub adapter</text>
-  <text x="362" y="562" font-size="10" fill="#37474F">  (将来 multi-process scale)</text>
-  <text x="362" y="578" font-size="10" fill="#37474F">• 在席状態 (online/offline)</text>
-  <text x="362" y="594" font-size="10" fill="#37474F">• session cache</text>
-  <text x="362" y="610" font-size="10" fill="#37474F">• rate limit counter</text>
+  <text x="470" y="504" text-anchor="middle" font-size="14" font-weight="700" fill="#263238">本体のメモリ</text>
+  <text x="470" y="522" text-anchor="middle" font-size="10" fill="#37474F">1 台・1 プロセスの前提</text>
+  <text x="362" y="546" font-size="10" fill="#37474F">• 在席状態 (online/offline)</text>
+  <text x="362" y="562" font-size="10" fill="#37474F">• ログインの総当たり抑止</text>
+  <text x="362" y="578" font-size="10" fill="#37474F">• LINE の写真の束ね</text>
+  <text x="362" y="594" font-size="10" fill="#37474F">• 消えても害の少ない状態だけ</text>
+  <text x="362" y="616" font-size="10" font-style="italic" fill="#546E7A">→ Redis を使わない理由は 03</text>
 
   <!-- ChildProcess spawn (dashed box) -->
   <rect x="620" y="470" width="500" height="210" fill="#FAFAFA" stroke="#90A4AE" stroke-width="1.5" stroke-dasharray="6,4" rx="6"/>

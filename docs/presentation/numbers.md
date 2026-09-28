@@ -82,14 +82,14 @@ audience 別 Full pitch / LP / 短尺資料すべてで引用される **客観�
 | 副 repo | tealus-mcp (https://github.com/gamasenninn/tealus-mcp、v0.6.0)、tealus-docs (公式 docs) |
 | Docker image 配布 | Phase A まで (local build、Phase B で GHCR 予定) |
 | Docker compose | `docker-compose.yml` (dev) / `docker-compose.full.yml` (NAS) / `docker-compose.rtc.yml` (rtc-server) |
-| 採用最低スペック | x86_64 / arm64 NAS、メモリ **4 GB 以上**、ディスク **50 GB 以上**、Docker 対応 OS (実測根拠: PostgreSQL 256-500 MB + Redis 100-200 MB + Node server 200-400 MB + agent-server 200-400 MB + mediasoup 200-500 MB + OS/Docker 500 MB-1 GB → アイドル 1.5-2.5 GB、RTC アクティブで 2-3.5 GB、30 ユーザで 4-5 GB ピーク) |
+| 採用最低スペック | x86_64 / arm64 NAS、メモリ **4 GB 以上**、ディスク **50 GB 以上**、Docker 対応 OS (実測根拠: PostgreSQL 256-500 MB + Node server 200-400 MB + agent-server 200-400 MB + mediasoup 200-500 MB + OS/Docker 500 MB-1 GB → アイドル 1.5-2.5 GB、RTC アクティブで 2-3.5 GB、30 ユーザで 4-5 GB ピーク。★ この見積もりは Redis 100-200 MB を含んでいた。Redis は 2026-09-28 に外したので、実際はその分少ない) |
 
 ## 主要技術 stack
 
 | 層 | 技術 |
 |---|---|
 | Frontend | React + Vite、PWA、Service Worker、Web Push |
-| Backend | Node.js (Express)、Socket.IO、PostgreSQL (RLS)、Redis |
+| Backend | Node.js (Express)、Socket.IO、PostgreSQL (RLS) |
 | AI | OpenAI Whisper (転写) + gpt-4o-mini (整形) + Claude Code CLI (Deep agent) + OpenAI Agents SDK (Light agent) |
 | MCP | @modelcontextprotocol/sdk v1+、tealus-mcp v0.6.0 |
 | 通話 | mediasoup SFU (rtc-server)、PlainTransport (TTS 配信) |

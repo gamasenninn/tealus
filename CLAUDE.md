@@ -102,7 +102,6 @@ stdio の子プロセスが生き残るので不十分)。
 - フロントエンド: React + Vite (PWA、TS)
 - バックエンド: Node.js (Express) + Socket.IO + TypeScript
 - DB: PostgreSQL (RLS有効)
-- キャッシュ: Redis
 - コンテナ: Docker Compose
 - テスト: サーバ/agent-server は Jest + @swc/jest (型検査は `tsc --noEmit` に分離)、クライアントは Vitest。★ dashboard はテストの道具が**未導入** (2026-09-27 確認。次に大きく書き換えるときに入れる、#462)
 

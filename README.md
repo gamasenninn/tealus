@@ -145,7 +145,7 @@ git clone https://github.com/gamasenninn/tealus.git
 cd tealus
 ```
 
-### 2. Docker 起動（PostgreSQL + Redis）
+### 2. Docker 起動（PostgreSQL）
 
 ```bash
 docker-compose up -d
@@ -157,7 +157,6 @@ docker-compose up -d
 |----------|--------|------|
 | PostgreSQL | 5432 | 開発用DB |
 | PostgreSQL | 5433 | テスト用DB |
-| Redis | 6379 | セッション・在席状態管理 |
 
 > **トラブルシューティング**: `error during connect: ... docker daemon is not running` と出たら Docker Desktop が起動していない。起動してから再実行してください。
 
@@ -833,7 +832,7 @@ agent-server と Claude Code が **別マシン** に居る構成では stdio (c
 
 ### Docker デプロイ（推奨）
 
-OSS 採用者向けに、`docker-compose.full.yml` 一発で **postgres + redis + server + agent-server** が起動する構成を用意しています。Mac / Windows / Linux いずれでも動作。NAS の Container UI (Synology / QNAP / UGREEN) からも `docker-compose.full.yml` の中身を貼り付けるだけで起動できます。
+OSS 採用者向けに、`docker-compose.full.yml` 一発で **postgres + server + agent-server** が起動する構成を用意しています。Mac / Windows / Linux いずれでも動作。NAS の Container UI (Synology / QNAP / UGREEN) からも `docker-compose.full.yml` の中身を貼り付けるだけで起動できます。
 
 #### 構成 1: 通話なし（推奨デフォルト、すべての OS で動作）
 
@@ -891,7 +890,6 @@ docker compose -f docker-compose.full.yml -f docker-compose.rtc.yml up -d
 | データ | 保存先 |
 |--------|-------|
 | PostgreSQL | named volume `pgdata-prod` |
-| Redis | named volume `redisdata-prod` |
 | アップロード媒体 | `./media` (host bind mount) |
 | エージェント workspace | named volume `agent-workspaces-prod` |
 
@@ -906,7 +904,7 @@ docker compose -f docker-compose.full.yml up -d
 
 #### 開発者向け補足
 
-`docker-compose.yml`（version 管理されている既存ファイル）は **開発用** で、postgres / postgres_test / redis のみを起動する設計を維持しています。Node サービス (server / agent-server / rtc-server) は引き続き `npm run dev` でホスト直接起動、ホットリロード / nodemon が機能します。
+`docker-compose.yml`（version 管理されている既存ファイル）は **開発用** で、postgres / postgres_test のみを起動する設計を維持しています。Node サービス (server / agent-server / rtc-server) は引き続き `npm run dev` でホスト直接起動、ホットリロード / nodemon が機能します。
 
 `docker-compose.full.yml` は **デプロイ用** で別ファイルなので、開発者フローと衝突しません。
 
@@ -1015,7 +1013,6 @@ npm run build
 | 状態管理 | Zustand |
 | バックエンド | Node.js + Express + Socket.IO |
 | DB | PostgreSQL 16 (RLS有効) |
-| キャッシュ | Redis 7 |
 | ファイルアップロード | multer + sharp (サムネイル生成) |
 | 認証 | JWT + bcrypt |
 | Push通知 | web-push (VAPID) |
