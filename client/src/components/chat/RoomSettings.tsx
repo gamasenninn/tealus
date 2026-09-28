@@ -39,6 +39,8 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
   const [restoredTools, setRestoredTools] = useState<string[]>(currentRoom?.voice_conversation_tools || []);
   const [isAnnouncement, setIsAnnouncement] = useState(currentRoom?.is_announcement || false);
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
+  // #463 このルームの通知 (自分の分だけ)。既定は鳴らす
+  const [pushMuted, setPushMuted] = useState<boolean>(!!currentRoom?.push_muted);
   const [appUrls, setAppUrls] = useState<AppUrl[]>(currentRoom?.app_urls || []);
   const [newAppTitle, setNewAppTitle] = useState('');
   const [newAppUrl, setNewAppUrl] = useState('');
@@ -110,6 +112,18 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
     const newValue = !continuousPlay;
     setContinuousPlay(newValue);
     localStorage.setItem('voiceContinuousPlay', String(newValue));
+  };
+
+  const handleTogglePushMuted = async () => {
+    const next = !pushMuted;
+    setPushMuted(next);
+    try {
+      await api.setRoomNotification(roomId, next);
+      await selectRoom(roomId);   // ★ 開き直したときに古い設定が出ないよう、手元のルーム情報も取り直す
+    } catch {
+      setPushMuted(!next);
+      showError('通知の設定を保存できませんでした');
+    }
   };
 
   // --- ルーム設定（管理者） ---
@@ -285,6 +299,10 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
         <label className="room-setting-toggle">
           <input type="checkbox" checked={continuousPlay} onChange={handleToggleContinuousPlay} />
           <span>音声の連続再生</span>
+        </label>
+        <label className="room-setting-toggle">
+          <input type="checkbox" checked={!pushMuted} onChange={handleTogglePushMuted} aria-label="このルームの通知" />
+          <span>このルームの通知</span>
         </label>
       </div>
 

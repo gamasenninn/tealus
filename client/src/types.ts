@@ -51,6 +51,8 @@ export interface Room {
   voice_conversation_denied_tools?: string[];
   app_urls?: AppUrl[];
   is_announcement?: boolean;
+  /** #463 自分がこのルームの通知を鳴らさないにしているか (GET /rooms/:id が自分の分だけ返す) */
+  push_muted?: boolean;
   my_role?: string;
 }
 

@@ -442,6 +442,11 @@ class ApiClient {
     return this.request<{ room: Room }>('PUT', `/rooms/${roomId}`, data);
   }
 
+  /** #463 自分の分だけ、このルームの通知を鳴らす / 鳴らさない */
+  setRoomNotification(roomId: string, muted: boolean) {
+    return this.request<{ push_muted: boolean }>('PUT', `/rooms/${roomId}/notification`, { muted });
+  }
+
   uploadRoomIcon(roomId: string, file: File) {
     const formData = new FormData();
     formData.append('icon', file);

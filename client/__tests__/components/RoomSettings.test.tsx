@@ -22,6 +22,8 @@ vi.mock('../../src/services/api', () => ({
     getRoomClaudeMd: vi.fn(() => Promise.resolve({ content: 'claude md content' })),
     updateRoomClaudeMd: vi.fn(() => Promise.resolve({ success: true })),
     updateRoom: vi.fn(() => Promise.resolve()),
+    // #463 ルームごとの通知オフ (自分の分だけ)
+    setRoomNotification: vi.fn((_roomId: string, muted: boolean) => Promise.resolve({ push_muted: muted })),
     // ★ 2026-09-26 ルームごとの読み上げエンジン・声 (一覧は agent-server の 1 か所から)
     getTtsOptions: vi.fn(() => Promise.resolve({
       global_provider: 'openai',
@@ -343,3 +345,38 @@ describe('RoomSettings — 読み上げエンジン・声', () => {
   });
 });
 
+
+describe('RoomSettings — このルームの通知 (#463)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('既定は鳴らす (チェックあり)', () => {
+    render(<RoomSettings {...baseProps} isAdmin={false} isSysAdmin={false} currentRoom={{ type: 'group' } as Room} />);
+    expect(screen.getByLabelText('このルームの通知')).toBeChecked();
+  });
+
+  it('鳴らさないにしているルームではチェックなし', () => {
+    render(<RoomSettings {...baseProps} isAdmin={false} isSysAdmin={false} currentRoom={{ type: 'group', push_muted: true } as Room} />);
+    expect(screen.getByLabelText('このルームの通知')).not.toBeChecked();
+  });
+
+  it('★ 外すと鳴らさないを保存し、もう一度押すと戻す (管理者でなくても自分の分は変えられる)', async () => {
+    render(<RoomSettings {...baseProps} isAdmin={false} isSysAdmin={false} currentRoom={{ type: 'group' } as Room} />);
+    const box = screen.getByLabelText('このルームの通知');
+    fireEvent.click(box);
+    await waitFor(() => expect(api.setRoomNotification).toHaveBeenCalledWith('room-1', true));
+    await waitFor(() => expect(box).not.toBeChecked());
+    await waitFor(() => expect(baseProps.selectRoom).toHaveBeenCalledWith('room-1'));   // ★ 手元のルーム情報も取り直す
+    fireEvent.click(box);
+    await waitFor(() => expect(api.setRoomNotification).toHaveBeenLastCalledWith('room-1', false));
+    await waitFor(() => expect(box).toBeChecked());
+  });
+
+  it('保存に失敗したらチェックを元に戻してエラーを出す', async () => {
+    vi.mocked(api.setRoomNotification).mockRejectedValueOnce(new Error('network'));
+    render(<RoomSettings {...baseProps} isAdmin={false} isSysAdmin={false} currentRoom={{ type: 'group' } as Room} />);
+    const box = screen.getByLabelText('このルームの通知');
+    fireEvent.click(box);
+    expect(await screen.findByText(/通知の設定を保存できませんでした/)).toBeInTheDocument();
+    expect(box).toBeChecked();
+  });
+});

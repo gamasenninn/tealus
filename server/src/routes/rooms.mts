@@ -381,9 +381,38 @@ router.get('/:id', requireMember, async (req, res) => {
     );
     const last_read_message_id = cursorResult.rows[0]?.last_read_message_id || null;
 
-    res.json({ room: roomResult.rows[0], members: membersResult.rows, last_read_message_id });
+    // #463 自分がこのルームの通知を鳴らさないにしているか (各自の設定なので room に自分の分だけ載せる)
+    const muteResult = await pool.query<{ push_muted: boolean }>(
+      'SELECT push_muted FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [id, req.user!.id]
+    );
+    const push_muted = muteResult.rows[0]?.push_muted ?? false;
+
+    res.json({ room: { ...roomResult.rows[0], push_muted }, members: membersResult.rows, last_read_message_id });
   } catch (err) {
     logger.error('Get room error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * PUT /api/rooms/:id/notification
+ * #463 自分の分だけ、このルームの通知を鳴らす / 鳴らさないを切り替える (body: { muted: boolean })
+ * ★ 通話の着信は止めない (docs/02 room_members.push_muted)
+ */
+router.put('/:id/notification', requireMember, async (req, res) => {
+  const { muted } = (req.body ?? {}) as { muted?: unknown };
+  if (typeof muted !== 'boolean') {
+    return res.status(400).json({ error: 'muted は true / false で指定してください' });
+  }
+  try {
+    const r = await pool.query<{ push_muted: boolean }>(
+      'UPDATE room_members SET push_muted = $1 WHERE room_id = $2 AND user_id = $3 RETURNING push_muted',
+      [muted, req.params.id, req.user!.id]
+    );
+    res.json({ push_muted: r.rows[0].push_muted });
+  } catch (err) {
+    logger.error('Update room notification error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

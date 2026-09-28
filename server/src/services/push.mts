@@ -155,7 +155,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
 export async function sendPushToOfflineMembers(roomId: string, senderId: string, payload: PushPayload, onlineUserIds: Set<string>): Promise<void> {
   try {
     const members = await pool.query<{ user_id: string }>(
-      'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2',
+      // ★ #463 このルームを鳴らさないにしている人は除く (通話の着信は sendPushToUser を直接呼ぶので影響しない)
+      'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2 AND push_muted = false',
       [roomId, senderId]
     );
 
