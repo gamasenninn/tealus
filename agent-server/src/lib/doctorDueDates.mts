@@ -83,6 +83,12 @@ export function judgeDueDates(issues: DueIssue[] | null, now: Date): Finding {
       const days = Math.ceil((i.due.getTime() + DAY_MS - now.getTime()) / DAY_MS);
       return `    #${i.number} ${ymd(i.due)} (あと ${days} 日): ${i.title.slice(0, 48)}`;
     });
+    // ★ 切ったら切ったと書く (2026-09-28)。「6 件」と書いて 5 件しか並べないと、
+    //   6 件目を「載っていない = 期限が拾われていない」と読み違える (実際に読み違えた)
+    if (upcoming.length > 5) {
+      const last = upcoming[upcoming.length - 1];
+      lines.push(`    ほか ${upcoming.length - 5} 件 (最も遠いもの: #${last.number} ${ymd(last.due)})`);
+    }
     return {
       id: 'due-dates',
       level: 'info',

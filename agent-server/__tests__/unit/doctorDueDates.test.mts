@@ -72,4 +72,19 @@ describe('judgeDueDates', () => {
       new Date('2026-10-16T09:00:00+09:00'));
     expect(f.level).toBe('info');
   });
+
+  it('★ まだ先のものを 5 件で切ったら「ほか N 件」と出す (★★ 数と並びが合わないと「載っていない」と読まれる)', () => {
+    const issues: DueIssue[] = [1, 2, 3, 4, 5, 6, 7].map((d) => ({ number: 100 + d, title: `2026-11-0${d} に測る` }));
+    const f = judgeDueDates(issues, NOW);
+    expect(f.level).toBe('info');
+    expect(f.detail).toMatch(/期限つき 7 件/);
+    expect(f.detail).toMatch(/#105/);
+    expect(f.detail).not.toMatch(/#106/);
+    expect(f.detail).toContain('ほか 2 件 (最も遠いもの: #107 2026-11-07)');
+  });
+
+  it('5 件以下なら「ほか」は出さない', () => {
+    const f = judgeDueDates([{ number: 1, title: '2026-11-01 に測る' }], NOW);
+    expect(f.detail).not.toMatch(/ほか/);
+  });
 });
