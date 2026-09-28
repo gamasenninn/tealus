@@ -130,8 +130,8 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     io.to(roomId).emit('message:new', fullMessage);
 
     // ★ 2026-09-27 (#383): 人が上げた写真・動画・ファイルにも通知を鳴らす (テキストと転送には元から鳴っていた)。
-    //   機械 (is_bot) の分は鳴らさない —— ルームごとの通知オフが無いので、機械の流れまで鳴らすと
-    //   OS で Tealus の通知を丸ごと切るしかなくなり、人からの通知まで消える
+    //   機械 (is_bot) の分は鳴らさない。当時はルームごとの通知オフが無く、鳴らすと OS で通知を丸ごと
+    //   切るしかなかった。★ オフは 2026-09-28 に入った (#463) が、機械の流れを鳴らすかはまだ決めていない
     if (!req.user!.is_bot) {
       try {
         const typeLabel = messageType === 'image' ? '📷 写真' : messageType === 'video' ? '🎬 動画' : '📎 ファイル';
