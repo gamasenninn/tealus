@@ -7,4 +7,10 @@
  */
 import dotenv from 'dotenv';
 
-dotenv.config();
+// ★ テスト中 (Jest の中) は本番の .env を読まない (#468、2026-09-28)。
+//   jest.setup.js が .env.test を読んだ後にここで .env も読むと、.env.test に無い項目 (24 個) が本番の値になり、
+//   npm test のたびにテストのダミーが本番のメディアのフォルダへ書かれていた (外部 API の設定も見えていた)。
+//   ★ CI には本番の .env が無く、その状態で全テストが通る = テストはこれらを必要としていない
+if (!process.env.JEST_WORKER_ID) {
+  dotenv.config();
+}

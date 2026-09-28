@@ -17,3 +17,16 @@ require('dotenv').config({ path: path.join(__dirname, '.env.test') });
 if (!process.env.LOCAL_TTL_PATH) {
   process.env.LOCAL_TTL_PATH = path.join(os.tmpdir(), `tealus-test-dictionary.local.${process.pid}.ttl`);
 }
+
+// ★★ メディアの置き場所もテスト用の一時フォルダにする (#468、2026-09-28)
+//   未設定だと src/middleware/upload.mts などの既定値が repo の media/ を指す。
+//   ★ 以前は src/env.mts が本番の .env も読んでいて、本番のメディアのフォルダに書いていた (1 日で約 580 件)
+if (!process.env.MEDIA_ROOT) {
+  process.env.MEDIA_ROOT = path.join(os.tmpdir(), `tealus-test-media-${process.pid}`);
+}
+
+// ★ OpenAI の部品は読み込んだ瞬間に鍵を要求する。CI (.github/workflows/test.yml) と同じダミーを渡す (#468)
+//   以前は本番の .env の本物の鍵が漏れてきて、たまたま通っていた
+if (!process.env.OPENAI_API_KEY) {
+  process.env.OPENAI_API_KEY = 'dummy-key-for-ci';
+}
