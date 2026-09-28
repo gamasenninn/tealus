@@ -21,6 +21,7 @@
 import { pool } from '../db/pool.mts';
 import { getIo } from '../io-registry.mts';
 import { fireWebhooks } from './webhook.mts';
+import { pushMachinePost, textPushBody } from './machinePush.mts';
 import { logger } from '../utils/logger.mts';
 
 /** 4 経路で共通の sender context (docs/05 §4) */
@@ -93,6 +94,12 @@ export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResu
       ...message,
       sender_display_name: sender.display_name,
       sender_avatar_url: sender.avatar_url,
+    });
+
+    // #463 機械の投稿の通知。ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
+    await pushMachinePost({
+      roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id,
+      body: textPushBody(type, content),
     });
 
     fireWebhooks('message.created', roomId, {

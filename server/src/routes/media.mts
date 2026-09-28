@@ -12,6 +12,7 @@ import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
 import type { AttachableMessage } from '../services/messageAttachments.mts';
 import { sendPushToOfflineMembers } from '../services/push.mts';
+import { pushMachinePost } from '../services/machinePush.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 
 export const router = express.Router({ mergeParams: true });
@@ -130,19 +131,21 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     io.to(roomId).emit('message:new', fullMessage);
 
     // ★ 2026-09-27 (#383): 人が上げた写真・動画・ファイルにも通知を鳴らす (テキストと転送には元から鳴っていた)。
-    //   機械 (is_bot) の分は鳴らさない。当時はルームごとの通知オフが無く、鳴らすと OS で通知を丸ごと
-    //   切るしかなかった。★ オフは 2026-09-28 に入った (#463) が、機械の流れを鳴らすかはまだ決めていない
+    // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
+    const typeLabel = messageType === 'image' ? '📷 写真' : messageType === 'video' ? '🎬 動画' : '📎 ファイル';
+    const mediaBody = files.length > 1 ? `${typeLabel} (${files.length} 件)` : typeLabel;
     if (!req.user!.is_bot) {
       try {
-        const typeLabel = messageType === 'image' ? '📷 写真' : messageType === 'video' ? '🎬 動画' : '📎 ファイル';
         sendPushToOfflineMembers(roomId as string, userId, {
           title: req.user!.display_name,
-          body: files.length > 1 ? `${typeLabel} (${files.length} 件)` : typeLabel,
+          body: mediaBody,
           data: { roomId, messageId: message.id },
         }, new Set(getOnlineUserIds()));
       } catch (e) {
         logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
       }
+    } else {
+      await pushMachinePost({ roomId: roomId as string, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: mediaBody });
     }
 
     res.status(201).json({

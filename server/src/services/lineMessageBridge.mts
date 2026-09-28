@@ -19,6 +19,7 @@ import { logger } from '../utils/logger.mts';
 import { processLinkPreviews } from './linkPreview.mts';
 import { sendPushToOfflineMembers } from './push.mts';
 import { getOnlineUserIds } from '../socket/index.mts';
+import { pushMachinePost, mediaPushBody } from './machinePush.mts';
 import type { AuthUser } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
@@ -120,9 +121,10 @@ export async function postTextToTealus(
     //   Tealus しか見ていない人は、アプリを閉じている間 LINE の投稿に気づけない
     //   (投稿・データは欠けない。開けばサーバの未読数から取り直すのでバッジも直る)。
     //
-    //   ★ text だけに付ける。実測 (直近 7 日、出品写真・動画): image 24.4/日・video 4.3/日 に対し
-    //   text は 2.6/日。画像は 3 秒間隔で連投されるので、1 枚ずつ鳴らすと実用にならない。
-    //   画像も要るなら「まとめて 1 件」の仕組みを先に作ること。
+    //   ★ text はいつも鳴らす。当時の実測 (直近 7 日、出品写真・動画): image 24.4/日・video 4.3/日 に対し
+    //   text は 2.6/日。画像は 3 秒間隔で連投されるので、画像は鳴らしていなかった。
+    //   ★ 2026-09-28 (#463): 画像・動画・音声・ファイルは、ルームの管理者が「機械の投稿の通知: 鳴らす」を
+    //   選んだルームだけ鳴らす (各 post*ToTealus の pushMachinePost)。まとめる仕組みは作らず 1 件ずつ (利用者判断)。
     //
     //   ★★ webhook (fireWebhooks) は **付けない**。docs/05 の不変条件で「message.created を
     //   発火するのは socket の message:send のみ」。付けると LINE のメッセージで @cc-* が
@@ -197,6 +199,9 @@ export async function postImageToTealus(
         media: [mediaResult.rows[0]],
       });
     }
+
+    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
+    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('📷 写真', content) });
 
     logger.info(`[lineMessageBridge] image post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
     return { message, media: mediaResult.rows[0] };
@@ -275,6 +280,9 @@ export async function postImagesToTealus(
       });
     }
 
+    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
+    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📷 写真 (${media.length} 件)`, content) });
+
     logger.info(`[lineMessageBridge] image-set post: room=${roomId} msg=${message.id} files=${media.length}`);
     return { message, media };
   } catch (err) {
@@ -345,6 +353,9 @@ export async function postVoiceToTealus(
       logger.warn(`[lineMessageBridge] transcribeVoiceMessage not available: ${e instanceof Error ? e.message : String(e)}`);
     }
 
+    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
+    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎤 音声メッセージ', content) });
+
     logger.info(`[lineMessageBridge] voice post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
     return { message, media: mediaResult.rows[0] };
   } catch (err) {
@@ -400,6 +411,9 @@ export async function postFileToTealus(
         media: [mediaResult.rows[0]],
       });
     }
+
+    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
+    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📎 ${mediaInfo.fileName}`, content) });
 
     logger.info(`[lineMessageBridge] file post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
     return { message, media: mediaResult.rows[0] };
@@ -465,6 +479,9 @@ export async function postVideoToTealus(
         media: [mediaResult.rows[0]],
       });
     }
+
+    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
+    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎬 動画', content) });
 
     logger.info(`[lineMessageBridge] video post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName} thumb=${thumbnailPath || 'null'}`);
     return { message, media: mediaResult.rows[0] };

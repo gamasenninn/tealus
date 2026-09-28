@@ -380,3 +380,25 @@ describe('RoomSettings — このルームの通知 (#463)', () => {
     expect(box).toBeChecked();
   });
 });
+
+describe('RoomSettings — 機械の投稿の通知 (#463、管理者)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('管理者には出る。既定は「鳴らさない」', () => {
+    render(<RoomSettings {...baseProps} isAdmin={true} isSysAdmin={false} currentRoom={{ type: 'group' } as Room} />);
+    expect(screen.getByLabelText('機械の投稿の通知')).toHaveValue('off');
+  });
+
+  it('管理者でなければ出ない', () => {
+    render(<RoomSettings {...baseProps} isAdmin={false} isSysAdmin={false} currentRoom={{ type: 'group' } as Room} />);
+    expect(screen.queryByLabelText('機械の投稿の通知')).toBeNull();
+  });
+
+  it('★ 「鳴らす」を選ぶとルームに保存し、ルーム情報を取り直す', async () => {
+    render(<RoomSettings {...baseProps} isAdmin={true} isSysAdmin={false} currentRoom={{ type: 'group', push_machine_posts: false } as Room} />);
+    fireEvent.change(screen.getByLabelText('機械の投稿の通知'), { target: { value: 'on' } });
+    await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('room-1', { push_machine_posts: true }));
+    await waitFor(() => expect(baseProps.selectRoom).toHaveBeenCalledWith('room-1'));
+    expect(screen.getByLabelText('機械の投稿の通知')).toHaveValue('on');
+  });
+});

@@ -25,6 +25,14 @@ jest.mock('../../src/services/webhook.mts', () => ({
   fireWebhooks: (...a: unknown[]) => mockFireWebhooks(...a),
 }));
 
+// #463 機械の投稿の通知は別の関数 (machinePush) の仕事。ここでは「正しい引数で呼ぶか」だけを見る
+//   (ルームの設定を引く問い合わせは machinePush 側。この単体テストの「2 回だけ」を崩さない)
+const mockPushMachinePost = jest.fn((..._a: unknown[]) => Promise.resolve());
+jest.mock('../../src/services/machinePush.mts', () => ({
+  ...jest.requireActual('../../src/services/machinePush.mts'),
+  pushMachinePost: (...a: unknown[]) => mockPushMachinePost(...a),
+}));
+
 jest.mock('../../src/utils/logger.mts', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
@@ -190,5 +198,21 @@ describe('postAsUser — 本文の NUL 文字', () => {
     happyPath();
     await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('postAsUser — 機械の投稿の通知 (#463)', () => {
+  beforeEach(() => { mockQuery.mockReset(); mockPushMachinePost.mockClear(); });
+
+  it('投稿が通ったら、送り手・本文の先頭で通知の関数を呼ぶ (鳴らすかどうかはその中でルームの設定を見る)', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] }).mockResolvedValueOnce({ rows: [MESSAGE] });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+    expect(mockPushMachinePost).toHaveBeenCalledWith({ roomId: ROOM, senderId: USER, senderName: 'テスト太郎', messageId: 'msg-1', body: 'hi' });
+  });
+
+  it('メンバーでなければ呼ばない', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+    expect(mockPushMachinePost).not.toHaveBeenCalled();
   });
 });

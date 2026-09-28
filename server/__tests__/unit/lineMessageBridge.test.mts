@@ -10,8 +10,11 @@ const mockClient = {
   query: jest.fn(),
   release: jest.fn(),
 };
+// #463 ルームの「機械の投稿も鳴らす」を引く (pool.query)。既定は鳴らさない
+const mockPoolQuery = jest.fn((..._a: unknown[]) => Promise.resolve({ rows: [{ push_machine_posts: false }] }));
 jest.mock('../../src/db/pool.mts', () => ({ pool: {
   connect: jest.fn(() => Promise.resolve(mockClient)),
+  query: (...a: unknown[]) => mockPoolQuery(...a),
 } }));
 
 // Mock logger
@@ -581,5 +584,31 @@ describe('postImagesToTealus', () => {
       sender: TEST_SENDER,
       mediaInfos: [],
     })).rejects.toThrow(/mediaInfos/);
+  });
+});
+
+describe('LINE の写真の通知 (#463 ルームの管理者が選ぶ)', () => {
+  const post = async () => {
+    setupSqlSequence([{}, { rows: [{ id: 'msg-img', room_id: 'room-1', type: 'image' }] }, { rows: [{ id: 'media-1' }] }, {}]);
+    const { io } = makeMockIo();
+    await postImageToTealus({
+      roomId: 'room-1', sender: TEST_SENDER, content: '[田中@出品]',
+      mediaInfo: { filePath: '/tmp/x.jpg', relativePath: 'line/x.jpg', fileName: 'x.jpg', fileSize: 1, mimeType: 'image/jpeg' },
+      io,
+    });
+  };
+  beforeEach(() => { mockSendPush.mockClear(); mockPoolQuery.mockClear(); });
+
+  test('既定 (設定オフ) では鳴らさない', async () => {
+    await post();
+    expect(mockPoolQuery).toHaveBeenCalledTimes(1);
+    expect(mockSendPush).not.toHaveBeenCalled();
+  });
+
+  test('★ 設定オンなら鳴らす。本文は送り手ラベル + 種類', async () => {
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ push_machine_posts: true }] });
+    await post();
+    expect(mockSendPush).toHaveBeenCalledTimes(1);
+    expect(mockSendPush.mock.calls[0][2]).toMatchObject({ body: '[田中@出品] 📷 写真', data: { roomId: 'room-1', messageId: 'msg-img' } });
   });
 });

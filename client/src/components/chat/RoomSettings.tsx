@@ -41,6 +41,8 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
   const [continuousPlay, setContinuousPlay] = useState(() => localStorage.getItem('voiceContinuousPlay') === 'true');
   // #463 このルームの通知 (自分の分だけ)。既定は鳴らす
   const [pushMuted, setPushMuted] = useState<boolean>(!!currentRoom?.push_muted);
+  // #463 機械の投稿の通知 (ルームの管理者が選ぶ)。既定は鳴らさない
+  const [machinePush, setMachinePush] = useState<boolean>(!!currentRoom?.push_machine_posts);
   const [appUrls, setAppUrls] = useState<AppUrl[]>(currentRoom?.app_urls || []);
   const [newAppTitle, setNewAppTitle] = useState('');
   const [newAppUrl, setNewAppUrl] = useState('');
@@ -188,6 +190,16 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
   };
 
+  // #463 機械 (is_bot) の投稿でも通知を鳴らすか。★ 各自のオフ (個人設定) がこれより優先する
+  const handleMachinePushChange = async (value: string) => {
+    const enabled = value === 'on';
+    try {
+      await api.updateRoom(roomId, { push_machine_posts: enabled });
+      setMachinePush(enabled);
+      await selectRoom(roomId);
+    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+  };
+
   const handleVoiceConversationChange = async (value: string) => {
     const enabled = value === 'on';
     try {
@@ -314,6 +326,13 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
             <select value={transcriptionEdit} onChange={e => handleTranscriptionEditChange(e.target.value)}>
               <option value="sender">送信者のみ</option>
               <option value="member">メンバー全員</option>
+            </select>
+          </div>
+          <div className="room-setting-select">
+            <label htmlFor="room-machine-push">機械の投稿の通知</label>
+            <select id="room-machine-push" value={machinePush ? 'on' : 'off'} onChange={e => handleMachinePushChange(e.target.value)}>
+              <option value="off">鳴らさない</option>
+              <option value="on">鳴らす</option>
             </select>
           </div>
           <div className="room-setting-select">

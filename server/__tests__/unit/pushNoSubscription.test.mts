@@ -54,3 +54,17 @@ describe('sendPushToUser — 購読の有無', () => {
     expect(JSON.parse(mockSend.mock.calls[0][1]).total_unread).toBe(3);
   });
 });
+
+import { mediaPushBody, textPushBody } from '../../src/services/machinePush.mts';
+
+describe('機械の投稿の通知の本文 (#463)', () => {
+  test('メディア: 本文の 1 行目を前に付ける。本文が無ければ種類だけ', () => {
+    expect(mediaPushBody('📷 写真', '[田中@出品]\n補足')).toBe('[田中@出品] 📷 写真');
+    expect(mediaPushBody('📷 写真', '\n  \n')).toBe('📷 写真');
+    expect(mediaPushBody('📷 写真', null)).toBe('📷 写真');
+  });
+  test('テキスト: 先頭 100 字。フォームは JSON を見せない', () => {
+    expect(textPushBody('text', 'x'.repeat(150))).toBe('x'.repeat(100));
+    expect(textPushBody('form', '{"title":"q"}')).toBe('📝 フォーム');
+  });
+});

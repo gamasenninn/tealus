@@ -423,7 +423,7 @@ router.put('/:id/notification', requireMember, async (req, res) => {
  */
 router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled, voice_conversation_tools, voice_conversation_denied_tools } = req.body;
+  const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled, voice_conversation_tools, voice_conversation_denied_tools, push_machine_posts } = req.body;
 
   try {
     const updates: string[] = [];
@@ -442,6 +442,11 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     if (voice_conversation_tools !== undefined) { updates.push(`voice_conversation_tools = $${paramIndex++}`); values.push(JSON.stringify(voice_conversation_tools)); }
     // #418 会話モードで外す道具。★ 既定は空 = 何もしなければ 1 つも外れない
     if (voice_conversation_denied_tools !== undefined) { updates.push(`voice_conversation_denied_tools = $${paramIndex++}`); values.push(JSON.stringify(voice_conversation_denied_tools)); }
+    // #463 機械 (is_bot) の投稿でも通知を鳴らすか。既定 false。★ 管理者だけが変えられる (requireRoomAdmin)
+    if (push_machine_posts !== undefined) {
+      if (typeof push_machine_posts !== 'boolean') return res.status(400).json({ error: 'push_machine_posts は true / false で指定してください' });
+      updates.push(`push_machine_posts = $${paramIndex++}`); values.push(push_machine_posts);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: '更新する項目がありません' });

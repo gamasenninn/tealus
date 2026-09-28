@@ -14,6 +14,7 @@ import { decodeFileName } from '../middleware/upload.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { fetchReplyMessage } from '../socket/handlers/message.mts';
 import { sendPushToOfflineMembers } from '../services/push.mts';
+import { pushMachinePost } from '../services/machinePush.mts';
 import { getOnlineUserIds } from '../socket/index.mts';
 
 export const router = express.Router({ mergeParams: true });
@@ -134,10 +135,12 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
       message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
     });
 
-    // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。機械 (is_bot) の分は鳴らさない
-    //   —— トランシーバーは 1 日 55 件・17 人。当時はルームごとの通知オフが無く、鳴らすと通知を丸ごと切られた。
-    //   ★ オフは 2026-09-28 に入った (#463) が、機械の流れを鳴らすかはまだ決めていない
-    if (!req.user!.is_bot) {
+    // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。
+    // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
+    //   —— トランシーバーは 1 日 57 件・12 人。既定で鳴らすと、止めたい人が各自でオフにするまで鳴り続ける
+    if (req.user!.is_bot) {
+      await pushMachinePost({ roomId, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: '🎤 音声メッセージ' });
+    } else {
       try {
         sendPushToOfflineMembers(roomId, userId, {
           title: req.user!.display_name,

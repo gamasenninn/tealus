@@ -15,6 +15,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
 import { postAsUser } from '../services/postAsUser.mts';
+import { pushMachinePost } from '../services/machinePush.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
@@ -352,6 +353,12 @@ router.post('/push-image', upload.single('image'), async (req, res) => {
       media: [mediaResult.rows[0]],
     });
 
+    // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。失敗しても投稿は止めない
+    await pushMachinePost({
+      roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
+      body: content?.trim() ? content.trim().slice(0, 100) : '📷 写真',
+    });
+
     logger.info(`Bot push-image: ${req.user!.display_name} → room ${room_id}`);
     res.status(201).json({ message, media: [mediaResult.rows[0]] });
   } catch (err) {
@@ -425,6 +432,12 @@ router.post('/push-file', upload.single('file'), async (req, res) => {
       sender_display_name: req.user!.display_name,
       sender_avatar_url: req.user!.avatar_url,
       media: [mediaResult.rows[0]],
+    });
+
+    // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。通話履歴ボットはここを通る
+    await pushMachinePost({
+      roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
+      body: content?.trim() ? content.trim().slice(0, 100) : `📎 ${decodeFileName(file.originalname)}`,
     });
 
     logger.info(`Bot push-file: ${req.user!.display_name} → room ${room_id} (${decodeFileName(file.originalname)})`);
