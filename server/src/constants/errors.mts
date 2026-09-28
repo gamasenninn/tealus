@@ -10,6 +10,7 @@ export const AUTH_TOKEN_INVALID = 'トークンが無効です';
 export const AUTH_INVALID_CREDENTIALS = 'ユーザーIDまたはパスワードが正しくありません';
 export const AUTH_REGISTER_REQUIRED = 'ユーザーID、表示名、パスワードは必須です';
 export const AUTH_DUPLICATE_LOGIN_ID = 'このユーザーIDは既に登録されています';
+export const AUTH_REGISTER_CLOSED = '新しいユーザーは管理者がダッシュボードから作成します';
 export const AUTH_LOGIN_REQUIRED = 'ユーザーIDとパスワードは必須です';
 // #362 login の失敗が短時間に続いたとき。★ ID が存在するかを漏らさない文面にする
 export const AUTH_TOO_MANY_ATTEMPTS = 'ログインの試行が多すぎます。しばらく待ってからやり直してください';

@@ -2,9 +2,11 @@
  * Test auth helper
  * Creates test users and returns their tokens.
  */
-import request from 'supertest';
-import { app } from '../../src/app.mts';
+import bcrypt from 'bcrypt';
+import '../../src/app.mts';
 import { getTestPool } from './db.mts';
+import { generateToken } from '../../src/middleware/auth.mts';
+import { SALT_ROUNDS } from '../../src/constants/config.mts';
 
 interface CreateTestUserOverrides {
   login_id?: string;
@@ -24,12 +26,12 @@ interface TestUser {
 }
 
 /**
- * Register a test user and return { token, user }.
+ * テスト用の利用者を作り、{ token, user } を返す。
  *
- * #211: 本番では最初の非 Bot ユーザーが auto-promote で admin になる仕様。
- * テストでは controlled な initial role が欲しいので、register 後に
- * DEFAULT 'user' に reset する (個別テストで admin が必要なら DB UPDATE する)。
- * authenticate middleware は DB から role を毎回読むので token 再発行は不要。
+ * ★ 2026-09-28: 以前は POST /api/auth/register を呼んでいたが、自己登録は「人の利用者が 0 人」の
+ *   ときだけ開く形に閉じたので、テスト DB に直接作る (パスワードは本物と同じ bcrypt、鍵は本物と同じ generateToken)。
+ *   role は 'user' (個別テストで admin が必要なら DB UPDATE する)。
+ * ★ app を読み込むのは、本体の設定 (src/env.mts など) をテストと同じ順で確定させるため。
  */
 export async function createTestUser(overrides: CreateTestUserOverrides = {}): Promise<TestUser> {
   const data = {
@@ -37,15 +39,12 @@ export async function createTestUser(overrides: CreateTestUserOverrides = {}): P
     display_name: overrides.display_name || 'テストユーザー',
     password: overrides.password || 'password123',
   };
-
-  const res = await request(app)
-    .post('/api/auth/register')
-    .send(data);
-
-  // Reset role to 'user' (auto-promote で 'admin' になっていても上書き)
-  const pool = getTestPool();
-  await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [res.body.user.id]);
-  res.body.user.role = 'user';
-
-  return { token: res.body.token, user: res.body.user };
+  const password_hash = await bcrypt.hash(data.password, SALT_ROUNDS);
+  const { rows: [user] } = await getTestPool().query<TestUser['user']>(
+    `INSERT INTO users (login_id, display_name, password_hash, role)
+     VALUES ($1, $2, $3, 'user')
+     RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+    [data.login_id, data.display_name, password_hash]
+  );
+  return { token: generateToken(user), user };
 }

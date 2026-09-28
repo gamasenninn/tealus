@@ -308,7 +308,8 @@ Viteのプロキシ設定により、`/api/*` と `/socket.io` はサーバー�
 ブラウザで `http://localhost:5173` を開いても、まだユーザーがいません。
 APIで初回ユーザーを登録します。
 
-> 💡 **最初に登録した非 Bot ユーザーは自動的に admin role になります** ([#211](https://github.com/gamasenninn/tealus/issues/211))。以降の登録は通常の user role で作成され、admin がダッシュボード経由で昇格管理できます。
+> 💡 **最初に登録した非 Bot ユーザーは自動的に admin role になります** ([#211](https://github.com/gamasenninn/tealus/issues/211))。
+> ★ **この API で登録できるのは最初の 1 人だけです** (人の利用者が 0 人のとき)。2 人目以降はこの API は 403 を返すので、admin がダッシュボードの「ユーザー管理」から作成してください。
 
 > ⚠️ **下記の `password123` は localhost 検証用のサンプル**。本番運用では必ず強固なパスワード（12 文字以上、英数記号混在）に置き換えてください。
 
@@ -520,7 +521,7 @@ tealus/
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| POST | /api/auth/register | ユーザー登録 |
+| POST | /api/auth/register | 最初の管理者の登録 (人の利用者が 0 人のときだけ。以降は 403) |
 | POST | /api/auth/login | ログイン（JWT発行） |
 | GET | /api/auth/me | 現在ユーザー取得 |
 | PUT | /api/auth/profile | プロフィール更新（表示名・ステータスメッセージ） |

@@ -35,25 +35,26 @@ describe('Auth API', () => {
       expect(res.body.user.password_hash).toBeUndefined(); // パスワードハッシュは返さない
     });
 
-    it('should reject duplicate login_id', async () => {
+    // ★ 2026-09-28: 自己登録は「人の利用者が 0 人 = 最初の管理者づくり」のときだけ。
+    //   2 人目からは管理者がダッシュボードで作る
+    it('★ 人の利用者が 1 人でもいれば、登録は 403 で断る (同じ login_id でも)', async () => {
       await request(app)
         .post('/api/auth/register')
-        .send({
-          login_id: 'EMP001',
-          display_name: '田中太郎',
-          password: 'password123',
-        });
+        .send({ login_id: 'EMP001', display_name: '田中太郎', password: 'password123' });
 
-      const res = await request(app)
+      const other = await request(app)
         .post('/api/auth/register')
-        .send({
-          login_id: 'EMP001',
-          display_name: '別の人',
-          password: 'password456',
-        });
+        .send({ login_id: 'EMP002', display_name: '別の人', password: 'password456' });
+      expect(other.status).toBe(403);
+      expect(other.body.token).toBeUndefined();
 
-      expect(res.status).toBe(409);
-      expect(res.body.error).toBeDefined();
+      const dup = await request(app)
+        .post('/api/auth/register')
+        .send({ login_id: 'EMP001', display_name: '別の人', password: 'password456' });
+      expect(dup.status).toBe(403);
+
+      const count = await getTestPool().query('SELECT count(*)::int n FROM users WHERE is_bot = false');
+      expect(count.rows[0].n).toBe(1);
     });
 
     it('should reject missing fields', async () => {
@@ -83,27 +84,16 @@ describe('Auth API', () => {
       expect(res.body.user.role).toBe('admin');
     });
 
-    it('should create subsequent users with default user role', async () => {
-      // First user → admin
-      await request(app)
-        .post('/api/auth/register')
-        .send({
-          login_id: 'FIRST_USER',
-          display_name: '管理者',
-          password: 'password123',
-        });
-
-      // Second user → user
+    it('ボットしかいないうちは開いている (最初の人が管理者になる)', async () => {
+      await getTestPool().query(
+        `INSERT INTO users (login_id, display_name, password_hash, role, is_bot)
+         VALUES ('BOT_ONLY', 'Bot', 'dummy_hash', 'user', true)`
+      );
       const res = await request(app)
         .post('/api/auth/register')
-        .send({
-          login_id: 'SECOND_USER',
-          display_name: '一般ユーザー',
-          password: 'password456',
-        });
-
+        .send({ login_id: 'FIRST_USER', display_name: '管理者', password: 'password123' });
       expect(res.status).toBe(201);
-      expect(res.body.user.role).toBe('user');
+      expect(res.body.user.role).toBe('admin');
     });
 
     it('should auto-promote even if Bot users exist (only non-bot users counted)', async () => {

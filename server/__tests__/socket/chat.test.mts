@@ -5,6 +5,7 @@ import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import express from 'express';
 import request from 'supertest';
 import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
+import { createTestUser } from '../helpers/auth.mts';
 
 // app.js already calls setupSocketHandlers(io)
 import { app, server as appServer, io } from '../../src/app.mts';
@@ -42,20 +43,10 @@ describe('Socket.IO Chat', () => {
     await cleanTestDb();
 
     // Create users
-    const res1 = await request(app)
-      .post('/api/auth/register')
-      .send({ login_id: 'EMP001', display_name: '田中太郎', password: 'pass123' });
-    user1 = res1.body;
-
-    const res2 = await request(app)
-      .post('/api/auth/register')
-      .send({ login_id: 'EMP002', display_name: '鈴木花子', password: 'pass123' });
-    user2 = res2.body;
-
-    const res3 = await request(app)
-      .post('/api/auth/register')
-      .send({ login_id: 'EMP003', display_name: '佐藤次郎', password: 'pass123' });
-    user3 = res3.body;
+    // ★ 自己登録は最初の 1 人だけに閉じた (2026-09-28) ので、テスト DB に直接作る
+    user1 = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎', password: 'pass123' });
+    user2 = await createTestUser({ login_id: 'EMP002', display_name: '鈴木花子', password: 'pass123' });
+    user3 = await createTestUser({ login_id: 'EMP003', display_name: '佐藤次郎', password: 'pass123' });
 
     // Create room
     const roomRes = await request(app)

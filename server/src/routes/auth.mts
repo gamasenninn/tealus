@@ -43,7 +43,16 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    // Check duplicate
+    // ★ 自己登録は「人の利用者が 0 人 = 最初の管理者づくり」のときだけ開く (2026-09-28)。
+    //   それ以外で開いている必要はない。2 人目からは管理者がダッシュボード (/api/admin/users) で作る
+    const { rows: [{ count }] } = await pool.query<{ count: string }>(
+      'SELECT COUNT(*) FROM users WHERE is_bot = false'
+    );
+    if (parseInt(count, 10) > 0) {
+      return res.status(403).json({ error: E.AUTH_REGISTER_CLOSED });
+    }
+
+    // Check duplicate (★ 人が 0 人のときは、ボットの login_id との重複だけがありうる)
     const existing = await pool.query<{ id: string }>(
       'SELECT id FROM users WHERE login_id = $1',
       [login_id]
@@ -55,11 +64,8 @@ router.post('/register', async (req, res) => {
     // Hash password
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
-    // 最初の非 Bot ユーザーは admin として作成 (#211)
-    const { rows: [{ count }] } = await pool.query<{ count: string }>(
-      'SELECT COUNT(*) FROM users WHERE is_bot = false'
-    );
-    const role = parseInt(count, 10) === 0 ? 'admin' : 'user';
+    // 最初の非 Bot ユーザーは admin として作成 (#211)。★ 上で 0 人を確かめているので必ず admin
+    const role = 'admin';
 
     // Insert user
     const result = await pool.query<AuthUser>(
