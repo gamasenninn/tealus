@@ -27,6 +27,12 @@ export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER || 'tealus'}:${process.env.DB_PASSWORD || 'tealus_dev'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5432'}/${process.env.DB_NAME || 'tealus'}`,
 });
 
+// ★ 待機中の接続が切られたとき (DB の再起動など) の知らせを受け止める (2026-09-28)。
+//   agent-server には全体の受け止め口が無いので、受け止めないとプロセスごと落ちる
+pool.on('error', (err) => {
+  logger.warn(`[db] 待機中の接続が切れました (次の要求で張り直します): ${err.message}`);
+});
+
 /**
  * コンテキストを取得または新規作成
  */

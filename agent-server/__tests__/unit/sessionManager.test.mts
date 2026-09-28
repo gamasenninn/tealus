@@ -10,6 +10,7 @@ jest.mock('pg', () => {
   const mockQueryFn = jest.fn();
   const MockPool = jest.fn().mockImplementation(() => ({
     query: mockQueryFn,
+    on: jest.fn(),   // ★ 2026-09-28: 本物は切断の知らせを pool.on('error') で受け止める
   }));
   (MockPool as unknown as { __mockQuery: jest.Mock }).__mockQuery = mockQueryFn;
   return { Pool: MockPool };
