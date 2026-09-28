@@ -2,7 +2,7 @@ import request from 'supertest';
 import path from 'node:path';
 import fs from 'node:fs';
 import { app } from '../../src/app.mts';
-import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
+import { setupTestDb, cleanTestDb, closeTestDb, getTestPool, waitTranscriptionSettled } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 
 const fixturesDir = path.join(import.meta.dirname, '../fixtures');
@@ -46,8 +46,8 @@ describe('Transcription Edit API', () => {
       .attach('voice', voicePath);
     messageId = uploadRes.body.message.id;
 
-    // Wait for async process to settle, then simulate completion
-    await new Promise(r => setTimeout(r, 500));
+    // 裏の文字起こしが書き終わるまで待ってから完了を模す (固定時間の待ちは、遅れた場合に上書きされる)
+    await waitTranscriptionSettled(messageId);
     const pool = getTestPool();
     await pool.query(
       `UPDATE voice_transcriptions SET status = 'done', raw_text = '元のテキスト', formatted_text = '整形済みテキスト' WHERE message_id = $1`,

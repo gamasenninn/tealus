@@ -107,6 +107,9 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       [userId]
     );
     logger.debug(`push: user=${userId} subscriptions=${result.rows.length} title=${payload.title}`);
+    // ★ 送り先が無ければ未読も数えない (2026-09-28)。数えていた頃は送らない人の分まで集計が走り、
+    //   テストでは裏に残ったこの集計が次のテストの TRUNCATE とデッドロックしていた
+    if (result.rows.length === 0) return;
 
     // SPIKE: 全 room 未読合計を計算して payload に追加 (App Badge 用)
     const totalUnread = await calculateTotalUnreadForUser(userId);

@@ -2,7 +2,7 @@ import request from 'supertest';
 import path from 'node:path';
 import fs from 'node:fs';
 import { app } from '../../src/app.mts';
-import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
+import { setupTestDb, cleanTestDb, closeTestDb, getTestPool, waitTranscriptionSettled } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 
 const fixturesDir = path.join(import.meta.dirname, '../fixtures');
@@ -63,11 +63,11 @@ describe('Voice Transcription', () => {
       .set('Authorization', `Bearer ${user1.token}`)
       .attach('voice', voicePath);
 
-    // Wait for async transcription to settle (will fail on dummy file)
-    await new Promise(r => setTimeout(r, 500));
+    // 裏の文字起こしが書き終わるまで待つ (固定時間の待ちは、遅れた場合に上書きされる)
+    await waitTranscriptionSettled(uploadRes.body.message.id);
+    const pool = getTestPool();
 
     // Simulate transcription completion after background process settles
-    const pool = getTestPool();
     await pool.query(
       `UPDATE voice_transcriptions SET status = 'done', raw_text = 'テスト文字起こし', formatted_text = '整形済みテスト'
        WHERE message_id = $1`,

@@ -86,3 +86,20 @@ export async function closeTestDb(): Promise<void> {
     pool = null;
   }
 }
+
+/**
+ * 音声を上げた直後に裏で走る文字起こしが、状態を書き終えるまで待つ
+ * (テストのダミー音声では 'error' で終わる)。
+ * ★ 固定時間の待ちにしないこと。裏の 'error' がテストの書いた 'done' より後に届くと上書きされる
+ *   (待ちを 0 にすると 2 回に 1 回落ちた。単独なら約 80ms で終わるので 500ms 待ちでは実際には出ていない)
+ */
+export async function waitTranscriptionSettled(messageId: string, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const r = await getTestPool().query('SELECT status FROM voice_transcriptions WHERE message_id = $1', [messageId]);
+    const status = r.rows[0]?.status;
+    if (status === 'error' || status === 'done') return;
+    if (Date.now() > deadline) throw new Error(`文字起こしが終わらない (status=${status})`);
+    await new Promise(res => setTimeout(res, 20));
+  }
+}
