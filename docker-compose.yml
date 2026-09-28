@@ -10,7 +10,8 @@ services:
       POSTGRES_PASSWORD: tealus_dev
       POSTGRES_DB: tealus
     ports:
-      - "5432:5432"
+      # ★ 自分のマシンからだけ受ける (2026-09-28)。以前は全部の口で待ち受け、LAN から届く設定だった
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./server/src/db/migrations:/docker-entrypoint-initdb.d
@@ -24,7 +25,7 @@ services:
       POSTGRES_PASSWORD: tealus_test
       POSTGRES_DB: tealus_test
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
 
 volumes:
   pgdata:
