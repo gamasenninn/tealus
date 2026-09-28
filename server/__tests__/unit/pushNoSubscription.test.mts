@@ -24,7 +24,7 @@ const SUB = {
 };
 
 function unreadQueries() {
-  return mockQuery.mock.calls.filter(c => String(c[0]).includes('unread_count'));
+  return mockQuery.mock.calls.filter(c => String(c[0]).includes('room_read_cursors'));
 }
 
 beforeEach(() => {
@@ -44,7 +44,7 @@ describe('sendPushToUser — 購読の有無', () => {
 
   test('購読があれば未読を数えて、合計を載せて送る', async () => {
     mockQuery.mockImplementation((sql: string) =>
-      Promise.resolve(String(sql).includes('unread_count') ? { rows: [{ total: 3 }] } : { rows: [SUB] }));
+      Promise.resolve(String(sql).includes('room_read_cursors') ? { rows: [{ total: 3 }] } : { rows: [SUB] }));
     mockSend.mockResolvedValue({});
 
     await sendPushToUser('u1', { title: 't', body: 'b' });
