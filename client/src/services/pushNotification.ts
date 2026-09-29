@@ -1,5 +1,6 @@
 import { api } from './api';
 import { getConfig } from './clientConfig';
+import { deviceLabel } from '../utils/deviceLabel';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -42,10 +43,14 @@ export async function registerPushNotification(): Promise<void> {
     const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!)));
     const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!)));
 
+    // 端末名を付ける (2026-09-29)。以前は送っておらず、登録がどの端末のものか見分けられなかった
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches
+      || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     await api.subscribePush({
       endpoint: subscription.endpoint,
       p256dh_key: p256dh,
       auth_key: auth,
+      device_name: deviceLabel(navigator.userAgent, standalone),
     });
   } catch (err) {
     console.error('[push] Registration failed:', err);
