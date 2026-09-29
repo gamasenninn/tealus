@@ -215,8 +215,10 @@ function ChatRoom() {
       >
           <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
         {/* #476 日ごとのまとまりに入れ、先頭の札を上に貼り付ける (押すとカレンダー) */}
-        {groupByDay(messages).map((g) => (
-          <div key={`${g.day}:${g.messages[0].id}`} className="day-group" data-date={g.firstCreatedAt}>
+        {groupByDay(messages).map((g, gi, all) => (
+          // ★ key は日付 (+ 同じ日が離れて 2 回出たときの番号)。先頭の投稿の id を入れると、古い投稿を
+          //   読み足したときに key が変わり、その日のまとまりを丸ごと作り直す (画像・動画がちらつく)
+          <div key={`${g.day}#${all.slice(0, gi).filter((x) => x.day === g.day).length}`} className="day-group" data-date={g.firstCreatedAt}>
             <DateSeparator date={g.firstCreatedAt} sticky onClick={() => setCalendarDate(g.day)} />
             {g.messages.map((msg) => (
               <div key={msg.id} data-msg-id={msg.id}>
