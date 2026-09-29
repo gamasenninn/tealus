@@ -9,7 +9,7 @@
  * → id が引けなければタグ名で絞る (本体は room_id + tag_names にも対応している)。
  */
 import { render, waitFor, fireEvent, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const search = vi.fn((_q: string, _opts: Record<string, unknown>) => Promise.resolve({ results: [] }));
@@ -87,5 +87,40 @@ describe('SearchPage — タグを選んでいる間は、必ずタグで絞っ�
 
     await waitFor(() => expect(search).toHaveBeenCalled());
     expect(search.mock.calls.at(-1)![1]).toMatchObject({ roomId: 'R1', tagId: 'tag-claim' });
+  });
+});
+
+// #472 結果を開くとき「どの検索から来たか」を state に残す (部屋の検索アイコンが前の検索画面へ戻れるように)
+function LocationProbe() {
+  const loc = useLocation();
+  return <p data-testid="probe">{loc.pathname}|{JSON.stringify(loc.state)}</p>;
+}
+
+describe('SearchPage — 結果を開くとき、どの検索から来たかを残す (#472)', () => {
+  const result = { id: 'm1', room_id: 'R1', content: 'ご相談の件', type: 'text', created_at: '2026-09-29T00:00:00Z' };
+  beforeEach(() => { search.mockClear(); sessionStorage.clear(); });
+
+  const openFirstResult = async (entry: string) => {
+    sessionStorage.setItem('searchCache', JSON.stringify({ query: '見積', selectedTags: [], results: [result] }));
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/rooms/:roomId" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByText(/ご相談の件/));
+    return screen.findByTestId('probe');
+  };
+
+  it('★ 部屋内検索: その部屋の id を残す', async () => {
+    const probe = await openFirstResult('/search?room_id=R1');
+    expect(probe.textContent).toBe('/rooms/R1|{"fromSearch":{"roomId":"R1"}}');
+  });
+
+  it('全体検索: 部屋の id は null (部屋の検索アイコンは部屋内検索を開く)', async () => {
+    const probe = await openFirstResult('/search');
+    expect(probe.textContent).toBe('/rooms/R1|{"fromSearch":{"roomId":null}}');
   });
 });

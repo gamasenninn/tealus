@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useMessageStore } from '../../stores/messageStore';
@@ -22,6 +22,7 @@ import TransceiverErrorBoundary from './TransceiverErrorBoundary';
 import MessageErrorBoundary from './MessageErrorBoundary';
 import AgentCancelButton from './AgentCancelButton';
 import { isCancellableStatus } from '../../utils/agentStatus';
+import { roomSearchAction } from '../../utils/searchNav';
 import { useCapabilityStore } from '../../stores/capabilityStore';
 import type { RoomMember } from '../../types';
 import './ChatRoom.css';
@@ -41,6 +42,7 @@ function ChatRoom() {
   const { roomId } = useParams() as { roomId: string };
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuthStore();
   const { currentRoom, members, lastReadMessageId, error: roomError } = useRoomStore();
   const { messages, error: messageError } = useMessageStore();
@@ -178,7 +180,11 @@ function ChatRoom() {
           </button>
         )}
         <button className="chat-header-btn" onClick={() => navigate(`/rooms/${roomId}/gallery`)} title="ファイル"><Image size={18} /></button>
-        <button className="chat-header-btn" onClick={() => navigate(`/search?room_id=${roomId}`)}><Search size={18} /></button>
+        {/* #472 検索結果から来た部屋では、新しく積まずに前の検索画面へ戻る (← 2 回で元の部屋に戻れる) */}
+        <button className="chat-header-btn" onClick={() => {
+          const a = roomSearchAction(location.state, roomId);
+          if (a.type === 'back') navigate(-1); else navigate(a.to);
+        }}><Search size={18} /></button>
         {currentRoom?.type === 'group' && (
           <button className="chat-header-btn" onClick={() => setShowMembers(true)}>≡</button>
         )}

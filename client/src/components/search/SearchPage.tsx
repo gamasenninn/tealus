@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { renderKeywordHighlight } from '../../utils/highlight';
+import { searchResultState } from '../../utils/searchNav';
 import { ArrowLeft, CheckSquare, Square, X, RefreshCw } from 'lucide-react';
 import type { Message, Tag } from '../../types';
 import './SearchPage.css';
@@ -267,7 +268,8 @@ function SearchPage() {
 
   const handleResultClick = (result: SearchResult) => {
     if (scrollRef.current) sessionStorage.setItem('searchScroll', String(scrollRef.current.scrollTop));
-    navigate(`/rooms/${result.room_id}?msg=${result.id}&q=${encodeURIComponent(query)}`);
+    // #472 どの検索から来たかを残す (部屋の検索アイコンが、新しく積まずにこの画面へ戻れるように)
+    navigate(`/rooms/${result.room_id}?msg=${result.id}&q=${encodeURIComponent(query)}`, { state: searchResultState(roomId) });
   };
 
   // タグの分類
