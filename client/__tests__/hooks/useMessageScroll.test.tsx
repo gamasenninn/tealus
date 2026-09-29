@@ -55,6 +55,34 @@ describe('useMessageScroll — 画面が見えているときだけ、まとめ�
     expect(api.markRead).toHaveBeenCalledWith('room1', ['m0', 'm1']);
   });
 
+  // ★ #474 の残り: 裏のタブが自分で読み込み直したとき (新しい版への更新など) も、開いた部屋をまとめて既読にしていた。
+  //   確認中に裏のタブを読み込み直したら 13 件が既読になった
+  it('★★ 裏で部屋を開いた (読み込み直した) ときは既読にせず、見えるようになったら既読にする', () => {
+    visibility = 'hidden';
+    const hook = renderHook(() => useMessageScroll('room1'));
+    hook.result.current.messagesEndRef.current = { scrollIntoView: vi.fn() } as unknown as HTMLDivElement;
+    hook.result.current.messagesContainerRef.current = document.createElement('div');
+    act(() => { vi.runAllTimers(); });
+    expect(api.markRead).not.toHaveBeenCalled();
+
+    visibility = 'visible';
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api.markRead).toHaveBeenCalledTimes(1);
+    expect(api.markRead).toHaveBeenCalledWith('room1', ['m0']);
+  });
+
+  it('★ 見えるようになる前に部屋を離れたら、既読にしない', () => {
+    visibility = 'hidden';
+    const hook = renderHook(() => useMessageScroll('room1'));
+    hook.result.current.messagesEndRef.current = { scrollIntoView: vi.fn() } as unknown as HTMLDivElement;
+    hook.result.current.messagesContainerRef.current = document.createElement('div');
+    act(() => { vi.runAllTimers(); });
+    hook.unmount();
+    visibility = 'visible';
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
   it('★★ 裏にある間に投稿が増えても、既読にしない', () => {
     const { rerender } = openRoom();
     visibility = 'hidden';

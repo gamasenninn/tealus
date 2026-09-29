@@ -54,13 +54,13 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
           if (container) {
             container.scrollTop = parseInt(savedScrollTop);
           }
-          markVisibleAsRead();
+          markReadWhenVisible();
         }, INITIAL_SCROLL_DELAY);
         sessionStorage.removeItem(`scrollPos:${roomId}`);
       } else {
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView();
-          markVisibleAsRead();
+          markReadWhenVisible();
         }, INITIAL_SCROLL_DELAY);
       }
       isInitialLoad.current = false;
@@ -120,6 +120,29 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
       }
     }
   }, [messages, roomId, user]);
+
+  // #474 の残り: 部屋を開いたときの既読も、画面が裏にあるなら見えるようになるまで待つ。
+  //   裏のタブが自分で読み込み直したとき (新しい版への更新など) に、開いた部屋をまとめて既読にしていた
+  const readDeferred = useRef(false);
+  const markRef = useRef(markVisibleAsRead);
+  markRef.current = markVisibleAsRead;
+  const markReadWhenVisible = () => {
+    if (document.visibilityState === 'visible') markRef.current();
+    else readDeferred.current = true;
+  };
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && readDeferred.current) {
+        readDeferred.current = false;
+        markRef.current();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      readDeferred.current = false;   // 部屋を切り替えたら、前の部屋の「待ち」は持ち越さない
+    };
+  }, [roomId]);
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
