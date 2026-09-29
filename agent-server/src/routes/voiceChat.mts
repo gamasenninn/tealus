@@ -33,6 +33,7 @@ import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { partsFor } from '../lib/promptKnowledge.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
+import { resolveRoomArg, roomIdsFromListRooms } from '../lib/voiceChatRoomArg.mts';
 
 export const router = express.Router();
 
@@ -143,9 +144,13 @@ interface McpServerLike {
 interface SessionEntry {
   userId: string;
   roomId: string;
+  /** #477 正直な返事に添える、いまの部屋の名前 */
+  roomName: string;
   allowedTools: Set<string>;
   serverOf: Map<string, McpServerLike>;
   issuedAt: number;
+  /** #477 アシスタントが参加しているルームの ID。undefined = まだ引いていない / null = 引けなかった */
+  knownRoomIds?: Set<string> | null;
 }
 
 /** セッション台帳。TTL を過ぎたものは掃除する (プロセス内。再起動で消えてよい) */
@@ -247,6 +252,8 @@ export function buildInstructions(
   const base = [
     `あなたは社内メッセンジャー Tealus の「${roomName}」ルームで、音声で会話するアシスタントです。`,
     '過去のやりとりは道具 (get_messages / search_messages) で引けます。必要になったときだけ引いてください。',
+    // #477 36 文字の ID を写させない (2 つの部屋の ID をつないで「権限がない」と答えた実例がある)
+    'このルームのことを引くときは、room_id に "current" を渡してください (ID を調べて写す必要はありません)。',
     '★ 道具を呼ぶ前に「確認しますね」のように一言だけ挟んでください (黙って待たせない)。',
     '話し言葉で、短く答えてください。聞かれていないことを足さないこと。',
     '役職や呼び方はそのまま残してください。人物のフルネームに言い換えないこと。',
@@ -410,7 +417,7 @@ router.post('/session', async (req, res) => {
     sweep();
     const sessionId = randomUUID();
     sessions.set(sessionId, {
-      userId, roomId,
+      userId, roomId, roomName,
       allowedTools: new Set(serverOf.keys()),
       serverOf,
       issuedAt: Date.now(),
@@ -521,6 +528,18 @@ router.post('/tool-call', async (req, res) => {
     args.content = withOriginMark(args.content);
   }
 
+  // ★ #477 room_id: "current" はいまの部屋に置き換え、参加していない ID は呼ばずに正直に返す。
+  //   AI が 36 文字の ID を写し間違え、本体の 403 を「権限がない」と受け取って答え続けたため (docs/08 §12.3)
+  if (typeof args.room_id === 'string') {
+    if (entry.knownRoomIds === undefined) entry.knownRoomIds = await loadKnownRoomIds(entry);
+    const resolved = resolveRoomArg(name, args, entry.roomId, entry.roomName, entry.knownRoomIds);
+    if (!resolved.ok) {
+      logger.info(`[voice-chat] tool ${name} 呼ばずに返す (参加していない room_id=${String(args.room_id).slice(0, 36)}) session=${sessionId.slice(0, 8)}`);
+      return res.json({ output: resolved.output, elapsed_ms: Date.now() - started });
+    }
+    args = resolved.args;
+  }
+
   try {
     const result = await entry.serverOf.get(name)!.callTool(name, args);
     const output = typeof result === 'string' ? result : JSON.stringify(result);
@@ -533,6 +552,18 @@ router.post('/tool-call', async (req, res) => {
     res.json({ output: `道具の実行に失敗しました: ${message}`, elapsed_ms: Date.now() - started });
   }
 });
+
+/** #477 アシスタントが参加しているルームの ID を 1 回だけ引く。引けなければ null (= 確かめずに呼ぶ) */
+async function loadKnownRoomIds(entry: SessionEntry): Promise<Set<string> | null> {
+  const server = entry.serverOf.get('list_rooms');
+  if (!server) return null;
+  try {
+    return roomIdsFromListRooms(await server.callTool('list_rooms', {}));
+  } catch (err) {
+    logger.warn(`[voice-chat] list_rooms を引けず、room_id を確かめずに呼ぶ: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
 
 /**
  * POST /voice-chat/promote — ★ 昇格 (R3、docs/08 §1.2.2)。

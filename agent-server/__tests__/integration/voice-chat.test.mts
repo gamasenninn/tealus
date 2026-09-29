@@ -214,6 +214,75 @@ describe('POST /voice-chat/tool-call — 台帳の検証 (二段目)', () => {
 });
 
 /**
+ * #477 AI が room_id を写し間違えて「権限がない」と答えた (2 つの部屋の ID を前後でつないだ)。
+ * ★ いまの部屋は "current" で指せる。参加していない ID は呼ばずに正直に返す。
+ */
+describe('POST /voice-chat/tool-call — room_id の扱い (#477)', () => {
+  const ROOM_ARG_TOOLS = [
+    ...TOOLS,
+    { name: 'list_rooms', description: '参加中のルーム', inputSchema: { type: 'object', properties: {} } },
+    { name: 'join_room', description: '参加', inputSchema: { type: 'object', properties: { room_id: { type: 'string' } } } },
+  ];
+  const listRoomsResult = { content: [{ type: 'text', text: JSON.stringify({ rooms: [{ id: 'r1' }, { id: 'r2' }] }) }] };
+  let sessionId: string;
+  const call = (name: string, args: Record<string, unknown>) => request(app).post('/voice-chat/tool-call')
+    .set('Authorization', `Bearer ${token('u1')}`)
+    .send({ session_id: sessionId, call_id: 'c1', name, arguments: JSON.stringify(args) });
+  const calledWith = (name: string) => mockCallTool.mock.calls.filter(([n]) => n === name).map(([, a]) => a);
+
+  beforeEach(async () => {
+    voiceChat._resetForTest();
+    mockListTools.mockReset().mockResolvedValue(ROOM_ARG_TOOLS);
+    mockCallTool.mockReset().mockImplementation(async (name: string) =>
+      name === 'list_rooms' ? listRoomsResult : { content: [{ type: 'text', text: 'ok' }] });
+    stubFetch();
+    const res = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
+    sessionId = res.body.session_id;
+  });
+
+  test('★★ "current" は、いまの部屋の ID に置き換えて呼ぶ', async () => {
+    const res = await call('get_messages', { room_id: 'current' });
+    expect(res.status).toBe(200);
+    expect(calledWith('get_messages')).toEqual([{ room_id: 'r1' }]);
+  });
+
+  test('★★ 参加していない ID は呼ばずに、正直な理由を返す', async () => {
+    const res = await call('get_messages', { room_id: 'r1-mixed-up' });
+    expect(res.status).toBe(200);
+    expect(calledWith('get_messages')).toEqual([]);
+    expect(res.body.output).toContain('参加しているルームにありません');
+    expect(res.body.output).toContain('current');
+    expect(res.body.output).toContain('営業報告');   // いまの部屋の名前を添える
+  });
+
+  test('参加している別の部屋は、今までどおり呼ぶ', async () => {
+    await call('get_messages', { room_id: 'r2' });
+    expect(calledWith('get_messages')).toEqual([{ room_id: 'r2' }]);
+  });
+
+  test('★ 参加しているルームの一覧は、セッション中に 1 回だけ引く', async () => {
+    await call('get_messages', { room_id: 'r2' });
+    await call('get_messages', { room_id: 'r3' });
+    expect(calledWith('list_rooms')).toHaveLength(1);
+  });
+
+  test('★ join_room は確かめずに呼ぶ (参加していない部屋に入るための道具)', async () => {
+    await call('join_room', { room_id: 'r9' });
+    expect(calledWith('join_room')).toEqual([{ room_id: 'r9' }]);
+  });
+
+  test('★ 一覧が引けないときは確かめずに呼ぶ (止めない)', async () => {
+    mockCallTool.mockImplementation(async (name: string) => {
+      if (name === 'list_rooms') throw new Error('MCP が落ちています');
+      return { content: [{ type: 'text', text: 'ok' }] };
+    });
+    await call('get_messages', { room_id: 'r9' });
+    expect(calledWith('get_messages')).toEqual([{ room_id: 'r9' }]);
+  });
+});
+
+/**
  * #405 R3 昇格 — 会話の中の「良かった 1 つ」を、いま居るルームへ残す (docs/08 §1.2.2)。
  *
  * ★ **これが無い会話モードは作らない**、が設計書の成立条件。捨てるだけなら ChatGPT でよく、
