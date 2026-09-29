@@ -20,6 +20,10 @@ process.env.TEALUS_API_URL = 'http://tealus.test';
 // ★ ルーム固有の指示のテストで本物のファイルを置くため、ワークスペースを一時 dir にする
 process.env.AGENT_WORKSPACE_ROOT = require('node:fs')
   .mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'vc-ws-'));
+// ★ 2026-09-29: 作ったまま消しておらず、流すたびに 1 つ残っていた (9/5 から 100 個)
+afterAll(() => {
+  require('node:fs').rmSync(process.env.AGENT_WORKSPACE_ROOT!, { recursive: true, force: true });
+});
 
 // #408 昇格の失敗が log に残ることを見るため、logger を差し替える
 jest.mock('../../src/lib/logger.mts', () => ({ logger: {
