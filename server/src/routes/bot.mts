@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import type { Server } from 'socket.io';
 import { logger } from '../utils/logger.mts';
@@ -233,6 +234,16 @@ router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), async (req, res)
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
+
+// ★ 2026-09-29: 形の崩れた ID (会話モードの AI が「754...」と省略して渡した) を確かめずに DB に投げ、
+//   500 (invalid input syntax for type uuid) を返していた。AI が読んで直せるよう、400 と理由を返す。
+//   tts-audio の :id は読み上げ音声の鍵で UUID ではないので付けない
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function requireUuidId(req: Request, res: Response, next: NextFunction): void {
+  const id = String(req.params.id ?? '');
+  if (UUID_RE.test(id)) { next(); return; }
+  res.status(400).json({ error: `ID「${id.slice(0, 60)}」の形が正しくありません。ID は省略せずに、36 文字のまま渡してください。` });
+}
 
 /**
  * GET /api/bot/tts-audio/:id
@@ -594,8 +605,8 @@ interface BotMediaResponse {
   transcription?: TranscriptionTextRow;
 }
 
-router.get('/messages/:id/media', async (req, res) => {
-  const messageId = req.params.id;
+router.get('/messages/:id/media', requireUuidId, async (req, res) => {
+  const messageId = String(req.params.id);
   const userId = req.user!.id;
 
   try {
@@ -705,8 +716,8 @@ router.get('/messages/:id/media', async (req, res) => {
  * #271 (per-room MCP + light_prompt.md tuning pattern reference) follow-up、
  * 案 B (tealus-mcp `transcribe_media` MCP tool) の server-side 実装。
  */
-router.post('/messages/:id/transcribe', async (req, res) => {
-  const messageId = req.params.id;
+router.post('/messages/:id/transcribe', requireUuidId, async (req, res) => {
+  const messageId = String(req.params.id);
   const userId = req.user!.id;
   const forceRetranscribe = (req.body as { force_retranscribe?: unknown } | undefined)?.force_retranscribe === true;
 
@@ -862,8 +873,8 @@ router.post('/messages/:id/transcribe', async (req, res) => {
  *
  * 認可: Bot が message の room の member であること (= 他 bot endpoint と同 pattern)。
  */
-router.get('/messages/:id/edit-history', async (req, res) => {
-  const messageId = req.params.id;
+router.get('/messages/:id/edit-history', requireUuidId, async (req, res) => {
+  const messageId = String(req.params.id);
   const userId = req.user!.id;
 
   try {
@@ -1241,9 +1252,9 @@ router.get('/tags', async (req, res) => {
  *
  * Body: { is_done: boolean }
  */
-router.patch('/messages/:id/tags/:tag_name/done', async (req, res) => {
-  const messageId = req.params.id;
-  const tagName = req.params.tag_name;
+router.patch('/messages/:id/tags/:tag_name/done', requireUuidId, async (req, res) => {
+  const messageId = String(req.params.id);
+  const tagName = String(req.params.tag_name);
   const userId = req.user!.id;
   const { is_done } = req.body as { is_done?: unknown };
 
@@ -1476,8 +1487,8 @@ router.get('/rooms', async (req, res) => {
  * POST /api/bot/rooms/:id/join
  * Join a room
  */
-router.post('/rooms/:id/join', async (req, res) => {
-  const roomId = req.params.id;
+router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
+  const roomId = String(req.params.id);
   const userId = req.user!.id;
 
   try {
@@ -1529,8 +1540,8 @@ router.post('/rooms/:id/join', async (req, res) => {
  * 指定 user が room のメンバーか返す (#282: 委譲の権限チェック用)。
  * least privilege: bot 自身がメンバーのルームのみ照会可 (= 非メンバールームは 403)。
  */
-router.get('/rooms/:id/membership', async (req, res) => {
-  const roomId = req.params.id;
+router.get('/rooms/:id/membership', requireUuidId, async (req, res) => {
+  const roomId = String(req.params.id);
   const botUserId = req.user!.id;
   const targetUserId = req.query.user_id as string | undefined;
 
