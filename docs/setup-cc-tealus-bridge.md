@@ -498,7 +498,7 @@ listen-tealus skill を実行して、Tealus からの mention を待機して
 
 1. `.claude/cc-tealus.json` を読む
 2. catch-up 確認 (未処理あれば policy に従い対応)
-3. `tail -n 0 -F ~/.tealus/cc-queue/tealus.jsonl` を Monitor で arm
+3. `tail --pid=$$ -n 0 -F ~/.tealus/cc-queue/tealus.jsonl` を Monitor で arm (★ Monitor は最長 30 分で切れるので、切れたら張り直す。`--pid=$$` は Windows で切れた後に tail が残るのを防ぐ)
 4. 「🟢 Tealus listening (project: tealus, auto_level: L2)」と報告
 
 これで session は **新着 mention で起こされる状態**に入ります。user は別の作業をしててもいいし、session を雑談に使ってもいい。
