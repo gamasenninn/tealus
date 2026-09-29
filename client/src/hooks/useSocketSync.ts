@@ -107,9 +107,21 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     selectRoom(roomId);
     fetchMessages(roomId, targetMsgId || null);
 
+    // #474 画面が裏にある間に届いた投稿は既読にせず溜めておき、戻ったときにまとめて既読にする。
+    //   以前は開いたままの端末が裏でも既読にしていた (既読は人ごとに 1 つなので、他の端末に未読の数が出ない)
+    let pendingReadIds: string[] = [];
+    const markRead = (ids: string[]) => {
+      api.markRead(roomId, ids).catch(() => {});
+      getSocket()?.emit('message:read', { room_id: roomId, message_ids: ids });
+    };
+
     // Re-fetch messages when app returns from background
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
+        if (pendingReadIds.length > 0) {
+          markRead(pendingReadIds);
+          pendingReadIds = [];
+        }
         fetchMessages(roomId);
       }
     };
@@ -134,8 +146,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       // 考え中だった agent 自身の返信が届いたら「考え中」を解除 (idle 取りこぼしの保険、agent_id 一致のみ)
       setAgentStatus(prev => (prev && prev.agent_id === msg.sender_id ? null : prev));
       if (msg.sender_id !== user!.id) {
-        api.markRead(roomId, [msg.id]).catch(() => {});
-        socket!.emit('message:read', { room_id: roomId, message_ids: [msg.id] });
+        if (document.visibilityState === 'visible') markRead([msg.id]);
+        else pendingReadIds.push(msg.id);
         const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
         if (!isEmbed && localStorage.getItem('notificationSound') !== 'off') {
           new Audio('/notification.wav').play().catch(() => {});

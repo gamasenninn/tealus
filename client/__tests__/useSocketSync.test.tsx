@@ -41,6 +41,7 @@ import { useSocketSync } from '../src/hooks/useSocketSync';
 import { playTtsSrc } from '../src/services/ttsAudioPlayer';
 import { speakAuto } from '../src/services/browserTts';
 import { holdAudio, releaseAudio } from '../src/utils/audioExclusive';
+import { api } from '../src/services/api';
 
 // #413 読み上げの取得は fetch で始まる。掴まれている間は**取りに行きもしない**ことを見る
 globalThis.fetch = vi.fn(async () => ({
@@ -124,5 +125,83 @@ describe('useSocketSync — 会話が音声を掴んでいる間の自動読み�
     });
 
     expect(playTtsSrc).toHaveBeenCalled();
+  });
+});
+
+// #474 部屋を開いたままの端末が、画面が裏にある間も届いた投稿を既読にしていた
+// (既読は人ごとに 1 つなので、他の端末に未読の数が出ない。トランシーバー履歴で報告)
+describe('useSocketSync — 画面が見えているときだけ既読にする (#474)', () => {
+  let visibility: DocumentVisibilityState = 'visible';
+  const setVisibility = (v: DocumentVisibilityState) => {
+    visibility = v;
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  const markRead = () => vi.mocked(api.markRead);
+  const readEmits = () => vi.mocked(fakeSocket.emit).mock.calls.filter((c) => (c as unknown[])[0] === 'message:read');
+  const newMessage = (id: string, sender = 'other') =>
+    fakeSocket.trigger('message:new', { id, room_id: 'room1', sender_id: sender, type: 'text', content: 'x' });
+
+  beforeEach(() => {
+    fakeSocket.handlers = {};
+    localStorage.setItem('ttsReadAloud', 'off');
+    localStorage.setItem('notificationSound', 'off');   // jsdom は音を鳴らせない
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    visibility = 'visible';
+    markRead().mockClear();
+    markRead().mockResolvedValue(undefined as never);
+    vi.spyOn(fakeSocket, 'emit').mockClear();
+  });
+
+  it('見えている間は、届いた投稿をその場で既読にする (今までどおり)', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => newMessage('m1'));
+    expect(markRead()).toHaveBeenCalledWith('room1', ['m1']);
+    expect(readEmits()).toEqual([['message:read', { room_id: 'room1', message_ids: ['m1'] }]]);
+  });
+
+  it('★★ 裏にある間に届いた投稿は、既読にしない', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setVisibility('hidden'));
+    act(() => { newMessage('m1'); newMessage('m2'); });
+    expect(markRead()).not.toHaveBeenCalled();
+    expect(readEmits()).toEqual([]);
+  });
+
+  it('★★ 画面に戻ったとき、裏にある間の分をまとめて 1 回で既読にする', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setVisibility('hidden'));
+    act(() => { newMessage('m1'); newMessage('m2'); });
+    act(() => setVisibility('visible'));
+    expect(markRead()).toHaveBeenCalledTimes(1);
+    expect(markRead()).toHaveBeenCalledWith('room1', ['m1', 'm2']);
+    expect(readEmits()).toEqual([['message:read', { room_id: 'room1', message_ids: ['m1', 'm2'] }]]);
+  });
+
+  it('★ 戻ったあとにもう一度裏→表にしても、同じ分を二重に既読にしない', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setVisibility('hidden'));
+    act(() => newMessage('m1'));
+    act(() => setVisibility('visible'));
+    act(() => setVisibility('hidden'));
+    act(() => setVisibility('visible'));
+    expect(markRead()).toHaveBeenCalledTimes(1);
+  });
+
+  it('自分の投稿は、見えていても裏でも既読にしない', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => newMessage('mine', 'u1'));
+    act(() => setVisibility('hidden'));
+    act(() => newMessage('mine2', 'u1'));
+    act(() => setVisibility('visible'));
+    expect(markRead()).not.toHaveBeenCalled();
+  });
+
+  it('部屋を離れたら、溜めていた分は既読にしない (別の部屋で戻っても送らない)', () => {
+    const { unmount } = renderHook(() => useSocketSync('room1'));
+    act(() => setVisibility('hidden'));
+    act(() => newMessage('m1'));
+    unmount();
+    act(() => setVisibility('visible'));
+    expect(markRead()).not.toHaveBeenCalled();
   });
 });

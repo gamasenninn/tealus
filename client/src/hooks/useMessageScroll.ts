@@ -70,7 +70,8 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
         if (isNearBottom) {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          markVisibleAsRead();
+          // #474 裏にある間は既読にしない (その間の分は useSocketSync が溜めて、画面に戻ったときに既読にする)
+          if (document.visibilityState === 'visible') markVisibleAsRead();
         }
       }
     }
