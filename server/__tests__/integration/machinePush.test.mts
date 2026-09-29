@@ -4,7 +4,7 @@
  * ★ 既定は鳴らさない (今までと同じ)。rooms.push_machine_posts = true のルームだけ鳴らす。
  * ★ 人の投稿はこの設定に関係なく鳴る (media-voice-push.test が見ている)。
  * ★ 連投もまとめずに 1 件ずつ鳴らす (利用者判断)。
- * ★ 各自のオフ (room_members.push_muted) は sendPushToOfflineMembers の中で効く (roomPushMute.test)。
+ * ★ 各自のオフ (room_members.push_muted) は sendPushToRoomMembers の中で効く (roomPushMute.test)。
  */
 import request from 'supertest';
 import path from 'node:path';
@@ -14,7 +14,7 @@ import sharp from 'sharp';
 const mockPush = jest.fn();
 jest.mock('../../src/services/push.mts', () => ({
   ...jest.requireActual('../../src/services/push.mts'),
-  sendPushToOfflineMembers: (...a: unknown[]) => mockPush(...a),
+  sendPushToRoomMembers: (...a: unknown[]) => mockPush(...a),
 }));
 
 import { app } from '../../src/app.mts';

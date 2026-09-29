@@ -205,3 +205,61 @@ describe('useSocketSync — 画面が見えているときだけ既読にする 
     expect(markRead()).not.toHaveBeenCalled();
   });
 });
+
+// #475 画面が見えていて部屋を開いている間だけ「見ている」を知らせる (通知の送り先から外してもらうため)
+describe('useSocketSync — 部屋を見ていることを知らせる (#475)', () => {
+  let visibility: DocumentVisibilityState = 'visible';
+  const setVisibility = (v: DocumentVisibilityState) => {
+    visibility = v;
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  const viewingEmits = () => vi.mocked(fakeSocket.emit).mock.calls
+    .filter((c) => (c as unknown[])[0] === 'room:viewing')
+    .map((c) => (c as unknown[])[1]);
+
+  beforeEach(() => {
+    fakeSocket.handlers = {};
+    localStorage.setItem('notificationSound', 'off');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    visibility = 'visible';
+    vi.mocked(api.markRead).mockResolvedValue(undefined as never);
+    vi.spyOn(fakeSocket, 'emit').mockClear();
+  });
+
+  it('★ 開いて見えていれば「見ている」を知らせる', () => {
+    renderHook(() => useSocketSync('room1'));
+    expect(viewingEmits()).toEqual([{ room_id: 'room1', viewing: true }]);
+  });
+
+  it('★★ 裏に回ったら「見ていない」、戻ったら「見ている」', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setVisibility('hidden'));
+    act(() => setVisibility('visible'));
+    expect(viewingEmits()).toEqual([
+      { room_id: 'room1', viewing: true },
+      { room_id: 'room1', viewing: false },
+      { room_id: 'room1', viewing: true },
+    ]);
+  });
+
+  it('★★ 部屋を離れたら「見ていない」', () => {
+    const { unmount } = renderHook(() => useSocketSync('room1'));
+    unmount();
+    expect(viewingEmits().at(-1)).toEqual({ room_id: 'room1', viewing: false });
+  });
+
+  it('★ 裏で開いたときは「見ている」を知らせない', () => {
+    visibility = 'hidden';
+    renderHook(() => useSocketSync('room1'));
+    expect(viewingEmits()).toEqual([]);
+  });
+
+  it('★★ 接続し直したら、見えていればもう一度知らせる (サーバーは切断で忘れる)', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => fakeSocket.trigger('connect'));
+    expect(viewingEmits()).toEqual([
+      { room_id: 'room1', viewing: true },
+      { room_id: 'room1', viewing: true },
+    ]);
+  });
+});

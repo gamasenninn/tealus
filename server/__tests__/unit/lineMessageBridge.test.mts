@@ -53,11 +53,7 @@ jest.mock('../../src/services/linkPreview.mts', () => ({
 // Mock push (= web-push で外に出る。media.mts と同じ組で mock する)
 const mockSendPush = jest.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
 jest.mock('../../src/services/push.mts', () => ({
-  sendPushToOfflineMembers: (...args: unknown[]) => mockSendPush(...args),
-}));
-const mockGetOnlineUserIds = jest.fn((): string[] => []);
-jest.mock('../../src/socket/index.mts', () => ({
-  getOnlineUserIds: () => mockGetOnlineUserIds(),
+  sendPushToRoomMembers: (...args: unknown[]) => mockSendPush(...args),
 }));
 
 import type { Server } from 'socket.io';
@@ -102,8 +98,6 @@ beforeEach(() => {
   mockProcessLinkPreviews.mockResolvedValue(undefined);
   mockSendPush.mockReset();
   mockSendPush.mockResolvedValue(undefined);
-  mockGetOnlineUserIds.mockReset();
-  mockGetOnlineUserIds.mockReturnValue([]);
 });
 
 // ★ プッシュ通知 (2026-08-14)。socket と media にしか付いておらず、LINE 経由は飛んでいなかった。
@@ -117,9 +111,9 @@ describe('postTextToTealus のプッシュ通知 (2026-08-14)', () => {
   const newMsg = { id: 'msg-1', room_id: 'room-1', type: 'text', content: 'x', sender_id: 'bot-1' };
   const okSql = () => setupSqlSequence([{ rows: [] }, { rows: [newMsg] }, { rows: [] }]);
 
-  test('★ オフラインのメンバーへプッシュを送る (送信者名 + 本文)', async () => {
+  // ★ #475: 送り先から外す人 (その部屋をいま見ている人) は送る側が引く。呼ぶ側は集合を渡さない
+  test('★ メンバーへプッシュを送る (送信者名 + 本文)。見ている人の集合は渡さない', async () => {
     okSql();
-    mockGetOnlineUserIds.mockReturnValue(['u-online']);
     const { io } = makeMockIo();
     await postTextToTealus({ roomId: 'room-1', sender: TEST_SENDER, content: 'シバウラS440 動作確認', io });
 
@@ -131,8 +125,8 @@ describe('postTextToTealus のプッシュ通知 (2026-08-14)', () => {
         body: 'シバウラS440 動作確認',
         data: { roomId: 'room-1', messageId: 'msg-1' },
       }),
-      new Set(['u-online']),
     );
+    expect(mockSendPush.mock.calls[0]).toHaveLength(3);
   });
 
   test('本文は 100 文字で切る (socket 側と同じ扱い)', async () => {

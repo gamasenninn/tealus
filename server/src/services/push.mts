@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.mts';
 import webpush from 'web-push';
 import { pool } from '../db/pool.mts';
+import { viewingUserIds } from '../socket/viewingRooms.mts';
 
 /**
  * VAPID の連絡先 (subject) の点検。問題が無ければ null (2026-09-27)
@@ -146,13 +147,20 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
 }
 
 /**
- * Send push notification to all offline members of a room.
+ * ルームのメンバーに通知を送る。送り手と、その部屋をいま見ている人は除く。
+ *
+ * ★ #475 (2026-09-29): 以前は「どの端末からでも接続している人」を除いていた (sendPushToOfflineMembers)。
+ *   PC を開いたままだとスマホに 1 件も届かなかった。除くのは「その部屋を開いていて画面が見えている人」だけにした。
+ * ★ viewing を渡さなければ viewingRooms から引く。呼ぶ側で集合を作らせない (作り間違えると黙って鳴らなくなる)。
  * @param roomId - Room ID
  * @param senderId - Sender's user ID (excluded from push)
  * @param payload - Notification payload
- * @param onlineUserIds - Set of currently connected user IDs
+ * @param viewing - その部屋をいま見ている利用者 (テスト以外では渡さない)
  */
-export async function sendPushToOfflineMembers(roomId: string, senderId: string, payload: PushPayload, onlineUserIds: Set<string>): Promise<void> {
+export async function sendPushToRoomMembers(
+  roomId: string, senderId: string, payload: PushPayload,
+  viewing: Set<string> = new Set(viewingUserIds(roomId)),
+): Promise<void> {
   try {
     const members = await pool.query<{ user_id: string }>(
       // ★ #463 このルームを鳴らさないにしている人は除く (通話の着信は sendPushToUser を直接呼ぶので影響しない)
@@ -161,11 +169,11 @@ export async function sendPushToOfflineMembers(roomId: string, senderId: string,
     );
 
     for (const member of members.rows) {
-      if (!onlineUserIds.has(member.user_id)) {
+      if (!viewing.has(member.user_id)) {
         await sendPushToUser(member.user_id, payload);
       }
     }
   } catch (err) {
-    logger.error('sendPushToOfflineMembers error:', err);
+    logger.error('sendPushToRoomMembers error:', err);
   }
 }

@@ -5,15 +5,14 @@
  *   機械の流れは量がルームで大きく違い (トランシーバー履歴 1 日 57 件・通話履歴 33 件・出品写真 18 件)、
  *   全部を既定で鳴らすと、止めたい人が各自でオフにするまで鳴り続けるため (利用者判断)。
  * ★ 連投もまとめずに 1 件ずつ鳴らす (利用者判断)。
- * ★ 各自のオフ (room_members.push_muted) は sendPushToOfflineMembers の中で効く。
+ * ★ 各自のオフ (room_members.push_muted) は sendPushToRoomMembers の中で効く。
  *
  * 呼び出し側は await してよい: 待つのはルームの設定を引く 1 回だけで、送信そのものは待たない。
  * 失敗しても投稿は止めない (ログだけ残す)。
  */
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
-import { sendPushToOfflineMembers } from './push.mts';
-import { getOnlineUserIds } from '../socket/index.mts';
+import { sendPushToRoomMembers } from './push.mts';
 
 export interface MachinePost {
   roomId: string;
@@ -30,11 +29,11 @@ export async function pushMachinePost(post: MachinePost): Promise<void> {
       [post.roomId],
     );
     if (!r.rows[0]?.push_machine_posts) return;
-    sendPushToOfflineMembers(post.roomId, post.senderId, {
+    sendPushToRoomMembers(post.roomId, post.senderId, {
       title: post.senderName,
       body: post.body,
       data: { roomId: post.roomId, messageId: post.messageId },
-    }, new Set(getOnlineUserIds())).catch(() => {});
+    }).catch(() => {});
   } catch (err) {
     logger.warn('機械の投稿の通知に失敗しました (投稿は成功): ' + (err instanceof Error ? err.message : String(err)));
   }

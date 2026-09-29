@@ -2,7 +2,7 @@
  * ルームごとに通知を鳴らさないようにする (#463, 2026-09-28)
  *
  * ★ 各自が自分の分だけ切り替える。既定は鳴らす。
- * ★ 鳴らさないを選んだ人は sendPushToOfflineMembers の送り先から外れる。
+ * ★ 鳴らさないを選んだ人は sendPushToRoomMembers の送り先から外れる。
  * ★ 通話の着信は止めない (sendPushToUser を直接呼ぶ経路なので、ここでは触らない)。
  */
 const mockSend = jest.fn();
@@ -12,7 +12,7 @@ jest.mock('web-push', () => ({ __esModule: true, default: {
 
 import request from 'supertest';
 import { app } from '../../src/app.mts';
-import { sendPushToOfflineMembers } from '../../src/services/push.mts';
+import { sendPushToRoomMembers } from '../../src/services/push.mts';
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 
@@ -79,7 +79,7 @@ describe('ルームごとの通知オフ', () => {
 
     // outsider が送り手のつもりで、me と other の両方に届く状況を作る
     await pool.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, outsider.user.id]);
-    await sendPushToOfflineMembers(roomId, outsider.user.id, { title: 't', body: 'b' }, new Set());
+    await sendPushToRoomMembers(roomId, outsider.user.id, { title: 't', body: 'b' }, new Set());
 
     const endpoints = mockSend.mock.calls.map(c => c[0].endpoint);
     expect(endpoints).toEqual([`https://push.example/${me.user.id}`]);

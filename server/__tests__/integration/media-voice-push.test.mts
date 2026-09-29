@@ -16,7 +16,7 @@ import sharp from 'sharp';
 const mockPush = jest.fn();
 jest.mock('../../src/services/push.mts', () => ({
   ...jest.requireActual('../../src/services/push.mts'),
-  sendPushToOfflineMembers: (...a: unknown[]) => mockPush(...a),
+  sendPushToRoomMembers: (...a: unknown[]) => mockPush(...a),
 }));
 
 import { app } from '../../src/app.mts';

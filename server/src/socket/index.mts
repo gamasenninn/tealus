@@ -8,6 +8,7 @@ import { registerMessageHandler } from './handlers/message.mts';
 import { registerReadHandler } from './handlers/read.mts';
 import { registerTypingHandler } from './handlers/typing.mts';
 import { registerCallHandler } from './handlers/call.mts';
+import { setViewing, removeSocket } from './viewingRooms.mts';
 import type { SocketUser } from '../types.mts';
 
 // Online users: userId -> Set of socketIds
@@ -99,6 +100,14 @@ export function setupSocketHandlers(io: Server): void {
       socket.leave(roomId);
     });
 
+    // #475 その部屋を開いていて画面が見えている間だけ viewing: true が届く。通知の送り先から外すのに使う
+    // ★ 影響するのは自分への通知だけなので、メンバーかどうかは確かめない (形だけ確かめる)
+    socket.on('room:viewing', (data: unknown) => {
+      const d = data as { room_id?: unknown; viewing?: unknown } | null;
+      if (!d || typeof d.room_id !== 'string' || !UUID_REGEX.test(d.room_id) || typeof d.viewing !== 'boolean') return;
+      setViewing(socket.id, userId, d.room_id, d.viewing);
+    });
+
     // Register handlers
     registerMessageHandler(socket, io);
     registerReadHandler(socket);
@@ -108,6 +117,7 @@ export function setupSocketHandlers(io: Server): void {
     // Disconnect
     socket.on('disconnect', () => {
       logger.info(`Client disconnected: ${socket.user.display_name} (${socket.id})`);
+      removeSocket(socket.id);   // #475 見ていた部屋も消す
 
       const sockets = onlineUsers.get(userId);
       if (sockets) {

@@ -115,14 +115,25 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       getSocket()?.emit('message:read', { room_id: roomId, message_ids: ids });
     };
 
+    // #475 部屋を開いていて画面が見えている間だけ「見ている」を知らせる。
+    //   サーバーは、その部屋を見ている人を通知の送り先から外す (以前は接続しているだけで外していたので、
+    //   PC を開いたままだとスマホに通知が届かなかった)
+    const sendViewing = (viewing: boolean) => {
+      getSocket()?.emit('room:viewing', { room_id: roomId, viewing });
+    };
+    if (document.visibilityState === 'visible') sendViewing(true);
+
     // Re-fetch messages when app returns from background
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
+        sendViewing(true);
         if (pendingReadIds.length > 0) {
           markRead(pendingReadIds);
           pendingReadIds = [];
         }
         fetchMessages(roomId);
+      } else {
+        sendViewing(false);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -133,6 +144,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     //  例: RoomList sidebar の message:new handler、PC layout で発覚した既存 bug)
     const handleConnect = () => {
       socket!.emit('room:join', roomId);
+      // #475 サーバーは切断で「見ている」を忘れるので、見えていれば知らせ直す
+      if (document.visibilityState === 'visible') sendViewing(true);
       // 再接続 = 切断中に idle / typing:stop を取りこぼした可能性がある。
       // 一過性の「考え中」/「入力中」は履歴に残らないので、ここでリセットしないと
       // スマホのスリープ復帰後に消えず残り続ける（議事録完成後も「考え中」のまま）。
@@ -286,6 +299,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
+      sendViewing(false);   // #475 部屋を離れたら「見ていない」
       clearCurrentRoom();
       clearMessages();
       if (socket) {

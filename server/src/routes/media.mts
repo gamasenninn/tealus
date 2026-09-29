@@ -1,4 +1,3 @@
-import { getOnlineUserIds } from '../socket/index.mts';
 import { getIo } from '../io-registry.mts';
 import express from 'express';
 import { logger } from '../utils/logger.mts';
@@ -11,7 +10,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
 import type { AttachableMessage } from '../services/messageAttachments.mts';
-import { sendPushToOfflineMembers } from '../services/push.mts';
+import { sendPushToRoomMembers } from '../services/push.mts';
 import { pushMachinePost } from '../services/machinePush.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 
@@ -136,11 +135,11 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     const mediaBody = files.length > 1 ? `${typeLabel} (${files.length} 件)` : typeLabel;
     if (!req.user!.is_bot) {
       try {
-        sendPushToOfflineMembers(roomId as string, userId, {
+        sendPushToRoomMembers(roomId as string, userId, {
           title: req.user!.display_name,
           body: mediaBody,
           data: { roomId, messageId: message.id },
-        }, new Set(getOnlineUserIds()));
+        });
       } catch (e) {
         logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
       }
@@ -315,11 +314,11 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
     try {
       
       const typeLabel = src.type === 'image' ? '画像' : src.type === 'video' ? '動画' : 'ファイル';
-      sendPushToOfflineMembers(targetRoomId, userId, {
+      sendPushToRoomMembers(targetRoomId, userId, {
         title: req.user!.display_name,
         body: `📎 ${typeLabel}を転送`,
         data: { roomId: targetRoomId, messageId: fullMessage.id },
-      }, new Set(getOnlineUserIds()));
+      });
     } catch (e) {
       logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
     }

@@ -2,9 +2,8 @@ import type { Socket, Server } from 'socket.io';
 import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
 import { processLinkPreviews } from '../../services/linkPreview.mts';
-import { sendPushToOfflineMembers } from '../../services/push.mts';
+import { sendPushToRoomMembers } from '../../services/push.mts';
 import { fireWebhooks } from '../../services/webhook.mts';
-import { getOnlineUserIds } from '../index.mts';
 
 interface ReplyMessageRow {
   id: string;
@@ -118,12 +117,11 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
 
       // Push notification（オフラインユーザー向け）
       // (../index.mts との相互 import は関数呼び出し時に解決されるため ESM 循環でも安全)
-      const onlineUserIds = new Set(getOnlineUserIds());
-      sendPushToOfflineMembers(room_id, socket.user.id, {
+      sendPushToRoomMembers(room_id, socket.user.id, {
         title: socket.user.display_name,
         body: (content || '').slice(0, 100) || (type === 'voice' ? '🎤 音声メッセージ' : '📎 ファイル'),
         data: { roomId: room_id, messageId: message.id },
-      }, onlineUserIds);
+      });
 
       // Webhook notification
       fireWebhooks('message.created', room_id, {

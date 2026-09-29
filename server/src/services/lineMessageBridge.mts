@@ -17,8 +17,7 @@ import type { Server } from 'socket.io';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { processLinkPreviews } from './linkPreview.mts';
-import { sendPushToOfflineMembers } from './push.mts';
-import { getOnlineUserIds } from '../socket/index.mts';
+import { sendPushToRoomMembers } from './push.mts';
 import { pushMachinePost, mediaPushBody } from './machinePush.mts';
 import type { AuthUser } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
@@ -129,11 +128,11 @@ export async function postTextToTealus(
     //   ★★ webhook (fireWebhooks) は **付けない**。docs/05 の不変条件で「message.created を
     //   発火するのは socket の message:send のみ」。付けると LINE のメッセージで @cc-* が
     //   agent-server の dispatch を起動する = 別の挙動変更になる。
-    sendPushToOfflineMembers(roomId, sender.id, {
+    sendPushToRoomMembers(roomId, sender.id, {
       title: sender.display_name,
       body: (content || '').slice(0, 100),
       data: { roomId, messageId: message.id },
-    }, new Set(getOnlineUserIds())).catch(() => {});
+    }).catch(() => {});
 
     logger.info(`[lineMessageBridge] text post: room=${roomId} msg=${message.id}`);
     return { message };
