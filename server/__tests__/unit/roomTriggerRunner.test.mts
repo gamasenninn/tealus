@@ -12,7 +12,8 @@ import path from 'node:path';
 import type { SenderContext } from '../../src/services/postAsUser.mts';
 import { loadTriggersFrom } from '../../src/services/roomTriggers.mts';
 import {
-  isPolling, runOnce, shouldReport, startRoomTriggers, stopRoomTriggers,
+  isPolling, reportStep, runOnce, shouldReport, startRoomTriggers, stopRoomTriggers,
+  type ReportState,
 } from '../../src/services/roomTriggerRunner.mts';
 
 const ROOM = '00000000-0000-0000-0000-000000000002';
@@ -174,5 +175,42 @@ describe('shouldReport — 10 秒ごとの行でログを埋めない', () => {
 
   test('初回は必ず出す', () => {
     expect(shouldReport({ fired: false, reason: 'a' }, undefined, t0)).toBe(true);
+  });
+
+  // ★ 2026-09-29: 間隔待ちの理由には経過分が入る (「前回発火から 18.2 分 / 120 分」) ので、
+  //   毎回「理由が変わった」と判定され、10 秒ごとに出ていた (1 日 数千行)
+  test('★ 数字だけが違う理由は、同じ理由とみなす', () => {
+    const t1 = new Date(t0.getTime() + 10_000);
+    expect(shouldReport(
+      { fired: false, reason: '間隔 (前回発火から 18.3 分 / 120 分)' },
+      { reason: '間隔 (前回発火から 18.2 分 / 120 分)', at: t0 }, t1,
+    )).toBe(false);
+  });
+});
+
+describe('reportStep — 10 秒ごとに回したときに出る行 (★ 状態の持ち方ごと確かめる)', () => {
+  const t0 = new Date('2026-08-23T01:00:00Z');
+  const run = (reasonAt: (i: number) => string, ticks: number) => {
+    let state: ReportState | undefined;
+    const logged: number[] = [];
+    for (let i = 0; i < ticks; i++) {
+      const step = reportStep({ fired: false, reason: reasonAt(i) }, state, new Date(t0.getTime() + i * 10_000));
+      if (step.log) logged.push(i);
+      state = step.next;
+    }
+    return logged;
+  };
+
+  test('★★ 同じ理由が 2 時間続いたら、初回と 1 時間ごとの 3 行だけ出る', () => {
+    // 以前は「出さなかった回」も時刻を書き換えていたので、1 時間ごとの行が永遠に来なかった
+    expect(run(() => '時刻前 (JST 13:00 まで待ちます)', 721)).toEqual([0, 360, 720]);
+  });
+
+  test('★★ 経過分が 10 秒ごとに変わる理由でも、同じく 3 行だけ出る', () => {
+    expect(run((i) => `間隔 (前回発火から ${(i / 6).toFixed(1)} 分 / 120 分)`, 721)).toEqual([0, 360, 720]);
+  });
+
+  test('理由の種類が変わったら、その回に出る', () => {
+    expect(run((i) => (i < 5 ? '静穏待ち (あと 3 分)' : '間隔 (前回発火から 1.0 分 / 120 分)'), 10)).toEqual([0, 5]);
   });
 });

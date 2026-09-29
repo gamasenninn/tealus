@@ -101,8 +101,31 @@ export function shouldReport(
 ): boolean {
   if (result.fired) return true;
   if (!prev) return true;
-  if (prev.reason !== result.reason) return true;
+  if (reasonKind(prev.reason) !== reasonKind(result.reason)) return true;
   return now.getTime() - prev.at.getTime() >= HEARTBEAT_MS;
+}
+
+/**
+ * 理由の「種類」。数字を除いて比べる。
+ * ★ 2026-09-29: 間隔待ちの理由には経過分が入る (「前回発火から 18.2 分」) ので、
+ *   文のまま比べると毎回「変わった」になり、10 秒ごとに出ていた
+ */
+function reasonKind(reason: string): string {
+  return reason.replace(/\d+(?:\.\d+)?/g, '#');
+}
+
+/**
+ * 1 回分の判定: 出すかどうかと、次に覚えておく状態。
+ * ★ 2026-09-29: 以前は出さなかった回も時刻を書き換えていたので、
+ *   同じ理由が続くと「1 時間に 1 回」が永遠に来なかった。**覚えるのは出した回だけ**
+ */
+export function reportStep(
+  result: { fired: boolean; reason: string },
+  prev: ReportState | undefined,
+  now: Date,
+): { log: boolean; next: ReportState | undefined } {
+  const log = shouldReport(result, prev, now);
+  return { log, next: log ? { reason: result.reason, at: now } : prev };
 }
 
 // --- 本番の配線 ------------------------------------------------------------
@@ -233,9 +256,10 @@ export function startRoomTriggers(configPath: string = CONFIG_PATH): void {
       });
       for (const r of results) {
         const line = `[room-triggers] ${r.id}: ${r.fired ? '発火' : '見送り'} — ${r.reason}${r.error ? ` / ★ ${r.error}` : ''}`;
-        if (r.error) logger.warn(line);
-        else if (shouldReport(r, reported.get(r.id), now)) logger.info(line);
-        reported.set(r.id, { reason: r.reason, at: now });
+        if (r.error) { logger.warn(line); continue; }
+        const step = reportStep(r, reported.get(r.id), now);
+        if (step.log) logger.info(line);
+        if (step.next) reported.set(r.id, step.next);
       }
     })();
   }, POLL_MS);
