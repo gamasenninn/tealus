@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 /**
  * Middleware: Require room membership
@@ -10,6 +11,8 @@ import { pool } from '../db/pool.mts';
 export async function requireMember(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   const roomId = req.params.id;
   const userId = req.user!.id;
+  // ★ 2026-09-29: 形の崩れた部屋の ID を DB に投げ、500 を返していた。400 と理由を返す
+  if (!isUuid(roomId)) return res.status(400).json({ error: badIdMessage(String(roomId)) });
 
   try {
     const result = await pool.query<{ role: string }>(

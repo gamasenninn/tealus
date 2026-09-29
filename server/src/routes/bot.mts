@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import multer from 'multer';
 import type { Server } from 'socket.io';
 import { logger } from '../utils/logger.mts';
@@ -26,6 +27,7 @@ const require = createRequire(import.meta.url);
 export const router = express.Router();
 
 router.use(authenticate);
+router.use(requireUuidRoomId);
 
 // ============================================
 // DB row 型 (SELECT 列 / RETURNING * に対応)
@@ -192,7 +194,7 @@ router.post('/tts-speak', async (req, res) => {
  * This is the new TTS delivery path that replaces mediasoup PlainTransport
  * for aivis-cloud auto-readout. See #189.
  */
-router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), async (req, res) => {
+router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), requireUuidRoomId, async (req, res) => {
   const { room_id } = req.body as { room_id?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -236,13 +238,20 @@ router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), async (req, res)
 });
 
 // ★ 2026-09-29: 形の崩れた ID (会話モードの AI が「754...」と省略して渡した) を確かめずに DB に投げ、
-//   500 (invalid input syntax for type uuid) を返していた。AI が読んで直せるよう、400 と理由を返す。
+//   500 を返していた。パスの :id と、クエリ・本文の room_id を確かめて 400 と理由を返す (utils/uuid.mts)。
 //   tts-audio の :id は読み上げ音声の鍵で UUID ではないので付けない
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function requireUuidId(req: Request, res: Response, next: NextFunction): void {
   const id = String(req.params.id ?? '');
-  if (UUID_RE.test(id)) { next(); return; }
-  res.status(400).json({ error: `ID「${id.slice(0, 60)}」の形が正しくありません。ID は省略せずに、36 文字のまま渡してください。` });
+  if (isUuid(id)) { next(); return; }
+  res.status(400).json({ error: badIdMessage(id) });
+}
+
+/** クエリと本文の room_id。★ ファイルを送る route は本文を道具の中で読むので、読んだあとにも付ける */
+function requireUuidRoomId(req: Request, res: Response, next: NextFunction): void {
+  for (const v of [req.query.room_id, (req.body as { room_id?: unknown } | undefined)?.room_id]) {
+    if (typeof v === 'string' && !isUuid(v)) { res.status(400).json({ error: badIdMessage(v) }); return; }
+  }
+  next();
 }
 
 /**
@@ -296,7 +305,7 @@ router.post('/status', async (req, res) => {
  * POST /api/bot/push-image
  * Send an image message to a room
  */
-router.post('/push-image', upload.single('image'), async (req, res) => {
+router.post('/push-image', upload.single('image'), requireUuidRoomId, async (req, res) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -389,7 +398,7 @@ router.post('/push-image', upload.single('image'), async (req, res) => {
  * Image / video は existing /push-image, /media path に lateral OK だが、
  * text / pdf 等の attached file は本 endpoint で。
  */
-router.post('/push-file', upload.single('file'), async (req, res) => {
+router.post('/push-file', upload.single('file'), requireUuidRoomId, async (req, res) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
