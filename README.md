@@ -1,6 +1,6 @@
 # Tealus — 人と AI のためのメッセンジャー
 
-[![Test](https://github.com/gamasenninn/tealus/actions/workflows/test.yml/badge.svg)](https://github.com/gamasenninn/tealus/actions/workflows/test.yml)
+[![Test](https://github.com/gamasenninn/tealus/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/gamasenninn/tealus/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 > **AI が組織の記憶を声で運ぶ。NAS 1 台で動く。月額ゼロ円。**
