@@ -1,0 +1,106 @@
+/* #476 日付へ飛ぶカレンダー */
+.date-jump-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.date-jump-panel {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 12px 8px;
+  width: min(340px, calc(100vw - 32px));
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+.date-jump-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.date-jump-header span {
+  flex: 1;
+  text-align: center;
+}
+
+.date-jump-header button {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: #333;
+  display: flex;
+}
+
+.date-jump-header button:disabled {
+  color: #ccc;
+  cursor: default;
+}
+
+.date-jump-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.date-jump-weekday {
+  text-align: center;
+  font-size: 12px;
+  color: #888;
+  padding: 4px 0;
+}
+
+.date-jump-day {
+  position: relative;
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  font-size: 14px;
+  color: #ccc;
+  cursor: default;
+}
+
+/* 投稿のある日だけ押せる。下に ● */
+.date-jump-day.has-posts {
+  color: #222;
+  cursor: pointer;
+}
+
+.date-jump-day.has-posts::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--primary, #00B4A0);
+}
+
+.date-jump-day.has-posts:hover {
+  background: #f0f0f0;
+}
+
+.date-jump-day.current {
+  outline: 2px solid var(--primary, #00B4A0);
+}
+
+.date-jump-day.today {
+  font-weight: 700;
+}
+
+.date-jump-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+}

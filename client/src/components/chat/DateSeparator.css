@@ -16,3 +16,37 @@
   padding: 4px 14px;
   border-radius: 12px;
 }
+
+/* #476 日ごとのまとまりの先頭で、スクロール中も画面の上に貼り付ける。
+   次の日のまとまりが下から来ると、そのまとまりの札に押し出されて入れ替わる */
+.date-separator.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  pointer-events: none;   /* 札の左右の余白は、下の投稿を押せるように素通しする */
+}
+
+.date-separator.sticky > * {
+  pointer-events: auto;
+}
+
+/* 押せる札 (見た目は今までの札と同じ) */
+.date-separator button {
+  background: rgba(0, 0, 0, 0.15);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 14px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.date-separator button:active {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* 貼り付いた札は投稿の上に重なるので、少し濃くして読めるようにする */
+.date-separator.sticky button {
+  background: rgba(0, 0, 0, 0.4);
+}

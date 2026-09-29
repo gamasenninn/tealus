@@ -209,6 +209,85 @@ router.patch('/:msgId/publish', async (req: Request, res: Response) => {
   }
 });
 
+// --- #476 日付へ飛ぶ -------------------------------------------------------
+// ★ tz_offset は画面の Date.getTimezoneOffset() (UTC − 現地、分。日本なら -540)。
+//   日の区切りを見ている人の時刻に合わせる。現地の 0 時 = UTC の (0 時 + tz_offset 分)
+
+const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+const DATE_RE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/** tz_offset を分の整数で読む。時差は ±14 時間まで。読めなければ null */
+function parseTzOffset(v: unknown): number | null {
+  if (typeof v !== 'string' || !/^-?\d+$/.test(v)) return null;
+  const n = parseInt(v, 10);
+  return Math.abs(n) <= 14 * 60 ? n : null;
+}
+
+/** 現地の y/m/d 0 時を UTC の Date にする */
+function localMidnightUtc(y: number, m: number, d: number, tzOffset: number): Date {
+  return new Date(Date.UTC(y, m - 1, d) + tzOffset * 60_000);
+}
+
+/**
+ * GET /api/rooms/:id/messages/days?month=YYYY-MM&tz_offset=分
+ * その月で投稿がある日 (見ている人の時刻で) — カレンダーの印に使う
+ */
+router.get('/days', async (req: Request, res: Response) => {
+  const roomId = (req.params as { id: string }).id;
+  const m = MONTH_RE.exec(String(req.query.month ?? ''));
+  const tz = parseTzOffset(req.query.tz_offset);
+  if (!m || tz === null) return res.status(400).json({ error: 'month (YYYY-MM) と tz_offset (分) が必要です' });
+
+  const y = Number(m[1]), mo = Number(m[2]);
+  const from = localMidnightUtc(y, mo, 1, tz);
+  const to = localMidnightUtc(mo === 12 ? y + 1 : y, mo === 12 ? 1 : mo + 1, 1, tz);
+  try {
+    const r = await pool.query<{ d: string }>(
+      `SELECT DISTINCT to_char((created_at AT TIME ZONE 'UTC') - ($2::int * INTERVAL '1 minute'), 'YYYY-MM-DD') AS d
+         FROM messages
+        WHERE room_id = $1 AND is_deleted = false AND created_at >= $3 AND created_at < $4
+        ORDER BY d`,
+      [roomId, tz, from, to],
+    );
+    res.json({ days: r.rows.map((row) => row.d) });
+  } catch (err) {
+    logger.error('Message days error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * GET /api/rooms/:id/messages/first-of-day?date=YYYY-MM-DD&tz_offset=分
+ * その日の最初の投稿 (消したものは数えない)。無ければ message_id: null
+ */
+router.get('/first-of-day', async (req: Request, res: Response) => {
+  const roomId = (req.params as { id: string }).id;
+  const d = DATE_RE.exec(String(req.query.date ?? ''));
+  const tz = parseTzOffset(req.query.tz_offset);
+  if (!d || tz === null) return res.status(400).json({ error: 'date (YYYY-MM-DD) と tz_offset (分) が必要です' });
+
+  const y = Number(d[1]), mo = Number(d[2]), day = Number(d[3]);
+  // ★ 2/30 のような無い日は 3/2 に化けるので、組み立て直して同じかを確かめる
+  const check = new Date(Date.UTC(y, mo - 1, day));
+  if (check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== day) {
+    return res.status(400).json({ error: 'date が正しい日付ではありません' });
+  }
+  const from = localMidnightUtc(y, mo, day, tz);
+  const to = new Date(from.getTime() + 86_400_000);
+  try {
+    const r = await pool.query<{ id: string }>(
+      `SELECT id FROM messages
+        WHERE room_id = $1 AND is_deleted = false AND created_at >= $2 AND created_at < $3
+        ORDER BY created_at ASC LIMIT 1`,
+      [roomId, from, to],
+    );
+    res.json({ message_id: r.rows[0]?.id ?? null });
+  } catch (err) {
+    logger.error('First of day error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
 /**
  * PUT /api/rooms/:id/messages/:msgId
  * Edit message content (policy-based: none/sender/member)

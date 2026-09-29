@@ -7,12 +7,15 @@ import { useSocketSync } from '../../hooks/useSocketSync';
 import { useMessageScroll } from '../../hooks/useMessageScroll';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { getSocket } from '../../services/socket';
+import { api } from '../../services/api';
 import { useVoiceContinuousPlay } from '../../hooks/useVoiceContinuousPlay';
 import { useAppPanel } from '../../hooks/useAppPanel';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
+import DateJumpCalendar from './DateJumpCalendar';
+import { groupByDay, jumpToDate } from '../../utils/dateJump';
 import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic } from 'lucide-react';
 import CallConfirmModal from '../call/CallConfirmModal';
@@ -50,6 +53,8 @@ function ChatRoom() {
   const [showCallConfirm, setShowCallConfirm] = useState(false);
   // #405 Realtime 音声会話 (docs/08 §12)。専用画面なので、開いている間はトーク画面を覆う
   const [showVoiceChat, setShowVoiceChat] = useState(false);
+  // #476 日付の札を押したら、その日を入れてカレンダーを開く
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom);
   useVoiceContinuousPlay(messages);
 
@@ -132,6 +137,14 @@ function ChatRoom() {
     return members.length;
   };
 
+  // 「ここから未読」の線を出す投稿 (既読の最後の次で、自分以外の投稿)。日ごとのまとまりをまたいで決める
+  const unreadStartId = (() => {
+    if (!lastReadMessageId) return null;
+    const i = messages.findIndex((m) => m.id === lastReadMessageId);
+    const next = i >= 0 ? messages[i + 1] : undefined;
+    return next && next.sender_id !== user!.id ? next.id : null;
+  })();
+
   const getPartnerOnline = () => {
     if (!currentRoom || currentRoom.type !== 'direct') return false;
     const partner = (members as MemberWithUserId[]).find(m => m.user_id !== user!.id);
@@ -201,21 +214,20 @@ function ChatRoom() {
         style={showAppPanel && appUrls.length > 0 ? { flex: 100 - (appUrls[activeAppIndex]?.ratio || 50) } : undefined}
       >
           <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
-        {messages.map((msg, i) => {
-          const prevMsg = messages[i - 1];
-          const showDate = !prevMsg ||
-            new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
-          const showUnread = lastReadMessageId && prevMsg && prevMsg.id === lastReadMessageId && msg.sender_id !== user!.id;
-          return (
-            <div key={msg.id} data-date={showDate ? msg.created_at : undefined} data-msg-id={msg.id}>
-              {showDate && <DateSeparator date={msg.created_at} />}
-              {showUnread && <UnreadSeparator />}
-              <MessageErrorBoundary messageId={msg.id}>
-                <MessageBubble message={msg} isOwn={msg.sender_id === user!.id} searchKeyword={searchKeyword} />
-              </MessageErrorBoundary>
-            </div>
-          );
-        })}
+        {/* #476 日ごとのまとまりに入れ、先頭の札を上に貼り付ける (押すとカレンダー) */}
+        {groupByDay(messages).map((g) => (
+          <div key={`${g.day}:${g.messages[0].id}`} className="day-group" data-date={g.firstCreatedAt}>
+            <DateSeparator date={g.firstCreatedAt} sticky onClick={() => setCalendarDate(g.day)} />
+            {g.messages.map((msg) => (
+              <div key={msg.id} data-msg-id={msg.id}>
+                {msg.id === unreadStartId && <UnreadSeparator />}
+                <MessageErrorBoundary messageId={msg.id}>
+                  <MessageBubble message={msg} isOwn={msg.sender_id === user!.id} searchKeyword={searchKeyword} />
+                </MessageErrorBoundary>
+              </div>
+            ))}
+          </div>
+        ))}
         <div ref={messagesEndRef} />
       </div>
 
@@ -288,6 +300,20 @@ function ChatRoom() {
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />
+      )}
+      {calendarDate && (
+        <DateJumpCalendar
+          roomId={roomId}
+          initialDate={calendarDate}
+          onClose={() => setCalendarDate(null)}
+          onPick={(date) => {
+            setCalendarDate(null);
+            void jumpToDate(roomId, date, {
+              getFirst: (r, d) => api.getFirstMessageOfDay(r, d),
+              dispatch: (id) => window.dispatchEvent(new CustomEvent('message:scroll-to', { detail: { id } })),
+            });
+          }}
+        />
       )}
       {showVoiceChat && (
         <VoiceChatView

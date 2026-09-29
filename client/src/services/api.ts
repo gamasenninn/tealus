@@ -219,6 +219,17 @@ class ApiClient {
     return this.request<MessagesResponse>('GET', url);
   }
 
+  // #476 日付へ飛ぶ。tz_offset は Date.getTimezoneOffset() (日本なら -540)
+  getMessageDays(roomId: string, month: string, tzOffset = new Date().getTimezoneOffset()) {
+    const q = new URLSearchParams({ month, tz_offset: String(tzOffset) });
+    return this.request<{ days: string[] }>('GET', `/rooms/${roomId}/messages/days?${q}`);
+  }
+
+  getFirstMessageOfDay(roomId: string, date: string, tzOffset = new Date().getTimezoneOffset()) {
+    const q = new URLSearchParams({ date, tz_offset: String(tzOffset) });
+    return this.request<{ message_id: string | null }>('GET', `/rooms/${roomId}/messages/first-of-day?${q}`);
+  }
+
   sendMessage(roomId: string, content: string, replyTo: string | null = null, forwardedFrom: string | null = null) {
     return this.request<MessageResponse>('POST', `/rooms/${roomId}/messages`, {
       content,

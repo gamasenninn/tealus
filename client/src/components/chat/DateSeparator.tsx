@@ -3,9 +3,13 @@ import './DateSeparator.css';
 interface DateSeparatorProps {
   date: string;
   hidden?: boolean;
+  /** #476 押すとカレンダーを開く。無ければ今までどおりの札 */
+  onClick?: () => void;
+  /** #476 日ごとのまとまりの先頭に置き、スクロール中も画面の上に貼り付ける */
+  sticky?: boolean;
 }
 
-function DateSeparator({ date, hidden }: DateSeparatorProps) {
+function DateSeparator({ date, hidden, onClick, sticky }: DateSeparatorProps) {
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     const now = new Date();
@@ -23,9 +27,12 @@ function DateSeparator({ date, hidden }: DateSeparatorProps) {
     });
   };
 
+  const label = formatDate(date);
   return (
-    <div className={`date-separator ${hidden ? 'hidden' : ''}`}>
-      <span>{formatDate(date)}</span>
+    <div className={`date-separator ${hidden ? 'hidden' : ''} ${sticky ? 'sticky' : ''}`}>
+      {onClick
+        ? <button type="button" onClick={onClick} aria-label={`${label} — 日付へ移動`}>{label}</button>
+        : <span>{label}</span>}
     </div>
   );
 }
