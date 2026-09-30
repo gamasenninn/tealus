@@ -46,6 +46,7 @@ import { roomRouter as tagRoomRoutes, messageRouter as tagMessageRoutes, globalR
 import { router as stampRoutes } from './routes/stamps.mts';
 import { router as promptRoutes } from './routes/prompts.mts';
 import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
+import { mediaStatic } from './utils/mediaStatic.mts';
 import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 
@@ -230,7 +231,8 @@ app.use('/api/stamps', stampRoutes);
 app.use('/api/rooms/:id/prompts', promptRoutes);
 
 // Static media files
-app.use('/media', express.static(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../media')));
+// ★ 本体と切り離して開かせる (utils/mediaStatic.mts)
+app.use('/media', mediaStatic(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../media')));
 
 // Health check
 app.get('/api/health', (req, res) => {
