@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Share2, Search } from 'lucide-react';
 import { api } from '../../services/api';
 import { sendRoomMessage } from '../../services/sendRoomMessage';
+import { buildForwardToast } from './forwardToast';
 import { useRoomStore } from '../../stores/roomStore';
 import { useConfirm } from '../../stores/confirmStore';
 import type { Message, Room } from '../../types';
@@ -35,14 +36,11 @@ function ForwardModal({ message, onClose }: ForwardModalProps) {
   // トーストを表示するヘルパー（body 直下に3秒表示）
   const showToast = (targetRoom: Room) => {
     const name = targetRoom.name || targetRoom.partner_display_name || 'DM';
-    const toast = document.createElement('div');
-    toast.className = 'forward-toast';
-    toast.innerHTML = `<span>📤 「${name}」に転送しました</span><button class="forward-toast-open">開く</button>`;
-    document.body.appendChild(toast);
-    toast.querySelector('.forward-toast-open')!.addEventListener('click', () => {
+    const toast = buildForwardToast(name, () => {
       navigate(`/rooms/${targetRoom.id}`);
       toast.remove();
     });
+    document.body.appendChild(toast);
     setTimeout(() => toast.classList.add('forward-toast-show'), 10);
     setTimeout(() => {
       toast.classList.remove('forward-toast-show');
