@@ -9,6 +9,7 @@ import { requireMember } from '../middleware/roomAccess.mts';
 import { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } from '../constants/config.mts';
 import { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps, type AttachableMessage } from '../services/messageAttachments.mts';
 import { fireWebhooks } from '../services/webhook.mts';
+import { isUuid } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -21,6 +22,16 @@ interface MessageRow extends AttachableMessage {
 }
 
 router.use(authenticate, requireMember);
+
+/**
+ * メッセージが URL の部屋のものか (2026-09-30)。
+ * ★ requireMember は「URL の部屋のメンバーか」しか見ない。:msgId の口は、これで別の部屋のメッセージを弾く
+ */
+async function isMessageInRoom(msgId: unknown, roomId: string): Promise<boolean> {
+  if (!isUuid(msgId)) return false;
+  const r = await pool.query('SELECT 1 FROM messages WHERE id = $1 AND room_id = $2', [msgId, roomId]);
+  return r.rows.length > 0;
+}
 
 /**
  * POST /api/rooms/:id/messages
@@ -423,6 +434,10 @@ router.get('/:msgId/edits', async (req: Request, res: Response) => {
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ error: 'ルームメンバーのみ閲覧できます' });
     }
+    // ★ この部屋のメッセージだけ (以前は別の部屋の投稿の前の文面も読めた)
+    if (!(await isMessageInRoom(msgId, roomId))) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
 
     const result = await pool.query(
       `SELECT me.version, me.content, me.edited_by, me.created_at, u.display_name AS edited_by_name
@@ -453,7 +468,8 @@ router.delete('/:msgId', async (req: Request, res: Response) => {
       'SELECT sender_id, room_id FROM messages WHERE id = $1',
       [msgId]
     );
-    if (msg.rows.length === 0) {
+    // ★ URL の部屋のメッセージだけ (以前は別の部屋の URL でも消せ、削除の知らせを違う部屋へ流していた)
+    if (msg.rows.length === 0 || msg.rows[0].room_id !== (req.params as { id: string }).id) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
     if (msg.rows[0].sender_id !== userId) {
@@ -496,6 +512,12 @@ router.post('/:msgId/reactions', async (req: Request, res: Response) => {
   }
 
   try {
+    // ★ この部屋のメッセージだけ (以前は別の部屋の投稿にも付け外しできた。✅ は「処理済み」の印にも使われている)
+    const roomId = (req.params as { id: string }).id;
+    if (!(await isMessageInRoom(msgId, roomId))) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
+
     // Check if already reacted
     const existing = await pool.query(
       'SELECT 1 FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
@@ -526,7 +548,6 @@ router.post('/:msgId/reactions', async (req: Request, res: Response) => {
     );
 
     const io = getIo();
-    const roomId = (req.params as { id: string }).id;
     io.to(roomId).emit('message:reaction', {
       message_id: msgId,
       reactions: reactions.rows,
