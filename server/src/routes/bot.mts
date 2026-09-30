@@ -1511,6 +1511,12 @@ router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
   const roomId = String(req.params.id);
   const userId = req.user!.id;
 
+  // ★ 自分で入れるのはボットだけ (2026-09-30)。/api/bot はログインしていれば誰でも呼べるので、
+  //   以前は人の利用者 (ゲストを含む) も部屋の ID だけでグループに入れた。人は招待で入る
+  if (!req.user!.is_bot) {
+    return res.status(403).json({ error: 'この口で部屋に入れるのはボットだけです。人の利用者は招待で入ってください。' });
+  }
+
   try {
     // Check room exists
     const room = await pool.query<{ id: string; type: string }>(

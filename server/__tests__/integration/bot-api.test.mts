@@ -1210,6 +1210,30 @@ describe('Bot API', () => {
     });
 
     /**
+     * 2026-09-30: /api/bot はログインしていれば誰でも呼べるので、人の利用者 (ゲストを含む) も
+     * 部屋の ID だけでグループに入れた。自分で入れるのはボットだけにする (人は招待で入る)。
+     * ★ 14 日間のログで、この口を使ったのはボット 1 つ (472 回) だけだった。
+     */
+    it('★ 人の利用者は 403 (招待を通らずに入れない)', async () => {
+      const owner = await createTestUser({ login_id: 'EMP0J1', display_name: '部屋の持ち主' });
+      const human = await createTestUser({ login_id: 'EMP0J2', display_name: '人の利用者' });
+      const roomRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ name: '招待制の部屋', member_ids: [] });
+      const targetId = roomRes.body.room.id;
+
+      const res = await request(app)
+        .post(`/api/bot/rooms/${targetId}/join`)
+        .set('Authorization', `Bearer ${human.token}`);
+      expect(res.status).toBe(403);
+
+      const { rows } = await getTestPool().query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [targetId, human.user.id]);
+      expect(rows).toHaveLength(0);
+    });
+
+    /**
      * #390: bot は room ID さえ分かれば 1 対 1 ルームにも自分を入れられた。
      * 招待の UI が無いルームに、UI を通らない経路で第三者が入れる状態だった。
      *
