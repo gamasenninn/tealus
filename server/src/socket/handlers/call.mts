@@ -4,6 +4,7 @@ import { pool } from '../../db/pool.mts';
 import { sendPushToUser } from '../../services/push.mts';
 import * as capabilityWatcher from '../../services/capabilityWatcher.mts';
 import { getOnlineUserIds } from '../index.mts';
+import { isRoomMember } from '../membership.mts';
 
 /**
  * Handle call events (notification + history + status)
@@ -55,7 +56,8 @@ function broadcastCallStatus(roomId: string, io: Server): void {
 
 export function registerCallHandler(socket: Socket, io: Server): void {
   // 通話開始 or 途中参加
-  socket.on('call:start', async ({ roomId }: { roomId: string }) => {
+  socket.on('call:start', async (data: { roomId?: unknown } | null) => {
+    const roomId = data?.roomId as string;
     logger.debug(`call:start user=${socket.user.id} room=${roomId}`);
 
     // Defense: rtc-server 不可時は reject (古い client / race condition 保護)
@@ -71,6 +73,9 @@ export function registerCallHandler(socket: Socket, io: Server): void {
     }
 
     try {
+      // ★ メンバーでなければ何もしない (以前は部屋の ID だけで、投稿・着信・通知まで動いた)
+      if (!(await isRoomMember(roomId, socket.user.id))) return;
+
       const existing = activeCalls.get(roomId);
 
       if (existing) {
@@ -122,8 +127,18 @@ export function registerCallHandler(socket: Socket, io: Server): void {
   });
 
   // 通話拒否 → 発信者に通知
-  socket.on('call:reject', ({ roomId, callerId }: { roomId: string; callerId: string }) => {
+  socket.on('call:reject', async (data: { roomId?: unknown; callerId?: unknown } | null) => {
+    const roomId = data?.roomId as string;
+    const callerId = data?.callerId as string;
     logger.debug(`call:reject user=${socket.user.id} room=${roomId} caller=${callerId}`);
+    // ★ その部屋でいま通話に入っている人にだけ、その部屋のメンバーから返せる
+    if (!activeCalls.get(roomId)?.participants.has(callerId)) return;
+    try {
+      if (!(await isRoomMember(roomId, socket.user.id))) return;
+    } catch (err) {
+      logger.error('call:reject error:', err instanceof Error ? err.message : String(err));
+      return;
+    }
     io.to(`user:${callerId}`).emit('call:rejected', {
       roomId,
       userId: socket.user.id,
@@ -132,10 +147,13 @@ export function registerCallHandler(socket: Socket, io: Server): void {
   });
 
   // 通話終了（個人の退出）
-  socket.on('call:end', async ({ roomId }: { roomId: string }) => {
+  socket.on('call:end', async (data: { roomId?: unknown } | null) => {
+    const roomId = data?.roomId as string;
     logger.debug(`call:end user=${socket.user.id} room=${roomId}`);
     try {
       const call = activeCalls.get(roomId);
+      // ★ 通話に入っている人 (途中で部屋から外された人も含む) か、メンバーだけ。それ以外は何も流さない
+      if (!call?.participants.has(socket.user.id) && !(await isRoomMember(roomId, socket.user.id))) return;
       if (call) {
         call.participants.delete(socket.user.id);
 

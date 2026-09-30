@@ -1,6 +1,8 @@
 import type { Socket } from 'socket.io';
 import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
+import { isRoomMember } from '../membership.mts';
+import { isUuid } from '../../utils/uuid.mts';
 
 interface ReadPayload {
   room_id?: string;
@@ -14,14 +16,18 @@ export function registerReadHandler(socket: Socket): void {
   socket.on('message:read', async (data: ReadPayload) => {
     const { room_id, message_ids } = data;
     logger.debug(`message:read user=${socket.user.id} room=${room_id} count=${message_ids?.length || 0}`);
-    if (!room_id || !message_ids || message_ids.length === 0) return;
+    if (!room_id || !Array.isArray(message_ids) || message_ids.length === 0) return;
 
     try {
+      // ★ メンバーでなければ既読位置を書かない (以前は部屋の ID だけで書け、既読数が増えた)
+      if (!(await isRoomMember(room_id, socket.user.id))) return;
+
       // Find the latest message among the ones being read
+      // ★ この部屋のメッセージだけ (別の部屋の ID で既読位置を進めない)
       const latestMsg = await pool.query<{ id: string; created_at: Date }>(
         `SELECT id, created_at FROM messages
-         WHERE id = ANY($1) ORDER BY created_at DESC LIMIT 1`,
-        [message_ids]
+         WHERE id = ANY($1::uuid[]) AND room_id = $2 ORDER BY created_at DESC LIMIT 1`,
+        [message_ids.filter(isUuid), room_id]
       );
 
       if (latestMsg.rows.length > 0) {
