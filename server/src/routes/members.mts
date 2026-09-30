@@ -119,6 +119,8 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req: Requ
     const io = getIo();
     await insertSystemMessage(roomId, `${req.user!.display_name}が退会しました`, io);
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: userId });
+    // ★ 接続中の端末もこの部屋の配信から抜く (DB から消すだけだと、つなぎ直すまで届き続ける)
+    io.in(`user:${userId}`).socketsLeave(roomId);
 
     // Webhook notification
     fireWebhooks('member.left', roomId, {
@@ -204,6 +206,8 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
     const io = getIo();
     await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}を退会させました`, io);
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: targetUserId });
+    // ★ 接続中の端末もこの部屋の配信から抜く (DB から消すだけだと、つなぎ直すまで届き続ける)
+    io.in(`user:${targetUserId}`).socketsLeave(roomId);
 
     // Webhook notification
     fireWebhooks('member.left', roomId, {

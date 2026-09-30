@@ -3,6 +3,7 @@ import * as E from '../../constants/errors.mts';
 import express from 'express';
 import bcrypt from 'bcrypt';
 import { pool } from '../../db/pool.mts';
+import { getIo } from '../../io-registry.mts';
 
 import { SALT_ROUNDS } from '../../constants/config.mts';
 
@@ -138,6 +139,9 @@ router.patch('/users/:id/status', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'ユーザーが見つかりません' });
     }
+
+    // ★ 停止したら接続中の端末も切る (接続時にしか is_active を見ていないので、切らないと配信が届き続ける)
+    if (!result.rows[0].is_active) getIo().in(`user:${id}`).disconnectSockets(true);
 
     res.json({ user: result.rows[0] });
   } catch (err) {
