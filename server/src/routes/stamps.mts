@@ -8,6 +8,7 @@ import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { isAdmin } from '../utils/permissions.mts';
+import { isRoomMember } from '../services/roomMembership.mts';
 import { MEDIA_ROOT } from '../middleware/upload.mts';
 import { generateStampPack, saveStampFiles, checkDailyLimit } from '../services/stamp/index.mts';
 
@@ -64,6 +65,11 @@ router.post('/generate', async (req, res) => {
 
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({ error: 'プロンプトは必須です' });
+  }
+
+  // ★ 完成の知らせを投稿する部屋は、自分がメンバーの部屋だけ
+  if (room_id && !(await isRoomMember(room_id, userId))) {
+    return res.status(403).json({ error: 'このルームのメンバーではありません' });
   }
 
   // Check daily limit (admin exempt)

@@ -19,6 +19,7 @@ import { transcribeMessage } from '../services/transcription.mts';
 import { postAsUser } from '../services/postAsUser.mts';
 import { pushMachinePost } from '../services/machinePush.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
+import { isRoomMember } from '../services/roomMembership.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -285,6 +286,10 @@ router.post('/status', async (req, res) => {
   }
 
   try {
+    // ★ メンバーの部屋にだけ流す (/api/bot はボット専用ではない)
+    if (!(await isRoomMember(room_id, userId))) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
+    }
     const io = getIo();
     io.to(room_id).emit('agent:status', {
       agent_id: userId,
@@ -1337,6 +1342,10 @@ router.get('/unread', async (req, res) => {
     let params: string[];
 
     if (room_id) {
+      // ★ メンバーでなければ読ませない (以前は部屋の ID だけで、どの部屋の未読も読めた)
+      if (!(await isRoomMember(room_id, userId))) {
+        return res.status(403).json({ error: 'このルームのメンバーではありません' });
+      }
       // Specific room
       query = `
         SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
@@ -1415,11 +1424,13 @@ router.post('/mark-read', async (req, res) => {
 
   try {
     // Find the latest message and its room
+    // ★ 自分がメンバーの部屋のメッセージだけ (以前はどの部屋の既読位置でも書けた)
     const latestMsg = await pool.query<Pick<MessageRow, 'id' | 'room_id' | 'created_at'>>(
       `SELECT m.id, m.room_id, m.created_at FROM messages m
-       WHERE m.id = ANY($1)
+       JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $2
+       WHERE m.id = ANY($1::uuid[])
        ORDER BY m.created_at DESC LIMIT 1`,
-      [message_ids]
+      [message_ids.filter(isUuid), userId]
     );
 
     if (latestMsg.rows.length > 0) {

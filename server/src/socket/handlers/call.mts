@@ -4,7 +4,7 @@ import { pool } from '../../db/pool.mts';
 import { sendPushToUser } from '../../services/push.mts';
 import * as capabilityWatcher from '../../services/capabilityWatcher.mts';
 import { getOnlineUserIds } from '../index.mts';
-import { isRoomMember } from '../membership.mts';
+import { isRoomMember } from '../../services/roomMembership.mts';
 
 /**
  * Handle call events (notification + history + status)

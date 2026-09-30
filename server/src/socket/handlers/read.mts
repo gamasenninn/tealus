@@ -1,7 +1,7 @@
 import type { Socket } from 'socket.io';
 import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
-import { isRoomMember } from '../membership.mts';
+import { isRoomMember } from '../../services/roomMembership.mts';
 import { isUuid } from '../../utils/uuid.mts';
 
 interface ReadPayload {
