@@ -11,10 +11,8 @@ import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
 import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { decodeFileName } from '../middleware/upload.mts';
-import { fireWebhooks } from '../services/webhook.mts';
 import { fetchReplyMessage } from '../socket/handlers/message.mts';
-import { sendPushToRoomMembers } from '../services/push.mts';
-import { pushMachinePost } from '../services/machinePush.mts';
+import { announcePost } from '../services/postEffects.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -126,30 +124,24 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
       fullMessage.reply_to_message = await fetchReplyMessage(replyTo);
     }
 
-    io.to(roomId).emit('message:new', fullMessage);
-
-    // Webhook notification
-    fireWebhooks('message.created', roomId, {
-      room: { id: roomId },
-      message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#8)
+    // ★★ 移したことで順番だけ変わった: 以前は「AI 通知 → 通知」、今は入口の順の「通知 → AI 通知」(2026-10-01 利用者判断)。
+    //   人は通知を待たないので差は無い。機械は通知 (部屋の設定を DB に聞く) を待ってから AI 通知を投げる分、数 ms 遅れる
+    await announcePost({
+      roomId,
+      emit: fullMessage,
+      // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。
+      // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
+      //   —— トランシーバーは 1 日 57 件・12 人。既定で鳴らすと、止めたい人が各自でオフにするまで鳴り続ける
+      push: req.user!.is_bot
+        ? { kind: 'machine', post: { roomId, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: '🎤 音声メッセージ' } }
+        : { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: '🎤 音声メッセージ', data: { roomId, messageId: message.id } } },
+      webhook: { kind: 'on', payload: {
+        room: { id: roomId },
+        message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
+      } },
+      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。音声は本文を持たない (文字起こしは後から入る)' },
     });
-
-    // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。
-    // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
-    //   —— トランシーバーは 1 日 57 件・12 人。既定で鳴らすと、止めたい人が各自でオフにするまで鳴り続ける
-    if (req.user!.is_bot) {
-      await pushMachinePost({ roomId, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: '🎤 音声メッセージ' });
-    } else {
-      try {
-        sendPushToRoomMembers(roomId, userId, {
-          title: req.user!.display_name,
-          body: '🎤 音声メッセージ',
-          data: { roomId, messageId: message.id },
-        });
-      } catch (e) {
-        logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
-      }
-    }
 
     res.status(201).json({
       message,
