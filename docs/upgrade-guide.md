@@ -110,6 +110,40 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
+### → 未リリース（2026-09-27〜10-01: 通知の設定 / 受け口の締め直し）
+
+> **★ 影響範囲**: **全員**に作業が 2 つ (migration と client のビルド)。agent-server と本体の webhook を使っている環境は、**鍵を両側に入れる**作業が 1 つ増えます (推奨)。一覧と理由は [CHANGELOG](../CHANGELOG.md) の「★ 更新時の急所」。
+
+**1. migration と client のビルド (全員)**
+
+```bash
+cd server && npm run migrate      # 031_room_member_push_muted / 032_room_push_machine_posts
+cd ../client && npm run build     # 通知の設定画面・「いま見ている部屋」・日付へ飛ぶ
+```
+
+★ migration を忘れても**止まりません**。通知を送る所でエラーになり、**通知が黙って送られなくなる**だけです (ログに `sendPushToRoomMembers error`)。
+
+**2. webhook の鍵を両側に入れる (agent-server を使っている環境・推奨)**
+
+```
+① 本体の管理画面 → Webhook → http://localhost:4000/webhook/tealus の secret に値を入れる
+② agent-server/.env の WEBHOOK_SECRET に同じ値を入れる
+③ agent-server を再起動
+```
+
+- ★ **①を先に**。本体が署名を付けて送り始めても、古い agent-server は署名を見ないので通知は途切れません
+- ★★ **②だけ (agent-server 側だけ) にすると、署名の無い通知を 401 で断るので、エージェントが黙って起きなくなります** (agent-server のログに `Webhook signature missing or mismatch`)
+- 両方空のままなら以前どおり動きます (起動時と `npm run doctor` で警告が出ます)
+
+**3. 挙動が変わるもの (作業は不要)**
+
+- 人の利用者のアカウントで `/api/bot/rooms/:id/join` を呼んでいる自作のツールは 403 になります (ボットだけ)
+- アップロードした HTML の中から、ブラウザの保存領域 (localStorage 等) は使えなくなります
+- `localhost` / LAN の URL にはリンクプレビューが付かなくなります
+- 自己登録は「人の利用者が 0 人のとき」だけ。開発用 compose の DB は `127.0.0.1` だけで待ち受けます
+
+**健全性チェック**: `npm run doctor` で `webhook-secret` の warn が出ないこと (鍵を入れた場合)。
+
 ### → 未リリース（ルームの workspace から資格情報を追い出す）
 
 > **★ 影響範囲**: **`DEEP_AGENT_PROVIDER=codex` を使ったことがある環境だけ**に、**手を動かす作業があります**（[#419](https://github.com/gamasenninn/tealus/issues/419)）。使っていない環境と新規インストールは、**何もする必要がありません**。
