@@ -17,7 +17,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
 import { postAsUser } from '../services/postAsUser.mts';
-import { pushMachinePost } from '../services/machinePush.mts';
+import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
 
@@ -369,19 +369,22 @@ router.post('/push-image', upload.single('image'), requireUuidRoomId, async (req
 
     await client.query('COMMIT');
 
-    // Socket.IO broadcast
-    const io = getIo();
-    io.to(room_id).emit('message:new', {
-      ...message,
-      sender_display_name: req.user!.display_name,
-      sender_avatar_url: req.user!.avatar_url,
-      media: [mediaResult.rows[0]],
-    });
-
-    // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。失敗しても投稿は止めない
-    await pushMachinePost({
-      roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
-      body: content?.trim() ? content.trim().slice(0, 100) : '📷 写真',
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#6)
+    await announcePost({
+      roomId: room_id,
+      emit: {
+        ...message,
+        sender_display_name: req.user!.display_name,
+        sender_avatar_url: req.user!.avatar_url,
+        media: [mediaResult.rows[0]],
+      },
+      // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。失敗しても投稿は止めない
+      push: { kind: 'machine', post: {
+        roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
+        body: content?.trim() ? content.trim().slice(0, 100) : '📷 写真',
+      } },
+      webhook: { kind: 'off', reason: '不明 (docs/07 §3.2 #6)。60 日で行頭の @ を含む便は 0 件、判断待ち' },
+      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });
 
     logger.info(`Bot push-image: ${req.user!.display_name} → room ${room_id}`);
@@ -451,18 +454,22 @@ router.post('/push-file', upload.single('file'), requireUuidRoomId, async (req, 
 
     await client.query('COMMIT');
 
-    const io = getIo();
-    io.to(room_id).emit('message:new', {
-      ...message,
-      sender_display_name: req.user!.display_name,
-      sender_avatar_url: req.user!.avatar_url,
-      media: [mediaResult.rows[0]],
-    });
-
-    // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。通話履歴ボットはここを通る
-    await pushMachinePost({
-      roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
-      body: content?.trim() ? content.trim().slice(0, 100) : `📎 ${decodeFileName(file.originalname)}`,
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#7)
+    await announcePost({
+      roomId: room_id,
+      emit: {
+        ...message,
+        sender_display_name: req.user!.display_name,
+        sender_avatar_url: req.user!.avatar_url,
+        media: [mediaResult.rows[0]],
+      },
+      // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。通話履歴ボットはここを通る
+      push: { kind: 'machine', post: {
+        roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
+        body: content?.trim() ? content.trim().slice(0, 100) : `📎 ${decodeFileName(file.originalname)}`,
+      } },
+      webhook: { kind: 'off', reason: '不明 (docs/07 §3.2 #7)。#6 と同じ、判断待ち' },
+      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });
 
     logger.info(`Bot push-file: ${req.user!.display_name} → room ${room_id} (${decodeFileName(file.originalname)})`);
