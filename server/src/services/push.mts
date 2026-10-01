@@ -35,7 +35,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 /** 通知ペイロード { title, body, data } */
-interface PushPayload {
+export interface PushPayload {
   title: string;
   [key: string]: unknown;
 }

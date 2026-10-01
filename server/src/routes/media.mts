@@ -11,7 +11,7 @@ import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
 import type { AttachableMessage } from '../services/messageAttachments.mts';
 import { sendPushToRoomMembers } from '../services/push.mts';
-import { pushMachinePost } from '../services/machinePush.mts';
+import { announcePost } from '../services/postEffects.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 
 export const router = express.Router({ mergeParams: true });
@@ -120,32 +120,26 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     await client.query('COMMIT');
 
     // Broadcast via Socket.IO
-    const io = getIo();
     const fullMessage = {
       ...message,
       sender_display_name: req.user!.display_name,
       sender_avatar_url: req.user!.avatar_url,
       media: mediaRecords,
     };
-    io.to(roomId).emit('message:new', fullMessage);
-
     // ★ 2026-09-27 (#383): 人が上げた写真・動画・ファイルにも通知を鳴らす (テキストと転送には元から鳴っていた)。
     // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
     const typeLabel = messageType === 'image' ? '📷 写真' : messageType === 'video' ? '🎬 動画' : '📎 ファイル';
     const mediaBody = files.length > 1 ? `${typeLabel} (${files.length} 件)` : typeLabel;
-    if (!req.user!.is_bot) {
-      try {
-        sendPushToRoomMembers(roomId as string, userId, {
-          title: req.user!.display_name,
-          body: mediaBody,
-          data: { roomId, messageId: message.id },
-        });
-      } catch (e) {
-        logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
-      }
-    } else {
-      await pushMachinePost({ roomId: roomId as string, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: mediaBody });
-    }
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#3)
+    await announcePost({
+      roomId: roomId as string,
+      emit: fullMessage,
+      push: req.user!.is_bot
+        ? { kind: 'machine', post: { roomId: roomId as string, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: mediaBody } }
+        : { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: mediaBody, data: { roomId, messageId: message.id } } },
+      webhook: { kind: 'off', reason: '意図 (docs/07 §3.1 #3)。アップロードは本文を持たず、写真を上げただけで AI が反応するのを避ける' },
+      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。本文が無いので付ける対象も無い' },
+    });
 
     res.status(201).json({
       message,

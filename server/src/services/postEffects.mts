@@ -13,6 +13,8 @@
 import { getIo } from '../io-registry.mts';
 import { pushMachinePost, type MachinePost } from './machinePush.mts';
 import { fireWebhooks, type WebhookPayload } from './webhook.mts';
+import { sendPushToRoomMembers, type PushPayload } from './push.mts';
+import { logger } from '../utils/logger.mts';
 
 /** 付けない、と理由つきで書く */
 export interface Off {
@@ -24,8 +26,12 @@ export interface PostEffects {
   roomId: string;
   /** ① 配信 (`message:new`)。画面の更新と未読の数え直し */
   emit: Record<string, unknown>;
-  /** ② 通知。machine = 部屋の管理者の設定で鳴らすか決まる (#463)。★ 待ってから戻る (移す前と同じ) */
-  push: { kind: 'machine'; post: MachinePost } | Off;
+  /**
+   * ② 通知
+   *   human   … その部屋のメンバーへ鳴らす。★ 待たずに投げる (移す前の #3 と同じ。投げるところの例外だけ記録して続ける)
+   *   machine … 部屋の管理者の設定で鳴らすか決まる (#463)。★ 待ってから戻る (移す前と同じ)
+   */
+  push: { kind: 'human'; senderId: string; payload: PushPayload } | { kind: 'machine'; post: MachinePost } | Off;
   /** ③ AI 通知 (`message.created`)。★ 待たずに投げる (移す前の #5 と同じ。fireWebhooks は中で失敗を握る) */
   webhook: { kind: 'on'; payload: WebhookPayload } | Off;
   /** ④ リンクプレビュー */
@@ -34,6 +40,13 @@ export interface PostEffects {
 
 export async function announcePost(e: PostEffects): Promise<void> {
   getIo().to(e.roomId).emit('message:new', e.emit);
+  if (e.push.kind === 'human') {
+    try {
+      sendPushToRoomMembers(e.roomId, e.push.senderId, e.push.payload);
+    } catch (err) {
+      logger.warn('Push notification failed: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
   if (e.push.kind === 'machine') await pushMachinePost(e.push.post);
   if (e.webhook.kind === 'on') fireWebhooks('message.created', e.roomId, e.webhook.payload);
 }
