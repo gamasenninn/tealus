@@ -23,6 +23,8 @@ import { checkDocsIndex } from '../src/lib/docsIndex.mts';
 // ★ 期限つきの宿題 (#453 系)。★★ ci-status と同じく **既定で gh を叩く** —— 期限の日に
 //   鳴らない口は、置いた意味が無いため (★★★ 送るものは無い。引けなければ info)。
 import { judgeDueDates, fetchOpenIssues } from '../src/lib/doctorDueDates.mts';
+// ★ 最後に成功したバックアップ (2026-10-01)。★★ BACKUP_LOG_DIR があるときだけ、その置き場の file を読む
+import { judgeBackup, readLatestBackupLog } from '../src/lib/doctorBackup.mts';
 
 dotenv.config();
 
@@ -35,6 +37,7 @@ const findings: Finding[] = [
   judgeCiStatus(await fetchCiRuns(), new Date()),
   judgeDueDates(await fetchOpenIssues(), new Date()),
   await checkDocsIndex(),
+  judgeBackup({ dir: process.env.BACKUP_LOG_DIR, ...(process.env.BACKUP_LOG_DIR ? readLatestBackupLog(process.env.BACKUP_LOG_DIR) : { latest: null }) }, new Date()),
   ...(probe ? await runProbeChecks(process.env) : []),
 ];
 
