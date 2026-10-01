@@ -1,0 +1,73 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#4 メディアの転送: 送る中身 ファイル の転送: 配信の中身 + 人の通知 + AI 通知 (転送元つき)。機械の通知・プレビューは無し 1`] = `
+{
+  "content": null,
+  "forwarded_matches": true,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "b.pdf",
+      "mime_type": "application/pdf",
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "転送する人",
+  "sender_matches": true,
+  "type": "file",
+}
+`;
+
+exports[`#4 メディアの転送: 送る中身 画像 の転送: 配信の中身 + 人の通知 + AI 通知 (転送元つき)。機械の通知・プレビューは無し 1`] = `
+{
+  "content": null,
+  "forwarded_matches": true,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "a.png",
+      "mime_type": "image/png",
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "転送する人",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
