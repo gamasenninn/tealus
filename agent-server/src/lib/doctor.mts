@@ -151,11 +151,21 @@ export function runDoctor(env: DoctorEnv): Finding[] {
     });
   }
 
+  // ★ webhook の鍵 (2026-10-01)。空だと受け口が署名を検査しない (起動時にも警告を出している)
+  if (!env.WEBHOOK_SECRET) {
+    out.push({
+      id: 'webhook-secret',
+      level: 'warn',
+      detail: 'WEBHOOK_SECRET が未設定です。webhook の受け口が署名を検査していません',
+      fix: 'agent-server/.env の WEBHOOK_SECRET と、本体の webhook 登録 (管理画面 → Webhook) の secret に同じ値を入れる (docs/setup-ai-agent.md)',
+    });
+  }
+
   // ★ 資格情報は **指紋だけ**。設定されているかどうかを、値を見ずに判断できる形。
   out.push({
     id: 'credentials',
     level: 'info',
-    detail: ['TEALUS_BOT_PASS', 'OPENAI_API_KEY', 'JWT_SECRET']
+    detail: ['TEALUS_BOT_PASS', 'OPENAI_API_KEY', 'JWT_SECRET', 'WEBHOOK_SECRET']
       .map((k) => `${k}: ${fingerprint(env[k])}`)
       .join('\n'),
     fix: '★ 値は出していません (長さと sha256 の先頭 8 桁のみ)',
@@ -166,7 +176,7 @@ export function runDoctor(env: DoctorEnv): Finding[] {
     id: 'checked',
     level: 'info',
     detail: [
-      '確かめた項目: 既知の使えないモデル表 / 経路ごとのモデル設定 / 必須 env / 資格情報の有無',
+      '確かめた項目: 既知の使えないモデル表 / 経路ごとのモデル設定 / 必須 env / 資格情報の有無 / webhook の鍵',
       // ★ ここは **起動時の口が何を見たか** を言う欄。★★ 手動の口で増えた項目を書くと、
       //   起動時にも見たことになってしまう (#442 で実際に古くなった行を直した)。
       '★ 起動時のこの口が見ていないもの: 外部サービスの疎通 / DB migration の適用状態 /',

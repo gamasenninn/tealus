@@ -142,3 +142,23 @@ describe('#438 doctor — 約束', () => {
     expect(Date.now() - started).toBeLessThan(200);
   });
 });
+
+describe('doctor — webhook の鍵 (2026-10-01)', () => {
+  // ★ 10-01 まで本番は鍵なしで、署名の検査が一切効いていなかった。空に戻ったら言う
+  it('★ WEBHOOK_SECRET が空なら warn を出し、何をすればよいかも出す', () => {
+    const hit = runDoctor({}).find((x) => x.id === 'webhook-secret')!;
+    expect(hit.level).toBe('warn');
+    expect(hit.fix).toContain('WEBHOOK_SECRET');
+  });
+
+  it('設定されていれば warn を出さない', () => {
+    expect(ids(runDoctor({ WEBHOOK_SECRET: 'abc' }))).not.toContain('webhook-secret');
+  });
+
+  it('★ 値は出さず、指紋の欄に並べる', () => {
+    const SECRET = 'whsec-should-never-appear-0123';
+    const f = runDoctor({ WEBHOOK_SECRET: SECRET });
+    expect(JSON.stringify(f)).not.toContain(SECRET);
+    expect(f.find((x) => x.id === 'credentials')!.detail).toContain('WEBHOOK_SECRET: len=');
+  });
+});
