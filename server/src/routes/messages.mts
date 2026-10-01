@@ -9,7 +9,7 @@ import { requireMember } from '../middleware/roomAccess.mts';
 import { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } from '../constants/config.mts';
 import { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps, type AttachableMessage } from '../services/messageAttachments.mts';
 import { fireWebhooks } from '../services/webhook.mts';
-import { isUuid } from '../utils/uuid.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -22,6 +22,12 @@ interface MessageRow extends AttachableMessage {
 }
 
 router.use(authenticate, requireMember);
+
+// ★ 形の崩れたメッセージ ID には 500 でなく 400 と理由を返す (2026-10-01、#477 と同じ決まり)
+router.param('msgId', (_req, res, next, msgId: string) => {
+  if (!isUuid(msgId)) return res.status(400).json({ error: badIdMessage(msgId) });
+  next();
+});
 
 /**
  * メッセージが URL の部屋のものか (2026-09-30)。
