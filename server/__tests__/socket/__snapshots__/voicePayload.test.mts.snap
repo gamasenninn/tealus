@@ -1,0 +1,190 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#8 音声メッセージ: 送る中身 人・返信あり: 配信 + 通知 + AI 通知の中身。プレビューは無し 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_size": "16",
+      "mime_type": "audio/wav",
+    },
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": {
+    "content": "返信される元の投稿",
+    "id_matches": true,
+    "keys": [
+      "content",
+      "id",
+      "sender_display_name",
+      "sender_id",
+      "transcription_raw",
+      "transcription_text",
+      "type",
+    ],
+  },
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "話す人",
+  "sender_matches": true,
+  "type": "voice",
+}
+`;
+
+exports[`#8 音声メッセージ: 送る中身 人・返信あり: 配信 + 通知 + AI 通知の中身。プレビューは無し 2`] = `
+{
+  "content": null,
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": {
+    "content": "返信される元の投稿",
+    "id_matches": true,
+    "keys": [
+      "content",
+      "id",
+      "sender_display_name",
+      "sender_id",
+      "transcription_raw",
+      "transcription_text",
+      "type",
+    ],
+  },
+  "sender_display_name": "話す人",
+  "type": "voice",
+}
+`;
+
+exports[`#8 音声メッセージ: 送る中身 人・返信なし: 配信 + 通知 + AI 通知の中身。プレビューは無し 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_size": "16",
+      "mime_type": "audio/wav",
+    },
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "話す人",
+  "sender_matches": true,
+  "type": "voice",
+}
+`;
+
+exports[`#8 音声メッセージ: 送る中身 人・返信なし: 配信 + 通知 + AI 通知の中身。プレビューは無し 2`] = `
+{
+  "content": null,
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "話す人",
+  "type": "voice",
+}
+`;
+
+exports[`#8 音声メッセージ: 送る中身 機械・返信なし: 配信 + 通知 + AI 通知の中身。プレビューは無し 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_size": "16",
+      "mime_type": "audio/wav",
+    },
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "話すボット",
+  "sender_matches": true,
+  "type": "voice",
+}
+`;
+
+exports[`#8 音声メッセージ: 送る中身 機械・返信なし: 配信 + 通知 + AI 通知の中身。プレビューは無し 2`] = `
+{
+  "content": null,
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "話すボット",
+  "type": "voice",
+}
+`;
