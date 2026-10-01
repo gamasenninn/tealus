@@ -16,12 +16,15 @@ export async function insertSystemMessage(
   content: string,
   io: Server | undefined
 ): Promise<void> {
+  // ★ 部屋に誰もいなければ入れない (2026-10-01)。送り主に借りる人がいないので INSERT が not-null で落ち、
+  //   最後の 1 人の退会が「済んでいるのに 500」になっていた。誰も見ないので、入れないことで失うものは無い
   const result = await pool.query(
     `INSERT INTO messages (room_id, sender_id, content, type)
-     VALUES ($1, (SELECT user_id FROM room_members WHERE room_id = $1 LIMIT 1), $2, 'system')
+     SELECT $1, user_id, $2, 'system' FROM room_members WHERE room_id = $1 LIMIT 1
      RETURNING *`,
     [roomId, content]
   );
+  if (result.rows.length === 0) return;
 
   if (io) {
     io.to(roomId).emit('message:new', {
