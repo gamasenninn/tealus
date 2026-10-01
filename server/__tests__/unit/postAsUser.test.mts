@@ -70,6 +70,36 @@ describe('postAsUser', () => {
     expect(mockFireWebhooks).toHaveBeenCalledWith('message.created', ROOM, expect.anything());
   });
 
+  /**
+   * ★ #383 段階 1 (2026-10-01): 付随処理を announcePost へ移す前に、**送る中身と順番**を固定する。
+   *   上のテストは webhook の中身を `expect.anything()` で見ているので、中身が変わっても通ってしまう
+   *   (エージェントは webhook の中身で動くので、ここが変わると画面は正常なまま AI だけが変わる)
+   */
+  test('★ 送る中身と順番: 配信 → 機械の通知 (待つ) → webhook', async () => {
+    happyPath();
+    const order: string[] = [];
+    mockEmit.mockImplementation(() => { order.push('emit'); });
+    mockPushMachinePost.mockImplementation(async () => { order.push('machine:start'); await Promise.resolve(); order.push('machine:end'); });
+    mockFireWebhooks.mockImplementation(() => { order.push('webhook'); });
+
+    const r = await postAsUser({ roomId: ROOM, sender: SENDER, content: '  hi  ', type: 'text' });
+    expect(r.ok).toBe(true);
+    expect(order).toEqual(['emit', 'machine:start', 'machine:end', 'webhook']);
+    expect(mockEmit).toHaveBeenCalledWith('message:new', {
+      ...MESSAGE, sender_display_name: 'テスト太郎', sender_avatar_url: null,
+    });
+    expect(mockPushMachinePost).toHaveBeenCalledWith({
+      roomId: ROOM, senderId: USER, senderName: 'テスト太郎', messageId: 'msg-1', body: 'hi',
+    });
+    expect(mockFireWebhooks).toHaveBeenCalledWith('message.created', ROOM, {
+      room: { id: ROOM },
+      message: { id: 'msg-1', type: 'text', content: 'hi', reply_to: null, sender: { id: USER, display_name: 'テスト太郎' } },
+    });
+    expect(mockEmit).toHaveBeenCalledTimes(1);
+    expect(mockFireWebhooks).toHaveBeenCalledTimes(1);
+    mockPushMachinePost.mockReset().mockImplementation(() => Promise.resolve()); // ★ 後のテストに順番の記録を残さない
+  });
+
   test('★ 非メンバーなら投稿しない (名義の妥当性検査)', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     const r = await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
