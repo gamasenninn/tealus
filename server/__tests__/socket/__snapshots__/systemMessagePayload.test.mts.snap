@@ -1,0 +1,148 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`system メッセージ: 配信の中身 #2 通話の開始・終了: 名前は付けない 1`] = `
+[
+  {
+    "content": "📞 持ち主 が通話を開始しました",
+    "keys": [
+      "content",
+      "created_at",
+      "forwarded_from",
+      "id",
+      "is_deleted",
+      "is_edited",
+      "is_published",
+      "reply_to",
+      "room_id",
+      "sender_id",
+      "type",
+      "updated_at",
+    ],
+    "room_matches": true,
+    "sender_display_name": undefined,
+    "sender_matches": true,
+    "type": "system",
+  },
+  {
+    "content": "📞 通話が終了しました",
+    "keys": [
+      "content",
+      "created_at",
+      "forwarded_from",
+      "id",
+      "is_deleted",
+      "is_edited",
+      "is_published",
+      "reply_to",
+      "room_id",
+      "sender_id",
+      "type",
+      "updated_at",
+    ],
+    "room_matches": true,
+    "sender_display_name": undefined,
+    "sender_matches": true,
+    "type": "system",
+  },
+]
+`;
+
+exports[`system メッセージ: 配信の中身 #10 スタンプの完成: 名前は作った人 1`] = `
+{
+  "content": "🎉 スタンプパック「ねこパック」が完成しました！（1枚）",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "room_matches": true,
+  "sender_display_name": "持ち主",
+  "sender_matches": true,
+  "type": "system",
+}
+`;
+
+exports[`system メッセージ: 配信の中身 #11 スタンプの失敗: 名前は作った人 1`] = `
+{
+  "content": "⚠️ スタンプパック「いぬパック」の生成に失敗しました。別のプロンプトで試してみてください。",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "room_matches": true,
+  "sender_display_name": "持ち主",
+  "sender_matches": true,
+  "type": "system",
+}
+`;
+
+exports[`system メッセージ: 配信の中身 #12 入退室 (人の招待): 名前は「システム」 1`] = `
+{
+  "content": "持ち主が招かれる人を追加しました",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "room_matches": true,
+  "sender_display_name": "システム",
+  "sender_matches": "any",
+  "type": "system",
+}
+`;
+
+exports[`system メッセージ: 配信の中身 #12' ボットが自分で入る: 名前は「システム」 1`] = `
+{
+  "content": "入るボットが参加しました",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "room_matches": true,
+  "sender_display_name": "システム",
+  "sender_matches": "any",
+  "type": "system",
+}
+`;
