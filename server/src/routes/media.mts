@@ -1,4 +1,3 @@
-import { getIo } from '../io-registry.mts';
 import express from 'express';
 import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
@@ -10,9 +9,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
 import type { AttachableMessage } from '../services/messageAttachments.mts';
-import { sendPushToRoomMembers } from '../services/push.mts';
 import { announcePost } from '../services/postEffects.mts';
-import { fireWebhooks } from '../services/webhook.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -302,23 +299,17 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
     await attachMedia([fullMessage]);
     await attachForwards([fullMessage]);
 
-    const io = getIo();
-    io.to(targetRoomId).emit('message:new', fullMessage);
-
-    try {
-      
-      const typeLabel = src.type === 'image' ? '画像' : src.type === 'video' ? '動画' : 'ファイル';
-      sendPushToRoomMembers(targetRoomId, userId, {
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#4)
+    const typeLabel = src.type === 'image' ? '画像' : src.type === 'video' ? '動画' : 'ファイル';
+    await announcePost({
+      roomId: targetRoomId,
+      emit: fullMessage,
+      push: { kind: 'human', senderId: userId, payload: {
         title: req.user!.display_name,
         body: `📎 ${typeLabel}を転送`,
         data: { roomId: targetRoomId, messageId: fullMessage.id },
-      });
-    } catch (e) {
-      logger.warn('Push notification failed: ' + (e instanceof Error ? e.message : String(e)));
-    }
-
-    try {
-      fireWebhooks('message.created', targetRoomId, {
+      } },
+      webhook: { kind: 'on', payload: {
         room: { id: targetRoomId },
         message: {
           id: fullMessage.id,
@@ -327,10 +318,9 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
           forwarded_from: source_message_id,
           sender: { id: userId, display_name: req.user!.display_name },
         },
-      });
-    } catch (e) {
-      logger.warn('Webhook fire failed: ' + (e instanceof Error ? e.message : String(e)));
-    }
+      } },
+      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
+    });
 
     res.status(201).json({ message: fullMessage });
   } catch (err) {
