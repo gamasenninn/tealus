@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Device } from 'mediasoup-client';
+// ★ mediasoup-client (175 KB) は使い始めたときにだけ読む (2026-10-01)。値の import をここに書くと、
+//   使わない人も含めて最初の 1 本に入る。型だけここで取り、Device は下で動的に読む
+import type { Device } from 'mediasoup-client';
 import type {
   Consumer, Producer, Transport, TransportOptions,
   RtpCapabilities, RtpParameters, MediaKind,
@@ -272,6 +274,7 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
       const joinResp = await waitForMessage<JoinedMessage>((m) => m.type === 'joined');
 
       // Device 初期化
+      const { Device } = await import('mediasoup-client');
       const device = new Device();
       await device.load({ routerRtpCapabilities: joinResp.routerRtpCapabilities });
       deviceRef.current = device;
