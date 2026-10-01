@@ -1,0 +1,157 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#6 #7 ボットの画像・ファイル: 送る中身 #6 画像 (説明あり): 通知の本文は説明の先頭 100 字 1`] = `
+{
+  "content": "ああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああ",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "b.png",
+      "file_size": "70",
+      "has_thumbnail": true,
+      "height": null,
+      "message_id_matches": true,
+      "mime_type": "image/png",
+      "width": null,
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "ボット",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
+
+exports[`#6 #7 ボットの画像・ファイル: 送る中身 #6 画像 (説明なし): 配信の中身・機械の通知の中身が今のまま。人の通知・AI 通知・プレビューは無し 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "a.png",
+      "file_size": "70",
+      "has_thumbnail": true,
+      "height": null,
+      "message_id_matches": true,
+      "mime_type": "image/png",
+      "width": null,
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "ボット",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
+
+exports[`#6 #7 ボットの画像・ファイル: 送る中身 #7 ファイル (本文あり): 通知の本文は本文の先頭 100 字 1`] = `
+{
+  "content": "  報告書です  ",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "e.txt",
+      "file_size": "1",
+      "has_thumbnail": false,
+      "height": null,
+      "message_id_matches": true,
+      "mime_type": "text/plain",
+      "width": null,
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "ボット",
+  "sender_matches": true,
+  "type": "file",
+}
+`;
+
+exports[`#6 #7 ボットの画像・ファイル: 送る中身 #7 ファイル (本文なし): 通知の本文は「📎 ファイル名」 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "d.txt",
+      "file_size": "5",
+      "has_thumbnail": false,
+      "height": null,
+      "message_id_matches": true,
+      "mime_type": "text/plain",
+      "width": null,
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "ボット",
+  "sender_matches": true,
+  "type": "file",
+}
+`;
