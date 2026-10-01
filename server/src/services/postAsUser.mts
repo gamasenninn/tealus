@@ -19,9 +19,8 @@
  *   後から「LINE 経由と同じ抜け漏れだ」と判断して足さないこと。
  */
 import { pool } from '../db/pool.mts';
-import { getIo } from '../io-registry.mts';
-import { fireWebhooks } from './webhook.mts';
-import { pushMachinePost, textPushBody } from './machinePush.mts';
+import { textPushBody } from './machinePush.mts';
+import { announcePost } from './postEffects.mts';
 import { logger } from '../utils/logger.mts';
 
 /** 4 経路で共通の sender context (docs/05 §4) */
@@ -90,27 +89,30 @@ export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResu
     );
     const message = inserted.rows[0];
 
-    getIo().to(roomId).emit('message:new', {
-      ...message,
-      sender_display_name: sender.display_name,
-      sender_avatar_url: sender.avatar_url,
-    });
-
-    // #463 機械の投稿の通知。ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
-    await pushMachinePost({
-      roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id,
-      body: textPushBody(type, content),
-    });
-
-    fireWebhooks('message.created', roomId, {
-      room: { id: roomId },
-      message: {
-        id: message.id,
-        type,
-        content,
-        reply_to: message.reply_to || null,
-        sender: { id: sender.id, display_name: sender.display_name },
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#5)
+    await announcePost({
+      roomId,
+      emit: {
+        ...message,
+        sender_display_name: sender.display_name,
+        sender_avatar_url: sender.avatar_url,
       },
+      // #463 機械の投稿の通知。ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
+      push: { kind: 'machine', post: {
+        roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id,
+        body: textPushBody(type, content),
+      } },
+      webhook: { kind: 'on', payload: {
+        room: { id: roomId },
+        message: {
+          id: message.id,
+          type,
+          content,
+          reply_to: message.reply_to || null,
+          sender: { id: sender.id, display_name: sender.display_name },
+        },
+      } },
+      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });
 
     return { ok: true, message };

@@ -12,6 +12,7 @@
  */
 import { getIo } from '../io-registry.mts';
 import { pushMachinePost, type MachinePost } from './machinePush.mts';
+import { fireWebhooks, type WebhookPayload } from './webhook.mts';
 
 /** 付けない、と理由つきで書く */
 export interface Off {
@@ -25,8 +26,8 @@ export interface PostEffects {
   emit: Record<string, unknown>;
   /** ② 通知。machine = 部屋の管理者の設定で鳴らすか決まる (#463)。★ 待ってから戻る (移す前と同じ) */
   push: { kind: 'machine'; post: MachinePost } | Off;
-  /** ③ AI 通知 (`message.created`) */
-  webhook: Off;
+  /** ③ AI 通知 (`message.created`)。★ 待たずに投げる (移す前の #5 と同じ。fireWebhooks は中で失敗を握る) */
+  webhook: { kind: 'on'; payload: WebhookPayload } | Off;
   /** ④ リンクプレビュー */
   preview: Off;
 }
@@ -34,4 +35,5 @@ export interface PostEffects {
 export async function announcePost(e: PostEffects): Promise<void> {
   getIo().to(e.roomId).emit('message:new', e.emit);
   if (e.push.kind === 'machine') await pushMachinePost(e.push.post);
+  if (e.webhook.kind === 'on') fireWebhooks('message.created', e.roomId, e.webhook.payload);
 }

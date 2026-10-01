@@ -29,7 +29,7 @@ interface DispatchResult {
 }
 
 /** fireWebhooks に渡すペイロード (room はルーム情報で補完される) */
-interface WebhookPayload {
+export interface WebhookPayload {
   room?: {
     name?: string | null;
     type?: string;
