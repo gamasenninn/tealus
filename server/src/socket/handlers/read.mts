@@ -14,6 +14,8 @@ interface ReadPayload {
  */
 export function registerReadHandler(socket: Socket): void {
   socket.on('message:read', async (data: ReadPayload) => {
+    // ★ 値の形を入口で確かめる (2026-10-01、null が例外になっていた)
+    if (!data || typeof data !== 'object') return;
     const { room_id, message_ids } = data;
     logger.debug(`message:read user=${socket.user.id} room=${room_id} count=${message_ids?.length || 0}`);
     if (!room_id || !Array.isArray(message_ids) || message_ids.length === 0) return;

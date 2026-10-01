@@ -1,6 +1,7 @@
 import type { Socket, Server } from 'socket.io';
 import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
+import { isUuid } from '../../utils/uuid.mts';
 import { processLinkPreviews } from '../../services/linkPreview.mts';
 import { sendPushToRoomMembers } from '../../services/push.mts';
 import { fireWebhooks } from '../../services/webhook.mts';
@@ -85,10 +86,12 @@ export async function fetchForwardMessage(forwardId: string): Promise<ForwardMes
  */
 export function registerMessageHandler(socket: Socket, io: Server): void {
   socket.on('message:send', async (data: SendPayload) => {
+    // ★ 値の形を入口で確かめる (2026-10-01、部外者の総当たりで null / 崩れた ID が例外になっていた)
+    if (!data || typeof data !== 'object') return;
     const { room_id, content, type = 'text', reply_to, forwarded_from } = data;
     logger.debug(`message:send user=${socket.user.id} room=${room_id} type=${type}`);
 
-    if (!room_id || !content || content.trim() === '') return;
+    if (!isUuid(room_id) || typeof content !== 'string' || content.trim() === '') return;
 
     // Verify membership
     const memberCheck = await pool.query(

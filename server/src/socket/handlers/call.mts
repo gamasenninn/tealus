@@ -182,7 +182,9 @@ export function registerCallHandler(socket: Socket, io: Server): void {
   });
 
   // ルームの通話状態を問い合わせ
-  socket.on('call:getStatus', ({ roomId }: { roomId: string }) => {
+  socket.on('call:getStatus', (data: { roomId?: unknown } | null) => {
+    // ★ null が例外になっていた (2026-10-01)
+    const roomId = data?.roomId as string;
     const call = activeCalls.get(roomId);
     socket.emit('call:status', {
       roomId,
