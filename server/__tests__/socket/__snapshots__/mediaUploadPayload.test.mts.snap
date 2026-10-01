@@ -1,0 +1,163 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#3 メディアアップロード: 送る中身 人がファイル 1 つ: 通知の本文は「📎 ファイル」 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "d.pdf",
+      "file_size": "8",
+      "has_thumbnail": false,
+      "message_id_matches": true,
+      "mime_type": "application/pdf",
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "人",
+  "sender_matches": true,
+  "type": "file",
+}
+`;
+
+exports[`#3 メディアアップロード: 送る中身 人が画像 1 枚: 配信の中身 + 人の通知 (📷 写真)。機械の通知・AI 通知・プレビューは無し 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "a.png",
+      "file_size": "70",
+      "has_thumbnail": true,
+      "message_id_matches": true,
+      "mime_type": "image/png",
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "人",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
+
+exports[`#3 メディアアップロード: 送る中身 人が画像 1 枚: 配信の中身 + 人の通知 (📷 写真)。機械の通知・AI 通知・プレビューは無し 2`] = `
+[
+  "media",
+  "message",
+]
+`;
+
+exports[`#3 メディアアップロード: 送る中身 人が画像 2 枚: 通知の本文は「📷 写真 (2 件)」 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "b.png",
+      "file_size": "70",
+      "has_thumbnail": true,
+      "message_id_matches": true,
+      "mime_type": "image/png",
+    },
+    {
+      "file_name": "c.png",
+      "file_size": "70",
+      "has_thumbnail": true,
+      "message_id_matches": true,
+      "mime_type": "image/png",
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "人",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
+
+exports[`#3 メディアアップロード: 送る中身 機械が画像 1 枚: 配信の中身 + 機械の通知 (📷 写真)。人の通知は無し 1`] = `
+{
+  "content": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "e.png",
+      "file_size": "70",
+      "has_thumbnail": true,
+      "message_id_matches": true,
+      "mime_type": "image/png",
+    },
+  ],
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "ボット",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
