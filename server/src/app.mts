@@ -120,6 +120,17 @@ app.use(cors());
 //   ライブラリが変えたとき黙ってずれるため。plugins は既定の後ろに足されるので、
 //   記録 (on.error) → 応答 (plugin) の順で **両方走る**。
 //   挙動は __tests__/integration/proxyErrorResponse.test.mts で固定。
+// ★ webhook の受け口は中継しない (2026-10-01)。本体は agent-server へ直接 (localhost) 送るので、
+//   外から /agent-api を通って届く必要はない。agent-server の道選びは大文字小文字を区別しないので、
+//   デコード・連続する / の畳み込み・小文字化をしてから判定する
+app.use('/agent-api', (req, res, next) => {
+  let p: string;
+  try { p = decodeURIComponent(req.path); } catch { return res.status(400).json({ error: 'Bad request' }); }
+  p = p.replace(/\/+/g, '/').toLowerCase();
+  if (p === '/webhook' || p.startsWith('/webhook/')) return res.status(404).json({ error: 'Not found' });
+  next();
+});
+
 app.use('/agent-api', createProxyMiddleware({
   target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
   pathRewrite: { '^/agent-api': '' },

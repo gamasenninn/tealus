@@ -154,7 +154,7 @@ agent-server は server から **Webhook イベント** (POST `/webhook/tealus`)
    | URL | `http://localhost:4000/webhook/tealus` | agent-server の listen URL + `/webhook/tealus` path |
    | events | `message.created` (default) | これだけで対話 OK、後から `voice.transcription_completed` / `reaction.added` 等を追加可能 |
    | room_id | 空 | 全ルーム共通。特定ルームに限定したい場合のみ選択 |
-   | secret | 空 (or 任意の文字列) | 本番では HMAC 検証用に設定推奨、dev では空でも動く |
+   | secret | agent-server の `WEBHOOK_SECRET` と**同じ値** | ★ 本番では設定する (両方に同じ値)。★ agent-server 側だけに設定すると、署名の無い通知を断るので届かなくなる (2026-10-01 から)。dev では両方空でも動く (agent-server が起動時に警告を出す) |
    | is_active | ✅ ON | デフォルト ON |
 
 4. **「作成」** をクリック → 一覧に追加されたことを確認
