@@ -14,6 +14,15 @@
 
 ### ★ 更新時の急所
 
+- **★ 2026-09-27〜10-01 の分 (ここから下の 7 行)** — まとめて更新する場合は全部当てはまる
+- **DB migration が 2 本ある** (`031_room_member_push_muted` / `032_room_push_machine_posts`、[#463](https://github.com/gamasenninn/tealus/issues/463))。`cd server && npm run migrate` を忘れると、**通知が黙って送られなくなる** (エラーはログに出るだけで、画面には出ない)。★ client も本番ビルドし直す (#463 の設定画面・[#475](https://github.com/gamasenninn/tealus/issues/475) の「いま見ている部屋」・[#476](https://github.com/gamasenninn/tealus/issues/476) の日付へ飛ぶ)。★ 更新前の画面は「見ていない」扱いになるので、通知は届く側に倒れる
+- **★★ webhook の鍵は両側に同じ値を** ([#478](https://github.com/gamasenninn/tealus/issues/478)): agent-server の `WEBHOOK_SECRET` を設定すると、**署名の無い・合わない通知は 401 で断る**。本体の webhook 登録 (管理画面 → Webhook) の secret にも同じ値を入れること。片方だけだとエージェントが黙って起きなくなる (agent-server のログに `Webhook signature missing or mismatch`)。両方空なら以前どおり受け取る (起動時と `npm run doctor` で警告)
+- **★ `/api/bot/rooms/:id/join` はボット (`is_bot`) だけ** になった。人の利用者のアカウントでこの口を使っている自作のツールがあれば 403 になる (人は招待で入る)
+- **アップロードした HTML は、本体の画面と切り離して開く** (`/media` の PDF 以外に CSP sandbox)。HTML の中のスクリプトは動くが、**ブラウザの保存領域 (localStorage 等) は使えない**。try で包んでいないページはそこで止まる
+- **リンクプレビューは外の宛先だけ** — `localhost` / LAN の URL にはプレビューが付かなくなる
+- **自己登録は「人の利用者が 0 人のとき (最初の管理者づくり)」だけ** ([#469](https://github.com/gamasenninn/tealus/issues/469))。開発用 compose の DB ポートは `127.0.0.1` だけで待ち受ける ([#467](https://github.com/gamasenninn/tealus/issues/467)) — LAN の別マシンから DB に直接つないでいた場合はつながらなくなる
+- (任意) `npm run doctor` がバックアップの記録を見るようになった ([#479](https://github.com/gamasenninn/tealus/issues/479))。`agent-server/.env` の `BACKUP_LOG_DIR` に `backup-YYYYMMDD.log` の置き場を書くと、最後の成功が 26 時間より古いと warn
+
 - **★★ `#419` は pull しただけでは終わらない。しかも放っておくと、直る代わりに履歴が消える** — 新しいコードは `.codex_home` を workspace の外へ書き、**workspace 内の古いものを見つけたら消す**。つまり **Deep が走ったルームでは codex のセッション記録ごと消え、Deep が走らないルームでは読める状態が残る**。先に `agent-server/scripts/migrate-codex-homes.mts --apply` で**移して**から更新すること (手順は [アップグレードガイド](docs/upgrade-guide.md))。★ 本家では 14 ルーム / 65,166 ファイルを移し、移行前後の総数一致で検算した。
 - **★ 直したことの確認に `ripgrep` / `grep -r` を使わない** — **既定で dot-dir を飛ばす**ので `.codex_home` の中に入らない。2026-09-06 に「残存 0 件」と誤報したのがこれ。`scripts/scan-workspace-secrets.mts` は全深さを歩き、**値を一切出さずに**ファイル名と種類だけ出す。
 - **★ client を本番ビルドし直す** — #421 は client のみの変更なので、ビルドしないと**画面は何も変わらない**。エラーは出ないので静かに変化ゼロになる。
@@ -68,6 +77,24 @@
   - ★ 画面に出るのは子プロセス kill の文字化け (`Failed to parse item: ...PID...`) で**原因が見えない**。agent-server ログの `stream error` を見ること。
 
 ### Security
+
+- **2026-09-27〜10-01 に塞いだ入口** (★ 突き方は書かない。入口と、誰だけにしたか):
+
+  | 入口 | 変更後 |
+  |---|---|
+  | 自己登録 (`/api/auth/register`) | 人の利用者が 0 人のときだけ ([#469](https://github.com/gamasenninn/tealus/issues/469)) |
+  | 開発用 compose の DB ポート | `127.0.0.1` だけ ([#467](https://github.com/gamasenninn/tealus/issues/467)) |
+  | `/media` の配り方 | PDF 以外は本体と切り離して開く + `nosniff` |
+  | リンクプレビューの取得 | 外の宛先だけ (接続直前に検査・転送先も)・HTML の頭 1 MB まで |
+  | 部屋から外す・退会・利用停止 | 接続中の端末にもその場で効く |
+  | socket の通話・既読・入力中 | その部屋のメンバーだけ |
+  | `/api/bot` の未読・既読・状態表示、スタンプ作成の投稿先 | その部屋のメンバーだけ |
+  | `/api/bot/rooms/:id/join` | ボットだけ |
+  | メッセージの編集履歴・リアクション・削除 | URL の部屋のメッセージだけ |
+  | 転送後の通知の部屋名 | 文字として入れる (client) |
+  | webhook の受け口 | 本体の `/agent-api` では中継しない・鍵があるときは署名必須 ([#478](https://github.com/gamasenninn/tealus/issues/478)) |
+  - 約束は [docs/05](docs/05_実装ノート_不変条件と落とし穴.md) §5 に (新しい口を足すときに読む)
+  - 依存パッケージの既知の脆弱性を更新 ([#471](https://github.com/gamasenninn/tealus/issues/471))
 
 - **`POST /api/auth/login` に総当たり抑止を入れた** ([#362](https://github.com/gamasenninn/tealus/issues/362)): **15 分に 5 回失敗**で 429 (`Retry-After` つき)。鍵は **(client IP, login_id)**。
   - ★ **数えるのは失敗だけ。成功でカウンタを消す。** #360 で接続に最大寿命 (既定 55 分) が入って以降、cc-bridge の常駐ループは **55 分ごとに正当に login する** (1 セッション日 26 回程度)。全リクエストを数える素直な制限だと bot 例外が要り、例外の方が恒久化する。★★ 失敗だけ数えれば **bot はそもそも当たらない**ので、その分岐が消える。
