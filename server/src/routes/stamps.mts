@@ -9,6 +9,7 @@ import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { isAdmin } from '../utils/permissions.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
+import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../services/postEffects.mts';
 import { MEDIA_ROOT } from '../middleware/upload.mts';
 import { generateStampPack, saveStampFiles, checkDailyLimit } from '../services/stamp/index.mts';
 
@@ -143,10 +144,8 @@ router.post('/generate', async (req, res) => {
              VALUES ($1, $2, $3, 'system') RETURNING *`,
             [roomId, userId, systemMsg]
           );
-          io.to(roomId).emit('message:new', {
-            ...msgRes.rows[0],
-            sender_display_name: displayName,
-          });
+          // ★ 付随処理は announcePost から (docs/07 §5.1、#10 #11)
+          await announcePost({ roomId, emit: { ...msgRes.rows[0], sender_display_name: displayName }, ...SYSTEM_MESSAGE_EFFECTS });
         } catch (e) {
           logger.error('Stamp system message error:', e);
         }
@@ -171,10 +170,8 @@ router.post('/generate', async (req, res) => {
              VALUES ($1, $2, $3, 'system') RETURNING *`,
             [roomId, userId, errorMsg]
           );
-          io.to(roomId).emit('message:new', {
-            ...msgRes.rows[0],
-            sender_display_name: displayName,
-          });
+          // ★ 付随処理は announcePost から (docs/07 §5.1、#10 #11)
+          await announcePost({ roomId, emit: { ...msgRes.rows[0], sender_display_name: displayName }, ...SYSTEM_MESSAGE_EFFECTS });
         } catch (e) {
           logger.error('Stamp error message error:', e);
         }

@@ -1,5 +1,6 @@
 import type { Server } from 'socket.io';
 import { pool } from '../db/pool.mts';
+import { announcePost, SYSTEM_MESSAGE_EFFECTS } from './postEffects.mts';
 
 /**
  * ルームに system メッセージを 1 件入れて配信する。
@@ -26,10 +27,12 @@ export async function insertSystemMessage(
   );
   if (result.rows.length === 0) return;
 
+  // ★ 付随処理は announcePost から (docs/07 §5.1、#12 #12')。io を渡さなければ配信しない (移す前と同じ)
   if (io) {
-    io.to(roomId).emit('message:new', {
-      ...result.rows[0],
-      sender_display_name: 'システム',
+    await announcePost({
+      roomId,
+      emit: { ...result.rows[0], sender_display_name: 'システム' },
+      ...SYSTEM_MESSAGE_EFFECTS,
     });
   }
 }

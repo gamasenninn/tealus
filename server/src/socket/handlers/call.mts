@@ -5,6 +5,7 @@ import { sendPushToUser } from '../../services/push.mts';
 import * as capabilityWatcher from '../../services/capabilityWatcher.mts';
 import { getOnlineUserIds } from '../index.mts';
 import { isRoomMember } from '../../services/roomMembership.mts';
+import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../../services/postEffects.mts';
 
 /**
  * Handle call events (notification + history + status)
@@ -25,15 +26,15 @@ interface ActiveCall {
 // 通話中ルームの管理: roomId -> { participants: Set<userId>, startedBy }
 export const activeCalls = new Map<string, ActiveCall>();
 
-async function insertCallMessage(roomId: string, senderId: string, content: string, io: Server): Promise<void> {
+async function insertCallMessage(roomId: string, senderId: string, content: string): Promise<void> {
   try {
     const result = await pool.query(
       `INSERT INTO messages (room_id, sender_id, content, type)
        VALUES ($1, $2, $3, 'system') RETURNING *`,
       [roomId, senderId, content]
     );
-    const msg = result.rows[0];
-    io.to(roomId).emit('message:new', msg);
+    // ★ 付随処理は announcePost から (docs/07 §5.1、#2)。名前は付けない (移す前と同じ)
+    await announcePost({ roomId, emit: result.rows[0], ...SYSTEM_MESSAGE_EFFECTS });
   } catch (err) {
     console.error('insertCallMessage error:', err);
   }
@@ -119,7 +120,7 @@ export function registerCallHandler(socket: Socket, io: Server): void {
       }
 
       // 開始メッセージ（1通のみ）
-      await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を開始しました`, io);
+      await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を開始しました`);
       broadcastCallStatus(roomId, io);
     } catch (err) {
       console.error('call:start error:', err);
@@ -160,7 +161,7 @@ export function registerCallHandler(socket: Socket, io: Server): void {
         if (call.participants.size === 0) {
           // 最後の人が退出 → 通話終了
           activeCalls.delete(roomId);
-          await insertCallMessage(roomId, socket.user.id, `📞 通話が終了しました`, io);
+          await insertCallMessage(roomId, socket.user.id, `📞 通話が終了しました`);
         }
         broadcastCallStatus(roomId, io);
       }

@@ -38,6 +38,16 @@ export interface PostEffects {
   preview: Off;
 }
 
+/**
+ * system メッセージ (#2 通話 / #10 #11 スタンプ / #12 入退室・権限変更 / #12' ボットの参加) の付随処理。
+ * ★ 配信だけ。通知・AI 通知・プレビューは**意図して付けない** (docs/07 §3.1「スタンプ・入退室・通話でエージェントが動くのは誤り」)
+ */
+export const SYSTEM_MESSAGE_EFFECTS: Pick<PostEffects, 'push' | 'webhook' | 'preview'> = {
+  push: { kind: 'off', reason: '意図 (docs/07 §3.1)。system メッセージでは鳴らさない' },
+  webhook: { kind: 'off', reason: '意図 (docs/07 §3.1)。system メッセージでエージェントが動くのは誤り' },
+  preview: { kind: 'off', reason: '意図 (docs/07 §3.1)。system メッセージに URL は入らない' },
+};
+
 export async function announcePost(e: PostEffects): Promise<void> {
   getIo().to(e.roomId).emit('message:new', e.emit);
   if (e.push.kind === 'human') {
