@@ -13,6 +13,8 @@ import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { decodeFileName } from '../middleware/upload.mts';
 import { fetchReplyMessage } from '../socket/handlers/message.mts';
 import { announcePost } from '../services/postEffects.mts';
+import { checkMessageRefs } from '../services/messageRefs.mts';
+import fs from 'node:fs';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -74,6 +76,13 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
 
   if (!req.file) {
     return res.status(400).json({ error: '音声ファイルが添付されていません' });
+  }
+
+  // ★ #482 返信先は同じ部屋の投稿だけ。断るときは受け取ったファイルを消す (メッセージに紐づかないまま残さない)
+  const refs = await checkMessageRefs({ roomId, userId, replyTo: req.body.reply_to });
+  if (!refs.ok) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    return res.status(refs.status).json({ error: refs.error });
   }
 
   const client = await pool.connect();

@@ -10,6 +10,7 @@ import { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } from '../constants/config.
 import { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps, type AttachableMessage } from '../services/messageAttachments.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
+import { checkMessageRefs } from '../services/messageRefs.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -53,6 +54,10 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   try {
+    // ★ #482 返信先・転送元は指してよい投稿だけ
+    const refs = await checkMessageRefs({ roomId, userId, replyTo: reply_to, forwardedFrom: forwarded_from });
+    if (!refs.ok) return res.status(refs.status).json({ error: refs.error });
+
     const result = await pool.query<MessageRow>(
       `INSERT INTO messages (room_id, sender_id, content, type, reply_to, forwarded_from)
        VALUES ($1, $2, $3, $4, $5, $6)

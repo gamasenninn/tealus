@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
 import { isUuid } from '../../utils/uuid.mts';
 import { announcePost } from '../../services/postEffects.mts';
+import { checkMessageRefs } from '../../services/messageRefs.mts';
 
 interface ReplyMessageRow {
   id: string;
@@ -97,6 +98,13 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
       [room_id, socket.user.id]
     );
     if (memberCheck.rows.length === 0) return;
+
+    // ★ #482 返信先・転送元は指してよい投稿だけ。満たさなければ投稿ごと断る (メンバーでないときと同じく黙って返す)
+    const refs = await checkMessageRefs({ roomId: room_id, userId: socket.user.id, replyTo: reply_to, forwardedFrom: forwarded_from });
+    if (!refs.ok) {
+      logger.warn(`message:send を断りました (#482 ${refs.error}): actor=${socket.user.display_name}(${socket.user.id}) room=${room_id}`);
+      return;
+    }
 
     try {
       const result = await pool.query<{ id: string }>(

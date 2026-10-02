@@ -77,8 +77,8 @@ describe('Reply Feature', () => {
       .set('Authorization', `Bearer ${user1.token}`)
       .send({ content: 'リプライ', reply_to: '00000000-0000-0000-0000-000000000000' });
 
-    // Should fail due to foreign key constraint
-    expect(res.status).toBe(500);
+    // ★ #482 (2026-10-02): 入口で確かめて 403 を返す。以前は DB の外部キーで落ちて 500 だった
+    expect(res.status).toBe(403);
   });
 
   it('should work without reply_to (normal message)', async () => {
