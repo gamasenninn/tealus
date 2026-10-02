@@ -7,6 +7,7 @@ import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } from '../middleware/roomAccess.mts';
 import { canCreateRoom, isGuest } from '../utils/permissions.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'icons');
@@ -145,6 +146,17 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'グループ名は必須です' });
   }
 
+  // ★ 指定された人は「存在して有効な人」だけ (2026-10-02、routes/members.mts の追加口と同じ)。
+  //   以前は確かめず、存在しない ID・重複で 500、無効にした人も入れられた。重複と自分自身は 1 人にまとめる
+  const requested = Array.isArray(member_ids) ? member_ids : [];
+  const bad = requested.find((id) => !isUuid(id));
+  if (bad !== undefined) return res.status(400).json({ error: badIdMessage(String(bad)) });
+  const otherIds = [...new Set(requested as string[])].filter((id) => id !== userId);
+  if (otherIds.length > 0) {
+    const ok = await pool.query<{ n: number }>('SELECT count(*)::int n FROM users WHERE id = ANY($1::uuid[]) AND is_active = true', [otherIds]);
+    if (ok.rows[0].n !== otherIds.length) return res.status(400).json({ error: 'メンバーに指定できないユーザーが含まれています' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -165,16 +177,13 @@ router.post('/', async (req, res) => {
       [room.id, userId]
     );
 
-    // Add other members
-    const allMemberIds = Array.isArray(member_ids) ? member_ids : [];
-    for (const memberId of allMemberIds) {
-      if (memberId !== userId) {
-        await client.query(
-          `INSERT INTO room_members (room_id, user_id, role)
-           VALUES ($1, $2, 'member')`,
-          [room.id, memberId]
-        );
-      }
+    // Add other members (★ 上で確かめて重複と自分を除いた分)
+    for (const memberId of otherIds) {
+      await client.query(
+        `INSERT INTO room_members (room_id, user_id, role)
+         VALUES ($1, $2, 'member')`,
+        [room.id, memberId]
+      );
     }
 
     // デフォルト TODO タグ作成
@@ -218,8 +227,15 @@ router.post('/direct', async (req, res) => {
   if (!partner_id) {
     return res.status(400).json({ error: '相手のユーザーIDは必須です' });
   }
+  // ★ 相手は「自分以外の、存在して有効な人」だけ (2026-10-02、routes/members.mts と同じ確かめ)。
+  //   以前は存在しない ID で 500、無効にした人とも作れ、自分自身を指定すると手持ちの 1 対 1 のどれかが返った
+  if (!isUuid(partner_id)) return res.status(400).json({ error: badIdMessage(String(partner_id)) });
+  if (partner_id === userId) return res.status(400).json({ error: '自分自身とは 1 対 1 を作れません' });
 
   try {
+    const partner = await pool.query('SELECT 1 FROM users WHERE id = $1 AND is_active = true', [partner_id]);
+    if (partner.rows.length === 0) return res.status(404).json({ error: 'ユーザーが見つかりません' });
+
     // Check if direct room already exists between these two users
     const existingResult = await pool.query<RoomRow>(
       `SELECT r.* FROM rooms r
