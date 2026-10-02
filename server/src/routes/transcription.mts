@@ -42,18 +42,18 @@ router.put('/', authenticate, async (req, res) => {
 
     const { sender_id, room_id, allow_member_transcription_edit } = msgResult.rows[0];
 
-    if (sender_id !== userId) {
-      if (!allow_member_transcription_edit) {
-        return res.status(403).json({ error: '送信者のみ編集できます' });
-      }
-      // ルーム設定でメンバー編集が許可されている場合、メンバーかチェック
-      const memberCheck = await pool.query(
-        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-        [room_id, userId]
-      );
-      if (memberCheck.rows.length === 0) {
-        return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
-      }
+    // ★ 送り手本人も、今その部屋のメンバーのときだけ (2026-10-02、利用者判断)。
+    //   以前は送り手なら部屋を抜けた後も直せた (履歴は読めないのに)。文字の投稿の編集 (requireMember) と揃える
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
+    }
+    // 送り手以外は、ルームの設定でメンバーの編集が許されているときだけ
+    if (sender_id !== userId && !allow_member_transcription_edit) {
+      return res.status(403).json({ error: '送信者のみ編集できます' });
     }
 
     // Get current max version
@@ -204,17 +204,16 @@ router.post('/retranscribe', authenticate, async (req: Request, res: Response) =
 
     const { sender_id, room_id, allow_member_transcription_edit } = msgResult.rows[0];
 
-    if (sender_id !== userId) {
-      if (!allow_member_transcription_edit) {
-        return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
-      }
-      const memberCheck = await pool.query(
-        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-        [room_id, userId]
-      );
-      if (memberCheck.rows.length === 0) {
-        return res.status(403).json({ error: 'ルームメンバーのみ再文字起こしできます' });
-      }
+    // ★ 送り手本人も、今その部屋のメンバーのときだけ (2026-10-02、PUT と同じ)
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [room_id, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'ルームメンバーのみ再文字起こしできます' });
+    }
+    if (sender_id !== userId && !allow_member_transcription_edit) {
+      return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
     }
 
     // Get audio file path from message_media

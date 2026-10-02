@@ -211,4 +211,36 @@ describe('Transcription Edit API', () => {
       expect(res.status).toBe(401);
     });
   });
+
+  // ============================================
+  // ★ 部屋を抜けた送り手 (2026-10-02、利用者判断)
+  //   以前は送り手本人なら部屋のメンバーかを見ずに、手直し・やり直しができた (履歴は読めないのに)。
+  //   文字の投稿の編集 (requireMember) と揃えて、今のメンバーだけにする。本番で抜けた後の手直しは 0 件だった
+  // ============================================
+  describe('★ 部屋を抜けた送り手', () => {
+    const versions = async () => (await getTestPool().query<{ n: number }>(
+      'SELECT count(*)::int n FROM voice_transcriptions WHERE message_id = $1', [messageId])).rows[0].n;
+    beforeEach(async () => {
+      await getTestPool().query('DELETE FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, user1.user.id]);
+    });
+
+    it('手直しは 403 で、版は増えない', async () => {
+      const before = await versions();
+      const res = await request(app)
+        .put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ text: '抜けた後の手直し' });
+      expect(res.status).toBe(403);
+      expect(await versions()).toBe(before);
+    });
+
+    it('やり直しは 403 で、版は増えない', async () => {
+      const before = await versions();
+      const res = await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(res.status).toBe(403);
+      expect(await versions()).toBe(before);
+    });
+  });
 });
