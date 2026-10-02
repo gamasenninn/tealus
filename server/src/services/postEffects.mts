@@ -11,6 +11,7 @@
  *   それを使う経路を移すときに、その経路の待ち方 (待つ / 待たない) に合わせて足す
  *   (プレビューの「付ける」形は #1 を移すときに足した、2026-10-02)
  */
+import type { Server } from 'socket.io';
 import { getIo } from '../io-registry.mts';
 import { pushMachinePost, type MachinePost } from './machinePush.mts';
 import { fireWebhooks, type WebhookPayload } from './webhook.mts';
@@ -26,11 +27,17 @@ export interface Off {
 
 export interface PostEffects {
   roomId: string;
+  /**
+   * 配信とプレビューに使う io。省略すると getIo()。
+   * ★ LINE (#13〜#18) は呼び出し側から io を渡す作り (Option D、テストで差し替える) なので、その io をそのまま通す。
+   *   null なら配信しない (移す前の LINE の `if (io)` と同じ)
+   */
+  io?: Server | null;
   /** ① 配信 (`message:new`)。画面の更新と未読の数え直し */
   emit: Record<string, unknown>;
   /**
    * ② 通知
-   *   human   … その部屋のメンバーへ鳴らす。★ 待たずに投げる (移す前の #3 と同じ。投げるところの例外だけ記録して続ける)
+   *   human   … その部屋のメンバーへ鳴らす。★ 待たずに投げる (移す前の #3 と同じ。失敗は記録して続ける)
    *   machine … 部屋の管理者の設定で鳴らすか決まる (#463)。★ 待ってから戻る (移す前と同じ)
    */
   push: { kind: 'human'; senderId: string; payload: PushPayload } | { kind: 'machine'; post: MachinePost } | Off;
@@ -54,15 +61,17 @@ export const SYSTEM_MESSAGE_EFFECTS: Pick<PostEffects, 'push' | 'webhook' | 'pre
 };
 
 export async function announcePost(e: PostEffects): Promise<void> {
-  getIo().to(e.roomId).emit('message:new', e.emit);
+  const io = e.io === undefined ? getIo() : e.io;
+  if (io) io.to(e.roomId).emit('message:new', e.emit);
   if (e.push.kind === 'human') {
-    try {
-      sendPushToRoomMembers(e.roomId, e.push.senderId, e.push.payload);
-    } catch (err) {
+    // ★ 待たずに投げ、失敗 (reject) は記録して続ける。★★ 2026-10-02 まで try/catch で、reject は握れていなかった
+    //   (sendPushToRoomMembers は async なので同期の例外は出ない)。LINE (#13) は移す前から .catch で捨てていた
+    //   Promise.resolve で包むのは、Promise を返さない差し替え (テストの jest.fn()) でも .catch で落ちないため。呼ぶのは同期のまま
+    Promise.resolve(sendPushToRoomMembers(e.roomId, e.push.senderId, e.push.payload)).catch((err: unknown) => {
       logger.warn('Push notification failed: ' + (err instanceof Error ? err.message : String(err)));
-    }
+    });
   }
   if (e.push.kind === 'machine') await pushMachinePost(e.push.post);
   if (e.webhook.kind === 'on') fireWebhooks('message.created', e.roomId, e.webhook.payload);
-  if (e.preview.kind === 'on') processLinkPreviews(e.preview.messageId, e.preview.text, getIo(), e.roomId).catch(() => {});
+  if (e.preview.kind === 'on') processLinkPreviews(e.preview.messageId, e.preview.text, io, e.roomId).catch(() => {});
 }

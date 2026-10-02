@@ -3,7 +3,7 @@
  *
  * ★ 付随処理を announcePost へ移す前に、配信・通知・プレビューの**中身**を固定する。移す前のコードで通ることを先に確かめる
  * ★ AI 通知は**付けない** (docs/05 の不変条件。LINE の投稿で @cc-* を起動しない) —— 呼ばれたら落ちる
- * ★ 順番は固定しない: 移すと #13 の「プレビュー → 通知」が「通知 → プレビュー」に変わる (2026-10-02 利用者判断で許容)
+ * ★ 順番: 移す前の #13 は「プレビュー → 通知」だった。移して入口の順「通知 → プレビュー」に揃えた (2026-10-02 利用者判断)。移した後の順を固定する
  * ★ 位置 (postLocationToTealus) は #13 テキストを通る
  */
 import fs from 'node:fs';
@@ -129,6 +129,7 @@ describe('#13〜#18 LINE からの投稿: 送る中身', () => {
     expect(recorded.preview).toEqual([[message.id, content, true, roomId]]);
     expect(recorded.machine).toEqual([]);
     expect(recorded.webhook).toEqual([]);
+    expect(order).toEqual(['push', 'preview']);
   });
 
   it.each([

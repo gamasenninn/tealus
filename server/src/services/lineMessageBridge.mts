@@ -16,9 +16,8 @@
 import type { Server } from 'socket.io';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
-import { processLinkPreviews } from './linkPreview.mts';
-import { sendPushToRoomMembers } from './push.mts';
-import { pushMachinePost, mediaPushBody } from './machinePush.mts';
+import { mediaPushBody } from './machinePush.mts';
+import { announcePost, type Off } from './postEffects.mts';
 import type { AuthUser } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
@@ -30,6 +29,11 @@ import { generateThumbnail } from './thumbnail.mts';
 // helper 内 DB query ゼロ + module level state ゼロ = test isolation 構造的保証。
 // sender = { id, display_name, avatar_url } object form
 export type LineSenderContext = Pick<AuthUser, 'id' | 'display_name' | 'avatar_url'>;
+
+/** ★ LINE (#13〜#18) は AI 通知を付けない。付けると LINE のメッセージで @cc-* が agent-server の dispatch を起動する */
+const LINE_NO_WEBHOOK: Off = { kind: 'off', reason: '意図 (docs/07 §3.1、docs/05 の不変条件)。LINE の投稿で @cc-* を起動しない' };
+/** #14〜#18 メディア。プレビューは付けない (移す前も無し) */
+const LINE_MEDIA_NO_PREVIEW: Off = { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' };
 
 /** messages テーブル row (= INSERT ... RETURNING *) */
 export interface MessageRow {
@@ -100,22 +104,17 @@ export async function postTextToTealus(
     const message = msgResult.rows[0];
     await client.query('COMMIT');
 
-    if (io) {
-      io.to(roomId).emit('message:new', {
-        ...message,
-        sender_display_name: sender.display_name,
-        sender_avatar_url: sender.avatar_url,
-      });
-    }
-
+    // ★ 付随処理 4 つは announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
+    // ★★ 移したことで順番だけ変わった: 以前は「配信 → プレビュー → 通知」、今は入口の順の「配信 → 通知 → プレビュー」
+    //   (2026-10-02 利用者判断)。どちらも待たずに投げるので差は無い
+    //
     // ★ リンクプレビュー (2026-08-14)。socket 経由の投稿にしか付いておらず、LINE 経由は
     //   ずっと素の URL のままだった (実測: link_previews 239 件はすべて socket 経由の人間 4 名、
     //   LINE 経由のリンク投稿 13 件はプレビュー 0 件)。OGP 取得自体は動いていて、
     //   **経路が増えたときに、投稿に付随する処理が一緒に増えていなかった**だけ。
     //   socket 側 (socket/handlers/message.mts) と同じく待たずに投げる — OGP 取得は外に出るので、
     //   失敗しても投稿を止めない。
-    processLinkPreviews(message.id, content || '', io ?? null, roomId).catch(() => {});
-
+    //
     // ★ プッシュ通知 (2026-08-14)。socket と media にしか付いておらず、LINE 経由は飛んでいなかった。
     //   Tealus しか見ていない人は、アプリを閉じている間 LINE の投稿に気づけない
     //   (投稿・データは欠けない。開けばサーバの未読数から取り直すのでバッジも直る)。
@@ -128,11 +127,14 @@ export async function postTextToTealus(
     //   ★★ webhook (fireWebhooks) は **付けない**。docs/05 の不変条件で「message.created を
     //   発火するのは socket の message:send のみ」。付けると LINE のメッセージで @cc-* が
     //   agent-server の dispatch を起動する = 別の挙動変更になる。
-    sendPushToRoomMembers(roomId, sender.id, {
-      title: sender.display_name,
-      body: (content || '').slice(0, 100),
-      data: { roomId, messageId: message.id },
-    }).catch(() => {});
+    await announcePost({
+      roomId,
+      io: io ?? null,
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url },
+      push: { kind: 'human', senderId: sender.id, payload: { title: sender.display_name, body: (content || '').slice(0, 100), data: { roomId, messageId: message.id } } },
+      webhook: LINE_NO_WEBHOOK,
+      preview: { kind: 'on', messageId: message.id, text: content || '' },
+    });
 
     logger.info(`[lineMessageBridge] text post: room=${roomId} msg=${message.id}`);
     return { message };
@@ -190,17 +192,16 @@ export async function postImageToTealus(
     );
     await client.query('COMMIT');
 
-    if (io) {
-      io.to(roomId).emit('message:new', {
-        ...message,
-        sender_display_name: sender.display_name,
-        sender_avatar_url: sender.avatar_url,
-        media: [mediaResult.rows[0]],
-      });
-    }
-
+    // ★ 付随処理は announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
     // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
-    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('📷 写真', content) });
+    await announcePost({
+      roomId,
+      io: io ?? null,
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('📷 写真', content) } },
+      webhook: LINE_NO_WEBHOOK,
+      preview: LINE_MEDIA_NO_PREVIEW,
+    });
 
     logger.info(`[lineMessageBridge] image post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
     return { message, media: mediaResult.rows[0] };
@@ -270,17 +271,16 @@ export async function postImagesToTealus(
     }
     await client.query('COMMIT');
 
-    if (io) {
-      io.to(roomId).emit('message:new', {
-        ...message,
-        sender_display_name: sender.display_name,
-        sender_avatar_url: sender.avatar_url,
-        media,
-      });
-    }
-
+    // ★ 付随処理は announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
     // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
-    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📷 写真 (${media.length} 件)`, content) });
+    await announcePost({
+      roomId,
+      io: io ?? null,
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: media },
+      push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📷 写真 (${media.length} 件)`, content) } },
+      webhook: LINE_NO_WEBHOOK,
+      preview: LINE_MEDIA_NO_PREVIEW,
+    });
 
     logger.info(`[lineMessageBridge] image-set post: room=${roomId} msg=${message.id} files=${media.length}`);
     return { message, media };
@@ -333,16 +333,19 @@ export async function postVoiceToTealus(
 
     await client.query('COMMIT');
 
-    if (io) {
-      io.to(roomId).emit('message:new', {
-        ...message,
-        sender_display_name: sender.display_name,
-        sender_avatar_url: sender.avatar_url,
-        media: [mediaResult.rows[0]],
-      });
-    }
+    // ★ 付随処理は announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
+    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
+    await announcePost({
+      roomId,
+      io: io ?? null,
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎤 音声メッセージ', content) } },
+      webhook: LINE_NO_WEBHOOK,
+      preview: LINE_MEDIA_NO_PREVIEW,
+    });
 
     // ★ ★ ★ Background transcription trigger (= voice.js line 116-118 同型)
+    // ★ #383 で announcePost の後に置いた (#8 と同じ並び)。以前は配信と通知の間で、機械の通知を待つ分 (DB 1 回) だけ早かった
     // organon polyseme inject (= 5/31 Day 15 完成) もここから自動連動
     try {
       transcribeVoiceMessage(message.id, mediaInfo.relativePath, io, roomId).catch((err: unknown) => {
@@ -351,9 +354,6 @@ export async function postVoiceToTealus(
     } catch (e) {
       logger.warn(`[lineMessageBridge] transcribeVoiceMessage not available: ${e instanceof Error ? e.message : String(e)}`);
     }
-
-    // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
-    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎤 音声メッセージ', content) });
 
     logger.info(`[lineMessageBridge] voice post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
     return { message, media: mediaResult.rows[0] };
@@ -402,17 +402,16 @@ export async function postFileToTealus(
     );
     await client.query('COMMIT');
 
-    if (io) {
-      io.to(roomId).emit('message:new', {
-        ...message,
-        sender_display_name: sender.display_name,
-        sender_avatar_url: sender.avatar_url,
-        media: [mediaResult.rows[0]],
-      });
-    }
-
+    // ★ 付随処理は announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
     // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
-    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📎 ${mediaInfo.fileName}`, content) });
+    await announcePost({
+      roomId,
+      io: io ?? null,
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📎 ${mediaInfo.fileName}`, content) } },
+      webhook: LINE_NO_WEBHOOK,
+      preview: LINE_MEDIA_NO_PREVIEW,
+    });
 
     logger.info(`[lineMessageBridge] file post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
     return { message, media: mediaResult.rows[0] };
@@ -470,17 +469,16 @@ export async function postVideoToTealus(
     );
     await client.query('COMMIT');
 
-    if (io) {
-      io.to(roomId).emit('message:new', {
-        ...message,
-        sender_display_name: sender.display_name,
-        sender_avatar_url: sender.avatar_url,
-        media: [mediaResult.rows[0]],
-      });
-    }
-
+    // ★ 付随処理は announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
     // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
-    await pushMachinePost({ roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎬 動画', content) });
+    await announcePost({
+      roomId,
+      io: io ?? null,
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎬 動画', content) } },
+      webhook: LINE_NO_WEBHOOK,
+      preview: LINE_MEDIA_NO_PREVIEW,
+    });
 
     logger.info(`[lineMessageBridge] video post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName} thumb=${thumbnailPath || 'null'}`);
     return { message, media: mediaResult.rows[0] };
