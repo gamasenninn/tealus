@@ -112,7 +112,11 @@ export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResu
           sender: { id: sender.id, display_name: sender.display_name },
         },
       } },
-      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
+      // ★ #383 第 2 段 (2026-10-02 利用者判断) で付けた。それまでは「不明」で付いていなかった。#1 と同じく text だけ
+      //   ボットの URL つきの投稿は一覧型が多い (60 日 133 件、平均 6.7 本) が、プレビューは先頭の 1 本だけを作る
+      preview: type === 'text'
+        ? { kind: 'on', messageId: message.id, text: content }
+        : { kind: 'off', reason: 'text 以外 (#1 と同じ。プレビューは text だけ)' },
     });
 
     return { ok: true, message };

@@ -33,6 +33,12 @@ jest.mock('../../src/services/machinePush.mts', () => ({
   pushMachinePost: (...a: unknown[]) => mockPushMachinePost(...a),
 }));
 
+// ★ リンクプレビューは外へ取りに行く。ここでは「正しい引数で呼ぶか」だけを見る (2026-10-02 #383 第 2 段で付けた)
+const mockProcessLinkPreviews = jest.fn((..._a: unknown[]) => Promise.resolve());
+jest.mock('../../src/services/linkPreview.mts', () => ({
+  processLinkPreviews: (...a: unknown[]) => mockProcessLinkPreviews(...a),
+}));
+
 jest.mock('../../src/utils/logger.mts', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
@@ -244,5 +250,49 @@ describe('postAsUser — 機械の投稿の通知 (#463)', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
     expect(mockPushMachinePost).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ #383 第 2 段 (2026-10-02 利用者判断): ボットのテキストにもリンクプレビューを付ける。
+ *   それまでは「不明」で付いていなかった (付くのは #1 と #13 だけ)。
+ *   ★ #1 と同じく text のときだけ。待たずに投げる (投稿は OGP の取得を待たない)
+ */
+describe('postAsUser — リンクプレビュー', () => {
+  beforeEach(() => { mockQuery.mockReset(); mockProcessLinkPreviews.mockClear(); });
+
+  it('★ text なら、空白を落とした本文でプレビューを呼ぶ (配信と同じ io・同じ部屋)', async () => {
+    const msg = { ...MESSAGE, content: '見て https://example.com/a' };
+    mockQuery.mockResolvedValueOnce({ rows: [{ ok: 1 }] }).mockResolvedValueOnce({ rows: [msg] });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: '  見て https://example.com/a  ' });
+    expect(mockProcessLinkPreviews).toHaveBeenCalledTimes(1);
+    const [id, text, io, room] = mockProcessLinkPreviews.mock.calls[0];
+    expect([id, text, room]).toEqual(['msg-1', '見て https://example.com/a', ROOM]);
+    expect((io as { to: unknown }).to).toBe(mockTo);
+  });
+
+  it('★ text 以外 (フォームなど) には付けない', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ ok: 1 }] }).mockResolvedValueOnce({ rows: [{ ...MESSAGE, type: 'form' }] });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'https://example.com/a', type: 'form' });
+    expect(mockProcessLinkPreviews).not.toHaveBeenCalled();
+  });
+
+  it('★ 順番は入口のとおり: 配信 → 機械の通知 → AI 通知 → プレビュー', async () => {
+    happyPath();
+    const order: string[] = [];
+    mockEmit.mockImplementation(() => { order.push('emit'); });
+    mockPushMachinePost.mockImplementation(async () => { order.push('machine'); });
+    mockFireWebhooks.mockImplementation(() => { order.push('webhook'); });
+    mockProcessLinkPreviews.mockImplementation(async () => { order.push('preview'); });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+    expect(order).toEqual(['emit', 'machine', 'webhook', 'preview']);
+    mockPushMachinePost.mockReset().mockImplementation(() => Promise.resolve());
+    mockProcessLinkPreviews.mockReset().mockImplementation(() => Promise.resolve());
+  });
+
+  it('メンバーでなければ呼ばない', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await postAsUser({ roomId: ROOM, sender: SENDER, content: 'https://example.com/a' });
+    expect(mockProcessLinkPreviews).not.toHaveBeenCalled();
   });
 });

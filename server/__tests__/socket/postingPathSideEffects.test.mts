@@ -157,18 +157,18 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
       .attach('files', PNG, { filename: 'b.png', contentType: 'image/png' }))).toEqual(['emit', 'machine']);
   });
 
-  it('#5 Bot API のテキスト投稿 (postAsUser) — emit + machine + webhook。④ は不明 (§3.2)', async () => {
+  it('#5 Bot API のテキスト投稿 (postAsUser) — 4 つ全部 (② は機械の通知)。④ は 2026-10-02 に付けた (#383 第 2 段、利用者判断)', async () => {
     expect(await run(() => request(app).post('/api/bot/push').set(auth(bot.token))
-      .send({ room_id: roomId, content: URL_TEXT }))).toEqual(['emit', 'machine', 'webhook']);
+      .send({ room_id: roomId, content: URL_TEXT }))).toEqual(['emit', 'machine', 'preview', 'webhook']);
   });
 
-  it('#6 Bot API の画像投稿 — emit + machine。★ ③ は不明 (§3.2、60 日で影響 0 件・判断待ち)', async () => {
+  it('#6 Bot API の画像投稿 — emit + machine。③ は意図して無し (§3.1、2026-10-02 利用者判断)', async () => {
     expect(await run(() => request(app).post('/api/bot/push-image').set(auth(bot.token))
       .field('room_id', roomId).field('caption', URL_TEXT)
       .attach('image', PNG, { filename: 'c.png', contentType: 'image/png' }))).toEqual(['emit', 'machine']);
   });
 
-  it('#7 Bot API のファイル投稿 — emit + machine。★ ③ は不明 (§3.2、#6 と同じ)', async () => {
+  it('#7 Bot API のファイル投稿 — emit + machine。③ は意図して無し (§3.1、#6 と同じ)', async () => {
     expect(await run(() => request(app).post('/api/bot/push-file').set(auth(bot.token))
       .field('room_id', roomId).field('content', URL_TEXT)
       .attach('file', Buffer.from('hello'), { filename: 'd.txt', contentType: 'text/plain' }))).toEqual(['emit', 'machine']);

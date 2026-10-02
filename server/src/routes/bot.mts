@@ -383,7 +383,7 @@ router.post('/push-image', upload.single('image'), requireUuidRoomId, async (req
         roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
         body: content?.trim() ? content.trim().slice(0, 100) : '📷 写真',
       } },
-      webhook: { kind: 'off', reason: '不明 (docs/07 §3.2 #6)。60 日で行頭の @ を含む便は 0 件、判断待ち' },
+      webhook: { kind: 'off', reason: '意図 (docs/07 §3.1 #6、2026-10-02 利用者判断)。60 日 2,883 件で行頭の @ は 0 件。付けると応答モード all の部屋や DM でボットが画像を置いただけで AI が反応する' },
       preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });
 
@@ -468,7 +468,7 @@ router.post('/push-file', upload.single('file'), requireUuidRoomId, async (req, 
         roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
         body: content?.trim() ? content.trim().slice(0, 100) : `📎 ${decodeFileName(file.originalname)}`,
       } },
-      webhook: { kind: 'off', reason: '不明 (docs/07 §3.2 #7)。#6 と同じ、判断待ち' },
+      webhook: { kind: 'off', reason: '意図 (docs/07 §3.1 #7、2026-10-02 利用者判断)。#6 と同じ' },
       preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });
 
