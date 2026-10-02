@@ -73,16 +73,17 @@ export function judgeDueDates(issues: DueIssue[] | null, now: Date): Finding {
     };
   }
 
-  // ★ 当日はまだ過ぎていない (その日のうちに引けばよい) → 翌 0 時を境にする
-  const overdue = dated.filter((i) => now.getTime() >= i.due.getTime() + DAY_MS);
-  const upcoming = dated.filter((i) => now.getTime() < i.due.getTime() + DAY_MS);
+  // ★ 日数は JST の暦で数える (★★ 2026-10-02 まで「あと」は当日を数に入れていて、明日を「あと 2 日」、当日を「あと 1 日」と出していた)
   const ymd = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+  const today = Date.parse(ymd(now));
+  const daysUntil = (d: Date) => Math.round((Date.parse(ymd(d)) - today) / DAY_MS);
+  // ★★ 当日から warn (2026-10-02 に向きを変えた)。以前は「当日はまだ過ぎていない」で info だったが、
+  //   期限の日に #456 が info・「あと 1 日」と出て明日に読めた。この口は「その日に引かせる」ためにある
+  const due = dated.filter((i) => daysUntil(i.due) <= 0);
+  const upcoming = dated.filter((i) => daysUntil(i.due) > 0);
 
-  if (overdue.length === 0) {
-    const lines = upcoming.slice(0, 5).map((i) => {
-      const days = Math.ceil((i.due.getTime() + DAY_MS - now.getTime()) / DAY_MS);
-      return `    #${i.number} ${ymd(i.due)} (あと ${days} 日): ${i.title.slice(0, 48)}`;
-    });
+  if (due.length === 0) {
+    const lines = upcoming.slice(0, 5).map((i) => `    #${i.number} ${ymd(i.due)} (あと ${daysUntil(i.due)} 日): ${i.title.slice(0, 48)}`);
     // ★ 切ったら切ったと書く (2026-09-28)。「6 件」と書いて 5 件しか並べないと、
     //   6 件目を「載っていない = 期限が拾われていない」と読み違える (実際に読み違えた)
     if (upcoming.length > 5) {
@@ -92,19 +93,20 @@ export function judgeDueDates(issues: DueIssue[] | null, now: Date): Finding {
     return {
       id: 'due-dates',
       level: 'info',
-      detail: `★ 期限つき ${dated.length} 件。★★ 過ぎたものはありません\n${lines.join('\n')}`,
-      fix: '★ 期限の日にこの口が warn になります',
+      detail: `★ 期限つき ${dated.length} 件。★★ 今日が期限のもの・過ぎたものはありません\n${lines.join('\n')}`,
+      fix: '★ 期限の日からこの口が warn になります',
     };
   }
 
-  const lines = overdue.map((i) => {
-    const days = Math.floor((now.getTime() - i.due.getTime()) / DAY_MS);
-    return `    #${i.number} ${ymd(i.due)} (★ ${days} 日 過ぎています): ${i.title.slice(0, 48)}`;
+  const lines = due.map((i) => {
+    const late = -daysUntil(i.due);
+    const mark = late === 0 ? '★ 今日が期限' : `★ ${late} 日 過ぎています`;
+    return `    #${i.number} ${ymd(i.due)} (${mark}): ${i.title.slice(0, 48)}`;
   });
   return {
     id: 'due-dates',
     level: 'warn',
-    detail: `★★★★ 期限を過ぎた宿題 ${overdue.length} 件 (★ 古い順)\n${lines.join('\n')}`,
+    detail: `★★★★ 期限が来た宿題 ${due.length} 件 (★ 古い順)\n${lines.join('\n')}`,
     fix: '★ 引くか、期限を書き直すか、close するか。★★ **放っておくと この口は毎日 鳴り続けます** (それが狙いです)',
   };
 }

@@ -67,10 +67,45 @@ describe('judgeDueDates', () => {
     expect(f.detail.indexOf('#454')).toBeLessThan(f.detail.indexOf('#453'));
   });
 
-  it('★ 当日は まだ過ぎていない扱い (★★ その日のうちに引けばよい)', () => {
+  // ★ 2026-10-02 に向きを変えた。以前は「当日は まだ過ぎていない (info)」で、表示も「あと 1 日」だった。
+  //   ★★ 期限の日に #456 が info・「あと 1 日」と出て、明日に読めた (申し送りは「当日 warn」と思い込んでいた)。
+  //   この口が置かれた理由は「その日に誰も引かない」なので、当日に鳴らす
+  it('★★ 当日は warn にして「今日が期限」と出す (★ その日に引かせるための口)', () => {
     const f = judgeDueDates([{ number: 453, title: '2026-10-16 に測る' }],
       new Date('2026-10-16T09:00:00+09:00'));
-    expect(f.level).toBe('info');
+    expect(f.level).toBe('warn');
+    expect(f.detail).toMatch(/#453 2026-10-16 \(★ 今日が期限\)/);
+    expect(f.detail).not.toMatch(/あと/);
+    expect(f.detail).not.toMatch(/過ぎています/);
+  });
+
+  it('★ 当日の終わり (23:59 JST) も当日、翌 0 時からは「過ぎた」', () => {
+    const issues = [{ number: 453, title: '2026-10-16 に測る' }];
+    // ★ 行の形まで見る (★★ info の見出し「今日が期限のもの・…ありません」にも同じ語が入っていて、語だけだと素通りした)
+    const late = judgeDueDates(issues, new Date('2026-10-16T23:59:00+09:00'));
+    expect(late.level).toBe('warn');
+    expect(late.detail).toMatch(/#453 2026-10-16 \(★ 今日が期限\)/);
+    expect(judgeDueDates(issues, new Date('2026-10-17T00:00:00+09:00')).detail).toMatch(/#453 2026-10-16 \(★ 1 日 過ぎています\)/);
+  });
+
+  it('★ 「あと N 日」は暦の日数 (★★ 明日なら「あと 1 日」。以前は「あと 2 日」と出ていた)', () => {
+    const issues = [{ number: 453, title: '2026-10-17 に測る' }];
+    expect(judgeDueDates(issues, new Date('2026-10-16T09:00:00+09:00')).detail).toMatch(/#453 2026-10-17 \(あと 1 日\)/);
+    expect(judgeDueDates(issues, new Date('2026-10-16T00:30:00+09:00')).detail).toMatch(/\(あと 1 日\)/);
+    expect(judgeDueDates(issues, new Date('2026-10-14T23:30:00+09:00')).detail).toMatch(/\(あと 3 日\)/);
+  });
+
+  it('★ 過ぎたものと今日のものが両方あれば、両方出す (古い順)', () => {
+    const f = judgeDueDates([
+      { number: 453, title: '2026-10-16 に測る' },
+      { number: 454, title: '2026-10-10 に決める' },
+      { number: 455, title: '2026-10-20 に見直す' },
+    ], NOW);
+    expect(f.level).toBe('warn');
+    expect(f.detail).toMatch(/#454 2026-10-10 \(★ 6 日 過ぎています\)/);
+    expect(f.detail).toMatch(/#453 2026-10-16 \(★ 今日が期限\)/);
+    expect(f.detail.indexOf('#454')).toBeLessThan(f.detail.indexOf('#453'));
+    expect(f.detail).not.toMatch(/#455/);
   });
 
   it('★ まだ先のものを 5 件で切ったら「ほか N 件」と出す (★★ 数と並びが合わないと「載っていない」と読まれる)', () => {
