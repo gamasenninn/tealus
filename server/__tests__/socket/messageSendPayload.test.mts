@@ -5,7 +5,7 @@
  * ★ いちばん多く使われる経路なので、形を変えやすい所を全部押さえる:
  *   - 返信 (`reply_to_message`) と転送 (`forwarded_from_message`) は配信の中身に入る
  *   - ★ 通知とプレビューは**空白を落とす前**の本文、配信 (DB) と AI 通知は**落とした後**の本文を使う (今の形のまま固定する)
- *   - プレビューは `type === 'text'` のときだけ
+ *   - プレビューは `type === 'text'` のときだけ (★ 2026-10-02 から socket は text 以外を断るので、text 以外の場合は messageTypeAllowlist で見る)
  *   - ★ 機械が socket から送っても通知は「人の通知」になる (今の形のまま固定する。#463 の機械の通知には乗らない)
  */
 import type { AddressInfo } from 'node:net';
@@ -140,7 +140,6 @@ describe('#1 画面から打つメッセージ: 送る中身', () => {
     ['人・前後に空白 + URL', 'human', { content: URL_TEXT }],
     ['人・返信あり', 'human', { content: '返信します', reply_to: 'PARENT' }],
     ['人・転送', 'human', { content: '転送される元の投稿', forwarded_from: 'FORWARD' }],
-    ['人・type が text 以外 (URL を含む)', 'human', { content: URL_TEXT, type: 'stamp' }],
     ['機械が socket から送る', 'bot', { content: 'ボットです' }],
   ] as const)('%s', async (_l, who, input) => {
     const sender = who === 'bot' ? bot : human;

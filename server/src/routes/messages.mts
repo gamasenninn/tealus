@@ -12,6 +12,7 @@ import { fireWebhooks } from '../services/webhook.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
 import { announcePost } from '../services/postEffects.mts';
+import { REST_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -53,6 +54,8 @@ router.post('/', async (req: Request, res: Response) => {
   if (!content || content.trim() === '') {
     return res.status(400).json({ error: 'メッセージ内容は必須です' });
   }
+  // ★ この口は text と stamp だけ (2026-10-02、services/messageTypes.mts)
+  if (!REST_POST_TYPES.includes(type)) return res.status(400).json({ error: typeNotAllowedMessage(type, REST_POST_TYPES) });
 
   try {
     // ★ #482 返信先・転送元は指してよい投稿だけ

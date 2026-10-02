@@ -1,56 +1,5 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`#1 画面から打つメッセージ: 送る中身 人・type が text 以外 (URL を含む): AI 通知 1`] = `
-{
-  "content": "見てください https://example.com/a",
-  "message_keys": [
-    "content",
-    "id",
-    "reply_to",
-    "reply_to_message",
-    "sender",
-    "type",
-  ],
-  "reply_to_matches": true,
-  "reply_to_message": null,
-  "sender_display_name": "打つ人",
-  "type": "stamp",
-}
-`;
-
-exports[`#1 画面から打つメッセージ: 送る中身 人・type が text 以外 (URL を含む): 配信 1`] = `
-{
-  "content": "見てください https://example.com/a",
-  "forwarded_from_matches": true,
-  "forwarded_from_message": null,
-  "keys": [
-    "content",
-    "created_at",
-    "forwarded_from",
-    "forwarded_from_message",
-    "id",
-    "is_deleted",
-    "is_edited",
-    "is_published",
-    "reply_to",
-    "reply_to_message",
-    "room_id",
-    "sender_avatar_url",
-    "sender_display_name",
-    "sender_id",
-    "type",
-    "updated_at",
-  ],
-  "reply_to_matches": true,
-  "reply_to_message": null,
-  "room_matches": true,
-  "sender_avatar_url": null,
-  "sender_display_name": "打つ人",
-  "sender_matches": true,
-  "type": "stamp",
-}
-`;
-
 exports[`#1 画面から打つメッセージ: 送る中身 人・テキスト: AI 通知 1`] = `
 {
   "content": "こんにちは",

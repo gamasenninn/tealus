@@ -17,6 +17,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
 import { postAsUser } from '../services/postAsUser.mts';
+import { BOT_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
@@ -127,6 +128,8 @@ router.post('/push', async (req, res) => {
   if (!content || !content.trim()) {
     return res.status(400).json({ error: 'content は必須です' });
   }
+  // ★ ボットの投稿は text と form だけ (2026-10-02、services/messageTypes.mts)。AI が system などを混ぜる間違いを止める
+  if (!BOT_POST_TYPES.includes(type)) return res.status(400).json({ error: typeNotAllowedMessage(type, BOT_POST_TYPES) });
 
   // ★ メンバー確認 → INSERT → socket 配信 → webhook は postAsUser に集約 (#382)。
   //   ルームトリガーが同じ 4 つを必要とし、書き写すと必ず片方だけ直る形になる。

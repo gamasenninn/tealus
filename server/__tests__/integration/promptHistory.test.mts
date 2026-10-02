@@ -151,9 +151,16 @@ describe('Prompt History API', () => {
     // 「フォーム回答」の定義は hasUserAnsweredForm と揃える:
     // reply_to がフォーム、かつ本文に 【回答】 を含む。
     describe('フォーム回答', () => {
-      /** フォーム本体を投稿して id を返す */
+      /**
+       * フォーム本体を置いて id を返す。
+       * ★ 2026-10-02 から人の口 (REST) はフォームを作れない (フォームはボットだけが作る、services/messageTypes.mts)。
+       *   ここでは「フォームがある」状態だけが要るので DB に直接置く (送り手は今までどおり token の人)
+       */
       async function sendForm(token: string, room: string): Promise<string> {
-        return send(token, room, '📋 Day80 Q0\n\n```tealus-form\n{"version":1}\n```', { type: 'form' });
+        const who = token === user1.token ? user1.user.id : user2.user.id;
+        return (await getTestPool().query<{ id: string }>(
+          `INSERT INTO messages (room_id, sender_id, content, type) VALUES ($1, $2, $3, 'form') RETURNING id`,
+          [room, who, '📋 Day80 Q0\n\n```tealus-form\n{"version":1}\n```'])).rows[0].id;
       }
 
       it('宛先が単独行のフォーム回答は返さない (現行の buildAnswerText 形式)', async () => {
