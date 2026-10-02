@@ -23,6 +23,8 @@ import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import request from 'supertest';
 
 const calls: string[] = [];
+/** 経路番号 (`1`, `12'` …) → その経路のテストで観測した付随処理 (人・機械の両方を流す経路は和集合) */
+const observed = new Map<string, Set<string>>();
 jest.mock('../../src/services/push.mts', () => {
   const actual = jest.requireActual('../../src/services/push.mts');
   return { ...actual, sendPushToRoomMembers: jest.fn(async () => { calls.push('push'); }), sendPushToUser: jest.fn(async () => {}) };
@@ -132,6 +134,9 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
     await new Promise((r) => setTimeout(r, 150)); // ★ 応答の後に呼ばれる付随処理 (通知など) を待つ
     const got = [...new Set(calls)];
     if (emits > before) got.push('emit');
+    // ★ 経路番号ごとに観測を貯め、最後に docs/07 の表の印と突き合わせる (2026-10-02、下の「表の ①〜④」)
+    const no = /^#(\d+'?)/.exec(expect.getState().currentTestName?.replace(/^.*?(#\d)/, '$1') ?? '')?.[1];
+    if (no) observed.set(no, new Set([...(observed.get(no) ?? []), ...got]));
     return got.sort();
   }
 
@@ -277,5 +282,40 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
 
   it('#18 LINE の動画 — emit + machine', async () => {
     expect(await run(() => postVideoToTealus({ roomId, sender: lineSender(), mediaInfo: savedLine('m.mp4', Buffer.from('x'), 'video/mp4'), io: getIo() }))).toEqual(['emit', 'machine']);
+  });
+
+  /**
+   * ★ docs/07 §2 の表の ①〜④ の印が、上で**観測した**付随処理と一致するか (2026-10-02)。
+   *   それまで表の印は手で直していて、見張りは経路の数 (postPathMap / postingPathInventory) だけだった。
+   *   #383 第 2 段で #5 の ④ を変えたとき、表は手で直すしかなかった
+   * ★ 読み方: ① ○ = emit / ② ○ = 人の通知 (push)、「設定」= 機械の通知 (machine)、両方書いてあれば両方 /
+   *   ③ ○ = webhook / ④ ○ = preview。印の後ろの注記 (意図・日付) と太字は読まない
+   * ★ この file を -t で絞って流したときは、観測した経路だけを比べる (経路の増減は上の 2 本が見ている)
+   */
+  it('★ 表の ①〜④ が観測と一致する (docs/07 §2)', () => {
+    const doc = fs.readFileSync(path.resolve(import.meta.dirname, '../../../docs/07_投稿経路と付随処理.md'), 'utf8');
+    const rows = new Map<string, string[]>();
+    for (const line of doc.split(/\r?\n/)) {
+      const cells = line.split('|').map((c) => c.replace(/\*\*/g, '').trim());
+      if (cells.length >= 9 && /^\d+'?$/.test(cells[1])) rows.set(cells[1], cells.slice(4, 8));
+    }
+    expect(rows.size).toBe(19); // 18 本 + #12'
+    const expectedOf = ([c1, c2, c3, c4]: string[]): string[] => {
+      const out: string[] = [];
+      if (c1.startsWith('○')) out.push('emit');
+      if (c2.includes('○')) out.push('push');
+      if (c2.includes('設定')) out.push('machine');
+      if (c3.startsWith('○')) out.push('webhook');
+      if (c4.startsWith('○')) out.push('preview');
+      return out.sort();
+    };
+    const diffs: string[] = [];
+    for (const [no, got] of observed) {
+      const row = rows.get(no);
+      if (!row) { diffs.push(`#${no}: 表に行が無い`); continue; }
+      const want = expectedOf(row), seen = [...got].sort();
+      if (want.join() !== seen.join()) diffs.push(`#${no}: 表 [${want}] / 観測 [${seen}]`);
+    }
+    expect(diffs).toEqual([]);
   });
 });
