@@ -7,6 +7,7 @@ import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
 import { playTtsSrc } from '../services/ttsAudioPlayer';
 import { isAudioHeld } from '../utils/audioExclusive';
+import { shouldPlayMessageSound } from '../utils/messageSound';
 import type { Message, Reaction, LinkPreview, Transcription } from '../types';
 
 // --- Socket.IO event payload (client が消費するフィールドのみ最小型付け) ---
@@ -162,7 +163,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
         if (document.visibilityState === 'visible') markRead([msg.id]);
         else pendingReadIds.push(msg.id);
         const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
-        if (!isEmbed && localStorage.getItem('notificationSound') !== 'off') {
+        // ★ 自分・system メッセージ・通知音オフは鳴らさない (utils/messageSound、2026-10-02)
+        if (!isEmbed && shouldPlayMessageSound(msg, user!.id, localStorage.getItem('notificationSound'))) {
           new Audio('/notification.wav').play().catch(() => {});
         }
       }

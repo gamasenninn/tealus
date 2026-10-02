@@ -11,6 +11,7 @@ import { canCreateRoom } from '../../utils/permissions';
 import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import type { Room } from '../../types';
+import { shouldPlayMessageSound } from '../../utils/messageSound';
 import './RoomList.css';
 
 // ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
@@ -62,9 +63,10 @@ function RoomList() {
     // Re-join on reconnect (after background recovery)
     socket.on('connect', joinAllRooms);
 
-    const handleNewMessage = (msg: { sender_id?: string }) => {
+    const handleNewMessage = (msg: { sender_id?: string; type?: string }) => {
       fetchRooms();
-      if (msg.sender_id !== user!.id && localStorage.getItem('notificationSound') !== 'off') {
+      // ★ 自分・system メッセージ・通知音オフは鳴らさない (utils/messageSound、2026-10-02)
+      if (shouldPlayMessageSound(msg, user!.id, localStorage.getItem('notificationSound'))) {
         new Audio('/notification.wav').play().catch(() => {});
       }
     };

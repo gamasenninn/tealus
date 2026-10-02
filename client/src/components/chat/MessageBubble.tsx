@@ -28,6 +28,7 @@ import VoiceEditModal from './VoiceEditModal';
 import MediaAudio from '../media/MediaAudio';
 import { editableAudioAttachmentMessages } from '../../utils/voiceNav';
 import EditHistoryModal from './EditHistoryModal';
+import SystemMessage from './SystemMessage';
 import type { MessageEditEntry } from '../../utils/editHistory';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems';
 import Markdown from 'react-markdown';
@@ -206,6 +207,9 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
       longPressTimer.current = null;
     }
   };
+
+  // ★ system メッセージは中央に小さく出す (2026-10-02)。吹き出し・アイコン・長押しのメニューは出さない
+  if (message.type === 'system' && !message.is_deleted) return <SystemMessage message={message} />;
 
   if (message.is_deleted) {
     return (
