@@ -1,0 +1,426 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #13 テキスト (101 字以上): 配信 + 人の通知 + プレビュー。AI 通知は無し: 配信 1`] = `
+{
+  "content": "ああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああ",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": null,
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #13 テキスト (URL・返信あり): 配信 + 人の通知 + プレビュー。AI 通知は無し: 配信 1`] = `
+{
+  "content": "  見て https://example.com/a  ",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": null,
+  "reply_to_is_null": false,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #13 位置 (テキストを通る): 配信 + 人の通知 + プレビュー。AI 通知は無し: 配信 1`] = `
+{
+  "content": "[送り手]
+📍 本社
+栃木県
+緯度: 36.5, 経度: 139.7
+
+[地図を開く](https://maps.google.com/?q=36.5,139.7)",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": null,
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #14 画像: 配信 + 機械の通知。AI 通知・プレビューは無し: 機械の通知 1`] = `
+{
+  "body": "[送り手] 📷 写真",
+  "messageId": true,
+  "roomId": true,
+  "senderId": true,
+  "senderName": "LINE の人 (LINE)",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #14 画像: 配信 + 機械の通知。AI 通知・プレビューは無し: 配信 1`] = `
+{
+  "content": "[送り手]",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "a.png",
+      "file_size": "70",
+      "has_thumbnail": false,
+      "height": null,
+      "keys": [
+        "created_at",
+        "file_name",
+        "file_path",
+        "file_size",
+        "height",
+        "id",
+        "message_id",
+        "mime_type",
+        "thumbnail_path",
+        "width",
+      ],
+      "mime_type": "image/png",
+      "width": null,
+    },
+  ],
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #15 複数画像: 配信 + 機械の通知。AI 通知・プレビューは無し: 機械の通知 1`] = `
+{
+  "body": "[送り手] 📷 写真 (2 件)",
+  "messageId": true,
+  "roomId": true,
+  "senderId": true,
+  "senderName": "LINE の人 (LINE)",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #15 複数画像: 配信 + 機械の通知。AI 通知・プレビューは無し: 配信 1`] = `
+{
+  "content": "[送り手]",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "b.png",
+      "file_size": "70",
+      "has_thumbnail": false,
+      "height": null,
+      "keys": [
+        "created_at",
+        "file_name",
+        "file_path",
+        "file_size",
+        "height",
+        "id",
+        "message_id",
+        "mime_type",
+        "thumbnail_path",
+        "width",
+      ],
+      "mime_type": "image/png",
+      "width": null,
+    },
+    {
+      "file_name": "c.png",
+      "file_size": "70",
+      "has_thumbnail": false,
+      "height": null,
+      "keys": [
+        "created_at",
+        "file_name",
+        "file_path",
+        "file_size",
+        "height",
+        "id",
+        "message_id",
+        "mime_type",
+        "thumbnail_path",
+        "width",
+      ],
+      "mime_type": "image/png",
+      "width": null,
+    },
+  ],
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "image",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #16 音声: 配信 + 機械の通知。AI 通知・プレビューは無し: 機械の通知 1`] = `
+{
+  "body": "[送り手] 🎤 音声メッセージ",
+  "messageId": true,
+  "roomId": true,
+  "senderId": true,
+  "senderName": "LINE の人 (LINE)",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #16 音声: 配信 + 機械の通知。AI 通知・プレビューは無し: 配信 1`] = `
+{
+  "content": "[送り手]",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "v.m4a",
+      "file_size": "1",
+      "has_thumbnail": false,
+      "height": null,
+      "keys": [
+        "created_at",
+        "file_name",
+        "file_path",
+        "file_size",
+        "height",
+        "id",
+        "message_id",
+        "mime_type",
+        "thumbnail_path",
+        "width",
+      ],
+      "mime_type": "audio/m4a",
+      "width": null,
+    },
+  ],
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "voice",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #17 ファイル: 配信 + 機械の通知。AI 通知・プレビューは無し: 機械の通知 1`] = `
+{
+  "body": "[送り手] 📎 f.pdf",
+  "messageId": true,
+  "roomId": true,
+  "senderId": true,
+  "senderName": "LINE の人 (LINE)",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #17 ファイル: 配信 + 機械の通知。AI 通知・プレビューは無し: 配信 1`] = `
+{
+  "content": "[送り手]",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "f.pdf",
+      "file_size": "8",
+      "has_thumbnail": false,
+      "height": null,
+      "keys": [
+        "created_at",
+        "file_name",
+        "file_path",
+        "file_size",
+        "height",
+        "id",
+        "message_id",
+        "mime_type",
+        "thumbnail_path",
+        "width",
+      ],
+      "mime_type": "application/pdf",
+      "width": null,
+    },
+  ],
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "file",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #18 動画: 配信 + 機械の通知。AI 通知・プレビューは無し: 機械の通知 1`] = `
+{
+  "body": "[送り手] 🎬 動画",
+  "messageId": true,
+  "roomId": true,
+  "senderId": true,
+  "senderName": "LINE の人 (LINE)",
+}
+`;
+
+exports[`#13〜#18 LINE からの投稿: 送る中身 #18 動画: 配信 + 機械の通知。AI 通知・プレビューは無し: 配信 1`] = `
+{
+  "content": "[送り手]",
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "media",
+    "reply_to",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "media": [
+    {
+      "file_name": "m.mp4",
+      "file_size": "1",
+      "has_thumbnail": false,
+      "height": null,
+      "keys": [
+        "created_at",
+        "file_name",
+        "file_path",
+        "file_size",
+        "height",
+        "id",
+        "message_id",
+        "mime_type",
+        "thumbnail_path",
+        "width",
+      ],
+      "mime_type": "video/mp4",
+      "width": null,
+    },
+  ],
+  "reply_to_is_null": true,
+  "reply_to_matches": true,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "LINE の人 (LINE)",
+  "sender_matches": true,
+  "type": "video",
+}
+`;
