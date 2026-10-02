@@ -1,0 +1,351 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・type が text 以外 (URL を含む): AI 通知 1`] = `
+{
+  "content": "見てください https://example.com/a",
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "打つ人",
+  "type": "stamp",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・type が text 以外 (URL を含む): 配信 1`] = `
+{
+  "content": "見てください https://example.com/a",
+  "forwarded_from_matches": true,
+  "forwarded_from_message": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "打つ人",
+  "sender_matches": true,
+  "type": "stamp",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・テキスト: AI 通知 1`] = `
+{
+  "content": "こんにちは",
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "打つ人",
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・テキスト: 配信 1`] = `
+{
+  "content": "こんにちは",
+  "forwarded_from_matches": true,
+  "forwarded_from_message": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "打つ人",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・前後に空白 + URL: AI 通知 1`] = `
+{
+  "content": "見てください https://example.com/a",
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "打つ人",
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・前後に空白 + URL: 配信 1`] = `
+{
+  "content": "見てください https://example.com/a",
+  "forwarded_from_matches": true,
+  "forwarded_from_message": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "打つ人",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・転送: AI 通知 1`] = `
+{
+  "content": "転送される元の投稿",
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "打つ人",
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・転送: 配信 1`] = `
+{
+  "content": "転送される元の投稿",
+  "forwarded_from_matches": true,
+  "forwarded_from_message": {
+    "content": "転送される元の投稿",
+    "id_matches": true,
+    "is_deleted": false,
+    "keys": [
+      "content",
+      "id",
+      "is_deleted",
+      "room_name",
+      "room_type",
+      "sender_display_name",
+      "sender_id",
+      "transcription_raw",
+      "transcription_text",
+      "type",
+    ],
+    "room_name": "転送元の部屋",
+    "room_type": "group",
+  },
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "打つ人",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・返信あり: AI 通知 1`] = `
+{
+  "content": "返信します",
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": {
+    "content": "返信される元の投稿",
+    "id_matches": true,
+    "keys": [
+      "content",
+      "id",
+      "sender_display_name",
+      "sender_id",
+      "transcription_raw",
+      "transcription_text",
+      "type",
+    ],
+  },
+  "sender_display_name": "打つ人",
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 人・返信あり: 配信 1`] = `
+{
+  "content": "返信します",
+  "forwarded_from_matches": true,
+  "forwarded_from_message": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": {
+    "content": "返信される元の投稿",
+    "id_matches": true,
+    "keys": [
+      "content",
+      "id",
+      "sender_display_name",
+      "sender_id",
+      "transcription_raw",
+      "transcription_text",
+      "type",
+    ],
+    "sender_display_name": "読む人",
+    "type": "text",
+  },
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "打つ人",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 機械が socket から送る: AI 通知 1`] = `
+{
+  "content": "ボットです",
+  "message_keys": [
+    "content",
+    "id",
+    "reply_to",
+    "reply_to_message",
+    "sender",
+    "type",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "sender_display_name": "打つボット",
+  "type": "text",
+}
+`;
+
+exports[`#1 画面から打つメッセージ: 送る中身 機械が socket から送る: 配信 1`] = `
+{
+  "content": "ボットです",
+  "forwarded_from_matches": true,
+  "forwarded_from_message": null,
+  "keys": [
+    "content",
+    "created_at",
+    "forwarded_from",
+    "forwarded_from_message",
+    "id",
+    "is_deleted",
+    "is_edited",
+    "is_published",
+    "reply_to",
+    "reply_to_message",
+    "room_id",
+    "sender_avatar_url",
+    "sender_display_name",
+    "sender_id",
+    "type",
+    "updated_at",
+  ],
+  "reply_to_matches": true,
+  "reply_to_message": null,
+  "room_matches": true,
+  "sender_avatar_url": null,
+  "sender_display_name": "打つボット",
+  "sender_matches": true,
+  "type": "text",
+}
+`;
