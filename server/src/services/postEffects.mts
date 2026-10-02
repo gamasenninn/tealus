@@ -7,13 +7,15 @@
  * ★ INSERT は各経路に残す (添付・サムネイル・文字起こし・LINE の保存で形が違いすぎる)
  * ★ 送る中身と待ち方は、移す前と同じにする。移す経路ごとに中身を固定するテストを先に足す
  *   (例: __tests__/socket/botMediaPostPayload.test.mts)
- * ★★ 今ある形は、移した経路が使うものだけ。人の通知・AI 通知・プレビューの「付ける」形は、
+ * ★★ 今ある形は、移した経路が使うものだけ。新しい「付ける」形は、
  *   それを使う経路を移すときに、その経路の待ち方 (待つ / 待たない) に合わせて足す
+ *   (プレビューの「付ける」形は #1 を移すときに足した、2026-10-02)
  */
 import { getIo } from '../io-registry.mts';
 import { pushMachinePost, type MachinePost } from './machinePush.mts';
 import { fireWebhooks, type WebhookPayload } from './webhook.mts';
 import { sendPushToRoomMembers, type PushPayload } from './push.mts';
+import { processLinkPreviews } from './linkPreview.mts';
 import { logger } from '../utils/logger.mts';
 
 /** 付けない、と理由つきで書く */
@@ -34,8 +36,11 @@ export interface PostEffects {
   push: { kind: 'human'; senderId: string; payload: PushPayload } | { kind: 'machine'; post: MachinePost } | Off;
   /** ③ AI 通知 (`message.created`)。★ 待たずに投げる (移す前の #5 と同じ。fireWebhooks は中で失敗を握る) */
   webhook: { kind: 'on'; payload: WebhookPayload } | Off;
-  /** ④ リンクプレビュー */
-  preview: Off;
+  /**
+   * ④ リンクプレビュー。★ 待たずに投げ、失敗は捨てる (移す前の #1 と同じ。processLinkPreviews は中で失敗を記録する)
+   *   text は本文そのもの (★ #1 は空白を落とす前の本文を渡している。URL の取り出しには差が出ない)
+   */
+  preview: { kind: 'on'; messageId: string; text: string } | Off;
 }
 
 /**
@@ -59,4 +64,5 @@ export async function announcePost(e: PostEffects): Promise<void> {
   }
   if (e.push.kind === 'machine') await pushMachinePost(e.push.post);
   if (e.webhook.kind === 'on') fireWebhooks('message.created', e.roomId, e.webhook.payload);
+  if (e.preview.kind === 'on') processLinkPreviews(e.preview.messageId, e.preview.text, getIo(), e.roomId).catch(() => {});
 }

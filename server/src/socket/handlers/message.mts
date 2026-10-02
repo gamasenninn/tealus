@@ -2,9 +2,7 @@ import type { Socket, Server } from 'socket.io';
 import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
 import { isUuid } from '../../utils/uuid.mts';
-import { processLinkPreviews } from '../../services/linkPreview.mts';
-import { sendPushToRoomMembers } from '../../services/push.mts';
-import { fireWebhooks } from '../../services/webhook.mts';
+import { announcePost } from '../../services/postEffects.mts';
 
 interface ReplyMessageRow {
   id: string;
@@ -116,26 +114,31 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
         forwarded_from_message: forwarded_from ? await fetchForwardMessage(forwarded_from) : null,
       };
 
-      io.to(room_id).emit('message:new', message);
-
-      // Push notification（オフラインユーザー向け）
-      // (../index.mts との相互 import は関数呼び出し時に解決されるため ESM 循環でも安全)
-      sendPushToRoomMembers(room_id, socket.user.id, {
-        title: socket.user.display_name,
-        body: (content || '').slice(0, 100) || (type === 'voice' ? '🎤 音声メッセージ' : '📎 ファイル'),
-        data: { roomId: room_id, messageId: message.id },
+      // ★ 付随処理 4 つは announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/messageSendPayload で固定
+      // ★ 通知とプレビューは空白を落とす前の本文、配信 (DB) と AI 通知は落とした後の本文 (移す前と同じ)
+      await announcePost({
+        roomId: room_id,
+        emit: message,
+        push: {
+          kind: 'human',
+          senderId: socket.user.id,
+          payload: {
+            title: socket.user.display_name,
+            body: content.slice(0, 100) || (type === 'voice' ? '🎤 音声メッセージ' : '📎 ファイル'),
+            data: { roomId: room_id, messageId: message.id },
+          },
+        },
+        webhook: {
+          kind: 'on',
+          payload: {
+            room: { id: room_id },
+            message: { id: message.id, type, content: content.trim(), reply_to: reply_to || null, reply_to_message: message.reply_to_message || null, sender: { id: socket.user.id, display_name: socket.user.display_name } },
+          },
+        },
+        preview: type === 'text'
+          ? { kind: 'on', messageId: message.id, text: content }
+          : { kind: 'off', reason: 'text 以外 (移す前と同じ。プレビューは text だけ)' },
       });
-
-      // Webhook notification
-      fireWebhooks('message.created', room_id, {
-        room: { id: room_id },
-        message: { id: message.id, type, content: content?.trim(), reply_to: reply_to || null, reply_to_message: message.reply_to_message || null, sender: { id: socket.user.id, display_name: socket.user.display_name } },
-      });
-
-      // Async link preview
-      if (content && type === 'text') {
-        processLinkPreviews(result.rows[0].id, content, io, room_id).catch(() => {});
-      }
     } catch (err) {
       logger.error('Socket message:send error:', err);
     }
