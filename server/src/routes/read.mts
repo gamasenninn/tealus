@@ -5,6 +5,7 @@ import type { Request, Response } from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
+import { isUuid } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -25,12 +26,13 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   try {
+    // ★ #483 この部屋のメッセージだけ (socket の message:read と同じ)。ID の形でないものは捨てる (500 にしない)
     const latestMsg = await pool.query<{ id: string; created_at: Date }>(
       `SELECT id, created_at FROM messages
-       WHERE id = ANY($1)
+       WHERE id = ANY($1::uuid[]) AND room_id = $2
        ORDER BY created_at DESC
        LIMIT 1`,
-      [message_ids]
+      [message_ids.filter(isUuid), roomId]
     );
 
     if (latestMsg.rows.length > 0) {

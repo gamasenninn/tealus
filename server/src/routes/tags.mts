@@ -5,6 +5,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 /** tags テーブル行 (SELECT * / RETURNING *。アクセスする列のみ型付け) */
 interface TagRow {
@@ -227,6 +228,13 @@ messageRouter.post('/', async (req, res) => {
 
   try {
     let tagId = tag_id;
+
+    // ★ #483 指定されたタグは、この投稿の部屋のタグだけ。無いタグと同じ答えにする (区別して返さない)
+    if (tagId !== undefined && tagId !== null && tagId !== '') {
+      if (!isUuid(tagId)) return res.status(400).json({ error: badIdMessage(String(tagId)) });
+      const own = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND room_id = $2', [tagId, roomId]);
+      if (own.rows.length === 0) return res.status(404).json({ error: 'タグが見つかりません' });
+    }
 
     // If name provided, find or create tag
     if (!tagId && name) {

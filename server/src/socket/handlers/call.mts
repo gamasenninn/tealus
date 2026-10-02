@@ -5,6 +5,7 @@ import { sendPushToUser } from '../../services/push.mts';
 import * as capabilityWatcher from '../../services/capabilityWatcher.mts';
 import { getOnlineUserIds } from '../index.mts';
 import { isRoomMember } from '../../services/roomMembership.mts';
+import { isUuid } from '../../utils/uuid.mts';
 import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../../services/postEffects.mts';
 
 /**
@@ -183,9 +184,11 @@ export function registerCallHandler(socket: Socket, io: Server): void {
   });
 
   // ルームの通話状態を問い合わせ
-  socket.on('call:getStatus', (data: { roomId?: unknown } | null) => {
+  socket.on('call:getStatus', async (data: { roomId?: unknown } | null) => {
     // ★ null が例外になっていた (2026-10-01)
     const roomId = data?.roomId as string;
+    // ★ #483 メンバーである部屋だけ答える (以前はどの部屋でも、通話中か・何人かを答えていた)
+    if (!isUuid(roomId) || !(await isRoomMember(roomId, socket.user.id))) return;
     const call = activeCalls.get(roomId);
     socket.emit('call:status', {
       roomId,

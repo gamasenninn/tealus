@@ -108,6 +108,10 @@ router.get('/', async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const { before, around, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
   const parsedLimit = Math.min(Math.max(parseInt(String(limit)) || MESSAGES_DEFAULT_LIMIT, 1), MESSAGES_MAX_LIMIT);
+  // ★ #483 基準のメッセージは ID の形を確かめる (崩れていると 500 だった)。部屋の外のものは下の SQL で「無いもの」と同じになる
+  for (const cursorId of [around, before]) {
+    if (cursorId !== undefined && !isUuid(cursorId)) return res.status(400).json({ error: badIdMessage(String(cursorId)) });
+  }
 
   try {
     let query: string;
@@ -126,7 +130,7 @@ router.get('/', async (req: Request, res: Response) => {
           WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
         ) rc ON true
         WHERE m.room_id = $1
-          AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2) - INTERVAL '1 second'
+          AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1) - INTERVAL '1 second'
         ORDER BY m.created_at ASC
         LIMIT $3
       `;
@@ -144,7 +148,7 @@ router.get('/', async (req: Request, res: Response) => {
           WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
         ) rc ON true
         WHERE m.room_id = $1
-          AND m.created_at < (SELECT created_at FROM messages WHERE id = $2)
+          AND m.created_at < (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1)
         ORDER BY m.created_at DESC
         LIMIT $3
       `;

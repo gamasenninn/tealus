@@ -56,8 +56,9 @@ export function registerReadHandler(socket: Socket): void {
                  WHERE rrc.room_id = $2 AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
                 ) AS read_count
          FROM messages m
-         WHERE m.id = ANY($1)`,
-        [message_ids, room_id]
+         WHERE m.id = ANY($1::uuid[]) AND m.room_id = $2`,
+        // ★ #483 部屋に流す既読数も、この部屋のメッセージだけ (以前は別の部屋の ID も数えて流していた)
+        [message_ids.filter(isUuid), room_id]
       );
       const counts: Record<string, number> = {};
       readCounts.rows.forEach(r => { counts[r.message_id] = r.read_count; });
