@@ -197,6 +197,15 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
     expect(calls).toEqual([]);
   });
 
+  it("#9' REST のスタンプ (画面のスタンプはこの口) — emit + push。③④ は意図して無し (2026-10-02 利用者判断)", async () => {
+    const pack = (await getTestPool().query<{ id: string }>(
+      `INSERT INTO stamp_packs (name, created_by) VALUES ('束', $1) RETURNING id`, [human.id])).rows[0].id;
+    const stamp = (await getTestPool().query<{ id: string }>(
+      `INSERT INTO stamps (pack_id, file_path, label) VALUES ($1, 'stamps/p/0.png', 'a') RETURNING id`, [pack])).rows[0].id;
+    expect(await run(() => request(app).post(`/api/rooms/${roomId}/messages`).set(auth(human.token))
+      .send({ content: stamp, type: 'stamp' }))).toEqual(['emit', 'push']);
+  });
+
   // ===== 2 周目: system メッセージ・転送・LINE =====
 
   const humanSocket = () => new Promise<ClientSocket>((resolve) => {
@@ -299,7 +308,7 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
       const cells = line.split('|').map((c) => c.replace(/\*\*/g, '').trim());
       if (cells.length >= 9 && /^\d+'?$/.test(cells[1])) rows.set(cells[1], cells.slice(4, 8));
     }
-    expect(rows.size).toBe(19); // 18 本 + #12'
+    expect(rows.size).toBe(20); // 18 本 + #12' + #9' (スタンプ)
     const expectedOf = ([c1, c2, c3, c4]: string[]): string[] => {
       const out: string[] = [];
       if (c1.startsWith('○')) out.push('emit');

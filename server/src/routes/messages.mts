@@ -11,6 +11,7 @@ import { attachMedia, attachReplies, attachForwards, attachTranscriptions, attac
 import { fireWebhooks } from '../services/webhook.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
+import { announcePost } from '../services/postEffects.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -66,6 +67,21 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     const message = result.rows[0];
+
+    // ★ スタンプ (#9') は配信 + 人の通知 (#383、2026-10-02 利用者判断)。画面はスタンプをこの口で送るが、
+    //   配信が無く、送った本人の画面にしか出なかった。中身は __tests__/socket/stampSendPayload で固定
+    // ★ スタンプ以外 (REST のテキスト) は今までどおり何も付けない (#9 は触らない、利用者判断)
+    if (type === 'stamp') {
+      const emitted: AttachableMessage = { ...message, sender_display_name: req.user!.display_name, sender_avatar_url: req.user!.avatar_url };
+      await attachStamps([emitted]);
+      await announcePost({
+        roomId,
+        emit: emitted as unknown as Record<string, unknown>,
+        push: { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: '🙂 スタンプ', data: { roomId, messageId: message.id } } },
+        webhook: { kind: 'off', reason: '意図 (docs/07 §3.1、2026-10-02 利用者判断)。スタンプで AI は動かさない' },
+        preview: { kind: 'off', reason: '意図。スタンプに URL の本文は無い (content はスタンプの ID)' },
+      });
+    }
 
     // Update per-user stamp usage
     if (type === 'stamp' && content) {
