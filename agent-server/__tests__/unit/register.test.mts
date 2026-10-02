@@ -18,6 +18,13 @@ jest.mock('../../src/lib/logger.mts', () => ({ logger: {
   error: jest.fn(),
 } }));
 
+// ★ 本物の MCP (npx で子プロセス) を起こさない (2026-10-02 に起動時の warmSharedGlobal を足した)
+const mockWarm = jest.fn(() => new Promise<void>(() => {})); // ★ 終わらない = 起動がこれを待たないことを見る
+jest.mock('../../src/mcp/roomMcpManager.mts', () => ({
+  startSweeper: jest.fn(),
+  warmSharedGlobal: () => mockWarm(),
+}));
+
 jest.mock('../../src/config.mts', () => ({
   TEALUS_BOT_ID: 'AI_AGENT',
   TEALUS_BOT_PASS: 'password',
@@ -47,6 +54,12 @@ describe('Agent Registration', () => {
   test('参加中のルーム一覧を取得する', async () => {
     const result = await initializeAgent();
     expect(botApi.getRooms).toHaveBeenCalled();
+    expect(result.rooms).toHaveLength(1);
+  });
+
+  test('★ 共有 MCP を裏で先に起こし始める。起動はそれを待たない (2026-10-02、会話モードの 1 回目の待ち)', async () => {
+    const result = await initializeAgent(); // ★ mockWarm は終わらないので、待っていればここで止まる
+    expect(mockWarm).toHaveBeenCalledTimes(1);
     expect(result.rooms).toHaveLength(1);
   });
 

@@ -8,7 +8,7 @@ import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import * as botApi from '../lib/botApi.mts';
 import { registerBotUserId } from '../webhook/handler.mts';
-import { startSweeper } from '../mcp/roomMcpManager.mts';
+import { startSweeper, warmSharedGlobal } from '../mcp/roomMcpManager.mts';
 import { loadSettings } from '../context/settingsManager.mts';
 
 export interface InitializeAgentResult {
@@ -43,6 +43,13 @@ export async function initializeAgent(): Promise<InitializeAgentResult> {
 
     // MCPキャッシュスイーパー開始（ルームMCPは初回アクセス時に動的接続）
     startSweeper();
+
+    // ★ 共有グローバル MCP (tealus・mcp_config.json) を裏で先に起こす (2026-10-02)。
+    //   起こさないと、会話モードの 1 回目が tealus MCP の起動 (npx で GitHub から解決、実測 16.5 秒) を待つ。
+    //   待たない (起動を遅らせない)。つながらなかった MCP は中で記録され、道具なしで続く (以前と同じ)
+    void warmSharedGlobal().catch((err: unknown) => {
+      logger.warn(`[RoomMCP] 共有グローバルを先に起こせませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    });
 
     return { rooms };
   } catch (err) {

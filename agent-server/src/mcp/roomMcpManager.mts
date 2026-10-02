@@ -33,6 +33,11 @@ interface RoomMcpEntry {
 const roomMcpCache = new Map<string, RoomMcpEntry>();
 // グローバルMCP共有キャッシュ（全ルームで1セット）
 let sharedGlobalServers: MCPServerStdio[] | null = null;
+// ★ 起こしている最中の共有グローバル (2026-10-02)。同時に呼ばれたら同じ起動を待たせる。
+//   以前は「まだ無い」と判断した呼び出しがそれぞれ起こし、先に作った方は閉じられずに残っていた
+let sharedGlobalPromise: Promise<MCPServerStdio[]> | null = null;
+// ★ 起こしている最中の部屋 (同じ部屋に同時に来た呼び出しは同じ起動を待つ)
+const roomMcpPending = new Map<string, Promise<MCPServerStdio[]>>();
 let sweepTimer: NodeJS.Timeout | null = null;
 
 // MCP server connect timeout (#226 Phase C → #227 完全 fix)
@@ -52,9 +57,33 @@ const MCP_CONNECT_TIMEOUT_SECONDS = 30;     // connect/initialize timeout (秒)
  *    Deep agent (agents/deep.js) と同じ npx 経由で組織記憶ツールに access (#199)
  * 2. agent-server/mcp_config.json: user カスタム MCP 用 (filesystem は除外)
  */
-async function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
-  if (sharedGlobalServers) return sharedGlobalServers;
+function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
+  if (sharedGlobalServers) return Promise.resolve(sharedGlobalServers);
+  if (!sharedGlobalPromise) {
+    sharedGlobalPromise = connectSharedGlobal().then((servers) => { sharedGlobalServers = servers; return servers; });
+  }
+  return sharedGlobalPromise;
+}
 
+/**
+ * 共有グローバルを先に起こしておく (2026-10-02)。agent-server の起動時に裏で呼ぶ。
+ * ★ 会話モードの 1 回目が、tealus MCP (npx で GitHub から解決、実測 16.5 秒) を待たないようにする
+ */
+export async function warmSharedGlobal(): Promise<void> {
+  const started = Date.now();
+  const servers = await getOrCreateSharedGlobal();
+  logger.info(`[RoomMCP] 共有グローバルを先に起こしました: ${servers.length} servers (${Date.now() - started}ms)`);
+}
+
+async function connectSharedGlobal(): Promise<MCPServerStdio[]> {
+  // ★ tealus と mcp_config.json の分は同時に起こす (以前は順番に待っていた。実測 16.5 秒 + 3.4 秒)
+  const [tealus, user] = await Promise.all([connectTealusMcp(), connectGlobalConfig()]);
+  const servers = [...tealus, ...user];
+  logger.info(`[RoomMCP] Shared global: ${servers.length} servers connected`);
+  return servers;
+}
+
+async function connectTealusMcp(): Promise<MCPServerStdio[]> {
   const servers: MCPServerStdio[] = [];
 
   // 1. Tealus MCP (#199、Bot 認証情報があれば追加)
@@ -82,7 +111,11 @@ async function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
   } else {
     logger.debug('[RoomMCP] Tealus MCP skipped (TEALUS_BOT_ID/PASS not set)');
   }
+  return servers;
+}
 
+async function connectGlobalConfig(): Promise<MCPServerStdio[]> {
+  const servers: MCPServerStdio[] = [];
   // 2. agent-server/mcp_config.json (user カスタム)
   const globalConfigPath = path.join(import.meta.dirname, '..', '..', 'mcp_config.json');
   if (fs.existsSync(globalConfigPath)) {
@@ -102,9 +135,7 @@ async function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
     }
   }
 
-  sharedGlobalServers = servers;
-  logger.info(`[RoomMCP] Shared global: ${sharedGlobalServers.length} servers connected`);
-  return sharedGlobalServers;
+  return servers;
 }
 
 /**
@@ -120,8 +151,17 @@ export async function getOrCreateRoomMcp(agentId: string, roomId: string, worksp
     const globalServers = await getOrCreateSharedGlobal();
     return [...entry.servers, ...globalServers];
   }
+  const pending = roomMcpPending.get(key);
+  if (pending) return pending;
+  const created = createRoomMcp(key, roomId, workspacePath).finally(() => roomMcpPending.delete(key));
+  roomMcpPending.set(key, created);
+  return created;
+}
 
+async function createRoomMcp(key: string, roomId: string, workspacePath: string): Promise<MCPServerStdio[]> {
   logger.info(`[RoomMCP] Creating MCP connections for ${key}`);
+  // ★ 共有グローバルは部屋の filesystem と同時に起こす (以前は filesystem の後に順番に待っていた)
+  const globalPromise = getOrCreateSharedGlobal();
   const servers: MCPServerStdio[] = [];
 
   // ルーム固有 mcp_config.json を先に読む（filesystem重複チェック用）
@@ -172,8 +212,8 @@ export async function getOrCreateRoomMcp(agentId: string, roomId: string, worksp
     workspacePath,
   });
 
-  // 3. グローバルMCP（共有）
-  const globalServers = await getOrCreateSharedGlobal();
+  // 3. グローバルMCP（共有）。上で起こし始めたものを待つ
+  const globalServers = await globalPromise;
 
   logger.info(`[RoomMCP] ${key}: ${servers.length} room + ${globalServers.length} shared servers`);
   return [...servers, ...globalServers];
@@ -257,13 +297,13 @@ export async function closeAllRoomMcp(): Promise<void> {
   }
   roomMcpCache.clear();
 
-  // 共有グローバルサーバーを close
-  if (sharedGlobalServers) {
-    for (const server of sharedGlobalServers) {
-      try { await server.close(); } catch { /* ignore */ }
-    }
-    sharedGlobalServers = null;
+  // 共有グローバルサーバーを close (★ 起こしている最中なら、起き終わるのを待ってから閉じる)
+  const globals = sharedGlobalServers ?? (sharedGlobalPromise ? await sharedGlobalPromise.catch(() => []) : []);
+  for (const server of globals) {
+    try { await server.close(); } catch { /* ignore */ }
   }
+  sharedGlobalServers = null;
+  sharedGlobalPromise = null;
 
   logger.info('[RoomMCP] All room MCP connections closed');
 }
