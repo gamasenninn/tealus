@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './ContextMenu.css';
 
 // ✅ = 完了マーカー（業務メモ 6/27 小野さん要望）。先頭で押しやすく。
@@ -22,6 +23,8 @@ interface ContextMenuProps {
 function ContextMenu({ items, position, onClose, onReaction }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [adjustedPos, setAdjustedPos] = useState({ x: position.x, y: position.y });
+  // #485-6 の続き: Esc でも閉じる (外をタップしないと閉じなかった。部屋の一覧のメニューと揃える)
+  useEscapeToClose(true, onClose);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent | TouchEvent) => {
