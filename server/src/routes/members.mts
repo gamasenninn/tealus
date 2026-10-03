@@ -64,7 +64,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req: Request,
     const addedName = userResult.rows[0].display_name;
     const adderName = req.user!.display_name;
     const io = getIo();
-    await insertSystemMessage(roomId, `${adderName}が${addedName}を追加しました`, io);
+    await insertSystemMessage(roomId, `${adderName}が${addedName}を追加しました`, io, req.user!.id);
 
     io.to(roomId).emit('member:added', { room_id: roomId, user_id, display_name: addedName });
 
@@ -117,7 +117,7 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req: Requ
 
     // System message
     const io = getIo();
-    await insertSystemMessage(roomId, `${req.user!.display_name}が退会しました`, io);
+    await insertSystemMessage(roomId, `${req.user!.display_name}が退会しました`, io, req.user!.id);
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: userId });
     // ★ 接続中の端末もこの部屋の配信から抜く (DB から消すだけだと、つなぎ直すまで届き続ける)
     io.in(`user:${userId}`).socketsLeave(roomId);
@@ -204,7 +204,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
     // System message
     const targetName = target.rows[0].display_name;
     const io = getIo();
-    await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}を退会させました`, io);
+    await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}を退会させました`, io, req.user!.id);
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: targetUserId });
     // ★ 接続中の端末もこの部屋の配信から抜く (DB から消すだけだと、つなぎ直すまで届き続ける)
     io.in(`user:${targetUserId}`).socketsLeave(roomId);
@@ -261,9 +261,9 @@ router.put('/:userId/role', authenticate, requireGroup, requireMember, async (re
     const targetName = target.rows[0].display_name;
     const io = getIo();
     if (role === 'admin') {
-      await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}をグループ管理者にしました`, io);
+      await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}をグループ管理者にしました`, io, req.user!.id);
     } else {
-      await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}のグループ管理者を解除しました`, io);
+      await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}のグループ管理者を解除しました`, io, req.user!.id);
     }
 
     res.json({ member: result.rows[0] });

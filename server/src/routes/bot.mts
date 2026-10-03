@@ -1561,7 +1561,7 @@ router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
     // ★ rowCount で判定するのは必須。再 join でも出すと、常時再接続する bot
     //   (7 日で 208 回 join を叩いているものがある) の分でルームが埋まる。
     if (inserted.rowCount && inserted.rowCount > 0) {
-      await insertSystemMessage(roomId, `${req.user!.display_name}が参加しました`, getIo());
+      await insertSystemMessage(roomId, `${req.user!.display_name}が参加しました`, getIo(), userId);
     }
 
     res.json({ success: true });
