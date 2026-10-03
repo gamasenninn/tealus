@@ -238,6 +238,25 @@ describe('Bot API', () => {
       expect(res.body.messages[0].content).toBe('新着メッセージ');
     });
 
+    it('#485-1 ★ 共有 MCP の get_messages はこの口を使う。各メッセージにサーバーの時間帯の時刻 created_at_local を添える', async () => {
+      // ★ 最初は /api/rooms/:id/messages だけに足して、MCP 経由では届いていなかった (MCP はこの口を呼ぶ)
+      await request(app)
+        .post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ content: '時刻の確認' });
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}&limit=5`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.length).toBeGreaterThan(0);
+      for (const m of res.body.messages) {
+        const jst = new Date(new Date(m.created_at).getTime() + 9 * 3600 * 1000).toISOString();
+        expect(m.created_at_local).toBe(`${jst.slice(0, 10)} ${jst.slice(11, 16)} (Asia/Tokyo)`);
+      }
+    });
+
     it('should reject without room_id', async () => {
       const res = await request(app)
         .get('/api/bot/messages?since=2026-01-01')

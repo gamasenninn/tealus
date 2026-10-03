@@ -21,6 +21,7 @@ import { BOT_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.
 import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
+import { formatLocalTime } from '../lib/localTime.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -594,7 +595,8 @@ router.get('/messages', async (req, res) => {
       }
     }
 
-    res.json({ messages });
+    // ★ #485-1 共有 MCP の get_messages はこの口。AI が UTC を書き写さないよう、サーバーの時間帯で読める時刻を添える
+    res.json({ messages: messages.map((m) => ({ ...m, created_at_local: formatLocalTime(m.created_at) })) });
   } catch (err) {
     logger.error('Bot messages error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
