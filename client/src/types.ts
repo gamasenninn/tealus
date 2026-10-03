@@ -126,6 +126,8 @@ export interface Reaction {
   reacted?: boolean;
   /** server は me という名でも返す (MessageBubble が消費) */
   me?: boolean;
+  /** #488 リアルタイムの知らせは誰が付けたかで届く (me は各端末が utils/reactionMe で決める) */
+  user_ids?: string[];
 }
 
 export interface MessageTag {

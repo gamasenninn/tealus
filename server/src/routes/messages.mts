@@ -580,18 +580,21 @@ router.post('/:msgId/reactions', async (req: Request, res: Response) => {
     }
 
     // Get updated reactions for this message
-    const reactions = await pool.query<{ emoji: string; count: number; me: boolean }>(
+    const reactions = await pool.query<{ emoji: string; count: number; me: boolean; user_ids: string[] }>(
       `SELECT emoji, COUNT(*)::int as count,
-              BOOL_OR(user_id = $2) as me
+              BOOL_OR(user_id = $2) as me,
+              ARRAY_AGG(user_id::text ORDER BY created_at) as user_ids
        FROM message_reactions WHERE message_id = $1
        GROUP BY emoji ORDER BY MIN(created_at)`,
       [msgId, userId]
     );
 
+    // ★ #488 配るのは「誰が付けたか (user_ids)」。me は付けた本人の目線の値なので配らない
+    //   (配っていたので、付けていない人の画面でも「自分が付けた」と出ていた)。各端末が自分の ID で決める
     const io = getIo();
     io.to(roomId).emit('message:reaction', {
       message_id: msgId,
-      reactions: reactions.rows,
+      reactions: reactions.rows.map(({ emoji, count, user_ids }) => ({ emoji, count, user_ids })),
     });
 
     // Webhook notification (追加時のみ)

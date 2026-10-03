@@ -8,6 +8,7 @@ import { speakAuto } from '../services/browserTts';
 import { playTtsSrc } from '../services/ttsAudioPlayer';
 import { isAudioHeld } from '../utils/audioExclusive';
 import { shouldPlayMessageSound } from '../utils/messageSound';
+import { withMe } from '../utils/reactionMe';
 import type { Message, Reaction, LinkPreview, Transcription } from '../types';
 
 // --- Socket.IO event payload (client が消費するフィールドのみ最小型付け) ---
@@ -205,7 +206,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     };
 
     const handleMessageReaction = (data: MessageReactionPayload) => {
-      useMessageStore.getState().updateReactions(data.message_id, data.reactions);
+      // ★ #488 me は自分の ID で決める (配られる me は付けた本人の目線だったので信じない)
+      useMessageStore.getState().updateReactions(data.message_id, withMe(data.reactions, user?.id));
     };
 
     const handleLinkPreview = (data: LinkPreviewPayload) => {
