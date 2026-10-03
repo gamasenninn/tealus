@@ -9,7 +9,7 @@ import { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireS
 import { canCreateRoom, isGuest } from '../utils/permissions.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
-import { announceRoomJoined } from '../services/roomJoined.mts';
+import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -480,6 +480,7 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
       `UPDATE rooms SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
       values
     );
+    announceRoomUpdated(result.rows[0].id);   // ★ #489 開いている人の画面に反映する
     res.json({ room: result.rows[0] });
   } catch (err) {
     logger.error('Update room error:', err);
@@ -529,6 +530,7 @@ router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, iconUplo
       'UPDATE rooms SET icon_url = $1, updated_at = now() WHERE id = $2 RETURNING *',
       [iconUrl, id]
     );
+    announceRoomUpdated(result.rows[0].id);   // ★ #489 開いている人の画面に反映する
     res.json({ room: result.rows[0] });
   } catch (err) {
     logger.error('Upload room icon error:', err);

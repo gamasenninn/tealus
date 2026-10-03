@@ -11,6 +11,8 @@ interface RoomState {
   error: string | null;
   fetchRooms: () => Promise<void>;
   selectRoom: (roomId: string) => Promise<void>;
+  /** #489 開いている部屋の情報とメンバーだけを取り直す (既読の位置は動かさない)。別の部屋なら何もしない */
+  refreshRoom: (roomId: string) => Promise<void>;
   clearCurrentRoom: () => void;
   createGroup: (name: string, memberIds: string[]) => Promise<{ room: Room }>;
   createDirect: (partnerId: string) => Promise<{ room: Room }>;
@@ -41,6 +43,18 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
       set({ currentRoom: data.room, members: data.members, lastReadMessageId: data.last_read_message_id ?? null, error: null });
     } catch {
       set({ error: 'ルーム情報の取得に失敗しました' });
+    }
+  },
+
+  refreshRoom: async (roomId) => {
+    if (get().currentRoom?.id !== roomId) return;
+    try {
+      const data = await api.getRoom(roomId);
+      // ★ 取りに行っている間に別の部屋へ移っていたら書かない
+      if (get().currentRoom?.id !== roomId) return;
+      set({ currentRoom: data.room, members: data.members });
+    } catch {
+      // 取り直しに失敗しても今の表示は残す (次の変化か読み込み直しで追いつく)
     }
   },
 

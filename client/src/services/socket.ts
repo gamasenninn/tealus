@@ -33,6 +33,15 @@ export function connectSocket(token: string): Socket {
     useRoomStore.getState().fetchRooms();
   });
 
+  // #489 部屋の設定・メンバーが変わった。一覧を取り直し、開いている部屋なら情報とメンバーも取り直す
+  // (読み込み直すまで「編集」が出ない・見出しの人数が古いままだった)
+  s.on('room:updated', (data: { room_id?: unknown } | null) => {
+    if (!data || typeof data.room_id !== 'string') return;
+    const store = useRoomStore.getState();
+    store.fetchRooms();
+    return store.refreshRoom(data.room_id);
+  });
+
   return socket;
 }
 

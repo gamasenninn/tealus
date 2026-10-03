@@ -10,7 +10,7 @@ import { requireMember, requireGroup } from '../middleware/roomAccess.mts';
 import { canInviteToRoom } from '../utils/permissions.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
-import { announceRoomJoined } from '../services/roomJoined.mts';
+import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -78,6 +78,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req: Request,
       added_by: { id: req.user!.id, display_name: adderName },
     });
 
+    announceRoomUpdated(roomId);   // ★ #489 開いている人の見出しの人数・役割を反映する
     res.json({ member: result.rows[0] });
   } catch (err) {
     logger.error('Add member error:', err);
@@ -131,6 +132,7 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req: Requ
       member: { id: userId, display_name: req.user!.display_name },
     });
 
+    announceRoomUpdated(roomId);   // ★ #489 残った人の見出しの人数を反映する (抜けた本人は受信から外れている)
     res.json({ message: '退会しました' });
   } catch (err) {
     logger.error('Leave group error:', err);
@@ -219,6 +221,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
       removed_by: { id: req.user!.id, display_name: req.user!.display_name },
     });
 
+    announceRoomUpdated(roomId);   // ★ #489 残った人の見出しの人数を反映する
     res.json({ message: `${targetName}を除外しました` });
   } catch (err) {
     logger.error('Kick member error:', err);
@@ -269,6 +272,7 @@ router.put('/:userId/role', authenticate, requireGroup, requireMember, async (re
       await insertSystemMessage(roomId, `${req.user!.display_name}が${targetName}のグループ管理者を解除しました`, io, req.user!.id);
     }
 
+    announceRoomUpdated(roomId);   // ★ #489 開いている人の見出しの人数・役割を反映する
     res.json({ member: result.rows[0] });
   } catch (err) {
     logger.error('Change role error:', err);
