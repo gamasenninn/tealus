@@ -302,6 +302,14 @@ describe('RoomSettings — 読み上げエンジン・声', () => {
     expect((sel.querySelector('option[value="gemini"]') as HTMLOptionElement).disabled).toBe(true);
   });
 
+  it('#485-4 既定の声は「サーバーの設定」と書く (利用者の画面に「環境変数」を出さない)', async () => {
+    render(<RoomSettings {...dm} />);
+    const voice = await screen.findByLabelText('声');
+    await waitFor(() => expect(voice.querySelector('option[value="cedar"]')).not.toBeNull());
+    expect(voice.querySelector('option[value=""]')?.textContent).toBe('デフォルト（サーバーの設定）');
+    expect(document.body.textContent).not.toContain('環境変数');
+  });
+
   it('★ エンジンを選ぶと tts_engine を保存し、ほかの項目は残す', async () => {
     vi.mocked(api.getRoomAgentSettings).mockResolvedValueOnce({ settings: { response_mode: 'all', enabled: true } } as never);
     render(<RoomSettings {...dm} />);

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { api } from '../../services/api';
 import { renderKeywordHighlight } from '../../utils/highlight';
 import { formatDuration } from '../../utils/format';
-import { useConfirm } from '../../stores/confirmStore';
+import { useConfirm, notify } from '../../stores/confirmStore';
 import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
 import type { VoiceHistoryEntry } from './VoiceHistoryModal';
@@ -161,7 +161,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
       // ここでは何もしない (transcription は親から再受信)
     } catch (err) {
       console.error('Retranscribe error:', err);
-      alert('再文字起こしに失敗しました: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      notify('再文字起こしに失敗しました: ' + (err instanceof Error ? err.message : '原因不明'));
     } finally {
       setIsRetranscribing(false);
     }

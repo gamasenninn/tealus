@@ -18,16 +18,21 @@ export interface ConfirmOptions {
   okLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** #485-5 知らせるだけ (OK のみ)。alert() の代わり */
+  hideCancel?: boolean;
+  /** #485-5 文字を入れてもらう。prompt() の代わり (promptText から使う) */
+  input?: { defaultValue?: string; placeholder?: string };
 }
 
 interface ConfirmModalState extends ConfirmOptions {
-  resolve: (value: boolean) => void;
+  /** text は入力欄があるときだけ渡る */
+  resolve: (value: boolean, text?: string) => void;
 }
 
 interface ConfirmState {
   state: ConfirmModalState | null;
   confirm: (opts: ConfirmOptions) => Promise<boolean>;
-  _resolve: (value: boolean) => void;
+  _resolve: (value: boolean, text?: string) => void;
 }
 
 export const useConfirmStore = create<ConfirmState>()((set, get) => ({
@@ -39,11 +44,33 @@ export const useConfirmStore = create<ConfirmState>()((set, get) => ({
     set({ state: { ...opts, resolve } });
   }),
 
-  _resolve: (value) => {
+  _resolve: (value, text) => {
     const s = get().state;
-    if (s) s.resolve(value);
+    if (s) s.resolve(value, text);
     set({ state: null });
   },
 }));
 
 export const useConfirm = () => useConfirmStore((s) => s.confirm);
+
+/** #485-5 知らせるだけ (alert の代わり)。OK を押すと解決する */
+export function notify(body: string, title?: string): Promise<void> {
+  return useConfirmStore.getState().confirm({ body, title, hideCancel: true }).then(() => undefined);
+}
+
+/** #485-5 文字を入れてもらう (prompt の代わり)。OK で入れた文字、キャンセルで null */
+export function promptText(opts: { body: string; title?: string; defaultValue?: string; placeholder?: string }): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    const store = useConfirmStore;
+    const prev = store.getState().state;
+    if (prev) prev.resolve(false);
+    store.setState({
+      state: {
+        body: opts.body,
+        title: opts.title,
+        input: { defaultValue: opts.defaultValue, placeholder: opts.placeholder },
+        resolve: (ok, text) => resolve(ok ? (text ?? '') : null),
+      },
+    });
+  });
+}

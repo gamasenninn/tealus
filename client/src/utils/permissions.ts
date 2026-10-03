@@ -32,6 +32,20 @@ export function canInviteToRoom(user: UserLike): boolean {
   return !isGuest(user);
 }
 
+/**
+ * #485-2 部屋を画面から削除できるか。サーバーの DELETE /api/rooms/:id と同じ条件
+ * (グループ・作った本人・自分しかいない)。外れた人に「押すと 403 になるボタン」を見せない。
+ */
+export function canDeleteRoom(
+  room: { type?: string; created_by?: string } | null | undefined,
+  userId: string | undefined,
+  memberIds: string[],
+): boolean {
+  if (!room || !userId) return false;
+  if (room.type !== 'group' || !room.created_by || room.created_by !== userId) return false;
+  return memberIds.length === 1 && memberIds[0] === userId;
+}
+
 /** role の日本語表示ラベル。 */
 export function roleLabel(user: UserLike): string {
   if (user?.is_bot) return 'BOT';

@@ -473,7 +473,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
           {(() => {
             // ★ 2026-09-26: 読み上げエンジン (Aivis / OpenAI / Gemini) と声。ダッシュボードと同じ決め方
             const opts = ttsOptions;
-            const defaultLabel = opts?.engines.find(e => e.id === opts.default_engine)?.label ?? '環境変数';
+            const defaultLabel = opts?.engines.find(e => e.id === opts.default_engine)?.label ?? 'サーバーの設定';
             const engine = agentSettings.tts_engine || opts?.default_engine || '';
             const voices = (opts && engine && opts.voices[engine]) || [];
             // ★ Aivis の声は tts_model_uuid、OpenAI / Gemini は tts_voice (既存の Aivis の設定を生かす)
@@ -506,7 +506,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
                     disabled={!opts}
                     onChange={e => saveAgentSettings({ [voiceKey]: e.target.value || undefined })}
                   >
-                    <option value="">デフォルト（環境変数）</option>
+                    <option value="">デフォルト（サーバーの設定）</option>
                     {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
                 </div>

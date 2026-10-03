@@ -89,6 +89,20 @@ describe('Messages API', () => {
       }
     });
 
+    it('#485-1 各メッセージにサーバーの時間帯で読める時刻 created_at_local を添える (AI が UTC を書き写さないように)', async () => {
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+      for (const m of res.body.messages) {
+        const utc = new Date(m.created_at);
+        const jst = new Date(utc.getTime() + 9 * 3600 * 1000);
+        const want = `${jst.toISOString().slice(0, 10)} ${jst.toISOString().slice(11, 16)} (Asia/Tokyo)`;
+        expect(m.created_at_local).toBe(want);
+      }
+    });
+
     it('should return messages (default limit 20)', async () => {
       const res = await request(app)
         .get(`/api/rooms/${roomId}/messages`)

@@ -1,6 +1,7 @@
 import { useRef, memo } from 'react';
 import { Volume2 } from 'lucide-react';
 import { api } from '../../services/api';
+import { notify } from '../../stores/confirmStore';
 import * as browserTts from '../../services/browserTts';
 import { getConfig } from '../../services/clientConfig';
 import { playTtsSrc } from '../../services/ttsAudioPlayer';
@@ -91,7 +92,7 @@ function TtsButton({ text, roomId }: TtsButtonProps) {
       audioRef.current = audio;
     } catch (err) {
       console.error('TTS error:', err);
-      alert('読み上げに失敗しました: ' + (err instanceof Error ? err.message : ''));
+      notify('読み上げに失敗しました: ' + (err instanceof Error ? err.message : ''));
     } finally {
       busyRef.current = false;
     }

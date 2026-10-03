@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
-import { useConfirm } from '../../stores/confirmStore';
+import { useConfirm, promptText } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import StampGenerator from './StampGenerator';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
@@ -112,7 +112,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
   const handleRenamePack = async () => {
     const pack = contextMenu!.pack!;
     setContextMenu(null);
-    const newName = prompt('新しいパック名を入力', pack.name);
+    const newName = await promptText({ body: '新しいパック名を入力', defaultValue: pack.name });
     if (!newName || !newName.trim() || newName.trim() === pack.name) return;
     try {
       await api.renameStampPack(pack.id, newName.trim());

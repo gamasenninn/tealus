@@ -13,6 +13,7 @@ import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { REST_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.mts';
+import { formatLocalTime } from '../lib/localTime.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -187,7 +188,8 @@ router.get('/', async (req: Request, res: Response) => {
     await attachTags(messages);
     await attachStamps(messages);
 
-    res.json({ messages });
+    // ★ #485-1 AI が UTC を書き写さないよう、サーバーの時間帯で読める時刻を添える (共有 MCP はこの JSON をそのまま渡す)
+    res.json({ messages: messages.map((m) => ({ ...m, created_at_local: formatLocalTime(m.created_at) })) });
   } catch (err) {
     logger.error('Get messages error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

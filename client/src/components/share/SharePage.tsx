@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRoomStore } from '../../stores/roomStore';
 import { api } from '../../services/api';
+import { notify } from '../../stores/confirmStore';
 import { sendRoomMessage } from '../../services/sendRoomMessage';
 import { ArrowLeft, Send } from 'lucide-react';
 import type { Room } from '../../types';
@@ -183,7 +184,7 @@ function SharePage() {
       navigate(`/rooms/${roomId}`, { replace: true });
     } catch (err) {
       console.error('[share] Send failed:', err);
-      alert('送信に失敗しました: ' + (err instanceof Error ? err.message : String(err)));
+      notify('送信に失敗しました: ' + (err instanceof Error ? err.message : String(err)));
       setSending(false);
     }
   };

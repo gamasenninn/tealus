@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getSocket } from '../services/socket';
 import { useAuthStore } from '../stores/authStore';
 import { useCapabilityStore } from '../stores/capabilityStore';
+import { notify } from '../stores/confirmStore';
 
 // --- Socket.IO / CustomEvent payload (client が消費するフィールドのみ最小型付け) ---
 
@@ -61,7 +62,7 @@ export function useCallNotification(): UseCallNotificationResult {
     const handleRejected = (data: CallRejectedPayload) => {
       setActiveCall((prev) => {
         if (prev?.roomId === data.roomId) {
-          alert(`${data.userName} が通話を拒否しました`);
+          void notify(`${data.userName} が通話を拒否しました`);
           return null;
         }
         return prev;

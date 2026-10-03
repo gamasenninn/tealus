@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
@@ -12,6 +12,7 @@ import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import type { Room } from '../../types';
 import { shouldPlayMessageSound } from '../../utils/messageSound';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './RoomList.css';
 
 // ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
@@ -40,6 +41,9 @@ function RoomList() {
   const [contextMenu, setContextMenu] = useState<RoomContextMenuState | null>(null);
   const [activeTab, setActiveTab] = useState('all');
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // #485-6 右クリック (長押し) メニューを Esc でも閉じる (外のクリックだけだった)
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  useEscapeToClose(!!contextMenu, closeContextMenu);
   const navigate = useNavigate();
 
   useEffect(() => {

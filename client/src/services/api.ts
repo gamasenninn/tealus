@@ -499,6 +499,11 @@ class ApiClient {
     return this.request('DELETE', `/rooms/${roomId}/members/me`);
   }
 
+  /** #485-2 グループを削除 (作った本人・自分しかいないときだけ。サーバーが最終判定) */
+  deleteRoom(roomId: string) {
+    return this.request('DELETE', `/rooms/${roomId}`);
+  }
+
   kickMember(roomId: string, userId: string) {
     return this.request('DELETE', `/rooms/${roomId}/members/${userId}`);
   }

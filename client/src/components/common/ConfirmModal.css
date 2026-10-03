@@ -34,3 +34,14 @@
 .confirm-actions button {
   min-width: 80px;
 }
+
+/* #485-5 prompt() の代わりの入力欄。★ iOS は 16px 未満だと入力時に拡大するので 16px */
+.confirm-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: -8px 0 20px;
+  padding: 8px 10px;
+  font-size: 16px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+}

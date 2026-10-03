@@ -6,7 +6,7 @@ import { useConfirm } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import { Pencil } from 'lucide-react';
 import RoomSettings from './RoomSettings';
-import { canInviteToRoom } from '../../utils/permissions';
+import { canInviteToRoom, canDeleteRoom } from '../../utils/permissions';
 import type { RoomMember, User } from '../../types';
 import './MemberList.css';
 
@@ -106,10 +106,29 @@ function MemberList({ roomId, onClose }: MemberListProps) {
     }
   };
 
+  // #485-2 部屋の削除。人は退会しかできず、最後の 1 人が抜けると誰もいない部屋が残っていた
+  const canDelete = canDeleteRoom(currentRoom, user?.id, memberList.map(m => m.user_id));
+  const handleDeleteRoom = async () => {
+    const ok = await confirm({
+      title: 'グループを削除',
+      body: 'このグループを削除しますか？\nメッセージもすべて消え、元に戻せません。',
+      okLabel: '削除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteRoom(roomId);
+      await useRoomStore.getState().fetchRooms();
+      navigate('/talk');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const handleKick = async (userId: string, displayName: string) => {
     const ok = await confirm({
-      body: `${displayName}をこのグループから除外しますか？`,
-      okLabel: '除外',
+      body: `${displayName}をこのグループから退会させますか？`,
+      okLabel: '退会させる',
       danger: true,
     });
     if (!ok) return;
@@ -183,7 +202,7 @@ function MemberList({ roomId, onClose }: MemberListProps) {
                   ) : (
                     <button onClick={() => handleRoleChange(m.user_id, 'member')}>グループ管理者を解除</button>
                   )}
-                  <button className="member-menu-danger" onClick={() => handleKick(m.user_id, m.display_name)}>除外する</button>
+                  <button className="member-menu-danger" onClick={() => handleKick(m.user_id, m.display_name)}>退会させる</button>
                 </div>
               )}
             </div>
@@ -195,6 +214,9 @@ function MemberList({ roomId, onClose }: MemberListProps) {
             <button className="member-add-btn" onClick={openAddModal}>+ メンバーを追加</button>
           )}
           <button className="member-leave-btn" onClick={handleLeave}>このグループを退会</button>
+          {canDelete && (
+            <button className="member-leave-btn" onClick={handleDeleteRoom}>このグループを削除</button>
+          )}
         </div>
 
         <RoomSettings
