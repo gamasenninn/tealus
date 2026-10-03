@@ -90,7 +90,10 @@ describe('system メッセージの送り主', () => {
     // 送り主が誰になっていても消せないことを見る (直す前は借りられた人なら消せた)
     const sender = [owner, actor, target].find((u) => u.user.id === m.sender_id)!;
     const res = await request(app).delete(`/api/rooms/${roomId}/messages/${m.id}`).set('Authorization', `Bearer ${sender.token}`);
-    expect(res.status).toBe(403);
+    // ★ 権限の問題ではなく「この種類は消せない」ので、編集と同じ 400 と文言で断る
+    //   (「自分のメッセージのみ」と返すと、送り主本人や AI が理由を取り違える)
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('このメッセージは削除できません');
 
     const after = await getTestPool().query('SELECT is_deleted, content FROM messages WHERE id = $1', [m.id]);
     expect(after.rows[0]).toEqual({ is_deleted: false, content: '操作する人が対象の人を追加しました' });

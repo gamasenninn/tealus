@@ -506,9 +506,12 @@ router.delete('/:msgId', async (req: Request, res: Response) => {
     if (msg.rows.length === 0 || msg.rows[0].room_id !== (req.params as { id: string }).id) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
-    // ★ system メッセージ (入退室など) は部屋の記録なので誰も消せない (編集と同じ扱い、2026-10-03)。
+    // ★ system メッセージ (入退室など) は部屋の記録なので誰も消せない (編集と同じ 400 と文言、2026-10-03)。
     //   送り主の判定だけだと、送り主になった人が消せた
-    if (msg.rows[0].type === 'system' || msg.rows[0].sender_id !== userId) {
+    if (msg.rows[0].type === 'system') {
+      return res.status(400).json({ error: 'このメッセージは削除できません' });
+    }
+    if (msg.rows[0].sender_id !== userId) {
       return res.status(403).json({ error: '自分のメッセージのみ削除できます' });
     }
 
