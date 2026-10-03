@@ -18,6 +18,18 @@
   height: 100%;
 }
 
+/* #487 Mobile の `/talk`: 一覧はサイドバーの 1 つだけなので、サイドバーを全画面で出し、本体 (案内) は隠す */
+@media (max-width: 1023.98px) {
+  .desktop-shell--talk .desktop-sidebar {
+    display: block;
+    width: 100%;
+    height: 100dvh;
+  }
+  .desktop-shell--talk .desktop-main {
+    display: none;
+  }
+}
+
 /* Desktop (>= 1024px): 2-pane layout */
 @media (min-width: 1024px) {
   .desktop-shell {

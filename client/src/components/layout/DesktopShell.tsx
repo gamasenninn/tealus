@@ -6,14 +6,20 @@
  *
  * CSS media query で切替、JS state branching なし。
  * 認証必須 routes をラップする (PrivateRoute → DesktopShell → 各画面)。
+ *
+ * ★ #487 RoomList はこのサイドバーの 1 つだけ。スマホでも CSS で隠しているだけで常に動いている
+ *   (トークを開いている間もほかの部屋の新着の音を鳴らす)。`/talk` では本体に一覧を置かず、
+ *   スマホはサイドバーを全画面で出す (.desktop-shell--talk)。以前は本体にも置いて、一覧が 2 つ動いていた
  */
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import RoomList from '../room-list/RoomList';
 import './DesktopShell.css';
 
 function DesktopShell() {
+  const { pathname } = useLocation();
+  const onTalk = pathname === '/talk';
   return (
-    <div className="desktop-shell">
+    <div className={onTalk ? 'desktop-shell desktop-shell--talk' : 'desktop-shell'}>
       <aside className="desktop-sidebar">
         <RoomList />
       </aside>

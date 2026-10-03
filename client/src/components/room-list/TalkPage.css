@@ -1,0 +1,10 @@
+/* #487 PC で `/talk` を開いたときの本体の案内 */
+.talk-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 50vh;
+  color: var(--text-secondary, #888);
+  font-size: 14px;
+}

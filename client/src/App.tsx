@@ -7,7 +7,7 @@ import { useCallNotification } from './hooks/useCallNotification';
 import { useVisualViewportVars } from './hooks/useVisualViewportVars';
 import Login from './components/auth/Login';
 import HomePage from './components/home/HomePage';
-import RoomList from './components/room-list/RoomList';
+import TalkPage from './components/room-list/TalkPage';
 import ChatRoom from './components/chat/ChatRoom';
 import AdminDashboard from './components/admin/AdminDashboard';
 import Profile from './components/profile/Profile';
@@ -78,7 +78,7 @@ function App() {
             Desktop (>= 1024px): sidebar (RoomList) + main pane (各画面) の 2-pane */}
         <Route element={<PrivateRoute><DesktopShell /></PrivateRoute>}>
           <Route path="/" element={<HomePage />} />
-          <Route path="/talk" element={<RoomList />} />
+          <Route path="/talk" element={<TalkPage />} />
           <Route path="/rooms/:roomId" element={<ChatRoom />} />
           <Route path="/rooms/:roomId/gallery" element={<MediaGallery />} />
           <Route path="/profile" element={<Profile />} />
