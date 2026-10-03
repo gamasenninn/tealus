@@ -10,6 +10,7 @@ import { requireMember, requireGroup } from '../middleware/roomAccess.mts';
 import { canInviteToRoom } from '../utils/permissions.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
+import { announceRoomJoined } from '../services/roomJoined.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -64,6 +65,8 @@ router.post('/', authenticate, requireGroup, requireMember, async (req: Request,
     const addedName = userResult.rows[0].display_name;
     const adderName = req.user!.display_name;
     const io = getIo();
+    // ★ #486 追加された人の接続を部屋に入れ、本人に知らせる (system メッセージより先に。本人にも届くように)
+    announceRoomJoined(roomId, [user_id]);
     await insertSystemMessage(roomId, `${adderName}が${addedName}を追加しました`, io, req.user!.id);
 
     io.to(roomId).emit('member:added', { room_id: roomId, user_id, display_name: addedName });

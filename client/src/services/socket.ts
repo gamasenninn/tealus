@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { useCapabilityStore } from '../stores/capabilityStore';
+import { useRoomStore } from '../stores/roomStore';
 
 let socket: Socket | null = null;
 
@@ -21,6 +22,15 @@ export function connectSocket(token: string): Socket {
     if (data && typeof data.realtime_voice_available === 'boolean') {
       useCapabilityStore.getState().setRealtimeVoice(data.realtime_voice_available);
     }
+  });
+
+  // #486 自分が部屋に入った (作った・招かれた・1 対 1 を始められた)。読み込み直すまで出なかった。
+  // ★ ここで受ける: 一覧の部品 (RoomList) は部屋が 0 件だと受信を登録せず、トークを開いている間は外れている
+  const s = socket;
+  s.on('room:added', (data: { room_id?: unknown } | null) => {
+    if (!data || typeof data.room_id !== 'string') return;
+    s.emit('room:join', data.room_id);
+    useRoomStore.getState().fetchRooms();
   });
 
   return socket;

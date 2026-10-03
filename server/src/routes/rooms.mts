@@ -9,6 +9,7 @@ import { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireS
 import { canCreateRoom, isGuest } from '../utils/permissions.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
+import { announceRoomJoined } from '../services/roomJoined.mts';
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -203,6 +204,8 @@ router.post('/', async (req, res) => {
       [room.id]
     );
 
+    // ★ #486 入った全員の接続を部屋に入れ、本人に知らせる (読み込み直すまで出なかった)
+    announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
     res.status(201).json({ room, members: membersResult.rows });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -295,6 +298,8 @@ router.post('/direct', async (req, res) => {
         [room.id]
       );
 
+      // ★ #486 1 対 1 の相手にも、読み込み直さずに出るようにする
+      announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
       res.status(201).json({ room, members: membersResult.rows });
     } catch (err) {
       await client.query('ROLLBACK');

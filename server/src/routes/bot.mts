@@ -22,6 +22,7 @@ import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
+import { announceRoomJoined } from '../services/roomJoined.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -1563,6 +1564,8 @@ router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
     // ★ rowCount で判定するのは必須。再 join でも出すと、常時再接続する bot
     //   (7 日で 208 回 join を叩いているものがある) の分でルームが埋まる。
     if (inserted.rowCount && inserted.rowCount > 0) {
+      // ★ #486 入ったボット自身の接続を部屋に入れ、本人に知らせる
+      announceRoomJoined(roomId, [userId]);
       await insertSystemMessage(roomId, `${req.user!.display_name}が参加しました`, getIo(), userId);
     }
 
