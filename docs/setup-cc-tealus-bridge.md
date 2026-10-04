@@ -311,6 +311,9 @@ Agent Server started on port 4000
 [Bot Login] Logged in as AI_AGENT
 ```
 
+> ★ **ゲスト (`users.role = 'guest'`) の投稿は配送しません** (#491)。cc の先は社内の作業用セッションで、ゲストの原則「招かれた部屋の外には触れない」(#282) の外側にあたるためです。断った便は agent-server のログに `ゲストの便のため配送していません` と残ります。
+> 届く便の `sender` には送り主の権限 (`role`: admin / user / guest) が載ります (本体が webhook を送る入口で付ける)。
+
 ### ステップ 1.5B: 自己ループ防止の env 設定 (任意、defense in depth)
 
 > 💡 **#215 (2026-05-02) 以降**、cc-tealus は `@cc-{project}` を **メッセージの先頭** にある場合のみ match する仕様になりました。AI reply は本文中で mention を引用しても、先頭ではないため自然に skip されます。**この env 設定は基本不要**です。

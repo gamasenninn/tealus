@@ -94,6 +94,14 @@ function routeCcEvent(
   recipients: string[],
   tag = '',
 ): string[] {
+  // ★ #491 ゲストの便は配送しない。cc の先は社内の作業用セッション = 部屋の外 (#282 の原則)。
+  //   新規の投稿と、編集で足した宛先の両方がここを通るので、判定はここ 1 か所に置く。
+  //   ★ 権限が載っていない便 (古い本体) は今までどおり配送する
+  if (message.sender?.role === 'guest') {
+    logger.info(`${tag}[cc-queue] ゲストの便のため配送していません: @cc-${targets.join(' @cc-')} `
+      + `room=${room.name || room.id} sender=${message.sender.display_name || message.sender.id || '?'}`);
+    return [];
+  }
   const ccPayload = {
     id: message.id,
     room_id: room.id,
@@ -200,7 +208,8 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
       logger.debug(`[cc-queue] Skipped self-loop sender ${senderId} for @cc-${ccProjects.join(' @cc-')}`);
     } else {
       const delivered = routeCcEvent(message, room, ccProjects, ccProjects);
-      warnDroppedCcMentions(message.content, delivered, room, senderId);
+      // ★ #491 ゲストの便は丸ごと断ったので、「1 行目以外の宛先を捨てた」の warn は出さない (理由が違う)
+      if (message.sender?.role !== 'guest') warnDroppedCcMentions(message.content, delivered, room, senderId);
     }
     // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
   } else {

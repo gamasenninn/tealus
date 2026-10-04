@@ -6,6 +6,8 @@
 export interface WebhookSender {
   id?: string;
   display_name?: string;
+  /** #491 本体が webhook を送る入口で載せる (admin / user / guest)。古い本体からは来ない */
+  role?: string;
 }
 
 export interface WebhookMessage {

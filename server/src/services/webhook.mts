@@ -182,6 +182,14 @@ export async function fireWebhooks(eventType: string, roomId: string | null, pay
       }
     }
 
+    // ★ #491 送り主の権限を載せる (受け手が権限で振る舞いを変えられるように)。
+    //   送り主の形を作る所は 10 か所あるので、1 つずつ足さずにこの入口で 1 回だけ引く
+    const sender = (payload.message as { sender?: { id?: string; role?: string } } | undefined)?.sender;
+    if (sender?.id && !sender.role) {
+      const roleResult = await pool.query<{ role: string }>('SELECT role FROM users WHERE id = $1', [sender.id]);
+      if (roleResult.rows.length > 0) sender.role = roleResult.rows[0].role;
+    }
+
     const body = JSON.stringify({
       event: eventType,
       timestamp: new Date().toISOString(),

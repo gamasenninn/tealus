@@ -35,7 +35,7 @@ jest.mock('../../src/db/pool.mts', () => ({ pool: {
   query: jest.fn(),
 } }));
 
-import { dispatchWithRetry, generateSignature } from '../../src/services/webhook.mts';
+import { dispatchWithRetry, generateSignature, fireWebhooks } from '../../src/services/webhook.mts';
 
 describe('generateSignature', () => {
   test('HMAC-SHA256署名を生成する', () => {
@@ -139,5 +139,38 @@ describe('dispatchWithRetry', () => {
     expect(result.ok).toBe(false);
     expect(result.attempts).toBe(1);
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ★ #491 送り主の権限を載せる。受け手 (agent-server) がゲストの便を見分けるため。
+//   送り主の形を作る所は 10 か所あるので、送る入口の 1 か所で引く
+describe('fireWebhooks — 送り主の権限 (#491)', () => {
+  const { pool } = jest.requireMock('../../src/db/pool.mts') as { pool: { query: jest.Mock } };
+
+  function routeQueries(role: string | null) {
+    pool.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM webhooks')) return { rows: [{ id: 'w1', url: 'http://hook.test/x', secret: null }] };
+      if (sql.includes('FROM users')) return { rows: role ? [{ role }] : [] };
+      return { rows: [] };
+    });
+  }
+  const sentBody = () => JSON.parse(String((mockFetch.mock.calls[0] as unknown[])[1] && ((mockFetch.mock.calls[0] as unknown[])[1] as { body: string }).body));
+
+  beforeEach(() => { pool.query.mockReset(); });
+
+  it('★★ message.sender に role が載る', async () => {
+    routeQueries('guest');
+    mockFetchResponses = [{ ok: true, status: 200 }];
+    await fireWebhooks('message.created', 'r1', { message: { id: 'm1', sender: { id: 'g1', display_name: '外の人' } } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sentBody().message.sender).toEqual({ id: 'g1', display_name: '外の人', role: 'guest' });
+  });
+
+  it('送り主の無い payload はそのまま (落ちない)', async () => {
+    routeQueries('user');
+    mockFetchResponses = [{ ok: true, status: 200 }];
+    await fireWebhooks('member.joined', 'r1', { user: { id: 'u1' } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sentBody().user).toEqual({ id: 'u1' });
   });
 });
