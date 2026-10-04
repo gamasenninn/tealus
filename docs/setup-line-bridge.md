@@ -36,6 +36,14 @@ LINE グループは複数人が発言するため、投影メッセージの本
 - 200 silent return (= secret path mismatch / signature verify failed でも 200 + log warn のみ、★ webhook auto-suspend 構造的にゼロ)
 - security: 攻撃者に URL / verify status 情報 leak しない
 
+### 引用返信 (= #490、2026-10-04)
+
+LINE で「引用して返信」した投稿は、Tealus でも**返信** (`reply_to`) として届く (画面に引用元が出る、AI が読む `/api/bot/messages` にも返信先の要点が載る)。
+
+- LINE の webhook は引用元の **ID (`quotedMessageId`) だけ**を送る (文字とスタンプの便のみ)。引用元の本文は来ない
+- そのため、LINE から投稿した便の ID を表 `line_message_links` に全部記録し、引用が来たら同じ部屋の記録から引き当てる (`docs/02`)
+- ★ 引き当てられない (記録を始める前の投稿・別グループの投稿) ときは、本文の末尾に「（LINE の引用返信。引用元はこちらに届いていません）」と添える。黙って普通の投稿にすると、読む側 (人も AI も) が返信だと気づけない
+
 ### Tealus client (= PWA) 内蔵 file preview
 
 - TextFilePreview component で MD / TXT / JSON / CSV / source code 等の inline preview

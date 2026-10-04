@@ -72,7 +72,21 @@ interface BotMessageListRow extends MessageRow {
   sender_display_name: string;
   reactions?: { emoji: string; count: number }[];
   transcription?: TranscriptionVerbosityRow;
+  reply_to_message?: BotReplyExcerpt | null;
 }
+
+/** ★ #490 返信先の要点 (AI が引用元を引き直さなくても分かるように) */
+interface BotReplyExcerpt {
+  id: string;
+  sender_display_name: string | null;
+  type: string | null;
+  content: string | null;
+  is_deleted: boolean;
+  created_at_local: string | null;
+}
+
+/** 返信先の本文はこの字数で切る (一覧に全文を載せると、長い議事録への返信で応答が膨らむ) */
+const REPLY_EXCERPT_CHARS = 200;
 
 /** message_reactions の emoji 集約行 */
 interface ReactionAggRow {
@@ -594,6 +608,39 @@ router.get('/messages', async (req, res) => {
           msg.transcription = trans.rows[0];
         }
       }
+    }
+
+    // ★ #490 返信先の要点を添える。reply_to の ID だけだと AI は引用元を引き直さない
+    //   (2026-10-04 に日付の無い返信を聞き返した)。★ 同じ部屋の返信先だけ (読めない部屋の本文を漏らさない)
+    const replyIds = [...new Set(messages.map((m) => m.reply_to).filter((id): id is string => !!id))];
+    const replies = new Map<string, BotReplyExcerpt>();
+    if (replyIds.length > 0) {
+      const rr = await pool.query<{ id: string; sender_display_name: string; type: string; content: string | null; is_deleted: boolean; created_at: Date }>(
+        `SELECT p.id, u.display_name AS sender_display_name, p.type, p.is_deleted, p.created_at,
+                COALESCE(p.content, vt.formatted_text, vt.raw_text) AS content
+         FROM messages p
+         JOIN users u ON u.id = p.sender_id
+         LEFT JOIN LATERAL (
+           SELECT formatted_text, raw_text FROM voice_transcriptions
+           WHERE message_id = p.id ORDER BY version DESC LIMIT 1
+         ) vt ON p.type = 'voice'
+         WHERE p.id = ANY($1::uuid[]) AND p.room_id = $2`,
+        [replyIds, room_id]
+      );
+      for (const r of rr.rows) {
+        const text = r.is_deleted ? null : r.content;
+        replies.set(r.id, {
+          id: r.id,
+          sender_display_name: r.sender_display_name,
+          type: r.type,
+          content: text && text.length > REPLY_EXCERPT_CHARS ? `${text.slice(0, REPLY_EXCERPT_CHARS)}…` : text,
+          is_deleted: r.is_deleted,
+          created_at_local: formatLocalTime(r.created_at),
+        });
+      }
+    }
+    for (const m of messages) {
+      m.reply_to_message = m.reply_to ? replies.get(m.reply_to) ?? null : null;
     }
 
     // ★ #485-1 共有 MCP の get_messages はこの口。AI が UTC を書き写さないよう、サーバーの時間帯で読める時刻を添える

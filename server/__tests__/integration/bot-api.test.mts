@@ -395,6 +395,75 @@ describe('Bot API', () => {
   });
 
   // ============================================
+  // GET /api/bot/messages — 返信先の要点 (#490)
+  // ============================================
+  describe('GET /api/bot/messages — reply_to_message (#490)', () => {
+    // ★ reply_to の ID だけだと、AI は引用元を引き直さない (2026-10-04 に日付の無い返信を聞き返した)
+    it('返信には返信先の送り主・本文の頭・時刻を添える。返信でない便は null', async () => {
+      const pool = getTestPool();
+      const parent = (await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, created_at)
+         VALUES ($1, $2, 'text', $3, '2026-10-02T03:00:00Z') RETURNING id`,
+        [roomId, user1.user.id, '10/2 の報告 ' + 'あ'.repeat(300)]
+      )).rows[0].id;
+      const reply = (await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, reply_to) VALUES ($1, $2, 'text', '頂きました', $3) RETURNING id`,
+        [roomId, user1.user.id, parent]
+      )).rows[0].id;
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+
+      expect(res.status).toBe(200);
+      const byId = Object.fromEntries(res.body.messages.map((m: { id: string }) => [m.id, m]));
+      const r = byId[reply].reply_to_message;
+      expect(r).toMatchObject({ id: parent, sender_display_name: '田中太郎', type: 'text', created_at_local: '2026-10-02 12:00 (Asia/Tokyo)' });
+      expect(r.content.startsWith('10/2 の報告 ')).toBe(true);
+      expect(r.content.length).toBeLessThanOrEqual(201);   // 200 字 + 省略の印
+      expect(byId[parent].reply_to_message).toBeNull();
+    });
+
+    it('★ 返信先が別の部屋なら中身を出さない (読めない部屋の本文を漏らさない)', async () => {
+      const pool = getTestPool();
+      const other = (await request(app).post('/api/rooms').set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '別の部屋', member_ids: [] })).body.room.id;
+      const secret = (await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'text', '秘密') RETURNING id`,
+        [other, user1.user.id]
+      )).rows[0].id;
+      const reply = (await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, reply_to) VALUES ($1, $2, 'text', 'x', $3) RETURNING id`,
+        [roomId, user1.user.id, secret]
+      )).rows[0].id;
+
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      const msg = res.body.messages.find((m: { id: string }) => m.id === reply);
+      expect(msg.reply_to_message).toBeNull();
+      expect(JSON.stringify(res.body)).not.toContain('秘密');
+    });
+
+    it('返信先が削除済みなら本文は出さない', async () => {
+      const pool = getTestPool();
+      const parent = (await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, is_deleted) VALUES ($1, $2, 'text', '消した', true) RETURNING id`,
+        [roomId, user1.user.id]
+      )).rows[0].id;
+      const reply = (await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content, reply_to) VALUES ($1, $2, 'text', 'x', $3) RETURNING id`,
+        [roomId, user1.user.id, parent]
+      )).rows[0].id;
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      const msg = res.body.messages.find((m: { id: string }) => m.id === reply);
+      expect(msg.reply_to_message).toMatchObject({ id: parent, is_deleted: true, content: null });
+    });
+  });
+
+  // ============================================
   // GET /api/bot/search — has_reaction フィルタ (#325)
   // ============================================
   describe('GET /api/bot/search — has_reaction (#325)', () => {

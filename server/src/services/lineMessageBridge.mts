@@ -14,6 +14,8 @@
  * @module services/lineMessageBridge
  */
 import type { Server } from 'socket.io';
+// ★ #490 配信に返信先の中身を添える (socket の message:send と同じ形)。無いと画面は読み込み直すまで引用を出せない
+import { fetchReplyMessage } from '../socket/handlers/message.mts';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { mediaPushBody } from './machinePush.mts';
@@ -130,7 +132,7 @@ export async function postTextToTealus(
     await announcePost({
       roomId,
       io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url },
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null },
       push: { kind: 'human', senderId: sender.id, payload: { title: sender.display_name, body: (content || '').slice(0, 100), data: { roomId, messageId: message.id } } },
       webhook: LINE_NO_WEBHOOK,
       preview: { kind: 'on', messageId: message.id, text: content || '' },
@@ -197,7 +199,7 @@ export async function postImageToTealus(
     await announcePost({
       roomId,
       io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null, media: [mediaResult.rows[0]] },
       push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('📷 写真', content) } },
       webhook: LINE_NO_WEBHOOK,
       preview: LINE_MEDIA_NO_PREVIEW,
@@ -276,7 +278,7 @@ export async function postImagesToTealus(
     await announcePost({
       roomId,
       io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: media },
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: null, media: media },
       push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📷 写真 (${media.length} 件)`, content) } },
       webhook: LINE_NO_WEBHOOK,
       preview: LINE_MEDIA_NO_PREVIEW,
@@ -338,7 +340,7 @@ export async function postVoiceToTealus(
     await announcePost({
       roomId,
       io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null, media: [mediaResult.rows[0]] },
       push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎤 音声メッセージ', content) } },
       webhook: LINE_NO_WEBHOOK,
       preview: LINE_MEDIA_NO_PREVIEW,
@@ -407,7 +409,7 @@ export async function postFileToTealus(
     await announcePost({
       roomId,
       io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null, media: [mediaResult.rows[0]] },
       push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody(`📎 ${mediaInfo.fileName}`, content) } },
       webhook: LINE_NO_WEBHOOK,
       preview: LINE_MEDIA_NO_PREVIEW,
@@ -474,7 +476,7 @@ export async function postVideoToTealus(
     await announcePost({
       roomId,
       io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, media: [mediaResult.rows[0]] },
+      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null, media: [mediaResult.rows[0]] },
       push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎬 動画', content) } },
       webhook: LINE_NO_WEBHOOK,
       preview: LINE_MEDIA_NO_PREVIEW,

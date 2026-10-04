@@ -44,6 +44,14 @@ jest.mock('../../src/db/pool.mts', () => ({ pool: {
   connect: jest.fn(),  // ★ helper test では mockClient 経由で別 mock、router test では未使用
 } }));
 
+// #490 引用返信の記録と引き当て
+const mockRecordLinks = jest.fn((..._args: unknown[]) => Promise.resolve(undefined as unknown));
+const mockFindLinked = jest.fn((..._args: unknown[]) => Promise.resolve(null as string | null));
+jest.mock('../../src/services/lineMessageLinks.mts', () => ({
+  recordLineMessageLinks: (...args: unknown[]) => mockRecordLinks(...args),
+  findLinkedMessageId: (...args: unknown[]) => mockFindLinked(...args),
+}));
+
 jest.mock('../../src/services/lineSignature.mts', () => ({
   verifyLineSignature: jest.fn(() => true),
 }));
@@ -620,5 +628,124 @@ describe('dispatchEvent imageSet', () => {
     expect(result).toEqual({ posted: 'image' });
     expect(mockPostImage).toHaveBeenCalledTimes(1);
     expect(mockPostImages).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// #490 引用返信 — LINE は引用元の ID (quotedMessageId) しか送らないので、届いた便を記録して引き当てる
+// ─────────────────────────────────────────────────────────────
+describe('dispatchEvent — 引用返信 (#490)', () => {
+  const cfg = { ...TEST_CONFIG, skipCatalog: true };
+  const flushTick = () => new Promise((r) => setTimeout(r, 10));
+
+  beforeEach(() => {
+    mockRecordLinks.mockReset();
+    mockRecordLinks.mockResolvedValue(undefined);
+    mockFindLinked.mockReset();
+    mockFindLinked.mockResolvedValue(null);
+  });
+
+  test('引用元が記録にある → 同じ部屋で引き当てて replyTo に渡す (本文はそのまま)', async () => {
+    mockFindLinked.mockResolvedValue('tealus-parent');
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', id: 'm-reply', text: '頂きました', quotedMessageId: 'line-parent' },
+    };
+    await dispatchEvent(event, { config: cfg });
+
+    expect(mockFindLinked).toHaveBeenCalledWith('line-parent', 'room-X');
+    expect(mockPostText).toHaveBeenCalledWith(expect.objectContaining({ content: '頂きました', replyTo: 'tealus-parent' }));
+  });
+
+  test('★ 引用元が記録に無い → 返信にはできないが、引用返信だったことを本文に添える (黙って普通の投稿にしない)', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', id: 'm-reply2', text: '頂きました', quotedMessageId: 'line-old' },
+    };
+    await dispatchEvent(event, { config: cfg });
+
+    const arg = mockPostText.mock.calls[0][0] as { content: string; replyTo?: string | null };
+    expect(arg.replyTo ?? null).toBeNull();
+    expect(arg.content).toBe('頂きました\n（LINE の引用返信。引用元はこちらに届いていません）');
+  });
+
+  test('引き当てで DB が落ちても投稿は止めない (引用元なしの扱いに倒す)', async () => {
+    mockFindLinked.mockRejectedValue(new Error('db down'));
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', id: 'm-reply3', text: 'x', quotedMessageId: 'line-p' },
+    };
+    const result = await dispatchEvent(event, { config: cfg });
+    expect(result).toEqual({ posted: 'text' });
+    expect((mockPostText.mock.calls[0][0] as { content: string }).content).toContain('引用元はこちらに届いていません');
+  });
+
+  test('引用でない便は引き当てを呼ばず、replyTo も付けない', async () => {
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'text', id: 'm-plain', text: 'hello' },
+    };
+    await dispatchEvent(event, { config: cfg });
+    expect(mockFindLinked).not.toHaveBeenCalled();
+    expect((mockPostText.mock.calls[0][0] as { replyTo?: unknown }).replyTo).toBeUndefined();
+  });
+
+  test('スタンプの引用返信も replyTo に渡す', async () => {
+    mockFindLinked.mockResolvedValue('tealus-parent');
+    mockFetchStickerImage.mockResolvedValue({ buffer: Buffer.from('png'), mimeType: 'image/png' });
+    mockSaveContent.mockResolvedValue({ filePath: '/tmp/s.png', relativePath: 'line-stickers/s.png', fileName: 's.png', mimeType: 'image/png', fileSize: 3 });
+    const event = {
+      type: 'message',
+      source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'sticker', id: 'm-st', stickerId: '1', quotedMessageId: 'line-parent' },
+    };
+    await dispatchEvent(event, { config: cfg });
+    expect(mockPostImage).toHaveBeenCalledWith(expect.objectContaining({ replyTo: 'tealus-parent' }));
+  });
+
+  test.each([
+    ['text', { type: 'text', id: 'L-text', text: 'a' }, 'msg-text'],
+    ['location', { type: 'location', id: 'L-loc', title: 't', address: 'a', latitude: 1, longitude: 2 }, 'msg-location'],
+  ])('★ 投稿した便は LINE の ID を記録する (%s)', async (_l, message, tealusId) => {
+    await dispatchEvent({ type: 'message', source: { type: 'group', groupId: 'group-X' }, message }, { config: cfg });
+    expect(mockRecordLinks).toHaveBeenCalledWith({ lineMessageIds: [message.id], messageId: tealusId, roomId: 'room-X' });
+  });
+
+  test.each([
+    ['image', 'msg-image'],
+    ['audio', 'msg-voice'],
+    ['file', 'msg-file'],
+    ['video', 'msg-video'],
+  ])('★ 投稿した便は LINE の ID を記録する (%s)', async (type, tealusId) => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('x'), mimeType: 'application/octet-stream' });
+    mockSaveContent.mockResolvedValue({ filePath: '/tmp/x', relativePath: 'x', fileName: 'x', mimeType: 'application/octet-stream', fileSize: 1 });
+    const message = { type, id: `L-${type}`, fileName: 'x.bin' };
+    await dispatchEvent({ type: 'message', source: { type: 'group', groupId: 'group-X' }, message }, { config: cfg });
+    expect(mockRecordLinks).toHaveBeenCalledWith({ lineMessageIds: [message.id], messageId: tealusId, roomId: 'room-X' });
+  });
+
+  test('★ 画像のまとめ投稿は、束の全部の LINE の ID を 1 投稿へ記録する', async () => {
+    mockFetchContent.mockResolvedValue({ buffer: Buffer.from('img'), mimeType: 'image/jpeg' });
+    mockSaveContent.mockResolvedValue({ filePath: '/tmp/i.jpg', relativePath: 'line-images/i.jpg', fileName: 'i.jpg', mimeType: 'image/jpeg', fileSize: 1 });
+    const ev = (index: number, id: string) => ({
+      type: 'message', source: { type: 'group', groupId: 'group-X' },
+      message: { type: 'image', id, imageSet: { id: 'set-490', index, total: 2 } },
+    });
+    await dispatchEvent(ev(2, 'L-b'), { config: cfg });
+    await dispatchEvent(ev(1, 'L-a'), { config: cfg });
+    await flushTick();
+    expect(mockRecordLinks).toHaveBeenCalledWith({ lineMessageIds: ['L-a', 'L-b'], messageId: 'msg-image-set', roomId: 'room-X' });
+  });
+
+  test('記録に失敗しても投稿の結果は変わらない', async () => {
+    mockRecordLinks.mockRejectedValue(new Error('db down'));
+    const result = await dispatchEvent({
+      type: 'message', source: { type: 'group', groupId: 'group-X' }, message: { type: 'text', id: 'L-x', text: 'a' },
+    }, { config: cfg });
+    expect(result).toEqual({ posted: 'text' });
   });
 });

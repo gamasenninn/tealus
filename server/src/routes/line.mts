@@ -35,6 +35,7 @@ import { ImageSetBuffer, DEFAULT_FLUSH_DELAY_MS } from '../services/lineImageSet
 import { loadGroupToRoomMap } from '../services/lineGroupMappings.mts';
 import { upsertGroupEntry, readGroupName } from '../services/lineGroupCatalog.mts';
 import { getMemberDisplayName } from '../services/lineMemberCatalog.mts';
+import { recordLineMessageLinks, findLinkedMessageId } from '../services/lineMessageLinks.mts';
 import { logger } from '../utils/logger.mts';
 
 export const router = express.Router();
@@ -59,6 +60,8 @@ interface LineEventMessage {
   longitude?: number | null;
   /** ★ #353: 複数画像同時送信時のみ付与 (LINE 11.15 以前の Android は付かない) */
   imageSet?: { id: string; index: number; total: number };
+  /** ★ #490: 引用返信のときだけ付く引用元の ID (文字とスタンプの便のみ)。引用元の本文は来ない */
+  quotedMessageId?: string;
 }
 
 /** LINE webhook event */
@@ -151,15 +154,57 @@ const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../
 const imageSetBuffer = new ImageSetBuffer({
   flushDelayMs: Number(process.env.LINE_IMAGESET_FLUSH_MS) || DEFAULT_FLUSH_DELAY_MS,
   onFlush: async (ctx, images) => {
-    await postImagesToTealus({
+    const { message } = await postImagesToTealus({
       roomId: ctx.roomId,
       sender: ctx.sender,
       mediaInfos: images.map((i) => i.mediaInfo),
       content: ctx.content,
       io: ctx.io,
     });
+    // ★ #490 束のどの 1 枚が引用されても同じ投稿へ引き当てる
+    await linkPosted(images.map((i) => i.lineMessageId).filter((id): id is string => !!id), message?.id, ctx.roomId);
   },
 });
+
+/** ★ #490 引き当てられなかった引用返信に添える一文。黙って普通の投稿にすると、読む側 (人も AI も) が返信だと気づけない */
+export const QUOTE_NOT_FOUND_NOTE = '（LINE の引用返信。引用元はこちらに届いていません）';
+
+/**
+ * ★ #490 LINE から投稿した便の ID を記録する (引用返信の引き当て用)。
+ * 失敗しても投稿は成立済みなので warn だけ (= 200 OK 最優先の作法)。
+ */
+async function linkPosted(lineMessageIds: string[], messageId: string | undefined, roomId: string): Promise<void> {
+  if (!messageId || lineMessageIds.length === 0) return;
+  try {
+    await recordLineMessageLinks({ lineMessageIds, messageId, roomId });
+  } catch (e) {
+    logger.warn(`[LINE Bridge] link record failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/**
+ * ★ #490 引用元の ID を同じ部屋の Tealus の投稿へ引き当てる。
+ * @returns replyTo = 引き当てた投稿 / note = 引用返信なのに引き当てられなかった (記録前の投稿・別の部屋・DB の失敗)
+ */
+async function resolveQuote(message: LineEventMessage, roomId: string): Promise<{ replyTo?: string; note: boolean }> {
+  if (!message.quotedMessageId) return { note: false };
+  try {
+    const found = await findLinkedMessageId(message.quotedMessageId, roomId);
+    if (found) return { replyTo: found, note: false };
+  } catch (e) {
+    logger.warn(`[LINE Bridge] quote lookup failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return { note: true };
+}
+
+/** 本文の末尾に一文を添える (本文が空なら一文だけ) */
+function withNote(body: string, note: boolean): string;
+function withNote(body: string | undefined, note: boolean): string | undefined;
+function withNote(body: string | undefined, note: boolean): string | undefined {
+  if (!note) return body;
+  return body && body.length > 0 ? `${body}
+${QUOTE_NOT_FOUND_NOTE}` : QUOTE_NOT_FOUND_NOTE;
+}
 
 /**
  * 単一 event を Tealus に post (= test-friendly な独立 function)
@@ -270,15 +315,22 @@ export async function dispatchEvent(
   // 取得不可 (userId 無 / token 無 / API fail) は null → ラベルなしで従来どおり「LINE Bridge」表示に degrade
   const senderLabel = await resolveSenderLabel(event, groupId, channelToken, cfg);
 
+  // ★ #490 引用返信: 引き当てたら reply_to に、引き当てられなければ本文に一文を添える
+  const quote = await resolveQuote(message, roomId);
+  const reply = quote.replyTo ? { replyTo: quote.replyTo } : {};
+
   switch (message.type) {
-    case 'text':
-      await postTextToTealus({
+    case 'text': {
+      const { message: posted } = await postTextToTealus({
         roomId,
         sender,
-        content: applyContentLabel(senderLabel, message.text || ''),
+        content: applyContentLabel(senderLabel, withNote(message.text || '', quote.note)),
+        ...reply,
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'text' };
+    }
 
     case 'image': {
       const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
@@ -291,32 +343,34 @@ export async function dispatchEvent(
         const flushed = imageSetBuffer.add(
           imageSet.id,
           imageSet.total,
-          { index: imageSet.index, mediaInfo },
+          { index: imageSet.index, mediaInfo, lineMessageId: message.id },
           { roomId, sender, content: applyContentLabel(senderLabel, undefined), io }
         );
         return { posted: flushed ? 'image-set' : 'image-set-buffered' };
       }
 
-      await postImageToTealus({
+      const { message: posted } = await postImageToTealus({
         roomId,
         sender,
         mediaInfo,
         content: applyContentLabel(senderLabel, undefined),
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'image' };
     }
 
     case 'audio': {
       const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-voices' });
-      await postVoiceToTealus({
+      const { message: posted } = await postVoiceToTealus({
         roomId,
         sender,
         mediaInfo,
         content: applyContentLabel(senderLabel, undefined),
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'voice' };
     }
 
@@ -328,26 +382,28 @@ export async function dispatchEvent(
         subdir: 'line-files',
         originalFileName: message.fileName,
       });
-      await postFileToTealus({
+      const { message: posted } = await postFileToTealus({
         roomId,
         sender,
         mediaInfo,
         content: applyContentLabel(senderLabel, undefined),
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'file' };
     }
 
     case 'video': {
       const { buffer, mimeType } = await fetchLineContent(message.id, channelToken);
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-videos' });
-      await postVideoToTealus({
+      const { message: posted } = await postVideoToTealus({
         roomId,
         sender,
         mediaInfo,
         content: applyContentLabel(senderLabel, undefined),
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'video' };
     }
 
@@ -357,13 +413,15 @@ export async function dispatchEvent(
       // Tealus 既存 image type 流用で投影 (= migration 不要、image grid で自然表示)
       const { buffer, mimeType } = await fetchLineStickerImage(message.stickerId);
       const mediaInfo = await saveLineContentToFile(buffer, mimeType, mediaRoot, { subdir: 'line-stickers' });
-      await postImageToTealus({
+      const { message: posted } = await postImageToTealus({
         roomId,
         sender,
         mediaInfo,
-        content: applyContentLabel(senderLabel, undefined),
+        content: applyContentLabel(senderLabel, withNote(undefined, quote.note)),
+        ...reply,
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'sticker' };
     }
 
@@ -371,13 +429,14 @@ export async function dispatchEvent(
       // ★ Phase 2.2: location は text + markdown で投影 (= 既存 MessageBubble の markdown rendering で
       // 自動的に 「📍 + 緯度経度 + Google Maps link」 表示、messages schema 拡張なし)
       const { title, address, latitude, longitude } = message;
-      await postLocationToTealus({
+      const { message: posted } = await postLocationToTealus({
         roomId,
         sender,
         location: { title, address, latitude, longitude },
         senderLabel,
         io,
       });
+      await linkPosted([message.id], posted?.id, roomId);
       return { posted: 'location' };
     }
 

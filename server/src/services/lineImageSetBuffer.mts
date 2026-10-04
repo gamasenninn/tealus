@@ -27,6 +27,8 @@ import type { LineSenderContext } from './lineMessageBridge.mts';
 export interface BufferedImage {
   index: number;
   mediaInfo: SavedLineContent;
+  /** ★ #490 LINE の便の ID (束の全部を 1 投稿へ記録して、どの 1 枚が引用されても引き当てる) */
+  lineMessageId?: string;
 }
 
 /** flush 時に投稿へ引き渡す文脈 (= set 内の初回イベント基準で確定) */

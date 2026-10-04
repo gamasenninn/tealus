@@ -132,8 +132,26 @@ describe('#13〜#18 LINE からの投稿: 送る中身', () => {
     expect(order).toEqual(['push', 'preview']);
   });
 
+  // ★ #490 LINE の引用返信: 配信にも返信先の中身を添える (socket の message:send と同じ形)。無いと画面は読み込み直すまで引用を出せない
   it.each([
-    ['#14 画像', () => postImageToTealus({ roomId, sender, mediaInfo: savedLine('a.png', PNG, 'image/png'), content: '[送り手]', io: io() })],
+    ['#13 テキスト', () => postTextToTealus({ roomId, sender, content: '頂きました', replyTo: parentId, io: io() })],
+    ['#14 画像 (スタンプ)', () => postImageToTealus({ roomId, sender, mediaInfo: savedLine('s.png', PNG, 'image/png'), content: '[送り手]', replyTo: parentId, io: io() })],
+  ] as const)('#490 %s の返信: 配信に reply_to_message が載る', async (_l, act) => {
+    await act();
+    await settle();
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].reply_to).toBe(parentId);
+    expect(emitted[0].reply_to_message).toMatchObject({ id: parentId, content: '返信される元の投稿', sender_display_name: '読む人' });
+  });
+
+  it('#490 返信でない便は reply_to_message が null', async () => {
+    await postTextToTealus({ roomId, sender, content: 'ふつう', io: io() });
+    await settle();
+    expect(emitted[0].reply_to_message).toBeNull();
+  });
+
+  it.each([
+    ['#14 画像',() => postImageToTealus({ roomId, sender, mediaInfo: savedLine('a.png', PNG, 'image/png'), content: '[送り手]', io: io() })],
     ['#15 複数画像', () => postImagesToTealus({ roomId, sender, mediaInfos: [savedLine('b.png', PNG, 'image/png'), savedLine('c.png', PNG, 'image/png')], content: '[送り手]', io: io() })],
     ['#16 音声', () => postVoiceToTealus({ roomId, sender, mediaInfo: savedLine('v.m4a', Buffer.from('x'), 'audio/m4a'), content: '[送り手]', io: io() })],
     ['#17 ファイル', () => postFileToTealus({ roomId, sender, mediaInfo: savedLine('f.pdf', Buffer.from('%PDF-1.4'), 'application/pdf'), content: '[送り手]', io: io() })],

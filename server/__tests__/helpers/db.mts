@@ -69,6 +69,7 @@ export async function cleanTestDb(): Promise<void> {
       push_subscriptions,
       room_read_cursors,
       message_media,
+      line_message_links,
       messages,
       room_members,
       rooms,
