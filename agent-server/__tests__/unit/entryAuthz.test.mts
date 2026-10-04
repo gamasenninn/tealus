@@ -36,9 +36,16 @@ describe('classifyLogsRequest — ★ /logs はどの道も管理者だけ', () 
 });
 
 describe('classifyAgentRequest — ★ /agent', () => {
-  test('identity / cc-projects はログインだけ', () => {
+  test('identity はログインだけ', () => {
     expect(classifyAgentRequest({ method: 'GET', path: '/identity' })).toEqual({ kind: 'open' });
-    expect(classifyAgentRequest({ method: 'GET', path: '/cc-projects' })).toEqual({ kind: 'open' });
+  });
+  test('★ #494-1 cc-projects は社内の人だけ (ゲストには cc の宛先を見せない)', () => {
+    expect(classifyAgentRequest({ method: 'GET', path: '/cc-projects' })).toEqual({ kind: 'staff' });
+  });
+  test('★ staff の判断: 管理者・一般は通り、ゲストは断る', () => {
+    expect(isAllowed({ kind: 'staff' }, facts('admin'))).toBe(true);
+    expect(isAllowed({ kind: 'staff' }, facts('user'))).toBe(true);
+    expect(isAllowed({ kind: 'staff' }, facts('guest'))).toBe(false);
   });
   test('★★ cancel は body の room_id のメンバー', () => {
     expect(classifyAgentRequest({ method: 'POST', path: '/cancel', body: { room_id: 'r1' } }))
@@ -75,6 +82,16 @@ describe('createConfigAuthz({ classify }) — ★ 分け方を差し替えられ
     const next = jest.fn();
     await mw(mkReq('/cancel', { room_id: 'r1' }) as never, mkRes() as never, next);
     expect(next).toHaveBeenCalled();
+  });
+
+  test('★ #494-1 ゲストの鍵で cc-projects を引くと 403 (本体には room_id なしで聞く)', async () => {
+    const fetchImpl = serverSays(facts('guest'));
+    const mw = createConfigAuthz({ apiUrl: 'http://s', fetchImpl: fetchImpl as never, classify: classifyAgentRequest });
+    const res = mkRes(); const next = jest.fn();
+    await mw({ method: 'GET', path: '/cc-projects', headers: { authorization: 'Bearer tok-G' } } as never, res as never, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(String((fetchImpl.mock.calls[0] as unknown[])[0])).toBe('http://s/api/auth/authz');
   });
 
   test('判断しない (null) ときは本体に聞かずにハンドラへ渡す', async () => {

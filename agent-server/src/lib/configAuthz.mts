@@ -22,6 +22,7 @@
  *   (分け方だけを classify で差し替える。判断の表 isAllowed は 1 つのまま)。
  *   /logs          管理者だけ (★ ログには全ルームの本文 = 道具の結果が入る)
  *   /agent/cancel  そのルームのメンバー (★ 止めるとボットがそのルームに「中断しました」を出す)
+ *   /agent/cc-projects  社内の人 (管理者・一般) だけ (#494、ゲストには cc の宛先を見せない)
  *
  * @module lib/configAuthz
  */
@@ -31,6 +32,7 @@ import { logger } from './logger.mts';
 
 export type ConfigPathKind =
   | { kind: 'open' }
+  | { kind: 'staff' }                    // ★ #494 社内の人 (管理者・一般) だけ。ゲストは断る
   | { kind: 'global' }
   | { kind: 'room'; roomId: string }     // そのルームの設定を変える (管理者 / DM の当人)
   | { kind: 'member'; roomId: string };  // そのルームに入っていればよい (#459)
@@ -56,6 +58,7 @@ export function classifyConfigPath(p: string): ConfigPathKind {
 export function isAllowed(kind: ConfigPathKind, f: AuthzFacts): boolean {
   if (kind.kind === 'open') return true;
   if (f.role === 'admin') return true;
+  if (kind.kind === 'staff') return f.role === 'user';
   if (kind.kind === 'global') return false;
   const room = f.room;
   if (!room) return false;
@@ -76,7 +79,9 @@ export function classifyLogsRequest(_req: AuthzRequest): ConfigPathKind {
  * ★ #459 /agent。null = ここでは判断しない (room_id が無い → ハンドラが 400 を返す)
  */
 export function classifyAgentRequest(req: AuthzRequest): ConfigPathKind | null {
-  if (req.method === 'GET' && (req.path === '/identity' || req.path === '/cc-projects')) return { kind: 'open' };
+  if (req.method === 'GET' && req.path === '/identity') return { kind: 'open' };
+  // ★ #494-1 cc の宛先は社内の作業用セッション。ゲストには一覧も見せない (配送は #491 で handler が止めてある)
+  if (req.method === 'GET' && req.path === '/cc-projects') return { kind: 'staff' };
   if (req.method === 'POST' && req.path === '/cancel') {
     const roomId = (req.body as { room_id?: unknown } | undefined)?.room_id;
     return typeof roomId === 'string' && roomId ? { kind: 'member', roomId } : null;
@@ -144,7 +149,8 @@ export function createConfigAuthz({
     if (got.status === 'unauthorized') { res.status(401).json({ error: 'トークンが無効です' }); return; }
     if (!isAllowed(kind, got.facts)) {
       logger.info(`[config-authz] 403 ${req.method} ${req.baseUrl ?? ''}${req.path} user=${got.facts.user_id} role=${got.facts.role}`);
-      const message = kind.kind === 'room' ? 'このルームの設定を変える権限がありません'
+      const message = kind.kind === 'staff' ? 'ゲストは使えません'
+        : kind.kind === 'room' ? 'このルームの設定を変える権限がありません'
         : kind.kind === 'member' ? 'このルームに参加していません'
           : '管理者権限が必要です';
       res.status(403).json({ error: message });

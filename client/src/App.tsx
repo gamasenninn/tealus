@@ -6,7 +6,7 @@ import { useCapabilityStore } from './stores/capabilityStore';
 import { useCallNotification } from './hooks/useCallNotification';
 import { useVisualViewportVars } from './hooks/useVisualViewportVars';
 import Login from './components/auth/Login';
-import HomePage from './components/home/HomePage';
+import HomeRoute from './components/home/HomeRoute';
 import TalkPage from './components/room-list/TalkPage';
 import ChatRoom from './components/chat/ChatRoom';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -77,7 +77,7 @@ function App() {
             Mobile (< 1024px): shell の sidebar 非表示で main 全画面 (既存 UX 維持)
             Desktop (>= 1024px): sidebar (RoomList) + main pane (各画面) の 2-pane */}
         <Route element={<PrivateRoute><DesktopShell /></PrivateRoute>}>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/talk" element={<TalkPage />} />
           <Route path="/rooms/:roomId" element={<ChatRoom />} />
           <Route path="/rooms/:roomId/gallery" element={<MediaGallery />} />

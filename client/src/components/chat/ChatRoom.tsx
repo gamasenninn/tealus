@@ -16,6 +16,7 @@ import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import DateJumpCalendar from './DateJumpCalendar';
 import { groupByDay, jumpToDate } from '../../utils/dateJump';
+import { showComposer } from '../../utils/roomComposer';
 import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic } from 'lucide-react';
 import CallConfirmModal from '../call/CallConfirmModal';
@@ -298,7 +299,8 @@ function ChatRoom() {
         </div>
       )}
 
-      <MessageInput roomId={roomId} transceiver={transceiver} />
+      {/* ★ #494-3 開けなかった部屋では入力欄を出さない (送ってもサーバーが捨てる) */}
+      {showComposer(roomError) && <MessageInput roomId={roomId} transceiver={transceiver} />}
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />

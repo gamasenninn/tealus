@@ -50,7 +50,7 @@ app.use('/logs', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL
 app.use('/tts', authenticate, ttsRoutes);
 
 // Agent control API（認証必要）— #250 Deep agent cancel
-// ★ #459: cancel はそのルームのメンバーだけ (identity / cc-projects はログインだけ)
+// ★ #459: cancel はそのルームのメンバーだけ (identity はログインだけ、cc-projects は社内の人だけ #494)
 app.use('/agent', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL, classify: classifyAgentRequest }), agentRoutes);
 
 // #405 Realtime 音声会話（認証必要）— docs/08 §12。使い捨てトークンの発行 / 道具の実行 / 計測。
