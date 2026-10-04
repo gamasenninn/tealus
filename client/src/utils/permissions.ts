@@ -32,6 +32,11 @@ export function canInviteToRoom(user: UserLike): boolean {
   return !isGuest(user);
 }
 
+/** ★ #495 スタンプを作る権限。guest は送るだけ (サーバーの POST /api/stamps/generate も 403) */
+export function canCreateStamp(user: UserLike): boolean {
+  return !isGuest(user);
+}
+
 /**
  * #485-2 部屋を画面から削除できるか。サーバーの DELETE /api/rooms/:id と同じ条件
  * (グループ・作った本人・自分しかいない)。外れた人に「押すと 403 になるボタン」を見せない。

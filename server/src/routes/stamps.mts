@@ -7,7 +7,7 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { isAdmin } from '../utils/permissions.mts';
+import { isAdmin, isGuest } from '../utils/permissions.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
 import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../services/postEffects.mts';
 import { MEDIA_ROOT } from '../middleware/upload.mts';
@@ -56,6 +56,10 @@ interface MessageRow {
  * Generate a stamp pack from user prompt
  */
 router.post('/generate', async (req, res) => {
+  // ★ #495 ゲストは送るだけ。生成は費用がかかり、パックは全員で共有する資産 (部屋の外)
+  if (isGuest(req.user)) {
+    return res.status(403).json({ error: 'ゲストはスタンプを作成できません' });
+  }
   const userId = req.user!.id;
   const { prompt, name, room_id, labels } = req.body as {
     prompt?: string;
@@ -187,6 +191,14 @@ router.post('/generate', async (req, res) => {
 });
 
 /**
+ * ★ #495 ゲストに返すパックからは、作者 (社内の人の名前・ID) と作るときの文を外す。スタンプは送れるまま
+ */
+function forGuest<T extends { created_by?: unknown; creator_name?: unknown; prompt?: unknown }>(pack: T): Omit<T, 'created_by' | 'creator_name' | 'prompt'> {
+  const { created_by: _c, creator_name: _n, prompt: _p, ...rest } = pack;
+  return rest;
+}
+
+/**
  * GET /api/stamps/packs
  * List all stamp packs
  */
@@ -203,7 +215,7 @@ router.get('/packs', async (req, res) => {
        ORDER BY usu.last_used_at DESC NULLS LAST, sp.created_at DESC`,
       [userId]
     );
-    res.json({ packs: result.rows });
+    res.json({ packs: isGuest(req.user) ? result.rows.map(forGuest) : result.rows });
   } catch (err) {
     logger.error('Stamp packs list error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
@@ -236,7 +248,7 @@ router.get('/packs/:id', async (req, res) => {
     );
 
     res.json({
-      pack: packRes.rows[0],
+      pack: isGuest(req.user) ? forGuest(packRes.rows[0]) : packRes.rows[0],
       stamps: stampsRes.rows,
     });
   } catch (err) {

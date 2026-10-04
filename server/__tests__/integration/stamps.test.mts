@@ -59,6 +59,55 @@ describe('Stamps API', () => {
   });
 
   // ============================================
+  // #495 ゲストはスタンプを送るだけ (生成しない・作者を見せない)
+  // ============================================
+  describe('ゲスト (#495)', () => {
+    let guest: TestUser;
+    const packId = 'aaaaaaaa-0000-0000-0000-000000000495';
+    beforeEach(async () => {
+      guest = await createTestUser({ login_id: 'GST001', display_name: '外の人' });
+      const pool = getTestPool();
+      await pool.query("UPDATE users SET role = 'guest' WHERE id = $1", [guest.user.id]);
+      await pool.query(
+        `INSERT INTO stamp_packs (id, name, prompt, created_by) VALUES ($1, '社内パック', '社内の人が書いた文', $2)`,
+        [packId, user1.user.id]
+      );
+    });
+
+    it('★★ 生成は 403 (費用がかかる・全員で共有する資産)', async () => {
+      const res = await request(app).post('/api/stamps/generate')
+        .set('Authorization', `Bearer ${guest.token}`).send({ prompt: 'ねこ' });
+      expect(res.status).toBe(403);
+    });
+
+    it('★ 一覧には作者名・作者・作るときの文が載らない。パックは見える (送れる)', async () => {
+      const res = await request(app).get('/api/stamps/packs').set('Authorization', `Bearer ${guest.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.packs).toHaveLength(1);
+      const p = res.body.packs[0];
+      expect(p.name).toBe('社内パック');
+      expect(p.creator_name).toBeUndefined();
+      expect(p.created_by).toBeUndefined();
+      expect(p.prompt).toBeUndefined();
+      expect(JSON.stringify(res.body)).not.toContain('田中太郎');
+    });
+
+    it('★ 詳細も同じ', async () => {
+      const res = await request(app).get(`/api/stamps/packs/${packId}`).set('Authorization', `Bearer ${guest.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.pack.creator_name).toBeUndefined();
+      expect(res.body.pack.created_by).toBeUndefined();
+      expect(res.body.pack.prompt).toBeUndefined();
+    });
+
+    it('社内の人には今までどおり作者名が載る', async () => {
+      const res = await request(app).get('/api/stamps/packs').set('Authorization', `Bearer ${user2.token}`);
+      expect(res.body.packs[0].creator_name).toBe('田中太郎');
+      expect(res.body.packs[0].prompt).toBe('社内の人が書いた文');
+    });
+  });
+
+  // ============================================
   // GET /api/stamps/packs/:id — パック詳細
   // ============================================
   describe('GET /api/stamps/packs/:id', () => {

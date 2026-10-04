@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { canCreateStamp } from '../../utils/permissions';
 import { useConfirm, promptText } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import StampGenerator from './StampGenerator';
@@ -149,9 +150,12 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
     <div className="stamp-picker">
       <div className="stamp-picker-header">
         <span>スタンプ</span>
-        <button className="stamp-picker-add" onClick={() => setShowGenerator(true)} title="スタンプを作成">
-          +
-        </button>
+        {/* ★ #495 ゲストは送るだけ */}
+        {canCreateStamp(user) && (
+          <button className="stamp-picker-add" onClick={() => setShowGenerator(true)} title="スタンプを作成">
+            +
+          </button>
+        )}
         <button className="stamp-picker-close" onClick={onClose}>✕</button>
       </div>
 
@@ -160,9 +164,11 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       ) : packs.length === 0 ? (
         <div className="stamp-picker-empty">
           <p>スタンプがありません</p>
-          <button className="stamp-picker-create-btn" onClick={() => setShowGenerator(true)}>
-            AIでスタンプを作成
-          </button>
+          {canCreateStamp(user) && (
+            <button className="stamp-picker-create-btn" onClick={() => setShowGenerator(true)}>
+              AIでスタンプを作成
+            </button>
+          )}
         </div>
       ) : (
         <>

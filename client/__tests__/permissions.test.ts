@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, roleLabel } from '../src/utils/permissions';
+import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, roleLabel } from '../src/utils/permissions';
 
 describe('client permissions helper (#282 Phase D)', () => {
   const admin = { role: 'admin' };
@@ -13,6 +13,12 @@ describe('client permissions helper (#282 Phase D)', () => {
     expect(isGuest(guest)).toBe(true);
     expect(isGuest(user)).toBe(false);
     expect(isGuest(null)).toBe(false);
+  });
+
+  it('★ #495 canCreateStamp は guest のみ false (送るだけ)', () => {
+    expect(canCreateStamp(admin)).toBe(true);
+    expect(canCreateStamp(user)).toBe(true);
+    expect(canCreateStamp(guest)).toBe(false);
   });
 
   it('canCreateRoom / canInviteToRoom は guest のみ false', () => {
