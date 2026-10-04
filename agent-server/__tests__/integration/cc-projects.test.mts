@@ -29,10 +29,25 @@ jest.mock('../../src/webhook/ccQueue.mts', () => {
 // ESM では import が巻き上げられ評価される。static import だと app.mts (→ webhook/ccQueue.mts)
 // の module-load が下の mockTmpDir 初期化より先に走り、mock factory から参照する mockTmpDir が
 // TDZ になる ("Cannot access 'mockTmpDir' before initialization")。require で遅延読込にする。
+// ★ #494-1 この口は社内の人だけ = 本体 (GET /api/auth/authz) に役割を聞く。本物の本体に聞かないよう偽物に
+const mockRoles: Record<string, string> = {};
+const realFetch = global.fetch;
+beforeAll(() => {
+  global.fetch = jest.fn(async (url: unknown, init?: { headers?: Record<string, string> }) => {
+    const u = new URL(String(url));
+    if (u.pathname === '/api/auth/authz') {
+      const uid = (jwt.decode((init?.headers?.Authorization || '').slice(7)) as { id: string }).id;
+      return { ok: true, status: 200, json: async () => ({ user_id: uid, role: mockRoles[uid] || 'user', room: null }) } as Response;
+    }
+    throw new Error(`unexpected fetch ${u}`);
+  }) as typeof fetch;
+});
+afterAll(() => { global.fetch = realFetch; });
+
 const { app } = require('../../src/app.mts') as { app: import('express').Express };
 
-function makeToken(): string {
-  return jwt.sign({ id: 'u1', login_id: 'EMP001' }, process.env.JWT_SECRET as string, { expiresIn: '1h' });
+function makeToken(id = 'u1'): string {
+  return jwt.sign({ id, login_id: 'EMP001' }, process.env.JWT_SECRET as string, { expiresIn: '1h' });
 }
 
 describe('GET /agent/cc-projects', () => {
@@ -50,6 +65,14 @@ describe('GET /agent/cc-projects', () => {
   test('認証なし → 401', async () => {
     const res = await request(app).get('/agent/cc-projects');
     expect(res.status).toBe(401);
+  });
+
+  test('★ #494-1 ゲストは 403 (cc の宛先の一覧を見せない)', async () => {
+    mockRoles.g1 = 'guest';
+    fs.writeFileSync(path.join(mockTmpDir, 'tealus.jsonl'), '');
+    const res = await request(app).get('/agent/cc-projects').set('Authorization', `Bearer ${makeToken('g1')}`);
+    expect(res.status).toBe(403);
+    expect(res.body.projects).toBeUndefined();
   });
 
   test('queue dir が空 → projects=[]', async () => {
