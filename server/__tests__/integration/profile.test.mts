@@ -92,6 +92,47 @@ describe('Profile API', () => {
       expect(res.body.user.status_message).toBe('');
     });
 
+    // ★ #498 入力を確かめる。それまで空・空白だけの名前が通り、長すぎると案内の無い 500 だった
+    describe('入力の確かめ (#498)', () => {
+      const put = (body: unknown) => request(app).put('/api/auth/profile')
+        .set('Authorization', `Bearer ${user1.token}`).send(body as object);
+
+      it.each([
+        ['空', ''],
+        ['空白だけ', '   '],
+        ['51 字', 'あ'.repeat(51)],
+        ['数値', 123],
+      ])('★ 表示名が %s なら 400 で理由を返す (名前は変わらない)', async (_l, v) => {
+        const res = await put({ display_name: v });
+        expect(res.status).toBe(400);
+        expect(typeof res.body.error).toBe('string');
+        const me = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${user1.token}`);
+        expect(me.body.user.display_name).toBe('田中太郎');
+      });
+
+      it('★ 表示名の前後の空白は落とす', async () => {
+        const res = await put({ display_name: '  鈴木一郎  ' });
+        expect(res.status).toBe(200);
+        expect(res.body.user.display_name).toBe('鈴木一郎');
+      });
+
+      it('50 字ちょうどは通る', async () => {
+        const res = await put({ display_name: 'あ'.repeat(50) });
+        expect(res.status).toBe(200);
+      });
+
+      it('★ ひとことが 101 字なら 400 (500 にしない)', async () => {
+        const res = await put({ status_message: 'い'.repeat(101) });
+        expect(res.status).toBe(400);
+        expect(typeof res.body.error).toBe('string');
+      });
+
+      it('ひとことが文字列でなければ 400', async () => {
+        const res = await put({ status_message: { x: 1 } });
+        expect(res.status).toBe(400);
+      });
+    });
+
     it('should reject without auth', async () => {
       const res = await request(app)
         .put('/api/auth/profile')

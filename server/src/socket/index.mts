@@ -18,6 +18,17 @@ const onlineUsers = new Map<string, Set<string>>();
 // pool.query が Postgres 22P02 throw → unhandledRejection で process exit していた)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * ★ #498 つながっている socket が持つ利用者の表示名・アイコンを書き換える。
+ *   socket はつながったときに読んだ値を持ち続けるので、プロフィールを変えても
+ *   読み込み直すまで古い名前で投稿が配られていた (入力中の表示なども同じ値を使う)
+ */
+export function refreshSocketUser(io: Server, userId: string, patch: Partial<Pick<SocketUser, 'display_name' | 'avatar_url'>>): void {
+  for (const s of io.of('/').sockets.values()) {
+    if (s.user?.id === userId) Object.assign(s.user, patch);
+  }
+}
+
 export function getOnlineUserIds(): string[] {
   return Array.from(onlineUsers.keys());
 }

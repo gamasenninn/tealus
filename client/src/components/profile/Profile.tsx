@@ -134,6 +134,7 @@ function Profile() {
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
             placeholder="表示名"
+            maxLength={50}
           />
         </div>
         <div className="profile-field">

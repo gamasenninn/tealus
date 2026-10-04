@@ -10,6 +10,8 @@ import { generateToken, authenticate } from '../middleware/auth.mts';
 import { createLoginThrottleMiddleware, loginThrottle } from '../middleware/loginThrottle.mts';
 import { verifyPassword } from '../services/passwordVerify.mts';
 import type { AuthUser } from '../types.mts';
+import { getIo } from '../io-registry.mts';
+import { refreshSocketUser } from '../socket/index.mts';
 
 const AVATAR_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'avatars');
 const avatarStorage = multer.diskStorage({
@@ -20,6 +22,19 @@ const avatarStorage = multer.diskStorage({
   },
 });
 const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+
+/** ★ #498 DB の列の上限と同じ (users.display_name varchar(50) / status_message varchar(100)) */
+const DISPLAY_NAME_MAX = 50;
+const STATUS_MESSAGE_MAX = 100;
+
+/** つながっている socket の利用者情報を書き換える。失敗しても更新そのものは成立済みなので warn だけ */
+function refreshConnectedUser(userId: string, patch: { display_name?: string; avatar_url?: string | null }): void {
+  try {
+    refreshSocketUser(getIo(), userId, patch);
+  } catch (err) {
+    logger.warn(`[profile] socket の利用者情報を書き換えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 export const router = express.Router();
 
@@ -179,8 +194,21 @@ router.get('/authz', authenticate, async (req, res) => {
  * Update own display_name and/or status_message
  */
 router.put('/profile', authenticate, async (req, res) => {
-  const { display_name, status_message } = req.body;
+  const { status_message } = req.body;
+  let { display_name } = req.body;
   const userId = req.user!.id;
+
+  // ★ #498 入力を確かめる。それまで空・空白だけの名前が通り、DB の上限を超えると案内の無い 500 だった
+  if (display_name !== undefined) {
+    if (typeof display_name !== 'string') return res.status(400).json({ error: '表示名は文字で入力してください' });
+    display_name = display_name.trim();
+    if (!display_name) return res.status(400).json({ error: '表示名を入力してください' });
+    if ([...display_name].length > DISPLAY_NAME_MAX) return res.status(400).json({ error: `表示名は ${DISPLAY_NAME_MAX} 文字以内で入力してください` });
+  }
+  if (status_message !== undefined && status_message !== null) {
+    if (typeof status_message !== 'string') return res.status(400).json({ error: 'ひとことは文字で入力してください' });
+    if ([...status_message].length > STATUS_MESSAGE_MAX) return res.status(400).json({ error: `ひとことは ${STATUS_MESSAGE_MAX} 文字以内で入力してください` });
+  }
 
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -208,6 +236,8 @@ router.put('/profile', authenticate, async (req, res) => {
        RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
       values
     );
+    // ★ #498 つながっている socket の名前も書き換える (古い名前で投稿が配られないように)
+    refreshConnectedUser(userId, { display_name: result.rows[0].display_name });
     res.json({ user: result.rows[0] });
   } catch (err) {
     logger.error('Profile update error:', err);
@@ -232,6 +262,7 @@ router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, 
        RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
       [avatarUrl, req.user!.id]
     );
+    refreshConnectedUser(req.user!.id, { avatar_url: result.rows[0].avatar_url });   // ★ #498
     res.json({ user: result.rows[0] });
   } catch (err) {
     logger.error('Avatar upload error:', err);
