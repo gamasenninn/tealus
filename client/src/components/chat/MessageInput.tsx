@@ -18,7 +18,7 @@ import type { MentionCandidate } from './MentionPicker';
 import AgentPanel from './AgentPanel';
 import type { AgentPanelMode } from './AgentPanel';
 import type { PromptHistoryItem } from '../../services/api';
-import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY } from '../../constants/ui';
+import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY, ATTACH_ACCEPT } from '../../constants/ui';
 import { Mic } from 'lucide-react';
 import type { Stamp } from '../../types';
 import './MessageInput.css';
@@ -498,7 +498,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           ref={fileInputRef}
           onChange={handleFileSelect}
           style={{ display: 'none' }}
-          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+          accept={ATTACH_ACCEPT}
           multiple
         />
         <textarea

@@ -11,6 +11,26 @@ export const SIZE_LIMITS = {
   default: 100 * 1024 * 1024, // 100MB
 };
 
+/** 種類ごとの上限 (画面の constants/ui.ts と同じ値) */
+export function sizeLimitFor(mimetype: string): number {
+  if (mimetype.startsWith('image/')) return SIZE_LIMITS.image;
+  if (mimetype.startsWith('video/')) return SIZE_LIMITS.video;
+  return SIZE_LIMITS.default;
+}
+
+/**
+ * ★ #497 種類ごとの上限を超えたファイルを探す。
+ *   multer には 1 つの上限 (いちばん大きい 1GB) しか渡せないので、受け取った後にここで確かめる。
+ *   それまでは画面だけが 10MB / 100MB で止めていて、サーバーは種類を問わず 1GB まで受け取っていた
+ */
+export function findOversizedFile(files: Array<{ originalname: string; mimetype: string; size: number }>): { name: string; limitMb: number } | null {
+  for (const f of files) {
+    const limit = sizeLimitFor(f.mimetype);
+    if (f.size > limit) return { name: decodeFileName(f.originalname), limitMb: Math.round(limit / (1024 * 1024)) };
+  }
+  return null;
+}
+
 // multer/busboy decodes the multipart `filename` header as latin1, so multibyte
 // (UTF-8) filenames arrive mojibake'd (e.g. 出品票.md → åºå...).
 // Re-interpret the bytes as UTF-8 to recover the original name. If the bytes are

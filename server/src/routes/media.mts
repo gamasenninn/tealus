@@ -4,7 +4,8 @@ import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
-import { upload, getMessageType, getSubdir, decodeFileName } from '../middleware/upload.mts';
+import fs from 'node:fs';
+import { upload, getMessageType, getSubdir, decodeFileName, findOversizedFile } from '../middleware/upload.mts';
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
@@ -47,12 +48,20 @@ interface MediaRow {
  * Supports: upload.single('file') or upload.array('files', 20)
  */
 router.post('/', authenticate, requireMember, (req, res, next) => {
-  upload.array('files', MAX_UPLOAD_FILES)(req, res, (err) => {
+  upload.array('files', MAX_UPLOAD_FILES)(req, res, async (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'ファイルサイズが上限を超えています（最大100MB）' });
+        // ★ #497 ここに来るのは 1GB を超えたときだけ (種類ごとの上限は下で確かめる)
+        return res.status(413).json({ error: 'ファイルサイズが上限を超えています（画像 10MB・動画 1GB・その他 100MB）' });
       }
       return res.status(400).json({ error: err.message });
+    }
+    // ★ #497 種類ごとの上限。1 つでも超えたら全部を断り、保存済みのファイルは消す (一緒に送った小さいファイルも)
+    const received = (req.files as Express.Multer.File[] | undefined) || (req.file ? [req.file] : []);
+    const over = findOversizedFile(received);
+    if (over) {
+      await Promise.all(received.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+      return res.status(413).json({ error: `${over.name} のサイズが上限（${over.limitMb}MB）を超えています` });
     }
     next();
   });

@@ -6,6 +6,9 @@ export const LONG_PRESS_TIMEOUT = 500;
 export const TYPING_DEBOUNCE = 2000;
 export const UPLOAD_DELAY = 2000;
 
+/** ＋ボタンで選べるファイルの種類。★ #497 プレビューに対応している CSV・MD・JSON も選べるように */
+export const ATTACH_ACCEPT = 'image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.md,.json';
+
 export const FILE_SIZE_LIMITS = {
   image: 10,      // MB
   video: 1024,    // MB (1GB)
