@@ -199,6 +199,8 @@ export interface Tag {
   room_id?: string;
   usage_count?: number;
   total_usage?: number;
+  /** 作った人 (#496 消せるかの判断に使う。部屋を作ったときの「TODO」は部屋を作った人) */
+  created_by?: string | null;
 }
 
 export interface Stamp {

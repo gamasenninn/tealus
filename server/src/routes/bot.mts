@@ -1,4 +1,5 @@
 import { getIo } from '../io-registry.mts';
+import { announceMessageTags } from './tags.mts';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -1370,6 +1371,7 @@ router.patch('/messages/:id/tags/:tag_name/done', requireUuidId, async (req, res
     }
 
     res.json({ success: true, message_id: messageId, tag_name: tagName, is_done });
+    await announceMessageTags(messageId, roomId);   // ★ #496 ボットが完了にしたときも部屋に知らせる
   } catch (err) {
     logger.error('Bot mark tag done error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

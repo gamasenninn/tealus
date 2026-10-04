@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import { patchMessage } from './patchMessage';
-import type { Message, Reaction, LinkPreview, Transcription } from '../types';
+import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
 export type StoreMessage = Message & { link_preview?: LinkPreview | null };
@@ -17,6 +17,10 @@ interface MessageState {
   addMessage: (message: Message) => void;
   updateReadCount: (messageId: string, readCount: number) => void;
   updateReactions: (messageId: string, reactions: Reaction[]) => void;
+  /** #496 投稿のタグを丸ごと差し替える (message:tags の知らせ) */
+  updateTags: (messageId: string, tags: MessageTag[]) => void;
+  /** #496 消された部屋のタグを全投稿から外す (room:tag_deleted の知らせ) */
+  removeTag: (tagId: string) => void;
   updateLinkPreview: (messageId: string, preview: LinkPreview | null) => void;
   markDeleted: (messageId: string) => void;
   updatePublishStatus: (messageId: string, isPublished: boolean) => void;
@@ -85,6 +89,18 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   updateReactions: (messageId, reactions) => {
     set((state) => ({ messages: patchMessage(state.messages, messageId, { reactions }) }));
+  },
+
+  updateTags: (messageId, tags) => {
+    set((state) => ({ messages: patchMessage(state.messages, messageId, { tags }) }));
+  },
+
+  removeTag: (tagId) => {
+    set((state) => ({
+      messages: state.messages.map((m) => (m.tags?.some((t) => (t.id ?? t.tag_id) === tagId)
+        ? { ...m, tags: m.tags.filter((t) => (t.id ?? t.tag_id) !== tagId) }
+        : m)),
+    }));
   },
 
   updateLinkPreview: (messageId, preview) => {

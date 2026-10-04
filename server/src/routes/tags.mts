@@ -6,6 +6,30 @@ import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
+import { isAdmin } from '../utils/permissions.mts';
+import { getIo } from '../io-registry.mts';
+
+/**
+ * ★ #496 投稿のタグの変化を部屋に知らせる (その投稿の今のタグ一覧を丸ごと)。
+ *   それまでタグの口はどれも知らせを出さず、相手の画面は読み込み直すまで古いままだった。
+ *   差分ではなく一覧を送るので、受け手は差し替えるだけでよい (順番が入れ替わっても壊れない)。
+ *   ★ 知らせの失敗では変更を取り消さない (warn だけ)
+ */
+export async function announceMessageTags(messageId: string, roomId: string | undefined): Promise<void> {
+  if (!roomId) return;
+  try {
+    const result = await pool.query(
+      `SELECT t.*, mt.is_done, mt.priority FROM tags t
+       JOIN message_tags mt ON mt.tag_id = t.id
+       WHERE mt.message_id = $1
+       ORDER BY t.name`,
+      [messageId]
+    );
+    getIo().to(roomId).emit('message:tags', { message_id: messageId, room_id: roomId, tags: result.rows });
+  } catch (err) {
+    logger.warn(`[tags] 知らせを出せませんでした (変更は済んでいます): message=${messageId} ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 /** tags テーブル行 (SELECT * / RETURNING *。アクセスする列のみ型付け) */
 interface TagRow {
@@ -102,6 +126,20 @@ roomRouter.delete('/:tagId', async (req, res) => {
   const tagId = (req.params as { id: string; tagId: string }).tagId;
 
   try {
+    // ★ #496 消せるのは、タグを作った人 / 部屋の管理者 / システム管理者だけ。
+    //   消すと付いていた投稿すべてから外れる (「TODO」なら部屋中の TODO の印が消える)
+    const found = await pool.query<{ created_by: string | null }>(
+      'SELECT created_by FROM tags WHERE id = $1 AND room_id = $2',
+      [tagId, roomId]
+    );
+    if (found.rows.length === 0) {
+      return res.status(404).json({ error: 'タグが見つかりません' });
+    }
+    const allowed = found.rows[0].created_by === req.user!.id || req.memberRole === 'admin' || isAdmin(req.user);
+    if (!allowed) {
+      return res.status(403).json({ error: 'このタグを削除できるのは、作った人と部屋の管理者だけです' });
+    }
+
     const result = await pool.query(
       'DELETE FROM tags WHERE id = $1 AND room_id = $2',
       [tagId, roomId]
@@ -111,7 +149,12 @@ roomRouter.delete('/:tagId', async (req, res) => {
       return res.status(404).json({ error: 'タグが見つかりません' });
     }
 
-    logger.info(`Tag deleted: ${tagId} from room ${roomId}`);
+    logger.info(`Tag deleted: ${tagId} from room ${roomId} by ${req.user!.id}`);
+    try {
+      getIo().to(roomId).emit('room:tag_deleted', { room_id: roomId, tag_id: tagId });
+    } catch (err) {
+      logger.warn(`[tags] 削除の知らせを出せませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    }
     res.json({ success: true });
   } catch (err) {
     logger.error('Tag delete error:', err);
@@ -272,7 +315,7 @@ messageRouter.post('/', async (req, res) => {
 
     if (existing.rows.length > 0) {
       const tag = await pool.query<TagRow>('SELECT * FROM tags WHERE id = $1', [tagId]);
-      return res.status(200).json({ tag: tag.rows[0] });
+      return res.status(200).json({ tag: tag.rows[0] });   // 変化なし = 知らせない
     }
 
     // Add tag to message
@@ -286,6 +329,7 @@ messageRouter.post('/', async (req, res) => {
     const tag = await pool.query<TagRow>('SELECT * FROM tags WHERE id = $1', [tagId]);
 
     res.status(201).json({ tag: tag.rows[0] });
+    await announceMessageTags(messageId, roomId);
   } catch (err) {
     logger.error('Message tag add error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
@@ -333,6 +377,7 @@ messageRouter.patch('/:tagId', async (req, res) => {
     );
 
     res.json({ success: true });
+    await announceMessageTags(messageId, req.messageRoomId);
   } catch (err) {
     logger.error('Message tag update error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
@@ -354,6 +399,7 @@ messageRouter.delete('/:tagId', async (req, res) => {
     );
 
     res.json({ success: true });
+    await announceMessageTags(messageId, req.messageRoomId);
   } catch (err) {
     logger.error('Message tag remove error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

@@ -13,7 +13,7 @@ const store = {
   addMessage: vi.fn(), fetchMessages: vi.fn(), clearMessages: vi.fn(),
   updateMessageContent: vi.fn(), updateReadCount: vi.fn(), updateTranscription: vi.fn(),
   updateReactions: vi.fn(), updateLinkPreview: vi.fn(), markDeleted: vi.fn(),
-  updatePublishStatus: vi.fn(),
+  updatePublishStatus: vi.fn(), updateTags: vi.fn(), removeTag: vi.fn(),
 };
 vi.mock('../src/stores/messageStore', () => {
   const useMessageStore = () => store;
@@ -261,5 +261,29 @@ describe('useSocketSync — 部屋を見ていることを知らせる (#475)', 
       { room_id: 'room1', viewing: true },
       { room_id: 'room1', viewing: true },
     ]);
+  });
+});
+
+describe('useSocketSync — タグの知らせ (#496)', () => {
+  beforeEach(() => { fakeSocket.handlers = {}; store.updateTags.mockClear(); store.removeTag.mockClear(); });
+
+  it('★★ message:tags を受けたら、その投稿のタグを差し替える', () => {
+    renderHook(() => useSocketSync('room1'));
+    const tags = [{ id: 't1', name: 'TODO', is_todo: true, is_done: true }];
+    act(() => fakeSocket.trigger('message:tags', { message_id: 'm1', room_id: 'room1', tags }));
+    expect(store.updateTags).toHaveBeenCalledWith('m1', tags);
+  });
+
+  it('★ room:tag_deleted を受けたら、そのタグを全投稿から外す', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => fakeSocket.trigger('room:tag_deleted', { room_id: 'room1', tag_id: 't1' }));
+    expect(store.removeTag).toHaveBeenCalledWith('t1');
+  });
+
+  it('部屋を離れたら受け取りをやめる', () => {
+    const { unmount } = renderHook(() => useSocketSync('room1'));
+    unmount();
+    expect(fakeSocket.handlers['message:tags']).toBeUndefined();
+    expect(fakeSocket.handlers['room:tag_deleted']).toBeUndefined();
   });
 });

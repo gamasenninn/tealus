@@ -32,6 +32,22 @@ export function canInviteToRoom(user: UserLike): boolean {
   return !isGuest(user);
 }
 
+/**
+ * ★ #496 部屋のタグを消せるか。サーバーの DELETE /api/rooms/:id/tags/:tagId と同じ条件
+ * (タグを作った人 / 部屋の管理者 / システム管理者)。消すと付いていた投稿すべてから外れる
+ * @param myRoomRole 部屋での自分の役割 (メンバー一覧の role: 'admin' / 'member')
+ */
+export function canDeleteRoomTag(
+  tag: { created_by?: string | null } | null | undefined,
+  user: { id?: string; role?: string | null } | null | undefined,
+  myRoomRole: string | null | undefined,
+): boolean {
+  if (!user || !tag) return false;
+  if (isAdmin(user)) return true;
+  if (myRoomRole === 'admin') return true;
+  return !!tag.created_by && tag.created_by === user.id;
+}
+
 /** ★ #495 スタンプを作る権限。guest は送るだけ (サーバーの POST /api/stamps/generate も 403) */
 export function canCreateStamp(user: UserLike): boolean {
   return !isGuest(user);

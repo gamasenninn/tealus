@@ -9,7 +9,7 @@ import { playTtsSrc } from '../services/ttsAudioPlayer';
 import { isAudioHeld } from '../utils/audioExclusive';
 import { shouldPlayMessageSound } from '../utils/messageSound';
 import { withMe } from '../utils/reactionMe';
-import type { Message, Reaction, LinkPreview, Transcription } from '../types';
+import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
 // --- Socket.IO event payload (client が消費するフィールドのみ最小型付け) ---
 
@@ -210,6 +210,14 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       useMessageStore.getState().updateReactions(data.message_id, withMe(data.reactions, user?.id));
     };
 
+    // ★ #496 タグの変化。それまで知らせが無く、相手の画面は読み込み直すまで古いままだった
+    const handleMessageTags = (data: { message_id: string; tags: MessageTag[] }) => {
+      useMessageStore.getState().updateTags(data.message_id, data.tags);
+    };
+    const handleRoomTagDeleted = (data: { tag_id: string }) => {
+      useMessageStore.getState().removeTag(data.tag_id);
+    };
+
     const handleLinkPreview = (data: LinkPreviewPayload) => {
       useMessageStore.getState().updateLinkPreview(data.message_id, data.preview);
     };
@@ -293,6 +301,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       socket.on('message:published', handleMessagePublished);
       socket.on('message:deleted', handleMessageDeleted);
       socket.on('message:reaction', handleMessageReaction);
+      socket.on('message:tags', handleMessageTags);
+      socket.on('room:tag_deleted', handleRoomTagDeleted);
       socket.on('link:preview', handleLinkPreview);
       socket.on('typing:start', handleTypingStart);
       socket.on('typing:stop', handleTypingStop);
@@ -318,6 +328,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
         socket.off('message:published', handleMessagePublished);
         socket.off('message:deleted', handleMessageDeleted);
         socket.off('message:reaction', handleMessageReaction);
+        socket.off('message:tags', handleMessageTags);
+        socket.off('room:tag_deleted', handleRoomTagDeleted);
         socket.off('link:preview', handleLinkPreview);
         socket.off('typing:start', handleTypingStart);
         socket.off('typing:stop', handleTypingStop);

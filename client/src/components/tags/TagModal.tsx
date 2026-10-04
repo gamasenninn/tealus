@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Tag } from 'lucide-react';
 import { useConfirm } from '../../stores/confirmStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useRoomStore } from '../../stores/roomStore';
+import { canDeleteRoomTag } from '../../utils/permissions';
 import type { Tag as TagType } from '../../types';
 import './TagModal.css';
 
@@ -21,6 +24,10 @@ interface TagModalProps {
 function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
   const { roomId } = useParams() as { roomId: string };
   const confirm = useConfirm();
+  // ★ #496 部屋のタグを消せるのは、作った人 / 部屋の管理者 / システム管理者だけ (サーバーも 403)
+  const { user } = useAuthStore();
+  const { members } = useRoomStore();
+  const myRoomRole = (members.find((m) => m.user_id === user?.id) as { role?: string } | undefined)?.role;
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<TagType[]>([]);
   const [recentTags, setRecentTags] = useState<TagType[]>([]);
@@ -181,11 +188,13 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
                 manageMode ? (
                   <span key={tag.id} className="tag-chip manage">
                     {tag.name}
-                    <button
-                      className="tag-remove"
-                      title="このタグをルームから削除"
-                      onClick={() => deleteRoomTag(tag)}
-                    >×</button>
+                    {canDeleteRoomTag(tag, user, myRoomRole) && (
+                      <button
+                        className="tag-remove"
+                        title="このタグをルームから削除"
+                        onClick={() => deleteRoomTag(tag)}
+                      >×</button>
+                    )}
                   </span>
                 ) : (
                   <button
