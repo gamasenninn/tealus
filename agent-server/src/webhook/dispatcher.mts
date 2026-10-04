@@ -217,6 +217,9 @@ export async function dispatch({ message, room, agentId, agentName }: DispatchPa
   }
 }
 
+/** #492 ゲストの便に返すお知らせ (応答の代わり) */
+export const GUEST_NOT_SUPPORTED_NOTICE = 'ゲストの方には、まだアシスタントを使っていただけません。';
+
 async function _dispatch({ message, room, agentId, agentName }: DispatchParams): Promise<void> {
   const roomId = room.id;
   const memberCount = room.member_count || 2;
@@ -264,6 +267,18 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
     roomSettings.response_mode === 'mention' ? true :
     roomSettings.response_mode === 'all' ? false :
     /* auto */ memberCount > 2;
+
+  // ★ #492 ゲストの便には応答しない。アシスタントは部屋の外 (他の部屋・社内 DB・サーバー) にも届く作りで、
+  //   ゲストの原則「招かれた部屋の中だけ」(#282) を守れないため。部屋の中に閉じた経路ができるまでの守り。
+  //   ★ お知らせは名指しされたとき / 1 対 1 だけ (「全部に答える」部屋で発言のたびに出さない)。
+  //   ★ 委譲 (%) より前に置く。権限が載っていない便 (古い本体) は今までどおり
+  if (message.sender?.role === 'guest') {
+    const addressed = !(memberCount > 2) || isMentioned(prompt, agentName);
+    logger.info(`[guest] ゲストの便のため応答していません: room=${room.name || roomId} `
+      + `sender=${message.sender.display_name || message.sender.id || '?'} notice=${addressed}`);
+    if (addressed) await botApi.pushMessage(roomId, GUEST_NOT_SUPPORTED_NOTICE).catch(() => {});
+    return;
+  }
 
   if (needsMention) {
     if (!isMentioned(prompt, agentName)) {

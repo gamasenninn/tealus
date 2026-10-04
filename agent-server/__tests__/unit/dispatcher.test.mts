@@ -211,6 +211,67 @@ describe('Dispatcher', () => {
       expect(processLight).toHaveBeenCalled();
     });
 
+    // ★ #492 ゲストの便には応答しない (閉じた経路ができるまでの守り)。アシスタントは部屋の外にも届く作りなので
+    describe('ゲストの便 (#492)', () => {
+      const GUEST = { id: 'g1', display_name: '外の人', role: 'guest' };
+      const pushed = () => (botApi.pushMessage as jest.Mock).mock.calls.map((c: unknown[]) => String(c[1]));
+
+      test('★★★ 名指しされても route・Light・Deep を呼ばない。短いお知らせだけ返す', async () => {
+        await dispatch({
+          message: { id: 'm1', content: '@アシスタント 業務メモの最新を教えて', sender: GUEST },
+          room: { id: 'room1', name: 'ゲストの部屋', member_count: 3 },
+          agentId: 'agent1', agentName: 'アシスタント',
+        });
+        expect(route).not.toHaveBeenCalled();
+        expect(processLight).not.toHaveBeenCalled();
+        expect(pushed()).toEqual(['ゲストの方には、まだアシスタントを使っていただけません。']);
+      });
+
+      test('★ 1 対 1 の部屋 (名指し不要) でもお知らせだけ', async () => {
+        await dispatch({
+          message: { id: 'm2', content: 'こんにちは', sender: GUEST },
+          room: { id: 'room1', name: null, member_count: 2 },
+          agentId: 'agent1', agentName: 'アシスタント',
+        });
+        expect(route).not.toHaveBeenCalled();
+        expect(pushed()).toHaveLength(1);
+      });
+
+      test('★ 名指ししていないグループの発言には何も返さない (「全部に答える」部屋で毎回お知らせを出さない)', async () => {
+        await dispatch({
+          message: { id: 'm3', content: 'よろしくお願いします', sender: GUEST },
+          room: { id: 'room1', name: 'ゲストの部屋', member_count: 3 },
+          agentId: 'agent1', agentName: 'アシスタント',
+        });
+        expect(route).not.toHaveBeenCalled();
+        expect(pushed()).toEqual([]);
+      });
+
+      test('★ % の委譲もさせない', async () => {
+        process.env.ENABLE_CROSS_ROOM_DELEGATION = 'true';
+        try {
+          await dispatch({
+            message: { id: 'm4', content: '@アシスタント %業務メモ 要約して', sender: GUEST },
+            room: { id: 'room1', name: 'ゲストの部屋', member_count: 3 },
+            agentId: 'agent1', agentName: 'アシスタント',
+          });
+        } finally { delete process.env.ENABLE_CROSS_ROOM_DELEGATION; }
+        expect(botApi.getRooms).not.toHaveBeenCalled();
+        expect(route).not.toHaveBeenCalled();
+      });
+
+      test('社内の人 (role: user) は今までどおり応答する', async () => {
+        route.mockResolvedValueOnce({ tier: 'light', prompt: 'x' });
+        processLight.mockResolvedValueOnce();
+        await dispatch({
+          message: { id: 'm5', content: '@アシスタント x', sender: { id: 'u1', role: 'user' } },
+          room: { id: 'room1', name: 'Web部', member_count: 5 },
+          agentId: 'agent1', agentName: 'アシスタント',
+        });
+        expect(processLight).toHaveBeenCalled();
+      });
+    });
+
     test('グループでメンションなしは応答しない', async () => {
       await dispatch({
         message: { id: 'msg1', content: '普通のメッセージ', sender: { id: 'user1' } },
