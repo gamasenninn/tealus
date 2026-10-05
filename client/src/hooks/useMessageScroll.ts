@@ -25,10 +25,32 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoad = useRef(true);
   const isLoadingMore = useRef(false);
+  // ★ #506 最下部にいるか (スクロールのたびに記録)。開いたときは一番下へ動かすので最下部から始まる
+  const atBottom = useRef(true);
+
+  /**
+   * #506 一番下へ「一度に」合わせる。★ 滑らかなスクロール (scrollIntoView smooth) は裏のタブでは動かず、
+   *   監視中 (ウィンドウが他の後ろ) に短い便でも取り残されていた
+   */
+  const pinToBottom = () => {
+    const c = messagesContainerRef.current;
+    if (c) c.scrollTop = c.scrollHeight;
+  };
+
+  // ★ #506 画像などが遅れて読み込まれて背が伸びたら、最下部にいる間は合わせ直す。
+  //   画像の load は上へ伝わらないので、入れ物で捕まえる (capture)
+  const loadListenerOn = useRef<HTMLElement | null>(null);
+  const ensureLoadListener = () => {
+    const c = messagesContainerRef.current;
+    if (!c || loadListenerOn.current === c) return;
+    c.addEventListener('load', () => { if (atBottom.current) pinToBottom(); }, true);
+    loadListenerOn.current = c;
+  };
 
   // Reset on room change
   useEffect(() => {
     isInitialLoad.current = true;
+    atBottom.current = true;   // #506 開いたら一番下から始まる
 
     const handleScrollBottom = () => {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -53,6 +75,8 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
           const container = messagesContainerRef.current;
           if (container) {
             container.scrollTop = parseInt(savedScrollTop);
+            // #506 復元した位置で「最下部にいるか」を判定し直す
+            atBottom.current = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
           }
           markReadWhenVisible();
         }, INITIAL_SCROLL_DELAY);
@@ -65,17 +89,22 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
       }
       isInitialLoad.current = false;
     } else {
-      const container = messagesContainerRef.current;
-      if (container) {
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
-        if (isNearBottom) {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          // #474 裏にある間は既読にしない (その間の分は useSocketSync が溜めて、画面に戻ったときに既読にする)
-          if (document.visibilityState === 'visible') markVisibleAsRead();
-        }
+      // ★ #506 「最下部にいるか」は新着が来る前の記録 (atBottom) で判定する。
+      //   以前は新着を描いたあとに「下端から 100px 以内か」を測っていたので、新着の高さが 100px を超えると
+      //   「最下部にいない」になり、長い便ほど埋もれた (本番で 218px の便が 222px 取り残された)
+      if (atBottom.current) {
+        pinToBottom();
+        // #474 裏にある間は既読にしない (その間の分は useSocketSync が溜めて、画面に戻ったときに既読にする)
+        if (document.visibilityState === 'visible') markVisibleAsRead();
       }
     }
   }, [messages.length]);
+
+  // ★ #506 最下部にいる間は、投稿の中身が変わって (リンクのプレビューなど) 背が伸びても合わせ直す
+  useEffect(() => {
+    ensureLoadListener();
+    if (!isInitialLoad.current && atBottom.current) pinToBottom();
+  }, [messages]);
 
   // IntersectionObserver for loading older messages
   useEffect(() => {
@@ -148,6 +177,9 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
     const container = messagesContainerRef.current;
     if (!container) return;
     sessionStorage.setItem(`scrollPos:${roomId}`, String(container.scrollTop));
+    // ★ #506 新着が来る前の「最下部にいるか」を覚えておく (判定の幅は今までと同じ 100px)
+    atBottom.current = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
+    ensureLoadListener();
   };
 
   return { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll };

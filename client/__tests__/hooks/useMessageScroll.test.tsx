@@ -92,3 +92,86 @@ describe('useMessageScroll — 画面が見えているときだけ、まとめ�
     expect(emit).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * #506 最下部まで見ている部屋で、長い新着や裏のタブだと画面が下まで追いかけなかった (監視中に新着が埋もれる)
+ * ★ 本番で実測: 前に出ていて短い投稿 (71px) は追いかけるが、長い投稿 (218px) は 222px 取り残される。
+ *   裏のタブでは短い投稿でも取り残される (滑らかなスクロールが裏では動かない)
+ * ★ 直し方: 「最下部にいるか」はスクロールのたびに記録し、新着が来る前の状態で判定する。
+ *   最下部にいたら一度に一番下へ合わせる。画像の読み込みなどで背が伸びても合わせ直す
+ */
+describe('useMessageScroll — 最下部にいたら新着を追いかける (#506)', () => {
+  let visibility: DocumentVisibilityState = 'visible';
+
+  /** 高さとスクロール位置を持たせた入れ物 (jsdom には高さの計算がない) */
+  function makeContainer(clientHeight: number, scrollHeight: number) {
+    const el = document.createElement('div');
+    const box = { clientHeight, scrollHeight, scrollTop: Math.max(0, scrollHeight - clientHeight) };
+    Object.defineProperty(el, 'clientHeight', { get: () => box.clientHeight });
+    Object.defineProperty(el, 'scrollHeight', { get: () => box.scrollHeight });
+    Object.defineProperty(el, 'scrollTop', { get: () => box.scrollTop, set: (v: number) => { box.scrollTop = Math.min(v, box.scrollHeight - box.clientHeight); } });
+    return { el, box, gap: () => box.scrollHeight - box.scrollTop - box.clientHeight };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    visibility = 'visible';
+    vi.mocked(api.markRead).mockReset().mockResolvedValue(undefined as never);
+    messages = [{ id: 'm0', sender_id: 'other' }];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function openAtBottom() {
+    const c = makeContainer(700, 2000);
+    const hook = renderHook(() => useMessageScroll('room1'));
+    hook.result.current.messagesEndRef.current = { scrollIntoView: vi.fn() } as unknown as HTMLDivElement;
+    hook.result.current.messagesContainerRef.current = c.el;
+    act(() => { vi.runAllTimers(); });
+    act(() => { hook.result.current.handleScroll(); });   // 最下部にいる
+    return { ...hook, c };
+  }
+
+  it('★★★ 長い新着 (100px を超える) でも、最下部にいたら一番下まで合わせる', () => {
+    const { rerender, c } = openAtBottom();
+    c.box.scrollHeight += 218;                               // 描いたあと = 下端が伸びている
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    rerender();
+    expect(c.gap()).toBe(0);
+  });
+
+  it('★★ 裏のタブでも合わせる (滑らかなスクロールに頼らない)', () => {
+    const { rerender, c } = openAtBottom();
+    visibility = 'hidden';
+    c.box.scrollHeight += 71;
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    rerender();
+    expect(c.gap()).toBe(0);
+  });
+
+  it('★★ 上にさかのぼって読んでいるときは動かさない', () => {
+    const { result, rerender, c } = openAtBottom();
+    c.box.scrollTop = 500;                                   // 上へ
+    act(() => { result.current.handleScroll(); });
+    c.box.scrollHeight += 71;
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    rerender();
+    expect(c.box.scrollTop).toBe(500);
+  });
+
+  it('★ 最下部にいる間に画像が読み込まれて背が伸びたら、合わせ直す', () => {
+    const { c } = openAtBottom();
+    c.box.scrollHeight += 300;
+    act(() => { c.el.dispatchEvent(new Event('load')); });   // 画像の load は伝わらないので、捕まえる側 (capture) で受ける
+    expect(c.gap()).toBe(0);
+  });
+
+  it('上にいる間に画像が読み込まれても、動かさない', () => {
+    const { result, c } = openAtBottom();
+    c.box.scrollTop = 500;
+    act(() => { result.current.handleScroll(); });
+    c.box.scrollHeight += 300;
+    act(() => { c.el.dispatchEvent(new Event('load')); });
+    expect(c.box.scrollTop).toBe(500);
+  });
+});
