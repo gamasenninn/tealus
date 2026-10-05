@@ -1,12 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { Rnd } from 'react-rnd';
-import { useAuthStore } from '../../stores/authStore';
-import { api } from '../../services/api';
-import { getSocket } from '../../services/socket';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone } from 'lucide-react';
-import type { Room } from '../../types';
+import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
 import './MultiTalk.css';
+
+/*
+ * ★ #502 (2026-10-05) 部屋の一覧は持たない。左の RoomList (DesktopShell) 1 つだけで、
+ *   `/multi` ではそこで押すと「開いて」が店 (multiTalkStore) に置かれ、ここで受け取ってパネルにする。
+ *   以前は自前の一覧 (.multi-sidebar) を持っていて、#237 で PC 全体の一覧が入ってから
+ *   「トーク」が 2 つ並んでいた (左端で押すとマルチトークを抜けた)。
+ *   未読の数え方も自前で持っていたが、RoomList が新着のたびにサーバーから取り直すので要らない
+ */
 
 /** 開いているトークパネル 1 枚分 (localStorage 'multiTalkPanels' に永続化) */
 interface TalkPanel {
@@ -20,9 +25,9 @@ interface TalkPanel {
 }
 
 function MultiTalk() {
-  const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const pendingOpen = useMultiTalkStore((s) => s.pendingOpen);
+  const sidebarHidden = useMultiTalkStore((s) => s.sidebarHidden);
   const [panels, setPanels] = useState<TalkPanel[]>(() => {
     try {
       const saved = localStorage.getItem('multiTalkPanels');
@@ -31,7 +36,6 @@ function MultiTalk() {
   });
   const [activePanel, setActivePanel] = useState<number | null>(null);
   const [interacting, setInteracting] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panelCounter = useRef((() => {
     try {
@@ -41,9 +45,10 @@ function MultiTalk() {
     } catch { return 0; }
   })());
 
-  // panels 変更時に localStorage に保存
+  // panels 変更時に localStorage に保存。★ #502 開いている部屋を左の一覧の印のために店へ知らせる
   useEffect(() => {
     localStorage.setItem('multiTalkPanels', JSON.stringify(panels));
+    useMultiTalkStore.getState().setOpenRoomIds(panels.map(p => p.roomId));
   }, [panels]);
 
   // PC PWA: マルチトーク画面ではウィンドウを広げ、パネルを自動整列
@@ -76,48 +81,17 @@ function MultiTalk() {
     };
   }, []);
 
-  // ルーム一覧取得
+  // ★ #502 左の一覧 (RoomList) で押された部屋を受け取ってパネルにする
   useEffect(() => {
-    api.getRooms().then(d => setRooms(d.rooms || [])).catch(() => {});
-  }, []);
-
-  // Socket.IO で未読更新
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
-    const handleMessage = (msg: { sender_id: string; room_id: string }) => {
-      if (msg.sender_id === user!.id) return;
-      // 開いているパネルのルームは未読を増やさない
-      setPanels(currentPanels => {
-        const isOpen = currentPanels.some(p => p.roomId === msg.room_id);
-        if (!isOpen) {
-          setRooms(prev => prev.map(r =>
-            r.id === msg.room_id ? { ...r, unread_count: (r.unread_count || 0) + 1 } : r
-          ));
-        }
-        return currentPanels;
-      });
-    };
-
-    const handleRead = (data: { room_id?: string }) => {
-      if (data.room_id) {
-        setRooms(prev => prev.map(r =>
-          r.id === data.room_id ? { ...r, unread_count: 0 } : r
-        ));
-      }
-    };
-
-    socket.on('message:new', handleMessage);
-    socket.on('message:read', handleRead);
-    return () => {
-      socket.off('message:new', handleMessage);
-      socket.off('message:read', handleRead);
-    };
-  }, [user]);
+    if (!pendingOpen) return;
+    const room = useMultiTalkStore.getState().takeOpen();
+    if (room) openPanel(room);
+    // openPanel は panels を読むので、押されたときの最新の panels で動く (pendingOpen が変わるたび)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpen]);
 
   // パネル追加
-  const openPanel = (room: Room) => {
+  const openPanel = (room: MultiTalkRoomRef) => {
     // 既に開いていればフォーカス
     const existing = panels.find(p => p.roomId === room.id);
     if (existing) {
@@ -135,7 +109,7 @@ function MultiTalk() {
     const newPanel: TalkPanel = {
       id: ++panelCounter.current,
       roomId: room.id,
-      roomName: room.name || room.partner_display_name || 'DM',
+      roomName: room.name || 'DM',
       x: 20 + offset,
       y: 20 + offset,
       width,
@@ -144,11 +118,7 @@ function MultiTalk() {
 
     setPanels(prev => [...prev, newPanel]);
     setActivePanel(newPanel.id);
-
-    // 未読クリア
-    setRooms(prev => prev.map(r =>
-      r.id === room.id ? { ...r, unread_count: 0 } : r
-    ));
+    // 未読はその場で 0 にする処理を RoomList が押したときにしている (#238 と同じ)
   };
 
   // パネル閉じる
@@ -226,17 +196,13 @@ function MultiTalk() {
     } : p));
   };
 
-  const getRoomDisplayName = (room: Room) => {
-    if (room.type === 'group') return room.name;
-    return room.partner_display_name || 'DM';
-  };
-
   return (
     <div className="multi-talk">
       {/* ツールバー（常に表示） */}
       <div className="multi-toolbar">
-        <button onClick={() => setSidebarOpen(prev => !prev)} title={sidebarOpen ? 'サイドバーを閉じる' : 'サイドバーを開く'}>
-          {sidebarOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
+        {/* ★ #502 左の一覧 (RoomList) を隠す / 出す。パネルを広く使う役目は以前の「サイドバー」と同じ */}
+        <button onClick={() => useMultiTalkStore.getState().toggleSidebar()} title={sidebarHidden ? '一覧を出す' : '一覧を隠す'}>
+          {sidebarHidden ? <Menu size={18} /> : <PanelLeftClose size={18} />}
         </button>
         <div className="multi-toolbar-divider" />
         <button onClick={() => { localStorage.setItem('multiTalkLayout', 'tile'); arrangeTile(); }} title="タイル整列"><LayoutGrid size={18} /></button>
@@ -244,32 +210,6 @@ function MultiTalk() {
         <div className="multi-toolbar-divider" />
         <button onClick={() => navigate('/talk')} title="シングルモードに戻る"><MonitorSmartphone size={18} /></button>
       </div>
-
-      {/* サイドバー（トグル） */}
-      {sidebarOpen && (
-      <div className="multi-sidebar">
-        <div className="multi-sidebar-header">
-          <h2>トーク</h2>
-        </div>
-        <div className="multi-room-list">
-          {rooms.map(room => {
-            const isOpen = panels.some(p => p.roomId === room.id);
-            return (
-              <div
-                key={room.id}
-                className={`multi-room-item ${isOpen ? 'open' : ''}`}
-                onClick={() => openPanel(room)}
-              >
-                <span className="multi-room-name">{getRoomDisplayName(room)}</span>
-                {(room.unread_count ?? 0) > 0 && (
-                  <span className="multi-unread">{room.unread_count}</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      )}
 
       <div className="multi-panels" ref={containerRef}>
         {panels.length === 0 && (

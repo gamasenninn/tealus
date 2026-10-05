@@ -10,7 +10,7 @@
  */
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/components/room-list/RoomList', () => ({
   default: () => <div data-testid="room-list" />,
@@ -18,6 +18,7 @@ vi.mock('../../src/components/room-list/RoomList', () => ({
 
 import DesktopShell from '../../src/components/layout/DesktopShell';
 import TalkPage from '../../src/components/room-list/TalkPage';
+import { useMultiTalkStore } from '../../src/stores/multiTalkStore';
 
 function renderAt(path: string) {
   return render(
@@ -52,5 +53,54 @@ describe('DesktopShell / TalkPage (#487)', () => {
     const { container } = renderAt('/rooms/r-1');
     expect(container.querySelector('.desktop-shell')?.classList.contains('desktop-shell--talk')).toBe(false);
     expect(screen.getAllByTestId('room-list')).toHaveLength(1);
+  });
+});
+
+/**
+ * #502 PC のマルチトーク
+ * ★ `/multi` には MultiTalk の中にも一覧があり、「トーク」が 2 つ並んでいた (押した結果も違った)。
+ *   一覧は RoomList 1 つにそろえ、`/multi` ではそれでパネルを開く
+ * ★★ パネルの中身は iframe (`/rooms/:id?embed=true`) で、そこも DesktopShell に包まれていたので、
+ *   見えない RoomList がパネルの数だけ動いて通知音が重なった (パネル 3 枚で 4 回)
+ */
+describe('DesktopShell — マルチトーク (#502)', () => {
+  function renderMulti(path: string) {
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route element={<DesktopShell />}>
+            <Route path="/multi" element={<div>multi</div>} />
+            <Route path="/rooms/:roomId" element={<div>chat</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+  }
+
+  beforeEach(() => { useMultiTalkStore.setState({ sidebarHidden: false }); });
+
+  it('★★ iframe の中 (embed=true) では RoomList を動かさない', () => {
+    renderMulti('/rooms/r-1?embed=true');
+    expect(screen.queryByTestId('room-list')).toBeNull();
+    expect(screen.getByText('chat')).toBeTruthy();
+  });
+
+  it('★ /multi では目印の class が付き、RoomList は 1 つ', () => {
+    const { container } = renderMulti('/multi');
+    expect(container.querySelector('.desktop-shell')?.classList.contains('desktop-shell--multi')).toBe(true);
+    expect(screen.getAllByTestId('room-list')).toHaveLength(1);
+  });
+
+  it('★ /multi で一覧を隠すと、隠す目印が付く (RoomList は動かしたまま = 音は止めない)', () => {
+    useMultiTalkStore.setState({ sidebarHidden: true });
+    const { container } = renderMulti('/multi');
+    expect(container.querySelector('.desktop-shell')?.classList.contains('desktop-shell--sidebar-hidden')).toBe(true);
+    expect(screen.getAllByTestId('room-list')).toHaveLength(1);
+  });
+
+  it('★ 隠したのは /multi の中だけ。ほかの画面では一覧が出る', () => {
+    useMultiTalkStore.setState({ sidebarHidden: true });
+    const { container } = renderMulti('/rooms/r-1');
+    expect(container.querySelector('.desktop-shell')?.classList.contains('desktop-shell--sidebar-hidden')).toBe(false);
   });
 });

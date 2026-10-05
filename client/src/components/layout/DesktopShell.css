@@ -76,3 +76,32 @@
     display: none;
   }
 }
+
+/* ★ #502 マルチトーク: 一覧は RoomList 1 つだけ。以前は MultiTalk が幅に関係なく自前の一覧を出していたので、
+   狭いウィンドウでも部屋を開けた。それを失わないよう、`/multi` では幅によらず 2 列にする */
+.desktop-shell--multi {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+}
+.desktop-shell--multi .desktop-sidebar {
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+  border-right: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+.desktop-shell--multi .desktop-sidebar .room-list-container {
+  max-width: none;
+  width: 100%;
+}
+.desktop-shell--multi .desktop-main {
+  height: 100dvh;
+  overflow: hidden;
+}
+/* ツールバーで一覧を隠したとき (パネルを広く使う)。★ RoomList は動かしたまま (新着の音を止めない) */
+.desktop-shell--multi.desktop-shell--sidebar-hidden {
+  grid-template-columns: 1fr;
+}
+.desktop-shell--multi.desktop-shell--sidebar-hidden .desktop-sidebar {
+  display: none;
+}

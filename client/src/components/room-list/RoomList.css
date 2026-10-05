@@ -102,6 +102,12 @@
   background: #f8f8f8;
 }
 
+/* #502 マルチトークでパネルに開いている部屋 (以前の MultiTalk の一覧の「開いている」と同じ印) */
+.room-item.open-in-panel {
+  background: rgba(0, 180, 160, 0.08);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
 .room-item:active {
   background: #f0f0f0;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useMultiTalkStore, roomClickAction } from '../../stores/multiTalkStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useConfirm } from '../../stores/confirmStore';
@@ -45,6 +46,10 @@ function RoomList() {
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   useEscapeToClose(!!contextMenu, closeContextMenu);
   const navigate = useNavigate();
+  // ★ #502 `/multi` ではこの一覧でパネルを開く (以前は MultiTalk に別の一覧があり、ここで押すとマルチトークを抜けた)
+  const { pathname } = useLocation();
+  const onMulti = roomClickAction(pathname) === 'panel';
+  const openRoomIds = useMultiTalkStore((s) => s.openRoomIds);
 
   useEffect(() => {
     fetchRooms();
@@ -182,7 +187,7 @@ function RoomList() {
         {filteredRooms.map((room) => (
           <div
             key={room.id}
-            className="room-item"
+            className={onMulti && openRoomIds.includes(room.id) ? 'room-item open-in-panel' : 'room-item'}
             onClick={() => {
               if (contextMenu) return;
               // #238: PC layout (#237) で sidebar 永続 mount のため、room click 後の
@@ -190,6 +195,12 @@ function RoomList() {
               // server cursor を進めるので、ここで optimistic に local state を更新。
               if ((room.unread_count ?? 0) > 0) {
                 useRoomStore.getState().updateRoomInList(room.id, { unread_count: 0 });
+              }
+              if (onMulti) {
+                // ★ #502 パネルの見出しは部屋の名前だけ (グループの人数は付けない。以前の MultiTalk と同じ)
+                const name = room.type === 'group' ? (room.name || '') : (room.partner_display_name || 'DM');
+                useMultiTalkStore.getState().requestOpen({ id: room.id, name });
+                return;
               }
               navigate(`/rooms/${room.id}`);
             }}
