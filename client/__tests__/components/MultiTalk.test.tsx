@@ -187,3 +187,27 @@ describe('MultiTalk — 元に戻す (#504)', () => {
     expect(saved().minimized).toBe(true);
   });
 });
+
+/**
+ * #507 ツールバーの「すべて最下部へ」: 開いている全パネル (iframe) へ一度に一番下へ合わせる合図を送る
+ */
+describe('MultiTalk — すべて最下部へ (#507)', () => {
+  it('★★ 開いている全パネルの中の画面へ scroll:bottom (instant) を送る', () => {
+    localStorage.setItem('multiTalkPanels', JSON.stringify([
+      { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 },
+      { id: 2, roomId: 'r2', roomName: '整備', x: 400, y: 0, width: 400, height: 400, minimized: true },
+    ]));
+    const { container } = renderMulti();
+    const got: unknown[] = [];
+    container.querySelectorAll('iframe').forEach(f => {
+      f.contentWindow!.addEventListener('scroll:bottom', (e) => got.push((e as CustomEvent).detail));
+    });
+    fireEvent.click(screen.getByTitle('すべて最下部へ'));
+    expect(got).toEqual([{ instant: true }, { instant: true }]);
+  });
+
+  it('パネルが無くても押せる (何も起きない)', () => {
+    renderMulti();
+    expect(() => fireEvent.click(screen.getByTitle('すべて最下部へ'))).not.toThrow();
+  });
+});

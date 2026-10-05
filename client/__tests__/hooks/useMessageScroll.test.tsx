@@ -175,3 +175,60 @@ describe('useMessageScroll — 最下部にいたら新着を追いかける (#5
     expect(c.box.scrollTop).toBe(500);
   });
 });
+
+/**
+ * #507 マルチトークの「すべて最下部へ」。ツールバーから各パネル (iframe) の window へ scroll:bottom を送る
+ * ★ 送信後の合図 (滑らか) とは違い、一度に一番下へ合わせ、「最下部にいる」記録も戻す (その後の新着も追いかける)
+ */
+describe('useMessageScroll — すべて最下部へ (#507)', () => {
+  function makeContainer(clientHeight: number, scrollHeight: number) {
+    const el = document.createElement('div');
+    const box = { clientHeight, scrollHeight, scrollTop: Math.max(0, scrollHeight - clientHeight) };
+    Object.defineProperty(el, 'clientHeight', { get: () => box.clientHeight });
+    Object.defineProperty(el, 'scrollHeight', { get: () => box.scrollHeight });
+    Object.defineProperty(el, 'scrollTop', { get: () => box.scrollTop, set: (v: number) => { box.scrollTop = Math.min(v, box.scrollHeight - box.clientHeight); } });
+    return { el, box, gap: () => box.scrollHeight - box.scrollTop - box.clientHeight };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    vi.mocked(api.markRead).mockReset().mockResolvedValue(undefined as never);
+    messages = [{ id: 'm0', sender_id: 'other' }];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function openScrolledUp() {
+    const c = makeContainer(700, 2000);
+    const hook = renderHook(() => useMessageScroll('room1'));
+    hook.result.current.messagesEndRef.current = { scrollIntoView: vi.fn() } as unknown as HTMLDivElement;
+    hook.result.current.messagesContainerRef.current = c.el;
+    act(() => { vi.runAllTimers(); });
+    c.box.scrollTop = 300;                                   // 上へさかのぼっている
+    act(() => { hook.result.current.handleScroll(); });
+    return { ...hook, c };
+  }
+
+  it('★★ instant の合図で、待たずに一番下へ合わせる (滑らかなスクロールに頼らない)', () => {
+    const { c } = openScrolledUp();
+    act(() => { window.dispatchEvent(new CustomEvent('scroll:bottom', { detail: { instant: true } })); });
+    expect(c.gap()).toBe(0);
+  });
+
+  it('★★ 合わせたあとは「最下部にいる」扱いになり、次の新着も追いかける', () => {
+    const { rerender, c } = openScrolledUp();
+    act(() => { window.dispatchEvent(new CustomEvent('scroll:bottom', { detail: { instant: true } })); });
+    c.box.scrollHeight += 218;
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    rerender();
+    expect(c.gap()).toBe(0);
+  });
+
+  it('instant の付かない合図 (送信後) は今までどおり滑らかに動かす', () => {
+    const { result, c } = openScrolledUp();
+    act(() => { window.dispatchEvent(new CustomEvent('scroll:bottom')); });
+    act(() => { vi.runAllTimers(); });
+    expect(result.current.messagesEndRef.current!.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
+    expect(c.box.scrollTop).toBe(300);
+  });
+});

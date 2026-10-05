@@ -52,7 +52,14 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
     isInitialLoad.current = true;
     atBottom.current = true;   // #506 開いたら一番下から始まる
 
-    const handleScrollBottom = () => {
+    const handleScrollBottom = (e: Event) => {
+      // ★ #507 マルチトークの「すべて最下部へ」は instant: 一度に合わせ、最下部にいる記録も戻す (その後の新着も追いかける)。
+      //   送信後の合図 (instant なし) は今までどおり滑らか
+      if ((e as CustomEvent<{ instant?: boolean }>).detail?.instant) {
+        atBottom.current = true;
+        pinToBottom();
+        return;
+      }
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };
     window.addEventListener('scroll:bottom', handleScrollBottom);

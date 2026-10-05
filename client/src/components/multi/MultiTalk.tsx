@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Rnd } from 'react-rnd';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal } from 'lucide-react';
+import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal, ArrowDownToLine } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
 import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, type PanelWindowState } from './panelWindow';
 import './MultiTalk.css';
@@ -195,6 +195,15 @@ function MultiTalk() {
     setPanels(prev => prev.map(p => p.id === id ? onBarDoubleClick(p, area) : p));
   };
 
+  // #507 全パネルを一番下へ。instant = 一度に合わせる (滑らかな動きは裏では止まる、#506)。
+  //   最小化中のパネルも送る (戻したときに下にいる)
+  const scrollAllToBottom = () => {
+    containerRef.current?.querySelectorAll('iframe').forEach(frame => {
+      const win = frame.contentWindow as (Window & typeof globalThis) | null;
+      win?.dispatchEvent(new win.CustomEvent('scroll:bottom', { detail: { instant: true } }));
+    });
+  };
+
   return (
     <div className="multi-talk">
       {/* ツールバー（常に表示） */}
@@ -206,6 +215,8 @@ function MultiTalk() {
         <div className="multi-toolbar-divider" />
         <button onClick={() => { localStorage.setItem('multiTalkLayout', 'tile'); arrangeTile(); }} title="タイル整列"><LayoutGrid size={18} /></button>
         <button onClick={() => { localStorage.setItem('multiTalkLayout', 'columns'); arrangeColumns(); }} title="横並び整列"><Columns size={18} /></button>
+        {/* ★ #507 開いている全パネルを一番下へ。中身は同じオリジンの iframe なので、部屋の画面の scroll:bottom を直接送る */}
+        <button onClick={scrollAllToBottom} title="すべて最下部へ"><ArrowDownToLine size={18} /></button>
         <div className="multi-toolbar-divider" />
         <button onClick={() => navigate('/talk')} title="シングルモードに戻る"><MonitorSmartphone size={18} /></button>
       </div>
