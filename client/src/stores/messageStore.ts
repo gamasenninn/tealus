@@ -129,11 +129,16 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   updateTranscription: (messageId, transcription) => {
-    set((state) => ({
-      messages: patchMessage(state.messages, messageId, (m) => ({
+    set((state) => {
+      const messages = patchMessage(state.messages, messageId, (m) => ({
         transcription: { ...m.transcription, ...transcription } as Transcription,
-      })),
-    }));
+      }));
+      // ★ #501 の残り: 文字が入った知らせなら、引用の写しも直す (サーバーと同じ「整形 → 無ければ生」)。
+      //   状態だけの知らせ (文字起こし中など) では触らない
+      if (!('formatted_text' in transcription) && !('raw_text' in transcription)) return { messages };
+      const text = transcription.formatted_text || transcription.raw_text || null;
+      return { messages: patchQuotes(messages, messageId, { content: text }) };
+    });
   },
 
   setReplyTo: (message) => {

@@ -16,13 +16,15 @@
  * ★ 引用は元の投稿の写しを持っているので、元だけ直すと開いたままの画面に古い中身が残る。
  *   該当が無ければ要素の参照はそのまま (無駄な再描画を作らない)。
  */
-export function patchQuotes<T extends { id: string; reply_to_message?: { id: string } | null }>(
+export function patchQuotes<T extends { id: string; reply_to_message?: { id: string; is_deleted?: boolean } | null }>(
   messages: T[],
   quotedId: string,
   patch: Partial<NonNullable<T['reply_to_message']>>,
 ): T[] {
+  // ★ 削除済みの引用は書き換えない (遅れて来た文字起こしで、消した中身が戻らないように)
   return messages.map((m) =>
-    m.reply_to_message?.id === quotedId ? { ...m, reply_to_message: { ...m.reply_to_message, ...patch } } : m
+    m.reply_to_message?.id === quotedId && !m.reply_to_message.is_deleted
+      ? { ...m, reply_to_message: { ...m.reply_to_message, ...patch } } : m
   );
 }
 

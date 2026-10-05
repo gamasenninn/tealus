@@ -37,6 +37,40 @@ describe('messageStore — 引用の写し (#501)', () => {
     expect(q2).toMatchObject({ id: 'm1', content: '直した本文' });
     expect(q3).toMatchObject({ content: '別の元' });
   });
+
+  // ★ #501 の残り: 音声の引用の本文は文字起こし (サーバーは「整形 → 無ければ生」で入れる)
+  describe('音声の元の文字起こしを直したとき', () => {
+    beforeEach(() => {
+      const quote = { id: 'v1', content: '前の整形', type: 'voice', sender_id: 'u1', sender_display_name: 'A' };
+      useMessageStore.setState({
+        messages: [
+          { ...base, id: 'v1', type: 'voice', content: null, transcription: { status: 'done', formatted_text: '前の整形', raw_text: '前の生' } },
+          { ...base, id: 'm2', content: 'リプライ', reply_to: 'v1', reply_to_message: quote },
+        ],
+      } as never);
+    });
+
+    it('★★ 整形した文字起こしが変わったら、引用もそれになる', () => {
+      useMessageStore.getState().updateTranscription('v1', { status: 'done', formatted_text: '直した整形', raw_text: '前の生' });
+      expect(quotes()[1]).toMatchObject({ id: 'v1', content: '直した整形' });
+    });
+
+    it('★ 整形が無ければ生の文字起こし (サーバーと同じ規則)', () => {
+      useMessageStore.getState().updateTranscription('v1', { status: 'done', formatted_text: null, raw_text: '直した生' } as never);
+      expect(quotes()[1]).toMatchObject({ content: '直した生' });
+    });
+
+    it('★ 状態だけの知らせ (文字起こし中など) では、引用を触らない', () => {
+      useMessageStore.getState().updateTranscription('v1', { status: 'processing' });
+      expect(quotes()[1]).toMatchObject({ content: '前の整形' });
+    });
+
+    it('削除済みの引用は、文字起こしが来ても本文を戻さない', () => {
+      useMessageStore.getState().markDeleted('v1');
+      useMessageStore.getState().updateTranscription('v1', { status: 'done', formatted_text: '遅れて来た整形', raw_text: 'x' });
+      expect(quotes()[1]).toMatchObject({ content: null, is_deleted: true });
+    });
+  });
 });
 
 describe('quoteText — 引用に出す文字 (#501)', () => {
