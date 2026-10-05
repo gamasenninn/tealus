@@ -15,7 +15,7 @@ interface MediaRow {
 }
 
 /** 返信元メッセージ (voice transcription fallback 付き) */
-interface ReplyMessageRow {
+export interface ReplyMessageRow {
   id: string;
   content: string | null;
   type: string;
@@ -23,6 +23,27 @@ interface ReplyMessageRow {
   sender_display_name: string;
   transcription_text: string | null;
   transcription_raw: string | null;
+  is_deleted: boolean;
+}
+
+/** 引用の SELECT 列 (attachReplies / fetchReplyMessage で共有) */
+export const REPLY_SELECT = `m.id, m.content, m.type, m.sender_id, m.is_deleted, u.display_name AS sender_display_name,
+            vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw`;
+
+/**
+ * 引用を画面に出せる形にする。
+ * ★ #501 削除済みなら本文も文字起こしも返さない。音声は削除しても voice_transcriptions が残るので、
+ *   ここで空にしないと「本文が空なら文字起こし」の代わりに消した中身が出る。
+ * ★★ 同じ仕事を 2 か所 (attachReplies / fetchReplyMessage) に持たないよう、ここに 1 つだけ置く
+ */
+export function normalizeReply(r: ReplyMessageRow): ReplyMessageRow {
+  if (r.is_deleted) {
+    return { ...r, content: null, transcription_text: null, transcription_raw: null };
+  }
+  if (r.type === 'voice' && !r.content) {
+    return { ...r, content: r.transcription_text || r.transcription_raw || null };
+  }
+  return r;
 }
 
 /** 転送元メッセージ (voice transcription fallback 付き) */
@@ -133,8 +154,7 @@ export async function attachReplies(messages: AttachableMessage[]): Promise<void
   const replyIds = messages.filter(m => m.reply_to).map(m => m.reply_to!);
   if (replyIds.length === 0) return;
   const result = await pool.query<ReplyMessageRow>(
-    `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name,
-            vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
+    `SELECT ${REPLY_SELECT}
      FROM messages m
      JOIN users u ON u.id = m.sender_id
      LEFT JOIN LATERAL (
@@ -146,10 +166,7 @@ export async function attachReplies(messages: AttachableMessage[]): Promise<void
   );
   const map: Record<string, ReplyMessageRow> = {};
   for (const r of result.rows) {
-    if (r.type === 'voice' && !r.content) {
-      r.content = r.transcription_text || r.transcription_raw || null;
-    }
-    map[r.id] = r;
+    map[r.id] = normalizeReply(r);
   }
   for (const msg of messages) {
     msg.reply_to_message = msg.reply_to ? (map[msg.reply_to] || null) : null;

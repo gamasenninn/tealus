@@ -35,6 +35,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import type { MediaItem, Message, Reaction } from '../../types';
+import { quoteText } from '../../utils/replyQuote';
 import './MessageBubble.css';
 
 // server 応答が持つが types.ts に無いフィールドの local 拡張:
@@ -132,7 +133,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
         }}
       >
         <span className="bubble-reply-sender">{message.reply_to_message.sender_display_name}</span>
-        <span className="bubble-reply-content">{message.reply_to_message.content || '(メディア)'}</span>
+        <span className="bubble-reply-content">{quoteText(message.reply_to_message)}</span>
       </div>
     );
   };

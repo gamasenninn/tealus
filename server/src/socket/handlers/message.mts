@@ -5,19 +5,9 @@ import { isUuid } from '../../utils/uuid.mts';
 import { announcePost } from '../../services/postEffects.mts';
 import { checkMessageRefs } from '../../services/messageRefs.mts';
 import { SOCKET_POST_TYPES } from '../../services/messageTypes.mts';
-
-interface ReplyMessageRow {
-  id: string;
-  content: string | null;
-  type: string;
-  sender_id: string;
-  sender_display_name: string;
-  transcription_text: string | null;
-  transcription_raw: string | null;
-}
+import { REPLY_SELECT, normalizeReply, type ReplyMessageRow } from '../../services/messageAttachments.mts';
 
 interface ForwardMessageRow extends ReplyMessageRow {
-  is_deleted: boolean;
   room_name: string | null;
   room_type: string;
 }
@@ -35,8 +25,7 @@ interface SendPayload {
  */
 export async function fetchReplyMessage(replyToId: string): Promise<ReplyMessageRow | null> {
   const result = await pool.query<ReplyMessageRow>(
-    `SELECT m.id, m.content, m.type, m.sender_id, u.display_name AS sender_display_name,
-            vt.formatted_text AS transcription_text, vt.raw_text AS transcription_raw
+    `SELECT ${REPLY_SELECT}
      FROM messages m JOIN users u ON u.id = m.sender_id
      LEFT JOIN LATERAL (
        SELECT formatted_text, raw_text FROM voice_transcriptions
@@ -46,11 +35,8 @@ export async function fetchReplyMessage(replyToId: string): Promise<ReplyMessage
     [replyToId]
   );
   if (result.rows.length === 0) return null;
-  const r = result.rows[0];
-  if (r.type === 'voice' && !r.content) {
-    r.content = r.transcription_text || r.transcription_raw || null;
-  }
-  return r;
+  // ★ #501 削除済みの空欄化・音声の文字起こしは attachReplies と同じ関数で (2 か所に持たない)
+  return normalizeReply(result.rows[0]);
 }
 
 /**

@@ -2,6 +2,8 @@ import request from 'supertest';
 import { app } from '../../src/app.mts';
 import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { pool } from '../../src/db/pool.mts';
+import { fetchReplyMessage } from '../../src/socket/handlers/message.mts';
 
 type TestUser = Awaited<ReturnType<typeof createTestUser>>;
 
@@ -89,5 +91,75 @@ describe('Reply Feature', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.message.reply_to).toBeNull();
+  });
+
+  // ★ #501 元を消したら、引用にも本文を出さない。
+  //   ★★ 音声は削除しても voice_transcriptions が残るので、引用が文字起こしに落ちて消した中身が出ていた
+  describe('元の投稿を削除したとき (#501)', () => {
+    async function replyTo(originalId: string) {
+      await request(app)
+        .post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user2.token}`)
+        .send({ content: 'リプライです', reply_to: originalId });
+    }
+    async function deleteMsg(id: string) {
+      const del = await request(app)
+        .delete(`/api/rooms/${roomId}/messages/${id}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(del.status).toBe(200);
+    }
+    async function quoteInHistory() {
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user2.token}`);
+      return res.body.messages.find((m: { content: string }) => m.content === 'リプライです').reply_to_message;
+    }
+
+    it('★ 文字の投稿: 引用は削除済みと分かり、本文を返さない', async () => {
+      const orig = await request(app)
+        .post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ content: '消す予定の本文' });
+      await replyTo(orig.body.message.id);
+      await deleteMsg(orig.body.message.id);
+
+      const q = await quoteInHistory();
+      expect(q.is_deleted).toBe(true);
+      expect(q.content).toBeNull();
+      expect(q.sender_display_name).toBe('田中太郎');
+    });
+
+    it('★★ 音声の投稿: 消したあと引用に文字起こしが出ない', async () => {
+      const v = await pool.query<{ id: string }>(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, 'voice', NULL) RETURNING id`,
+        [roomId, user1.user.id]
+      );
+      await pool.query(
+        `INSERT INTO voice_transcriptions (message_id, raw_text, formatted_text, status, version)
+         VALUES ($1, '消す予定の生のおと', '消す予定の整形', 'done', 1)`,
+        [v.rows[0].id]
+      );
+      await replyTo(v.rows[0].id);
+      // 消す前は文字起こしが引用に出る (これは正しい)
+      expect((await quoteInHistory()).content).toBe('消す予定の整形');
+
+      await deleteMsg(v.rows[0].id);
+      const q = await quoteInHistory();
+      expect(q.is_deleted).toBe(true);
+      expect(q.content).toBeNull();
+      expect(q.transcription_text).toBeNull();
+      expect(q.transcription_raw).toBeNull();
+    });
+
+    it('★ 送る瞬間に元が消えていた場合も、配る引用に本文を載せない (fetchReplyMessage)', async () => {
+      const orig = await request(app)
+        .post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ content: '消す予定の本文' });
+      await deleteMsg(orig.body.message.id);
+      const q = await fetchReplyMessage(orig.body.message.id);
+      expect(q?.is_deleted).toBe(true);
+      expect(q?.content).toBeNull();
+    });
   });
 });

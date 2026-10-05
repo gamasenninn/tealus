@@ -8,6 +8,7 @@ import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
 import type { VoiceHistoryEntry } from './VoiceHistoryModal';
 import type { MediaItem, Message, QuotedMessage, Transcription } from '../../types';
+import { quoteText } from '../../utils/replyQuote';
 import './VoiceBubble.css';
 
 // types.ts の Transcription.status には中間状態 'transcribing' / 'formatting' が
@@ -206,7 +207,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
           }}
         >
           <span className="bubble-reply-sender">{replyMessage.sender_display_name}</span>
-          <span className="bubble-reply-content">{replyMessage.content || '(メディア)'}</span>
+          <span className="bubble-reply-content">{quoteText(replyMessage)}</span>
         </div>
       )}
 
@@ -277,6 +278,9 @@ export default memo(VoiceBubble, (prev, next) => {
     prev.canEditTranscription === next.canEditTranscription &&
     prev.searchKeyword === next.searchKeyword &&
     prev.replyMessage?.id === next.replyMessage?.id &&
+    // ★ #501 引用の写しが消された・直されたら描き直す (id だけだと古い中身が残る)
+    prev.replyMessage?.content === next.replyMessage?.content &&
+    prev.replyMessage?.is_deleted === next.replyMessage?.is_deleted &&
     JSON.stringify(prev.media) === JSON.stringify(next.media)
   );
 });

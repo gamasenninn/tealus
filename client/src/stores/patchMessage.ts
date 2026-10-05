@@ -11,6 +11,21 @@
  * patch に関数を渡すと既存のメッセージを読んで部分マージできる (updateTranscription)。
  * 該当 id が無ければ全要素の参照をそのまま返す (無駄な再描画を作らない)。
  */
+/**
+ * #501 その投稿を引用しているリプライの「引用の写し」を書き換える (純関数)。
+ * ★ 引用は元の投稿の写しを持っているので、元だけ直すと開いたままの画面に古い中身が残る。
+ *   該当が無ければ要素の参照はそのまま (無駄な再描画を作らない)。
+ */
+export function patchQuotes<T extends { id: string; reply_to_message?: { id: string } | null }>(
+  messages: T[],
+  quotedId: string,
+  patch: Partial<NonNullable<T['reply_to_message']>>,
+): T[] {
+  return messages.map((m) =>
+    m.reply_to_message?.id === quotedId ? { ...m, reply_to_message: { ...m.reply_to_message, ...patch } } : m
+  );
+}
+
 export function patchMessage<T extends { id: string }>(
   messages: T[],
   messageId: string,

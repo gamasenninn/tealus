@@ -34,6 +34,7 @@ exports[`#8 音声メッセージ: 送る中身 人・返信あり: 配信 + 通
     "keys": [
       "content",
       "id",
+      "is_deleted",
       "sender_display_name",
       "sender_id",
       "transcription_raw",
@@ -67,6 +68,7 @@ exports[`#8 音声メッセージ: 送る中身 人・返信あり: 配信 + 通
     "keys": [
       "content",
       "id",
+      "is_deleted",
       "sender_display_name",
       "sender_id",
       "transcription_raw",

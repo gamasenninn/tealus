@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
-import { patchMessage } from './patchMessage';
+import { patchMessage, patchQuotes } from './patchMessage';
 import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
@@ -108,7 +108,13 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   markDeleted: (messageId) => {
-    set((state) => ({ messages: patchMessage(state.messages, messageId, { is_deleted: true, content: null }) }));
+    // ★ #501 引用している側の写しも消す (開いたままの画面に消した本文が残っていた)
+    set((state) => ({
+      messages: patchQuotes(
+        patchMessage(state.messages, messageId, { is_deleted: true, content: null }),
+        messageId, { is_deleted: true, content: null },
+      ),
+    }));
   },
 
   updatePublishStatus: (messageId, isPublished) => {
@@ -116,7 +122,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   updateMessageContent: (messageId, content, isEdited) => {
-    set((state) => ({ messages: patchMessage(state.messages, messageId, { content, is_edited: isEdited }) }));
+    // ★ #501 引用している側の写しも新しい本文に
+    set((state) => ({
+      messages: patchQuotes(patchMessage(state.messages, messageId, { content, is_edited: isEdited }), messageId, { content }),
+    }));
   },
 
   updateTranscription: (messageId, transcription) => {
