@@ -52,8 +52,9 @@ npm run migrate
 ```
 
 - migration は **`server/.env` の DB 接続情報**を使います（先に `.env` があること）。
-- 全 migration を順に流しますが、**各 migration は冪等**（`IF EXISTS` / `IF NOT EXISTS` 等）に書かれているため、**再実行しても安全**です。既に適用済みのものは実質何もしません。
-- `All migrations completed.` が出れば成功。
+- 適用済みのファイルは台帳 (`schema_migrations`) に記録され、**未適用のものだけ**が流れます（[#406](https://github.com/gamasenninn/tealus/issues/406)）。何度流しても安全です。
+- `N 件の migration を適用しました。` か `適用済みです` が出れば成功。
+- ★★ **台帳の無い DB (v0.9.0 以前) では一度止まります。** 案内に出る `--baseline` は「最新まで当ててある DB」用です。**v0.9.0 から上げるなら `npm run migrate -- --baseline-through 026_message_form_type.sql` → `npm run migrate` の順に**（[#500](https://github.com/gamasenninn/tealus/issues/500)、下の「→ v0.10.0」）。
 
 ### 4. ★ クライアントを本番ビルド
 
@@ -110,7 +111,29 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
-### → 未リリース（2026-09-27〜10-01: 通知の設定 / 受け口の締め直し）
+### → v0.10.0（ルームトリガー / 会話モード / 読み上げのエンジン / 入口の締め直し）
+
+> **★ 影響範囲**: **全員に作業があります。** DB migration が 7 本 (`027`〜`033`)、client の再ビルドも要ります。
+> v0.9.0 から上げるときの手順は下の **0.** が最優先です。そのあとの節は、この版に入った作業の多い変更ごとの手順です。
+> 一覧は [CHANGELOG](../CHANGELOG.md) の v0.10.0。
+
+#### 0. ★★★ v0.9.0 から上げるときの migrate（[#500](https://github.com/gamasenninn/tealus/issues/500)）
+
+v0.9.0 の DB には migration の台帳 (`schema_migrations`) がありません。そのため `npm run migrate` は
+「どこまで適用済みか判定できません」と**止まります**。
+
+```bash
+cd server
+npm run migrate -- --baseline-through 026_message_form_type.sql   # 026 までを「適用済み」と記録するだけ
+npm run migrate                                                    # 027〜033 の 7 本が流れる
+```
+
+- ★★ **止まったときの案内に出る `--baseline` (上限なし) は打たないでください。** 全ファイルを「適用済み」と記録するだけなので、
+  **027〜033 が流れないまま適用済みになり、静かに壊れます** (会話モードの設定・通知のオフ・LINE の引用返信の表が無いまま動く)
+- 2026-09-05 以降の main を追っていて、一度 baseline 済みの環境は、ふつうに `npm run migrate` だけで残りが流れます
+- 確認: 2 行目の出力に `Running migration: 033_line_message_links.sql` が出ること。`npm run doctor` の `db-migrations` が「未適用 0 件」になること
+
+#### → 2026-09-27〜10-01 の分（通知の設定 / 受け口の締め直し）
 
 > **★ 影響範囲**: **全員**に作業が 2 つ (migration と client のビルド)。agent-server と本体の webhook を使っている環境は、**鍵を両側に入れる**作業が 1 つ増えます (推奨)。一覧と理由は [CHANGELOG](../CHANGELOG.md) の「★ 更新時の急所」。
 
@@ -144,7 +167,7 @@ cd ../client && npm run build     # 通知の設定画面・「いま見てい�
 
 **健全性チェック**: `npm run doctor` で `webhook-secret` の warn が出ないこと (鍵を入れた場合)。
 
-### → 未リリース（ルームの workspace から資格情報を追い出す）
+#### → ルームの workspace から資格情報を追い出す（#419）
 
 > **★ 影響範囲**: **`DEEP_AGENT_PROVIDER=codex` を使ったことがある環境だけ**に、**手を動かす作業があります**（[#419](https://github.com/gamasenninn/tealus/issues/419)）。使っていない環境と新規インストールは、**何もする必要がありません**。
 
@@ -215,14 +238,14 @@ Deep が走らないルーム  → ★ 残ったまま。読める状態が続�
 ★ 未定義の変数は**そのまま残ります**（空文字にすると `mysql://:@host/db` のような
 「それらしく見えて壊れている」値になり、原因が分からなくなるため）。起動ログの `envRefs` の警告で気づけます。
 
-**#419 そのものの DB migration は追加ゼロ**です。★ ただし同じ未リリースの版で、ほかの変更が **2 本足しています** (下の「この版のほかの変更」)。
+**#419 そのものの DB migration は追加ゼロ**です。★ ただし同じ v0.10.0 で、ほかの変更が migration を足しています (下の「この版のほかの変更」と、この節の **0.**)。
 
 **★ 鍵を入れ替えるかどうか**は、環境ごとに判断してください。判断材料の集め方（いつから読める状態だったか /
 読まれた形跡があるか）は [#419](https://github.com/gamasenninn/tealus/issues/419) のコメントに実例があります。
 ★ 本家の環境では「外部公開されておらず、到達できたのは社内メンバーだけで、読まれた証拠が無い」ため
 **入れ替えない**判断をしました。★★ ただし「読まれていない」ことが証明されたわけではありません。
 
-#### この版のほかの変更 (2026-09-28)
+#### → この版のほかの変更 (2026-09-28)
 
 **★ DB migration が 2 本増えました** (031 ルームごとの通知オフ [#463](https://github.com/gamasenninn/tealus/issues/463) / 032 機械の投稿の通知 [#463](https://github.com/gamasenninn/tealus/issues/463))。
 **必ず `npm run migrate` を流してから**本体を再起動してください。

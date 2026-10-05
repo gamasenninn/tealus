@@ -34,16 +34,16 @@ cd client       && npx tsc --noEmit && npx vitest run
 | 値 | 現在 | source of truth |
 |---|---|---|
 | Node 要件 | 24 | `package.json` の `engines`（6 パッケージ）/ `*/Dockerfile` / `.github/workflows/*.yml` |
-| MCP ツール数 | 18 | tealus-mcp（別リポ）の tools 定義。**版で見える数が違う**ので「v0.14.8 以降で 18」のように版を添える |
+| MCP ツール数 | 19 | tealus-mcp（別リポ）の `src/tools.js`。**版で見える数が違う**ので「v0.15.0 以降で 19」のように版を添える (v0.14.8 は 18) |
 | 絵文字リアクション | 7 | `client/src/components/chat/ContextMenu.tsx` の `REACTION_EMOJIS` |
-| 選択できる TTS の声 | 10 | `client/src/components/chat/RoomSettings.tsx` の `TTS_MODELS`（先頭の「デフォルト（環境変数）」を除く） |
-| migration の最新番号 | 026 | `server/src/db/migrations/` |
+| 読み上げのエンジン / 声 | 3 エンジン (Aivis 10 / OpenAI 13 / Gemini 30) | `agent-server/src/lib/ttsRoom.mts` の `TTS_ENGINES` / `TTS_VOICES`。★ v0.10.0 で画面の `TTS_MODELS` (Aivis 10) からここへ移った |
+| migration の最新番号 | 033 | `server/src/db/migrations/` |
 | cc-bridge の接続寿命 | 55 分 (3300 秒) | `agent-server/src/routes/ccQueue.mts` の `maxAgeMs()` 既定。★ **`SKILL.md` が取得失敗時の退避として 3300 をハードコードしている**ので、既定を変えたら消費側も直す |
 
 ```bash
 # 変化の確認（前タグとの差分）
-git diff v0.6.0..HEAD -- client/src/components/chat/ContextMenu.tsx \
-  client/src/components/chat/RoomSettings.tsx '*package.json' server/src/db/migrations
+git diff "$(git describe --tags --abbrev=0)"..HEAD -- client/src/components/chat/ContextMenu.tsx \
+  agent-server/src/lib/ttsRoom.mts '*package.json' server/src/db/migrations
 ```
 
 ★ **新しく「数えられるもの」を作ったら、この表に足すこと。** 表に無い値は誰も追わない。

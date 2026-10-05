@@ -10,9 +10,21 @@
 
 ## [Unreleased]
 
-> **★ この版の影響範囲**: **`DEEP_AGENT_PROVIDER=codex` を使ったことがある環境には、`git pull` のあとに手を動かす作業があります** (#419)。使っていない環境と新規インストールは作業ゼロ。会話モード (#420 #421) は **client の再ビルド**が要る (#421 は画面の変更)。DB migration は追加ゼロ。
+## [0.10.0] - 2026-10-05
+
+★ **「書いていない」を「決めてある」に変える** — v0.9.0 から 2 か月・327 コミット。新しい入口が 3 つ (**ルームトリガー** [#382](https://github.com/gamasenninn/tealus/issues/382) / **会話モード** [#389](https://github.com/gamasenninn/tealus/issues/389) / **読み上げのエンジン選択** [#444](https://github.com/gamasenninn/tealus/issues/444)) 入り、同じだけ **入口の締め直し** (部屋の外のものを指す口・ゲスト・agent-server の設定 API) が入った。どちらも「経路ごとに書いてある / 書いていない」でばらついていたものを、1 か所の約束にそろえる作業だった (投稿経路の地図 `docs/07` [#383](https://github.com/gamasenninn/tealus/issues/383))。
+
+> **★ この版の影響範囲**: **全員に作業があります。** DB migration が **7 本** (`027`〜`033`)、client の再ビルドも要ります。★★ **v0.9.0 から上げる場合、`npm run migrate` は一度止まります** — 案内に `--baseline` が出ても打たず、`--baseline-through 026_message_form_type.sql` を使ってください (下の急所の 1 行目、[#500](https://github.com/gamasenninn/tealus/issues/500))。agent-server と webhook を使っている環境は鍵を両側に入れる作業 (推奨, [#478](https://github.com/gamasenninn/tealus/issues/478))、`DEEP_AGENT_PROVIDER=codex` を使ったことがある環境は資格情報の移動 ([#419](https://github.com/gamasenninn/tealus/issues/419)) があります。
 
 ### ★ 更新時の急所
+
+- **★★★ v0.9.0 から上げるときの migrate** ([#500](https://github.com/gamasenninn/tealus/issues/500)): v0.9.0 の DB には migration の台帳 (`schema_migrations`、[#406](https://github.com/gamasenninn/tealus/issues/406) で導入) が無いので、`npm run migrate` は「どこまで適用済みか判定できません」と止まります。**ここで `--baseline` を打つと 027〜033 が流れないまま「適用済み」になり、静かに壊れます。** 次の 2 行を順に:
+  ```bash
+  cd server
+  npm run migrate -- --baseline-through 026_message_form_type.sql   # 026 までを記録するだけ
+  npm run migrate                                                    # 027〜033 が流れる
+  ```
+  ★ 9/5 以降の main を追っていて一度 baseline 済みの環境は、ふつうに `npm run migrate` で残りが流れます
 
 - **★ 2026-09-27〜10-01 の分 (ここから下の 7 行)** — まとめて更新する場合は全部当てはまる
 - **DB migration が 2 本ある** (`031_room_member_push_muted` / `032_room_push_machine_posts`、[#463](https://github.com/gamasenninn/tealus/issues/463))。`cd server && npm run migrate` を忘れると、**通知が黙って送られなくなる** (エラーはログに出るだけで、画面には出ない)。★ client も本番ビルドし直す (#463 の設定画面・[#475](https://github.com/gamasenninn/tealus/issues/475) の「いま見ている部屋」・[#476](https://github.com/gamasenninn/tealus/issues/476) の日付へ飛ぶ)。★ 更新前の画面は「見ていない」扱いになるので、通知は届く側に倒れる
@@ -27,6 +39,55 @@
 - **★ 直したことの確認に `ripgrep` / `grep -r` を使わない** — **既定で dot-dir を飛ばす**ので `.codex_home` の中に入らない。2026-09-06 に「残存 0 件」と誤報したのがこれ。`scripts/scan-workspace-secrets.mts` は全深さを歩き、**値を一切出さずに**ファイル名と種類だけ出す。
 - **★ client を本番ビルドし直す** — #421 は client のみの変更なので、ビルドしないと**画面は何も変わらない**。エラーは出ないので静かに変化ゼロになる。
 - **鍵を入れ替えるかは環境ごとの判断** — 判断材料の集め方 (いつから読める状態だったか / 読まれた形跡があるか) は #419 のコメントに実例がある。★ 本家は「外部公開されておらず、到達できたのは社内メンバーだけで、読まれた証拠が無い」ため**入れ替えない**判断をした。★★ 「読まれていない」ことが証明されたわけではない (テキスト経路は道具の呼び出しをログに残しておらず、ログの保存期間 31 日は露出していた 99 日に届かない)。
+
+### この版に入った変更の一覧 (分野別)
+
+★ 下の Added / Fixed / Security には、経緯まで書いたものだけが入っています。**この版の全体はこの一覧**で、詳細は各 issue にあります。
+
+**新しい入口**
+- **ルームトリガー** [#382](https://github.com/gamasenninn/tealus/issues/382) [#385](https://github.com/gamasenninn/tealus/issues/385) [#433](https://github.com/gamasenninn/tealus/issues/433): 条件が満たされたら定型メッセージを投稿する (毎朝の議事録・出品写真の変換・定時の巡回)。★ 作らないものは `docs/06` §9 に
+- **会話モード** [#389](https://github.com/gamasenninn/tealus/issues/389): 声で壁打ちして、組織記憶には入れない入口 (`docs/08`)。逐語は 1 週間で消える [#407](https://github.com/gamasenninn/tealus/issues/407)。切断を画面に出す [#409](https://github.com/gamasenninn/tealus/issues/409)。人の発話も記録する [#412](https://github.com/gamasenninn/tealus/issues/412)。他の部屋の読み上げと重ならない [#413](https://github.com/gamasenninn/tealus/issues/413)。表示のちらつきを止めた [#415](https://github.com/gamasenninn/tealus/issues/415)。道具は「既定で全部 + 外す」 [#418](https://github.com/gamasenninn/tealus/issues/418)。AI が送った投稿に由来の印 [#417](https://github.com/gamasenninn/tealus/issues/417)。いまの部屋を `current` で指せる [#477](https://github.com/gamasenninn/tealus/issues/477)。昇格の失敗理由を残す [#408](https://github.com/gamasenninn/tealus/issues/408)
+- **読み上げのエンジンを選べる** [#444](https://github.com/gamasenninn/tealus/issues/444): Aivis に加えて OpenAI / Gemini。ルームごとにエンジンと声を選ぶ (声は Aivis 10 / OpenAI 13 / Gemini 30)。固有名詞の読みを辞書から渡す [#446](https://github.com/gamasenninn/tealus/issues/446)
+
+**AI・辞書・議事録**
+- アシスタントの通常応答も中断できる [#399](https://github.com/gamasenninn/tealus/issues/399)。エージェントに渡す知識の配線を 1 か所に [#439](https://github.com/gamasenninn/tealus/issues/439)
+- 辞書の語を取り消せる [#375](https://github.com/gamasenninn/tealus/issues/375)。organon の写しの冗長な別名を畳む [#381](https://github.com/gamasenninn/tealus/issues/381)。organon で撤去された語を辞書からも外す [#384](https://github.com/gamasenninn/tealus/issues/384)
+- 議事録: 別名 → 正規名を Light 経路でも [#377](https://github.com/gamasenninn/tealus/issues/377)。「社長」を人名に置き換えない [#403](https://github.com/gamasenninn/tealus/issues/403)。〔要確認〕の印を 2 つに分ける [#452](https://github.com/gamasenninn/tealus/issues/452)。朝礼の議事録を本文で投稿する [#388](https://github.com/gamasenninn/tealus/issues/388)
+- STT 整形の律速は抽出段だった (読みの欠落で全部棄てられる便があった) [#371](https://github.com/gamasenninn/tealus/issues/371)
+
+**通話履歴・音声の添付**
+- 聞くだけの再生 (ダウンロードしない) [#376](https://github.com/gamasenninn/tealus/issues/376)。編集中も再生できる [#378](https://github.com/gamasenninn/tealus/issues/378)。前 / 次で連続編集 [#379](https://github.com/gamasenninn/tealus/issues/379)。他の音声を止める [#380](https://github.com/gamasenninn/tealus/issues/380)。時刻のタグから音声へ飛ぶ [#398](https://github.com/gamasenninn/tealus/issues/398)
+- PC では編集枠を縦に広げる [#395](https://github.com/gamasenninn/tealus/issues/395)。スマホでキーボードにボタンが隠れない [#397](https://github.com/gamasenninn/tealus/issues/397)。開いただけでキーボードを出さない [#404](https://github.com/gamasenninn/tealus/issues/404)
+
+**画面・リアルタイム**
+- 新しく入った部屋が、読み込み直さなくても届く (一般ユーザー) [#486](https://github.com/gamasenninn/tealus/issues/486)。部屋の設定・メンバーの変化が届く [#489](https://github.com/gamasenninn/tealus/issues/489)。リアクションの「自分が付けた」表示 [#488](https://github.com/gamasenninn/tealus/issues/488)。`/talk` で一覧が 2 つ動いていた [#487](https://github.com/gamasenninn/tealus/issues/487)
+- 裏にある画面で既読にしない [#474](https://github.com/gamasenninn/tealus/issues/474)。検索のタグ絞り込み [#461](https://github.com/gamasenninn/tealus/issues/461)。部屋の中の検索から元の部屋へすぐ戻る [#472](https://github.com/gamasenninn/tealus/issues/472)
+- 画面を触って見つけた 6 件 (議事録の時刻を JST に・部屋を削除できない ほか) [#485](https://github.com/gamasenninn/tealus/issues/485)。改名直後の投稿が古い名前で届く・表示名とひとことの入力の確かめ [#498](https://github.com/gamasenninn/tealus/issues/498)
+- タグ・TODO の変化を部屋に知らせる [#496](https://github.com/gamasenninn/tealus/issues/496)。添付の上限をサーバーでも効かせる・＋ボタンで CSV / MD / JSON [#497](https://github.com/gamasenninn/tealus/issues/497)
+
+**LINE・ゲスト**
+- LINE の引用返信が、Tealus でも返信として届く (migration `033`) [#490](https://github.com/gamasenninn/tealus/issues/490)
+- ゲスト: `@cc-` を配送しない [#491](https://github.com/gamasenninn/tealus/issues/491)。アシスタントが応答しない [#492](https://github.com/gamasenninn/tealus/issues/492)。スタンプは送るだけ [#495](https://github.com/gamasenninn/tealus/issues/495)。画面の小さな食い違い 3 件 [#494](https://github.com/gamasenninn/tealus/issues/494)
+
+**cc-bridge (`@cc-*`)**
+- 1 行目にスペース区切りで並べると同報になる [#386](https://github.com/gamasenninn/tealus/issues/386) [#387](https://github.com/gamasenninn/tealus/issues/387)。行頭にない mention・飾りで囲った mention に気づけるようにした [#393](https://github.com/gamasenninn/tealus/issues/393) [#450](https://github.com/gamasenninn/tealus/issues/450)。「届ける」と「起こす」の使い分けを決めた [#396](https://github.com/gamasenninn/tealus/issues/396)
+- 55 分ごとの再ログインをやめ、トークンを使い回す [#427](https://github.com/gamasenninn/tealus/issues/427)。Windows で待ち受けの `tail` が残り続けた (skill の `--pid`) [#473](https://github.com/gamasenninn/tealus/issues/473)。班ごとに専用のアカウントにする [#392](https://github.com/gamasenninn/tealus/issues/392)
+
+**MCP**
+- tealus-mcp **v0.15.0** で `edit_message` を追加 (ツールは 19) [#394](https://github.com/gamasenninn/tealus/issues/394)。`GET /api/bot/messages` が `limit` を読むようになった [#373](https://github.com/gamasenninn/tealus/issues/373)
+
+**運用・自己診断**
+- `npm run doctor` (初回起動の自己診断 [#438](https://github.com/gamasenninn/tealus/issues/438)・実測する口 [#442](https://github.com/gamasenninn/tealus/issues/442))。品質の見張りを 1 本機械に [#441](https://github.com/gamasenninn/tealus/issues/441)。migration の台帳 [#406](https://github.com/gamasenninn/tealus/issues/406) と、v0.9.0 からの上げ方 [#500](https://github.com/gamasenninn/tealus/issues/500)
+- Redis を外した (一度も使われていなかった) [#466](https://github.com/gamasenninn/tealus/issues/466)。テストが本番の `server/.env` を読まない [#468](https://github.com/gamasenninn/tealus/issues/468)。DB の接続の束が切断を受け止める [#470](https://github.com/gamasenninn/tealus/issues/470)。CI の actions を Node 24 対応へ [#464](https://github.com/gamasenninn/tealus/issues/464)。業務固有の skill を本体から外した [#402](https://github.com/gamasenninn/tealus/issues/402)
+
+**守り** (★ 突き方は書かない。入口と、誰だけにしたか)
+- ボットが部屋の ID だけで 1 対 1 の部屋に入れない・誤って入ったメンバーを外せる [#390](https://github.com/gamasenninn/tealus/issues/390) [#391](https://github.com/gamasenninn/tealus/issues/391)
+- agent-server の設定 API は、資源の持ち主 (管理者・ルーム管理者) だけ [#458](https://github.com/gamasenninn/tealus/issues/458)。署名だけで通っていた入口を確かめ直した [#459](https://github.com/gamasenninn/tealus/issues/459)
+- 返信先・転送元・タグ・通話など、部屋の外のものを指す口をその部屋のものに絞った [#482](https://github.com/gamasenninn/tealus/issues/482) [#483](https://github.com/gamasenninn/tealus/issues/483)。部屋のタグを消せる人を絞った [#496](https://github.com/gamasenninn/tealus/issues/496)
+- ボット・プッシュが 403 を返したとき、誰がどの部屋で断られたかを残す [#451](https://github.com/gamasenninn/tealus/issues/451)
+
+**ドキュメント**
+- `docs/06_ルームトリガー設計.md` / `docs/07_投稿経路と付随処理.md` [#383](https://github.com/gamasenninn/tealus/issues/383) / `docs/08_会話モード設計.md` を追加
 
 ### Added
 
@@ -1509,7 +1570,9 @@ OSS 公開準備の最終フェーズで実施した、採用者体験を磨く�
 - rtc-server と agent-server は同一モノリポ前提（相対 require を使用）
 - mcp-server は npm publish 未実施（[#187](https://github.com/gamasenninn/tealus/issues/187) で対応予定）
 
-[Unreleased]: https://github.com/gamasenninn/tealus/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/gamasenninn/tealus/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/gamasenninn/tealus/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/gamasenninn/tealus/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/gamasenninn/tealus/compare/v0.7.0...v0.8.0
 [0.2.2]: https://github.com/gamasenninn/tealus/releases/tag/v0.2.2
 [0.2.1]: https://github.com/gamasenninn/tealus/releases/tag/v0.2.1
