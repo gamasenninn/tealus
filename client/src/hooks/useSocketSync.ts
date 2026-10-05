@@ -2,12 +2,11 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useRoomStore } from '../stores/roomStore';
 import { useMessageStore } from '../stores/messageStore';
-import { getSocket } from '../services/socket';
+import { getSocket, joinRoom, leaveRoom } from '../services/socket';
 import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
 import { playTtsSrc } from '../services/ttsAudioPlayer';
 import { isAudioHeld } from '../utils/audioExclusive';
-import { shouldPlayMessageSound } from '../utils/messageSound';
 import { withMe } from '../utils/reactionMe';
 import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
@@ -163,11 +162,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       if (msg.sender_id !== user!.id) {
         if (document.visibilityState === 'visible') markRead([msg.id]);
         else pendingReadIds.push(msg.id);
-        const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true';
-        // ★ 自分・system メッセージ・通知音オフは鳴らさない (utils/messageSound、2026-10-02)
-        if (!isEmbed && shouldPlayMessageSound(msg, user!.id, localStorage.getItem('notificationSound'))) {
-          new Audio('/notification.wav').play().catch(() => {});
-        }
+        // ★ #505 新着の音はここでは鳴らさない。一覧 (RoomList) が iframe の中以外ではいつも動いていて、
+        //   開いている部屋の新着でも鳴らす。ここでも鳴らしていたので 1 件で 2 回鳴っていた
       }
     };
 
@@ -291,7 +287,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     };
 
     if (socket) {
-      socket.emit('room:join', roomId);
+      joinRoom(roomId);   // ★ #505 出入りは窓口で数える (一覧も同じ部屋に入っている)
       socket.on('connect', handleConnect);
       socket.on('message:new', handleMessageNew);
       socket.on('message:read', handleMessageRead);
@@ -317,7 +313,9 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       clearCurrentRoom();
       clearMessages();
       if (socket) {
-        socket.emit('room:leave', roomId);
+        // ★ #505 room:leave を直接送らない。送ると一覧ごとこの部屋から抜け、読み込み直すまで
+        //   一覧に新着 (音・未読・最後の投稿) が届かなかった。窓口が数えて、最後の 1 つのときだけ抜ける
+        leaveRoom(roomId);
         // #239: handler reference を passed して specific 削除 (他 listener 影響なし)
         socket.off('connect', handleConnect);
         socket.off('message:new', handleMessageNew);

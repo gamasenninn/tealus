@@ -4,7 +4,7 @@ import { useMultiTalkStore, roomClickAction } from '../../stores/multiTalkStore'
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useConfirm } from '../../stores/confirmStore';
-import { getSocket } from '../../services/socket';
+import { getSocket, joinRoom, leaveRoom } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
@@ -62,14 +62,16 @@ function RoomList() {
     if (!socket || rooms.length === 0) return;
 
     // Join all rooms so we receive message:new events
+    // ★ #505 出入りは窓口 (joinRoom / leaveRoom) で数える。部屋の画面も同じ部屋に入るので、
+    //   片方が抜けてももう片方が入っていれば抜けない
+    rooms.forEach((room) => joinRoom(room.id));
+
+    // Re-join on reconnect (after background recovery)。★ つなぎ直しは数えずに直接入る
     const joinAllRooms = () => {
       rooms.forEach((room) => {
         socket.emit('room:join', room.id);
       });
     };
-    joinAllRooms();
-
-    // Re-join on reconnect (after background recovery)
     socket.on('connect', joinAllRooms);
 
     const handleNewMessage = (msg: { sender_id?: string; type?: string }) => {
@@ -96,10 +98,8 @@ function RoomList() {
       socket.off('user:online', handleOnline);
       socket.off('user:offline', handleOffline);
       socket.off('connect', joinAllRooms);
-      // Leave all rooms when leaving room list
-      rooms.forEach((room) => {
-        socket.emit('room:leave', room.id);
-      });
+      // Leave all rooms when leaving room list (★ #505 窓口を通す。開いている部屋の画面がいれば抜けない)
+      rooms.forEach((room) => leaveRoom(room.id));
     };
   }, [rooms.length, fetchRooms]);
 

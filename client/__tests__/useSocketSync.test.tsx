@@ -35,7 +35,8 @@ const fakeSocket = {
   emit() { /* noop */ },
   trigger(e: string, data?: unknown) { this.handlers[e]?.(data); },
 };
-vi.mock('../src/services/socket', () => ({ getSocket: () => fakeSocket }));
+const roomRefs = vi.hoisted(() => ({ joinRoom: vi.fn(), leaveRoom: vi.fn() }));
+vi.mock('../src/services/socket', () => ({ getSocket: () => fakeSocket, ...roomRefs }));
 
 import { useSocketSync } from '../src/hooks/useSocketSync';
 import { playTtsSrc } from '../src/services/ttsAudioPlayer';
@@ -285,5 +286,51 @@ describe('useSocketSync — タグの知らせ (#496)', () => {
     unmount();
     expect(fakeSocket.handlers['message:tags']).toBeUndefined();
     expect(fakeSocket.handlers['room:tag_deleted']).toBeUndefined();
+  });
+});
+
+/**
+ * #505 部屋の画面が離れるときに room:leave を直接送り、一覧ごとその部屋から抜けていた。
+ * ★ 出入りは窓口 (joinRoom / leaveRoom) を通す。窓口が数えて、最後の 1 つのときだけ抜ける
+ */
+describe('useSocketSync — 部屋への出入りは窓口を通す (#505)', () => {
+  beforeEach(() => {
+    fakeSocket.handlers = {};
+    roomRefs.joinRoom.mockClear();
+    roomRefs.leaveRoom.mockClear();
+    vi.spyOn(fakeSocket, 'emit').mockClear();
+  });
+
+  it('★ 開いたら窓口で入り、離れたら窓口で抜ける', () => {
+    const { unmount } = renderHook(() => useSocketSync('room1'));
+    expect(roomRefs.joinRoom).toHaveBeenCalledWith('room1');
+    unmount();
+    expect(roomRefs.leaveRoom).toHaveBeenCalledWith('room1');
+  });
+
+  it('★★★ 離れるときに room:leave を直接送らない (一覧ごと抜けてしまう)', () => {
+    const { unmount } = renderHook(() => useSocketSync('room1'));
+    unmount();
+    const leaves = vi.mocked(fakeSocket.emit).mock.calls.filter((c) => (c as unknown[])[0] === 'room:leave');
+    expect(leaves).toEqual([]);
+  });
+});
+
+/**
+ * #505 開いている部屋では、1 件で通知音が 2 回鳴っていた (一覧 RoomList と部屋の画面が両方鳴らす)。
+ * ★ 一覧は iframe の中以外ではいつも動いていて、どの部屋の新着でも鳴らす。部屋の画面では鳴らさない
+ */
+describe('useSocketSync — 新着の音は一覧が鳴らす (#505)', () => {
+  beforeEach(() => {
+    fakeSocket.handlers = {};
+    localStorage.setItem('notificationSound', 'on');
+  });
+
+  it('★★ 開いている部屋に他の人の投稿が届いても、部屋の画面は音を鳴らさない', () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    renderHook(() => useSocketSync('room1'));
+    act(() => fakeSocket.trigger('message:new', { id: 'm1', room_id: 'room1', sender_id: 'other', type: 'text', content: 'x' }));
+    expect(play).not.toHaveBeenCalled();
+    play.mockRestore();
   });
 });
