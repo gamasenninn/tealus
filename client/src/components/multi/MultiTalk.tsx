@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Rnd } from 'react-rnd';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone } from 'lucide-react';
+import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
 import './MultiTalk.css';
 
@@ -13,6 +13,9 @@ import './MultiTalk.css';
  *   未読の数え方も自前で持っていたが、RoomList が新着のたびにサーバーから取り直すので要らない
  */
 
+/** #503 最小化したパネルの高さ = 帯 (MultiTalk.css の 18px) + 枠線 上下 1px。以前は 40 (帯が太かった) */
+const MINIMIZED_HEIGHT = 20;
+
 /** 開いているトークパネル 1 枚分 (localStorage 'multiTalkPanels' に永続化) */
 interface TalkPanel {
   id: number;
@@ -22,6 +25,8 @@ interface TalkPanel {
   y: number;
   width: number;
   height: number;
+  /** #503 最小化している (帯だけ見える) とき、帯に名前を出す。前に保存したパネルには無い = 普通 */
+  minimized?: boolean;
 }
 
 function MultiTalk() {
@@ -151,6 +156,7 @@ function MultiTalk() {
       y: Math.floor(i / cols) * (h + 8) + 4,
       width: w,
       height: h,
+      minimized: false,
     })));
   };
 
@@ -168,6 +174,7 @@ function MultiTalk() {
       y: 4,
       width: w,
       height: ch - 8,
+      minimized: false,
     })));
   };
 
@@ -176,14 +183,14 @@ function MultiTalk() {
     const container = containerRef.current;
     if (!container) return;
     setPanels(prev => prev.map(p => p.id === id ? {
-      ...p, x: 4, y: 4, width: container.clientWidth - 8, height: container.clientHeight - 8,
+      ...p, x: 4, y: 4, width: container.clientWidth - 8, height: container.clientHeight - 8, minimized: false,
     } : p));
   };
 
   // 最小化: ヘッダーだけに
   const minimizePanel = (id: number) => {
     setPanels(prev => prev.map(p => p.id === id ? {
-      ...p, height: 40,
+      ...p, height: MINIMIZED_HEIGHT, minimized: true,
     } : p));
   };
 
@@ -192,7 +199,7 @@ function MultiTalk() {
     const container = containerRef.current;
     if (!container) return;
     setPanels(prev => prev.map(p => p.id === id ? {
-      ...p, width: Math.min(500, container.clientWidth - 40), height: Math.min(container.clientHeight - 40, 800),
+      ...p, width: Math.min(500, container.clientWidth - 40), height: Math.min(container.clientHeight - 40, 800), minimized: false,
     } : p));
   };
 
@@ -221,7 +228,10 @@ function MultiTalk() {
             position={{ x: panel.x, y: panel.y }}
             size={{ width: panel.width, height: panel.height }}
             minWidth={320}
-            minHeight={300}
+            // ★ #503 最小化中は最小の高さも帯の高さに。300 のままだと min-height で引き戻され、
+            //   最小化が #123 以来効いていなかった (高さは 40 にしていたが画面は 300 のまま)
+            minHeight={panel.minimized ? MINIMIZED_HEIGHT : 300}
+            enableResizing={!panel.minimized}
             bounds="parent"
             dragHandleClassName="multi-panel-header"
             onDragStart={() => setInteracting(true)}
@@ -238,14 +248,20 @@ function MultiTalk() {
                 height: parseInt(ref.style.height),
                 x: pos.x,
                 y: pos.y,
+                minimized: false,
               } : p));
             }}
             onMouseDown={() => setActivePanel(panel.id)}
             style={{ zIndex: activePanel === panel.id ? 10 : 1 }}
           >
             <div className={`multi-panel ${activePanel === panel.id ? 'active' : ''}`}>
-              <div className="multi-panel-header">
-                <span className="multi-panel-title">{panel.roomName}</span>
+              {/* ★ #503 帯はドラッグのつかみ (中身は iframe なので、中の見出しではつかめない)。
+                    部屋の名前は中の見出しに出るので、ここには最小化したときだけ出す (帯しか見えないため)。
+                    色は #123 の「つかむ帯と部屋の見出しをはっきり区別する」で濃い灰色のまま */}
+              <div className="multi-panel-header" title={panel.roomName} aria-label={panel.roomName}>
+                {panel.minimized
+                  ? <span className="multi-panel-title">{panel.roomName}</span>
+                  : <GripHorizontal className="multi-panel-grip" size={14} aria-hidden="true" />}
                 <div className="multi-panel-btns">
                   <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); minimizePanel(panel.id); }} title="最小化"><Minimize2 size={12} /></button>
                   <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); restorePanel(panel.id); }} title="普通サイズ"><Square size={12} /></button>
