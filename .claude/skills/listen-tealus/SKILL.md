@@ -173,6 +173,12 @@ Monitor (
 
 接続コマンド (`{...}` を設定値で置換して 1 行の sh として渡す):
 
+> ★ **同じものがスクリプトにもある**: `cc-stream.sh` (この SKILL.md と同じディレクトリ、#484)。
+> 設定値を引数で受けるので、置換せずに `sh ~/.claude/skills/listen-tealus/cc-stream.sh {project_name} {本体の origin} {stream_url} {auth_file}` で動く。
+> PaneDeck の service で常駐させるのはこちら (Monitor の 30 分の期限が無くなる。`docs/setup-cc-tealus-bridge.md` の受け取り方 C)。
+> ★★ **変えるときは両方を直す。** `agent-server/__tests__/unit/listenTealusSkillAuth.test.mts` が 1 文字単位で突き合わせ、食い違うと落ちる。
+> 2 か所に置いているのは、SKILL.md を 1 ファイルだけ curl で取っている別マシンがあるため (全員がスクリプトも取るようになったら、こちらの写しを消す)。
+
 ```sh
 P={project_name}; API={本体の origin}; STREAM={stream_url}
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
@@ -281,6 +287,7 @@ done
 >
 > ```sh
 > awk '/^P=\{project_name\}/{f=1} f&&/^```/{exit} f' SKILL.md | sh -n && echo "構文 OK"
+> sh -n cc-stream.sh && echo "スクリプトも構文 OK"
 > ```
 >
 > Monitor が使うシェルは環境によって zsh / bash / dash と違う。`RANDOM` のような
@@ -315,57 +322,15 @@ user に以下のように報告:
 
 `<task-notification>` で 1 行 jsonl payload が届く (file / http どちらでも同じ形)。各 payload に対して:
 
-#### ★ 同報された便 (`recipients` が 2 つ以上) —— #387
+#### ★ 返し方の決まりは tealus MCP の案内文にある (#484、2026-10-05)
 
-payload に `recipients` があれば、**同じ便が他の班にも届いている**。
+同報への返し方・mention の書き方・`@cc-` を付けるかどうかの決まりは、**tealus MCP の案内文 (instructions)** に移した。
+tealus MCP につないだ session は最初にそれを読んでいる。**ここには写しを持たない** —— 2 か所に置くと片方だけ直して食い違う。
 
-```json
-{"id":"...","room_name":"AI班連絡","recipients":["tealus","organon","kairos"], ...}
-```
-
-- **他の班も同じものを読んでいる前提で動く。** 「調べておきます」と全班が言うと同じ作業が 3 回走る。
-  自分の担当範囲だけに答え、他班の範囲は書かない
-- ★ **返信の先頭 mention は発信者 1 つだけにする。** 受け取った宛先を並べて返してはいけない
-  —— A の返信が B と C を起こし、B の返信が A と C を起こす、が成立する。
-  自己ループ防止は「行頭にあるか」だけで効いている (`docs/06` §6.1) ので、
-  **返し方の慣習が唯一のブレーキ**になる
-- **同報してよいのは最初に投げる便だけ。** 返信・追記では使わない
-
-`recipients` が無い payload (古いサーバ) は単一宛先として扱う。
-
-#### ★ 送るとき —— `@cc-` を付けるかどうか (#396、2026-09-03 合意)
-
-**`@cc-x` は「配送する」と「起こす」を同時に意味する。片方だけを選ぶ書き方は無い。** そして
-**作らないと決めた** —— 部屋に投稿した時点で配送は済んでおり、queue が足しているのは実質「起こす」だけ
-だから (「queue に入れるが起こさない」は「部屋に置く」とほぼ同じ)。したがって判断は 1 行:
-
-```
-★ @ を付けない   1 日遅れても困らない便
-                 監査行 / 日次照合 / 「了解」/ 印を付けた報告 / 定型の自動報告
-★ @ を付ける     問い / 訂正 / 相手の記録を変えるもの / 急ぐもの
-```
-
-★ **基準を「相手に読む習慣があるか」に置かないこと。** 置くと、習慣の有無を双方で確かめ合ってからでないと
-始められない。**便ごとに「1 日遅れて困るか」で決めれば、いまの手順のまま双方が同時に始められる**
-(2026-09-03 に本体班・Mac セッションで合意。★ 前者で組んだ「両方が習慣を持ってから外す」は過剰だった)。
-
-★★ **遅れの実測**: 受け手はどちらも「起こされたときにしか部屋を読まない」に近い。
-本体班は朝のセッション開始時に 業務メモ + AI班連絡 を 24h ぶん読む手順があるが、**2 部屋・1 日 1 回・
-セッションが始まったときだけ**。Mac セッションは日次照合に「部屋を読む」を足した (2026-09-03)。
-**どちらも最大 1 日遅れる。** それで困る便には付ける。
-
-★★★ **記法を足す案を採らなかった理由は、失敗の仕方が違うから**:
-
-```
-新記法を足す    知らない班 → ★ 配送そのものを落とす (壊れる)
-@ を付けない    知らない班 → ★ いままでどおり付ける (今と同じ)
-```
-
-skill には配布経路が無く、**いちばん古い版の listener に合わせるしかない** (実例: 26 日古い版で
-運用していた班がいた)。耐えるのは後者だけ。
-
-★ 測定の全文と、この判断に至るまでの誤り 4 件は
-[#396](https://github.com/gamasenninn/tealus/issues/396) のコメントにある。
+- 本文: [tealus-mcp `src/instructions.js`](https://github.com/gamasenninn/tealus-mcp/blob/main/src/instructions.js) (v0.16.0 以降)
+- ★ 案内文が見当たらないときは、tealus-mcp が v0.15.0 以前。pin を上げて **Claude Code をフル再起動**する (in-app reload では効かない)
+- payload に `recipients` があり 2 つ以上なら**同報**。案内文の 3 (返信の先頭は発信者 1 人だけ・自分の担当の範囲だけ答える) に従う。`recipients` が無い payload (古いサーバ) は単一宛先として扱う
+- 経緯と理由: 同報 [#387](https://github.com/gamasenninn/tealus/issues/387) / 行頭・飾り [#393](https://github.com/gamasenninn/tealus/issues/393) [#450](https://github.com/gamasenninn/tealus/issues/450) / `@` を付けるか [#396](https://github.com/gamasenninn/tealus/issues/396) (測定の全文と誤り 4 件はそのコメント)
 
 #### L1 (notify only)
 ```
@@ -388,7 +353,7 @@ skill には配布経路が無く、**いちばん古い版の listener に合�
 reply 完了時 (L2 の OK 後 / L3 投稿成功時) に msg.id を watermark file (step 2 の path) に書き込む。**reply 失敗時は更新しない** (再起動で再提示)。
 
 ★★ **返さないと決めた便も、読み終えたら進める。** (2026-10-03 追加)
-「了解」「受領」など 1 日遅れて困らない便には @ を付けて返さない (上の #396 の基準)。
+「了解」「受領」など 1 日遅れて困らない便には @ を付けて返さない (tealus MCP の案内文の 2、#396)。
 このとき watermark を進めないと、**読み終えた便が未処理として残り続ける**。
 `catch_up_policy` が `all` の班では、次に張ったときに**全部をもう一度処理して、相手を二重に起こす**。
 ★ 2026-10-03 に本体班で 6 件溜まった (panedeck 班の了解・節目の報告。どれも読んで対応済み)。

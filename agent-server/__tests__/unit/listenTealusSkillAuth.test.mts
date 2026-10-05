@@ -158,3 +158,74 @@ describe('listen-tealus SKILL の認証 — 55 分ごとの login をやめる (
     expect(r.token).toBe('tok-1');
   });
 });
+
+/**
+ * #484 接続コマンドを SKILL.md から独立したスクリプト (cc-stream.sh) にも置いた。
+ * ★ PaneDeck の service で常駐させるため (Monitor の 30 分の期限が消える)。
+ * ★★ SKILL.md を 1 ファイルだけ curl で取っている別マシンがあるので、当面は 2 か所に置く。
+ *   **食い違ったら落とす** (片方だけ直すと、もう片方が黙って古いまま配られる)。
+ */
+const SCRIPT = path.resolve(process.cwd(), '..', '.claude', 'skills', 'listen-tealus', 'cc-stream.sh');
+const MARK = '# ---- ここから SKILL.md と同じ ----\n';
+
+function readScript(): string {
+  return fs.readFileSync(SCRIPT, 'utf8').replace(/\r\n/g, '\n');
+}
+
+describe('cc-stream.sh — 接続コマンドのスクリプト (#484)', () => {
+  it('★★★ 「SKILL.md と同じ」から後が、SKILL.md の接続コマンドと 1 文字も違わない', () => {
+    const s = readScript();
+    const at = s.indexOf(MARK);
+    expect(at).toBeGreaterThan(0);
+    // スクリプトは設定値を引数で受ける。SKILL.md は {…} を置き換える。その 2 か所だけを戻して比べる
+    const back = 'P={project_name}; API={本体の origin}; STREAM={stream_url}\n'
+      + s.slice(at + MARK.length).replace('-d @"$AUTH"', '-d @{auth_file}');
+    // ★ SKILL.md は CRLF のことがあり、readLoopBlock の `^sh\n` が外れない。改行をそろえてから外す
+    expect(back).toBe(readLoopBlock().replace(/\r\n/g, '\n').replace(/^sh\n/, ''));
+  });
+
+  it('★★ 構文が通る / わざと壊すと落ちる (検査が何かを見ていることを確かめる)', () => {
+    expect(() => execFileSync('sh', ['-n', SCRIPT])).not.toThrow();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-'));
+    const broken = path.join(dir, 'broken.sh');
+    fs.writeFileSync(broken, readScript().replace('while true; do', 'while true; d'));
+    expect(() => execFileSync('sh', ['-n', broken], { stdio: 'ignore' })).toThrow();
+  });
+
+  it('★ 引数が足りなければ、使い方を出して止まる (黙って空の宛先へつながない)', () => {
+    let out = '';
+    let code = 0;
+    try {
+      execFileSync('sh', [SCRIPT], { encoding: 'utf8' });
+    } catch (e) {
+      const err = e as { status: number; stdout: string };
+      code = err.status;
+      out = err.stdout;
+    }
+    expect(code).toBe(2);
+    expect(out).toContain('使い方');
+  });
+
+  it('★★ スクリプトでも、トークンが有効なら login を呼ばない (#427 と同じ振る舞い)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-auth-'));
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    const auth = path.join(dir, 'auth.json').replace(/\\/g, '/');
+    fs.writeFileSync(auth, JSON.stringify({ login_id: 'STUB', password: 'stub-pw' }));
+    const d = dir.replace(/\\/g, '/');
+    fs.writeFileSync(path.join(bin, 'curl'), [
+      '#!/bin/sh',
+      'for a in "$@"; do case "$a" in *api/auth/login*) echo x >> "' + d + '/logins"; printf \'{"token":"tok-new"}\'; exit 0 ;; esac; done',
+      'printf \'{"max_age_ms":3300000}\\n200\'',
+    ].join('\n'), { mode: 0o755 });
+    const s = readScript();
+    const prologue = s.slice(0, s.indexOf('while true; do'));
+    const script = `${prologue}\nTOKEN='tok-old'; auth_prepare\nprintf 'RESULT token=%s code=%s\\n' "$TOKEN" "$CODE"\n`;
+    const out = execFileSync('sh', ['-c', script, 'sh', 'stubproj', 'http://stub.invalid', 'http://stub.invalid/agent-api/cc-queue', auth], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    });
+    expect(out).toContain('RESULT token=tok-old code=200');
+    expect(fs.existsSync(path.join(dir, 'logins'))).toBe(false);
+  });
+});

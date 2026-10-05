@@ -87,9 +87,13 @@ repo が無いので GitHub から直接取ってきます。**ディレクト�
 mkdir -p ~/.claude/skills/listen-tealus
 curl -sL https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/SKILL.md \
   -o ~/.claude/skills/listen-tealus/SKILL.md
+curl -sL https://raw.githubusercontent.com/gamasenninn/tealus/main/.claude/skills/listen-tealus/cc-stream.sh \
+  -o ~/.claude/skills/listen-tealus/cc-stream.sh
 ```
 
 ユーザー単位 (`~/.claude/skills/`) に置くと、どのディレクトリで `claude` を起動しても使えます。
+
+★ `cc-stream.sh` は接続コマンドをスクリプトにしたもの (#484)。SKILL.md の中にも同じ接続コマンドがあるので、今は SKILL.md だけでも動きます。**PaneDeck の service で常駐させるときはスクリプトのほうを使います** ([`setup-cc-tealus-bridge.md`](setup-cc-tealus-bridge.md) の受け取り方 C)。
 
 ---
 

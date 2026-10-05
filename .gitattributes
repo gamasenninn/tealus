@@ -1,0 +1,3 @@
+# ★ #484 シェルスクリプトは常に LF。core.autocrlf=true の Windows で取り出すと CRLF になり、
+#   sh が「$'\r': command not found」で止まる (cc-stream.sh は別マシンの受け取りそのもの)
+*.sh text eol=lf

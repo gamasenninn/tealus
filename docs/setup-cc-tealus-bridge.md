@@ -7,7 +7,7 @@
 | 方向 | 仕組み | 用途 |
 |---|---|---|
 | **Outbound** (Claude Code → Tealus) | [tealus-mcp](https://github.com/gamasenninn/tealus-mcp) 経由で Bot API を MCP ツール化 | session から `mcp__tealus__send_message` 等で Tealus に送信、検索、ルーム作成・削除など |
-| **Inbound** (Tealus → Claude Code) | cc-tealus bridge ([#213](https://github.com/gamasenninn/tealus/issues/213) Phase A、file beacon + Monitor) | Tealus 上の `@cc-{project}` mention でミリ秒単位で session を起こす |
+| **Inbound** (Tealus → Claude Code) | cc-tealus bridge ([#213](https://github.com/gamasenninn/tealus/issues/213) Phase A、file beacon + 受け取り方 3 通り: Monitor / HTTP / PaneDeck) | Tealus 上の `@cc-{project}` mention で session を起こす |
 
 両方をセットアップすると、Claude Code session が **Tealus 上の能動的なメンバー**として振る舞えるようになります。「session が Tealus でメッセージを書く」「Tealus でユーザーが session を呼ぶ」が両方 1 つの操作 fabric として機能します。
 
@@ -16,7 +16,7 @@
 │                                                                  │
 │   Outbound (この文書 Part 1)                                      │
 │     Claude Code session                                          │
-│         ↓ tealus-mcp (MCP tool 18 個)                             │
+│         ↓ tealus-mcp (MCP tool 19 個、v0.15.0+)                   │
 │     Tealus Bot API                                               │
 │         ↓                                                        │
 │     Tealus DB / room broadcast                                   │
@@ -28,8 +28,9 @@
 │         ↓ @cc-{project} mention を filter                        │
 │     ~/.tealus/cc-queue/{project}.jsonl に append                 │
 │         ↓                                                        │
-│     Claude Code session の Monitor (`tail -F`)                   │
-│         ↓ sub-second wake-up                                     │
+│     受け取り方 A/B: session 自身の Monitor (`tail -F` / HTTP)     │
+│     受け取り方 C:   PaneDeck のトリガーがペインに一文を送る (#484)  │
+│         ↓ wake-up                                                │
 │     auto_level (L1/L2/L3) に従って応答                            │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
@@ -252,9 +253,9 @@ stdio (`@tealus list_rooms`) と同じ結果が返れば transport 透明性が�
 - **公開**: tealus host を public expose する場合は HTTPS / reverse proxy (nginx 等) で TLS 終端必須。`<JWT>` は適切な expiry で運用、漏洩時は `JWT_SECRET` rotate で全 token 失効。
 - **詳細**: [tealus-mcp README v0.12.x](https://github.com/gamasenninn/tealus-mcp#http-transport-リモート利用-v0120) 参照。
 
-## 提供される 18 個の MCP tool
+## 提供される 19 個の MCP tool
 
-[tealus-mcp v0.14.8 時点](https://github.com/gamasenninn/tealus-mcp)。**ツール数は版で変わる**ので、`/mcp` の表示と食い違うときは自分の tealus-mcp の版を確認すること:
+[tealus-mcp v0.15.0 時点](https://github.com/gamasenninn/tealus-mcp)。**ツール数は版で変わる**ので、`/mcp` の表示と食い違うときは自分の tealus-mcp の版を確認すること:
 
 | Tool | 用途 |
 |---|---|
@@ -266,6 +267,7 @@ stdio (`@tealus list_rooms`) と同じ結果が返れば transport 透明性が�
 | `get_messages` | ルームのメッセージ履歴取得。voice transcription は default で `formatted_text` のみ inline (`include_raw=true` / `include_transcription=false` で verbosity 制御、v0.7.0〜) |
 | `get_message_media` | メッセージのメディア取得 (画像は AI 直接視認可、音声は文字起こし優先) |
 | `get_message_edit_history` | メッセージの編集履歴を取得 |
+| `edit_message` | 既存メッセージの本文を直す (v0.15.0〜、[#394](https://github.com/gamasenninn/tealus/issues/394)) |
 | `transcribe_media` | 音声 / 動画の文字起こし (`force_retranscribe` で cache を無視) |
 | `read_document` | 添付ドキュメントの読み取り |
 | `search_messages` | キーワード / タグ / 期間 / 発言者でメッセージ全文検索 |
@@ -534,6 +536,85 @@ session が L2 で reply 案を作り、`OK` で送信されるとき、内部�
 
 ---
 
+## 受け取り方は 3 通り (#484)
+
+agent-server が書くのは `~/.tealus/cc-queue/{project}.jsonl` の 1 行だけで、**誰が・どうやって受け手を起こすか**は受け手側で選びます。
+
+| | 受け取り方 | 起こす者 | 向いている場面 |
+|---|---|---|---|
+| A | `listen-tealus` (file mode) | session 自身の Monitor (`tail -F`) | 同じマシン。PaneDeck を使わない |
+| B | `listen-tealus` (http mode) | session 自身の Monitor (接続コマンド) | 別マシン ([`setup-cc-remote.md`](setup-cc-remote.md)) |
+| **C** | **PaneDeck のペイン** + `handle-tealus` | **PaneDeck のトリガー** | PaneDeck でペインを並べて動かしている |
+
+★ **A/B の弱さは「起こす仕組みが session の寿命に預けられている」こと**です。Monitor は最長 30 分で黙って切れ、張り直しを忘れると受け手が黙って耳を失います (2026-09-20 に 7 時間、誰も待っていなかった)。C は起こす仕組みを、ペインと同じだけ生きている PaneDeck の 1 か所に移します。**落ちるときはツールバーに理由が出る** (黙らない)。
+
+★★ **1 つの queue を起こす者は 1 人だけ。** 同じ queue を A と C の両方で受けると、watermark (どこまで処理したか) が 1 つしかないので、片方が進めた位置をもう片方が「処理済み」として飛ばします (2026-10-04 に実際に起きた)。**班ごとにどちらか 1 つ**に決めてください。班どうしで混ざっているのは構いません。
+
+### 受け取り方 C: PaneDeck のペインで受ける
+
+**1. PaneDeck の `settings.json` にトリガーを足す** ([PaneDeck README の triggers](https://github.com/gamasenninn/panedeck#telling-a-pane-that-a-file-grew-triggers))
+
+```json
+"triggers": [{
+  "watch": "C:/Users/me/.tealus/cc-queue/tealus-apps.jsonl",
+  "pane":  { "title": "tealus-apps" },
+  "send":  "Tealus に新着 {count} 件（最新 id={id}）。handle-tealus で queue を読んで対応して。"
+}]
+```
+
+- `pane.title` はペインの題 (ダブルクリックで変えられる)。**同じ題のペインが 2 つあると送らずにツールバーで知らせます**
+- ★★ **`send` に本文 (`{content}` など) を入れないこと。** PaneDeck が送る文は、受け手には **user が打ったもの**として入ります。本文を差し込むと、`@cc-x` を書ける人なら誰でも user として指示できることになります。**ID だけを送り、本文は受け手が MCP で取りに行きます** — そうすれば本文は「道具が返したデータ」として届きます
+- 作業中のペインには送らず、手が空いたときに **まとめて 1 通**で送ります (中断しない代わりに遅れる)
+- PaneDeck を閉じていた間の行も、次に開いたときに届きます (どこまで送ったかを保存している)
+
+**2. ペインの中では `handle-tealus` を使い、Monitor は張らない**
+
+`handle-tealus` は `listen-tealus` から「待つ」半分を抜いた skill です。**扱う手順 (catch-up / 1 件ごとの振る舞い / watermark) は `listen-tealus` の該当の節を読みに行く**ので、手順の本体は 1 か所にしかありません。
+
+★ **ペインの中で `listen-tealus` を実行しないこと** (Monitor を張ってしまい、上の「起こす者は 1 人」が崩れる)。張ってしまったら `TaskStop` で止めます。
+
+**3. 別マシンの班は、接続コマンドを PaneDeck の service で常駐させる**
+
+http mode の接続コマンドは、受け取った便を `~/.claude/.cc-stream-{project}.ndjson` に追記しています。これを PaneDeck の [`services`](https://github.com/gamasenninn/panedeck#keeping-a-command-running-services) で動かし、トリガーにそのファイルを見させれば、**同じマシンの班と同じ形**になります (30 分の期限が消え、接続の異常は Claude を起こさずに PaneDeck のログに出る)。
+
+接続コマンドはスクリプト `.claude/skills/listen-tealus/cc-stream.sh` にもなっています (設定値を引数で受ける):
+
+```json
+"services": [{
+  "name": "tealus-feed",
+  "command": "sh ~/.claude/skills/listen-tealus/cc-stream.sh tealus-apps https://tealus.example.com https://tealus.example.com/agent-api/cc-queue ~/.tealus/cc-auth.json",
+  "restart": "always"
+}],
+"triggers": [{
+  "watch": "~/.claude/.cc-stream-tealus-apps.ndjson",
+  "pane":  { "title": "tealus-apps" },
+  "send":  "Tealus に新着 {count} 件（最新 id={id}）。handle-tealus で queue を読んで対応して。"
+}]
+```
+
+★ `~` が展開されるかは PaneDeck の設定の読み方によるので、動かないときは絶対パスで書いてください。
+
+★ 接続コマンドの出力をペインへ直接流さず、**必ずファイルを挟む**こと。受け取った直後に PaneDeck が落ちても、行がファイルに残るためです。
+
+★ この形 (別マシン × PaneDeck) は、まだ試験していません (#484 のチェックリスト)。
+
+### 「届けた」と「処理した」は別
+
+PaneDeck が知れるのは「ペインに送った」までです。**処理したかどうかは、受け手が watermark を進めたかで決まります** (A/B と同じ)。返すつもりで失敗した便は watermark を進めないので、次に起こされたときに残っています。
+
+---
+
+## 返し方の決まり (どの受け取り方でも同じ)
+
+同報への返し方・mention の書き方・`@cc-` を付けるかどうかの決まりは、**tealus MCP の案内文 (instructions) にあります** (tealus-mcp v0.16.0 以降)。MCP の案内文は、つないだ session が最初に必ず読むものなので、**受け取り方にもエージェントの種類にも依らずに届きます**。
+
+- 本文: [tealus-mcp `src/instructions.js`](https://github.com/gamasenninn/tealus-mcp/blob/main/src/instructions.js) — ★ **決まりの真実はここ 1 か所**。ほかの場所 (この文書・skill) は要約を持たず、ここを指すだけにします (2 か所に置くと片方だけ直して食い違う)
+- 以前は `listen-tealus` の skill の中にだけあり、skill を使わない受け手 (C のペインや、別のエージェント) には届かない形でした (#484)
+- ★ v0.15.0 以前の tealus-mcp には案内文がありません。古い版を pin している環境は、pin を上げて **Claude Code をフル再起動**してください (in-app reload では stdio の子プロセスが残る)
+
+
+---
+
 # Part 3: 統合動作確認 — 1 cycle 全部回す
 
 両方向が動いている状態で、以下を試して 1 cycle 完走できれば setup 完了:
@@ -691,7 +772,9 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 ## 内部実装
 
 - agent-server cc-queue: `agent-server/src/webhook/ccQueue.js` + `handler.js`
-- listen-tealus skill: `.claude/skills/listen-tealus/SKILL.md`
+- listen-tealus skill: `.claude/skills/listen-tealus/SKILL.md` (http の接続コマンドは同じディレクトリの `cc-stream.sh` にも。食い違いはテストが落とす)
+- handle-tealus skill (PaneDeck のペイン用、受け取り方 C): `.claude/skills/handle-tealus/SKILL.md`
+- 返し方の決まり: [tealus-mcp `src/instructions.js`](https://github.com/gamasenninn/tealus-mcp/blob/main/src/instructions.js) (v0.16.0+)
 - 設定 schema: `.claude/cc-tealus.json` (`.json.example` から copy)
 
 ## 外部 repo
