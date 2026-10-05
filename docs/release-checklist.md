@@ -48,6 +48,13 @@ git diff "$(git describe --tags --abbrev=0)"..HEAD -- client/src/components/chat
 
 ★ **新しく「数えられるもの」を作ったら、この表に足すこと。** 表に無い値は誰も追わない。
 
+### 3.5 ★ 前のタグの環境から上げる道を、実物でなぞる
+
+`git describe --tags --abbrev=0` の版で動いている環境を想定して、[アップグレードガイド](upgrade-guide.md)の手順 (pull → install → **migrate** → build → 再起動) を、**そのとき出る案内文まで**コードで追う。
+
+- ★ **本家の環境は main を追っているので、タグを追う採用者だけが踏む穴は本家では起きない**。2026-10-05 の v0.10.0 では、v0.9.0 の DB (migration の台帳がまだ無い) で `npm run migrate` が止まり、案内どおり `--baseline` を打つと **027〜033 が流れないまま「適用済み」になる**穴を、タグを打つ直前に拾った ([#500](https://github.com/gamasenninn/tealus/issues/500))
+- 「既存の環境」向けの対策を足した版では特に、**前のタグの状態を作ってテストする** (#500 のテストは「026 まで流した台帳なしの DB」を作っている)
+
 ### 4. コミット → 注釈タグ → push
 
 ```bash

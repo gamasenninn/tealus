@@ -157,6 +157,8 @@ describe('Group Member Management', () => {
         .set('Authorization', `Bearer ${admin.token}`);
 
       expect(res.status).toBe(200);
+      // ★ 画面のボタン・部屋のお知らせと同じ言葉 (「除外」は使わない)
+      expect(res.body.message).toBe('鈴木花子を退会させました');
     });
 
     it('should create a system message when kicking', async () => {
@@ -186,6 +188,7 @@ describe('Group Member Management', () => {
         .set('Authorization', `Bearer ${user1.token}`);
 
       expect(res.status).toBe(403);
+      expect(res.body.error).toBe('グループ管理者だけがメンバーを退会させられます');
     });
 
     it('should reject self-kick', async () => {
@@ -194,6 +197,7 @@ describe('Group Member Management', () => {
         .set('Authorization', `Bearer ${admin.token}`);
 
       expect(res.status).toBe(400);
+      expect(res.body.error).toBe('自分を退会させることはできません。「このグループを退会」を使ってください。');
     });
   });
 

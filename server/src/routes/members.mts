@@ -159,7 +159,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
 
   // Cannot kick self
   if (targetUserId === req.user!.id) {
-    return res.status(400).json({ error: '自分自身を除外することはできません。退会を使用してください。' });
+    return res.status(400).json({ error: E.SELF_KICK_NOT_ALLOWED });
   }
 
   try {
@@ -170,7 +170,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
 
     if (roomType.rows[0].type === 'group') {
       if (req.memberRole !== 'admin') {
-        return res.status(403).json({ error: 'グループ管理者のみがメンバーを除外できます' });
+        return res.status(403).json({ error: 'グループ管理者だけがメンバーを退会させられます' });
       }
     } else {
       // direct: 本来の 2 人 = joined_at が最古の行
@@ -222,7 +222,8 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
     });
 
     announceRoomUpdated(roomId);   // ★ #489 残った人の見出しの人数を反映する
-    res.json({ message: `${targetName}を除外しました` });
+    // ★ 画面のボタン・部屋のお知らせと同じ言葉にそろえる (以前は「除外しました」)
+    res.json({ message: `${targetName}を退会させました` });
   } catch (err) {
     logger.error('Kick member error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
