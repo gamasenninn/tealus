@@ -1,4 +1,4 @@
-import { planMigrations, needsBaseline } from '../../src/db/migrate.mts';
+import { planMigrations, needsBaseline, baselineTargets } from '../../src/db/migrate.mts';
 
 /**
  * #406 migration runner が台帳を持たず、毎回全ファイルを再生していた。
@@ -53,5 +53,29 @@ describe('needsBaseline — 既存 DB を勝手に「適用済み」にしない
   it('台帳が在れば、テーブルの有無に関わらず進めてよい', () => {
     expect(needsBaseline(true, true)).toBe(false);
     expect(needsBaseline(true, false)).toBe(false);
+  });
+});
+
+describe('baselineTargets — どこまでを「適用済み」と記録するか (#500)', () => {
+  /**
+   * ★★ v0.9.0 の DB は 026 まで、台帳なし。`--baseline` (上限なし) は 027 以降まで
+   *   「適用済み」と記録してしまい、**流れないまま静かに壊れる**。上限を付けられるようにする。
+   */
+  const all = ['001_a.sql', '002_b.sql', '003_c.sql'];
+
+  it('★ 上限なしなら未適用を全部 (従来の --baseline)', () => {
+    expect(baselineTargets(all, new Set())).toEqual(all);
+  });
+
+  it('★★ 上限ありなら、そのファイルまで (残りは通常実行で流れる)', () => {
+    expect(baselineTargets(all, new Set(), '002_b.sql')).toEqual(['001_a.sql', '002_b.sql']);
+  });
+
+  it('上限ありでも、既に記録済みのものは返さない', () => {
+    expect(baselineTargets(all, new Set(['001_a.sql']), '002_b.sql')).toEqual(['002_b.sql']);
+  });
+
+  it('★★★ 存在しない名前は止める (打ち間違いで全部が適用済みになるのを防ぐ)', () => {
+    expect(() => baselineTargets(all, new Set(), '026_typo.sql')).toThrow(/026_typo\.sql/);
   });
 });

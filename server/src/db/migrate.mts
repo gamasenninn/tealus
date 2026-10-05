@@ -14,6 +14,10 @@
  * ★ 既存 DB の初期投入は **推測しない**。台帳が無いのにテーブルが在る DB は
  *   「全部適用済み」か「途中まで」か**区別が付かない**ので、止めて人に決めさせる:
  *     npm run migrate -- --baseline    ← 全ファイルを「適用済み」として記録するだけ (流さない)
+ *
+ * ★★ #500: 上限なしの baseline は **最新まで当ててある DB でしか正しくない**。v0.9.0 の DB は
+ *   026 までなので、027 以降が流れないまま適用済みになる。上限を付けられるようにした:
+ *     npm run migrate -- --baseline-through 026_message_form_type.sql   ← そこまでを記録。残りは次の通常実行で流れる
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,8 +28,8 @@ const LEDGER = 'schema_migrations';
 
 // ★ 純粋な判断は pg を import しないファイルに置く (#406 / 2026-09-19)。
 //   agent-server 側はそちらを直接 import すること (ここを経由すると pg まで要求される)。
-import { planMigrations, needsBaseline } from './migrationPlan.mts';
-export { planMigrations, needsBaseline };
+import { planMigrations, needsBaseline, baselineTargets } from './migrationPlan.mts';
+export { planMigrations, needsBaseline, baselineTargets };
 
 function listMigrationFiles(dir: string): string[] {
   return fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
@@ -48,6 +52,8 @@ async function hasUserTables(client: pg.PoolClient): Promise<boolean> {
 export interface MigrateOptions {
   /** 全ファイルを「適用済み」として記録するだけ (流さない)。既存 DB の初期投入用 */
   baseline?: boolean;
+  /** #500 このファイルまでを「適用済み」として記録するだけ (流さない)。v0.9.0 からの更新用 */
+  baselineThrough?: string;
   log?: (message: string) => void;
 }
 
@@ -67,15 +73,21 @@ export async function migrate(config?: pg.PoolConfig, opts: MigrateOptions = {})
   const client = await pool.connect();
   try {
     const ledgerExists = await hasLedgerTable(client);
+    const baselining = Boolean(opts.baseline || opts.baselineThrough);
 
     // ★ 推測しない。台帳が無いのにテーブルが在るなら、ここで止めて人に決めさせる
-    if (!opts.baseline && needsBaseline(ledgerExists, await hasUserTables(client))) {
+    if (!baselining && needsBaseline(ledgerExists, await hasUserTables(client))) {
       throw new Error(
         `${LEDGER} が無いのに、既にテーブルが存在します。どこまで適用済みか判定できません。\n`
-        + `  既存の DB なら:  npm run migrate -- --baseline   (全ファイルを「適用済み」として記録するだけ)\n`
-        + `  作り直すなら:    DB を空にしてから npm run migrate`,
+        + `  v0.9.0 以前から上げるなら:  npm run migrate -- --baseline-through 026_message_form_type.sql\n`
+        + `                              (026 までを「適用済み」と記録。続けて npm run migrate で 027 以降が流れます)\n`
+        + `  最新まで当ててある DB なら:  npm run migrate -- --baseline   (全ファイルを「適用済み」として記録するだけ)\n`
+        + `  作り直すなら:                DB を空にしてから npm run migrate`,
       );
     }
+
+    // ★ #500 上限の名前は、台帳を作る前に確かめる (打ち間違いで何かを記録しない)
+    if (opts.baselineThrough !== undefined) baselineTargets(files, new Set(), opts.baselineThrough);
 
     await client.query(
       `CREATE TABLE IF NOT EXISTS ${LEDGER} (
@@ -87,11 +99,14 @@ export async function migrate(config?: pg.PoolConfig, opts: MigrateOptions = {})
     const applied = new Set(rows.map((r) => r.filename));
     const pending = planMigrations(files, applied);
 
-    if (opts.baseline) {
-      for (const file of pending) {
+    if (baselining) {
+      const targets = baselineTargets(files, applied, opts.baselineThrough);
+      for (const file of targets) {
         await client.query(`INSERT INTO ${LEDGER} (filename) VALUES ($1) ON CONFLICT DO NOTHING`, [file]);
       }
-      log(`baseline: ${pending.length} 件を「適用済み」として記録しました (実行はしていません)`);
+      log(`baseline: ${targets.length} 件を「適用済み」として記録しました (実行はしていません)`);
+      const rest = pending.length - targets.length;
+      if (rest > 0) log(`  残り ${rest} 件は、続けて npm run migrate で流れます`);
       return;
     }
 
@@ -126,7 +141,16 @@ export async function migrate(config?: pg.PoolConfig, opts: MigrateOptions = {})
 if (import.meta.main) {
   dotenv.config();
   const baseline = process.argv.includes('--baseline');
-  migrate(undefined, { baseline }).catch(err => {
+  // #500 --baseline-through <name> / --baseline-through=<name>
+  const i = process.argv.findIndex((a) => a === '--baseline-through' || a.startsWith('--baseline-through='));
+  const arg = i < 0 ? undefined : process.argv[i];
+  const baselineThrough = arg === undefined ? undefined
+    : arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : process.argv[i + 1];
+  if (arg !== undefined && !baselineThrough) {
+    console.error('Migration failed: --baseline-through にはファイル名が要ります (例: 026_message_form_type.sql)');
+    process.exit(1);
+  }
+  migrate(undefined, { baseline, baselineThrough }).catch(err => {
     console.error('Migration failed:', err instanceof Error ? err.message : err);
     process.exit(1);
   });

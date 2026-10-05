@@ -23,3 +23,19 @@ export function planMigrations(files: string[], applied: Set<string>): string[] 
 export function needsBaseline(hasLedger: boolean, hasUserTables: boolean): boolean {
   return !hasLedger && hasUserTables;
 }
+
+/**
+ * baseline で「適用済み」と記録するファイル (#500)。
+ * ★ 上限なし (従来の `--baseline`) は未適用を全部返す —— **最新まで当ててある DB でしか正しくない**。
+ *   v0.9.0 の DB (026 まで・台帳なし) で使うと 027 以降が流れないまま適用済みになる。
+ * ★★ 上限 (`--baseline-through`) を付けると、そのファイルまでを返す。残りは通常実行で流れる。
+ * ★★★ 存在しない名前は止める。黙って「全部」や「0 件」に倒すと、どちらも静かに壊れる。
+ */
+export function baselineTargets(files: string[], applied: Set<string>, through?: string): string[] {
+  const pending = planMigrations(files, applied);
+  if (through === undefined) return pending;
+  if (!files.includes(through)) {
+    throw new Error(`--baseline-through に指定した ${through} は migrations の中にありません (ファイル名をそのまま指定してください。例: 026_message_form_type.sql)`);
+  }
+  return pending.filter((f) => f <= through);
+}

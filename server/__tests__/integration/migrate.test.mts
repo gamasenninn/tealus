@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import pg from 'pg';
 import { migrate } from '../../src/db/migrate.mts';
 
@@ -90,5 +92,42 @@ describe('migrate — 台帳 (#406)', () => {
     expect(Number(led[0].n)).toBeGreaterThan(20);
     // baseline 後は通常実行が通る
     await expect(migrate(CFG, silent)).resolves.toBeUndefined();
+  });
+
+  /**
+   * ★★★ #500 v0.9.0 から上げる形: 026 まで流してあり、台帳が無い。
+   *   上限なしの baseline だと 027 以降が流れないまま「適用済み」になる。
+   */
+  async function makeV090Db(): Promise<string[]> {
+    const dir = path.join(import.meta.dirname, '../../src/db/migrations');
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+    const p = new pg.Pool(CFG);
+    for (const f of files.filter((f) => f <= '026_message_form_type.sql')) {
+      await p.query(fs.readFileSync(path.join(dir, f), 'utf8'));
+    }
+    await p.end();
+    return files.filter((f) => f > '026_message_form_type.sql');
+  }
+
+  test('★★★ v0.9.0 の DB で止まったとき、上限つきの baseline を案内する', async () => {
+    await makeV090Db();
+    await expect(migrate(CFG, silent)).rejects.toThrow(/--baseline-through/);
+  });
+
+  test('★★★★ 上限つき baseline のあと、通常実行で 027 以降が流れる', async () => {
+    const rest = await makeV090Db();
+    expect(rest.length).toBeGreaterThan(0);
+    await migrate(CFG, { baselineThrough: '026_message_form_type.sql', log: () => {} });
+    const lines: string[] = [];
+    await migrate(CFG, { log: (m) => lines.push(m) });
+    for (const f of rest) expect(lines).toContain(`Running migration: ${f}`);
+    // ★ 実際に表ができている (033)
+    expect((await q<{ n: string }>("SELECT count(*) n FROM information_schema.tables WHERE table_name='line_message_links'"))[0].n).toBe('1');
+  });
+
+  test('★ 上限に存在しない名前を渡したら、何も記録せずに止まる', async () => {
+    await makeV090Db();
+    await expect(migrate(CFG, { baselineThrough: '026_typo.sql', log: () => {} })).rejects.toThrow(/026_typo/);
+    expect((await q<{ n: string }>("SELECT count(*) n FROM information_schema.tables WHERE table_name='schema_migrations'"))[0].n).toBe('0');
   });
 });
