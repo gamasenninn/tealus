@@ -229,3 +229,77 @@ describe('cc-stream.sh — 接続コマンドのスクリプト (#484)', () => {
     expect(fs.existsSync(path.join(dir, 'logins'))).toBe(false);
   });
 });
+
+/**
+ * #484 「粘らず落ちる」選択肢 (CC_STREAM_GIVE_UP) — PaneDeck 班の依頼 (2026-10-05)
+ * ★ PaneDeck の service の中で永久に粘ると「つながっていないのにプロセスは生きている」になり、
+ *   静かな日と見分けが付かない。落ちれば PaneDeck が起こし直し、再起動の回数をツールバーに出す。
+ * ★★ 既定は今のまま粘る (Claude Code の Monitor には起こし直す者がいないので、それが正しい)
+ */
+describe('cc-stream.sh — 粘らず落ちる (CC_STREAM_GIVE_UP、#484)', () => {
+  /** つながらない curl と、待たない sleep で、接続のループを回す */
+  function runFailingLoop(env: Record<string, string>, killAfterSleeps: number) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-giveup-'));
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    const d = dir.replace(/\\/g, '/');
+    const auth = `${d}/auth.json`;
+    fs.writeFileSync(auth, JSON.stringify({ login_id: 'STUB', password: 'stub-pw' }));
+    // ★ login は通し、/pending は 200 (max_age あり)、/stream は「つながらない」(curl=7)
+    fs.writeFileSync(path.join(bin, 'curl'), [
+      '#!/bin/sh',
+      'for a in "$@"; do case "$a" in',
+      `  *api/auth/login*) printf '{"token":"tok"}'; exit 0 ;;`,
+      `  *pending*) printf '{"max_age_ms":3300000}\\n200'; exit 0 ;;`,
+      `  *stream?*) echo x >> "${d}/streams"; exit 7 ;;`,
+      'esac; done',
+      'exit 0',
+    ].join('\n'), { mode: 0o755 });
+    // ★ sleep は待たない。決めた回数を超えたら親 (スクリプト) を止める = 「終わらなかった」の印
+    fs.writeFileSync(path.join(bin, 'sleep'), [
+      '#!/bin/sh',
+      `echo x >> "${d}/sleeps"`,
+      `N=$(wc -l < "${d}/sleeps" | tr -d ' ')`,
+      `[ "$N" -ge ${killAfterSleeps} ] && kill -TERM $PPID`,
+      'exit 0',
+    ].join('\n'), { mode: 0o755 });
+    const home = path.join(dir, 'home');
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    let status = 0;
+    let out = '';
+    try {
+      out = execFileSync('sh', [SCRIPT, 'stubproj', 'http://stub.invalid', 'http://stub.invalid/agent-api/cc-queue', auth], {
+        encoding: 'utf8',
+        timeout: 20000,
+        env: { ...process.env, ...env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+      });
+    } catch (e) {
+      const err = e as { status: number | null; signal: string | null; stdout: string };
+      status = err.status ?? (err.signal ? 143 : -1);
+      out = err.stdout ?? '';
+    }
+    const count = (f: string) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n').length : 0);
+    return { status, out, streams: count('streams') };
+  }
+
+  it('★★ CC_STREAM_GIVE_UP=2 なら、想定外の切断が 2 回続いたところで exit 1 し、理由を 1 行出す', () => {
+    const r = runFailingLoop({ CC_STREAM_GIVE_UP: '2' }, 10);
+    expect(r.status).toBe(1);
+    expect(r.streams).toBe(2);
+    expect(r.out).toContain('[stream] gave up after 2 unexpected disconnects');
+  });
+
+  it('★ 付けなければ、何回切れても終わらない (今までどおり粘る)', () => {
+    const r = runFailingLoop({}, 4);
+    expect(r.out).not.toContain('gave up');
+    expect(r.streams).toBeGreaterThanOrEqual(4);
+  });
+
+  it('★ 数でない値・0 は付けていないのと同じ (書き間違いで黙って落ちる側に倒さない)', () => {
+    for (const v of ['abc', '0']) {
+      const r = runFailingLoop({ CC_STREAM_GIVE_UP: v }, 4);
+      expect(r.out).not.toContain('gave up');
+      expect(r.streams).toBeGreaterThanOrEqual(4);
+    }
+  });
+});

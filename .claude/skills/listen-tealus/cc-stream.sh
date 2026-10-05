@@ -19,7 +19,7 @@ if [ -z "$P" ] || [ -z "$API" ] || [ -z "$STREAM" ]; then
 fi
 # ---- ここから SKILL.md と同じ ----
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
-FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=
+FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @"$AUTH" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
 fetch_meta() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P"; }
@@ -74,13 +74,18 @@ while true; do
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
   MSG="[stream] disconnected after ${SEC}s (curl=$RC_VAL), retrying in ${BACKOFF}s"
   if [ "$END" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]; then
-    FAILS=0; echo "$MSG — 予告済みの切断 (猶予中)" >&2  # ★ __bye の猶予窓 (#365/#366)。判定によらず黙る
+    FAILS=0; STREAK=0; echo "$MSG — 予告済みの切断 (猶予中)" >&2  # ★ __bye の猶予窓 (#365/#366)。判定によらず黙る
   elif [ "$RC_VAL" = "0" ] && [ "$SEC" -ge $((MAX_AGE - 5)) ] && [ "$SEC" -le $((MAX_AGE + 5)) ]; then
-    FAILS=0; echo "$MSG" >&2                        # 予告を出さない古いサーバ向けの退避判定
+    FAILS=0; STREAK=0; echo "$MSG" >&2              # 予告を出さない古いサーバ向けの退避判定
   else
     FAILS=$((FAILS+1)); [ "$FAILS" = "1" ] && DOWN_FROM=$END   # ★ ダウンの起点は切断時刻 (#366)
     case $FAILS in 1|2|4|8|16|32|64|128) echo "$MSG (想定外 ${FAILS} 回目)" ;; *) echo "$MSG" >&2 ;; esac
     [ "$FAILS" -gt 5 ] && BACKOFF=$((BACKOFF * 4))
+    [ "$SEC" -ge 60 ] && STREAK=0; STREAK=$((STREAK+1))  # ★ #484 続けて何回か。1 分以上つながったら数え直す
+    case "$CC_STREAM_GIVE_UP" in ''|0|*[!0-9]*) ;;     # ★ #484 既定は粘る。正の整数のときだけ N 回で終わる
+      *) [ "$STREAK" -ge "$CC_STREAM_GIVE_UP" ] && {   #   (PaneDeck の service が起こし直し、回数を見せる)
+           echo "[stream] gave up after ${STREAK} unexpected disconnects (CC_STREAM_GIVE_UP=$CC_STREAM_GIVE_UP)"; exit 1; } ;;
+    esac
   fi
   sleep "$BACKOFF"
 done

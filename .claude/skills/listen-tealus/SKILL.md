@@ -182,7 +182,7 @@ Monitor (
 ```sh
 P={project_name}; API={本体の origin}; STREAM={stream_url}
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
-FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=
+FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
 fetch_meta() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P"; }
@@ -237,13 +237,18 @@ while true; do
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
   MSG="[stream] disconnected after ${SEC}s (curl=$RC_VAL), retrying in ${BACKOFF}s"
   if [ "$END" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]; then
-    FAILS=0; echo "$MSG — 予告済みの切断 (猶予中)" >&2  # ★ __bye の猶予窓 (#365/#366)。判定によらず黙る
+    FAILS=0; STREAK=0; echo "$MSG — 予告済みの切断 (猶予中)" >&2  # ★ __bye の猶予窓 (#365/#366)。判定によらず黙る
   elif [ "$RC_VAL" = "0" ] && [ "$SEC" -ge $((MAX_AGE - 5)) ] && [ "$SEC" -le $((MAX_AGE + 5)) ]; then
-    FAILS=0; echo "$MSG" >&2                        # 予告を出さない古いサーバ向けの退避判定
+    FAILS=0; STREAK=0; echo "$MSG" >&2              # 予告を出さない古いサーバ向けの退避判定
   else
     FAILS=$((FAILS+1)); [ "$FAILS" = "1" ] && DOWN_FROM=$END   # ★ ダウンの起点は切断時刻 (#366)
     case $FAILS in 1|2|4|8|16|32|64|128) echo "$MSG (想定外 ${FAILS} 回目)" ;; *) echo "$MSG" >&2 ;; esac
     [ "$FAILS" -gt 5 ] && BACKOFF=$((BACKOFF * 4))
+    [ "$SEC" -ge 60 ] && STREAK=0; STREAK=$((STREAK+1))  # ★ #484 続けて何回か。1 分以上つながったら数え直す
+    case "$CC_STREAM_GIVE_UP" in ''|0|*[!0-9]*) ;;     # ★ #484 既定は粘る。正の整数のときだけ N 回で終わる
+      *) [ "$STREAK" -ge "$CC_STREAM_GIVE_UP" ] && {   #   (PaneDeck の service が起こし直し、回数を見せる)
+           echo "[stream] gave up after ${STREAK} unexpected disconnects (CC_STREAM_GIVE_UP=$CC_STREAM_GIVE_UP)"; exit 1; } ;;
+    esac
   fi
   sleep "$BACKOFF"
 done
@@ -281,6 +286,7 @@ done
 | ★ `__bye` の中身を stderr に 1 行残す | 猶予窓を張るだけだと **理由 (`shutdown` / `max_age`) が消える**。stdout に出すと起こしてしまうので stderr へ。**通知はしないが記録は残す**、の使い分け |
 | ★ クラッシュでは `__bye` が出ない | これは欠陥ではなく**意図した振る舞い**。計画的な停止 (SIGINT / SIGTERM) だけが静かになり、クラッシュ・電源断・`kill -9` は異常として残る。**予告できるものは予告し、予告できないものは異常として残る** —— 仕組みから自然にそうなるので、例外処理を書く必要がない |
 | `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。3〜12 秒に散らす。★ **以前は「login が毎回 bcrypt を踏むので CPU がスパイクする」を理由に挙げていたが、#427 でトークンを使い回すようになったので、その理由は消えた**。★★ **jitter 自体は残す** —— 同時刻に N セッションが同じ口へ殺到すること自体は変わらない。`RANDOM` は POSIX `sh` に無いので PID で代用する |
+| ★ `CC_STREAM_GIVE_UP` と `STREAK` (#484) | **既定は粘る** (Claude Code の Monitor には起こし直す者がいないので、自力で張り直すのが正しい)。PaneDeck の service の中では前提が変わる —— 永久に粘ると「**つながっていないのにプロセスは生きている**」になり、静かな日と見分けが付かない。正の整数を入れると、想定外の切断が **続けて** N 回で `exit 1` し、PaneDeck が待ち時間を延ばしながら起こし直して回数を見せる (PaneDeck 班の依頼、2026-10-05)。<br>★ **`FAILS` を使わないこと。** `FAILS` は周回頭の `/pending` が通ると 0 に戻るので、「`/pending` は通るのに受信だけすぐ切れる」状態では 1 より増えない (試験で実際にそうなった)。`STREAK` は予告・寿命の切断と、**1 分以上つながってから**の切断でだけ数え直す。<br>★ 数でない値・0 は「付けていない」扱い (書き間違いで黙って落ちる側に倒さない) |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 
 > ★ **接続コマンドを変えたら、配布前に構文を通すこと。**

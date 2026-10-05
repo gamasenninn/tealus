@@ -582,7 +582,7 @@ http mode の接続コマンドは、受け取った便を `~/.claude/.cc-stream
 ```json
 "services": [{
   "name": "tealus-feed",
-  "command": "sh ~/.claude/skills/listen-tealus/cc-stream.sh tealus-apps https://tealus.example.com https://tealus.example.com/agent-api/cc-queue ~/.tealus/cc-auth.json",
+  "command": "env CC_STREAM_GIVE_UP=3 sh ~/.claude/skills/listen-tealus/cc-stream.sh tealus-apps https://tealus.example.com https://tealus.example.com/agent-api/cc-queue ~/.tealus/cc-auth.json",
   "restart": "always"
 }],
 "triggers": [{
@@ -593,6 +593,8 @@ http mode の接続コマンドは、受け取った便を `~/.claude/.cc-stream
 ```
 
 ★ `~` が展開されるかは PaneDeck の設定の読み方によるので、動かないときは絶対パスで書いてください。
+
+★ **`CC_STREAM_GIVE_UP=3` を付ける。** 接続コマンドは既定では永久に粘ります (Claude Code の Monitor には起こし直す者がいないため)。PaneDeck の service の中で粘ると「つながっていないのにプロセスは生きている」になり、静かな日と見分けが付きません。付けると、想定外の切断が続けて 3 回で終わり、PaneDeck が待ち時間を延ばしながら起こし直して、**ツールバーに再起動の回数が出ます** (PaneDeck 班の依頼と実測、2026-10-05)。
 
 ★ 接続コマンドの出力をペインへ直接流さず、**必ずファイルを挟む**こと。受け取った直後に PaneDeck が落ちても、行がファイルに残るためです。
 
