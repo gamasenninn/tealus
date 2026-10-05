@@ -3,6 +3,7 @@ import { Rnd } from 'react-rnd';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
+import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, type PanelWindowState } from './panelWindow';
 import './MultiTalk.css';
 
 /*
@@ -13,20 +14,13 @@ import './MultiTalk.css';
  *   未読の数え方も自前で持っていたが、RoomList が新着のたびにサーバーから取り直すので要らない
  */
 
-/** #503 最小化したパネルの高さ = 帯 (MultiTalk.css の 18px) + 枠線 上下 1px。以前は 40 (帯が太かった) */
-const MINIMIZED_HEIGHT = 20;
 
 /** 開いているトークパネル 1 枚分 (localStorage 'multiTalkPanels' に永続化) */
-interface TalkPanel {
+interface TalkPanel extends PanelWindowState {
   id: number;
   roomId: string;
   roomName: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** #503 最小化している (帯だけ見える) とき、帯に名前を出す。前に保存したパネルには無い = 普通 */
-  minimized?: boolean;
+  // x / y / width / height、#503 minimized (帯に名前を出す)、#504 maximized と戻す先は PanelWindowState
 }
 
 function MultiTalk() {
@@ -150,13 +144,13 @@ function MultiTalk() {
     const w = Math.floor(cw / cols) - 8;
     const h = Math.floor(ch / rows) - 8;
 
+    // ★ #504 整列したら新しい大きさが「普通」(最小化・最大化と戻す先は消す)
     setPanels(prev => prev.map((p, i) => ({
-      ...p,
+      ...asNormal(p),
       x: (i % cols) * (w + 8) + 4,
       y: Math.floor(i / cols) * (h + 8) + 4,
       width: w,
       height: h,
-      minimized: false,
     })));
   };
 
@@ -169,38 +163,36 @@ function MultiTalk() {
     const w = Math.floor(cw / panels.length) - 8;
 
     setPanels(prev => prev.map((p, i) => ({
-      ...p,
+      ...asNormal(p),
       x: i * (w + 8) + 4,
       y: 4,
       width: w,
       height: ch - 8,
-      minimized: false,
     })));
   };
 
-  // 最大化: パネルエリア全体に
+  // ★ #504 最大化したときの位置と大きさ = パネルの置き場いっぱい
+  const maxArea = () => {
+    const c = containerRef.current;
+    return { x: 4, y: 4, width: (c?.clientWidth ?? 0) - 8, height: (c?.clientHeight ?? 0) - 8 };
+  };
+
+  // ★ #504 最大化 ⇄ 元に戻す / 最小化 ⇄ 元に戻す。戻す先は直前の位置と大きさ (panelWindow.ts)。
+  //   以前は「普通サイズ」ボタンで決まった大きさにするだけだった
   const maximizePanel = (id: number) => {
-    const container = containerRef.current;
-    if (!container) return;
-    setPanels(prev => prev.map(p => p.id === id ? {
-      ...p, x: 4, y: 4, width: container.clientWidth - 8, height: container.clientHeight - 8, minimized: false,
-    } : p));
+    const area = maxArea();
+    setPanels(prev => prev.map(p => p.id === id ? toggleMaximize(p, area) : p));
   };
 
-  // 最小化: ヘッダーだけに
   const minimizePanel = (id: number) => {
-    setPanels(prev => prev.map(p => p.id === id ? {
-      ...p, height: MINIMIZED_HEIGHT, minimized: true,
-    } : p));
+    setPanels(prev => prev.map(p => p.id === id ? toggleMinimize(p) : p));
   };
 
-  // 普通サイズ: デフォルトサイズに
-  const restorePanel = (id: number) => {
-    const container = containerRef.current;
-    if (!container) return;
-    setPanels(prev => prev.map(p => p.id === id ? {
-      ...p, width: Math.min(500, container.clientWidth - 40), height: Math.min(container.clientHeight - 40, 800), minimized: false,
-    } : p));
+  // 帯のダブルクリック: 最小化中なら戻す、それ以外は 最大化 ⇄ 元に戻す (Windows と同じ)。
+  // ★ 1 回のクリックでは戻さない (帯はドラッグのつかみ)
+  const barDoubleClick = (id: number) => {
+    const area = maxArea();
+    setPanels(prev => prev.map(p => p.id === id ? onBarDoubleClick(p, area) : p));
   };
 
   return (
@@ -242,13 +234,13 @@ function MultiTalk() {
             onResizeStart={() => setInteracting(true)}
             onResizeStop={(e, dir, ref, delta, pos) => {
               setInteracting(false);
+              // ★ #504 手でリサイズしたら新しい大きさが「普通」
               setPanels(prev => prev.map(p => p.id === panel.id ? {
-                ...p,
+                ...asNormal(p),
                 width: parseInt(ref.style.width),
                 height: parseInt(ref.style.height),
                 x: pos.x,
                 y: pos.y,
-                minimized: false,
               } : p));
             }}
             onMouseDown={() => setActivePanel(panel.id)}
@@ -258,14 +250,22 @@ function MultiTalk() {
               {/* ★ #503 帯はドラッグのつかみ (中身は iframe なので、中の見出しではつかめない)。
                     部屋の名前は中の見出しに出るので、ここには最小化したときだけ出す (帯しか見えないため)。
                     色は #123 の「つかむ帯と部屋の見出しをはっきり区別する」で濃い灰色のまま */}
-              <div className="multi-panel-header" title={panel.roomName} aria-label={panel.roomName}>
+              <div className="multi-panel-header" title={panel.roomName} aria-label={panel.roomName}
+                onDoubleClick={() => barDoubleClick(panel.id)}>
                 {panel.minimized
                   ? <span className="multi-panel-title">{panel.roomName}</span>
                   : <GripHorizontal className="multi-panel-grip" size={14} aria-hidden="true" />}
-                <div className="multi-panel-btns">
-                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); minimizePanel(panel.id); }} title="最小化"><Minimize2 size={12} /></button>
-                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); restorePanel(panel.id); }} title="普通サイズ"><Square size={12} /></button>
-                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); maximizePanel(panel.id); }} title="最大化"><Maximize2 size={12} /></button>
+                {/* ★ #504 ボタンのダブルクリックを帯へ伝えない (最大化が切り替わってしまう) */}
+                <div className="multi-panel-btns" onDoubleClick={(e) => e.stopPropagation()}>
+                  {/* ★ #504 最小化・最大化は押し直すと「元に戻す」。「普通サイズ」ボタンは無くした */}
+                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); minimizePanel(panel.id); }}
+                    title={panel.minimized ? '元に戻す' : '最小化'}>
+                    {panel.minimized ? <Square size={12} /> : <Minimize2 size={12} />}
+                  </button>
+                  <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); maximizePanel(panel.id); }}
+                    title={panel.maximized && !panel.minimized ? '元に戻す' : '最大化'}>
+                    {panel.maximized && !panel.minimized ? <Square size={12} /> : <Maximize2 size={12} />}
+                  </button>
                   <button className="multi-panel-close" onClick={(e) => { e.stopPropagation(); closePanel(panel.id); }} title="閉じる"><X size={12} /></button>
                 </div>
               </div>

@@ -102,7 +102,88 @@ describe('MultiTalk — パネルの帯 (#503)', () => {
     const { container } = openOne();
     fireEvent.click(screen.getByTitle('最小化'));
     expect(container.querySelector('.multi-panel-title')?.textContent).toBe('営業');
-    fireEvent.click(screen.getByTitle('普通サイズ'));
+    fireEvent.click(screen.getByTitle('元に戻す'));
     expect(container.querySelector('.multi-panel-title')).toBeNull();
+  });
+});
+
+/**
+ * #504 最小化・最大化は押し直して戻す / 帯のダブルクリック / 「普通サイズ」ボタンは無くす
+ * ★ 「普通サイズ」は決まった大きさにするだけで、整列で並べた大きさが失われていた。戻す先は直前の状態
+ */
+describe('MultiTalk — 元に戻す (#504)', () => {
+  const start = { id: 1, roomId: 'r1', roomName: '営業', x: 10, y: 20, width: 400, height: 500 };
+  const saved = () => JSON.parse(localStorage.getItem('multiTalkPanels')!)[0];
+  const geom = () => { const p = saved(); return { x: p.x, y: p.y, width: p.width, height: p.height }; };
+  const startGeom = { x: 10, y: 20, width: 400, height: 500 };
+  function renderOne() {
+    localStorage.setItem('multiTalkPanels', JSON.stringify([start]));
+    return renderMulti();
+  }
+
+  it('★ 「普通サイズ」ボタンは無い', () => {
+    renderOne();
+    expect(screen.queryByTitle('普通サイズ')).toBeNull();
+  });
+
+  it('★★ 最小化 → もう一度押すと、直前の位置と大きさに戻る', () => {
+    renderOne();
+    fireEvent.click(screen.getByTitle('最小化'));
+    expect(saved().minimized).toBe(true);
+    fireEvent.click(screen.getByTitle('元に戻す'));
+    expect(saved().minimized).toBeFalsy();
+    expect(geom()).toEqual(startGeom);
+  });
+
+  it('★★ 最大化 → もう一度押すと、直前の位置と大きさに戻る', () => {
+    renderOne();
+    fireEvent.click(screen.getByTitle('最大化'));
+    expect(saved().maximized).toBe(true);
+    fireEvent.click(screen.getByTitle('元に戻す'));
+    expect(saved().maximized).toBeFalsy();
+    expect(geom()).toEqual(startGeom);
+  });
+
+  it('★ 帯のダブルクリックで 最大化 ⇄ 元に戻す', () => {
+    const { container } = renderOne();
+    fireEvent.doubleClick(container.querySelector('.multi-panel-header')!);
+    expect(saved().maximized).toBe(true);
+    fireEvent.doubleClick(container.querySelector('.multi-panel-header')!);
+    expect(saved().maximized).toBeFalsy();
+    expect(geom()).toEqual(startGeom);
+  });
+
+  it('★ 最小化中に帯をダブルクリックすると元に戻す', () => {
+    const { container } = renderOne();
+    fireEvent.click(screen.getByTitle('最小化'));
+    fireEvent.doubleClick(container.querySelector('.multi-panel-header')!);
+    expect(saved().minimized).toBeFalsy();
+    expect(geom()).toEqual(startGeom);
+  });
+
+  it('★ 最大化中に最小化して戻すと、最大化に戻る (最小化する直前の状態)。そこからもう一度で最初へ', () => {
+    renderOne();
+    fireEvent.click(screen.getByTitle('最大化'));
+    const maxGeom = geom();
+    fireEvent.click(screen.getByTitle('最小化'));
+    fireEvent.click(screen.getAllByTitle('元に戻す')[0]);   // 最小化を戻すボタン (左)
+    expect(saved().minimized).toBeFalsy();
+    expect(saved().maximized).toBe(true);
+    expect(geom()).toEqual(maxGeom);
+    fireEvent.click(screen.getByTitle('元に戻す'));
+    expect(geom()).toEqual(startGeom);
+  });
+
+  it('★ ボタンのダブルクリックは帯へ伝わらない (最大化が勝手に切り替わらない)', () => {
+    renderOne();
+    fireEvent.doubleClick(screen.getByTitle('閉じる'));
+    expect(saved().maximized).toBeFalsy();
+  });
+
+  it('帯を 1 回クリックしただけでは最小化は解けない (つかみなので)', () => {
+    const { container } = renderOne();
+    fireEvent.click(screen.getByTitle('最小化'));
+    fireEvent.click(container.querySelector('.multi-panel-header')!);
+    expect(saved().minimized).toBe(true);
   });
 });
