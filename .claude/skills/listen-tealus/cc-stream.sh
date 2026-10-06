@@ -18,7 +18,7 @@ if [ -z "$P" ] || [ -z "$API" ] || [ -z "$STREAM" ]; then
   exit 2
 fi
 # ---- ここから SKILL.md と同じ ----
-LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
+LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye; UP=~/.claude/.cc-stream-$P.up
 FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @"$AUTH" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
@@ -30,6 +30,11 @@ auth_prepare() {                                    # ★ #427 トークンは�
   TOKEN=$(get_token)                                # ★ 失効した → 1 回だけ取り直す
   RAW=$(fetch_meta); CODE=$(printf '%s\n' "$RAW" | tail -1); META=$(printf '%s\n' "$RAW" | sed '$d')
 }                                                   # ★★ 2 回目も 401 なら諦めて戻る (速い再接続ループに入らない)
+mark_up() {                                         # ★ #512 /stream から本物の 1 行が来た = この接続はつながった
+  [ -e "$UP" ] && return; : > "$UP"
+  [ "$FAILS" -gt 0 ] && echo "[stream] recovered after ${FAILS} attempts, $(( $(date +%s) - DOWN_FROM ))s down"
+  FAILS=0                                           # (パイプの中の写し。外の FAILS は $UP を見て戻す)
+}
 while true; do
   auth_prepare
   MAX_AGE=$(printf '%s' "$META" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).max_age_ms/1000);Number.isFinite(v)?v:0}catch(e){0}")
@@ -38,9 +43,7 @@ while true; do
     [ "$WARNED" = "1" ] || { echo "[stream] max_age を取得できないため 3300 と仮定します"; WARNED=1; }
   else
     WARNED=0                                        # ★ 取れたら警告フラグを戻す (次に取れなくなったら再度知らせる)
-    [ "$FAILS" -gt 0 ] && {                         # ★ 復帰はここで判定 (接続終了を待たない)
-      echo "[stream] recovered after ${FAILS} attempts, $(( $(date +%s) - DOWN_FROM ))s down"; FAILS=0; }
-  fi
+  fi                                                # ★ #512 復帰はここで判定しない (/pending が通っても /stream が通るとは限らない)
   TODAY=$(date '+%Y-%m-%d')
   if [ "$TODAY" != "$LASTDAY" ]; then
     [ -n "$LASTDAY" ] && {                          # ★ 集計の起点からの経過を必ず添える (#366)
@@ -51,11 +54,11 @@ while true; do
   fi
   SINCE=$(grep '^{"id"' "$LOG" 2>/dev/null | tail -1 \
           | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
-  START=$(date +%s)
+  START=$(date +%s); rm -f "$UP"
   { curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}"; echo $? > "$RC"; } \
   | while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
-        '{"__hb"'*)   ;;                                                # heartbeat: 捨てる
+        '{"__hb"'*)   mark_up ;;                                        # heartbeat: 捨てる (つながった印にだけ使う)
         '{"__bye"'*)                                                    # ★ 予告された切断 (#365 停止 / #366 寿命)
           E=$(printf '%s' "$line" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).__bye.expect_back_ms/1000);Number.isFinite(v)&&v>0?v:0}catch(e){0}")
           [ "$E" = "0" ] && E=30
@@ -63,14 +66,18 @@ while true; do
           echo $(( $(date +%s) + E )) > "$BYE"
           printf '[stream] 切断予告: %s\n' "$line" >&2 ;;               # ★ 理由を記録に残す (起こさない)
         '{"__'*)      ;;                                                # ★ 制御メッセージ全般: 捨てる (前方互換)
-        '{"id"'*)     printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
+        '{"id"'*)     mark_up; printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
         *)            if [ "$(date +%s)" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]
                       then printf '[stream-error] %s\n' "$line" >&2    # ★ 猶予中は記録だけ (#365)
-                      else printf '[stream-error] %s\n' "$line"        # 通知のみ、ログは汚さない
+                      else case $((FAILS + 1)) in                       # ★ #512 切断と同じく 1・2・4・8… 回目だけ起こす
+                             1|2|4|8|16|32|64|128) printf '[stream-error] %s\n' "$line" ;;   # 通知のみ、ログは汚さない
+                             *) printf '[stream-error] %s\n' "$line" >&2 ;;
+                           esac
                       fi ;;
       esac
     done
   END=$(date +%s); SEC=$(( END - START )); RC_VAL=$(cat "$RC" 2>/dev/null); DISC=$((DISC+1))
+  [ -e "$UP" ] && FAILS=0                           # ★ #512 この接続はつながっていた → 想定外の数え直しはここで
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
   MSG="[stream] disconnected after ${SEC}s (curl=$RC_VAL), retrying in ${BACKOFF}s"
   if [ "$END" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]; then

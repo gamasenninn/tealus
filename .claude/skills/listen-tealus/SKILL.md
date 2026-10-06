@@ -181,7 +181,7 @@ Monitor (
 
 ```sh
 P={project_name}; API={本体の origin}; STREAM={stream_url}
-LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye
+LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye; UP=~/.claude/.cc-stream-$P.up
 FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
@@ -193,6 +193,11 @@ auth_prepare() {                                    # ★ #427 トークンは�
   TOKEN=$(get_token)                                # ★ 失効した → 1 回だけ取り直す
   RAW=$(fetch_meta); CODE=$(printf '%s\n' "$RAW" | tail -1); META=$(printf '%s\n' "$RAW" | sed '$d')
 }                                                   # ★★ 2 回目も 401 なら諦めて戻る (速い再接続ループに入らない)
+mark_up() {                                         # ★ #512 /stream から本物の 1 行が来た = この接続はつながった
+  [ -e "$UP" ] && return; : > "$UP"
+  [ "$FAILS" -gt 0 ] && echo "[stream] recovered after ${FAILS} attempts, $(( $(date +%s) - DOWN_FROM ))s down"
+  FAILS=0                                           # (パイプの中の写し。外の FAILS は $UP を見て戻す)
+}
 while true; do
   auth_prepare
   MAX_AGE=$(printf '%s' "$META" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).max_age_ms/1000);Number.isFinite(v)?v:0}catch(e){0}")
@@ -201,9 +206,7 @@ while true; do
     [ "$WARNED" = "1" ] || { echo "[stream] max_age を取得できないため 3300 と仮定します"; WARNED=1; }
   else
     WARNED=0                                        # ★ 取れたら警告フラグを戻す (次に取れなくなったら再度知らせる)
-    [ "$FAILS" -gt 0 ] && {                         # ★ 復帰はここで判定 (接続終了を待たない)
-      echo "[stream] recovered after ${FAILS} attempts, $(( $(date +%s) - DOWN_FROM ))s down"; FAILS=0; }
-  fi
+  fi                                                # ★ #512 復帰はここで判定しない (/pending が通っても /stream が通るとは限らない)
   TODAY=$(date '+%Y-%m-%d')
   if [ "$TODAY" != "$LASTDAY" ]; then
     [ -n "$LASTDAY" ] && {                          # ★ 集計の起点からの経過を必ず添える (#366)
@@ -214,11 +217,11 @@ while true; do
   fi
   SINCE=$(grep '^{"id"' "$LOG" 2>/dev/null | tail -1 \
           | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).id}catch(e){''}")
-  START=$(date +%s)
+  START=$(date +%s); rm -f "$UP"
   { curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}"; echo $? > "$RC"; } \
   | while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
-        '{"__hb"'*)   ;;                                                # heartbeat: 捨てる
+        '{"__hb"'*)   mark_up ;;                                        # heartbeat: 捨てる (つながった印にだけ使う)
         '{"__bye"'*)                                                    # ★ 予告された切断 (#365 停止 / #366 寿命)
           E=$(printf '%s' "$line" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).__bye.expect_back_ms/1000);Number.isFinite(v)&&v>0?v:0}catch(e){0}")
           [ "$E" = "0" ] && E=30
@@ -226,14 +229,18 @@ while true; do
           echo $(( $(date +%s) + E )) > "$BYE"
           printf '[stream] 切断予告: %s\n' "$line" >&2 ;;               # ★ 理由を記録に残す (起こさない)
         '{"__'*)      ;;                                                # ★ 制御メッセージ全般: 捨てる (前方互換)
-        '{"id"'*)     printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
+        '{"id"'*)     mark_up; printf '%s\n' "$line" >> "$LOG"; printf '%s\n' "$line" ;;
         *)            if [ "$(date +%s)" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]
                       then printf '[stream-error] %s\n' "$line" >&2    # ★ 猶予中は記録だけ (#365)
-                      else printf '[stream-error] %s\n' "$line"        # 通知のみ、ログは汚さない
+                      else case $((FAILS + 1)) in                       # ★ #512 切断と同じく 1・2・4・8… 回目だけ起こす
+                             1|2|4|8|16|32|64|128) printf '[stream-error] %s\n' "$line" ;;   # 通知のみ、ログは汚さない
+                             *) printf '[stream-error] %s\n' "$line" >&2 ;;
+                           esac
                       fi ;;
       esac
     done
   END=$(date +%s); SEC=$(( END - START )); RC_VAL=$(cat "$RC" 2>/dev/null); DISC=$((DISC+1))
+  [ -e "$UP" ] && FAILS=0                           # ★ #512 この接続はつながっていた → 想定外の数え直しはここで
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
   MSG="[stream] disconnected after ${SEC}s (curl=$RC_VAL), retrying in ${BACKOFF}s"
   if [ "$END" -lt "$(cat "$BYE" 2>/dev/null || echo 0)" ]; then
@@ -274,7 +281,8 @@ done
 | ★ 静音の条件は `curl=0` かつ `MAX_AGE-5 <= SEC <= MAX_AGE+5` | **これは古いサーバ向けの退避判定**。理由が届くならそちらが優先で、この窓は使われない (下の行)。<br>`curl=0` だけでは「サーバが正常に閉じたが寿命ではない」(再起動等) を拾えないので、両方要る。**窓を広げても拾えるものは増えず、見逃すものが増えるだけ**なので、必要以上に広げない |
 | ★ 下限を `MAX_AGE-5` にした経緯 (**削って `MAX_AGE` に戻さないこと**) | 当初は下限を `MAX_AGE` ちょうどにしていた。根拠は「**`SEC` は原理的に `MAX_AGE` を下回らない**」(クライアントの計測開始はサーバのタイマー開始より必ず前) で、実測 17 回が 3300/3301 の 2 値しか取らないことが裏づけだった。<br>★ **2026-08-02 に `SEC=3298` が出て反証された。** サーバ側の実測は 3300 秒ちょうど (寿命切断で確定) で、2 台の時計が 55 分の間に 2 秒ずれていた。606 ppm なので自然なドリフトでは説明がつかず、NTP の補正と見られる。<br>★ **導出は正しく、言語化されていない前提が誤りだった** —— `date +%s` は**壁時計であって単調増加しない**。この前提は原因が NTP かどうかに関係なく成り立たないので、下限を上げ直してはいけない |
 | ★ `case $FAILS in 1|2|4|8...` の間引き | 障害中は 3〜12 秒ごとに再試行するので、素通しだと **1 時間の停止で 450 回前後の起床**になる。Monitor には「イベントが多すぎる監視は自動停止される」仕様があるため、**障害のときに限って監視が死ぬ**という最悪の形になる |
-| ★ `recovered` を **pending の成否で**判定 | 接続終了時に判定すると **復帰の通知が最大 55 分遅れ、`down` の秒数に復帰後の正常接続が丸ごと含まれる**。周回頭の pending が通った時点でサーバは到達可能なので、そこで出す。**「落ちた」を通知するなら「戻った」も対で必要** |
+| ★ `recovered` は **`/stream` から最初の 1 行が来たとき** (`mark_up`) | 接続終了時に判定すると **復帰の通知が最大 55 分遅れ、`down` の秒数に復帰後の正常接続が丸ごと含まれる**。**「落ちた」を通知するなら「戻った」も対で必要**。<br>★★ **#512 (2026-10-06) まで、判定は「周回頭の `/pending` が通ったとき」だった。** `/pending` は通るのに `/stream` だけすぐ切れる状態だと、毎周「想定外 1 回目」+「recovered」で 2 回起こし、`FAILS` が毎回 0 に戻るので上の間引きも 4 倍の待ちも効かなかった (= 3〜12 秒ごとに起こし続け、Monitor が監視を止める)。**`/pending` が通ることは `/stream` が通ることの証拠にならない**。<br>★ 最初の 1 行は heartbeat (15 秒ごと) か便なので、通知の遅れは最大 15 秒。`FAILS` はパイプの中の写しなので、外の `FAILS` は `$UP` (印のファイル) を見て接続が終わったときに戻す |
+| ★ `[stream-error]` も 1・2・4・8… 回目だけ stdout (#512) | `/stream` がエラーの本文 (502 の HTML など) を返してすぐ終わる形が続くと、毎周 `[stream-error]` で起こしていた。間引いた分は stderr に記録だけ残す。**初回 (と間引きの節目) は必ず起こす**ので、2 本の検知経路 (終了コードとエラー本文) は残る |
 | ★ `DOWN_FROM=$END` (`$START` ではない) | `START` は**終了した接続の開始時刻**なので、`down` に**その接続が生きていた時間が丸ごと入る**。2026-08-02 の実例: 実際のダウン 11 秒に対し `3309s down` と表示された (3298 + 11)。<br>★ **短命な接続失敗では `START ≈ 切断時刻` なので気づかない。長く生きた接続が想定外に終わったとき初めて出る。**上の「pending の成否で判定」と同じ勘違いの残り半分で、判定点だけ直して起点を放置していた |
 | ★ `Number.isFinite(v)?v:0` | **古いサーバ (#361 前) は `max_age_ms` を返さない**。`undefined/1000` は `NaN` になるが**例外にならないので catch に落ちない**。そのままだと `[ "$SEC" -ge "NaN" ]` がエラーになり、**全ての切断が「想定外」に落ちて通知の嵐** = 防ごうとしている状態そのものになる。2026-08-02 に旧サーバへの実接続で確認 |
 | 毎周の `pending` | MAX_AGE を毎回取り直す。arm 時に 1 回だけだと、**実行中にサーバ側で max_age を変えられたときに古い値を持ち続ける** (2026-08-01 の 120 秒実験で実例)。取れないときは 3300 と仮定し、**その旨を 1 回だけ通知**する (黙って仮定しない) |

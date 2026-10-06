@@ -236,51 +236,55 @@ describe('cc-stream.sh — 接続コマンドのスクリプト (#484)', () => {
  *   静かな日と見分けが付かない。落ちれば PaneDeck が起こし直し、再起動の回数をツールバーに出す。
  * ★★ 既定は今のまま粘る (Claude Code の Monitor には起こし直す者がいないので、それが正しい)
  */
-describe('cc-stream.sh — 粘らず落ちる (CC_STREAM_GIVE_UP、#484)', () => {
-  /** つながらない curl と、待たない sleep で、接続のループを回す */
-  function runFailingLoop(env: Record<string, string>, killAfterSleeps: number) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-giveup-'));
-    const bin = path.join(dir, 'bin');
-    fs.mkdirSync(bin);
-    const d = dir.replace(/\\/g, '/');
-    const auth = `${d}/auth.json`;
-    fs.writeFileSync(auth, JSON.stringify({ login_id: 'STUB', password: 'stub-pw' }));
-    // ★ login は通し、/pending は 200 (max_age あり)、/stream は「つながらない」(curl=7)
-    fs.writeFileSync(path.join(bin, 'curl'), [
-      '#!/bin/sh',
-      'for a in "$@"; do case "$a" in',
-      `  *api/auth/login*) printf '{"token":"tok"}'; exit 0 ;;`,
-      `  *pending*) printf '{"max_age_ms":3300000}\\n200'; exit 0 ;;`,
-      `  *stream?*) echo x >> "${d}/streams"; exit 7 ;;`,
-      'esac; done',
-      'exit 0',
-    ].join('\n'), { mode: 0o755 });
-    // ★ sleep は待たない。決めた回数を超えたら親 (スクリプト) を止める = 「終わらなかった」の印
-    fs.writeFileSync(path.join(bin, 'sleep'), [
-      '#!/bin/sh',
-      `echo x >> "${d}/sleeps"`,
-      `N=$(wc -l < "${d}/sleeps" | tr -d ' ')`,
-      `[ "$N" -ge ${killAfterSleeps} ] && kill -TERM $PPID`,
-      'exit 0',
-    ].join('\n'), { mode: 0o755 });
-    const home = path.join(dir, 'home');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    let status = 0;
-    let out = '';
-    try {
-      out = execFileSync('sh', [SCRIPT, 'stubproj', 'http://stub.invalid', 'http://stub.invalid/agent-api/cc-queue', auth], {
-        encoding: 'utf8',
-        timeout: 20000,
-        env: { ...process.env, ...env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
-      });
-    } catch (e) {
-      const err = e as { status: number | null; signal: string | null; stdout: string };
-      status = err.status ?? (err.signal ? 143 : -1);
-      out = err.stdout ?? '';
-    }
-    const count = (f: string) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n').length : 0);
-    return { status, out, streams: count('streams') };
+/**
+ * つながらない curl と、待たない sleep で、接続のループを回す。
+ * stream: /stream の振る舞い (sh)。$N は何回目の /stream か。既定は「つながらない」(curl=7)
+ */
+function runFailingLoop(env: Record<string, string>, killAfterSleeps: number, stream = 'exit 7') {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-giveup-'));
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  const d = dir.replace(/\\/g, '/');
+  const auth = `${d}/auth.json`;
+  fs.writeFileSync(auth, JSON.stringify({ login_id: 'STUB', password: 'stub-pw' }));
+  // ★ login は通し、/pending は 200 (max_age あり)、/stream は「つながらない」(curl=7)
+  fs.writeFileSync(path.join(bin, 'curl'), [
+    '#!/bin/sh',
+    'for a in "$@"; do case "$a" in',
+    `  *api/auth/login*) printf '{"token":"tok"}'; exit 0 ;;`,
+    `  *pending*) printf '{"max_age_ms":3300000}\\n200'; exit 0 ;;`,
+    `  *stream?*) echo x >> "${d}/streams"; N=$(wc -l < "${d}/streams" | tr -d ' '); ${stream} ;;`,
+    'esac; done',
+    'exit 0',
+  ].join('\n'), { mode: 0o755 });
+  // ★ sleep は待たない。決めた回数を超えたら親 (スクリプト) を止める = 「終わらなかった」の印
+  fs.writeFileSync(path.join(bin, 'sleep'), [
+    '#!/bin/sh',
+    `echo x >> "${d}/sleeps"`,
+    `N=$(wc -l < "${d}/sleeps" | tr -d ' ')`,
+    `[ "$N" -ge ${killAfterSleeps} ] && kill -TERM $PPID`,
+    'exit 0',
+  ].join('\n'), { mode: 0o755 });
+  const home = path.join(dir, 'home');
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  let status = 0;
+  let out = '';
+  try {
+    out = execFileSync('sh', [SCRIPT, 'stubproj', 'http://stub.invalid', 'http://stub.invalid/agent-api/cc-queue', auth], {
+      encoding: 'utf8',
+      timeout: 20000,
+      env: { ...process.env, ...env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    });
+  } catch (e) {
+    const err = e as { status: number | null; signal: string | null; stdout: string };
+    status = err.status ?? (err.signal ? 143 : -1);
+    out = err.stdout ?? '';
   }
+  const count = (f: string) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n').length : 0);
+  return { status, out, streams: count('streams') };
+}
+
+describe('cc-stream.sh — 粘らず落ちる (CC_STREAM_GIVE_UP、#484)', () => {
 
   it('★★ CC_STREAM_GIVE_UP=2 なら、想定外の切断が 2 回続いたところで exit 1 し、理由を 1 行出す', () => {
     const r = runFailingLoop({ CC_STREAM_GIVE_UP: '2' }, 10);
@@ -301,5 +305,37 @@ describe('cc-stream.sh — 粘らず落ちる (CC_STREAM_GIVE_UP、#484)', () =>
       expect(r.out).not.toContain('gave up');
       expect(r.streams).toBeGreaterThanOrEqual(4);
     }
+  });
+});
+
+/**
+ * #512 /pending は通るのに /stream だけすぐ切れると、3〜12 秒ごとに Claude を起こし続けていた
+ * ★ 周回の頭で /pending が通るたびに「recovered」を出して FAILS を 0 に戻していたので、
+ *   毎周「想定外 1 回目」+「recovered」の 2 回起こし、1・2・4・8 回目だけの間引きも効かなかった。
+ *   Monitor は知らせが多すぎる監視を止めるので、壊れているときに限って待ち受けが黙って止まる
+ */
+describe('cc-stream.sh — 受信の口だけ壊れたときに起こし続けない (#512)', () => {
+  /** stdout の行 = Claude を起こす知らせ */
+  const wakes = (out: string) => out.split('\n').filter(Boolean);
+
+  it('★★★ /stream がすぐ切れ続けても、起こすのは 1・2・4・8・16 回目だけ。「recovered」は出さない', () => {
+    const r = runFailingLoop({}, 20);
+    expect(r.streams).toBeGreaterThanOrEqual(20);
+    expect(r.out).not.toContain('recovered');
+    expect(wakes(r.out).map((l) => (l.match(/想定外 (\d+) 回目/) || [])[1])).toEqual(['1', '2', '4', '8', '16']);
+  });
+
+  it('★★ /stream がエラーの本文を返してすぐ終わる形でも、[stream-error] は間引く', () => {
+    const r = runFailingLoop({}, 20, "printf 'Bad Gateway'; exit 0");
+    const errs = wakes(r.out).filter((l) => l.startsWith('[stream-error]'));
+    expect(r.streams).toBeGreaterThanOrEqual(20);
+    expect(errs.length).toBe(5);
+  });
+
+  it('★★ /stream から 1 行受け取れたら「recovered」を出す (その接続が本物だった)', () => {
+    // 1・2 回目はつながらない → 3 回目は heartbeat を 1 行返してから終わる
+    const r = runFailingLoop({}, 4, `[ "$N" -ge 3 ] && { printf '{"__hb":1}\n'; exit 0; }; exit 7`);
+    const lines = wakes(r.out);
+    expect(lines.some((l) => /recovered after 2 attempts/.test(l))).toBe(true);
   });
 });
