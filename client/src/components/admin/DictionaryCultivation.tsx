@@ -12,7 +12,6 @@ const SCOPES = [
   { key: 'rejected', label: '却下済' },
 ];
 const STATUS_LABEL: Record<string, string> = { pending: '確認待ち', active: '有効', rejected: '却下' };
-const STATUS_COLOR: Record<string, string> = { pending: '#b06000', active: '#188038', rejected: '#c5221f' };
 const SOURCE_LABEL: Record<string, string> = { auto: '自己成長', manual: '手動', organon: 'organon' };
 const CATEGORIES = [
   { key: 'person', label: '人名' },
@@ -128,27 +127,31 @@ function AliasView() {
       ) : aliases.length === 0 ? (
         <p style={{ color: '#888' }}>該当する語はありません。</p>
       ) : (
+        // ★ ユーザー一覧と同じ見た目 (白いカード・幅いっぱい・見出しの帯) にそろえる (2026-10-06)。
+        //   以前は素の table で、画面の左半分に寄り、行ごとにボタンの大きさ・位置がばらばらだった
+        <div className="admin-user-list dict-table">
         <table>
           <thead>
-            <tr><th>正しい語</th><th>崩れ（別名）</th><th>由来</th><th>状態</th><th>回数</th><th>読み</th><th></th></tr>
+            <tr><th>正しい語</th><th>崩れ（別名）</th><th>由来</th><th>状態</th><th className="num">回数</th><th>読み</th><th className="actions"></th></tr>
           </thead>
           <tbody>
             {aliases.map((a) => (
               <tr key={a.alias_id}>
-                <td>{a.term}</td>
+                <td className="dict-term">{a.term}</td>
                 <td>{a.alias}</td>
-                <td>{SOURCE_LABEL[a.source] || a.source}</td>
-                <td><span style={{ color: STATUS_COLOR[a.status], fontWeight: 600 }}>{STATUS_LABEL[a.status] || a.status}</span></td>
-                <td>{a.count}</td>
-                <td style={{ color: '#888' }}>{a.reading || '—'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  {a.status !== 'active' && <button className="admin-create-btn" onClick={() => approve(a.alias_id)}>承認</button>}
-                  {a.status !== 'rejected' && <button className="kebab-btn" style={{ marginLeft: 6 }} onClick={() => reject(a.alias_id)}>却下</button>}
+                <td><span className="dict-source">{SOURCE_LABEL[a.source] || a.source}</span></td>
+                <td><span className={`status-badge dict-status-${a.status}`}>{STATUS_LABEL[a.status] || a.status}</span></td>
+                <td className="num">{a.count}</td>
+                <td className="dict-muted">{a.reading || '—'}</td>
+                <td className="actions">
+                  {a.status !== 'active' && <button className="dict-btn primary" onClick={() => approve(a.alias_id)}>承認</button>}
+                  {a.status !== 'rejected' && <button className="dict-btn" onClick={() => reject(a.alias_id)}>却下</button>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -230,9 +233,10 @@ function TermView() {
       ) : terms.length === 0 ? (
         <p style={{ color: '#888' }}>該当する語はありません。</p>
       ) : (
+        <div className="admin-user-list dict-table">
         <table>
           <thead>
-            <tr><th>語</th><th>分類</th><th>読み</th><th>メモ（description）</th><th>別名数</th><th></th></tr>
+            <tr><th>語</th><th>分類</th><th>読み</th><th>メモ（description）</th><th className="num">別名数</th><th className="actions"></th></tr>
           </thead>
           <tbody>
             {terms.map((t) => {
@@ -240,11 +244,11 @@ function TermView() {
               const off = t.status === 'rejected';
               return (
                 <tr key={t.id} style={off ? { opacity: 0.5 } : undefined}>
-                  <td>
+                  <td className="dict-term">
                     <span style={off ? { textDecoration: 'line-through' } : undefined}>{t.term}</span>
                     {off && <span style={{ marginLeft: 6, fontSize: 11, color: '#c00' }}>取り消し済</span>}
                   </td>
-                  <td style={{ color: '#888' }}>
+                  <td className="dict-muted">
                     {ed ? (
                       <select value={editing!.category} onChange={(e) => setEditing({ ...editing!, category: e.target.value })} style={{ padding: '4px 6px' }}>
                         {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
@@ -261,20 +265,20 @@ function TermView() {
                       <input value={editing!.description} onChange={(e) => setEditing({ ...editing!, description: e.target.value })} style={{ width: 220, padding: '4px 6px' }} />
                     ) : (t.description || <span style={{ color: '#bbb' }}>—</span>)}
                   </td>
-                  <td>{t.alias_count}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
+                  <td className="num">{t.alias_count}</td>
+                  <td className="actions">
                     {ed ? (
-                      <span style={{ display: 'inline-flex', gap: 4 }}>
-                        <button className="admin-create-btn" onClick={save}>保存</button>
-                        <button className="kebab-btn" onClick={() => setEditing(null)}>×</button>
-                      </span>
+                      <>
+                        <button className="dict-btn primary" onClick={save}>保存</button>
+                        <button className="dict-btn" onClick={() => setEditing(null)}>×</button>
+                      </>
                     ) : (
-                      <span style={{ display: 'inline-flex', gap: 4 }}>
-                        <button className="kebab-btn" onClick={() => setEditing({ id: t.id, reading: t.reading || '', description: t.description || '', category: t.category || 'other' })}>編集</button>
+                      <>
+                        <button className="dict-btn" onClick={() => setEditing({ id: t.id, reading: t.reading || '', description: t.description || '', category: t.category || 'other' })}>編集</button>
                         {off
-                          ? <button className="admin-create-btn" onClick={() => setRejected(t.id, false)}>戻す</button>
-                          : <button className="kebab-btn" onClick={() => setRejected(t.id, true)}>取り消し</button>}
-                      </span>
+                          ? <button className="dict-btn primary" onClick={() => setRejected(t.id, false)}>戻す</button>
+                          : <button className="dict-btn" onClick={() => setRejected(t.id, true)}>取り消し</button>}
+                      </>
                     )}
                   </td>
                 </tr>
@@ -282,6 +286,7 @@ function TermView() {
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

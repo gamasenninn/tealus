@@ -472,3 +472,71 @@
     gap: 4px;
   }
 }
+
+/* ★ 辞書育成の表 (2026-10-06)。ユーザー一覧のカード (.admin-user-list) に乗せ、列の役割だけ足す */
+.dict-table td.dict-term {
+  font-weight: 600;
+}
+.dict-table .dict-muted {
+  color: var(--text-secondary);
+  white-space: nowrap;   /* 分類・読みは短い。折り返すと「組/織」と縦に割れる (メモの列に幅を取られて) */
+}
+.dict-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 1%;
+  white-space: nowrap;
+}
+/* 操作は右端にそろえ、行によってボタンの数が違っても位置がずれないようにする */
+.dict-table .actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+.dict-table .actions .dict-btn + .dict-btn {
+  margin-left: 6px;
+}
+.dict-source {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: #f1f3f4;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.status-badge.dict-status-pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-weight: 600;
+}
+.status-badge.dict-status-active {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+.status-badge.dict-status-rejected {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+.dict-btn {
+  min-width: 56px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  background: white;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.dict-btn:hover {
+  background: #f5f5f5;
+}
+.dict-btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  font-weight: 600;
+}
+.dict-btn.primary:hover {
+  background: var(--primary-hover);
+}
