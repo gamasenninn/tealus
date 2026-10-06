@@ -98,8 +98,13 @@
   transform: scale(1.05);
 }
 
+/* ★ 幅は 240px、ただし吹き出しより広くしない (2026-10-06)。max-width: 240px だけだと縮まず、
+   マルチトークの狭いパネルで吹き出しの外へ 45px はみ出していた。
+   width を 240px で持つのは、吹き出しが幅を決めるときに 240px として数えさせるため
+   (max-width: min(240px, 100%) だけにすると、添え書きが短い便ほど動画が小さくなる) */
 .media-video {
-  max-width: 240px;
+  width: 240px;
+  max-width: 100%;
   border-radius: 8px;
   display: block;
 }
