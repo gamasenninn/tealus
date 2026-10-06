@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal, ArrowDownToLine } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
 import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, type PanelWindowState } from './panelWindow';
+import { findInsertTarget, insertPanel, layoutPanels, type InsertHint, type LayoutMode } from './panelOrder';
 import './MultiTalk.css';
 
 /*
@@ -35,6 +36,8 @@ function MultiTalk() {
   });
   const [activePanel, setActivePanel] = useState<number | null>(null);
   const [interacting, setInteracting] = useState(false);
+  // ★ ドラッグ中に「ここで離すと、この前 / 後ろに入る」を見せる (2026-10-06)
+  const [dropHint, setDropHint] = useState<InsertHint | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panelCounter = useRef((() => {
     try {
@@ -133,42 +136,24 @@ function MultiTalk() {
     else arrangeTile();
   };
 
-  // 一括整列: タイル
-  const arrangeTile = () => {
+  // 一括整列。★ 計算は panelOrder.layoutPanels (ドラッグで差し込んだ後の並べ直しと同じ)。
+  //   #504 整列したら新しい大きさが「普通」(最小化・最大化と戻す先は消す)
+  const arrange = (mode: LayoutMode) => {
     const container = containerRef.current;
     if (!container || panels.length === 0) return;
-    const cw = container.clientWidth;
-    const ch = container.clientHeight;
-    const cols = Math.ceil(Math.sqrt(panels.length));
-    const rows = Math.ceil(panels.length / cols);
-    const w = Math.floor(cw / cols) - 8;
-    const h = Math.floor(ch / rows) - 8;
-
-    // ★ #504 整列したら新しい大きさが「普通」(最小化・最大化と戻す先は消す)
-    setPanels(prev => prev.map((p, i) => ({
-      ...asNormal(p),
-      x: (i % cols) * (w + 8) + 4,
-      y: Math.floor(i / cols) * (h + 8) + 4,
-      width: w,
-      height: h,
-    })));
+    setPanels(prev => layoutPanels(prev, mode, container.clientWidth, container.clientHeight));
   };
+  const arrangeTile = () => arrange('tile');
+  const arrangeColumns = () => arrange('columns');
 
-  // 一括整列: 横並び
-  const arrangeColumns = () => {
-    const container = containerRef.current;
-    if (!container || panels.length === 0) return;
-    const cw = container.clientWidth;
-    const ch = container.clientHeight;
-    const w = Math.floor(cw / panels.length) - 8;
-
-    setPanels(prev => prev.map((p, i) => ({
-      ...asNormal(p),
-      x: i * (w + 8) + 4,
-      y: 4,
-      width: w,
-      height: ch - 8,
-    })));
+  /** ドラッグの事象から、パネルの置き場の座標を出す (マウス・タッチの両方) */
+  const dropPoint = (e: MouseEvent | TouchEvent): { x: number; y: number } | null => {
+    const c = containerRef.current;
+    if (!c) return null;
+    const src = 'changedTouches' in e ? (e.changedTouches[0] ?? e.touches[0]) : e;
+    if (!src) return null;
+    const r = c.getBoundingClientRect();
+    return { x: src.clientX - r.left + c.scrollLeft, y: src.clientY - r.top + c.scrollTop };
   };
 
   // ★ #504 最大化したときの位置と大きさ = パネルの置き場いっぱい
@@ -238,8 +223,24 @@ function MultiTalk() {
             bounds="parent"
             dragHandleClassName="multi-panel-header"
             onDragStart={() => setInteracting(true)}
+            onDrag={(e) => {
+              const pt = dropPoint(e as MouseEvent | TouchEvent);
+              const hint = pt ? findInsertTarget(panels, panel.id, pt) : null;
+              setDropHint(h => (h?.targetId === hint?.targetId && h?.side === hint?.side ? h : hint));
+            }}
             onDragStop={(e, d) => {
               setInteracting(false);
+              setDropHint(null);
+              // ★ 別のパネルの上で離したら、その前 / 後ろへ差し込んで、今の整列のやり方で並べ直す。
+              //   何もない所なら今までどおり、そこに置く
+              const pt = dropPoint(e as MouseEvent | TouchEvent);
+              const hint = pt ? findInsertTarget(panels, panel.id, pt) : null;
+              const c = containerRef.current;
+              if (hint && c) {
+                const mode = (localStorage.getItem('multiTalkLayout') || 'tile') as LayoutMode;
+                setPanels(prev => layoutPanels(insertPanel(prev, panel.id, hint), mode, c.clientWidth, c.clientHeight));
+                return;
+              }
               setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, x: d.x, y: d.y } : p));
             }}
             onResizeStart={() => setInteracting(true)}
@@ -257,7 +258,10 @@ function MultiTalk() {
             onMouseDown={() => setActivePanel(panel.id)}
             style={{ zIndex: activePanel === panel.id ? 10 : 1 }}
           >
-            <div className={`multi-panel ${activePanel === panel.id ? 'active' : ''}`}>
+            {dropHint?.targetId === panel.id && (
+              <div className={`multi-insert-line ${dropHint.side}`} aria-hidden="true" />
+            )}
+            <div className={`multi-panel ${activePanel === panel.id ? 'active' : ''} ${dropHint?.targetId === panel.id ? 'insert-target' : ''}`}>
               {/* ★ #503 帯はドラッグのつかみ (中身は iframe なので、中の見出しではつかめない)。
                     部屋の名前は中の見出しに出るので、ここには最小化したときだけ出す (帯しか見えないため)。
                     色は #123 の「つかむ帯と部屋の見出しをはっきり区別する」で濃い灰色のまま */}

@@ -152,3 +152,22 @@
   width: 100%;
   border: none;
 }
+
+/* ★ ドラッグで差し込む先 (2026-10-06)。相手のパネルを薄く光らせ、入る側に縦の線を出す */
+.multi-panel.insert-target {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+}
+.multi-insert-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 6px rgba(0, 180, 160, 0.6);
+  z-index: 30;
+  pointer-events: none;
+}
+.multi-insert-line.before { left: -6px; }
+.multi-insert-line.after { right: -6px; }
