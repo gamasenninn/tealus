@@ -2,7 +2,10 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import type { AuthResponse } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import { registerPushNotification } from '../services/pushNotification';
+import { registerPushNotification, unregisterPushNotification } from '../services/pushNotification';
+
+/** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
+const UNSUBSCRIBE_WAIT_MS = 3000;
 import type { User } from '../types';
 
 interface AuthState {
@@ -11,7 +14,7 @@ interface AuthState {
   isLoading: boolean;
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()((set) => ({
@@ -47,7 +50,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
     return data;
   },
 
-  logout: () => {
+  logout: async () => {
+    // ★ #508 トークンを消す前に通知の購読を外す (後だとサーバーへの取り消しが認証で弾かれる)
+    await Promise.race([
+      unregisterPushNotification(),
+      new Promise<void>((resolve) => setTimeout(resolve, UNSUBSCRIBE_WAIT_MS)),
+    ]);
     api.setToken(null);
     disconnectSocket();
     set({ user: null, token: null });

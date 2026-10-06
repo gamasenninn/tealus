@@ -13,6 +13,27 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+/**
+ * #508 この端末の購読を外す (ログアウトのとき)。
+ * ★ 外さないと、ログアウトした端末にもその人宛ての通知 (本文の先頭つき) が届き続けていた。
+ * ★ サーバーへの取り消しは認証が要るので、トークンを消す前に呼ぶこと。失敗しても例外は外へ出さない
+ */
+export async function unregisterPushNotification(): Promise<void> {
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration?.();
+    const subscription = await registration?.pushManager?.getSubscription();
+    if (!subscription) return;
+    try {
+      await api.unsubscribePush(subscription.endpoint);
+    } catch (err) {
+      console.warn('[push] server unsubscribe failed:', err);
+    }
+    await subscription.unsubscribe();
+  } catch (err) {
+    console.warn('[push] unsubscribe failed:', err);
+  }
+}
+
 export async function registerPushNotification(): Promise<void> {
   const VAPID_PUBLIC_KEY = getConfig().vapid_public_key;
   if (!VAPID_PUBLIC_KEY) {
