@@ -19,7 +19,11 @@ export interface UseMessageScrollResult {
  */
 export function useMessageScroll(roomId: string): UseMessageScrollResult {
   const { user } = useAuthStore();
-  const { messages, loadMore, hasMore } = useMessageStore();
+  const { messages, loadMore, hasMore, hasNewer, loadNewer, fetchMessages } = useMessageStore();
+  // ★ #511 最新まで読み終えていないか。イベントの中でも今の値を読むので ref に写す
+  const hasNewerRef = useRef(hasNewer);
+  hasNewerRef.current = hasNewer;
+  const isLoadingNewer = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -52,7 +56,15 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
     isInitialLoad.current = true;
     atBottom.current = true;   // #506 開いたら一番下から始まる
 
-    const handleScrollBottom = (e: Event) => {
+    const handleScrollBottom = async (e: Event) => {
+      // ★ #511 日付・引用へ飛んで最新まで読み終えていなければ、最新を読み直してから一番下へ
+      //   (送った投稿・届いた新着は、読み直した中に入る)
+      if (hasNewerRef.current) {
+        await fetchMessages(roomId);
+        atBottom.current = true;
+        setTimeout(pinToBottom, 100);
+        return;
+      }
       // ★ #507 マルチトークの「すべて最下部へ」は instant: 一度に合わせ、最下部にいる記録も戻す (その後の新着も追いかける)。
       //   送信後の合図 (instant なし) は今までどおり滑らか
       if ((e as CustomEvent<{ instant?: boolean }>).detail?.instant) {
@@ -99,7 +111,8 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
       // ★ #506 「最下部にいるか」は新着が来る前の記録 (atBottom) で判定する。
       //   以前は新着を描いたあとに「下端から 100px 以内か」を測っていたので、新着の高さが 100px を超えると
       //   「最下部にいない」になり、長い便ほど埋もれた (本番で 218px の便が 222px 取り残された)
-      if (atBottom.current) {
+      // ★ #511 最新まで読み終えていない間 (と読み足しの直後) は追いかけない。追いかけると読み足すたびに下へ飛ばされ、最新まで一気に流れる
+      if (atBottom.current && !hasNewerRef.current && !isLoadingNewer.current) {
         pinToBottom();
         // #474 裏にある間は既読にしない (その間の分は useSocketSync が溜めて、画面に戻ったときに既読にする)
         if (document.visibilityState === 'visible') markVisibleAsRead();
@@ -110,7 +123,7 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
   // ★ #506 最下部にいる間は、投稿の中身が変わって (リンクのプレビューなど) 背が伸びても合わせ直す
   useEffect(() => {
     ensureLoadListener();
-    if (!isInitialLoad.current && atBottom.current) pinToBottom();
+    if (!isInitialLoad.current && atBottom.current && !hasNewerRef.current && !isLoadingNewer.current) pinToBottom();
   }, [messages]);
 
   // IntersectionObserver for loading older messages
@@ -187,6 +200,15 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
     // ★ #506 新着が来る前の「最下部にいるか」を覚えておく (判定の幅は今までと同じ 100px)
     atBottom.current = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
     ensureLoadListener();
+    // ★ #511 下端に近づいたら新しい方を読み足す (上の loadMore と対)。
+    //   目印の監視 (IntersectionObserver) にしないのは、読み足した直後に目印が見えたままだと次の合図が来ず、また止まるため
+    if (hasNewerRef.current && atBottom.current && !isLoadingNewer.current && !isInitialLoad.current) {
+      isLoadingNewer.current = true;
+      loadNewer(roomId).finally(() => {
+        // 描き終わるまで待ってから外す (外すのが早いと、増えた分の描画で一番下へ追いかけてしまう)
+        setTimeout(() => { isLoadingNewer.current = false; }, 150);
+      });
+    }
   };
 
   return { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll };

@@ -9,11 +9,15 @@ export type StoreMessage = Message & { link_preview?: LinkPreview | null };
 interface MessageState {
   messages: StoreMessage[];
   hasMore: boolean;
+  /** #511 最新まで読み終えていないか (日付・引用へ飛んだあと)。true の間は届いた新着を後ろにつながない */
+  hasNewer: boolean;
   isLoading: boolean;
   error: string | null;
   replyTo: Message | null;
   fetchMessages: (roomId: string, around?: string | null) => Promise<void>;
   loadMore: (roomId: string) => Promise<void>;
+  /** #511 一番新しい投稿の後ろを読み足す */
+  loadNewer: (roomId: string) => Promise<void>;
   addMessage: (message: Message) => void;
   updateReadCount: (messageId: string, readCount: number) => void;
   updateReactions: (messageId: string, reactions: Reaction[]) => void;
@@ -40,6 +44,7 @@ interface MessageState {
 export const useMessageStore = create<MessageState>()((set, get) => ({
   messages: [],
   hasMore: true,
+  hasNewer: false,
   isLoading: false,
   error: null,
   replyTo: null,
@@ -50,7 +55,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       const data = await api.getMessages(roomId, null, 20, around);
       set({
         messages: around ? data.messages : data.messages.reverse(),
-        hasMore: data.messages.length >= 20,
+        // ★ #511 around は「その投稿以降」なので、件数は上 (古い方) があるかを表さない。
+        //   件数で決めていた頃は、最近の日へ飛ぶと上にもスクロールできなかった (無ければ loadMore が 0 件で止める)
+        hasMore: around ? true : data.messages.length >= 20,
+        hasNewer: around ? data.messages.length >= 20 : false,
         isLoading: false,
       });
     } catch (err) {
@@ -75,8 +83,30 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     }
   },
 
+  loadNewer: async (roomId) => {
+    const { messages, isLoading, hasNewer } = get();
+    if (!hasNewer || messages.length === 0 || isLoading) return;
+    try {
+      set({ isLoading: true });
+      const newestId = messages[messages.length - 1].id;
+      const data = await api.getMessagesAfter(roomId, newestId);
+      set((state) => {
+        const have = new Set(state.messages.map((x) => x.id));
+        return {
+          messages: [...state.messages, ...data.messages.filter((x) => !have.has(x.id))],
+          hasNewer: data.messages.length >= 20,
+          isLoading: false,
+        };
+      });
+    } catch (err) {
+      set({ isLoading: false, error: '新しいメッセージの取得に失敗しました' });
+    }
+  },
+
   addMessage: (message) => {
     set((state) => {
+      // ★ #511 最新まで読み終えていない間は後ろにつながない (つなぐと間が抜けたまま並ぶ)。下端まで読み足したときに入る
+      if (state.hasNewer) return state;
       // Avoid duplicates
       if (state.messages.some((m) => m.id === message.id)) return state;
       return { messages: [...state.messages, message] };
@@ -158,6 +188,6 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [], hasMore: true, error: null, replyTo: null });
+    set({ messages: [], hasMore: true, hasNewer: false, error: null, replyTo: null });
   },
 }));

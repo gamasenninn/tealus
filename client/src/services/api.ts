@@ -219,6 +219,11 @@ class ApiClient {
     return this.request<MessagesResponse>('GET', url);
   }
 
+  // #511 基準より新しい投稿を古い順に (日付・引用へ飛んだあと、下へ読み足す)
+  getMessagesAfter(roomId: string, after: string, limit = 20) {
+    return this.request<MessagesResponse>('GET', `/rooms/${roomId}/messages?limit=${limit}&after=${after}`);
+  }
+
   // #476 日付へ飛ぶ。tz_offset は Date.getTimezoneOffset() (日本なら -540)
   getMessageDays(roomId: string, month: string, tzOffset = new Date().getTimezoneOffset()) {
     const q = new URLSearchParams({ month, tz_offset: String(tzOffset) });

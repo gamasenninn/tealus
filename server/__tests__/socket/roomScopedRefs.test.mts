@@ -134,10 +134,15 @@ describe('#483 部屋の外を指す口', () => {
       const around = await request(app).get(`/api/rooms/${r1}/messages?around=${m3}`).set(auth(a.token));
       expect(around.status).toBe(200);
       expect(ids(around.body)).toEqual([]);
+      // #511 新しい方へ読み足す口も同じ
+      const after = await request(app).get(`/api/rooms/${r1}/messages?after=${m3}`).set(auth(a.token));
+      expect(after.status).toBe(200);
+      expect(ids(after.body)).toEqual([]);
     });
     it('★ ID の形でなければ 400 (500 にしない)', async () => {
       expect((await request(app).get(`/api/rooms/${r1}/messages?before=x`).set(auth(a.token))).status).toBe(400);
       expect((await request(app).get(`/api/rooms/${r1}/messages?around=x`).set(auth(a.token))).status).toBe(400);
+      expect((await request(app).get(`/api/rooms/${r1}/messages?after=x`).set(auth(a.token))).status).toBe(400);
     });
   });
 

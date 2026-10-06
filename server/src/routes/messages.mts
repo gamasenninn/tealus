@@ -110,10 +110,10 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.get('/', async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
-  const { before, around, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
+  const { before, around, after, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
   const parsedLimit = Math.min(Math.max(parseInt(String(limit)) || MESSAGES_DEFAULT_LIMIT, 1), MESSAGES_MAX_LIMIT);
   // ★ #483 基準のメッセージは ID の形を確かめる (崩れていると 500 だった)。部屋の外のものは下の SQL で「無いもの」と同じになる
-  for (const cursorId of [around, before]) {
+  for (const cursorId of [around, before, after]) {
     if (cursorId !== undefined && !isUuid(cursorId)) return res.status(400).json({ error: badIdMessage(String(cursorId)) });
   }
 
@@ -139,6 +139,25 @@ router.get('/', async (req: Request, res: Response) => {
         LIMIT $3
       `;
       params = [roomId, around, parsedLimit];
+    } else if (after) {
+      // ★ #511 基準より新しいものを古い順に (日付・引用へ飛んだあと、下へ読み足す)。
+      //   時刻だけで比べると、同じ時刻の投稿を取りこぼす → (時刻, id) の組で比べて、同じ順に並べる
+      query = `
+        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
+               COALESCE(rc.read_count, 0)::int AS read_count
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS read_count
+          FROM room_read_cursors rrc
+          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
+        ) rc ON true
+        WHERE m.room_id = $1
+          AND (m.created_at, m.id) > (SELECT created_at, id FROM messages WHERE id = $2 AND room_id = $1)
+        ORDER BY m.created_at ASC, m.id ASC
+        LIMIT $3
+      `;
+      params = [roomId, after, parsedLimit];
     } else if (before) {
       // Get the created_at of the cursor message
       query = `

@@ -2,6 +2,7 @@ import request from 'supertest';
 import { app } from '../../src/app.mts';
 import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { pool } from '../../src/db/pool.mts';
 
 describe('Messages API', () => {
   let user1: Awaited<ReturnType<typeof createTestUser>>;
@@ -128,6 +129,51 @@ describe('Messages API', () => {
       expect(page2.status).toBe(200);
       expect(page2.body.messages).toHaveLength(5); // 25 - 20 = 5
       expect(page2.body.messages[0].content).toBe('メッセージ5');
+    });
+
+    it('#511 after: 基準より新しい投稿を古い順に返す (日付へ飛んだあと下へ読み足す)', async () => {
+      const latest = await request(app)
+        .get(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      // 新しい順の 20 件。末尾が メッセージ6
+      const sixth = latest.body.messages[latest.body.messages.length - 1];
+      expect(sixth.content).toBe('メッセージ6');
+
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages?after=${sixth.id}&limit=5`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages.map((m: { content: string }) => m.content))
+        .toEqual(['メッセージ7', 'メッセージ8', 'メッセージ9', 'メッセージ10', 'メッセージ11']);
+    });
+
+    it('#511 after: 最新を基準にすると何も返らない (読み足しの終わり)', async () => {
+      const latest = await request(app)
+        .get(`/api/rooms/${roomId}/messages?limit=1`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages?after=${latest.body.messages[0].id}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.messages).toEqual([]);
+    });
+
+    it('#511 after: 同じ時刻の投稿も取りこぼさない (時刻だけで比べると落ちる)', async () => {
+      const latest = await request(app)
+        .get(`/api/rooms/${roomId}/messages?limit=3`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      const [m25, m24, m23] = latest.body.messages;
+      // 3 件を同じ時刻にそろえる
+      await pool.query('UPDATE messages SET created_at = $1 WHERE id = ANY($2)', [m23.created_at, [m23.id, m24.id, m25.id]]);
+      const ordered = [m23.id, m24.id, m25.id].sort();
+
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages?after=${ordered[0]}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      expect(res.body.messages.map((m: { id: string }) => m.id)).toEqual(ordered.slice(1));
     });
 
     it('should support custom limit', async () => {
