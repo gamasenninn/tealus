@@ -230,7 +230,18 @@
   font-size: 12px;
   padding: 2px 8px;
 }
-/* ★ 一覧は長くなる (1 ルーム 36 個)。中でスクロールさせ、設定画面全体を伸ばさない */
+/* ★ 一覧は長くなる (1 ルーム約 36 個)。#514 で普段は畳むようにした (以前ここに「中でスクロールさせる」と
+   書いてあったが、高さの上限は書かれておらず、設定画面全体が伸びていた) */
+.voice-tools-summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  padding: 4px 0;
+  user-select: none;
+}
+.voice-tools-details[open] .voice-tools-summary {
+  margin-bottom: 4px;
+}
 .voice-tools .voice-tool-item {
   display: flex;
   align-items: baseline;

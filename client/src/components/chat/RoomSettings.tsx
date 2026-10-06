@@ -359,8 +359,25 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
                   <button type="button" onClick={() => setToolsReload((n) => n + 1)}>やり直す</button>
                 </p>
               )}
-              {toolCatalog && !toolsLoading && (
-                <>
+              {toolCatalog && !toolsLoading && (() => {
+                // ★ #514 見出しの数と一覧のチェックは同じ判定から出す (食い違わないように)
+                const isEnabled = (name: string) => toolCatalog.protected.includes(name)
+                  ? true
+                  : toolCatalog.default_denied.includes(name)
+                    ? restoredTools.includes(name)
+                    : !deniedTools.includes(name);
+                const off = toolCatalog.tools.map((t) => t.name).filter((n) => !isEnabled(n));
+                const total = toolCatalog.tools.length;
+                return (
+                // ★ #514 一度決めたらめったに触らないので普段は畳む (1 ルーム約 36 個で設定画面が縦に伸びていた)。
+                //   畳んでいても、使える数と外している道具が見出しで分かるようにする
+                <details className="voice-tools-details">
+                  <summary className="voice-tools-summary">
+                    {total - off.length} / {total} 個
+                    {off.length === 0
+                      ? '（すべて使える）'
+                      : `（外している: ${off[0]}${off.length > 1 ? ` ほか ${off.length - 1} 個` : ''}）`}
+                  </summary>
                   <p className="voice-tools-note">
                     チェックを外すと、このルームの会話では使えなくなります。
                     ★ 消す系は既定で外れています（戻すと<strong>このルームの設定ファイルも書き換えられます</strong>）。
@@ -368,11 +385,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
                   {toolCatalog.tools.map((t) => {
                     const isProtected = toolCatalog.protected.includes(t.name);
                     const isDefaultDenied = toolCatalog.default_denied.includes(t.name);
-                    const checked = isProtected
-                      ? true
-                      : isDefaultDenied
-                        ? restoredTools.includes(t.name)
-                        : !deniedTools.includes(t.name);
+                    const checked = isEnabled(t.name);
                     return (
                       <label key={t.name} className="voice-tool-item">
                         <input
@@ -391,8 +404,9 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
                       </label>
                     );
                   })}
-                </>
-              )}
+                </details>
+                );
+              })()}
             </div>
           )}
           <div className="room-setting-select">

@@ -410,3 +410,48 @@ describe('RoomSettings — 機械の投稿の通知 (#463、管理者)', () => {
     expect(screen.getByLabelText('機械の投稿の通知')).toHaveValue('on');
   });
 });
+
+/**
+ * #514 「会話で使える道具」(1 ルーム約 36 個) を畳む
+ * ★ 一度決めたらめったに触らない設定なので普段は畳む。ただし畳んだ見出しで今の状態が分かるようにする
+ */
+describe('RoomSettings — 会話で使える道具を畳む (#514)', () => {
+  const voiceRoom = {
+    id: 'room-1', name: '営業報告', type: 'group',
+    voice_conversation_enabled: true,
+  } as unknown as Room;
+  const toolsBox = () => document.querySelector('details.voice-tools-details') as HTMLDetailsElement | null;
+
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('★ 最初は畳んでいる', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(toolsBox()).not.toBeNull());
+    expect(toolsBox()!.open).toBe(false);
+  });
+
+  it('★★ 畳んだ見出しに、使える数と外している道具が出る (一覧のチェックと同じ判定)', async () => {
+    // 4 個のうち write_file は既定で外れている → 3 / 4
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(toolsBox()).not.toBeNull());
+    const summary = toolsBox()!.querySelector('summary')!.textContent!;
+    expect(summary).toContain('3 / 4 個');
+    expect(summary).toContain('write_file');
+  });
+
+  it('★ 外している道具が 2 つ以上なら「ほか N 個」', async () => {
+    const room = { ...voiceRoom, voice_conversation_denied_tools: ['execute_sql'] } as unknown as Room;
+    render(<RoomSettings {...baseProps} currentRoom={room} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(toolsBox()).not.toBeNull());
+    const summary = toolsBox()!.querySelector('summary')!.textContent!;
+    expect(summary).toContain('2 / 4 個');
+    expect(summary).toMatch(/ほか 1 個/);
+  });
+
+  it('★ チェックを変えると見出しの数も変わる', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={voiceRoom} isAdmin={true} isSysAdmin={false} />);
+    await waitFor(() => expect(screen.getByLabelText(/execute_sql/)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText(/execute_sql/));
+    await waitFor(() => expect(toolsBox()!.querySelector('summary')!.textContent).toContain('2 / 4 個'));
+  });
+});
