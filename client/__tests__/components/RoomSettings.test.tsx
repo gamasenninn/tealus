@@ -455,3 +455,49 @@ describe('RoomSettings — 会話で使える道具を畳む (#514)', () => {
     await waitFor(() => expect(toolsBox()!.querySelector('summary')!.textContent).toContain('2 / 4 個'));
   });
 });
+
+/**
+ * #514 の続き: Light / Deep Agent のプロンプトの入力欄も畳む (利用者の提案 2026-10-06)
+ * ★ 一度決めたらめったに触らない。畳んだ見出しで中身の有無が分かり、開いたら中身に合わせて大きく取る
+ *   (以前は 6 行の窓で 23 行の文を読み書きしていた)
+ */
+describe('RoomSettings — プロンプトの入力欄を畳む (#514)', () => {
+  const dm = { type: 'direct' } as Room;
+  const box = (label: string) => [...document.querySelectorAll('details.prompt-details')]
+    .find((d) => d.querySelector('summary')!.textContent!.includes(label)) as HTMLDetailsElement | undefined;
+
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('★ 2 つとも最初は畳んでいる', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={dm} isAdmin={false} isSysAdmin={false} />);
+    await waitFor(() => expect(document.querySelectorAll('details.prompt-details')).toHaveLength(2));
+    expect(box('Light Agent')!.open).toBe(false);
+    expect(box('Deep Agent')!.open).toBe(false);
+  });
+
+  it('★★ 見出しに中身の有無が出る (文字数・行数・1 行目 / 空なら未設定)', async () => {
+    vi.mocked(api.getRoomLightPrompt).mockResolvedValueOnce({ content: '' } as never);
+    vi.mocked(api.getRoomClaudeMd).mockResolvedValueOnce({ content: '# 見出し\n2 行目\n3 行目' } as never);
+    render(<RoomSettings {...baseProps} currentRoom={dm} isAdmin={false} isSysAdmin={false} />);
+    await waitFor(() => expect(box('Deep Agent')!.querySelector('summary')!.textContent).toContain('3 行'));
+    const deep = box('Deep Agent')!.querySelector('summary')!.textContent!;
+    expect(deep).toContain('15 文字');
+    expect(deep).toContain('# 見出し');
+    expect(box('Light Agent')!.querySelector('summary')!.textContent).toContain('未設定');
+  });
+
+  it('★ 開いたときの入力欄は中身に合わせて大きく取る (6 行の窓に押し込まない)', async () => {
+    const long = Array.from({ length: 23 }, (_, i) => `行 ${i + 1}`).join('\n');
+    vi.mocked(api.getRoomClaudeMd).mockResolvedValueOnce({ content: long } as never);
+    render(<RoomSettings {...baseProps} currentRoom={dm} isAdmin={false} isSysAdmin={false} />);
+    const ta = await screen.findByLabelText('Deep Agent プロンプト') as HTMLTextAreaElement;
+    await waitFor(() => expect(ta.value).toBe(long));
+    expect(ta.rows).toBeGreaterThanOrEqual(24);
+  });
+
+  it('短い中身や空でも 6 行はある (書き始めやすく)', async () => {
+    render(<RoomSettings {...baseProps} currentRoom={dm} isAdmin={false} isSysAdmin={false} />);
+    const ta = await screen.findByLabelText('Light Agent プロンプト') as HTMLTextAreaElement;
+    expect(ta.rows).toBe(6);
+  });
+});

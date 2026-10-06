@@ -527,31 +527,59 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
               </>
             );
           })()}
-          <div className="room-setting-textarea">
-            <label htmlFor="agent-light-prompt">Light Agent プロンプト</label>
-            <textarea
-              id="agent-light-prompt"
-              value={lightPrompt}
-              onChange={e => setLightPrompt(e.target.value)}
-              onBlur={handleLightPromptBlur}
-              rows={6}
-              placeholder="このルームでの Light Agent の振る舞いを記述 (空欄でデフォルト)"
-            />
-          </div>
-          <div className="room-setting-textarea">
-            <label htmlFor="agent-deep-prompt">Deep Agent プロンプト</label>
-            <textarea
-              id="agent-deep-prompt"
-              value={claudeMd}
-              onChange={e => setClaudeMd(e.target.value)}
-              onBlur={handleClaudeMdBlur}
-              rows={6}
-              placeholder="このルームでの Deep Agent の振る舞いを記述 (空欄でデフォルト)"
-            />
-          </div>
+          <PromptField
+            id="agent-light-prompt"
+            label="Light Agent プロンプト"
+            value={lightPrompt}
+            onChange={setLightPrompt}
+            onBlur={handleLightPromptBlur}
+            placeholder="このルームでの Light Agent の振る舞いを記述 (空欄でデフォルト)"
+          />
+          <PromptField
+            id="agent-deep-prompt"
+            label="Deep Agent プロンプト"
+            value={claudeMd}
+            onChange={setClaudeMd}
+            onBlur={handleClaudeMdBlur}
+            placeholder="このルームでの Deep Agent の振る舞いを記述 (空欄でデフォルト)"
+          />
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * #514 プロンプトの入力欄 (畳める)。一度決めたらめったに触らないので普段は畳み、見出しで中身の有無を見せる。
+ * ★ 開いたら中身に合わせて大きく取る (以前は 6 行の窓で 23 行の文を読み書きしていた)。上限は CSS (60vh)
+ * ★ 保存は今までどおり入力欄から離れたとき。見出しを押して畳むときも、先に入力欄から離れるので保存される
+ */
+function PromptField({ id, label, value, onChange, onBlur, placeholder }: {
+  id: string; label: string; value: string;
+  onChange: (v: string) => void; onBlur: () => void; placeholder: string;
+}) {
+  const lines = value ? value.split('\n').length : 0;
+  const first = value.split('\n').find((l) => l.trim()) ?? '';
+  return (
+    <details className="prompt-details room-setting-textarea">
+      <summary className="prompt-summary">
+        <span className="prompt-summary-title">{label}</span>
+        <span className="prompt-summary-state">
+          {value.trim()
+            ? `${value.length} 文字・${lines} 行 —「${first.length > 24 ? `${first.slice(0, 24)}…` : first}」`
+            : '未設定（既定の振る舞い）'}
+        </span>
+      </summary>
+      <textarea
+        id={id}
+        aria-label={label}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={onBlur}
+        rows={Math.max(6, lines + 1)}
+        placeholder={placeholder}
+      />
+    </details>
   );
 }
 

@@ -78,6 +78,29 @@
   border-color: var(--primary);
 }
 
+/* ★ #514 プロンプトの入力欄は畳む。見出しに名前と中身の有無、開いたら中身に合わせて大きく (上限 60vh) */
+.prompt-summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+.prompt-summary-title {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.prompt-summary-state {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+.prompt-details[open] .prompt-summary {
+  margin-bottom: 4px;
+}
+.prompt-details textarea {
+  max-height: 60vh;
+}
+
 /* App URL management */
 .app-url-item {
   display: flex;
