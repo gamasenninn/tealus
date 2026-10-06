@@ -6,7 +6,32 @@ import net from 'node:net';
 import { Agent, fetch as undiciFetch } from 'undici';
 import type { Server } from 'socket.io';
 
-const URL_REGEX = /https?:\/\/[^\s<>"']+/g;
+// ★ #510 URL に使える ASCII の文字だけを取る (' とバッククォートは除く)。以前は空白までを全部取り、
+//   `https://youtu.be/xxx（限定公開）` や AI の返信の `[こちら](https://…)で確認できます` のように後ろの日本語まで URL にしていた。
+//   ★ 生の日本語を含む URL は途中で切れる —— 割り切り。本番の日本語入りの URL は %E6… の形で入っていて
+//   (ブラウザからのコピーもこの形)、「URL の直後に日本語が続く」方がずっと多い
+const URL_REGEX = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&()*+,;=%]+/g;
+
+/** 対になっていない最初の閉じ括弧で切り、末尾の句読点を削る (`[x](https://a/b))` の `))` や文末の `.`) */
+function trimTrailing(url: string): string {
+  let depth = 0;
+  let u = url;
+  for (let i = 0; i < u.length; i++) {
+    if (u[i] === '(') depth++;
+    else if (u[i] === ')' && --depth < 0) { u = u.slice(0, i); break; }
+  }
+  while (/[.,;:!?]$/.test(u)) u = u.slice(0, -1);
+  return u;
+}
+
+/** 取りに行ける形か (`https://…` を切った残りの `https://` などを落とす) */
+function isFetchableUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 /** OGPメタデータ */
 interface OgpData {
@@ -31,7 +56,7 @@ interface LinkPreviewRow {
  */
 export function extractUrls(text: string | null | undefined): string[] {
   if (!text) return [];
-  return text.match(URL_REGEX) || [];
+  return (text.match(URL_REGEX) || []).map(trimTrailing).filter(isFetchableUrl);
 }
 
 /**
