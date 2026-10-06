@@ -190,3 +190,89 @@
   background: var(--bg-disabled);
   cursor: not-allowed;
 }
+
+/* ★ #513 畳める入力欄 (マルチトークのパネルの中)。普段は 1 行の帯 + マイク、押したら重ねて広げる */
+.message-input-collapsed {
+  align-items: center;
+  padding: 6px 8px;
+  gap: 6px;
+}
+
+.message-input-bar {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-medium);
+  border-radius: 18px;
+  background: white;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.message-input-bar.has-draft {
+  color: var(--text-primary);
+}
+
+.message-input-collapsed .message-input-mic-main {
+  width: 36px;
+  height: 36px;
+}
+
+/* 帯は広げている間も場所を取ったまま隠す (消すと入れ物の背が縮み、メッセージ欄が動く) */
+.message-input-container.expanded .message-input-collapsed {
+  visibility: hidden;
+}
+
+/* 広げた入力は帯の上に重ねる (メッセージ欄を押し上げない) */
+.message-input-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-page);
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 入力欄を幅いっぱいの 1 段目に、ボタンを 2 段目に回す */
+.message-input-sheet .message-input-row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.message-input-sheet .message-input-text {
+  order: -1;
+  flex: 1 1 100%;
+  min-height: 96px;
+  max-height: 50vh;
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+
+.message-input-close {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.message-input-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}

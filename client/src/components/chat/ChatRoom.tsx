@@ -300,7 +300,7 @@ function ChatRoom() {
       )}
 
       {/* ★ #494-3 開けなかった部屋では入力欄を出さない (送ってもサーバーが捨てる) */}
-      {showComposer(roomError) && <MessageInput roomId={roomId} transceiver={transceiver} />}
+      {showComposer(roomError) && <MessageInput roomId={roomId} transceiver={transceiver} collapsible={isEmbed} />}
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />

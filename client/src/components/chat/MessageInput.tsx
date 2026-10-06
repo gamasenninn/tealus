@@ -19,7 +19,7 @@ import AgentPanel from './AgentPanel';
 import type { AgentPanelMode } from './AgentPanel';
 import type { PromptHistoryItem } from '../../services/api';
 import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY, ATTACH_ACCEPT } from '../../constants/ui';
-import { Mic } from 'lucide-react';
+import { Mic, ChevronDown } from 'lucide-react';
 import type { Stamp } from '../../types';
 import './MessageInput.css';
 
@@ -34,10 +34,15 @@ interface TransceiverControls {
 interface MessageInputProps {
   roomId: string;
   transceiver?: TransceiverControls | null;
+  /** #513 畳める入力欄 (マルチトークのパネルの中)。普段は 1 行の帯 + マイクだけにし、押したら重ねて広げる */
+  collapsible?: boolean;
 }
 
-function MessageInput({ roomId, transceiver }: MessageInputProps) {
+function MessageInput({ roomId, transceiver, collapsible = false }: MessageInputProps) {
   const [text, setText] = useState('');
+  // #513 広げているか。畳める設定が無ければ常に広げた扱い。★ 畳んでも部品は消さない (書きかけを残す)
+  const [expanded, setExpanded] = useState(false);
+  const collapse = () => { if (collapsible) setExpanded(false); };
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState('');
@@ -75,6 +80,15 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   }, []);
 
   const focusTextareaEnd = useCallback(() => focusTextareaRange(), [focusTextareaRange]);
+
+  // ★ #513 返信先が付いたら広げる。返信も「エージェントに送る」(下の入口B) も返信先を付けるので、ここ 1 か所で両方を拾う。
+  //   畳んだままだと、文字が入ったのに何も起きないように見える
+  useEffect(() => {
+    if (collapsible && replyTo) {
+      setExpanded(true);
+      focusTextareaEnd();
+    }
+  }, [collapsible, replyTo, focusTextareaEnd]);
 
   // #354 🤖 パネル。null = 閉。'compose' = 宛先 + 最近の指示、'target-only' = 宛先のみ (入口B)
   const [agentPanel, setAgentPanel] = useState<AgentPanelMode | null>(null);
@@ -262,6 +276,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
       // socket 優先 / REST fallback は sendRoomMessage に集約 (docs/05 §4 webhook 発火経路)
       await sendRoomMessage({ roomId, content, replyTo: replyTo?.id ?? null });
       setText('');
+      collapse();   // #513 送ったら畳む
       // textarea の高さをリセット (ref 経由。querySelector は複数 room 表示等で誤爆源)
       const textarea = textareaRef.current;
       if (textarea) textarea.style.height = 'auto';
@@ -276,6 +291,12 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // #513 Esc で畳む (メンション・エージェントの一覧が開いている間は、そちらを閉じる方に譲る)
+    if (collapsible && e.key === 'Escape' && !showMention && !agentPanel) {
+      e.preventDefault();
+      collapse();
+      return;
+    }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSend();
@@ -315,6 +336,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
       // Re-fetch messages and scroll to bottom
       await useMessageStore.getState().fetchMessages(roomId);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
+      collapse();   // #513 送ったら畳む
       setTimeout(async () => {
         await useMessageStore.getState().fetchMessages(roomId);
         window.dispatchEvent(new CustomEvent('scroll:bottom'));
@@ -415,6 +437,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
         type: 'stamp',
       });
       clearReplyTo();
+      collapse();   // #513 送ったら畳む
       await useMessageStore.getState().fetchMessages(roomId);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {
@@ -422,8 +445,9 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
     }
   };
 
-  return (
-    <div className="message-input-container">
+  // アップロードの途中・失敗は、畳んでいても見せる
+  const status = (
+    <>
       {uploadError && (
         <div className="message-input-error">{uploadError}</div>
       )}
@@ -433,6 +457,22 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           <span className="message-input-progress-text">アップロード中... {uploadProgress}%</span>
         </div>
       )}
+    </>
+  );
+
+  const micButton = (
+    <button
+      className="message-input-mic-main"
+      onClick={handleMicClick}
+      disabled={isSending}
+      aria-label="音声で送る"
+    >
+      <Mic size={22} />
+    </button>
+  );
+
+  const composer = (
+    <>
       {replyTo && (
         <div className="message-input-reply">
           <span>{replyTo.sender_display_name}: {replyTo.content || replyTo.transcription?.formatted_text || replyTo.transcription?.raw_text || '(メディア)'}</span>
@@ -510,9 +550,14 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={window.innerWidth >= 768 ? 'メッセージを入力（Ctrl+Enterで送信）' : 'メッセージを入力'}
-          rows={1}
+          rows={collapsible ? 4 : 1}
           disabled={isSending}
         />
+        {collapsible && (
+          <button className="message-input-close" onClick={collapse} title="閉じる" aria-label="閉じる">
+            <ChevronDown size={20} />
+          </button>
+        )}
         {text.trim() ? (
           <button
             className="message-input-send"
@@ -521,15 +566,7 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           >
             ▶
           </button>
-        ) : (
-          <button
-            className="message-input-mic-main"
-            onClick={handleMicClick}
-            disabled={isSending}
-          >
-            <Mic size={22} />
-          </button>
-        )}
+        ) : micButton}
       </div>
 
       {showStamps && (
@@ -538,19 +575,50 @@ function MessageInput({ roomId, transceiver }: MessageInputProps) {
           onClose={() => setShowStamps(false)}
         />
       )}
+    </>
+  );
 
-      {recorderStream && (
-        <VoiceRecorder
-          stream={recorderStream}
-          onSend={handleVoiceSend}
-          onCancel={() => {
-            if (transceiver?.isProducing) transceiver.stopProducing();
-            recorderStream.getTracks().forEach((t) => t.stop());
-            setRecorderStream(null);
-          }}
-          isTransceiverActive={transceiver?.isProducing}
-        />
-      )}
+  const recorder = recorderStream && (
+    <VoiceRecorder
+      stream={recorderStream}
+      onSend={handleVoiceSend}
+      onCancel={() => {
+        if (transceiver?.isProducing) transceiver.stopProducing();
+        recorderStream.getTracks().forEach((t) => t.stop());
+        setRecorderStream(null);
+      }}
+      isTransceiverActive={transceiver?.isProducing}
+    />
+  );
+
+  if (!collapsible) {
+    return (
+      <div className="message-input-container">
+        {status}
+        {composer}
+        {recorder}
+      </div>
+    );
+  }
+
+  // #513 畳める入力欄。帯は広げている間も下に残す (消すと入れ物の背が縮み、メッセージ欄が動く)。
+  //   広げた入力は帯の上に重ねる (メッセージ欄を押し上げない = 見ていた位置がずれない)
+  const draft = text.trim().split('\n')[0];
+  return (
+    <div className={`message-input-container collapsible ${expanded ? 'expanded' : ''}`}>
+      {status}
+      <div className="message-input-row message-input-collapsed" aria-hidden={expanded || undefined}>
+        <button
+          className={`message-input-bar ${draft ? 'has-draft' : ''}`}
+          onClick={() => { setExpanded(true); focusTextareaEnd(); }}
+          tabIndex={expanded ? -1 : undefined}
+        >
+          {draft ? `下書き: ${draft}` : 'メッセージを入力…'}
+        </button>
+        {!expanded && micButton}
+      </div>
+      {expanded && <div className="message-input-sheet">{composer}</div>}
+      {recorder}
     </div>
   );
 }
