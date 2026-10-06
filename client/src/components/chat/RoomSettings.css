@@ -242,10 +242,14 @@
 .voice-tools-details[open] .voice-tools-summary {
   margin-bottom: 4px;
 }
+/* ★ #514 名前の下に説明を幅いっぱいで置く (1 カラム 2 行)。以前は チェック | 名前 | 説明 を横に並べていて、
+   説明が細い幅に押し込まれて縦に伸びていた (36 個で 4177px → 3573px、一番長い 1 個 280px → 179px) */
 .voice-tools .voice-tool-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  row-gap: 2px;
   align-items: baseline;
-  gap: 8px;
   padding: 5px 2px;
   font-size: 13px;
   cursor: pointer;
@@ -254,11 +258,13 @@
   flex-shrink: 0;
 }
 .voice-tool-name {
+  grid-column: 2;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   flex-shrink: 0;
 }
 .voice-tool-desc {
+  grid-column: 2;
   color: var(--text-secondary, #666);
   font-size: 12px;
 }
