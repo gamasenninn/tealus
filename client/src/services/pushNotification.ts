@@ -1,6 +1,7 @@
 import { api } from './api';
 import { getConfig } from './clientConfig';
 import { deviceLabel } from '../utils/deviceLabel';
+import { isEmbeddedInSameApp } from '../utils/embedded';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -35,6 +36,9 @@ export async function unregisterPushNotification(): Promise<void> {
 }
 
 export async function registerPushNotification(): Promise<void> {
+  // ★ #509 マルチトークのパネルの中では登録しない。購読は端末に 1 本でよく (親が持つ)、
+  //   パネルごとに同時に subscribe() すると送り先が何本もでき、生き残る 1 本以外は送ったときに 410 で弾かれていた
+  if (isEmbeddedInSameApp()) return;
   const VAPID_PUBLIC_KEY = getConfig().vapid_public_key;
   if (!VAPID_PUBLIC_KEY) {
     console.warn('[push] vapid_public_key not provided by /api/config');
