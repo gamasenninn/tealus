@@ -224,11 +224,20 @@ describe('useMessageScroll — すべて最下部へ (#507)', () => {
     expect(c.gap()).toBe(0);
   });
 
-  it('instant の付かない合図 (送信後) は今までどおり滑らかに動かす', () => {
+  it('instant の付かない合図 (送信後) は今までどおり滑らかに動かす (メッセージ欄の中だけ)', () => {
     const { result, c } = openScrolledUp();
+    (c.el as HTMLElement).scrollTo = vi.fn() as never;
     act(() => { window.dispatchEvent(new CustomEvent('scroll:bottom')); });
     act(() => { vi.runAllTimers(); });
-    expect(result.current.messagesEndRef.current!.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
+    expect(c.el.scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: 'smooth' });
+    expect(result.current.messagesEndRef.current!.scrollIntoView).not.toHaveBeenCalled();
     expect(c.box.scrollTop).toBe(300);
+  });
+
+  // ★ scrollIntoView は先祖の入れ物も動かす。マルチトークのパネルでは親の画面まで動き、パネルの上端が切れていた (2026-10-06)
+  it('★★ 開いたときの「一番下へ」も、メッセージ欄の外を動かさない (scrollIntoView を使わない)', () => {
+    const { result, c } = openScrolledUp();
+    expect(result.current.messagesEndRef.current!.scrollIntoView).not.toHaveBeenCalled();
+    expect(c.box).toBeTruthy();
   });
 });

@@ -16,6 +16,7 @@ import MemberList from './MemberList';
 import DateSeparator from './DateSeparator';
 import DateJumpCalendar from './DateJumpCalendar';
 import { groupByDay, jumpToDate } from '../../utils/dateJump';
+import { scrollIntoContainer } from '../../utils/scrollWithin';
 import { showComposer } from '../../utils/roomComposer';
 import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic } from 'lucide-react';
@@ -68,7 +69,7 @@ function ChatRoom() {
       setTimeout(() => {
         const el = document.querySelector(`[data-msg-id="${targetMsgId}"]`);
         if (el) {
-          el.scrollIntoView({ block: 'center' });
+          scrollIntoContainer(el, { block: 'center' });   // ★ メッセージ欄の中だけ動かす (マルチトークで親の画面まで動いていた)
           el.classList.add('highlight-msg');
           setTimeout(() => el.classList.remove('highlight-msg'), 3000);
         }
@@ -83,7 +84,7 @@ function ChatRoom() {
     const tryScroll = (id: string) => {
       const el = document.querySelector(`[data-msg-id="${id}"]`);
       if (el) {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        scrollIntoContainer(el, { block: 'center', behavior: 'smooth' });
         el.classList.add('highlight-msg');
         setTimeout(() => el.classList.remove('highlight-msg'), 3000);
         return true;

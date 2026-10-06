@@ -6,6 +6,7 @@ import { useRoomStore } from '../stores/roomStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
 import { SCROLL_NEAR_BOTTOM, INITIAL_SCROLL_DELAY } from '../constants/ui';
+import { scrollContainerTo } from '../utils/scrollWithin';
 
 export interface UseMessageScrollResult {
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -72,7 +73,11 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         pinToBottom();
         return;
       }
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      // ★ scrollIntoView を使わない。先祖の入れ物も動かし、マルチトークでは親の画面のパネルの上端が切れていた (2026-10-06)
+      setTimeout(() => {
+        const c = messagesContainerRef.current;
+        if (c) scrollContainerTo(c, c.scrollHeight, 'smooth');
+      }, 100);
     };
     window.addEventListener('scroll:bottom', handleScrollBottom);
 
@@ -102,7 +107,7 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         sessionStorage.removeItem(`scrollPos:${roomId}`);
       } else {
         setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView();
+          pinToBottom();   // ★ scrollIntoView を使わない (上と同じ理由)
           markReadWhenVisible();
         }, INITIAL_SCROLL_DELAY);
       }

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { Message } from '../types';
+import { scrollIntoContainer } from '../utils/scrollWithin';
 
 /**
  * 音声連続再生 + Wake Lock管理
@@ -34,7 +35,7 @@ export function useVoiceContinuousPlay(messages: Message[]): void {
         window.dispatchEvent(new CustomEvent('voice:play', { detail: { messageId: nextMsg.id } }));
         setTimeout(() => {
           const el = document.querySelector(`[data-msg-id="${nextMsg.id}"]`);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (el) scrollIntoContainer(el, { block: 'center', behavior: 'smooth' });   // ★ メッセージ欄の中だけ動かす
         }, 100);
       } else {
         releaseWakeLock();
