@@ -174,7 +174,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     setIsToolRunning(true);
     inFlightToolsRef.current += 1;   // ★ #432 門の数と突き合わせるための、こちら側の数
     respGateRef.current.beginTool();
-    mark('tool_call_start', { name });
+    // ★ #432 引数も残す (00:09 の回は何本引いたかが分からず、原因を推測で書くことになった)
+    mark('tool_call_start', { name, args: args.slice(0, 200) });
     let output: string;
     try {
       const r = await api.voiceChatToolCall(sessionIdRef.current, callId, name, args);
@@ -187,7 +188,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     // ★ 結果は必ず返す。★★ ただし応答を作るのは **最後の 1 つが終わったときだけ**。
     //   1 ターンで道具が 2 つ並行に呼ばれると、それぞれが response.create を送って
     //   2 通目が弾かれる (2026-09-05 実測で 1 件)。
-    // ★★★ #432 送るのに失敗しても例外を出さない (2026-10-09 KAIROS: 68,444 バイトで send が例外を出し、
+    // ★★★ #432 送るのに失敗しても例外を出さない (2026-10-09 KAIROS: send が例外を出し、
     //   下の「数を減らす」まで届かず「調べています…」で固まった)。送った大きさも記録に残す
     const delivered = deliverToolOutput(send, callId, output);
     mark(delivered.ok ? 'tool_output_sent' : 'tool_output_send_failed', {
@@ -461,7 +462,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       if (!sdpRes.ok) throw new Error(`OpenAI に接続できませんでした (${sdpRes.status})`);
       await pc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
 
-      // ★ #432 データチャネルが 1 回に送れる大きさ (相手が知らせてこないと 64KB)。固まったときの照合用
+      // ★ #432 データチャネルが 1 回に送れる大きさ。固まったときの照合用 (10-09 のスマホは 262,144)
       mark('connected', { max_message_size: pc.sctp?.maxMessageSize ?? null });
       // ★★ 「知らせる」ではなく「掴む」(#413)。会話は 1 回の再生ではなく続くセッションなので、
       //   あとから来た自動の読み上げに譲って止まるのは逆 —— **向こうが始まらない**。

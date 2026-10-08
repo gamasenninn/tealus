@@ -1,9 +1,9 @@
 /**
  * #432 会話モード: 道具の返り値が大きすぎると、画面がデータチャネルで送れずに固まった
  *
- * ★ 2026-10-09 00:09 KAIROS で再現。get_messages (既定 20 本) の返り値を画面が Realtime に送る文は
- *   68,444 バイトで、データチャネルの上限 (相手が知らせてこないときは 64KB) を超えていた。
- *   send が例外を出し、道具の数が減らないまま「調べています…」が消えなくなった。
+ * ★ 2026-10-09 00:09 KAIROS で再現。画面が道具の結果を Realtime に送る send が例外を出し、
+ *   道具の数が減らないまま「調べています…」が消えなくなった。上限の実測は 262,144 バイトで、
+ *   「全部読んで」で AI が件数を増やすと原寸 335,456 バイトになった (直した後の記録)。
  * ★ 画面は返り値を JSON.stringify で包んで送るので、上限は「包んだあとの大きさ」で見る。
  */
 import { describe, expect, test } from '@jest/globals';
@@ -20,7 +20,7 @@ describe('capToolOutput', () => {
     expect(capToolOutput(out)).toEqual({ output: out, truncated: false, originalBytes: Buffer.byteLength(out, 'utf8') });
   });
 
-  test('★ 大きい返り値は、送る文が 64KB を超えないところで切る', () => {
+  test('★ 大きい返り値は、送る文が上限 (48KB) を超えないところで切る', () => {
     // 実際に固まった形: 改行・引用符を含む日本語の長文が JSON に 2 重に包まれている
     const text = JSON.stringify({ messages: Array.from({ length: 40 }, (_, i) => ({ id: i, content: `**見出し${i}**\n「引用」と本文。`.repeat(60) })) }, null, 2);
     const out = JSON.stringify({ content: [{ type: 'text', text }] });
