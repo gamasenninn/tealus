@@ -93,6 +93,7 @@ describe('postAsUser', () => {
     expect(order).toEqual(['emit', 'machine:start', 'machine:end', 'webhook']);
     expect(mockEmit).toHaveBeenCalledWith('message:new', {
       ...MESSAGE, sender_display_name: 'テスト太郎', sender_avatar_url: null,
+      push_kind: 'machine',   // ★ 2026-10-08 画面の中の音をプッシュとそろえるため (docs/07 ②)
     });
     expect(mockPushMachinePost).toHaveBeenCalledWith({
       roomId: ROOM, senderId: USER, senderName: 'テスト太郎', messageId: 'msg-1', body: 'hi',

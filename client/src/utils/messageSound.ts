@@ -7,16 +7,21 @@
  * ★ 2026-10-08: 「このルームの通知」を切った部屋も鳴らさない。それまではプッシュにしか効かず、
  *   開いている間は鳴って「切ったのに鳴る」と言われた
  * @param prefs.soundOn アカウントの通知音 (users.notification_sound)
+ * ★ 2026-10-08: 機械の投稿はプッシュと同じく、ルームが「機械の投稿でも鳴らす」のときだけ鳴らす。
+ *   機械かどうかは経路ごとに決まるので、サーバーが配信に添える push_kind を見る (docs/07 ②)
  * @param prefs.roomMuted その部屋の「このルームの通知」を切っている (room_members.push_muted)
+ * @param prefs.machinePostsRing その部屋の「機械の投稿でも鳴らす」(rooms.push_machine_posts)
  */
 export function shouldPlayMessageSound(
-  msg: { sender_id?: string; type?: string },
+  msg: { sender_id?: string; type?: string; push_kind?: 'human' | 'machine' | 'off' },
   myId: string | undefined,
-  prefs: { soundOn: boolean; roomMuted: boolean },
+  prefs: { soundOn: boolean; roomMuted: boolean; machinePostsRing: boolean },
 ): boolean {
   if (!prefs.soundOn || prefs.roomMuted) return false;
   if (msg.sender_id === myId) return false;
   if (msg.type === 'system') return false;
+  if (msg.push_kind === 'off') return false;
+  if (msg.push_kind === 'machine' && !prefs.machinePostsRing) return false;
   return true;
 }
 

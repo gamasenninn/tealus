@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { shouldPlayMessageSound, shouldMoveLegacySoundOff } from '../src/utils/messageSound';
 
 const ME = 'me';
-const ON = { soundOn: true, roomMuted: false };
+const ON = { soundOn: true, roomMuted: false, machinePostsRing: false };
 
 describe('shouldPlayMessageSound', () => {
   it('ほかの人の投稿は鳴らす', () => {
@@ -25,10 +25,24 @@ describe('shouldPlayMessageSound', () => {
     expect(shouldPlayMessageSound({ sender_id: 'other', type: 'system' }, ME, ON)).toBe(false);
   });
   it('通知音を切っていれば鳴らさない', () => {
-    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text' }, ME, { soundOn: false, roomMuted: false })).toBe(false);
+    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text' }, ME, { ...ON, soundOn: false })).toBe(false);
   });
   it('★★ 「このルームの通知」を切った部屋は鳴らさない', () => {
-    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text' }, ME, { soundOn: true, roomMuted: true })).toBe(false);
+    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text' }, ME, { ...ON, roomMuted: true })).toBe(false);
+  });
+  // ★ 2026-10-08 プッシュと同じ判定にそろえる (docs/07 ②)。サーバーが配信に push_kind を添える
+  it('★★ 機械の投稿は、ルームが「機械の投稿でも鳴らす」でなければ鳴らさない', () => {
+    expect(shouldPlayMessageSound({ sender_id: 'bot', type: 'text', push_kind: 'machine' }, ME, ON)).toBe(false);
+    expect(shouldPlayMessageSound({ sender_id: 'bot', type: 'text', push_kind: 'machine' }, ME, { ...ON, machinePostsRing: true })).toBe(true);
+  });
+  it('人の投稿は、ルームの機械の設定に関係なく鳴らす', () => {
+    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text', push_kind: 'human' }, ME, ON)).toBe(true);
+  });
+  it('プッシュを付けない配信 (off) は鳴らさない', () => {
+    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text', push_kind: 'off' }, ME, ON)).toBe(false);
+  });
+  it('push_kind の無い配信 (古いサーバー) は従来どおり鳴らす', () => {
+    expect(shouldPlayMessageSound({ sender_id: 'other', type: 'text' }, ME, ON)).toBe(true);
   });
 });
 

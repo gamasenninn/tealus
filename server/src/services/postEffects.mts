@@ -62,7 +62,9 @@ export const SYSTEM_MESSAGE_EFFECTS: Pick<PostEffects, 'push' | 'webhook' | 'pre
 
 export async function announcePost(e: PostEffects): Promise<void> {
   const io = e.io === undefined ? getIo() : e.io;
-  if (io) io.to(e.roomId).emit('message:new', e.emit);
+  // ★ push_kind: 画面の中の音をプッシュと同じ判定にそろえるため (docs/07 ②、2026-10-08)。
+  //   機械の投稿かは経路ごとに決まる (LINE の文字は human、写真は machine) ので、送り手の is_bot では代わりにならない
+  if (io) io.to(e.roomId).emit('message:new', { ...e.emit, push_kind: e.push.kind });
   if (e.push.kind === 'human') {
     // ★ 待たずに投げ、失敗 (reject) は記録して続ける。★★ 2026-10-02 まで try/catch で、reject は握れていなかった
     //   (sendPushToRoomMembers は async なので同期の例外は出ない)。LINE (#13) は移す前から .catch で捨てていた

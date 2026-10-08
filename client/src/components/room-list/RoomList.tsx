@@ -74,7 +74,7 @@ function RoomList() {
     };
     socket.on('connect', joinAllRooms);
 
-    const handleNewMessage = (msg: { sender_id?: string; type?: string; room_id?: string }) => {
+    const handleNewMessage = (msg: { sender_id?: string; type?: string; room_id?: string; push_kind?: 'human' | 'machine' | 'off' }) => {
       fetchRooms();
       // ★ 自分・system メッセージ・通知音オフ・「このルームの通知」オフは鳴らさない (utils/messageSound)
       // ★ この effect は部屋の数が変わったときしか張り直さないので、設定は届いた時点のものを読む
@@ -82,6 +82,7 @@ function RoomList() {
       const prefs = {
         soundOn: useAuthStore.getState().user?.notification_sound !== false,
         roomMuted: !!room?.push_muted,
+        machinePostsRing: !!room?.push_machine_posts,
       };
       if (shouldPlayMessageSound(msg, user!.id, prefs)) {
         new Audio('/notification.wav').play().catch(() => {});
