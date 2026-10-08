@@ -4,15 +4,33 @@
  *   system メッセージは中央に小さく出す (SystemMessage) ので、音も控える (利用者判断)
  * ★ 使うのは部屋の一覧 (RoomList) だけ。開いている部屋の新着も一覧が鳴らす
  *   (#505 以前は開いている部屋 useSocketSync でも鳴らしていて、1 件で 2 回鳴っていた)
- * @param setting localStorage の notificationSound ('off' で切っている)
+ * ★ 2026-10-08: 「このルームの通知」を切った部屋も鳴らさない。それまではプッシュにしか効かず、
+ *   開いている間は鳴って「切ったのに鳴る」と言われた
+ * @param prefs.soundOn アカウントの通知音 (users.notification_sound)
+ * @param prefs.roomMuted その部屋の「このルームの通知」を切っている (room_members.push_muted)
  */
 export function shouldPlayMessageSound(
   msg: { sender_id?: string; type?: string },
   myId: string | undefined,
-  setting: string | null,
+  prefs: { soundOn: boolean; roomMuted: boolean },
 ): boolean {
-  if (setting === 'off') return false;
+  if (!prefs.soundOn || prefs.roomMuted) return false;
   if (msg.sender_id === myId) return false;
   if (msg.type === 'system') return false;
   return true;
+}
+
+/** 以前の端末ごとの保存 (localStorage)。2026-10-08 にアカウントの設定へ移した */
+export const LEGACY_SOUND_KEY = 'notificationSound';
+
+/**
+ * 端末に残った「通知音を切る」をアカウントへ移すか (2026-10-08)。
+ * ★ 移さないと、端末で切っていた人が更新した日から急に鳴り出す
+ * ★ サーバーが設定を返さない (古い) ときは移さない
+ */
+export function shouldMoveLegacySoundOff(
+  user: { notification_sound?: boolean },
+  legacyValue: string | null,
+): boolean {
+  return legacyValue === 'off' && user.notification_sound === true;
 }

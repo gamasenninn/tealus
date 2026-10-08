@@ -17,6 +17,8 @@ export interface User {
   role: UserRole;
   is_active?: boolean;
   is_bot?: boolean;
+  /** メッセージの通知で音を鳴らす (アカウントごと、2026-10-08) */
+  notification_sound?: boolean;
   created_at?: string;
 }
 

@@ -323,6 +323,7 @@ router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT r.*,
+              rm.push_muted,
               m.content AS last_message_content,
               m.created_at AS last_message_at,
               m.type AS last_message_type,

@@ -20,5 +20,7 @@ export interface AuthUser {
   is_active: boolean;
   /** 機械のアカウント (エージェント・ボット・トランシーバー)。★ 2026-09-27 通知の判定に使うため認証で読むようにした */
   is_bot?: boolean;
+  /** メッセージの通知で音を鳴らす (アカウントごと、2026-10-08)。切るとプッシュは silent で送る */
+  notification_sound?: boolean;
   created_at: Date;
 }

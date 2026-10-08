@@ -162,15 +162,18 @@ export async function sendPushToRoomMembers(
   viewing: Set<string> = new Set(viewingUserIds(roomId)),
 ): Promise<void> {
   try {
-    const members = await pool.query<{ user_id: string }>(
+    const members = await pool.query<{ user_id: string; notification_sound: boolean }>(
       // ★ #463 このルームを鳴らさないにしている人は除く (通話の着信は sendPushToUser を直接呼ぶので影響しない)
-      'SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2 AND push_muted = false',
+      `SELECT rm.user_id, u.notification_sound
+         FROM room_members rm JOIN users u ON u.id = rm.user_id
+        WHERE rm.room_id = $1 AND rm.user_id != $2 AND rm.push_muted = false`,
       [roomId, senderId]
     );
 
     for (const member of members.rows) {
       if (!viewing.has(member.user_id)) {
-        await sendPushToUser(member.user_id, payload);
+        // ★ 通知音を切っている人には、通知は出して音だけ止める (2026-10-08、iPhone で効くことを確かめた)
+        await sendPushToUser(member.user_id, member.notification_sound ? payload : { ...payload, silent: true });
       }
     }
   } catch (err) {

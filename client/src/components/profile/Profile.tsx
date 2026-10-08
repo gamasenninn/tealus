@@ -9,7 +9,7 @@ import { BUILD_ID } from '../../utils/buildVersion';
 import './Profile.css';
 
 function Profile() {
-  const { user, initialize, logout } = useAuthStore();
+  const { user, initialize, logout, setNotificationSound } = useAuthStore();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -22,7 +22,6 @@ function Profile() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [chatFontSize, setChatFontSize] = useState(localStorage.getItem('chatFontSize') || 'medium');
-  const [notificationSound, setNotificationSound] = useState(localStorage.getItem('notificationSound') !== 'off');
   const [mdPreview, setMdPreview] = useState(localStorage.getItem('mdPreview') !== 'off');
   const [voiceVolume, setVoiceVolume] = useState(parseInt(localStorage.getItem('voiceVolume') || '80'));
   const [ttsReadAloud, setTtsReadAloud] = useState(localStorage.getItem('ttsReadAloud') === 'on');
@@ -203,17 +202,21 @@ function Profile() {
         <label className="notification-toggle">
           <input
             type="checkbox"
-            checked={notificationSound}
-            onChange={(e) => {
-              setNotificationSound(e.target.checked);
-              localStorage.setItem('notificationSound', e.target.checked ? 'on' : 'off');
-              if (e.target.checked) {
-                new Audio('/notification.wav').play().catch(() => {});
+            checked={user?.notification_sound !== false}
+            onChange={async (e) => {
+              const on = e.target.checked;
+              if (on) new Audio('/notification.wav').play().catch(() => {});
+              try {
+                await setNotificationSound(on);
+              } catch {
+                showError('通知音の設定を保存できませんでした');
               }
             }}
           />
           <span>メッセージ受信時に通知音を鳴らす</span>
         </label>
+        {/* ★ 2026-10-08 アカウントごとの設定にした。プッシュ通知の音にも効く (通話の着信は対象外) */}
+        <p className="profile-hint">どの端末で切り替えても、すべての端末に効きます。切ってもプッシュ通知は届きます (音だけ鳴らなくなります)。通話の着信は鳴ります。</p>
       </div>
 
       <div className="profile-section">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api, type TtsOptions } from '../../services/api';
 import type { AppUrl, Room } from '../../types';
+import { useRoomStore } from '../../stores/roomStore';
 import './RoomSettings.css';
 
 
@@ -122,6 +123,8 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
     try {
       await api.setRoomNotification(roomId, next);
       await selectRoom(roomId);   // ★ 開き直したときに古い設定が出ないよう、手元のルーム情報も取り直す
+      // ★ 画面の中の音は部屋の一覧の設定を見る (2026-10-08)。取り直さないと次に一覧を読むまで鳴り続ける
+      await useRoomStore.getState().fetchRooms();
     } catch {
       setPushMuted(!next);
       showError('通知の設定を保存できませんでした');

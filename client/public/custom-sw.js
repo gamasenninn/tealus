@@ -3,7 +3,7 @@
 // --- プッシュ通知 ---
 self.addEventListener('push', (event) => {
   const data = event.data?.json() || {};
-  const { title, body, data: notifData, total_unread } = data;
+  const { title, body, data: notifData, total_unread, silent } = data;
 
   // SPIKE (5/12): App Badge — ホーム画面アイコン上に未読数表示 (PWA 機能)
   // iOS Safari 16.4+ (PWA installed) / Chrome / Edge で対応、Firefox は silent fail
@@ -22,6 +22,9 @@ self.addEventListener('push', (event) => {
       badge: '/icons/icon-192.png',
       tag: notifData?.roomId ? `room-${notifData.roomId}` : 'tealus',
       renotify: true,
+      // ★ 通知音を切った人には、サーバーが silent を付けて送る (users.notification_sound、2026-10-08)。
+      //   通知は出して音だけ止める。iPhone のホーム画面アプリで効くことを確かめた (Android は未確認)
+      silent: silent === true,
       data: notifData,
     })
   );

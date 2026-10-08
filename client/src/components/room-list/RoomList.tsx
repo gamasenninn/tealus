@@ -74,10 +74,16 @@ function RoomList() {
     };
     socket.on('connect', joinAllRooms);
 
-    const handleNewMessage = (msg: { sender_id?: string; type?: string }) => {
+    const handleNewMessage = (msg: { sender_id?: string; type?: string; room_id?: string }) => {
       fetchRooms();
-      // ★ 自分・system メッセージ・通知音オフは鳴らさない (utils/messageSound、2026-10-02)
-      if (shouldPlayMessageSound(msg, user!.id, localStorage.getItem('notificationSound'))) {
+      // ★ 自分・system メッセージ・通知音オフ・「このルームの通知」オフは鳴らさない (utils/messageSound)
+      // ★ この effect は部屋の数が変わったときしか張り直さないので、設定は届いた時点のものを読む
+      const room = useRoomStore.getState().rooms.find(r => r.id === msg.room_id);
+      const prefs = {
+        soundOn: useAuthStore.getState().user?.notification_sound !== false,
+        roomMuted: !!room?.push_muted,
+      };
+      if (shouldPlayMessageSound(msg, user!.id, prefs)) {
         new Audio('/notification.wav').play().catch(() => {});
       }
     };

@@ -86,7 +86,7 @@ router.post('/register', async (req, res) => {
     const result = await pool.query<AuthUser>(
       `INSERT INTO users (login_id, display_name, password_hash, role)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, created_at`,
       [login_id, display_name, password_hash, role]
     );
 
@@ -194,7 +194,7 @@ router.get('/authz', authenticate, async (req, res) => {
  * Update own display_name and/or status_message
  */
 router.put('/profile', authenticate, async (req, res) => {
-  const { status_message } = req.body;
+  const { status_message, notification_sound } = req.body;
   let { display_name } = req.body;
   const userId = req.user!.id;
 
@@ -210,6 +210,11 @@ router.put('/profile', authenticate, async (req, res) => {
     if ([...status_message].length > STATUS_MESSAGE_MAX) return res.status(400).json({ error: `ひとことは ${STATUS_MESSAGE_MAX} 文字以内で入力してください` });
   }
 
+  // ★ 通知音 (アカウントごと、2026-10-08)。切るとメッセージのプッシュを silent で送る
+  if (notification_sound !== undefined && typeof notification_sound !== 'boolean') {
+    return res.status(400).json({ error: '通知音の設定が不正です' });
+  }
+
   const updates: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
@@ -222,6 +227,10 @@ router.put('/profile', authenticate, async (req, res) => {
     updates.push(`status_message = $${idx++}`);
     values.push(status_message);
   }
+  if (notification_sound !== undefined) {
+    updates.push(`notification_sound = $${idx++}`);
+    values.push(notification_sound);
+  }
 
   if (updates.length === 0) {
     return res.status(400).json({ error: '更新する項目がありません' });
@@ -233,7 +242,7 @@ router.put('/profile', authenticate, async (req, res) => {
   try {
     const result = await pool.query<AuthUser>(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, created_at`,
       values
     );
     // ★ #498 つながっている socket の名前も書き換える (古い名前で投稿が配られないように)
@@ -259,7 +268,7 @@ router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, 
   try {
     const result = await pool.query<AuthUser>(
       `UPDATE users SET avatar_url = $1, updated_at = now() WHERE id = $2
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, created_at`,
       [avatarUrl, req.user!.id]
     );
     refreshConnectedUser(req.user!.id, { avatar_url: result.rows[0].avatar_url });   // ★ #498

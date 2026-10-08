@@ -7,6 +7,7 @@ import { registerPushNotification, unregisterPushNotification } from '../service
 /** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
 const UNSUBSCRIBE_WAIT_MS = 3000;
 import type { User } from '../types';
+import { LEGACY_SOUND_KEY, shouldMoveLegacySoundOff } from '../utils/messageSound';
 
 interface AuthState {
   user: User | null;
@@ -15,6 +16,25 @@ interface AuthState {
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
   logout: () => Promise<void>;
+  /** 通知音 (アカウントごと、2026-10-08)。切るとメッセージのプッシュも音なしになる */
+  setNotificationSound: (on: boolean) => Promise<void>;
+}
+
+/**
+ * 端末に残った「通知音を切る」(localStorage) をアカウントへ移す (2026-10-08)。
+ * ★ 移さないと、端末で切っていた人が更新した日から急に鳴り出す。失敗したら端末の値を残して次に開いたときにやり直す
+ */
+async function moveLegacySoundOff(user: User, set: (s: Partial<AuthState>) => void): Promise<void> {
+  const legacy = localStorage.getItem(LEGACY_SOUND_KEY);
+  if (legacy === null || user.notification_sound === undefined) return;
+  if (!shouldMoveLegacySoundOff(user, legacy)) { localStorage.removeItem(LEGACY_SOUND_KEY); return; }
+  try {
+    const data = await api.updateProfile({ notification_sound: false });
+    set({ user: data.user });
+    localStorage.removeItem(LEGACY_SOUND_KEY);
+  } catch (err) {
+    console.warn('[sound] 端末の設定をアカウントへ移せませんでした:', err);
+  }
 }
 
 export const useAuthStore = create<AuthState>()((set) => ({
@@ -34,6 +54,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       connectSocket(token);
       set({ user: data.user, token, isLoading: false });
       registerPushNotification();
+      void moveLegacySoundOff(data.user, set);
     } catch {
       localStorage.removeItem('token');
       api.setToken(null);
@@ -47,6 +68,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     connectSocket(data.token);
     set({ user: data.user, token: data.token });
     registerPushNotification();
+    void moveLegacySoundOff(data.user, set);
     return data;
   },
 
@@ -59,5 +81,10 @@ export const useAuthStore = create<AuthState>()((set) => ({
     api.setToken(null);
     disconnectSocket();
     set({ user: null, token: null });
+  },
+
+  setNotificationSound: async (on) => {
+    const data = await api.updateProfile({ notification_sound: on });
+    set({ user: data.user });
   },
 }));
