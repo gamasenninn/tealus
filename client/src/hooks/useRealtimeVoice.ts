@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { holdAudio, releaseAudio } from '../utils/audioExclusive';
 import { createResponseGate, shouldRecoverToolGate } from '../utils/realtimeResponseGate';
 import { createSpeechGate, createSpeakingView } from '../utils/speechGate';
+import { deliverToolOutput } from '../utils/realtimeToolOutput';
 import { readTranscriptEvent } from '../utils/realtimeTranscript';
 import { readResponseLifecycleEvent } from '../utils/realtimeResponseLifecycle';
 
@@ -178,7 +179,7 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     try {
       const r = await api.voiceChatToolCall(sessionIdRef.current, callId, name, args);
       output = r.output;
-      mark('tool_call_end', { name, elapsed_ms: r.elapsed_ms });
+      mark('tool_call_end', { name, elapsed_ms: r.elapsed_ms, original_bytes: r.original_bytes ?? null, truncated: r.truncated ?? false });
     } catch (e) {
       output = `道具の実行に失敗しました: ${e instanceof Error ? e.message : String(e)}`;
       mark('tool_call_error', { name });
@@ -186,7 +187,12 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
     // ★ 結果は必ず返す。★★ ただし応答を作るのは **最後の 1 つが終わったときだけ**。
     //   1 ターンで道具が 2 つ並行に呼ばれると、それぞれが response.create を送って
     //   2 通目が弾かれる (2026-09-05 実測で 1 件)。
-    send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output } });
+    // ★★★ #432 送るのに失敗しても例外を出さない (2026-10-09 KAIROS: 68,444 バイトで send が例外を出し、
+    //   下の「数を減らす」まで届かず「調べています…」で固まった)。送った大きさも記録に残す
+    const delivered = deliverToolOutput(send, callId, output);
+    mark(delivered.ok ? 'tool_output_sent' : 'tool_output_send_failed', {
+      name, bytes: delivered.bytes, error: delivered.error ?? null, fallback_sent: delivered.fallbackSent ?? null,
+    });
     inFlightToolsRef.current = Math.max(0, inFlightToolsRef.current - 1);
     const isLast = respGateRef.current.endTool();
     if (isLast) {
@@ -455,7 +461,8 @@ export function useRealtimeVoice(roomId: string): RealtimeVoice {
       if (!sdpRes.ok) throw new Error(`OpenAI に接続できませんでした (${sdpRes.status})`);
       await pc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
 
-      mark('connected');
+      // ★ #432 データチャネルが 1 回に送れる大きさ (相手が知らせてこないと 64KB)。固まったときの照合用
+      mark('connected', { max_message_size: pc.sctp?.maxMessageSize ?? null });
       // ★★ 「知らせる」ではなく「掴む」(#413)。会話は 1 回の再生ではなく続くセッションなので、
       //   あとから来た自動の読み上げに譲って止まるのは逆 —— **向こうが始まらない**。
       holdIdRef.current = `voice-chat:${session.session_id}`;

@@ -305,7 +305,7 @@ class ApiClient {
   }
 
   /** モデルが要求した道具を、サーバ側で実行して結果をもらう (ブラウザは実行しない) */
-  voiceChatToolCall(sessionId: string, callId: string, name: string, args: string): Promise<{ output: string; elapsed_ms: number }> {
+  voiceChatToolCall(sessionId: string, callId: string, name: string, args: string): Promise<{ output: string; elapsed_ms: number; truncated?: boolean; original_bytes?: number }> {
     return this._agentApi('POST', '/voice-chat/tool-call', { session_id: sessionId, call_id: callId, name, arguments: args });
   }
 

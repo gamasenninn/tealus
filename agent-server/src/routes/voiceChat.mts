@@ -34,6 +34,7 @@ import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { partsFor } from '../lib/promptKnowledge.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { resolveRoomArg, roomIdsFromListRooms } from '../lib/voiceChatRoomArg.mts';
+import { capToolOutput } from '../lib/voiceChatToolOutput.mts';
 
 export const router = express.Router();
 
@@ -542,9 +543,11 @@ router.post('/tool-call', async (req, res) => {
 
   try {
     const result = await entry.serverOf.get(name)!.callTool(name, args);
-    const output = typeof result === 'string' ? result : JSON.stringify(result);
-    logger.info(`[voice-chat] tool ${name} ${Date.now() - started}ms session=${sessionId.slice(0, 8)}`);
-    res.json({ output, elapsed_ms: Date.now() - started });
+    const raw = typeof result === 'string' ? result : JSON.stringify(result);
+    // ★ #432 画面がデータチャネルで送れる大きさに切る (超えると send が例外を出し「調べています…」で固まった)
+    const capped = capToolOutput(raw);
+    logger.info(`[voice-chat] tool ${name} ${Date.now() - started}ms bytes=${capped.originalBytes}${capped.truncated ? ' ★切った' : ''} session=${sessionId.slice(0, 8)}`);
+    res.json({ output: capped.output, elapsed_ms: Date.now() - started, truncated: capped.truncated, original_bytes: capped.originalBytes });
   } catch (err) {
     // ★ 500 にしない。道具が失敗したことをモデルに伝えて、会話は続けさせる
     const message = err instanceof Error ? err.message : String(err);
