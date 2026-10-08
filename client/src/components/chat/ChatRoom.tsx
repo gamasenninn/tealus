@@ -200,7 +200,8 @@ function ChatRoom() {
           const a = roomSearchAction(location.state, roomId);
           if (a.type === 'back') navigate(-1); else navigate(a.to);
         }}><Search size={18} /></button>
-        {currentRoom?.type === 'group' && (
+        {/* ★ 2026-10-08 DM にも出す (中身は個人設定だけ、MemberList)。それまで DM の通知を切る手段が無かった */}
+        {currentRoom && (
           <button className="chat-header-btn" onClick={() => setShowMembers(true)}>≡</button>
         )}
       </header>

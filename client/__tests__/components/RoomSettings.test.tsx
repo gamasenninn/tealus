@@ -501,3 +501,35 @@ describe('RoomSettings — プロンプトの入力欄を畳む (#514)', () => {
     expect(ta.rows).toBe(6);
   });
 });
+
+// ★ 2026-10-08 DM には「個人設定」だけを出す (DM には ≡ が無く、「このルームの通知」を切れなかった)
+describe('RoomSettings — 個人設定だけ (personalOnly、DM 用)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('★ 「このルームの通知」と「音声の連続再生」は出て、ほかの section は出ない', async () => {
+    render(<RoomSettings
+      {...baseProps}
+      currentRoom={{ type: 'direct' } as Room}
+      isAdmin={true}
+      isSysAdmin={true}
+      personalOnly
+    />);
+    expect(screen.getByLabelText('このルームの通知')).toBeInTheDocument();
+    expect(screen.getByText('音声の連続再生')).toBeInTheDocument();
+    expect(screen.queryByText('エージェント設定')).not.toBeInTheDocument();
+    expect(screen.queryByText('ルーム設定（管理者）')).not.toBeInTheDocument();
+    expect(screen.queryByText('システム設定')).not.toBeInTheDocument();
+  });
+
+  it('agent-server の設定は読みに行かない', async () => {
+    render(<RoomSettings
+      {...baseProps}
+      currentRoom={{ type: 'direct' } as Room}
+      isAdmin={false}
+      isSysAdmin={false}
+      personalOnly
+    />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.getRoomAgentSettings).not.toHaveBeenCalled();
+  });
+});

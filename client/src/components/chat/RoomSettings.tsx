@@ -23,9 +23,13 @@ interface RoomSettingsProps {
   isAdmin: boolean;
   isSysAdmin: boolean;
   selectRoom: (roomId: string) => Promise<void>;
+  /** ★ 2026-10-08 個人設定だけを出す (DM 用。DM にはメンバー管理も管理者向けの設定も出さない) */
+  personalOnly?: boolean;
 }
 
-function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: RoomSettingsProps) {
+function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: isSysAdminProp, selectRoom, personalOnly = false }: RoomSettingsProps) {
+  const isAdmin = isAdminProp && !personalOnly;
+  const isSysAdmin = isSysAdminProp && !personalOnly;
   const [transcriptionEdit, setTranscriptionEdit] = useState<string>(currentRoom?.allow_member_transcription_edit ? 'member' : 'sender');
   const [messageEditPolicy, setMessageEditPolicy] = useState<string>(currentRoom?.message_edit_policy || 'none');
   // #405 Realtime 音声会話 (docs/08 §12)。★ 既定 false = 明示的に開けたルームだけ
@@ -51,7 +55,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin, isSysAdmin, selectRoom }: 
   const [error, setError] = useState('');
 
   // --- エージェント設定 (#156) ---
-  const canEditAgent = currentRoom?.type === 'direct' || isAdmin;
+  const canEditAgent = !personalOnly && (currentRoom?.type === 'direct' || isAdmin);
   // ★ 2026-09-26: 読み込んだ設定を丸ごと持つ。保存は「変えた項目だけ差し替え」
   //   (以前は 3 項目だけで上書きしていて、ダッシュボードで決めた tts_engine / tts_voice が消えた)
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({ response_mode: 'auto', enabled: true });

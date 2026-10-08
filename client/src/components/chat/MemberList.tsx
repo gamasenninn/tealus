@@ -149,6 +149,25 @@ function MemberList({ roomId, onClose }: MemberListProps) {
     }
   };
 
+  // ★ 2026-10-08 DM は個人設定 (このルームの通知・音声の連続再生) だけ。それまで DM にはこの画面の入口が無かった
+  if (currentRoom?.type === 'direct') {
+    return (
+      <div className="member-list-overlay" onClick={onClose}>
+        <div className="member-list-modal" onClick={e => e.stopPropagation()}>
+          <RoomSettings
+            roomId={roomId}
+            currentRoom={currentRoom}
+            isAdmin={false}
+            isSysAdmin={false}
+            selectRoom={selectRoom}
+            personalOnly
+          />
+          <button className="member-close-btn" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="member-list-overlay" onClick={onClose}>
       <div className="member-list-modal" onClick={e => { e.stopPropagation(); if (menuTarget) setMenuTarget(null); }}>
