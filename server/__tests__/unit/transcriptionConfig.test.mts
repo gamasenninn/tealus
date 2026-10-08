@@ -575,6 +575,19 @@ describe('buildOrganonCorrectionPrompt (organon 補正段の system prompt)', ()
       expect(listOf(b)).toContain('セビ調');
     });
 
+    // ★ #521 「釜さん」「かまさん」(辞書に「ガマ」の崩れとして登録済み) が、「愛称は残す」に負けて直らなかった。
+    //   転写ブレ例にそのまま載っていて読みがほぼ同じなら崩れとして直す、の 1 項目を luna 用にだけ足した
+    //   (2026-10-08 実測: 対象 17 便 × 3 回で 22→35/51、うち釜さん・かまさん 6→21/21。250 便 × 2 回で正しい便は壊さない)
+    test('#521 luna 系は「転写ブレ例にそのまま載っていて読みがほぼ同じなら崩れとして直す」を持つ', () => {
+      const p = configModule.buildOrganonCorrectionPrompt(cfg, 'gpt-6-luna');
+      expect(p).toContain('転写ブレ例にそのまま載っていて');
+      expect(p).toContain('愛称ではなく音声認識の崩れ');
+      // 愛称を残す決まりは消していない (例外として足しただけ)
+      expect(p).toContain('役職語と愛称は、転写ブレ例にあっても置き換えずに');
+      // luna 以外の指示には入れない (系統ごとに測ってから)
+      expect(configModule.buildOrganonCorrectionPrompt(cfg, 'gpt-5.4-mini')).not.toContain('愛称ではなく音声認識の崩れ');
+    });
+
     test('vocab 空でも luna 用の指示を返す', () => {
       expect(configModule.buildOrganonCorrectionPrompt({ vocabulary: [] }, 'gpt-6-luna')).toContain('役職語と愛称');
     });
