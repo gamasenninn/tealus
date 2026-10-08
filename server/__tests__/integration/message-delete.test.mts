@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app.mts';
-import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
+import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 
 describe('Message Delete API', () => {
@@ -51,6 +51,27 @@ describe('Message Delete API', () => {
 
       const deleted = histRes.body.messages.find((m: any) => m.id === msgId);
       expect(deleted.is_deleted).toBe(true);
+    });
+
+    // ★ #522 画像・動画・ファイルも、消したあとに部屋の一覧へファイルの場所を返していた (画面は隠していたが中身は配っていた)
+    it('消した投稿には、一覧でファイルを付けない (他のメンバーから見ても)', async () => {
+      const msgRes = await request(app)
+        .post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ content: '添付つき' });
+      const msgId = msgRes.body.message.id;
+      await getTestPool().query(
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size) VALUES ($1, 'images/x.jpg', 'x.jpg', 'image/jpeg', 10)`,
+        [msgId]
+      );
+      const before = await request(app).get(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${user2.token}`);
+      expect(before.body.messages.find((m: any) => m.id === msgId).media.length).toBe(1);   // 消す前は付く
+
+      await request(app).delete(`/api/rooms/${roomId}/messages/${msgId}`).set('Authorization', `Bearer ${user1.token}`);
+      const after = await request(app).get(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${user2.token}`);
+      const m = after.body.messages.find((x: any) => x.id === msgId);
+      expect(m.is_deleted).toBe(true);
+      expect(m.media).toEqual([]);
     });
 
     it('should reject deleting other users message', async () => {

@@ -113,6 +113,7 @@ interface StampRow {
 export interface AttachableMessage {
   id: string;
   type?: string | null;
+  is_deleted?: boolean | null;
   content?: string | null;
   reply_to?: string | null;
   forwarded_from?: string | null;
@@ -132,7 +133,9 @@ export interface AttachableMessage {
  */
 export async function attachMedia(messages: AttachableMessage[]): Promise<void> {
   if (messages.length === 0) return;
-  const ids = messages.map(m => m.id);
+  // ★ #522 消した投稿にはファイルを付けない。削除は本文を空にするだけで message_media は残るので、
+  //   ここで外さないと画面は「削除されました」と隠しても、ファイルの場所を配り続ける (normalizeReply と同じ考え方)
+  const ids = messages.filter(m => !m.is_deleted).map(m => m.id);
   const result = await pool.query<MediaRow>(
     'SELECT * FROM message_media WHERE message_id = ANY($1)',
     [ids]
@@ -218,7 +221,8 @@ export async function attachForwards(messages: AttachableMessage[]): Promise<voi
  * Attach transcription for voice messages
  */
 export async function attachTranscriptions(messages: AttachableMessage[]): Promise<void> {
-  const voiceIds = messages.filter(m => m.type === 'voice').map(m => m.id);
+  // ★ #522 消した音声には文字起こしを付けない (voice_transcriptions は削除しても残る)
+  const voiceIds = messages.filter(m => m.type === 'voice' && !m.is_deleted).map(m => m.id);
   if (voiceIds.length === 0) return;
   const result = await pool.query<TranscriptionRow>(
     `SELECT DISTINCT ON (message_id) message_id, raw_text, formatted_text, status, version

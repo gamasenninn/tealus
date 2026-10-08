@@ -243,4 +243,72 @@ describe('Transcription Edit API', () => {
       expect(await versions()).toBe(before);
     });
   });
+  // ============================================
+  // ★ #522 消した音声 (2026-10-08 UI 試験)
+  //   消しても文字起こしの手直し・やり直し (費用がかかる)・履歴が通っていた。
+  //   履歴は部屋のメンバーなら誰でも読めるので、消した中身を読む口にもなっていた
+  // ============================================
+  describe('★ #522 消した音声', () => {
+    const versions = async () => (await getTestPool().query<{ n: number }>(
+      'SELECT count(*)::int n FROM voice_transcriptions WHERE message_id = $1', [messageId])).rows[0].n;
+    beforeEach(async () => {
+      const del = await request(app)
+        .delete(`/api/rooms/${roomId}/messages/${messageId}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(del.status).toBe(200);
+    });
+
+    it('手直しは 404 で、版は増えない', async () => {
+      const before = await versions();
+      const res = await request(app)
+        .put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ text: '消した後の手直し' });
+      expect(res.status).toBe(404);
+      expect(await versions()).toBe(before);
+    });
+
+    it('やり直しは 404 で、版は増えない', async () => {
+      const before = await versions();
+      const res = await request(app)
+        .post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(res.status).toBe(404);
+      expect(await versions()).toBe(before);
+    });
+
+    it('履歴は 404 (送り手も、他のメンバーも)', async () => {
+      for (const u of [user1, user2]) {
+        const res = await request(app)
+          .get(`/api/messages/${messageId}/transcription/history`)
+          .set('Authorization', `Bearer ${u.token}`);
+        expect(res.status).toBe(404);
+      }
+    });
+
+    it('部屋の一覧には、ファイルも文字起こしも付けない', async () => {
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user2.token}`);
+      const m = res.body.messages.find((x: { id: string }) => x.id === messageId);
+      expect(m.is_deleted).toBe(true);
+      expect(m.media).toEqual([]);
+      expect(m.transcription ?? null).toBeNull();
+    });
+
+    it('消していない音声には、今までどおりファイルと文字起こしが付く', async () => {
+      const up = await request(app)
+        .post(`/api/rooms/${roomId}/voice`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .attach('voice', voicePath);
+      const liveId = up.body.message.id;
+      await waitTranscriptionSettled(liveId);
+      const res = await request(app)
+        .get(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user2.token}`);
+      const m = res.body.messages.find((x: { id: string }) => x.id === liveId);
+      expect(m.media.length).toBe(1);
+      expect(m.transcription).toBeTruthy();
+    });
+  });
 });

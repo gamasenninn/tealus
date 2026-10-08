@@ -33,7 +33,8 @@ router.put('/', authenticate, async (req, res) => {
   try {
     // Check message exists
     const msgResult = await pool.query<VoiceMessageRow>(
-      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2',
+      // ★ #522 消した音声は「無い」と同じに扱う (手直し・やり直しで消した後も中身を作れていた)
+      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2 AND NOT m.is_deleted',
       [messageId, 'voice']
     );
     if (msgResult.rows.length === 0) {
@@ -150,7 +151,8 @@ router.get('/history', authenticate, async (req, res) => {
   try {
     // Check message exists and user is room member
     const msgResult = await pool.query<{ room_id: string }>(
-      'SELECT room_id FROM messages WHERE id = $1',
+      // ★ #522 消した音声の履歴は返さない (メンバーなら誰でも読めるので、消した中身を読む口になっていた)
+      'SELECT room_id FROM messages WHERE id = $1 AND NOT is_deleted',
       [messageId]
     );
     if (msgResult.rows.length === 0) {
@@ -195,7 +197,8 @@ router.post('/retranscribe', authenticate, async (req: Request, res: Response) =
   try {
     // Check message exists + permission (same logic as PUT)
     const msgResult = await pool.query<VoiceMessageRow>(
-      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2',
+      // ★ #522 消した音声は「無い」と同じに扱う (手直し・やり直しで消した後も中身を作れていた)
+      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2 AND NOT m.is_deleted',
       [messageId, 'voice']
     );
     if (msgResult.rows.length === 0) {
