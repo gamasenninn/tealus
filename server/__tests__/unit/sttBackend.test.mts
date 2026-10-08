@@ -434,29 +434,32 @@ describe('transcribeAudio - gemini backend (#424)', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  // 切断ガードでやり直したときの openai の答え (日本語として正当な形)
+  const JA_FALLBACK = 'ガマさん、ガマさん取れますか？ 前日出品機のチェックどうですか。';
+
   // ★ 切断ガード — 実測の 2 件 (28 秒 → 10 字 / 13 秒 → 15 字。呼びかけだけ残して用件が消えた) を固定。
   //   誤検知の代償は openai 呼び出し 1 回 (= 現行と同じ結果) なので安全側に倒す。
   test('★ 切断疑い (28 秒の音声に 10 字) → openai へ fail-open', async () => {
     writeWav(tmpAudio, 1000, 28_000);                            // 28 秒ぶん
     const fetchImpl = jest.fn().mockReturnValue(geminiResponse('ガマさん取れますか？'));  // 10 字
-    const openaiClient = fakeOpenAI('fallback-text');
+    const openaiClient = fakeOpenAI(JA_FALLBACK);
     const log = { warn: jest.fn(), error: jest.fn() };
     const text = await mod.transcribeAudio({
       inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient, fetchImpl, log,
     });
-    expect(text).toBe('fallback-text');
+    expect(text).toBe(JA_FALLBACK);
     expect(log.warn).toHaveBeenCalled();
   });
 
   test('★ 切断疑い (13 秒に 15 字) も fallback / 33 秒に 100 字は通常どおり通す', async () => {
     writeWav(tmpAudio, 1000, 13_000);
-    const openaiClient = fakeOpenAI('fallback-text');
+    const openaiClient = fakeOpenAI(JA_FALLBACK);
     const log = { warn: jest.fn(), error: jest.fn() };
     const short = await mod.transcribeAudio({
       inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient,
       fetchImpl: jest.fn().mockReturnValue(geminiResponse('ガマさん、ガマさん取れますか？')), log,  // 15 字
     });
-    expect(short).toBe('fallback-text');
+    expect(short).toBe(JA_FALLBACK);
 
     writeWav(tmpAudio, 1000, 33_000);
     const longText = 'あ'.repeat(100);
@@ -475,6 +478,62 @@ describe('transcribeAudio - gemini backend (#424)', () => {
       openaiClient: fakeOpenAI('no'), fetchImpl,
     });
     expect(text).toBe('了解です。');
+  });
+
+  // ★ #520 無線は無音が長いので、切断ガードが正しい短い答えを捨てることがある。
+  //   そのとき openai が日本語でない文字を返すと、正しい答えが外国語に置き換わっていた
+  //   (10-03 13.9 秒 12 字 →「Туря левост」/ 09-29 14.7 秒 6 字 →「Hi! Hi! Hi!」)。
+  describe('#520 切断ガードのやり直しが日本語に見えなければ gemini の答えを残す', () => {
+    const GEMINI_SHORT = '稲葉さん、取れますか。';  // 13.9 秒に 11 字 = 切断疑い
+
+    async function run(openaiText: string) {
+      writeWav(tmpAudio, 1000, 13_900);
+      const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+      const text = await mod.transcribeAudio({
+        inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB,
+        openaiClient: fakeOpenAI(openaiText),
+        fetchImpl: jest.fn().mockReturnValue(geminiResponse(GEMINI_SHORT)), log,
+      });
+      return { text, log };
+    }
+
+    test.each([
+      ['キリル文字', 'Туря левост, туря левост.'],
+      ['英字だけ', 'Hi! Hi! Hi!'],
+      ['ハングル', '그러다 이 집에'],
+      ['空', ''],
+    ])('%s → gemini の答えを残す', async (_label, openaiText) => {
+      const { text, log } = await run(openaiText);
+      expect(text).toBe(GEMINI_SHORT);
+      // ★ 件数を後から数えられるように 1 行残す
+      expect(log.warn.mock.calls.some((c) => String(c[0]).includes('gemini の答えを残す'))).toBe(true);
+    });
+
+    test('外国の文字が混ざっていれば、かながあっても gemini の答えを残す', async () => {
+      const { text } = await run('はい、Туря левост。');
+      expect(text).toBe(GEMINI_SHORT);
+    });
+
+    test('やり直しが日本語なら openai の答えを使う (救われる回を潰さない)', async () => {
+      const { text, log } = await run(JA_FALLBACK);
+      expect(text).toBe(JA_FALLBACK);
+      expect(log.warn.mock.calls.some((c) => String(c[0]).includes('gemini の答えを残す'))).toBe(false);
+    });
+
+    test('かなが無くても漢字なら日本語として使う (「了解」「了解。」)', async () => {
+      const { text } = await run('了解、了解。');
+      expect(text).toBe('了解、了解。');
+    });
+
+    test('gemini が空でやり直した回は、残す答えが無いので openai のまま', async () => {
+      const text = await mod.transcribeAudio({
+        inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB,
+        openaiClient: fakeOpenAI('Go.'),
+        fetchImpl: jest.fn().mockReturnValue(geminiResponse('')),
+        log: { warn: jest.fn(), error: jest.fn() },
+      });
+      expect(text).toBe('Go.');
+    });
   });
 
   test('★ videoAudio=true → gemini を叩かず openai 直行 (実測は 33 秒以下の voice クリップのみ)', async () => {

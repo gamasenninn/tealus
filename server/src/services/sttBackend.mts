@@ -62,6 +62,13 @@ export function looksLikeChineseMisdetection(text: unknown): boolean {
   return (t.match(HAN_RE) || []).length >= KANA_LESS_HAN_LIMIT; // かな皆無で漢字が長い
 }
 
+// #520 日本語に見えるか: 外国の文字を含まず、かなか漢字を 1 字以上含む。
+// 空・英字だけ (「Hi! Hi! Hi!」)・キリル・ハングルは false。「了解。」のような漢字だけは true。
+const JAPANESE_CHAR_RE = /[぀-ヿｦ-ﾝ一-鿿]/;
+function looksLikeJapanese(text: string): boolean {
+  return !looksLikeForeignScript(text) && JAPANESE_CHAR_RE.test(text);
+}
+
 /** log 注入用の最小 logger 形 (既定は winston logger、テストで差し替え可) */
 interface SttLogger {
   warn: (message: string) => unknown;
@@ -137,6 +144,8 @@ export async function transcribeAudio({
 }: TranscribeAudioParams): Promise<string> {
   const effectiveBackend = (backend || process.env.STT_BACKEND || 'openai').toLowerCase();
   let fellBackFromGemini = false;
+  // ★ #520 切断ガードで捨てた gemini の答え。やり直しが日本語に見えないときに戻す
+  let geminiTruncatedText: string | null = null;
 
   // #424 gemini: 語彙つき音響段。★ 使わない条件 3 つは静かに openai へ (fail-open とは別の「対象外」)
   //   - videoAudio: 実測した範囲 (短い voice クリップ) の外
@@ -156,6 +165,7 @@ export async function transcribeAudio({
         }
         const truncation = looksTruncated(inputPath, text);
         if (truncation) {
+          geminiTruncatedText = text;
           throw new Error(`gemini output looks truncated (${truncation})`);
         }
         log.info?.(`[stt] gemini ok ${Date.now() - started}ms vocab=${vocabTerms.length} chars=${text.length}`);
@@ -196,6 +206,13 @@ export async function transcribeAudio({
     // ★ 2026-09-27: 空応答が「無音」か「gemini が発話を落とした」かを、ログだけで分けられるように。
     //   実測 11 件中 10 件が無音 (chars=0)、1 件は「いいよ」を落としていた
     log.info?.(`[stt] openai (gemini の後) chars=${text.length}`);
+  }
+  // ★ #520 無線は無音が長く、切断ガードが正しい短い答えを捨てることがある。そのとき openai が
+  //   日本語でない文字を返すと、正しい答えが外国語に置き換わる (10-03「Туря левост」/ 09-29「Hi! Hi! Hi!」)。
+  //   やり直しで救われる回の方が多い (7 日で 14 回中 7 回) ので、やり直し自体は残す。
+  if (geminiTruncatedText !== null && !looksLikeJapanese(text)) {
+    log.warn(`[stt] openai のやり直しが日本語に見えないため gemini の答えを残す: openai="${text.slice(0, 20)}" gemini chars=${geminiTruncatedText.length}`);
+    return geminiTruncatedText;
   }
   return text;
 }
