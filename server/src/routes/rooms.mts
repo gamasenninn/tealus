@@ -447,6 +447,12 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
   const { id } = req.params;
   const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled, voice_conversation_tools, voice_conversation_denied_tools, push_machine_posts } = req.body;
 
+  // ★ #540 お知らせの切り替えはシステム管理者だけ (画面もシステム管理者にだけ出している)。
+  //   以前は部屋の管理者でも通り、画面と本体で決まりが食い違っていた
+  if (is_announcement !== undefined && req.user!.role !== 'admin') {
+    return res.status(403).json({ error: 'お知らせの切り替えはシステム管理者だけができます' });
+  }
+
   try {
     const updates: string[] = [];
     const values: unknown[] = [];
