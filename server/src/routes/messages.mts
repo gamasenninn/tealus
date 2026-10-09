@@ -493,6 +493,11 @@ router.get('/:msgId/edits', async (req: Request, res: Response) => {
     if (!(await isMessageInRoom(msgId, roomId))) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
+    // ★ #529 消した投稿の前の文面は返さない (#522 で音声の履歴は塞いだが、文字の履歴が残っていた)
+    const deleted = await pool.query('SELECT 1 FROM messages WHERE id = $1 AND is_deleted = true', [msgId]);
+    if (deleted.rows.length > 0) {
+      return res.status(404).json({ error: 'メッセージが見つかりません' });
+    }
 
     const result = await pool.query(
       `SELECT me.version, me.content, me.edited_by, me.created_at, u.display_name AS edited_by_name

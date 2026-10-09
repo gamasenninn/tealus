@@ -1,6 +1,8 @@
 import multer from 'multer';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import type { Request, Response, NextFunction } from 'express';
 
 export const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media');
 
@@ -29,6 +31,19 @@ export function findOversizedFile(files: Array<{ originalname: string; mimetype:
     if (f.size > limit) return { name: decodeFileName(f.originalname), limitMb: Math.round(limit / (1024 * 1024)) };
   }
   return null;
+}
+
+/**
+ * ★ #529 受け取った直後に種類ごとの上限を確かめる (#497 と同じ判定)。超えていたら保存済みのファイルを消して 413。
+ *   #497 は画面の口 (routes/media.mts) だけに入れていて、ボットの口 (/push-image・/push-file) は
+ *   multer の 1GB 一本だけで受けていた。upload.single(...) の直後に置く
+ */
+export async function rejectOversizedUpload(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const received = (req.files as Express.Multer.File[] | undefined) || (req.file ? [req.file] : []);
+  const over = findOversizedFile(received);
+  if (!over) { next(); return; }
+  await Promise.all(received.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+  res.status(413).json({ error: `${over.name} のサイズが上限（${over.limitMb}MB）を超えています` });
 }
 
 // multer/busboy decodes the multipart `filename` header as latin1, so multibyte

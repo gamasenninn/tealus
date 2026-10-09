@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName } from '../middleware/upload.mts';
+import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName, rejectOversizedUpload } from '../middleware/upload.mts';
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
@@ -330,7 +330,7 @@ router.post('/status', async (req, res) => {
  * POST /api/bot/push-image
  * Send an image message to a room
  */
-router.post('/push-image', upload.single('image'), requireUuidRoomId, async (req, res) => {
+router.post('/push-image', upload.single('image'), rejectOversizedUpload, requireUuidRoomId, async (req, res) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -426,7 +426,7 @@ router.post('/push-image', upload.single('image'), requireUuidRoomId, async (req
  * Image / video は existing /push-image, /media path に lateral OK だが、
  * text / pdf 等の attached file は本 endpoint で。
  */
-router.post('/push-file', upload.single('file'), requireUuidRoomId, async (req, res) => {
+router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireUuidRoomId, async (req, res) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;

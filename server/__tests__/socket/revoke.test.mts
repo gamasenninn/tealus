@@ -106,6 +106,25 @@ describe('Socket.IO — 取り消した権限が接続中にも効く', () => {
     expect(m.connected).toBe(false);
   });
 
+  // ★ #529 管理者は接続時に全部屋へ入る。役割を変えても接続が残ると、一般に戻した後も全部屋の配信を受けた
+  it('★★ 役割を変えたら、その人の接続を切る (つなぎ直して新しい役割で入り直す)', async () => {
+    const m = await connect(member.token);
+    const disconnected = new Promise<void>((resolve) => m.on('disconnect', () => resolve()));
+    const res = await request(app).put(`/api/admin/users/${member.id}`)
+      .set('Authorization', `Bearer ${admin.token}`).send({ role: 'admin' });
+    expect(res.status).toBe(200);
+    await Promise.race([disconnected, settle(1000)]);
+    expect(m.connected).toBe(false);
+  });
+
+  it('役割を変えない更新 (表示名だけ) では切らない', async () => {
+    const m = await connect(member.token);
+    await request(app).put(`/api/admin/users/${member.id}`)
+      .set('Authorization', `Bearer ${admin.token}`).send({ display_name: '新しい名前' });
+    await settle(300);
+    expect(m.connected).toBe(true);
+  });
+
   it('利用を再開しても、他の人の接続は切らない', async () => {
     const t = await connect(third.token);
     await request(app).patch(`/api/admin/users/${member.id}/status`)

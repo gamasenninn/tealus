@@ -100,7 +100,9 @@ export function describePushFailure(err: unknown, sub: Pick<PushSubscriptionRow,
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
   try {
     const result = await pool.query<PushSubscriptionRow>(
-      'SELECT * FROM push_subscriptions WHERE user_id = $1 AND is_active = true',
+      // ★ #529 利用停止にした人には送らない (停止は接続を切るが、プッシュは届き続けていた。端末側からは外せない)
+      `SELECT ps.* FROM push_subscriptions ps JOIN users u ON u.id = ps.user_id
+        WHERE ps.user_id = $1 AND ps.is_active = true AND u.is_active = true`,
       [userId]
     );
     logger.debug(`push: user=${userId} subscriptions=${result.rows.length} title=${payload.title}`);
@@ -166,7 +168,8 @@ export async function sendPushToRoomMembers(
       // ★ #463 このルームを鳴らさないにしている人は除く (通話の着信は sendPushToUser を直接呼ぶので影響しない)
       `SELECT rm.user_id, u.notification_sound
          FROM room_members rm JOIN users u ON u.id = rm.user_id
-        WHERE rm.room_id = $1 AND rm.user_id != $2 AND rm.push_muted = false`,
+        WHERE rm.room_id = $1 AND rm.user_id != $2 AND rm.push_muted = false
+          AND u.is_active = true`,   // ★ #529 利用停止にした人は除く
       [roomId, senderId]
     );
 

@@ -70,7 +70,7 @@ router.put('/users/:id', async (req, res) => {
 
   try {
     // Check user exists
-    const existing = await pool.query('SELECT id FROM users WHERE id = $1', [id]);
+    const existing = await pool.query<{ id: string; role: string }>('SELECT id, role FROM users WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'ユーザーが見つかりません' });
     }
@@ -109,6 +109,10 @@ router.put('/users/:id', async (req, res) => {
        RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,
       values
     );
+
+    // ★ #529 役割を変えたら接続を切る。管理者は接続時に全部屋へ入るので、切らないと一般に戻した後も
+    //   全部屋の配信を受け続けた。つなぎ直すと新しい役割で入り直す (昇格も同じ理由で切る)
+    if (result.rows[0].role !== existing.rows[0].role) getIo().in(`user:${id}`).disconnectSockets(true);
 
     res.json({ user: result.rows[0] });
   } catch (err) {
