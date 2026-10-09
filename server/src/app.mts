@@ -49,6 +49,7 @@ import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
 import { mediaStatic } from './utils/mediaStatic.mts';
 import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
+import { router as clientErrorRoutes } from './routes/clientErrors.mts';
 
 // 6/9 DoS crash fix: defense in depth global safety net
 // (= 個別 async handler の try/catch 漏れに対する Node.js default exit 抑止、
@@ -222,6 +223,7 @@ app.use((req, res, next) => {
 // (LINE route は app.use(express.json()) より前に登録済、上部参照)
 app.use('/api/config', configRoutes);
 app.use('/api/version', versionRoutes);
+app.use('/api/client-errors', clientErrorRoutes);   // #525 画面のエラーを本体のログへ (認証不要)
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);

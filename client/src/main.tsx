@@ -4,7 +4,12 @@ import App from './App';
 import { loadConfig } from './services/clientConfig';
 import { useCapabilityStore } from './stores/capabilityStore';
 import { initLaunchFiles } from './services/launchFiles';
+import { installGlobalErrorHandlers } from './services/errorReport';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import './index.css';
+
+// #525 画面で起きたエラーを本体のログへ (読み込みの最初に。設定の取得で落ちても拾えるように)
+installGlobalErrorHandlers();
 
 // ★★★★ #445 (2026-09-18): 共有ファイルの 2 本目の受け口を **いちばん早く**開く。
 //   ★ launchQueue の consumer は launch のときに 1 回だけ呼ばれるので、
@@ -23,7 +28,10 @@ loadConfig().then((config) => {
 }).finally(() => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <App />
+      {/* #525 一番外の受け止め。落ちても真っ白にせず「読み込み直す」を出す */}
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
     </React.StrictMode>
   );
 });

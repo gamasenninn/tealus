@@ -105,3 +105,30 @@ body {
     font-size: 16px !important;
   }
 }
+
+/* #525 一番外の受け止め (描画が落ちたとき)。真っ白の代わりに出す */
+.app-error-fallback {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  background: #fff;
+  color: #333;
+}
+.app-error-title { font-size: 18px; font-weight: bold; margin: 0; }
+.app-error-note { font-size: 14px; color: #666; margin: 0; }
+.app-error-reload {
+  margin-top: 8px;
+  padding: 12px 28px;
+  font-size: 16px;
+  border: none;
+  border-radius: 24px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+.app-error-reload:hover { background: var(--primary-hover); }

@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { reportClientError } from '../../services/errorReport';
 
 interface MessageErrorBoundaryProps {
   messageId?: string;
@@ -30,6 +31,7 @@ class MessageErrorBoundary extends Component<MessageErrorBoundaryProps, MessageE
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[MessageErrorBoundary]', this.props.messageId, error, errorInfo);
+    reportClientError('render', error, errorInfo.componentStack);   // #525 本体のログへ
   }
 
   render() {

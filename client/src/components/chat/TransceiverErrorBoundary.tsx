@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { reportClientError } from '../../services/errorReport';
 
 interface TransceiverErrorBoundaryProps {
   children?: ReactNode;
@@ -21,6 +22,7 @@ class TransceiverErrorBoundary extends Component<TransceiverErrorBoundaryProps, 
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[TransceiverErrorBoundary]', error, errorInfo);
+    reportClientError('render', error, errorInfo.componentStack);   // #525 本体のログへ
   }
 
   render() {
