@@ -2,6 +2,10 @@ import { io, Socket } from 'socket.io-client';
 import { useCapabilityStore } from '../stores/capabilityStore';
 import { useRoomStore } from '../stores/roomStore';
 import { applyUserUpdated } from './userProfileSync';
+import { api } from './api';
+
+/** #539 本体の socket の認証で断られたときの文言 (server/src/socket/index.mts の next(new Error(...)) と同じ) */
+const SOCKET_AUTH_ERRORS = new Set(['認証トークンがありません', 'ユーザーが見つかりません', 'トークンが無効です']);
 
 let socket: Socket | null = null;
 
@@ -37,6 +41,9 @@ export function connectSocket(token: string): Socket {
 
   socket.on('connect_error', (err) => {
     console.error('Socket connection error:', err.message);
+    // ★ #539 認証で断られた (期限切れ・無効) なら、認証が切れたと知らせてログイン画面へ。
+    //   以前は console に出すだけで、切れたトークンのまま再試行を続けた。文言は server/src/socket/index.mts と同じ
+    if (SOCKET_AUTH_ERRORS.has(err.message)) api.notifyUnauthorized();
   });
 
   // server の capabilityWatcher が状態変化時に emit する。

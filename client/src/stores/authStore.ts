@@ -88,3 +88,17 @@ export const useAuthStore = create<AuthState>()((set) => ({
     set({ user: data.user });
   },
 }));
+
+// ★ #539 ログインの期限切れ・無効 (本体の 401 / socket の認証エラー) を受けたら、1 回だけログアウトしてログイン画面へ。
+//   以前は「ルーム一覧の取得に失敗しました」の帯が出るだけで、アプリを閉じて開き直すまでログイン画面に戻らなかった。
+//   ★ ログアウトの中でも本体に問い合わせる (購読の取り消し) ので、その 401 で繰り返さないよう 1 回に絞る。
+//     ログアウト後はトークンが無いので、api はもう知らせない
+let handlingExpiry = false;
+api.setOnUnauthorized?.(() => {   // ?. は api を一部だけ差し替えたテストのため (本番では必ずある)
+  if (handlingExpiry) return;
+  handlingExpiry = true;
+  void useAuthStore.getState().logout().finally(() => {
+    handlingExpiry = false;
+    window.location.assign('/login');
+  });
+});

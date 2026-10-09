@@ -106,6 +106,16 @@ class ApiClient {
     });
   }
 
+  /**
+   * ★ #539 ログインしている状態で 401 (期限切れ・無効) が返ったときに呼ぶ。authStore が登録して、ログイン画面へ移す。
+   *   以前は 401 を特別扱いせず、帯が出るだけで、アプリを閉じて開き直すまでログイン画面に戻らなかった。
+   *   ★ api → authStore を import すると循環するので、受け手を登録してもらう形
+   */
+  private onUnauthorized: (() => void) | null = null;
+  setOnUnauthorized(fn: (() => void) | null): void { this.onUnauthorized = fn; }
+  /** socket の接続が認証で断られたときにも同じ受け手へ (services/socket.ts から) */
+  notifyUnauthorized(): void { this.onUnauthorized?.(); }
+
   setToken(token: string | null): void {
     this.token = token;
     if (token) {
@@ -158,6 +168,8 @@ class ApiClient {
         }
 
         if (!res.ok) {
+          // ★ #539 ログイン中の 401 = 期限切れ・無効。ログイン画面での打ち間違い (/auth/login) は除く
+          if (res.status === 401 && this.token && !path.startsWith('/auth/login')) this.onUnauthorized?.();
           if (isGet && RETRY_STATUS.has(res.status)) {
             lastError = new Error(data?.error || `status ${res.status}`);
             continue;
