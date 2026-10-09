@@ -23,6 +23,7 @@ import { getOrCreateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { extractPromptFromMessage } from '../media/messageAdapter.mts';
 import { isMentioned } from './mention.mts';
 import type { WebhookMessage, DispatchParams } from '../types.mts';
+import { beginWait, endWait } from './delegationWait.mts';
 
 // ルームごとの処理キュー（並行実行防止）
 const roomQueues = new Map<string, Promise<void>>();
@@ -343,6 +344,11 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
         const useDeepCodex = r.tier === 'deep' && config.DEEP_AGENT_PROVIDER === 'codex';
         const noPostPrefix = '**重要**: あなたは別のルームからの委譲依頼に回答しています。回答は本文として述べるだけにし、send_message ツールでこのルームに投稿しないでください（投稿は委譲元が行います）。\n\n';
         let out: string | null | undefined = null;
+        // ★ #545 相手がたどってこちらの答えを待っているなら、並ばずに断る (互いに待ち合って 9 分止まっていた)
+        if (!beginWait(roomId, targetRoomId)) {
+          logger.warn(`[delegator] 待ち合いになるため委譲しません: origin=${roomId} target=${targetRoomId}`);
+          throw new Error('相手の部屋が同時にこちらへ問い合わせ中のため、いまは頼めません');
+        }
         inflightRooms.add(targetRoomId);
         try {
           await enqueueForRoom(targetRoomId, async () => {
@@ -354,6 +360,7 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
           });
         } finally {
           inflightRooms.release(targetRoomId);
+          endWait(roomId, targetRoomId);
         }
         logger.info(`[delegator] runAgent target=${targetRoomId} tier=${useDeepCodex ? 'deep-codex' : 'light'}`);
         return out;
