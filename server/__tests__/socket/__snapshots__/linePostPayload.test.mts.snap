@@ -137,7 +137,7 @@ exports[`#13〜#18 LINE からの投稿: 送る中身 #14 画像: 配信 + 機�
     {
       "file_name": "a.png",
       "file_size": "70",
-      "has_thumbnail": false,
+      "has_thumbnail": true,
       "height": null,
       "keys": [
         "created_at",
@@ -201,7 +201,7 @@ exports[`#13〜#18 LINE からの投稿: 送る中身 #15 複数画像: 配信 +
     {
       "file_name": "b.png",
       "file_size": "70",
-      "has_thumbnail": false,
+      "has_thumbnail": true,
       "height": null,
       "keys": [
         "created_at",
@@ -221,7 +221,7 @@ exports[`#13〜#18 LINE からの投稿: 送る中身 #15 複数画像: 配信 +
     {
       "file_name": "c.png",
       "file_size": "70",
-      "has_thumbnail": false,
+      "has_thumbnail": true,
       "height": null,
       "keys": [
         "created_at",

@@ -287,6 +287,49 @@ describe('postImageToTealus', () => {
   test('mediaInfo 未指定で throw', async () => {
     await expect(postImageToTealus({ roomId: 'r', sender: TEST_SENDER } as unknown as Parameters<typeof postImageToTealus>[0])).rejects.toThrow(/mediaInfo/);
   });
+
+  // ★ #531 LINE の画像にはサムネイルを作っていなかった (動画は作っていた)。一覧が原寸を読み、9,879 枚 (3.5GB) が該当
+  test('★★ サムネイルを作り、保存の欄 (thumbnail_path) に入れる', async () => {
+    mockGenerateThumbnail.mockResolvedValue('thumbnails/x_thumb.jpg');
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
+    await postImageToTealus({
+      roomId: 'r', sender: TEST_SENDER,
+      mediaInfo: { filePath: '/tmp/x.jpg', relativePath: 'line-images/x.jpg', fileName: 'x.jpg', fileSize: 1, mimeType: 'image/jpeg' },
+    });
+    expect(mockGenerateThumbnail).toHaveBeenCalledWith('/tmp/x.jpg', 'image/jpeg');
+    const mediaInsert = mockClient.query.mock.calls.find((c) => String(c[0]).includes('INSERT INTO message_media'))!;
+    expect(String(mediaInsert[0])).toMatch(/thumbnail_path/);
+    expect(mediaInsert[1]).toContain('thumbnails/x_thumb.jpg');
+  });
+
+  test('サムネイルを作れなくても投稿はする (null で続ける)', async () => {
+    mockGenerateThumbnail.mockRejectedValue(new Error('sharp failed'));
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
+    const result = await postImageToTealus({
+      roomId: 'r', sender: TEST_SENDER,
+      mediaInfo: { filePath: '/tmp/x.jpg', relativePath: 'p', fileName: 'f', fileSize: 1, mimeType: 'image/jpeg' },
+    });
+    expect(result.message.id).toBe('m');
+  });
+});
+
+describe('postImagesToTealus のサムネイル (#531)', () => {
+  test('★★ 何枚組でも、1 枚ずつサムネイルを作って入れる', async () => {
+    mockGenerateThumbnail.mockReset();
+    mockGenerateThumbnail.mockImplementation((p: unknown) => Promise.resolve(`thumbnails/${String(p).slice(5, 6)}_thumb.jpg`));
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media1' }] }, { rows: [{ id: 'media2' }] }, {}]);
+    await postImagesToTealus({
+      roomId: 'r', sender: TEST_SENDER,
+      mediaInfos: [
+        { filePath: '/tmp/a.jpg', relativePath: 'line-images/a.jpg', fileName: 'a.jpg', fileSize: 1, mimeType: 'image/jpeg' },
+        { filePath: '/tmp/b.jpg', relativePath: 'line-images/b.jpg', fileName: 'b.jpg', fileSize: 1, mimeType: 'image/jpeg' },
+      ],
+    });
+    const inserts = mockClient.query.mock.calls.filter((c) => String(c[0]).includes('INSERT INTO message_media'));
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0][1]).toContain('thumbnails/a_thumb.jpg');
+    expect(inserts[1][1]).toContain('thumbnails/b_thumb.jpg');
+  });
 });
 
 describe('postVoiceToTealus', () => {

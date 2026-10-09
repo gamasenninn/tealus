@@ -149,6 +149,20 @@ export async function postTextToTealus(
 }
 
 /**
+ * ★ #531 LINE の画像のサムネイル。以前は作っておらず (動画は作っていた)、一覧が原寸を 1 枚ずつ読んでいた
+ *   (2026-10-09 時点で 9,879 枚・3.5GB。docs/setup-line-bridge.md は「投影 + サムネイル」と書いていた)。
+ *   作れなくても投稿はする (null)
+ */
+async function imageThumbnail(mediaInfo: { filePath: string; mimeType: string }): Promise<string | null> {
+  try {
+    return await generateThumbnail(mediaInfo.filePath, mediaInfo.mimeType);
+  } catch (e) {
+    logger.warn(`[lineMessageBridge] generateThumbnail failed for image: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+/**
  * image message を Tealus に post
  *
  * @param params.roomId
@@ -188,9 +202,10 @@ export async function postImageToTealus(
     }
 
     const mediaResult = await client.query<MediaRow>(
-      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height]
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height,
+        await imageThumbnail(mediaInfo)]
     );
     await client.query('COMMIT');
 
@@ -265,9 +280,10 @@ export async function postImagesToTealus(
       }
 
       const mediaResult = await client.query<MediaRow>(
-        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height]
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, width, height,
+          await imageThumbnail(mediaInfo)]
       );
       media.push(mediaResult.rows[0]);
     }
