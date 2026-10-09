@@ -8,6 +8,7 @@ import { ArrowLeft, Send } from 'lucide-react';
 import type { Room } from '../../types';
 import { planShare } from './sharePlan';
 import { diagnoseShare, type ShareRecord } from './shareDiagnosis';
+import { sharedFileName, SHARE_NAME_HEADER } from './shareFileName';
 import { getLaunchState, takeLaunchFiles, onLaunchFiles } from '../../services/launchFiles';
 import './SharePage.css';
 
@@ -99,7 +100,9 @@ function SharePage() {
           const response = await cache.match(`/share-file-${i}`);
           if (response) {
             const blob = await response.blob();
-            files.push(new File([blob], `shared-${i}.${blob.type.split('/')[1] || 'bin'}`, { type: blob.type }));
+            // ★ #527 受ける段が残した元の名前を使う (無ければ番号の名前。以前は常に番号で、撮った日時が消えた)
+            const name = sharedFileName(response.headers.get(SHARE_NAME_HEADER), i, blob.type);
+            files.push(new File([blob], name, { type: blob.type }));
           }
         }
         setSharedFiles(files);

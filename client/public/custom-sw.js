@@ -58,7 +58,10 @@ self.addEventListener('notificationclick', (event) => {
 //
 // ★★ 記録は **一度きり** (画面が読んだら消す)。★★★ URL に印を置くと
 //   **再訪 (履歴 / 再読み込み) で残って、生きている失敗と見分けがつかなくなる**。
-const SW_VERSION = '2026-09-20a';
+const SW_VERSION = '2026-10-09a';   // #527 元のファイル名を残すようにした
+
+// ★ #527 元のファイル名を残すヘッダー。画面側 (src/components/share/shareFileName.ts) と同じ名 (変えるときは両方)
+const SHARE_NAME_HEADER = 'X-Share-File-Name';
 
 /** 画面からの問い合わせに答える。★ 旧版はこの listener を持たないので **黙る** = 版が分かる。 */
 self.addEventListener('message', (event) => {
@@ -123,7 +126,9 @@ self.addEventListener('fetch', (event) => {
       let storeError = '';
       try {
         for (let i = 0; i < files.length; i++) {
-          await cache.put(`/share-file-${i}`, new Response(files[i]));
+          // ★ #527 名前も残す (以前は中身だけで、画面が shared-番号 で作り直し、撮った日時が消えた)
+          const headers = files[i].name ? { [SHARE_NAME_HEADER]: encodeURIComponent(files[i].name) } : {};
+          await cache.put(`/share-file-${i}`, new Response(files[i], { headers }));
           stored++;
         }
       } catch (err) {
