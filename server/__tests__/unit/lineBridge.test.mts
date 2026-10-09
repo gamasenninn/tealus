@@ -73,6 +73,31 @@ describe('fetchLineContent', () => {
     await expect(fetchLineContent('msg', 'tok', { fetchImpl: mockFetch as unknown as FetchLike })).rejects.toThrow(/401/);
   });
 
+  // ★ #530 LINE は動画の変換が終わっていないと 202 (中身は空) を返す。2xx なので成功として 0 バイトを保存し、
+  //   2026-07〜10 に LINE の動画の 24% (57 本) が再生できないまま残った
+  test('★★ 202 (準備中) なら間を空けて取り直し、準備ができた中身を返す', async () => {
+    const mockFetch = jest.fn()
+      .mockResolvedValueOnce(makeMockResponse({ ok: true, status: 202, statusText: 'Accepted', mimeType: null, body: Buffer.alloc(0) }))
+      .mockResolvedValueOnce(makeMockResponse({ ok: true, status: 202, statusText: 'Accepted', mimeType: null, body: Buffer.alloc(0) }))
+      .mockResolvedValueOnce(makeMockResponse({ ok: true, mimeType: 'video/mp4', body: Buffer.from('video-bytes') }));
+    const result = await fetchLineContent('msg', 'tok', { fetchImpl: mockFetch as unknown as FetchLike, retryDelaysMs: [0, 0, 0] });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(result.mimeType).toBe('video/mp4');
+    expect(result.buffer.toString()).toBe('video-bytes');
+  });
+
+  test('★★ 取り直しても 202 のままなら throw (空のファイルを保存しない)', async () => {
+    const mockFetch = jest.fn().mockResolvedValue(makeMockResponse({ ok: true, status: 202, statusText: 'Accepted', mimeType: null, body: Buffer.alloc(0) }));
+    await expect(fetchLineContent('msg', 'tok', { fetchImpl: mockFetch as unknown as FetchLike, retryDelaysMs: [0, 0] }))
+      .rejects.toThrow(/202/);
+    expect(mockFetch).toHaveBeenCalledTimes(3);   // 最初の 1 回 + 取り直し 2 回
+  });
+
+  test('★ 200 でも中身が 0 バイトなら throw', async () => {
+    const mockFetch = jest.fn().mockResolvedValue(makeMockResponse({ ok: true, mimeType: 'video/mp4', body: Buffer.alloc(0) }));
+    await expect(fetchLineContent('msg', 'tok', { fetchImpl: mockFetch as unknown as FetchLike })).rejects.toThrow(/空/);
+  });
+
   test('messageId 未指定で throw', async () => {
     await expect(fetchLineContent('', 'tok')).rejects.toThrow(/messageId/);
   });

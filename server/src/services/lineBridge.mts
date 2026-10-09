@@ -69,7 +69,7 @@ export function extensionForMime(mimeType: string | null | undefined): string {
 export async function fetchLineContent(
   messageId: string,
   accessToken: string,
-  options: { fetchImpl?: FetchLike } = {}
+  options: { fetchImpl?: FetchLike; retryDelaysMs?: number[] } = {}
 ): Promise<LineContentResult> {
   if (!messageId) throw new Error('messageId is required');
   if (!accessToken) throw new Error('accessToken is required');
@@ -78,21 +78,34 @@ export async function fetchLineContent(
   if (!fetchImpl) throw new Error('fetch implementation not available');
 
   const url = `${LINE_CONTENT_API_BASE}/${encodeURIComponent(messageId)}/content`;
-  const response = await fetchImpl(url, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  // ★ #530 LINE は動画などの変換が終わっていないと 202 (中身は空) を返す。2xx なので以前は成功として
+  //   0 バイトを保存し、LINE の動画の 24% (57 本) が再生できないまま残った。間を空けて取り直す
+  //   (webhook への返事は先に済ませているので、待っても LINE を待たせない)
+  const delays = options.retryDelaysMs ?? LINE_CONTENT_RETRY_DELAYS_MS;
+  let response = await fetchImpl(url, { method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } });
+  for (let i = 0; response.status === 202 && i < delays.length; i++) {
+    await new Promise((r) => setTimeout(r, delays[i]));
+    response = await fetchImpl(url, { method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } });
+  }
 
   if (!response.ok) {
     throw new Error(`LINE Content API responded ${response.status} ${response.statusText}`);
+  }
+  if (response.status === 202) {
+    throw new Error(`LINE Content API responded 202 (変換が終わらない、${delays.length} 回取り直した)`);
   }
 
   const mimeType = response.headers.get('content-type') || 'application/octet-stream';
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
+  // ★ #530 中身が空なら保存しない (再生できないファイルが残るより、失敗としてログに残す方がよい)
+  if (buffer.length === 0) throw new Error('LINE Content API の中身が空でした (0 バイト)');
 
   return { buffer, mimeType };
 }
+
+/** ★ #530 202 (準備中) のときの取り直しの間隔。合計 約 1 分 */
+export const LINE_CONTENT_RETRY_DELAYS_MS = [2000, 4000, 8000, 15000, 30000];
 
 /**
  * LINE content buffer を local file に保存
