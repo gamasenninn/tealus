@@ -12,6 +12,7 @@ import { verifyPassword } from '../services/passwordVerify.mts';
 import type { AuthUser } from '../types.mts';
 import { getIo } from '../io-registry.mts';
 import { refreshSocketUser } from '../socket/index.mts';
+import { announceUserUpdated } from '../services/userUpdated.mts';
 
 const AVATAR_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'avatars');
 const avatarStorage = multer.diskStorage({
@@ -248,6 +249,8 @@ router.put('/profile', authenticate, async (req, res) => {
     );
     // ★ #498 つながっている socket の名前も書き換える (古い名前で投稿が配られないように)
     refreshConnectedUser(userId, { display_name: result.rows[0].display_name });
+    // ★ #534 名前を変えたときだけ、同じ部屋の人と本人の別の端末に知らせる (ひとこと・通知音だけの更新では送らない)
+    if (req.body.display_name !== undefined) await announceUserUpdated(result.rows[0]);
     res.json({ user: result.rows[0] });
   } catch (err) {
     logger.error('Profile update error:', err);
@@ -273,6 +276,7 @@ router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, 
       [avatarUrl, req.user!.id]
     );
     refreshConnectedUser(req.user!.id, { avatar_url: result.rows[0].avatar_url });   // ★ #498
+    await announceUserUpdated(result.rows[0]);   // ★ #534
     res.json({ user: result.rows[0] });
   } catch (err) {
     logger.error('Avatar upload error:', err);

@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { useCapabilityStore } from '../stores/capabilityStore';
 import { useRoomStore } from '../stores/roomStore';
+import { applyUserUpdated } from './userProfileSync';
 
 let socket: Socket | null = null;
 
@@ -62,6 +63,9 @@ export function connectSocket(token: string): Socket {
     useRoomStore.getState().fetchRooms();
     window.dispatchEvent(new CustomEvent('tealus:room-removed', { detail: { room_id: data.room_id } }));
   });
+
+  // ★ #534 同じ部屋の人 (や自分の別の端末) が表示名・アイコンを変えた。読み込み直さずに名前を差し替える
+  s.on('user:updated', (data: unknown) => applyUserUpdated(data));
 
   // #489 部屋の設定・メンバーが変わった。一覧を取り直し、開いている部屋なら情報とメンバーも取り直す
   // (読み込み直すまで「編集」が出ない・見出しの人数が古いままだった)
