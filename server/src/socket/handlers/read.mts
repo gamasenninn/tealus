@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger.mts';
 import { pool } from '../../db/pool.mts';
 import { isRoomMember } from '../../services/roomMembership.mts';
 import { isUuid } from '../../utils/uuid.mts';
+import { announceUnreadChanged } from '../../services/unreadChanged.mts';
 
 interface ReadPayload {
   room_id?: string;
@@ -67,6 +68,7 @@ export function registerReadHandler(socket: Socket): void {
         room_id,
         read_counts: counts,
       });
+      announceUnreadChanged(socket.user.id, room_id);   // ★ #532 自分の別の端末の一覧へ
     } catch (err) {
       logger.error('Socket message:read error:', err);
     }

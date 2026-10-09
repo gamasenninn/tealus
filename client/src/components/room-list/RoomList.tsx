@@ -100,7 +100,17 @@ function RoomList() {
     socket.on('user:online', handleOnline);
     socket.on('user:offline', handleOffline);
 
+    // ★ #532 一覧を取り直す (鳴らさない)。以前は新着と部屋の追加・変更だけで取り直していたので、
+    //   最後の投稿を編集・削除してもプレビューが古いまま、別の端末で読んでも未読数とバッジが残った
+    const refresh = () => { fetchRooms(); };
+    socket.on('unread:changed', refresh);
+    socket.on('message:updated', refresh);
+    socket.on('message:deleted', refresh);
+
     return () => {
+      socket.off('unread:changed', refresh);
+      socket.off('message:updated', refresh);
+      socket.off('message:deleted', refresh);
       socket.off('message:new', handleNewMessage);
       socket.off('user:online', handleOnline);
       socket.off('user:offline', handleOffline);

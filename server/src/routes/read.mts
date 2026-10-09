@@ -6,6 +6,7 @@ import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
 import { isUuid } from '../utils/uuid.mts';
+import { announceUnreadChanged } from '../services/unreadChanged.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -51,6 +52,7 @@ router.post('/', async (req: Request, res: Response) => {
       );
     }
 
+    announceUnreadChanged(userId, String(roomId));   // ★ #532
     res.json({ success: true });
   } catch (err) {
     logger.error('Mark read error:', err);
@@ -103,6 +105,7 @@ router.post('/all', async (req: Request, res: Response) => {
 
     const count = unreadRes.rows[0].count;
     logger.info(`Mark all read: ${userId} in room ${roomId} (${count} messages)`);
+    announceUnreadChanged(userId, String(roomId));   // ★ #532
     res.json({ success: true, count });
   } catch (err) {
     logger.error('Mark all read error:', err);

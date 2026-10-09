@@ -94,4 +94,12 @@ describe('通知音の設定 (アカウントごと)', () => {
     const theirs = await request(app).get('/api/rooms').set('Authorization', `Bearer ${other.token}`);
     expect(theirs.body.rooms.find((r: { id: string }) => r.id === roomId).push_muted).toBe(false);
   });
+
+  // ★ #532 ログインの返事に入っておらず、ログインし直した直後は画面が「鳴らす」と見なした (#516 の取りこぼし)
+  it('★ 切っている人がログインし直すと、ログインの返事にも「切っている」が入る', async () => {
+    await getTestPool().query('UPDATE users SET notification_sound = false WHERE id = $1', [me.user.id]);
+    const res = await request(app).post('/api/auth/login').send({ login_id: 'EMP001', password: 'password123' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.notification_sound).toBe(false);
+  });
 });

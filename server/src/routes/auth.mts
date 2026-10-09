@@ -118,7 +118,8 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
   try {
     // Find user
     const result = await pool.query<UserWithPasswordRow>(
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, password_hash, created_at FROM users WHERE login_id = $1 AND is_active = true',
+      // ★ #532 notification_sound も返す (無いと、ログインし直した直後の画面が「鳴らす」と見なした)
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, password_hash, created_at FROM users WHERE login_id = $1 AND is_active = true',
       [login_id]
     );
 
