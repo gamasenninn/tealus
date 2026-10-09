@@ -77,6 +77,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-fanout-'));
   process.env.CC_QUEUE_DIR = testDir;
+  // ★ #542 「届きました」はアシスタントが参加している部屋でだけ出す。ここの便は r1 (参加している) 前提
+  registerBotUserId('bot-assistant', 'アシスタント', [{ id: 'r1' }]);
 });
 afterEach(() => {
   delete process.env.CC_QUEUE_DIR;
@@ -228,5 +230,23 @@ describe('#392 bot account を共有していると inflight 中の便が消え�
 
     expect(queuedProjects()).toEqual(['tealus']);
     expect(ackCalls()).toHaveLength(1);
+  });
+});
+
+/**
+ * ★ #542 アシスタントが参加していない部屋では「届きました」を出さない (配送はする)
+ *   以前は参加していない部屋でも出そうとして 403 で断られ、agent-server のエラーの最多 (7 日で 66 行) になっていた。
+ *   その部屋には元から表示できないので、出さないのが正しい
+ */
+describe('#542 参加していない部屋の受付エコー', () => {
+  test('★★ 配送はするが、受付エコーは出さない', async () => {
+    const outside = { id: 'r-outside', name: 'アシスタントのいない部屋' };
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'mx', content: '@cc-organon 見てください', type: 'text', sender, created_at: '2026-10-10T00:00:00Z' },
+      room: outside,
+    } as unknown as WebhookPayload);
+    expect(queuedProjects()).toEqual(['organon']);
+    expect(ackCalls()).toEqual([]);
   });
 });

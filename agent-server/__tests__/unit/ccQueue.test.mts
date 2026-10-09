@@ -534,6 +534,32 @@ describe('emitCcAck', () => {
     expect(calls[1].status).toBe('idle'); // TTL 到達で消える
   });
 
+  // ★ #542 同じ便でアシスタントも動く (`@アシスタント @cc-x`) と、5 秒後の idle が「考え中」を消していた
+  test('★★ TTL までに別の表示 (考え中など) が出ていたら、idle を出さない', () => {
+    let seq = 0;
+    const calls: Array<{ status: string }> = [];
+    emitCcAck({
+      projects: ['kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status) => { seq++; calls.push({ status }); return Promise.resolve(); },
+      statusSeq: () => seq,
+    });
+    seq++;   // アシスタントが「考え中」を出した
+    jest.advanceTimersByTime(5000);
+    expect(calls.map((c) => c.status)).toEqual(['relayed']);
+  });
+
+  test('★ 別の表示が出ていなければ、今までどおり idle を出す', () => {
+    let seq = 0;
+    const calls: Array<{ status: string }> = [];
+    emitCcAck({
+      projects: ['kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status) => { seq++; calls.push({ status }); return Promise.resolve(); },
+      statusSeq: () => seq,
+    });
+    jest.advanceTimersByTime(5000);
+    expect(calls.map((c) => c.status)).toEqual(['relayed', 'idle']);
+  });
+
   test('pushStatus が reject しても emitCcAck 自体は throw しない (best-effort)', () => {
     expect(() => emitCcAck({
       projects: ['organon'], roomId: 'r1', ttlMs: 5000,

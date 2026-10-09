@@ -9,6 +9,7 @@ import { logger } from './logger.mts';
 import * as botSendThrottle from './botSendThrottle.mts';
 import { speakMessage } from './ttsSpeak.mts';
 import { applyConfirmMarkSplit } from './confirmMarks.mts';
+import { bumpStatusSeq } from './statusSeq.mts';
 
 /**
  * #292 SPIKE safety: bot 送信 throttle check 共通化。
@@ -151,6 +152,7 @@ export async function pushMessage(roomId: string, content: string): Promise<unkn
  * ルームにステータスを通知（typing-indicator風の一時表示）
  */
 export async function pushStatus(roomId: string, status: string, message: string = ''): Promise<unknown> {
+  bumpStatusSeq(roomId);   // ★ #542 受付エコーの片づけが、後から出た表示を消さないように
   return request('POST', '/bot/status', { room_id: roomId, status, message });
 }
 

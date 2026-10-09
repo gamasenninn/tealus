@@ -125,7 +125,9 @@ function routeCcEvent(
   }
   // #335 受付エコー: 「cc-<project> に届きました」を出し TTL 後に消す (一か八か待ち解消)。
   // beacon は既に積んだので best-effort、失敗しても routing 自体は成立している。
-  if (delivered.length > 0) {
+  // ★ #542 アシスタントが参加している部屋でだけ出す。参加していない部屋では元から表示できず、
+  //   出そうとして 403 で断られていた (agent-server のエラーの最多、7 日で 66 行)
+  if (delivered.length > 0 && botRoomIds.has(room.id)) {
     emitCcAck({ projects: delivered, roomId: room.id, pushStatus: botApi.pushStatus });
   }
   return delivered;

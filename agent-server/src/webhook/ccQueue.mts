@@ -13,6 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { logger } from '../lib/logger.mts';
 import { publish } from './ccSubscribers.mts';
+import { statusSeqOf } from '../lib/statusSeq.mts';
 
 interface CcAlias {
   mention: string;
@@ -426,8 +427,10 @@ export interface CcAckDeps {
   pushStatus: (roomId: string, status: string, message?: string) => Promise<unknown>;
   /** 表示時間 (ms)。既定 CC_ACK_TTL_MS。 */
   ttlMs?: number;
+  /** #542 部屋の表示の番号 (既定 lib/statusSeq)。テストで差し替える */
+  statusSeq?: (roomId: string) => number;
 }
-function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAckDeps): void {
+function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS, statusSeq = statusSeqOf }: CcAckDeps): void {
   const label = projects.map((p) => `cc-${p}`).join(' / ');
   // ★ 'processing' ではなく 'relayed'。これは「このボットが処理中」ではなく
   //   「**別セッションへ中継した**」の意味で、止められる処理が無い。
@@ -439,7 +442,11 @@ function emitCcAck({ projects, roomId, pushStatus, ttlMs = CC_ACK_TTL_MS }: CcAc
   //   残らず、status を変えた直後の確認が画面を見るしかなくなる (2026-08-30 に実際そうなった)。
   //   ★★ 「観測不能」と「起きていない」を取り違えないための計器。
   logger.info(`[cc-ack] room=${roomId} status=relayed projects=${projects.join(',')} ttl=${ttlMs}ms`);
+  // ★ #542 自分の後に別の表示 (アシスタントの「考え中」など) が出ていたら消さない。
+  //   以前は無条件に idle を出し、同じ便で動いたアシスタントの「考え中」を 5 秒で消していた
+  const seqAfterAck = statusSeq(roomId);
   const timer = setTimeout(() => {
+    if (statusSeq(roomId) !== seqAfterAck) return;
     void pushStatus(roomId, 'idle', '').catch(() => {});
   }, ttlMs);
   if (timer.unref) timer.unref(); // ack timer が process を延命しない
