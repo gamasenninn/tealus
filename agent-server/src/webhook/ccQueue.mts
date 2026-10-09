@@ -158,7 +158,9 @@ const CC_MENTION_LINE_HEAD_G_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/gm;
 
 /** 最初の非空行。無ければ空文字 */
 function firstNonEmptyLine(content: string): string {
-  return content.split('\n').find((l) => l.trim().length > 0) || '';
+  // ★ #541 Windows の改行 (CRLF) も行の区切りにする。'\n' だけで切ると行末に '\r' が残り、
+  //   最後の宛先が宛先と読めずに黙って落ちた (`@アシスタント @cc-x` では 1 件も届かなかった)
+  return content.split(/\r?\n/).find((l) => l.trim().length > 0) || '';
 }
 
 /**
@@ -291,7 +293,7 @@ type UnroutedAddressHint = 'team-arrow' | 'malformed-cc-mention' | 'decorated-ad
  */
 function detectUnroutedAddressHint(content: string | null | undefined): UnroutedAddressHint {
   if (typeof content !== 'string' || content.length === 0) return null;
-  const firstLine = content.split('\n').find((l) => l.trim().length > 0);
+  const firstLine = content.split(/\r?\n/).find((l) => l.trim().length > 0);   // ★ #541 CRLF も
   if (!firstLine) return null;
   // 規約どおりに match するなら routing 済み = ここでは扱わない
   // ★ 宛名欄も見る (#393)。配送されるようになった便で hint を鳴らすと、

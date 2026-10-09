@@ -1012,3 +1012,33 @@ describe('宛名欄 — 行頭から続く mention の並び (#393)', () => {
     }
   });
 });
+
+/**
+ * ★ #541 宛名の行の行末が Windows の改行 (CRLF) でも、宛先を落とさない
+ *   以前は 1 行目を '\n' だけで切っていたので、最後の宛先に '\r' が残って宛先と読めず、
+ *   同報の最後の宛先が黙って落ちた (`@アシスタント @cc-x` では 1 件も届かなかった)。
+ *   Windows のファイルから MCP / Bot API で投げると起きる
+ */
+describe('CRLF の宛名欄 (#541)', () => {
+  it.each([
+    ['@cc-a @cc-b\r\n本文', ['a', 'b']],
+    ['@cc-a @cc-b @cc-c\r\n本文', ['a', 'b', 'c']],
+    ['@アシスタント @cc-b\r\n本文', ['b']],
+    ['@cc-a\r\n本文', ['a']],
+  ])('★★ %j → %j', (content, expected) => {
+    expect(extractCcProjects(content)).toEqual(expected);
+  });
+
+  it('★ CRLF と LF で結果が同じ', () => {
+    for (const body of ['@cc-a @cc-b\n本文', '@アシスタント @cc-b\n本文', '@cc-a\n本文']) {
+      expect(extractCcProjects(body.replace(/\n/g, '\r\n'))).toEqual(extractCcProjects(body));
+      expect(findDroppedCcMentions(body.replace(/\n/g, '\r\n'), extractCcProjects(body))).toEqual([]);
+    }
+  });
+
+  it('宛先らしきものの判定 (detectUnroutedAddressHint) も CRLF と LF で同じ', () => {
+    for (const body of ['【organon班 → 本体班】\n本文', '@cc-Tealus 本文\nつづき']) {
+      expect(detectUnroutedAddressHint(body.replace(/\n/g, '\r\n'))).toEqual(detectUnroutedAddressHint(body));
+    }
+  });
+});
