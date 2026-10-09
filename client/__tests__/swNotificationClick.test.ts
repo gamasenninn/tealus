@@ -6,8 +6,8 @@
  * ★ 今: パネルの中 (frameType: nested) は選ばず、本体の窓だけ。見えている窓を優先。失敗したら新しい窓で開く
  */
 import { describe, it, expect, vi } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
+// ★ ファイルは Vite の ?raw で文字として読む (画面の型検査は Node の型を持たないので node:fs を使わない)
+import swCode from '../public/custom-sw.js?raw';
 
 type Win = { url: string; frameType: string; visibilityState: string; navigate: ReturnType<typeof vi.fn>; focus: ReturnType<typeof vi.fn> };
 const win = (over: Partial<Win> = {}): Win => {
@@ -23,8 +23,7 @@ async function clickNotification(list: Win[], roomId = 'r-1') {
   const listeners: Record<string, (e: unknown) => void> = {};
   const clients = { matchAll: vi.fn(async () => list), openWindow: vi.fn(async () => null) };
   const self = { addEventListener: (t: string, fn: (e: unknown) => void) => { listeners[t] = fn; }, navigator: {}, registration: {} };
-  const code = fs.readFileSync(path.join(__dirname, '../public/custom-sw.js'), 'utf8');
-  new Function('self', 'clients', 'caches', code)(self, clients, {});
+  new Function('self', 'clients', 'caches', swCode)(self, clients, {});
   let done: Promise<unknown> = Promise.resolve();
   listeners.notificationclick({ notification: { close: vi.fn(), data: { roomId } }, waitUntil: (p: Promise<unknown>) => { done = p; } });
   await done;
