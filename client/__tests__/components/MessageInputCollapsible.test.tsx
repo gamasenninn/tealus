@@ -89,3 +89,22 @@ describe('MessageInput — 畳める入力欄 (#513)', () => {
     await waitFor(() => expect(textarea()).not.toBeNull());
   });
 });
+
+/**
+ * ★ #537 送れなかったら (つながっていない)、入力欄の文を残して理由を出す。以前は何も出なかった
+ */
+describe('MessageInput — 送れなかったとき (#537)', () => {
+  beforeEach(() => {
+    sendRoomMessage.mockReset();
+    useMessageStore.setState({ replyTo: null, pendingAgentMessage: null } as never);
+  });
+
+  it('★★ 文は入力欄に残り、理由が出る', async () => {
+    sendRoomMessage.mockRejectedValue(new Error('つながっていないため送れませんでした。電波を確かめて、もう一度送ってください'));
+    render(<MessageInput roomId="r1" />);
+    fireEvent.change(textarea()!, { target: { value: '大事な返事' } });
+    await act(async () => { fireEvent.keyDown(textarea()!, { key: 'Enter', ctrlKey: true }); });
+    await waitFor(() => expect(document.querySelector('.message-input-error')?.textContent).toMatch(/つながっていない/));
+    expect(textarea()!.value).toBe('大事な返事');
+  });
+});

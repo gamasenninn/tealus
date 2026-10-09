@@ -89,12 +89,9 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
     setSending(true);
     try {
       const content = buildAnswerText(schema, values);
-      // socket 経路が webhook を発火し cc-queue routing に乗る (reply_mention 起動)。切断時は REST fallback。
-      const via = await sendRoomMessage({ roomId, content, replyTo: message.id });
-      if (via === 'rest') {
-        // REST は message:new を発火しないので手元に反映
-        await useMessageStore.getState().fetchMessages(roomId);
-      }
+      // socket 経路が webhook を発火し cc-queue routing に乗る (reply_mention 起動)。
+      // ★ #537 切れていればつながり直すのを待ち、つながらなければ投げる (下の catch で再試行可能に)
+      await sendRoomMessage({ roomId, content, replyTo: message.id });
       setSent(true);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {

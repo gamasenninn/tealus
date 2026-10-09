@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FormSchema, Message } from '../../src/types';
 
@@ -9,9 +9,15 @@ vi.mock('../../src/services/api', () => ({
   api: { request: (...a: unknown[]) => requestMock(...a), sendMessage: (...a: unknown[]) => sendMessageMock(...a) },
 }));
 const emitMock = vi.fn();
+let connectListeners: Array<() => void> = [];
 let socketConnected = true;
 vi.mock('../../src/services/socket', () => ({
-  getSocket: () => ({ get connected() { return socketConnected; }, emit: (...a: unknown[]) => emitMock(...a) }),
+  getSocket: () => ({
+    get connected() { return socketConnected; },
+    emit: (...a: unknown[]) => emitMock(...a),
+    once: (ev: string, fn: () => void) => { if (ev === 'connect') connectListeners.push(fn); },
+    off: (_ev: string, fn: () => void) => { connectListeners = connectListeners.filter((x) => x !== fn); },
+  }),
 }));
 const fetchMessagesMock = vi.fn().mockResolvedValue(undefined);
 // hook-selector 対応 mock (二重回答防止の store 導出用)。messages は test ごとに差し替え。
@@ -91,18 +97,24 @@ describe('FormBubble', () => {
     expect(requestMock).not.toHaveBeenCalled(); // socket 時は REST を使わない
   });
 
-  it('socket 未接続時は REST(api.sendMessage) に fallback + fetchMessages で手元反映', async () => {
+  // ★ #537 切れていても REST に回さない。つながり直すのを待って socket で送る
+  it('★ socket 未接続時は REST に回さず、つながったら socket で送る', async () => {
     socketConnected = false;
+    connectListeners = [];
     render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
     fireEvent.click(screen.getByLabelText('記録のみ'));
     fireEvent.click(screen.getByRole('button', { name: '回答する' }));
-    await waitFor(() => expect(sendMessageMock).toHaveBeenCalledTimes(1));
-    const [rid, content, replyTo] = sendMessageMock.mock.calls[0];
-    expect(rid).toBe('room1');
-    expect(replyTo).toBe('form-msg-1');
-    expect(content).toContain('笹沼さんは?: 記録のみ');
+    await waitFor(() => expect(connectListeners).toHaveLength(1));
     expect(emitMock).not.toHaveBeenCalled();
-    await waitFor(() => expect(fetchMessagesMock).toHaveBeenCalledWith('room1'));
+    socketConnected = true;
+    await act(async () => { connectListeners.forEach((fn) => fn()); });
+    await waitFor(() => expect(emitMock).toHaveBeenCalledTimes(1));
+    const [event, payload] = emitMock.mock.calls[0];
+    expect(event).toBe('message:send');
+    expect(payload.room_id).toBe('room1');
+    expect(payload.reply_to).toBe('form-msg-1');
+    expect(payload.content).toContain('笹沼さんは?: 記録のみ');
+    expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
   it('★ 既に自分が回答済み(store に回答返信あり)なら「回答済み」表示で送信不可', () => {

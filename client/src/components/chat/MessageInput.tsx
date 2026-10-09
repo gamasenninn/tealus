@@ -273,7 +273,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
 
     setIsSending(true);
     try {
-      // socket 優先 / REST fallback は sendRoomMessage に集約 (docs/05 §4 webhook 発火経路)
+      // socket で送る (切れていればつながり直すのを待つ、#537)。判断は sendRoomMessage に集約 (docs/05 §4)
       await sendRoomMessage({ roomId, content, replyTo: replyTo?.id ?? null });
       setText('');
       collapse();   // #513 送ったら畳む
@@ -285,6 +285,9 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
       getSocket()?.emit('typing:stop', roomId);
     } catch (err) {
       console.error('Send error:', err);
+      // ★ #537 送れなかったことを知らせる (入力欄の文は残っている)。以前は何も出なかった
+      setUploadError(err instanceof Error ? err.message : '送れませんでした。もう一度送ってください');
+      setTimeout(() => setUploadError(''), 8000);
     } finally {
       setIsSending(false);
     }

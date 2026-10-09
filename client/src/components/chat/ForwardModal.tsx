@@ -69,7 +69,7 @@ function ForwardModal({ message, onClose }: ForwardModalProps) {
     setError('');
     try {
       if (message.type === 'text') {
-        // text: socket 優先 / REST fallback (sendRoomMessage に集約)。forwarded_from でリンク元を保持
+        // text: socket で送る (切れていればつながり直すのを待つ、#537)。forwarded_from でリンク元を保持
         await sendRoomMessage({ roomId: targetRoom.id, content: message.content as string, forwardedFrom: message.id });
       } else {
         // image / video / file: 新 REST 経路 (= リンク方式、server 側で file_path 共有)
