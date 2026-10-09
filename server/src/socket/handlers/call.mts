@@ -146,6 +146,16 @@ export function registerCallHandler(socket: Socket, io: Server): void {
       userId: socket.user.id,
       userName: socket.user.display_name,
     });
+
+    // ★ 拒否された発信側の画面は通話を閉じるが call:end を送らない。発信者だけが残った通話はここで終える
+    //   (2026-10-09: 部屋が「待機中」のまま本体の再起動まで残った。古いビルドの端末でも直るようサーバーで)
+    //   ★ 2 人以上いる通話は終えない (別の端末で応答済みの人が、残っていた着信の画面から拒否した場合)
+    const call = activeCalls.get(roomId);
+    if (call && call.participants.size === 1 && call.participants.has(callerId)) {
+      activeCalls.delete(roomId);
+      await insertCallMessage(roomId, callerId, `📞 通話が終了しました`);
+      broadcastCallStatus(roomId, io);
+    }
   });
 
   // 通話終了（個人の退出）

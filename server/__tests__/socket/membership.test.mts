@@ -143,6 +143,34 @@ describe('Socket.IO — 部屋の操作はメンバーだけ', () => {
       expect(rejected).toHaveLength(1);
     });
 
+    // ★ 2026-10-09 UI 試験で: 拒否された発信側は画面を閉じるが call:end を送らず、部屋が「待機中」のまま
+    //   本体の再起動まで残った。古いビルドの端末でも直るよう、サーバーで終える
+    it('★ 拒否されると、発信者だけが残った通話は終わる (「待機中」が残らない)', async () => {
+      const sa = await connect(a.token, [dmId]);
+      sa.emit('call:start', { roomId: dmId });
+      await settle();
+      const sb = await connect(b.token, [dmId]);
+      const status = events(sb, 'call:status');
+      sb.emit('call:reject', { roomId: dmId, callerId: a.id });
+      await settle();
+      expect(activeCalls.has(dmId)).toBe(false);
+      expect(await systemMessages(dmId)).toEqual(['📞 Aさん が通話を開始しました', '📞 通話が終了しました']);
+      expect(status).toContainEqual({ roomId: dmId, active: false, count: 0 });
+    });
+
+    it('★ もう 2 人で話している通話は、拒否が届いても終わらない', async () => {
+      const sa = await connect(a.token, [dmId]);
+      sa.emit('call:start', { roomId: dmId });
+      await settle();
+      const sb = await connect(b.token, [dmId]);
+      sb.emit('call:start', { roomId: dmId });   // 別の端末で応答済み
+      await settle();
+      sb.emit('call:reject', { roomId: dmId, callerId: a.id });   // 残っていた着信の画面から
+      await settle();
+      expect(activeCalls.get(dmId)?.participants.size).toBe(2);
+      expect(await systemMessages(dmId)).toEqual(['📞 Aさん が通話を開始しました']);
+    });
+
     it('★ 通話が無い・メンバーでない場合は、相手に何も届かない', async () => {
       const sa = await connect(a.token, [dmId]);
       const rejected = events(sa, 'call:rejected');
