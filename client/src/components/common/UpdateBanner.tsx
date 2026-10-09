@@ -1,4 +1,5 @@
 import { useVersionCheck } from '../../hooks/useVersionCheck';
+import { resetAppCache } from '../../services/resetAppCache';
 import './UpdateBanner.css';
 
 /**
@@ -15,17 +16,9 @@ function UpdateBanner() {
 
   const reload = async () => {
     // 古い precache を捨ててから読み直す。ここを飛ばすと SW が再び古い版を返す。
-    // caches / serviceWorker が無い環境でも必ず reload に到達させる (#356)
-    try {
-      if (typeof caches !== 'undefined') {
-        const keys = await caches.keys();
-        await Promise.all(keys.map(k => caches.delete(k)));
-      }
-    } catch { /* 消せなくても reload は行う */ }
-    try {
-      const regs = await navigator.serviceWorker?.getRegistrations?.();
-      await Promise.all((regs || []).map(r => r.unregister()));
-    } catch { /* 同上 */ }
+    // caches / serviceWorker が無い環境でも必ず reload に到達させる (#356)。
+    // ★ #528 SW を消す前にプッシュの宛先を本体から外す (resetAppCache の中)
+    await resetAppCache();
     location.reload();
   };
 

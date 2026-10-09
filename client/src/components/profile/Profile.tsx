@@ -6,6 +6,7 @@ import { api } from '../../services/api';
 import { ArrowLeft, Settings, LogOut, RefreshCw } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import { BUILD_ID } from '../../utils/buildVersion';
+import { resetAppCache } from '../../services/resetAppCache';
 import './Profile.css';
 
 function Profile() {
@@ -277,21 +278,9 @@ function Profile() {
           if (!ok) return;
           // #356 caches / serviceWorker が無い環境 (非セキュアコンテキスト等) では
           // ここで TypeError が飛び、reload にすら到達せず「押しても無反応」になっていた。
-          // 消せるものは消し、消せなくても必ず reload まで進める。
-          try {
-            if (typeof caches !== 'undefined') {
-              const keys = await caches.keys();
-              await Promise.all(keys.map(k => caches.delete(k)));
-            }
-          } catch (err) {
-            console.warn('cache clear failed:', err);
-          }
-          try {
-            const regs = await navigator.serviceWorker?.getRegistrations?.();
-            await Promise.all((regs || []).map(r => r.unregister()));
-          } catch (err) {
-            console.warn('sw unregister failed:', err);
-          }
+          // 消せるものは消し、消せなくても必ず reload まで進める (resetAppCache の中)。
+          // ★ #528 SW を消す前にプッシュの宛先を本体から外す
+          await resetAppCache();
           location.reload();
         }}>
           <RefreshCw size={18} />
