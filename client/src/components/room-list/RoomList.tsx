@@ -71,6 +71,7 @@ function RoomList() {
       rooms.forEach((room) => {
         socket.emit('room:join', room.id);
       });
+      fetchRooms();   // ★ #538 切れていた間の新着・未読に追いつく (以前は入り直すだけだった)
     };
     socket.on('connect', joinAllRooms);
 

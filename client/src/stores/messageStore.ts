@@ -6,6 +6,9 @@ import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
 export type StoreMessage = Message & { link_preview?: LinkPreview | null };
 
+/** #538 追いつくときに読む最大のページ数 (20 件 × 5 = 100 件)。超えたら最新に置き換える */
+const CATCH_UP_MAX_PAGES = 5;
+
 interface MessageState {
   messages: StoreMessage[];
   hasMore: boolean;
@@ -18,6 +21,8 @@ interface MessageState {
   loadMore: (roomId: string) => Promise<void>;
   /** #511 一番新しい投稿の後ろを読み足す */
   loadNewer: (roomId: string) => Promise<void>;
+  /** #538 つなぎ直し・表に戻ったときに、手元の最後より新しい分を足す (置き換えない) */
+  catchUp: (roomId: string) => Promise<void>;
   addMessage: (message: Message) => void;
   updateReadCount: (messageId: string, readCount: number) => void;
   updateReactions: (messageId: string, reactions: Reaction[]) => void;
@@ -100,6 +105,34 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       });
     } catch (err) {
       set({ isLoading: false, error: '新しいメッセージの取得に失敗しました' });
+    }
+  },
+
+  catchUp: async (roomId) => {
+    // ★ #538 以前はつなぎ直しでは取り直さず (切れていた間の投稿が抜けた)、表に戻ると最新 20 件に置き換えて
+    //   読んでいた位置が消えた。手元の最後より新しい分だけを足す。抜けが多すぎるときだけ最新に置き換える
+    const { messages, hasNewer, isLoading } = get();
+    if (hasNewer) return;   // 過去の位置を見ている最中。下へスクロールしたときに loadNewer が読み足す
+    if (isLoading) return;  // 開いた直後の読み込み中 (検索から開いた位置を上書きしない)
+    if (messages.length === 0) { await get().fetchMessages(roomId); return; }
+    try {
+      let newestId = messages[messages.length - 1].id;
+      const fetched: Message[] = [];
+      for (let page = 0; page < CATCH_UP_MAX_PAGES; page++) {
+        const data = await api.getMessagesAfter(roomId, newestId, 20);
+        fetched.push(...data.messages);
+        if (data.messages.length < 20) {
+          set((state) => {
+            const have = new Set(state.messages.map((x) => x.id));
+            return { messages: [...state.messages, ...fetched.filter((x) => !have.has(x.id))] };
+          });
+          return;
+        }
+        newestId = data.messages[data.messages.length - 1].id;
+      }
+      await get().fetchMessages(roomId);   // 抜けが多すぎる: 最新に置き換える
+    } catch {
+      // 取れなくても投げない (次の機会に追いつく)
     }
   },
 

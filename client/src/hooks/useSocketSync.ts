@@ -94,7 +94,7 @@ export interface UseSocketSyncResult {
 export function useSocketSync(roomId: string, targetMsgId: string | null = null): UseSocketSyncResult {
   const { user } = useAuthStore();
   const { selectRoom, clearCurrentRoom } = useRoomStore();
-  const { addMessage, fetchMessages, clearMessages, updateMessageContent } = useMessageStore();
+  const { addMessage, fetchMessages, catchUp, clearMessages, updateMessageContent } = useMessageStore();
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [agentStatus, setAgentStatus] = useState<AgentStatusPayload | null>(null);
 
@@ -132,7 +132,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
           markRead(pendingReadIds);
           pendingReadIds = [];
         }
-        fetchMessages(roomId);
+        // ★ #538 最新に置き換えず、手元の最後より新しい分を足す (以前は読んでいた位置・検索から開いた投稿が消えた)
+        catchUp(roomId);
       } else {
         sendViewing(false);
       }
@@ -152,6 +153,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       // スマホのスリープ復帰後に消えず残り続ける（議事録完成後も「考え中」のまま）。
       setAgentStatus(null);
       setTypingUsers({});
+      // ★ #538 切れていた間の投稿に追いつく (以前は取り直さず、抜けたまま新着だけ足された)
+      catchUp(roomId);
     };
 
     const handleMessageNew = (msg: Message) => {

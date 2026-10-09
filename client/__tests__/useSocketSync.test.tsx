@@ -10,7 +10,7 @@ import { renderHook, act } from '@testing-library/react';
 
 // --- 依存 mock（hook のロジックだけを検証するため最小化） ---
 const store = {
-  addMessage: vi.fn(), fetchMessages: vi.fn(), clearMessages: vi.fn(),
+  addMessage: vi.fn(), fetchMessages: vi.fn(), catchUp: vi.fn(), clearMessages: vi.fn(),
   updateMessageContent: vi.fn(), updateReadCount: vi.fn(), updateTranscription: vi.fn(),
   updateReactions: vi.fn(), updateLinkPreview: vi.fn(), markDeleted: vi.fn(),
   updatePublishStatus: vi.fn(), updateTags: vi.fn(), removeTag: vi.fn(),
@@ -332,5 +332,29 @@ describe('useSocketSync — 新着の音は一覧が鳴らす (#505)', () => {
     act(() => fakeSocket.trigger('message:new', { id: 'm1', room_id: 'room1', sender_id: 'other', type: 'text', content: 'x' }));
     expect(play).not.toHaveBeenCalled();
     play.mockRestore();
+  });
+});
+
+/**
+ * ★ #538 つなぎ直したとき・表に戻ったときは「追いつく」(catchUp)。最新に置き換え (fetchMessages) はしない
+ */
+describe('useSocketSync — 追いつく (#538)', () => {
+  beforeEach(() => { fakeSocket.handlers = {}; store.catchUp.mockClear(); store.fetchMessages.mockClear(); });
+
+  it('★★ つなぎ直したら、開いている部屋に追いつく', () => {
+    renderHook(() => useSocketSync('room1'));
+    store.fetchMessages.mockClear();
+    act(() => fakeSocket.trigger('connect'));
+    expect(store.catchUp).toHaveBeenCalledWith('room1');
+    expect(store.fetchMessages).not.toHaveBeenCalled();
+  });
+
+  it('★★ 表に戻ったら、最新に置き換えず追いつく (読んでいた位置を消さない)', () => {
+    renderHook(() => useSocketSync('room1'));
+    store.fetchMessages.mockClear();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(store.catchUp).toHaveBeenCalledWith('room1');
+    expect(store.fetchMessages).not.toHaveBeenCalled();
   });
 });
