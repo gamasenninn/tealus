@@ -63,8 +63,12 @@ const PARSE_ERROR_MESSAGE: Record<string, string> = {
   too_many_targets: '一度に委譲できるルーム数の上限を超えています。数を減らしてください。',
 };
 
+// ★ 投稿を直しても動き直さない (編集では webhook が来ない)。2026-10-09 01:14 に、空白を直して
+//   待った人が送り直していた。どの失敗も「直す → 送り直す」になるので、文面を問わず添える
+const RESEND_HINT = '直したら、もう一度送り直してください (投稿を直しても動き直しません)。';
+
 function parseErrorMessage(reason: string): string {
-  return `⚠️ ${PARSE_ERROR_MESSAGE[reason] || '委譲先を解決できませんでした。'}`;
+  return `⚠️ ${PARSE_ERROR_MESSAGE[reason] || '委譲先を解決できませんでした。'}\n${RESEND_HINT}`;
 }
 
 /**

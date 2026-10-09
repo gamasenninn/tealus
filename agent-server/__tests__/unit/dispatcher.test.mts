@@ -603,6 +603,8 @@ describe('Dispatcher', () => {
       const [rid, text] = botApi.pushMessage.mock.calls[0];
       expect(rid).toBe('room1');
       expect(text).toMatch(/見つかりませんでした/);
+      // ★ 投稿を直しても動き直さない (編集では webhook が来ない)。直した人が待ち続けないよう、送り直しを促す
+      expect(text).toMatch(/送り直してください/);
     });
 
     test('(c) フラグ off では %room でも従来どおり route に流れる', async () => {
