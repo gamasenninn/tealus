@@ -16,15 +16,27 @@ describe('最後の 1 人の退会', () => {
   afterAll(async () => { await closeTestDb(); });
   beforeEach(async () => { await cleanTestDb(); });
 
-  it('★ 1 人だけの部屋から退会すると 200 で、メンバーから外れる', async () => {
+  // ★★ #536 (2026-10-09) 決まりを変えた: 最後の 1 人は退会できない (400)。「部屋を削除してください」と伝える。
+  //   以前 (10-01) は 500 を直して「退会できる (200)」にしたが、空になった部屋は削除の口がメンバーにしか開いていないので
+  //   誰も消せないまま残った (本番で 1 部屋)。1 人だけの部屋は、退会でなく削除で片づける
+  it('★★ 1 人だけの部屋からは退会できない (400、部屋を削除するよう伝える)。メンバーのまま', async () => {
     const u = await createTestUser({ login_id: 'EMP501', display_name: 'ひとり' });
     const roomId = (await request(app).post('/api/rooms').set('Authorization', `Bearer ${u.token}`)
       .send({ name: 'ひとりの部屋', member_ids: [] })).body.room.id;
 
     const res = await request(app).delete(`/api/rooms/${roomId}/members/me`).set('Authorization', `Bearer ${u.token}`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/削除/);
     const left = await getTestPool().query('SELECT 1 FROM room_members WHERE room_id = $1', [roomId]);
-    expect(left.rowCount).toBe(0);
+    expect(left.rowCount).toBe(1);
+  });
+
+  it('★ 1 人だけの部屋は、削除で片づけられる (前提の確認)', async () => {
+    const u = await createTestUser({ login_id: 'EMP504', display_name: 'ひとり' });
+    const roomId = (await request(app).post('/api/rooms').set('Authorization', `Bearer ${u.token}`)
+      .send({ name: 'ひとりの部屋', member_ids: [] })).body.room.id;
+    const res = await request(app).delete(`/api/rooms/${roomId}`).set('Authorization', `Bearer ${u.token}`);
+    expect(res.status).toBeLessThan(300);
   });
 
   it('2 人以上なら、これまでどおり「退会しました」が残る', async () => {

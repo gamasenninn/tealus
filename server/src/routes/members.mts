@@ -95,6 +95,13 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req: Requ
   const userId = req.user!.id;
 
   try {
+    // ★ #536 最後の 1 人は退会できない。空になった部屋は、削除の口がメンバーにしか開いていないので誰も消せずに残った。
+    //   1 人だけの部屋は、退会でなく削除で片づける
+    const others = await pool.query('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id != $2 LIMIT 1', [roomId, userId]);
+    if (others.rows.length === 0) {
+      return res.status(400).json({ error: 'メンバーがあなただけなので退会できません。部屋を削除してください。' });
+    }
+
     // Check if last admin
     if (req.memberRole === 'admin') {
       const adminCount = await pool.query<{ count: number }>(
