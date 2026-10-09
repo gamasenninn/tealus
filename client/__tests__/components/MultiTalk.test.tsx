@@ -211,3 +211,54 @@ describe('MultiTalk — すべて最下部へ (#507)', () => {
     expect(() => fireEvent.click(screen.getByTitle('すべて最下部へ'))).not.toThrow();
   });
 });
+
+/**
+ * ★ 2026-10-09 利用者の報告: 整列した上に新しいトークを開き、そのまま閉じると、残りのパネルの間に隙間ができた。
+ *   閉じるボタンは帯 (ドラッグのつかみ) の中にあり、押して離すだけで「ドラッグして離した」扱いになって、
+ *   下のパネルの上 → 差し込み + 3 枚分の並べ直し → その直後に閉じて 2 枚 = 3 枚分の隙間が残っていた
+ */
+describe('MultiTalk — 閉じる・クリックでは並べ直さない', () => {
+  const tiled = [
+    { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 600, height: 800 },
+    { id: 2, roomId: 'r2', roomName: '整備', x: 600, y: 0, width: 600, height: 800 },
+    // 整列せずに開いた新しいパネル (営業の上に重なっている)
+    { id: 3, roomId: 'r3', roomName: '新しい', x: 20, y: 20, width: 500, height: 700 },
+  ];
+  const saved = () => JSON.parse(localStorage.getItem('multiTalkPanels') || '[]') as Array<{ id: number; x: number; y: number; width: number; height: number }>;
+  const geomOf = (id: number) => { const p = saved().find((x) => x.id === id)!; return { x: p.x, y: p.y, width: p.width, height: p.height }; };
+  const panelOf = (container: HTMLElement, title: string) => container.querySelector(`iframe[title="${title}"]`)!.closest('.multi-panel') as HTMLElement;
+
+  beforeEach(() => localStorage.setItem('multiTalkPanels', JSON.stringify(tiled)));
+
+  it('★★ 閉じるボタンを押して離しても、残りのパネルは動かない', () => {
+    const { container } = renderMulti();
+    const close = panelOf(container, '新しい').querySelector('.multi-panel-close')!;
+    fireEvent.mouseDown(close, { clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(close, { clientX: 100, clientY: 100 });
+    fireEvent.click(close);
+    expect(saved().map((p) => p.id)).toEqual([1, 2]);
+    expect(geomOf(1)).toEqual({ x: 0, y: 0, width: 600, height: 800 });
+    expect(geomOf(2)).toEqual({ x: 600, y: 0, width: 600, height: 800 });
+  });
+
+  it('★ 帯をクリックしただけ (動かさない) でも、差し込み・並べ直しをしない', () => {
+    const { container } = renderMulti();
+    const bar = panelOf(container, '新しい').querySelector('.multi-panel-header')!;
+    fireEvent.mouseDown(bar, { clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(bar, { clientX: 100, clientY: 100 });
+    expect(saved().map((p) => p.id)).toEqual([1, 2, 3]);
+    expect(geomOf(1)).toEqual({ x: 0, y: 0, width: 600, height: 800 });
+    expect(geomOf(3)).toEqual({ x: 20, y: 20, width: 500, height: 700 });
+  });
+
+  it('★ 本当に動かして別のパネルの上で離したら、今までどおり差し込む (10-06 の機能を壊さない)', () => {
+    const { container } = renderMulti();
+    const bar = panelOf(container, '新しい').querySelector('.multi-panel-header')!;
+    fireEvent.mouseDown(bar, { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 700, clientY: 100 });
+    fireEvent.mouseUp(document, { clientX: 700, clientY: 100 });
+    // 整備 (600〜1200) の左半分で離した → 整備の前へ
+    expect(saved().map((p) => p.id)).toEqual([1, 3, 2]);
+  });
+});

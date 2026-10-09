@@ -16,6 +16,9 @@ import './MultiTalk.css';
  */
 
 
+/** これより小さい動きはクリック扱い (差し込み・並べ直しをしない)。手のぶれで動いてしまう分 */
+const DRAG_THRESHOLD = 4;
+
 /** 開いているトークパネル 1 枚分 (localStorage 'multiTalkPanels' に永続化) */
 interface TalkPanel extends PanelWindowState {
   id: number;
@@ -222,6 +225,10 @@ function MultiTalk() {
             enableResizing={!panel.minimized}
             bounds="parent"
             dragHandleClassName="multi-panel-header"
+            // ★ 帯の中のボタン (最小化・最大化・閉じる) ではドラッグを始めない (2026-10-09)。
+            //   押して離すだけで「ドラッグして離した」になり、閉じる前に下のパネルへの差し込み + 並べ直しが走って、
+            //   閉じた後に隙間が残っていた
+            cancel=".multi-panel-btns"
             onDragStart={() => setInteracting(true)}
             onDrag={(e) => {
               const pt = dropPoint(e as MouseEvent | TouchEvent);
@@ -231,6 +238,9 @@ function MultiTalk() {
             onDragStop={(e, d) => {
               setInteracting(false);
               setDropHint(null);
+              // ★ 帯をクリックしただけ (動かしていない) なら何もしない (2026-10-09)。
+              //   重なったパネルの帯をクリックして前に出しただけで、差し込み + 並べ直しが走っていた
+              if (Math.abs(d.x - panel.x) < DRAG_THRESHOLD && Math.abs(d.y - panel.y) < DRAG_THRESHOLD) return;
               // ★ 別のパネルの上で離したら、その前 / 後ろへ差し込んで、今の整列のやり方で並べ直す。
               //   何もない所なら今までどおり、そこに置く
               const pt = dropPoint(e as MouseEvent | TouchEvent);
