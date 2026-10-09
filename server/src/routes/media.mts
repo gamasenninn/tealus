@@ -11,6 +11,7 @@ import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
 import type { AttachableMessage } from '../services/messageAttachments.mts';
 import { announcePost } from '../services/postEffects.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -251,6 +252,7 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
   if (!source_message_id) {
     return res.status(400).json({ error: 'source_message_id は必須です' });
   }
+  if (!isUuid(source_message_id)) return res.status(400).json({ error: badIdMessage(source_message_id) });   // ★ #543
 
   const client = await pool.connect();
   try {

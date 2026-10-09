@@ -1085,6 +1085,8 @@ router.get('/search', async (req, res) => {
     : [];
 
   // バリデーション: 6 種 narrowing filter のいずれか必須
+  // ★ #543 ID の形を確かめる (壊れた ID は DB の変換で落ちて 500 になっていた)
+  for (const v of [room_id, sender_id]) if (v && !isUuid(v)) return res.status(400).json({ error: badIdMessage(String(v)) });
   const hasFilter = !!(q || room_id || sender_id || since || tagNameList.length > 0 || type);
   if (!hasFilter) {
     return res.status(400).json({

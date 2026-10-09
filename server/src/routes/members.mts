@@ -11,6 +11,7 @@ import { canInviteToRoom } from '../utils/permissions.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { announceRoomJoined, announceRoomUpdated, announceRoomLeft } from '../services/roomJoined.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -32,6 +33,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req: Request,
   if (!user_id) {
     return res.status(400).json({ error: 'user_id は必須です' });
   }
+  if (!isUuid(user_id)) return res.status(400).json({ error: badIdMessage(String(user_id)) });   // ★ #543
 
   try {
     // Check if already a member

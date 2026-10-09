@@ -7,8 +7,16 @@ import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { learnFromEdit } from '../services/dictionaryLearner.mts';
 import { transcribeVoiceMessage } from '../services/transcription.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
+
+// ★ #543 メッセージの ID の形を、どの口でも最初に確かめる (壊れた ID は DB の変換で落ちて 500 になっていた)
+router.use((req, res, next) => {
+  const id = (req.params as { id?: string }).id;
+  if (!isUuid(id)) { res.status(400).json({ error: badIdMessage(String(id)) }); return; }
+  next();
+});
 
 /** messages + rooms JOIN で編集権限判定に使う行 */
 interface VoiceMessageRow {

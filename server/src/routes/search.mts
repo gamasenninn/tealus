@@ -3,6 +3,7 @@ import * as E from '../constants/errors.mts';
 import express from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
+import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 export const router = express.Router();
 
@@ -50,6 +51,8 @@ router.get('/', async (req, res) => {
   const { q, room_id, tag_id, tag_names, is_done, sort, limit = '50', offset = '0' } = req.query as SearchQuery;
   const userId = req.user!.id;
   const tagNameList = tag_names ? tag_names.split(',').map(s => s.trim()).filter(Boolean) : [];
+  // ★ #543 ID の形を確かめる (壊れた ID は DB の変換で落ちて 500 になっていた)
+  for (const v of [room_id, tag_id]) if (v && !isUuid(v)) return res.status(400).json({ error: badIdMessage(String(v)) });
 
   // tag_id/tag_names 指定時はキーワード不要
   if (!q && !tag_id && tagNameList.length === 0) {

@@ -57,6 +57,13 @@ router.post('/', async (req: Request, res: Response) => {
   }
   // ★ この口は text と stamp だけ (2026-10-02、services/messageTypes.mts)
   if (!REST_POST_TYPES.includes(type)) return res.status(400).json({ error: typeNotAllowedMessage(type, REST_POST_TYPES) });
+  // ★ #543 スタンプの中身はスタンプの ID。確かめずに保存すると、その部屋の一覧を読むたびに全員 500 になった
+  if (type === 'stamp') {
+    const stampId = content.trim();
+    if (!isUuid(stampId)) return res.status(400).json({ error: badIdMessage(stampId) });
+    const stamp = await pool.query('SELECT 1 FROM stamps WHERE id = $1', [stampId]);
+    if (stamp.rows.length === 0) return res.status(400).json({ error: 'スタンプが見つかりません' });
+  }
 
   try {
     // ★ #482 返信先・転送元は指してよい投稿だけ
