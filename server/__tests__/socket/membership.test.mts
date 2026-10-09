@@ -158,6 +158,33 @@ describe('Socket.IO — 部屋の操作はメンバーだけ', () => {
       expect(status).toContainEqual({ roomId: dmId, active: false, count: 0 });
     });
 
+    // ★ #535 応答 (join) は「続いている通話に入る」。発信者が切った直後に届いた応答で、新しい通話を始めない
+    //   (以前は応答側が 1 人で「待機中」になり、切ったはずの発信者に着信画面が出た)
+    it('★★ 通話が終わった後に届いた応答 (join) では、新しい通話を始めない', async () => {
+      const sa = await connect(a.token, [dmId]);
+      const incoming = events(sa, 'call:incoming');
+      sa.emit('call:start', { roomId: dmId });
+      await settle();
+      sa.emit('call:end', { roomId: dmId });
+      await settle();
+      const sb = await connect(b.token, [dmId]);
+      sb.emit('call:start', { roomId: dmId, join: true });
+      await settle();
+      expect(activeCalls.has(dmId)).toBe(false);
+      expect(incoming).toHaveLength(0);
+      expect(await systemMessages(dmId)).toEqual(['📞 Aさん が通話を開始しました', '📞 通話が終了しました']);
+    });
+
+    it('★ 続いている通話への応答 (join) は、今までどおり加わる', async () => {
+      const sa = await connect(a.token, [dmId]);
+      sa.emit('call:start', { roomId: dmId });
+      await settle();
+      const sb = await connect(b.token, [dmId]);
+      sb.emit('call:start', { roomId: dmId, join: true });
+      await settle();
+      expect(activeCalls.get(dmId)?.participants.size).toBe(2);
+    });
+
     it('★ もう 2 人で話している通話は、拒否が届いても終わらない', async () => {
       const sa = await connect(a.token, [dmId]);
       sa.emit('call:start', { roomId: dmId });

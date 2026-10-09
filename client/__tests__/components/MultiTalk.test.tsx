@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import MultiTalk from '../../src/components/multi/MultiTalk';
 import { useMultiTalkStore } from '../../src/stores/multiTalkStore';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useRoomStore } from '../../src/stores/roomStore';
 
 function renderMulti() {
   return render(<MemoryRouter initialEntries={['/multi']}><MultiTalk /></MemoryRouter>);
@@ -260,5 +261,29 @@ describe('MultiTalk — 閉じる・クリックでは並べ直さない', () =>
     fireEvent.mouseUp(document, { clientX: 700, clientY: 100 });
     // 整備 (600〜1200) の左半分で離した → 整備の前へ
     expect(saved().map((p) => p.id)).toEqual([1, 3, 2]);
+  });
+});
+
+/**
+ * ★ #535 パネルは開いたときの部屋の名前を覚えていて、改名しても最小化した帯 (と title) が古い名前のままだった
+ */
+describe('MultiTalk — 部屋の改名をパネルの名前に反映', () => {
+  it('★ 一覧の部屋の名前が変わったら、パネルの名前も変わる', () => {
+    localStorage.setItem('multiTalkPanels', JSON.stringify([
+      { id: 1, roomId: 'r1', roomName: '古い名前', x: 0, y: 0, width: 400, height: 400, minimized: true },
+    ]));
+    useRoomStore.setState({ rooms: [{ id: 'r1', type: 'group', name: '新しい名前' }] as never });
+    const { container } = renderMulti();
+    expect(container.querySelector('.multi-panel-title')?.textContent).toBe('新しい名前');
+    expect(JSON.parse(localStorage.getItem('multiTalkPanels')!)[0].roomName).toBe('新しい名前');
+  });
+
+  it('1 対 1 (名前の無い部屋) の名前は変えない', () => {
+    localStorage.setItem('multiTalkPanels', JSON.stringify([
+      { id: 1, roomId: 'd1', roomName: '田中', x: 0, y: 0, width: 400, height: 400, minimized: true },
+    ]));
+    useRoomStore.setState({ rooms: [{ id: 'd1', type: 'direct', name: null }] as never });
+    const { container } = renderMulti();
+    expect(container.querySelector('.multi-panel-title')?.textContent).toBe('田中');
   });
 });

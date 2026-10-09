@@ -58,8 +58,11 @@ function broadcastCallStatus(roomId: string, io: Server): void {
 
 export function registerCallHandler(socket: Socket, io: Server): void {
   // 通話開始 or 途中参加
-  socket.on('call:start', async (data: { roomId?: unknown } | null) => {
+  socket.on('call:start', async (data: { roomId?: unknown; join?: unknown } | null) => {
     const roomId = data?.roomId as string;
+    // ★ #535 着信への応答は join: true。「続いている通話に入る」だけで、通話が無ければ新しく始めない
+    //   (発信者が切った直後に応答が届くと、応答側が 1 人で「待機中」になり、発信者に着信画面が出た)
+    const joinOnly = data?.join === true;
     logger.debug(`call:start user=${socket.user.id} room=${roomId}`);
 
     // Defense: rtc-server 不可時は reject (古い client / race condition 保護)
@@ -79,6 +82,10 @@ export function registerCallHandler(socket: Socket, io: Server): void {
       if (!(await isRoomMember(roomId, socket.user.id))) return;
 
       const existing = activeCalls.get(roomId);
+      if (!existing && joinOnly) {
+        logger.info(`call:start(join) ignored: no active call (user=${socket.user.id} room=${roomId})`);
+        return;
+      }
 
       if (existing) {
         // 既に通話中 → 着信通知なし、そのまま参加

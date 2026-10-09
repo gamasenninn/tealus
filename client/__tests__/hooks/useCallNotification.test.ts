@@ -30,7 +30,8 @@ describe('useCallNotification — 応答', () => {
 
     act(() => result.current.acceptCall());
 
-    expect(emit).toHaveBeenCalledWith('call:start', { roomId: 'r1' });
+    // ★ #535 join: 続いている通話に入るだけ (発信者が切った後なら、本体は新しい通話を始めない)
+    expect(emit).toHaveBeenCalledWith('call:start', { roomId: 'r1', join: true });
     expect(result.current.activeCall?.roomId).toBe('r1');
     expect(result.current.incomingCall).toBeNull();
   });

@@ -121,7 +121,7 @@ export function useCallNotification(): UseCallNotificationResult {
     // ★ #524 サーバーの通話に加わる (見出しの「通話に参加」と同じ)。送らないと、2 人で話していても
     //   サーバーは発信者 1 人の通話だと思い込み、見出しは「待機中」のまま・発信者が切ると「終了」になる
     const socket = getSocket();
-    if (socket) socket.emit('call:start', { roomId: incomingCall.roomId });
+    if (socket) socket.emit('call:start', { roomId: incomingCall.roomId, join: true });   // ★ #535 入るだけ (無ければ始めない)
     setActiveCall({ roomId: incomingCall.roomId });
     setIncomingCall(null);
   }, [incomingCall]);

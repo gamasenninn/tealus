@@ -3,6 +3,7 @@ import { Rnd } from 'react-rnd';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal, ArrowDownToLine } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
+import { useRoomStore } from '../../stores/roomStore';
 import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, type PanelWindowState } from './panelWindow';
 import { findInsertTarget, insertPanel, layoutPanels, type InsertHint, type LayoutMode } from './panelOrder';
 import './MultiTalk.css';
@@ -55,6 +56,22 @@ function MultiTalk() {
     localStorage.setItem('multiTalkPanels', JSON.stringify(panels));
     useMultiTalkStore.getState().setOpenRoomIds(panels.map(p => p.roomId));
   }, [panels]);
+
+  // ★ #535 部屋の改名をパネルの名前 (最小化した帯・title) に反映する。以前は開いたときの名前のままだった。
+  //   名前の無い部屋 (1 対 1) は開いたときの相手の名前を残す
+  const rooms = useRoomStore((s) => s.rooms);
+  useEffect(() => {
+    setPanels((prev) => {
+      let changed = false;
+      const next = prev.map((p) => {
+        const name = rooms.find((r) => r.id === p.roomId)?.name;
+        if (!name || name === p.roomName) return p;
+        changed = true;
+        return { ...p, roomName: name };
+      });
+      return changed ? next : prev;
+    });
+  }, [rooms]);
 
   // PC PWA: マルチトーク画面ではウィンドウを広げ、パネルを自動整列
   useEffect(() => {
