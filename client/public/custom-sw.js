@@ -35,14 +35,17 @@ self.addEventListener('notificationclick', (event) => {
   const roomId = event.notification.data?.roomId;
   const targetUrl = roomId ? `/rooms/${roomId}` : '/';
 
+  // ★ #544 本体の窓 (top-level) だけを選び、見えている窓を優先する。以前は一覧の最初の 1 つを移していたので、
+  //   マルチトークのパネルの中 (iframe = nested) が通常の画面に切り替わることがあった。
+  //   移すのに失敗したら新しい窓で開く (以前は失敗するとタップしても何も起きなかった)
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('navigate' in client) {
-          return client.navigate(targetUrl).then((c) => c.focus());
-        }
-      }
-      return clients.openWindow(targetUrl);
+      const tops = clientList.filter((c) => c.frameType !== 'nested' && 'navigate' in c);
+      const client = tops.find((c) => c.visibilityState === 'visible') || tops[0];
+      if (!client) return clients.openWindow(targetUrl);
+      return client.navigate(targetUrl)
+        .then((c) => (c || client).focus())
+        .catch(() => clients.openWindow(targetUrl));
     })
   );
 });
@@ -58,7 +61,7 @@ self.addEventListener('notificationclick', (event) => {
 //
 // ★★ 記録は **一度きり** (画面が読んだら消す)。★★★ URL に印を置くと
 //   **再訪 (履歴 / 再読み込み) で残って、生きている失敗と見分けがつかなくなる**。
-const SW_VERSION = '2026-10-09a';   // #527 元のファイル名を残すようにした
+const SW_VERSION = '2026-10-10a';   // #544 通知のタップで開く窓を選ぶ (#527 元のファイル名を残す)
 
 // ★ #527 元のファイル名を残すヘッダー。画面側 (src/components/share/shareFileName.ts) と同じ名 (変えるときは両方)
 const SHARE_NAME_HEADER = 'X-Share-File-Name';
