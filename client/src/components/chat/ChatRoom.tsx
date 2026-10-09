@@ -31,6 +31,7 @@ import { roomSearchAction } from '../../utils/searchNav';
 import { useCapabilityStore } from '../../stores/capabilityStore';
 import type { RoomMember } from '../../types';
 import './ChatRoom.css';
+import { useRoomRemovedRedirect } from '../../hooks/useRoomRemovedRedirect';
 
 // server の room members 応答は user_id を持つ (types.ts RoomMember には未定義)
 type MemberWithUserId = RoomMember & { user_id: string };
@@ -105,6 +106,7 @@ function ChatRoom() {
 
   // Custom hooks
   const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
+  useRoomRemovedRedirect(roomId, isEmbed);   // ★ #533 この部屋から外れたらトーク一覧へ
   const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
   const { onlineUsers } = useOnlineStatus();
   const transceiver = useTransceiver(roomId);

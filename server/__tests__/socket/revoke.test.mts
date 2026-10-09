@@ -96,6 +96,36 @@ describe('Socket.IO — 取り消した権限が接続中にも効く', () => {
     expect(await deliveredTo(a, m, '退会した後')).toBe(false);
   });
 
+  // ★ #533 外された本人の画面に部屋が残った (部屋への知らせは、配信から抜けた本人には届かない)
+  it('★★ 外された本人の全端末に room:removed が届く', async () => {
+    const m1 = await connect(member.token);
+    const m2 = await connect(member.token);
+    const got: unknown[] = [];
+    m1.on('room:removed', (d: unknown) => got.push(d));
+    m2.on('room:removed', (d: unknown) => got.push(d));
+    await request(app).delete(`/api/rooms/${roomId}/members/${member.id}`).set('Authorization', `Bearer ${admin.token}`);
+    await settle(300);
+    expect(got).toEqual([{ room_id: roomId }, { room_id: roomId }]);
+  });
+
+  it('★ 自分で退会しても、自分の別の端末に room:removed が届く', async () => {
+    const m = await connect(member.token);
+    const got: unknown[] = [];
+    m.on('room:removed', (d: unknown) => got.push(d));
+    await request(app).delete(`/api/rooms/${roomId}/members/me`).set('Authorization', `Bearer ${member.token}`);
+    await settle(300);
+    expect(got).toEqual([{ room_id: roomId }]);
+  });
+
+  it('★ 残る人には room:removed は届かない', async () => {
+    const t = await connect(third.token);
+    const got: unknown[] = [];
+    t.on('room:removed', (d: unknown) => got.push(d));
+    await request(app).delete(`/api/rooms/${roomId}/members/${member.id}`).set('Authorization', `Bearer ${admin.token}`);
+    await settle(300);
+    expect(got).toEqual([]);
+  });
+
   it('★★ 利用停止にしたら、その人の接続を切る', async () => {
     const m = await connect(member.token);
     const disconnected = new Promise<void>((resolve) => m.on('disconnect', () => resolve()));

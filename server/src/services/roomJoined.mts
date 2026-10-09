@@ -27,3 +27,12 @@ export function announceRoomJoined(roomId: string, userIds: string[]): void {
 export function announceRoomUpdated(roomId: string): void {
   getIo().to(roomId).emit('room:updated', { room_id: roomId });
 }
+
+/**
+ * ★ #533 人が部屋から外れたことを、その人の全端末に知らせる (自分で退会・外された、の両方)。
+ *   部屋への知らせ (member:removed・room:updated) は、配信から抜けた本人には届かないので、
+ *   外された本人の画面には読み込み直すまで部屋が残っていた。呼び出し側は socketsLeave の後に呼ぶ
+ */
+export function announceRoomLeft(roomId: string, userId: string): void {
+  getIo().to(`user:${userId}`).emit('room:removed', { room_id: roomId });
+}

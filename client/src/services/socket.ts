@@ -55,6 +55,14 @@ export function connectSocket(token: string): Socket {
     useRoomStore.getState().fetchRooms();
   });
 
+  // ★ #533 自分が部屋から外れた (自分で退会・外された)。以前は本人に何も届かず、読み込み直すまで部屋が残った。
+  //   一覧を取り直し、開いている部屋の画面へ知らせる (useRoomRemovedRedirect が受けてトーク一覧へ戻る)
+  s.on('room:removed', (data: { room_id?: unknown } | null) => {
+    if (!data || typeof data.room_id !== 'string') return;
+    useRoomStore.getState().fetchRooms();
+    window.dispatchEvent(new CustomEvent('tealus:room-removed', { detail: { room_id: data.room_id } }));
+  });
+
   // #489 部屋の設定・メンバーが変わった。一覧を取り直し、開いている部屋なら情報とメンバーも取り直す
   // (読み込み直すまで「編集」が出ない・見出しの人数が古いままだった)
   s.on('room:updated', (data: { room_id?: unknown } | null) => {

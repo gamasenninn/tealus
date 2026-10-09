@@ -10,7 +10,7 @@ import { requireMember, requireGroup } from '../middleware/roomAccess.mts';
 import { canInviteToRoom } from '../utils/permissions.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
-import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
+import { announceRoomJoined, announceRoomUpdated, announceRoomLeft } from '../services/roomJoined.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -125,6 +125,7 @@ router.delete('/me', authenticate, requireGroup, requireMember, async (req: Requ
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: userId });
     // ★ 接続中の端末もこの部屋の配信から抜く (DB から消すだけだと、つなぎ直すまで届き続ける)
     io.in(`user:${userId}`).socketsLeave(roomId);
+    announceRoomLeft(roomId, userId);   // ★ #533 外れた本人の画面から部屋を消す
 
     // Webhook notification
     fireWebhooks('member.left', roomId, {
@@ -213,6 +214,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
     io.to(roomId).emit('member:removed', { room_id: roomId, user_id: targetUserId });
     // ★ 接続中の端末もこの部屋の配信から抜く (DB から消すだけだと、つなぎ直すまで届き続ける)
     io.in(`user:${targetUserId}`).socketsLeave(roomId);
+    announceRoomLeft(roomId, targetUserId);   // ★ #533 外れた本人の画面から部屋を消す
 
     // Webhook notification
     fireWebhooks('member.left', roomId, {
