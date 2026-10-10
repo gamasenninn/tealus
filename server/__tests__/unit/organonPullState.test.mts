@@ -183,3 +183,19 @@ describe('buildPullState — ★★★★ 別名側の drift (2026-09-18)', () =
     expect(s.db_organon_active_terms).toBe(261);
   });
 });
+
+/**
+ * #559 2 つ以上の語に付いていたので取り込まなかった別名を、pull の記録に載せる (organon 班が自分で引けるように)。
+ */
+describe('buildPullState — #559 取り込まなかった重なり', () => {
+  test('★ aliases_shared_dropped に「別名 → 語/語」で並べる', () => {
+    const s = buildPullState({ ranAt: new Date('2026-10-10T00:00:00Z'), terms: 1, aliases: 1, ttlPath: 'x',
+      sharedDropped: new Map([['田山', ['香山', '高山']]]) });
+    expect(s.aliases_shared_dropped).toEqual(['田山 → 香山/高山']);
+  });
+  test('重なりが無ければ空の配列 (渡さなければ null = 数えていない)', () => {
+    const base = { ranAt: new Date('2026-10-10T00:00:00Z'), terms: 1, aliases: 1, ttlPath: 'x' };
+    expect(buildPullState({ ...base, sharedDropped: new Map() }).aliases_shared_dropped).toEqual([]);
+    expect(buildPullState(base).aliases_shared_dropped).toBeNull();
+  });
+});

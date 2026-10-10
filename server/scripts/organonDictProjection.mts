@@ -4,6 +4,10 @@
  * Option 1: organon dock は proper noun のみを運ぶ。
  *   - `a org1:Role`         → category='person'
  *   - `a org1:Organization` → vendorClass が maker/manufacturer/parts_supplier なら 'vendor'、他は 'organization'
+ *   - ★ #559 `a org1:Location` → category='place'。別名は聞き崩れだけ (語と包含関係にある略・正式名は落とす)
+ *     (10-10 の試し: 略・正式名を「転写ブレ例」として渡すと「日光市 → 日光」のように正しい書き方から字を消した)
+ *   - ★ #559 同じ別名が 2 つ以上の語に付くときは、どの語にも取り込まない (8 月の 岡山 と同じ二重帰属の害)
+ *   - Shared-kernel は保留 (#559。補正段に載る category で測ってから)
  *   - status='confirmed' のみ (deprecated/candidate は除外)
  *   - term = rdfs:label / aliases = org1:alias (複数)
  * product/place/term 等の汎用・別種語彙は organon の責務外 (base/manual に残す)。
@@ -23,7 +27,7 @@ const VENDOR_CLASSES = new Set(['maker', 'manufacturer', 'parts_supplier']);
 
 export interface ProjectedTerm {
   term: string;
-  category: string; // 'person' | 'vendor' | 'organization'
+  category: string; // 'person' | 'vendor' | 'organization' | 'place'
   aliases: string[];
 }
 
@@ -102,6 +106,15 @@ function parseSubjects(ttl: string): Map<string, SubjectAcc> {
 }
 
 export function projectOrganonDict(ttl: string): ProjectedTerm[] {
+  return dropSharedAliases(projectBeforeSharedDrop(ttl));
+}
+
+/** ★ #559 取り込まなかった重なり (外す前の射影で 2 つ以上の語に付いている別名 → 語の一覧)。pull の記録に載せる */
+export function sharedAliasesInTtl(ttl: string): Map<string, string[]> {
+  return sharedAliasesOf(projectBeforeSharedDrop(ttl));
+}
+
+function projectBeforeSharedDrop(ttl: string): ProjectedTerm[] {
   const bySubject = parseSubjects(ttl);
   const out: ProjectedTerm[] = [];
   for (const a of bySubject.values()) {
@@ -110,17 +123,38 @@ export function projectOrganonDict(ttl: string): ProjectedTerm[] {
     if (a.type === `${ORG}Role`) category = 'person';
     else if (a.type === `${ORG}Organization`) {
       category = a.vendorClass && VENDOR_CLASSES.has(a.vendorClass) ? 'vendor' : 'organization';
-    } else continue; // Role/Organization 以外 (polyseme 等) は organon dock の対象外
+    } else if (a.type === `${ORG}Location`) category = 'place';   // ★ #559
+    else continue; // それ以外 (Polyseme / Shared-kernel 等) は organon dock の対象外
 
     const term = (a.label || '').trim();
     if (!term) continue;
     // alias は重複排除 + 決定論のため sort (順序は辞書用途に無関係)
     const deduped = [...new Set(a.aliases.map((x) => x.trim()).filter(Boolean))].sort();
     // #381 恒等・敬称重複を畳む (organon 側は触らず、消費者側の粒度に合わせる)
-    const aliases = foldRedundantAliases(term, deduped);
+    let aliases = foldRedundantAliases(term, deduped);
+    // ★ #559 地名の略・正式名 (下野 ⊂ 下野市 / 日光市 ⊃ 日光) は崩れではなく書き方の違い。崩れの例として渡さない
+    if (category === 'place') aliases = aliases.filter((x) => !term.includes(x) && !x.includes(term));
     out.push({ term, category, aliases });
   }
   return out;
+}
+
+/**
+ * ★ #559 同じ別名が 2 つ以上の語に付いていたら、どの語からも外す。
+ *   補正段はどちらへ寄せるかを決められず、突き合わせ順で勝手に決まる (8 月の 岡山 → 高山/香山)。
+ *   直すのは organon 側 (どちらかに決める)。外したものは sharedAliasesInTtl() で数え、pull の記録に載せる
+ */
+function dropSharedAliases(terms: ProjectedTerm[]): ProjectedTerm[] {
+  const shared = sharedAliasesOf(terms);
+  if (!shared.size) return terms;
+  return terms.map((t) => ({ ...t, aliases: t.aliases.filter((x) => !shared.has(x)) }));
+}
+
+/** 2 つ以上の語に付いている別名 → その語の一覧 */
+export function sharedAliasesOf(terms: ProjectedTerm[]): Map<string, string[]> {
+  const owners = new Map<string, string[]>();
+  for (const t of terms) for (const x of t.aliases) owners.set(x, [...(owners.get(x) || []), t.term]);
+  return new Map([...owners].filter(([, v]) => v.length > 1));
 }
 
 /**

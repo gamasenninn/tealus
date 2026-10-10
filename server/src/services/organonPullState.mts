@@ -76,6 +76,8 @@ export interface PullState {
    *   「届いていない」と読む。**読み違えを防ぐためだけに置いている。**
    */
   aliases_held_by_other_source: number | null;
+  /** ★ #559 2 つ以上の語に付いていたので取り込まなかった別名 (「別名 → 語/語」)。null = 数えていない */
+  aliases_shared_dropped: string[] | null;
   ttl_path: string;
   note: string;
 }
@@ -102,6 +104,7 @@ export function buildPullState({
   dbOrganonActiveAliases,
   aliasesNotInProjection,
   aliasesHeldByOtherSource,
+  sharedDropped,
 }: {
   ranAt: Date;
   terms: number;
@@ -115,6 +118,8 @@ export function buildPullState({
   aliasesNotInProjection?: number | null;
   /** ★ 射影にあるが organon 由来の active 行になっていない組の数 (tombstone / 別の出所)。 */
   aliasesHeldByOtherSource?: number | null;
+  /** ★ #559 取り込まなかった重なり (sharedAliasesInTtl の結果)。省略 = 数えていない */
+  sharedDropped?: Map<string, string[]>;
 }): PullState {
   const dbActive = dbOrganonActiveTerms ?? null;
   return {
@@ -126,6 +131,7 @@ export function buildPullState({
     db_organon_active_aliases: dbOrganonActiveAliases ?? null,
     drift_aliases: aliasesNotInProjection ?? null,
     aliases_held_by_other_source: aliasesHeldByOtherSource ?? null,
+    aliases_shared_dropped: sharedDropped ? [...sharedDropped].map(([a, ts]) => `${a} → ${ts.join('/')}`) : null,
     ttl_path: ttlPath,
     // ★ file 自身に意味を書く。後から開く人が「最後に成功した pull」なのか
     //   「最後に試した pull」なのかを判断できないと、止まっているか動いているかを読み違える。
@@ -138,7 +144,8 @@ export function buildPullState({
       + ' drift_aliases は語とは式が違う: db_organon_active_aliases - aliases ではなく,'
       + ' 「射影から外れたのに DB に残っている organon 由来の active 別名」の数 (= 撤去の積み残し、正常は 0)。'
       + ' aliases_held_by_other_source は射影にあるが organon 由来の active 行でない組の数で,'
-      + ' tombstone や「先に別の出所が入った行」= 正常 (source は今の供給元ではなく最初に入れた側を記録する)',
+      + ' tombstone や「先に別の出所が入った行」= 正常 (source は今の供給元ではなく最初に入れた側を記録する)。'
+      + ' aliases_shared_dropped は 2 つ以上の語に付いていたので取り込まなかった別名 (#559、organon 側でどちらかに決めると取り込まれる)',
   };
 }
 

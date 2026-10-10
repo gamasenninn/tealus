@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import dotenv from 'dotenv';
 import * as repo from '../src/services/dictionaryRepo.mts';
 import { pool } from '../src/db/pool.mts';
-import { projectOrganonDict, type ProjectedTerm } from './organonDictProjection.mts';
+import { projectOrganonDict, sharedAliasesInTtl, type ProjectedTerm } from './organonDictProjection.mts';
 import { buildPullState, writePullState } from '../src/services/organonPullState.mts';
 
 dotenv.config();
@@ -29,7 +29,9 @@ export interface SyncResult {
 
 /** 射影結果を dictionary テーブルへ upsert (source='organon')。冪等。 */
 export async function syncFromOrganon(ttlPath: string): Promise<SyncResult> {
-  const projected = projectOrganonDict(fs.readFileSync(ttlPath, 'utf8'));
+  const ttl = fs.readFileSync(ttlPath, 'utf8');
+  const projected = projectOrganonDict(ttl);
+  const sharedDropped = sharedAliasesInTtl(ttl);   // ★ #559 2 つの語に付いていて取り込まなかった別名
   let terms = 0;
   let aliases = 0;
   for (const p of projected) {
@@ -99,7 +101,7 @@ export async function syncFromOrganon(ttlPath: string): Promise<SyncResult> {
   writePullState(
     buildPullState({
       ranAt: new Date(), terms, aliases, ttlPath, dbOrganonActiveTerms,
-      dbOrganonActiveAliases, aliasesNotInProjection, aliasesHeldByOtherSource,
+      dbOrganonActiveAliases, aliasesNotInProjection, aliasesHeldByOtherSource, sharedDropped,
     })
   );
   return { terms, aliases };

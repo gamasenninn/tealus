@@ -1,7 +1,7 @@
 /**
  * #331 organon.ttl → 辞書射影 (Option 1: proper noun のみ) の unit test。
  */
-import { projectOrganonDict, collectConfirmedSurfaces } from '../../scripts/organonDictProjection.mts';
+import { projectOrganonDict, collectConfirmedSurfaces, sharedAliasesInTtl } from '../../scripts/organonDictProjection.mts';
 
 const TTL = `
 @prefix org1: <https://tealus.local/organon/> .
@@ -214,5 +214,80 @@ describe('collectConfirmedSurfaces — ★ ttl 直読みの経路に合わせた
     const all = collectConfirmedSurfaces(ttl);
     for (const w of projected) expect(all.has(w)).toBe(true);
     expect(all.size).toBeGreaterThan(projected.size);
+  });
+});
+
+/**
+ * #559 Location を射影に足す (category=place)。別名は聞き崩れだけ (語と包含関係にある略・正式名は落とす)。
+ *   同じ別名が 2 つ以上の語に付くときは、どの語にも取り込まない。Shared-kernel はまだ取り込まない (保留)。
+ * ★ 10-10 の試し: 略・正式名の別名を渡すと「日光市 → 日光」のように正しい書き方から字を消した。聞き崩れ (板子 → 潮来) は直った
+ */
+describe('projectOrganonDict — #559 Location', () => {
+  const TTL_LOC = `
+@prefix org1: <https://tealus.local/organon/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+org1:潮来 a org1:Location ;
+    rdfs:label "潮来" ;
+    org1:alias "板子", "潮来市" ;
+    org1:status "confirmed" .
+
+org1:下野市 a org1:Location ;
+    rdfs:label "下野市" ;
+    org1:alias "下野", "霜月" ;
+    org1:status "confirmed" .
+
+org1:岩舟 a org1:Location ;
+    rdfs:label "岩舟" ;
+    org1:status "deprecated" .
+
+org1:展示場 a org1:Shared-kernel ;
+    rdfs:label "展示場" ;
+    org1:alias "テンジ" ;
+    org1:status "confirmed" .
+
+org1:香山 a org1:Role ;
+    rdfs:label "香山" ;
+    org1:alias "田山", "カヤマ" ;
+    org1:status "confirmed" .
+
+org1:高山 a org1:Role ;
+    rdfs:label "高山" ;
+    org1:alias "田山" ;
+    org1:status "confirmed" .
+`;
+  const result = projectOrganonDict(TTL_LOC);
+  const byTerm = Object.fromEntries(result.map((r) => [r.term, r]));
+
+  test('★ Location は category=place で取り込む (confirmed のみ)', () => {
+    expect(byTerm['潮来'].category).toBe('place');
+    expect(byTerm['下野市'].category).toBe('place');
+    expect(byTerm['岩舟']).toBeUndefined();
+  });
+
+  test('★ 別名は聞き崩れだけ。語と包含関係にある略・正式名 (潮来市 / 下野) は落とす', () => {
+    expect(byTerm['潮来'].aliases).toEqual(['板子']);
+    expect(byTerm['下野市'].aliases).toEqual(['霜月']);
+  });
+
+  test('★ Shared-kernel はまだ取り込まない (保留)', () => {
+    expect(byTerm['展示場']).toBeUndefined();
+  });
+
+  test('★ 同じ別名が 2 つの語に付くときは、どちらにも取り込まない (ほかの別名は残す)', () => {
+    expect(byTerm['香山'].aliases).toEqual(['カヤマ']);
+    expect(byTerm['高山'].aliases).toEqual([]);
+  });
+});
+
+describe('sharedAliasesInTtl — #559 取り込まなかった重なりを数える', () => {
+  test('★ 外す前の射影で、2 つ以上の語に付いている別名を返す', () => {
+    const ttl = `
+@prefix org1: <https://tealus.local/organon/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+org1:香山 a org1:Role ; rdfs:label "香山" ; org1:alias "田山", "カヤマ" ; org1:status "confirmed" .
+org1:高山 a org1:Role ; rdfs:label "高山" ; org1:alias "田山" ; org1:status "confirmed" .
+`;
+    expect([...sharedAliasesInTtl(ttl)]).toEqual([['田山', ['香山', '高山']]]);
   });
 });
