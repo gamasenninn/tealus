@@ -24,6 +24,7 @@ import { extractPromptFromMessage } from '../media/messageAdapter.mts';
 import { isMentioned } from './mention.mts';
 import type { WebhookMessage, DispatchParams } from '../types.mts';
 import { beginWait, endWait } from './delegationWait.mts';
+import { runAsRequester, withCurrentRequester } from '../lib/requesterContext.mts';
 
 // ルームごとの処理キュー（並行実行防止）
 const roomQueues = new Map<string, Promise<void>>();
@@ -212,7 +213,8 @@ export async function dispatch({ message, room, agentId, agentName }: DispatchPa
   if (spikeEnabled) inflightRooms.add(roomId);
   try {
     // ルームごとにシリアライズ（並行実行防止）
-    await enqueueForRoom(roomId, () => _dispatch({ message, room, agentId, agentName }));
+    // ★ #564 依頼した人 = この便を投稿した人。AI の道具の読み取りをその人の部屋に絞る (lib/requesterContext.mts)
+    await enqueueForRoom(roomId, () => runAsRequester(message.sender?.id, () => _dispatch({ message, room, agentId, agentName })));
   } finally {
     if (spikeEnabled) inflightRooms.release(roomId);
   }
@@ -351,13 +353,14 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
         }
         inflightRooms.add(targetRoomId);
         try {
-          await enqueueForRoom(targetRoomId, async () => {
+          // ★ #564 委譲先の待ち行列でも、委譲を頼んだ人を持たせる (積んだ処理は別の流れから呼ばれる)
+          await enqueueForRoom(targetRoomId, withCurrentRequester(async () => {
             if (useDeepCodex) {
               out = await processDeepCodex({ roomId: targetRoomId, prompt: noPostPrefix + buildDeepPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, agentId, sessionId: tctx.session_id, suppressAutoPost: true });
             } else {
               out = await processLightV2({ roomId: targetRoomId, prompt: noPostPrefix + buildLightPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, suppressAutoPost: true });
             }
-          });
+          }));
         } finally {
           inflightRooms.release(targetRoomId);
           endWait(roomId, targetRoomId);

@@ -37,6 +37,7 @@ import {
 } from '../lib/codexAuthError.mts';
 import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
+import { currentRequester, issueScopedToken } from '../lib/requesterContext.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -96,6 +97,15 @@ export function formatLightV2StartupLog(args: {
     + `mcp_servers=${args.mcpServers.join(',')} model=${model}`;
 }
 
+/**
+ * ★ #564 道具 (tealus-mcp) の接続先。依頼した人がいれば agent-server の中継 (使い捨ての鍵つき) に向け、
+ *   中継が X-Tealus-Requester を付けて本体へ流す。依頼した人がいなければ今までどおり本体へ直接
+ */
+export function tealusApiUrlForCurrentRequester(): string {
+  const requesterId = currentRequester();
+  return requesterId ? `http://127.0.0.1:${config.PORT}/tealus-scoped/${issueScopedToken(requesterId)}` : config.TEALUS_API_URL;
+}
+
 export function buildLightV2McpConfig(workspacePath: string | undefined): Record<string, CodexConfigObject> {
   const mcp_servers: Record<string, CodexConfigObject> = {};
 
@@ -105,7 +115,8 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
       command: 'npx',
       args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.7'],
       env: {
-        TEALUS_API_URL: config.TEALUS_API_URL,
+        // ★ #564 依頼した人がいれば中継 (/tealus-scoped/<鍵>) に向ける = 本体がその人の部屋だけに絞る
+        TEALUS_API_URL: tealusApiUrlForCurrentRequester(),
         TEALUS_USER_ID: config.TEALUS_BOT_ID,
         TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
         // generate_and_send_image (#260) で DALL-E 3 を呼ぶため必要

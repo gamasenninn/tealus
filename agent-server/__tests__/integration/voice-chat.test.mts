@@ -38,6 +38,12 @@ jest.mock('../../src/webhook/routes.mts', () => {
 // ルーム MCP は起こさない (子プロセスを spawn するため)。listTools / callTool だけ偽装する。
 const mockListTools = jest.fn();
 const mockCallTool = jest.fn();
+// ★ #564 読める部屋は DB から引く (会話している人と bot の両方が入っている部屋)。テストでは差し替える
+const mockPoolQuery = jest.fn();
+jest.mock('../../src/context/sessionManager.mts', () => ({
+  ...jest.requireActual('../../src/context/sessionManager.mts'),
+  pool: { query: (...a: unknown[]) => mockPoolQuery(...a) },
+}));
 jest.mock('../../src/mcp/roomMcpManager.mts', () => ({
   getOrCreateRoomMcp: jest.fn(async () => [{
     listTools: mockListTools,
@@ -235,6 +241,9 @@ describe('POST /voice-chat/tool-call — room_id の扱い (#477)', () => {
     mockListTools.mockReset().mockResolvedValue(ROOM_ARG_TOOLS);
     mockCallTool.mockReset().mockImplementation(async (name: string) =>
       name === 'list_rooms' ? listRoomsResult : { content: [{ type: 'text', text: 'ok' }] });
+    // ★ #564 会話している人と bot の両方が入っている部屋 = r1 (いま) と r2
+    mockPoolQuery.mockReset().mockImplementation(async (sql: string) =>
+      (sql.includes('room_members') ? { rows: [{ room_id: 'r1' }, { room_id: 'r2' }] } : { rows: [] }));
     stubFetch();
     const res = await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token('u1')}`).send({ room_id: 'r1' });
@@ -261,10 +270,10 @@ describe('POST /voice-chat/tool-call — room_id の扱い (#477)', () => {
     expect(calledWith('get_messages')).toEqual([{ room_id: 'r2' }]);
   });
 
-  test('★ 参加しているルームの一覧は、セッション中に 1 回だけ引く', async () => {
+  test('★ 読める部屋の一覧は、セッション中に 1 回だけ引く (#564 から DB で)', async () => {
     await call('get_messages', { room_id: 'r2' });
     await call('get_messages', { room_id: 'r3' });
-    expect(calledWith('list_rooms')).toHaveLength(1);
+    expect(mockPoolQuery.mock.calls.filter(([sql]) => String(sql).includes('room_members'))).toHaveLength(1);
   });
 
   test('★ join_room は確かめずに呼ぶ (参加していない部屋に入るための道具)', async () => {
@@ -272,13 +281,19 @@ describe('POST /voice-chat/tool-call — room_id の扱い (#477)', () => {
     expect(calledWith('join_room')).toEqual([{ room_id: 'r9' }]);
   });
 
-  test('★ 一覧が引けないときは確かめずに呼ぶ (止めない)', async () => {
-    mockCallTool.mockImplementation(async (name: string) => {
-      if (name === 'list_rooms') throw new Error('MCP が落ちています');
-      return { content: [{ type: 'text', text: 'ok' }] };
-    });
-    await call('get_messages', { room_id: 'r9' });
-    expect(calledWith('get_messages')).toEqual([{ room_id: 'r9' }]);
+  test('★ #564 読める部屋を引けないときは、今の部屋だけ (以前は確かめずに呼んでいた = 広げる側だった)', async () => {
+    mockPoolQuery.mockImplementation(async () => { throw new Error('DB が落ちています'); });
+    await call('get_messages', { room_id: 'r2' });
+    await call('get_messages', { room_id: 'current' });
+    expect(calledWith('get_messages')).toEqual([{ room_id: 'r1' }]);
+  });
+
+  test('★ #564 部屋の一覧は、会話している人の部屋だけに減らして返す', async () => {
+    mockCallTool.mockImplementation(async (name: string) => (name === 'list_rooms'
+      ? { content: [{ type: 'text', text: JSON.stringify({ rooms: [{ id: 'r1' }, { id: 'r2' }, { id: 'r-hidden' }] }) }] }
+      : { content: [{ type: 'text', text: 'ok' }] }));
+    const res = await call('list_rooms', {});
+    expect(JSON.parse(JSON.parse(res.body.output).content[0].text).rooms.map((r: { id: string }) => r.id)).toEqual(['r1', 'r2']);
   });
 });
 

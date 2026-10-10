@@ -14,8 +14,11 @@ import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
 import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest } from './lib/configAuthz.mts';
+import { createScopedProxy } from './routes/scopedProxy.mts';
 
 export const app = express();
+// ★ #564 AI の道具のための中継。本文をそのまま本体へ流すので express.json より前に置く
+app.use('/tealus-scoped', createScopedProxy({ upstream: () => config.TEALUS_API_URL }));
 app.use(express.json());
 app.use(cors());
 

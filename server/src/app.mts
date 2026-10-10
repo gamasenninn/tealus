@@ -133,6 +133,8 @@ app.use('/agent-api', (req, res, next) => {
   next();
 });
 
+// ★ #564 agent-server の中継 (/tealus-scoped/<鍵>) は同じマシンの AI の道具のための口。外から本体経由で届かせない
+app.use('/agent-api/tealus-scoped', (_req, res) => { res.status(404).json({ error: 'この道は中継しません' }); });
 app.use('/agent-api', createProxyMiddleware({
   target: agentUrl(),   // ★ #556 AGENT_URL で別コンテナにも向けられる
   pathRewrite: { '^/agent-api': '' },

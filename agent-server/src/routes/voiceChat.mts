@@ -33,8 +33,10 @@ import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
 import { loadVocabForPrompt } from '../lib/vocabContext.mts';
 import { partsFor } from '../lib/promptKnowledge.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
-import { resolveRoomArg, roomIdsFromListRooms } from '../lib/voiceChatRoomArg.mts';
+import { resolveRoomArg } from '../lib/voiceChatRoomArg.mts';
 import { capToolOutput } from '../lib/voiceChatToolOutput.mts';
+import { requesterRoomIds, scopeToolArgs, filterListRooms } from '../lib/voiceChatRequesterScope.mts';
+import { pool } from '../context/sessionManager.mts';
 
 export const router = express.Router();
 
@@ -529,10 +531,18 @@ router.post('/tool-call', async (req, res) => {
     args.content = withOriginMark(args.content);
   }
 
+  // ★ #564 読める部屋は「会話している人と bot の両方が入っている部屋」。引けなければ今の部屋だけ
+  if (entry.knownRoomIds === undefined || entry.knownRoomIds === null) entry.knownRoomIds = await loadKnownRoomIds(entry);
+  const scoped = await scopeToolArgs(name, args, { currentRoomId: entry.roomId, known: entry.knownRoomIds, messageRoomOf });
+  if (!scoped.ok) {
+    logger.info(`[voice-chat] tool ${name} 呼ばずに返す (会話している人が入っていない部屋の投稿) session=${sessionId.slice(0, 8)}`);
+    return res.json({ output: scoped.output, elapsed_ms: Date.now() - started });
+  }
+  args = scoped.args;
+
   // ★ #477 room_id: "current" はいまの部屋に置き換え、参加していない ID は呼ばずに正直に返す。
   //   AI が 36 文字の ID を写し間違え、本体の 403 を「権限がない」と受け取って答え続けたため (docs/08 §12.3)
   if (typeof args.room_id === 'string') {
-    if (entry.knownRoomIds === undefined) entry.knownRoomIds = await loadKnownRoomIds(entry);
     const resolved = resolveRoomArg(name, args, entry.roomId, entry.roomName, entry.knownRoomIds);
     if (!resolved.ok) {
       logger.info(`[voice-chat] tool ${name} 呼ばずに返す (参加していない room_id=${String(args.room_id).slice(0, 36)}) session=${sessionId.slice(0, 8)}`);
@@ -542,7 +552,8 @@ router.post('/tool-call', async (req, res) => {
   }
 
   try {
-    const result = await entry.serverOf.get(name)!.callTool(name, args);
+    let result = await entry.serverOf.get(name)!.callTool(name, args);
+    if (name === 'list_rooms') result = filterListRooms(result, entry.knownRoomIds!);   // ★ #564
     const raw = typeof result === 'string' ? result : JSON.stringify(result);
     // ★ #432 画面がデータチャネルで送れる大きさに切る (超えると send が例外を出し「調べています…」で固まった)
     const capped = capToolOutput(raw);
@@ -556,15 +567,22 @@ router.post('/tool-call', async (req, res) => {
   }
 });
 
-/** #477 アシスタントが参加しているルームの ID を 1 回だけ引く。引けなければ null (= 確かめずに呼ぶ) */
-async function loadKnownRoomIds(entry: SessionEntry): Promise<Set<string> | null> {
-  const server = entry.serverOf.get('list_rooms');
-  if (!server) return null;
+/**
+ * #477 / #564 読める部屋の ID を 1 回だけ引く: 会話している人と bot の両方が入っている部屋。
+ * ★ 以前は bot が入っている部屋 (list_rooms) で、会話している人が入っていない部屋も読めた。引けなければ今の部屋だけ
+ */
+async function loadKnownRoomIds(entry: SessionEntry): Promise<Set<string>> {
+  return requesterRoomIds(pool, config.TEALUS_BOT_ID || '', entry.userId, entry.roomId);
+}
+
+/** #564 投稿の部屋。引けなければ「どこでもない部屋」として断る側に倒す (無い投稿は null = 道具の返事に任せる) */
+async function messageRoomOf(messageId: string): Promise<string | null> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId)) return null;
   try {
-    return roomIdsFromListRooms(await server.callTool('list_rooms', {}));
-  } catch (err) {
-    logger.warn(`[voice-chat] list_rooms を引けず、room_id を確かめずに呼ぶ: ${err instanceof Error ? err.message : String(err)}`);
-    return null;
+    const { rows } = await pool.query<{ room_id: string }>('SELECT room_id FROM messages WHERE id = $1', [messageId]);
+    return rows[0]?.room_id ?? null;
+  } catch {
+    return 'unknown-room';
   }
 }
 
