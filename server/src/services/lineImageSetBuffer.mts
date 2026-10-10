@@ -9,7 +9,7 @@
  * - ★ in-memory Map (= Redis 不使用)。「1台・1プロセス・同一オリジン」構成の前提に沿い、
  *   アルバムの webhook 群は数秒内に届くため短命 state で足りる (プロセス再起動で消えても
  *   最悪「バラバラ投影に degrade」であり事故にならない)
- * - flush 条件: total 枚そろったら即 / そろわなくても flushDelayMs 経過で部分 flush
+ * - flush 条件: total 枚そろったら即 / そろわなくても最後の 1 枚から flushDelayMs (最初から maxWaitMs で打ち切り) で部分 flush (#552)
  *   (= 1 枚の fetch 失敗や webhook 欠落でも止まらない)
  * - flush 時は imageSet.index 昇順にソート (= 順不同到着の再構成)
  * - onFlush の失敗は握りつぶして warn (= webhook dispatch を阻害しない、lineBridge 系の作法)
@@ -50,18 +50,35 @@ interface PendingSet {
   total: number;
   images: BufferedImage[];
   timer: NodeJS.Timeout;
+  firstAt: number;
 }
 
-export const DEFAULT_FLUSH_DELAY_MS = 15_000;
+/**
+ * ★ #552 待ち時間は「最後の 1 枚から」。以前は最初の 1 枚から 15 秒の固定で、届くのが遅い日は
+ *   1 つのアルバムが 2〜7 投稿に割れた (本番の到着間隔: ふだん 1 秒前後、遅いアルバムで 3〜60 秒)。
+ *   届き続けても最初の 1 枚から DEFAULT_MAX_WAIT_MS で打ち切る (欠けた束を待ち続けない)
+ */
+export const DEFAULT_FLUSH_DELAY_MS = 60_000;
+export const DEFAULT_MAX_WAIT_MS = 300_000;
 
 export class ImageSetBuffer {
   private pending = new Map<string, PendingSet>();
   private flushDelayMs: number;
+  private maxWaitMs: number;
   private onFlush: ImageSetFlushHandler;
 
-  constructor(options: { flushDelayMs?: number; onFlush: ImageSetFlushHandler }) {
+  constructor(options: { flushDelayMs?: number; maxWaitMs?: number; onFlush: ImageSetFlushHandler }) {
     this.flushDelayMs = options.flushDelayMs ?? DEFAULT_FLUSH_DELAY_MS;
+    this.maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
     this.onFlush = options.onFlush;
+  }
+
+  /** 最後の 1 枚から flushDelayMs、ただし最初の 1 枚から maxWaitMs を超えない */
+  private arm(setId: string, firstAt: number): NodeJS.Timeout {
+    const left = Math.max(0, this.maxWaitMs - (Date.now() - firstAt));
+    const timer = setTimeout(() => this.flush(setId, 'timeout'), Math.min(this.flushDelayMs, left));
+    timer.unref?.();   // プロセス終了を妨げない
+    return timer;
   }
 
   /**
@@ -76,15 +93,12 @@ export class ImageSetBuffer {
   add(setId: string, total: number, image: BufferedImage, ctx: ImageSetFlushContext): boolean {
     let set = this.pending.get(setId);
     if (!set) {
-      set = {
-        ctx,
-        total,
-        images: [],
-        // ★ timeout 部分 flush。unref でプロセス終了を妨げない
-        timer: setTimeout(() => this.flush(setId, 'timeout'), this.flushDelayMs),
-      };
-      set.timer.unref?.();
+      const firstAt = Date.now();
+      set = { ctx, total, images: [], firstAt, timer: this.arm(setId, firstAt) };
       this.pending.set(setId, set);
+    } else {
+      clearTimeout(set.timer);                       // ★ #552 届くたびに張り直す
+      set.timer = this.arm(setId, set.firstAt);
     }
     set.images.push(image);
 

@@ -120,4 +120,34 @@ describe('ImageSetBuffer', () => {
     expect(onFlush).toHaveBeenCalledTimes(1);
     // unhandled rejection にならないこと (= 到達すれば OK、jest が unhandled を検知したら fail する)
   });
+  /**
+   * #552 待ち時間は「最後の 1 枚から」。以前は最初の 1 枚から固定で、届くのが遅い日は 1 つのアルバムが 2〜7 投稿に割れた
+   *   (10-04 は 10 枚が 7 投稿。本番の到着間隔は遅い日で 3〜60 秒)
+   */
+  test('★ #552 画像が届くたびに待ち時間を張り直す (間隔が空いても 1 投稿にまとまる)', async () => {
+    const onFlush = jest.fn();
+    const buf = new ImageSetBuffer({ flushDelayMs: 60, maxWaitMs: 10_000, onFlush });
+    buf.add('set-slow', 3, mkImage(1, 'a.jpg'), CTX);
+    await new Promise((r) => setTimeout(r, 40));
+    buf.add('set-slow', 3, mkImage(2, 'b.jpg'), CTX);   // 最初から 40ms: 張り直し
+    await new Promise((r) => setTimeout(r, 40));        // 最初から 80ms (> 60ms) でも、最後から 40ms
+    expect(onFlush).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(onFlush).toHaveBeenCalledTimes(1);
+    const [, images] = onFlush.mock.calls[0] as [ImageSetFlushContext, BufferedImage[]];
+    expect(images.map((i) => i.index)).toEqual([1, 2]);
+  });
+
+  test('★ #552 届き続けても、最初の 1 枚から maxWaitMs で打ち切る', async () => {
+    const onFlush = jest.fn();
+    const buf = new ImageSetBuffer({ flushDelayMs: 60, maxWaitMs: 120, onFlush });
+    buf.add('set-drip', 10, mkImage(1, 'a.jpg'), CTX);
+    for (let i = 2; i <= 4; i++) {
+      await new Promise((r) => setTimeout(r, 40));
+      buf.add('set-drip', 10, mkImage(i, `${i}.jpg`), CTX);
+    }
+    // 最初から約 120ms。最後から 0ms だが、上限で打ち切られている
+    await new Promise((r) => setTimeout(r, 30));
+    expect(onFlush).toHaveBeenCalledTimes(1);
+  });
 });

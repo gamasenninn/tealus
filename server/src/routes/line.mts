@@ -31,7 +31,7 @@ import {
   postLocationToTealus,
 } from '../services/lineMessageBridge.mts';
 import type { LineSenderContext } from '../services/lineMessageBridge.mts';
-import { ImageSetBuffer, DEFAULT_FLUSH_DELAY_MS } from '../services/lineImageSetBuffer.mts';
+import { ImageSetBuffer, DEFAULT_FLUSH_DELAY_MS, DEFAULT_MAX_WAIT_MS } from '../services/lineImageSetBuffer.mts';
 import { loadGroupToRoomMap } from '../services/lineGroupMappings.mts';
 import { upsertGroupEntry, readGroupName } from '../services/lineGroupCatalog.mts';
 import { getMemberDisplayName } from '../services/lineMemberCatalog.mts';
@@ -150,9 +150,11 @@ const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../
 
 // ★ #353: imageSet 再構成バッファ (= プロセスに 1 個)。LINE の複数画像同時送信は
 // 画像ごと別 webhook + 順不同で届くため、imageSet.id 単位で貯めて 1 メッセージに束ねる。
-// total 未達でも LINE_IMAGESET_FLUSH_MS (既定 15s) で部分 flush = 欠落しても止まらない。
+// total 未達でも、最後の 1 枚から LINE_IMAGESET_FLUSH_MS (既定 60s)・最初から LINE_IMAGESET_MAX_WAIT_MS (既定 5 分) で
+// 部分 flush = 欠落しても止まらない。★ #552 以前は最初の 1 枚から 15s 固定で、遅い日はアルバムが割れた
 const imageSetBuffer = new ImageSetBuffer({
   flushDelayMs: Number(process.env.LINE_IMAGESET_FLUSH_MS) || DEFAULT_FLUSH_DELAY_MS,
+  maxWaitMs: Number(process.env.LINE_IMAGESET_MAX_WAIT_MS) || DEFAULT_MAX_WAIT_MS,
   onFlush: async (ctx, images) => {
     const { message } = await postImagesToTealus({
       roomId: ctx.roomId,
