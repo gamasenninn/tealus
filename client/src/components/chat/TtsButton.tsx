@@ -5,6 +5,7 @@ import { notify } from '../../stores/confirmStore';
 import * as browserTts from '../../services/browserTts';
 import { getConfig } from '../../services/clientConfig';
 import { playTtsSrc } from '../../services/ttsAudioPlayer';
+import { unlockAudio } from '../../services/audioContext';
 
 // 個人TTS再生のシングルトン（aivis-cloud 経路: 同時再生防止、最後に押したものが優先）
 let currentTtsAudio: HTMLAudioElement | null = null;
@@ -39,6 +40,7 @@ function TtsButton({ text, roomId }: TtsButtonProps) {
     e.preventDefault();
     e.stopPropagation();
     if (!text || busyRef.current) return;
+    unlockAudio();   // ★ #562 タップの中で (合成を待つ前に) 動かし始める。iPhone で音量ブーストの経路が無音にならないように
 
     if (provider === 'browser') {
       // 既に何か発話中なら停止 (トグル off)。何も再生されていなければ新規発話。

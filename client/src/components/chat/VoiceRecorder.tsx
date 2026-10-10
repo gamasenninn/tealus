@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import './VoiceRecorder.css';
+import { getSharedAudioContext } from '../../services/audioContext';
 
 interface VoiceRecorderProps {
   stream: MediaStream;
@@ -31,7 +32,8 @@ function VoiceRecorder({ stream, onSend, onCancel, isTransceiverActive }: VoiceR
     }
 
     // Audio context for level meter
-    const audioCtx = new AudioContext();
+    // ★ #562 画面で 1 つの AudioContext (MessageInput がマイクのタップ直後に unlockAudio() 済み)。iPhone で止まったままにしない
+    const audioCtx = getSharedAudioContext()!;
     audioCtxRef.current = audioCtx;
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
@@ -77,7 +79,7 @@ function VoiceRecorder({ stream, onSend, onCancel, isTransceiverActive }: VoiceR
         recorder.onstop = () => {};
         recorder.stop();
       }
-      audioCtx.close().catch(() => {});
+      source.disconnect();   // ★ #562 共有なので close しない
       if (wakeLock) wakeLock.release().catch(() => {});
       recorderRef.current = null;
     };

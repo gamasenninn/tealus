@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useRoomStore } from '../stores/roomStore';
 import { useCapabilityStore } from '../stores/capabilityStore';
 import type { RoomMember } from '../types';
+import { getSharedAudioContext, unlockAudio } from '../services/audioContext';
 
 export type TransceiverState = 'idle' | 'connecting' | 'connected' | 'producing' | 'error';
 
@@ -121,8 +122,9 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
   const startAudioLevelMonitor = useCallback((stream: MediaStream, peerId: string) => {
     try {
       if (!audioCtxRef.current) {
-        audioCtxRef.current = new AudioContext();
+        audioCtxRef.current = getSharedAudioContext();   // ★ #562 共有 (接続のタップで unlockAudio() 済み)
       }
+      if (!audioCtxRef.current) return;
       const source = audioCtxRef.current.createMediaStreamSource(stream);
       const analyser = audioCtxRef.current.createAnalyser();
       analyser.fftSize = 256;
@@ -205,6 +207,7 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
 
   // --- 接続 ---
   const connect = useCallback(async () => {
+    unlockAudio();   // ★ #562 接続のタップの中で (await より前に) 動かし始める
     if (!roomId || !token) {
       console.debug('[transceiver] connect: skip (roomId/token missing)', { roomId: !!roomId, token: !!token });
       return;
@@ -361,7 +364,7 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
       try { peer.audioEl.pause(); peer.consumer.close(); } catch {}
     }
     consumersRef.current.clear();
-    if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} audioCtxRef.current = null; }
+    audioCtxRef.current = null;   // ★ #562 共有なので close しない (受信側の source は相手ごとに作り直す)
     deviceRef.current = null;
     handlersRef.current = [];
   }, [stopAudioLevelMonitor]);

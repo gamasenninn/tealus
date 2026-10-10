@@ -13,20 +13,10 @@
 import { TTS_VOLUME_BOOST } from '../constants/ui';
 import { useTtsStore } from '../stores/ttsStore';
 import { notifyAudioStarted, subscribeAudioStarted } from '../utils/audioExclusive';
+import { getSharedAudioContext } from './audioContext';
 
-let audioContext: AudioContext | null = null;
-function getAudioContext(): AudioContext | null {
-  if (!audioContext) {
-    const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return null;
-    audioContext = new Ctx();
-  }
-  // user gesture 後 resume が必要なケースに備える
-  if (audioContext.state === 'suspended') {
-    audioContext.resume().catch(() => {});
-  }
-  return audioContext;
-}
+// ★ #562 AudioContext は画面で 1 つ (iPhone はタップの中で作らないと止まったまま)。TtsButton が押した直後に unlockAudio() する
+const getAudioContext = getSharedAudioContext;
 
 // #243: 同時再生される TTS は 1 つに限定。新規再生時に以前の audio を stop し、
 // store に isPlaying を反映する。stop button (TtsStopButton) はこの state を見る。

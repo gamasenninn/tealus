@@ -22,6 +22,7 @@ import { FILE_SIZE_LIMITS, TYPING_DEBOUNCE, UPLOAD_DELAY, ATTACH_ACCEPT } from '
 import { Mic, ChevronDown } from 'lucide-react';
 import type { Stamp } from '../../types';
 import './MessageInput.css';
+import { unlockAudio } from '../../services/audioContext';
 
 /** useTransceiver の返す制御 object のうち MessageInput が使う部分 */
 interface TransceiverControls {
@@ -379,6 +380,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   };
 
   const handleMicClick = async () => {
+    unlockAudio();   // ★ #562 タップの中で (await より前に) 音量ゲージの AudioContext を動かし始める (iPhone)
     // 事前チェック: insecure context (HTTPS 未対応) では mediaDevices が undefined になる
     if (!window.isSecureContext || !navigator.mediaDevices) {
       setUploadError('マイクの利用には HTTPS 接続が必要です。HTTPS で再度アクセスするか、管理者に確認してください。');
