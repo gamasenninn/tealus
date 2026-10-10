@@ -122,7 +122,7 @@ curl http://localhost:3000/rtc/health
 
 ### LAN 内通話のみ
 
-通常 OS 内蔵 firewall で UDP/TCP の **動的 port range** を許可する必要がある。mediasoup は **40000-49999** を default で使う (`rtcMinPort` / `rtcMaxPort` で変更可能)。
+通常 OS 内蔵 firewall で UDP/TCP の **動的 port range** を許可する必要がある。mediasoup は **10000-10100** を使う (`rtc-server/server.mts` の `rtcMinPort` / `rtcMaxPort` で固定。環境変数では変えられない)。
 
 #### Windows
 
@@ -136,8 +136,8 @@ curl http://localhost:3000/rtc/health
 #### Linux (ufw)
 
 ```bash
-sudo ufw allow 40000:49999/udp
-sudo ufw allow 40000:49999/tcp
+sudo ufw allow 10000:10100/udp
+sudo ufw allow 10000:10100/tcp
 ```
 
 #### Mac
@@ -146,7 +146,7 @@ sudo ufw allow 40000:49999/tcp
 
 ### 外部 access (NAT 越え)
 
-ルーターで **40000-49999/UDP** + **40000-49999/TCP** を rtc-server マシンに forward。
+ルーターで **10000-10100/UDP** + **10000-10100/TCP** を rtc-server マシンに forward。
 `PUBLIC_IP` を `.env` で設定 (固定 IP / DDNS の値)。
 
 > SSL 証明書 / TURN server は別議論。今は LAN 内 + 限定的 NAT 越えのみ想定。

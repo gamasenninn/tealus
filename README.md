@@ -377,7 +377,7 @@ rtc-server は `http://localhost:3100` で起動します。**ブラウザでマ
 
 > **Browser TTS だけ使う場合は rtc-server は不要**。`AIVIS_API_KEY` を設定しないと自動で `TTS_PROVIDER=browser` が選ばれ、各端末ローカルで合成されます（mediasoup 経由しない）。
 >
-> mediasoup の本番運用では UDP ポート範囲（デフォルト 40000-49999）の開放と、NAT 越え用に `PUBLIC_IP` の指定が必要です。
+> mediasoup の本番運用では UDP ポート範囲（デフォルト 10000-10100）の開放と、NAT 越え用に `PUBLIC_IP` の指定が必要です。
 
 #### rtc-server の有無で何が動くか
 
@@ -883,7 +883,7 @@ docker compose -f docker-compose.full.yml -f docker-compose.rtc.yml up -d
 
 **重要**:
 - **Linux ホスト限定** (mediasoup の host network 制約)
-- UDP ポート範囲 (default 40000-49999) を host のファイアウォールで開放
+- UDP ポート範囲 (default 10000-10100) を host のファイアウォールで開放
 - NAT 越え時は `rtc-server/.env` で `ANNOUNCED_IP` / `PUBLIC_IP` を設定
 
 #### 永続データとアップデート
@@ -994,7 +994,7 @@ server {
 }
 ```
 
-**mediasoup の追加要件**: rtc-server は WebSocket signaling とは別に、**音声/映像 RTP のため UDP ポートを直接開放** する必要があります（デフォルト範囲 40000-49999）。クライアントからこの UDP 範囲がサーバに到達できるよう、ファイアウォール / NAT を設定してください。NAT 越え時は `rtc-server/.env` の `PUBLIC_IP` にグローバル IP を設定。
+**mediasoup の追加要件**: rtc-server は WebSocket signaling とは別に、**音声/映像 RTP のため UDP ポートを直接開放** する必要があります（デフォルト範囲 10000-10100）。クライアントからこの UDP 範囲がサーバに到達できるよう、ファイアウォール / NAT を設定してください。NAT 越え時は `rtc-server/.env` の `PUBLIC_IP` にグローバル IP を設定。
 
 > server (`/api/`, `/agent-api/`, `/rtc/`, `/system/`) は内部で各サービスへ自動 proxy されるため、Nginx は **server (port 3000) に集約** すれば動きます。agent-server (4000) / rtc-server (3100) を直接外部公開する必要はありません。
 
