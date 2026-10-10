@@ -121,9 +121,14 @@ router.post('/all', requireMember, async (req: Request, res: Response) => {
         `INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at)
          VALUES ($1, $2, $3, $4::timestamptz + interval '1 millisecond')
          ON CONFLICT (room_id, user_id)
+         -- ★ #553 ほかの 3 つの口と同じく新しいほうを残す (別の端末がより先まで読んでいたら戻さない)
          DO UPDATE SET
-           last_read_message_id = EXCLUDED.last_read_message_id,
-           last_read_at = EXCLUDED.last_read_at`,
+           last_read_message_id = CASE
+             WHEN room_read_cursors.last_read_at < EXCLUDED.last_read_at
+             THEN EXCLUDED.last_read_message_id
+             ELSE room_read_cursors.last_read_message_id
+           END,
+           last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
         [roomId, userId, latest.rows[0].id, latest.rows[0].created_at]
       );
     }
