@@ -24,6 +24,7 @@ import * as deepRegistry from './deepRegistry.mts';
 import * as config from '../config.mts';
 import { buildLightV2McpConfig } from './lightV2.mts';
 import { detectCodexAuthError, buildCodexErrorUserMessage } from '../lib/codexAuthError.mts';
+import { agentChildEnv } from '../lib/childEnv.mts';
 
 /** MCP server 定義 (deep.mts の createDeepMcpConfig 同 form) */
 export interface McpServerDef {
@@ -248,7 +249,8 @@ export function buildCodexExecEnv({ codexHomePath, openaiApiKey, useSubscription
   useSubscription: boolean;
   baseEnv?: NodeJS.ProcessEnv;
 }): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...(baseEnv || process.env), CODEX_HOME: codexHomePath };
+  // ★ #565 元にするのは許可した一覧だけ (agent-server の鍵をシェルに渡さない)。API キーは下で明示して足す
+  const env: NodeJS.ProcessEnv = { ...(baseEnv || agentChildEnv()), CODEX_HOME: codexHomePath };
   if (useSubscription) {
     delete env.OPENAI_API_KEY;
   } else if (openaiApiKey) {

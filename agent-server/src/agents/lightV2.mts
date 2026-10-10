@@ -38,6 +38,7 @@ import {
 import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
 import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
+import { agentChildEnv } from '../lib/childEnv.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -95,6 +96,19 @@ export function formatLightV2StartupLog(args: {
   const model = args.model || '(未設定)';
   return `[LightV2] auth=${args.apiKey ? 'API key' : 'subscription'} `
     + `mcp_servers=${args.mcpServers.join(',')} model=${model}`;
+}
+
+/**
+ * codex の起動オプション。★ #565 子プロセスへ渡す環境変数は許可した一覧だけ (agentChildEnv)。
+ *   API キーは apiKey (codex-sdk が CODEX_API_KEY として足す)。subscription なら ~/.codex/auth.json (USERPROFILE / HOME で届く)
+ */
+export function buildLightV2CodexOptions(mcp_servers: Record<string, CodexConfigObject>): CodexOptions {
+  const codexOpts: CodexOptions = { config: { mcp_servers }, env: agentChildEnv() };
+  const useSubscription = config.LIGHTV2_AUTH === 'subscription';
+  if (!useSubscription && config.OPENAI_API_KEY) {
+    codexOpts.apiKey = config.OPENAI_API_KEY;
+  }
+  return codexOpts;
 }
 
 export function buildLightV2McpConfig(workspacePath: string | undefined): Record<string, CodexConfigObject> {
@@ -244,11 +258,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     // Light v1 / Router は依然 OPENAI_API_KEY を使うため、env 自体は unset しない。
     // Light v2 だけ subscription に向けるには LIGHTV2_AUTH=subscription を設定。
     const mcp_servers = buildLightV2McpConfig(workspacePath);
-    const codexOpts: CodexOptions = { config: { mcp_servers } };
-    const useSubscription = config.LIGHTV2_AUTH === 'subscription';
-    if (!useSubscription && config.OPENAI_API_KEY) {
-      codexOpts.apiKey = config.OPENAI_API_KEY;
-    }
+    const codexOpts = buildLightV2CodexOptions(mcp_servers);
     const codex = new Codex(codexOpts);
     // ★ model は 1 か所で決めて、ログと thread の両方に同じ変数を使う (2026-09-10)。
     //   2 回読むと片方だけ変わって計器が嘘をつく。

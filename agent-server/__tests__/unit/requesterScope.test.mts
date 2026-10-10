@@ -144,3 +144,21 @@ describe('中継は外からの要求を受けない (#564)', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('Light v2 の codex に渡す環境変数 (#565)', () => {
+  it('★ 鍵を含まない一覧を渡し、API キーは apiKey で別に渡す', () => {
+    const { buildLightV2CodexOptions } = require('../../src/agents/lightV2.mts') as typeof import('../../src/agents/lightV2.mts');
+    const saved = { ...process.env };
+    Object.assign(process.env, { TEALUS_BOT_PASS: 'p', DB_PASSWORD: 'd' });
+    try {
+      const opts = buildLightV2CodexOptions({}) as { env?: Record<string, string> };
+      expect(opts.env).toBeDefined();
+      expect(opts.env).not.toHaveProperty('TEALUS_BOT_PASS');
+      expect(opts.env).not.toHaveProperty('DB_PASSWORD');
+      expect(opts.env).not.toHaveProperty('OPENAI_API_KEY');
+    } finally {
+      for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+      Object.assign(process.env, saved);
+    }
+  });
+});
