@@ -50,6 +50,12 @@ describe('notifyGatewayBye — agent-server への一段渡し (#368)', () => {
     expect(calls[0].url).toBe('http://localhost:4321/cc-queue/gateway-bye');
   });
 
+  it('★ #556 baseUrl を渡したら、そこへ送る (別コンテナの agent-server)', async () => {
+    const fetchImpl = jest.fn(async () => new Response(JSON.stringify({ notified: 0 }), { status: 200 }));
+    await notifyGatewayBye({ baseUrl: 'http://agent-server:4000', secret: SECRET, expectBackMs: 1000, fetchImpl });
+    expect(fetchImpl.mock.calls[0][0]).toBe('http://agent-server:4000/cc-queue/gateway-bye');
+  });
+
   test('★ 非 2xx は throw する (呼び出し側が warn に出せるように)', async () => {
     const fetchImpl = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
     await expect(notifyGatewayBye({ port: 4000, secret: SECRET, expectBackMs: 30000, fetchImpl }))

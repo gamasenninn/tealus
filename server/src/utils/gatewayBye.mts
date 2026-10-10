@@ -27,8 +27,10 @@ const TOKEN_TTL_SEC = 60;
 const DEFAULT_TIMEOUT_MS = 1000;
 
 export interface GatewayByeOptions {
-  /** agent-server の待ち受けポート (本番は process.env.AGENT_PORT || 4000)。 */
-  port: number | string;
+  /** agent-server の待ち受けポート (baseUrl が無いときだけ使う。localhost + port)。 */
+  port?: number | string;
+  /** ★ #556 agent-server の宛先 (本番は upstream.mts の agentUrl())。別コンテナでも届くように */
+  baseUrl?: string;
   /** server と agent-server で共有している JWT_SECRET。 */
   secret: string;
   /** 「戻ってくるまでの見込み」。★ 値を知っているのは停止する側なので、こちらから渡す。 */
@@ -49,6 +51,7 @@ export interface GatewayByeOptions {
  */
 export async function notifyGatewayBye(opts: GatewayByeOptions): Promise<number> {
   const { port, secret, expectBackMs } = opts;
+  const base = opts.baseUrl ?? `http://localhost:${port ?? 4000}`;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
 
@@ -57,7 +60,7 @@ export async function notifyGatewayBye(opts: GatewayByeOptions): Promise<number>
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(`http://localhost:${port}/cc-queue/gateway-bye`, {
+    const res = await fetchImpl(`${base}/cc-queue/gateway-bye`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ expect_back_ms: expectBackMs }),

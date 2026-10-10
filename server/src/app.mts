@@ -50,6 +50,7 @@ import { mediaStatic } from './utils/mediaStatic.mts';
 import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 import { router as clientErrorRoutes } from './routes/clientErrors.mts';
+import { agentUrl, rtcUrl, mcpHttpUrl } from './lib/upstream.mts';
 
 // 6/9 DoS crash fix: defense in depth global safety net
 // (= 個別 async handler の try/catch 漏れに対する Node.js default exit 抑止、
@@ -133,7 +134,7 @@ app.use('/agent-api', (req, res, next) => {
 });
 
 app.use('/agent-api', createProxyMiddleware({
-  target: `http://localhost:${process.env.AGENT_PORT || 4000}`,
+  target: agentUrl(),   // ★ #556 AGENT_URL で別コンテナにも向けられる
   pathRewrite: { '^/agent-api': '' },
   changeOrigin: true,
   plugins: [errorResponsePlugin],
@@ -195,7 +196,7 @@ app.use('/agent-api', createProxyMiddleware({
 // tealus-mcp は /mcp namespace に揃えているため逆方向の rewrite が必要。
 // 認証は pass-through、tealus-mcp 側で JWT_SECRET 共有検証 (fail-fast 401)。
 app.use('/mcp', createProxyMiddleware({
-  target: `http://localhost:${process.env.MCP_HTTP_PORT || 3200}`,
+  target: mcpHttpUrl(),   // ★ #556
   changeOrigin: true,
   pathRewrite: (path) => '/mcp' + path,
 }));
@@ -254,7 +255,7 @@ app.get('/api/health', (req, res) => {
 
 // RTC Server proxy（mediasoup 実験サーバーに転送）
 const rtcProxy = createProxyMiddleware({
-  target: `http://localhost:${process.env.RTC_PORT || 3100}`,
+  target: rtcUrl(),   // ★ #556
   pathRewrite: { '^/rtc': '' },
   changeOrigin: true,
 });
@@ -382,7 +383,7 @@ if (import.meta.main) {
     // ★ 予告は「中継が生きているうち」に通す。接続を切ってからでは届かない
     notifyGateway: async () => {
       const notified = await notifyGatewayBye({
-        port: process.env.AGENT_PORT || 4000,
+        baseUrl: agentUrl(),   // ★ #556
         secret: JWT_SECRET,
         expectBackMs: parseInt(process.env.CC_GATEWAY_EXPECT_BACK_MS || '', 10) || 30000,
       });

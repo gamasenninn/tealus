@@ -13,16 +13,16 @@
 import express from 'express';
 export const router = express.Router();
 import * as capabilityWatcher from '../services/capabilityWatcher.mts';
+import { agentUrl } from '../lib/upstream.mts';
 
 const AGENT_FETCH_TIMEOUT_MS = 2000;
 
 router.get('/', async (req, res) => {
-  const agentPort = process.env.AGENT_PORT || 4000;
   let ttsProvider = 'browser';
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), AGENT_FETCH_TIMEOUT_MS);
-    const r = await fetch(`http://localhost:${agentPort}/public-config`, { signal: ctrl.signal });
+    const r = await fetch(`${agentUrl()}/public-config`, { signal: ctrl.signal });   // ★ #556
     clearTimeout(timer);
     if (r.ok) {
       const body = await r.json() as { tts_provider?: unknown };

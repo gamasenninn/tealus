@@ -12,6 +12,7 @@
  * /api/config からは getState() で現在値が読める。
  */
 import { logger } from '../utils/logger.mts';
+import { rtcUrl } from '../lib/upstream.mts';
 
 /** emit だけ使う最小の Socket.IO server 型 (テストの mock も満たせる構造的型) */
 interface EmitTarget {
@@ -28,11 +29,10 @@ let _io: EmitTarget | null = null;
 let _timer: NodeJS.Timeout | null = null;
 
 async function ping(): Promise<boolean> {
-  const port = process.env.RTC_PORT || 3100;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS);
-    const r = await fetch(`http://localhost:${port}/health`, { signal: ctrl.signal });
+    const r = await fetch(`${rtcUrl()}/health`, { signal: ctrl.signal });   // ★ #556
     clearTimeout(t);
     return r.ok;
   } catch {

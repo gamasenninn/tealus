@@ -51,6 +51,8 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       AGENT_PORT: 4000
+      # ★ #556 agent-server は別コンテナなので、名前で呼ぶ (未設定だと localhost に向かい、/agent-api が届かない)
+      AGENT_URL: http://agent-server:4000
       RTC_PORT: 3100
       MEDIA_ROOT: /app/media
     volumes:
