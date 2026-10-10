@@ -833,7 +833,7 @@ agent-server と Claude Code が **別マシン** に居る構成では stdio (c
 
 ### Docker デプロイ（推奨）
 
-OSS 採用者向けに、`docker-compose.full.yml` 一発で **postgres + server + agent-server** が起動する構成を用意しています。Mac / Windows / Linux いずれでも動作。NAS の Container UI (Synology / QNAP / UGREEN) からも `docker-compose.full.yml` の中身を貼り付けるだけで起動できます。
+OSS 採用者向けに、`docker-compose.full.yml` 一発で **postgres + server + agent-server** が起動する構成を用意しています。Mac / Windows / Linux いずれでも動作。NAS の Container UI (Synology / QNAP / UGREEN) からも使えますが、イメージは公開しておらず**リポジトリのソースから作る** (`build:`) ので、NAS 上にリポジトリを置いてから `docker-compose.full.yml` を指定してください。
 
 #### 構成 1: 通話なし（推奨デフォルト、すべての OS で動作）
 
@@ -898,9 +898,8 @@ docker compose -f docker-compose.full.yml -f docker-compose.rtc.yml up -d
 
 ```bash
 git pull
-docker compose -f docker-compose.full.yml build
-docker compose -f docker-compose.full.yml up -d
-# 起動時にマイグレーション (冪等) が自動実行される
+docker compose -f docker-compose.full.yml up -d --build   # ★ git pull だけではイメージは古いまま。必ず作り直す
+# 起動時にマイグレーション (適用済みは飛ばす) が自動実行される
 ```
 
 #### 開発者向け補足

@@ -1,0 +1,43 @@
+# #558 Docker のイメージに入れないもの (build context はリポジトリ直下)。
+# ★ 以前はこのファイルが無く、Dockerfile の COPY server/ などで手元の .env (鍵) や会社の設定までイメージに入っていた。
+# ★ .gitignore で外しているもの (鍵・会社のデータ) はここでも外す。足したら server/__tests__/unit/dockerignore.test.mts も
+
+# 手元の依存とビルド結果 (イメージの中で npm ci / build し直す。Windows の部品を Linux に持ち込まない)
+**/node_modules
+**/dist
+rtc-server/public/bundle.js
+**/coverage
+
+# 鍵
+**/.env
+**/.env.*
+!**/.env.example
+.mcp.json
+scripts/.env.trx
+
+# 会社の設定・データ (.gitignore と同じ)
+server/config/dictionary.local.ttl
+server/config/line-groups.json
+server/config/line-group-mappings.json
+server/config/line-members.json
+server/config/room-triggers.json
+server/config/mining_report.json
+server/config/transcription_guideline*.json
+!server/config/transcription_guideline.example.json
+agent-server/mcp_config.json
+agent-server/config/system_prompt.md
+agent-server/agent-workspaces
+media
+pgdata
+
+# 動かすのに要らないもの
+.git
+**/logs
+**/*.log
+report
+screenshot
+logo
+docs/presentation
+.claude
+.vscode
+.idea

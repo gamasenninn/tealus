@@ -10,6 +10,15 @@
 
 Tealus はサーバをビルドレス実行（Node の型ストリッピング）するため、**サーバ側のビルドは不要**です。更新で必要なのは「コード取得 → 依存更新 → DB migration → クライアント再ビルド → 再起動」の 5 ステップです。
 
+> ★ **`docker-compose.full.yml` で動かしている場合は、下の 2〜5 の代わりに次の 2 行です**（[#558](https://github.com/gamasenninn/tealus/issues/558)）。
+> Tealus のイメージは公開しておらず、手元のソースから作ります。**`git pull` だけではイメージは古いまま**なので、必ず作り直してください。
+> migration は server の起動時に先に走ります。
+>
+> ```bash
+> git pull
+> docker compose -f docker-compose.full.yml up -d --build
+> ```
+
 ### 0. 事前準備（推奨）
 
 ```bash
