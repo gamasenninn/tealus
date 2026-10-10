@@ -80,6 +80,14 @@ describe('migrate — 台帳 (#406)', () => {
     await expect(migrate(CFG, silent)).rejects.toThrow(/baseline/);
   });
 
+  test('★ #557 止まったときの案内に「Docker の初回起動で作った DB」の場合がある', async () => {
+    await migrate(CFG, silent);
+    const p = new pg.Pool(CFG);
+    await p.query('DROP TABLE schema_migrations');
+    await p.end();
+    await expect(migrate(CFG, silent)).rejects.toThrow(/Docker の初回起動/);
+  });
+
   test('★ --baseline は記録するだけで、実行しない', async () => {
     await migrate(CFG, silent);
     const p = new pg.Pool(CFG);

@@ -275,9 +275,9 @@ DOCUMENT_VISION_MAX_PAGES=20               # cost 保護、超過は vision skip
 npm run migrate
 ```
 
-> **初回 Docker 起動時は自動実行される**: `docker-compose.yml` が migrations ディレクトリを PostgreSQL の `/docker-entrypoint-initdb.d` にマウントしているため、**Postgres コンテナの初回起動時にすべての migration が自動適用** されます。したがって初回は `npm run migrate` を省略して直接サーバーを起動しても OK です。
+> **初回も `npm run migrate` を実行してください。** 適用したファイルは台帳 (`schema_migrations`) に記録され、次からは未適用のものだけが流れます（何度流しても安全）。`docker-compose.full.yml` では server の起動時に migrate が先に走ります。
 >
-> 2 回目以降（新しい migration が追加された時）は `npm run migrate` を手動実行してください。migrations は冪等に設計されているため、再実行しても問題は起きません。
+> ★ 2026-10-10 より前の `docker-compose.yml` は Postgres の初回起動で migration を流していて、台帳が作られませんでした（[#557](https://github.com/gamasenninn/tealus/issues/557)）。その DB で `npm run migrate` が「schema_migrations が無いのに…」と止まったら、案内に出る「Docker の初回起動で…作った DB なら」の手順に従ってください。
 
 > **PostgreSQL extension 要件 (v0.2.0 以降)**: migration 021 (`pg_trgm` GIN index、メッセージ全文検索の高速化に使用) が `pg_trgm` extension を有効化します。Tealus 同梱の Docker Postgres image (`docker-compose.yml`) では自動有効化されるため追加作業不要です。**managed PostgreSQL** (Supabase / RDS / Heroku Postgres / Cloud SQL 等) を使う場合は事前に `CREATE EXTENSION pg_trgm` 実行可能な権限 (SUPERUSER 相当) を確認してください。
 

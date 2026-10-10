@@ -54,7 +54,7 @@ npm run migrate
 - migration は **`server/.env` の DB 接続情報**を使います（先に `.env` があること）。
 - 適用済みのファイルは台帳 (`schema_migrations`) に記録され、**未適用のものだけ**が流れます（[#406](https://github.com/gamasenninn/tealus/issues/406)）。何度流しても安全です。
 - `N 件の migration を適用しました。` か `適用済みです` が出れば成功。
-- ★★ **台帳の無い DB (v0.9.0 以前) では一度止まります。** 案内に出る `--baseline` は「最新まで当ててある DB」用です。**v0.9.0 から上げるなら `npm run migrate -- --baseline-through 026_message_form_type.sql` → `npm run migrate` の順に**（[#500](https://github.com/gamasenninn/tealus/issues/500)、下の「→ v0.10.0」）。
+- ★★ **台帳の無い DB (v0.9.0 以前、または 2026-10-10 より前の `docker-compose.yml` の初回起動で作った DB [#557](https://github.com/gamasenninn/tealus/issues/557)) では一度止まります。** Docker で作った DB は、止まったときの案内の「Docker の初回起動で…作った DB なら」に従ってください。 案内に出る `--baseline` は「最新まで当ててある DB」用です。**v0.9.0 から上げるなら `npm run migrate -- --baseline-through 026_message_form_type.sql` → `npm run migrate` の順に**（[#500](https://github.com/gamasenninn/tealus/issues/500)、下の「→ v0.10.0」）。
 
 ### 4. ★ クライアントを本番ビルド
 

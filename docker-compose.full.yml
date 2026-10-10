@@ -28,7 +28,8 @@ services:
       POSTGRES_DB: tealus
     volumes:
       - pgdata-prod:/var/lib/postgresql/data
-      - ./server/src/db/migrations:/docker-entrypoint-initdb.d
+      # ★ #557 migrations は initdb で流さない (台帳 schema_migrations が作られず、次の npm run migrate が止まった)。
+      #   初回も npm run migrate で入れる (full は server の起動時に migrate が先に走る)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tealus"]
       interval: 5s

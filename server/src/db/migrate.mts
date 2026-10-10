@@ -82,6 +82,10 @@ export async function migrate(config?: pg.PoolConfig, opts: MigrateOptions = {})
         + `  v0.9.0 以前から上げるなら:  npm run migrate -- --baseline-through 026_message_form_type.sql\n`
         + `                              (026 までを「適用済み」と記録。続けて npm run migrate で 027 以降が流れます)\n`
         + `  最新まで当ててある DB なら:  npm run migrate -- --baseline   (全ファイルを「適用済み」として記録するだけ)\n`
+        // ★ #557 2026-10-10 より前の docker-compose.yml は Postgres の初回起動で migrations を流し、台帳を作らなかった
+        + `  Docker の初回起動で migrations を流して作った DB なら (10-10 より前の docker-compose.yml):\n`
+        + `                              作ってから git pull していなければ  npm run migrate -- --baseline\n`
+        + `                              pull していたら、作ったときの最後のファイル名で  npm run migrate -- --baseline-through <ファイル名>\n`
         + `  作り直すなら:                DB を空にしてから npm run migrate`,
       );
     }
