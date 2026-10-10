@@ -17,16 +17,24 @@
 FROM node:24-alpine AS client-builder
 WORKDIR /build
 COPY client/package*.json ./client/
-RUN cd client && npm ci
+# ★ #558 client も "postinstall": "vite build" を持つ (dashboard と同じ理由で、ここでは走らせない)
+RUN cd client && npm ci --ignore-scripts
 COPY client/ ./client/
+# ★ #558 client/tsconfig.json が ../tsconfig.base.json を extends している (無いとビルドが落ちる)
+COPY tsconfig.base.json ./
 RUN cd client && npm run build
 
 # --- Stage 2: dashboard build ---
 FROM node:24-alpine AS dashboard-builder
 WORKDIR /build
 COPY dashboard/package*.json ./dashboard/
-RUN cd dashboard && npm ci
+# ★ #558 dashboard の package.json には "postinstall": "vite build" がある (手元の npm install で管理画面を作るため)。
+#   ここではまだソースをコピーしていないので、そのまま npm ci すると vite build が失敗してイメージが作れなかった。
+#   作るのは下の npm run build で行う
+RUN cd dashboard && npm ci --ignore-scripts
 COPY dashboard/ ./dashboard/
+# ★ #558 dashboard/tsconfig.json が ../tsconfig.base.json を extends している (無いとビルドが落ちる)
+COPY tsconfig.base.json ./
 RUN cd dashboard && npm run build
 
 # --- Stage 3: runtime ---

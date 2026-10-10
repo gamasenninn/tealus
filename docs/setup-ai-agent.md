@@ -159,6 +159,9 @@ agent-server は server から **Webhook イベント** (POST `/webhook/tealus`)
 
 4. **「作成」** をクリック → 一覧に追加されたことを確認
 
+> ★ **`docker-compose.full.yml` で動かしている場合、URL は `http://agent-server:4000/webhook/tealus`**（[#558](https://github.com/gamasenninn/tealus/issues/558)）。
+> 本体と agent-server は別のコンテナなので、`localhost` では届きません (コンテナの名前で呼びます)。
+
 ### 4-2. テスト送信で疎通確認
 
 webhook 一覧の作成した行で **「テスト送信」** ボタンをクリック → status `200` が返れば agent-server 側で受信成功 ✅。

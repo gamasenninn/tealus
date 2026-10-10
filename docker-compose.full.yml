@@ -77,6 +77,10 @@ services:
       # compose 内で必須の override
       AGENT_PORT: 4000
       TEALUS_API_URL: http://server:3000
+      # ★ #558 agent-server も会話の文脈を DB に直接持つ (context/sessionManager.mts)。
+      #   上書きしないと .env の DB_HOST=localhost (コンテナ自身) につなぎ、会話のたびに落ちていた
+      DB_HOST: postgres
+      DB_PORT: 5432
       RTC_PORT: 3100
       AGENT_WORKSPACE_ROOT: /app/agent-server/agent-workspaces
     volumes:

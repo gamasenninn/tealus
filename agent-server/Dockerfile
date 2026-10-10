@@ -14,6 +14,9 @@
 
 FROM node:24-alpine AS runtime
 WORKDIR /app
+# ★ #558 AI の道具 (tealus-mcp) は npx -y github:gamasenninn/tealus-mcp#… で取ってくる (lightV2 / deep / roomMcpManager)。
+#   git が無いと npm が spawn git ENOENT で落ち、Docker の中では AI が Tealus の道具を使えなかった
+RUN apk add --no-cache git
 
 # agent-server deps (production only)
 COPY agent-server/package*.json ./agent-server/
