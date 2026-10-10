@@ -5,19 +5,43 @@ import type { Request, Response } from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
+import { isGuest } from '../utils/permissions.mts';
+import { badIdMessage } from '../utils/uuid.mts';
 import { isUuid } from '../utils/uuid.mts';
 import { announceUnreadChanged } from '../services/unreadChanged.mts';
 
 export const router = express.Router({ mergeParams: true });
 
-router.use(authenticate, requireMember);
+router.use(authenticate);
+
+/**
+ * ★ #551 既読はお知らせの部屋ならメンバーでない人 (ゲストを除く) も付けられる。ホームのお知らせ (rooms.mts /announcements) と同じ決まり。
+ *   以前はメンバーだけで、ホームで見ても 403 になり、未読の点が消えなかった (14 日で 57 件)。
+ *   利用者の判断 (10-10): 部屋の「既読 N」にも数える。進められるのは公開された投稿の位置まで (res.locals.publishedOnly)
+ */
+async function requireMemberOrAnnouncementReader(req: Request, res: Response, next: () => void) {
+  if (!isUuid(req.params.id)) return res.status(400).json({ error: badIdMessage(String(req.params.id)) });
+  if (!isGuest(req.user)) {
+    try {
+      const r = await pool.query(
+        `SELECT 1 FROM rooms WHERE id = $1 AND is_announcement = true
+           AND NOT EXISTS (SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2)`,
+        [req.params.id, req.user!.id]);
+      if (r.rows.length > 0) { res.locals.publishedOnly = true; return next(); }
+    } catch (err) {
+      logger.error('Announcement read check error:', err);
+      return res.status(500).json({ error: E.SERVER_ERROR });
+    }
+  }
+  return requireMember(req, res, next);
+}
 
 /**
  * POST /api/rooms/:id/read
  * Mark messages as read (cursor-based).
  * Accepts message_ids array — advances cursor to the latest among them.
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireMemberOrAnnouncementReader, async (req: Request, res: Response) => {
   const roomId = req.params.id;
   const userId = req.user!.id;
   const { message_ids } = req.body;
@@ -31,9 +55,10 @@ router.post('/', async (req: Request, res: Response) => {
     const latestMsg = await pool.query<{ id: string; created_at: Date }>(
       `SELECT id, created_at FROM messages
        WHERE id = ANY($1::uuid[]) AND room_id = $2
+         AND ($3::boolean = false OR (is_published = true AND is_deleted = false))
        ORDER BY created_at DESC
        LIMIT 1`,
-      [message_ids.filter(isUuid), roomId]
+      [message_ids.filter(isUuid), roomId, Boolean(res.locals.publishedOnly)]
     );
 
     if (latestMsg.rows.length > 0) {
@@ -64,7 +89,7 @@ router.post('/', async (req: Request, res: Response) => {
  * POST /api/rooms/:id/read/all
  * Mark all messages in the room as read.
  */
-router.post('/all', async (req: Request, res: Response) => {
+router.post('/all', requireMember, async (req: Request, res: Response) => {
   const roomId = req.params.id;
   const userId = req.user!.id;
 
