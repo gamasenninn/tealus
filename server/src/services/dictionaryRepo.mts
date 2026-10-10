@@ -67,7 +67,14 @@ export async function upsertTerm({ term, category = 'other', reading = null, des
        description = COALESCE(EXCLUDED.description, dictionary_terms.description),
        source      = EXCLUDED.source,
        status      = EXCLUDED.status,
-       updated_at  = NOW()
+       -- ★ #547 中身が変わったときだけ進める。以前は起動のたびの organon 取り込みで全件が起動時刻になっていた
+       updated_at  = CASE
+         WHEN (dictionary_terms.category, dictionary_terms.reading, dictionary_terms.description,
+               dictionary_terms.source, dictionary_terms.status)
+              IS DISTINCT FROM
+              (EXCLUDED.category, COALESCE(EXCLUDED.reading, dictionary_terms.reading),
+               COALESCE(EXCLUDED.description, dictionary_terms.description), EXCLUDED.source, EXCLUDED.status)
+         THEN NOW() ELSE dictionary_terms.updated_at END
      WHERE dictionary_terms.status <> 'rejected'
      RETURNING *`,
     [term, category, reading, description, source, status],
@@ -104,12 +111,13 @@ export async function upsertAlias({ termId, alias, source = 'auto', count = 1, s
      --   「書いていないこと」で成り立っている約束なので、足すと静かに壊れる
      --   (人が足した alias が organon 由来に見えるようになる)。
      --   2026-09-01 に実機で依存を確認: canon に 大阪 が入り pull が manual 行に当たったが、
-     --   source='manual' / count=7 のまま updated_at だけが動いた。回帰は dictionaryRepo.test.mts で固定。
+     --   source='manual' / count=7 のまま updated_at だけが動いた (#547 以降は updated_at も動かない)。回帰は dictionaryRepo.test.mts で固定。
      -- ★ 非対称: upsertTerm は source = EXCLUDED.source を持つ (= 上書きする)。
      --   実害は現時点で 0 件だが揃っていない。揃えるかは未決。
      ON CONFLICT (term_id, alias) DO UPDATE SET
        count      = dictionary_aliases.count + EXCLUDED.count,
-       updated_at = NOW()
+       -- ★ #547 count が増えたときだけ進める (organon の取り込みは count 0 で来る = 何も変わらない)
+       updated_at = CASE WHEN EXCLUDED.count <> 0 THEN NOW() ELSE dictionary_aliases.updated_at END
      WHERE dictionary_aliases.status <> 'rejected'
      RETURNING *`,
     [termId, alias, source, count, status],

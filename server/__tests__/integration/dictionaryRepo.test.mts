@@ -163,7 +163,7 @@ describe('upsertAlias', () => {
    *   非対称だが現時点で実害 0 件 (どちらの向きも 0)。揃えるかは未決なので、
    *   ここでは **alias 側の現状だけ** を固定する。
    */
-  test('★ organon の pull は manual alias の source を上書きしない (count 0 加算 / updated_at のみ)', async () => {
+  test('★ organon の pull は manual alias の source を上書きしない (count 0 加算 / #547 以降は updated_at も動かない)', async () => {
     const first = await repo.upsertAlias({ termId: term.id, alias: '大阪', source: 'manual', count: 7 });
     expect(first.row!.source).toBe('manual');
     expect(first.row!.count).toBe(7);
@@ -175,6 +175,48 @@ describe('upsertAlias', () => {
     expect(pulled.row!.id).toBe(first.row!.id);   // 行は 1 本のまま
     expect(pulled.row!.source).toBe('manual');    // ★ 来歴は保たれる
     expect(pulled.row!.count).toBe(7);            // ★ count: 0 なので加算されない
+  });
+});
+
+/**
+ * #547 中身が変わらない upsert で updated_at を動かさない。
+ * ★ 以前は本体を起動するたびに organon の取り込みが全件に当たり、用語 279 / 別名 690 の updated_at が起動時刻になっていた
+ *   (辞書の変更履歴は DB にしか無いのに、いつ変わったかが消える)
+ */
+describe('#547 updated_at は中身が変わったときだけ進む', () => {
+  const backdate = (table: string, id: string) =>
+    getTestPool().query(`UPDATE ${table} SET updated_at = '2026-01-01T00:00:00Z' WHERE id = $1`, [id]);
+
+  test('★ 同じ中身の upsertTerm では updated_at を動かさない', async () => {
+    const t = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    await backdate('dictionary_terms', t.id);
+    const again = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    expect(new Date(again.updated_at).toISOString()).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  test('中身が変われば updated_at を進める', async () => {
+    const t = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    await backdate('dictionary_terms', t.id);
+    const changed = await repo.upsertTerm({ term: '鹿沼', category: 'organization', source: 'organon' });
+    expect(new Date(changed.updated_at).getTime()).toBeGreaterThan(new Date('2026-01-02').getTime());
+  });
+
+  test('★ organon の取り込み (count 0) では別名の updated_at を動かさない', async () => {
+    const t = await repo.upsertTerm({ term: '鹿沼' });
+    const { row } = await repo.upsertAlias({ termId: t.id, alias: 'カヌマ', source: 'manual', count: 3 });
+    await backdate('dictionary_aliases', row!.id);
+    const pulled = await repo.upsertAlias({ termId: t.id, alias: 'カヌマ', source: 'organon', count: 0 });
+    expect(pulled.applied).toBe(true);
+    expect(new Date(pulled.row!.updated_at).toISOString()).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  test('count が増えたら別名の updated_at を進める', async () => {
+    const t = await repo.upsertTerm({ term: '鹿沼' });
+    const { row } = await repo.upsertAlias({ termId: t.id, alias: 'カヌマ', source: 'auto', count: 1 });
+    await backdate('dictionary_aliases', row!.id);
+    const bumped = await repo.upsertAlias({ termId: t.id, alias: 'カヌマ', source: 'auto', count: 1 });
+    expect(bumped.row!.count).toBe(2);
+    expect(new Date(bumped.row!.updated_at).getTime()).toBeGreaterThan(new Date('2026-01-02').getTime());
   });
 });
 
