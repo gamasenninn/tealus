@@ -25,6 +25,7 @@ import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
 import { announceRoomJoined } from '../services/roomJoined.mts';
+import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -34,6 +35,7 @@ export const router = express.Router();
 
 router.use(authenticate);
 router.use(requireUuidRoomId);
+router.use(readRequester);   // ★ #564 X-Tealus-Requester (AI の依頼した人) があれば、読み取りをその人の部屋に絞る
 
 // ============================================
 // DB row 型 (SELECT 列 / RETURNING * に対応)
@@ -521,7 +523,7 @@ router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireU
  *   default (true) + include_raw=false       → { id, status, version, formatted_text }
  *   true + include_raw=true                  → { id, status, version, formatted_text, raw_text }
  */
-router.get('/messages', async (req, res) => {
+router.get('/messages', scopeByRoom('query'), async (req, res) => {
   const { room_id, since, limit, include_transcription, include_raw } = req.query as {
     room_id?: string; since?: string; limit?: string | number;
     include_transcription?: string; include_raw?: string;
@@ -688,7 +690,7 @@ interface BotMediaResponse {
   transcription?: TranscriptionTextRow;
 }
 
-router.get('/messages/:id/media', requireUuidId, async (req, res) => {
+router.get('/messages/:id/media', scopeByMessage, requireUuidId, async (req, res) => {
   const messageId = String(req.params.id);
   const userId = req.user!.id;
 
@@ -799,7 +801,7 @@ router.get('/messages/:id/media', requireUuidId, async (req, res) => {
  * #271 (per-room MCP + light_prompt.md tuning pattern reference) follow-up、
  * 案 B (tealus-mcp `transcribe_media` MCP tool) の server-side 実装。
  */
-router.post('/messages/:id/transcribe', requireUuidId, async (req, res) => {
+router.post('/messages/:id/transcribe', scopeByMessage, requireUuidId, async (req, res) => {
   const messageId = String(req.params.id);
   const userId = req.user!.id;
   const forceRetranscribe = (req.body as { force_retranscribe?: unknown } | undefined)?.force_retranscribe === true;
@@ -956,7 +958,7 @@ router.post('/messages/:id/transcribe', requireUuidId, async (req, res) => {
  *
  * 認可: Bot が message の room の member であること (= 他 bot endpoint と同 pattern)。
  */
-router.get('/messages/:id/edit-history', requireUuidId, async (req, res) => {
+router.get('/messages/:id/edit-history', scopeByMessage, requireUuidId, async (req, res) => {
   const messageId = String(req.params.id);
   const userId = req.user!.id;
 
@@ -1122,6 +1124,12 @@ router.get('/search', async (req, res) => {
     if (room_id) {
       params.push(room_id);
       filtersSQL.push(`m.room_id = $${paramIdx++}`);
+    }
+    // ★ #564 依頼した人が入っている部屋だけ (部屋の指定が無いときの横断検索も)
+    const searchRequester = requesterOf(res);
+    if (searchRequester) {
+      params.push(searchRequester);
+      filtersSQL.push(requesterRoomCondition('m.room_id', paramIdx++));
     }
     if (sender_id) {
       params.push(sender_id);
@@ -1312,10 +1320,11 @@ router.get('/tags', async (req, res) => {
        FROM tags t
        JOIN room_members rm ON rm.room_id = t.room_id AND rm.user_id = $1
        LEFT JOIN message_tags mt ON mt.tag_id = t.id
+       WHERE ($3::uuid IS NULL OR ${requesterRoomCondition('t.room_id', 3)})   -- ★ #564
        GROUP BY t.name, t.is_todo
        ORDER BY total_usage DESC
        LIMIT $2`,
-      [userId, limit]
+      [userId, limit, requesterOf(res)]
     );
     res.json({ tags: result.rows });
   } catch (err) {
@@ -1405,7 +1414,7 @@ interface UnreadRow {
  * GET /api/bot/unread?room_id=optional
  * Get unread messages across all rooms or a specific room
  */
-router.get('/unread', async (req, res) => {
+router.get('/unread', scopeByRoom('query'), async (req, res) => {
   const { room_id } = req.query as { room_id?: string };
   const userId = req.user!.id;
 
@@ -1448,6 +1457,7 @@ router.get('/unread', async (req, res) => {
         JOIN rooms r ON r.id = m.room_id
         JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
         WHERE m.sender_id != $1
+          AND ($2::uuid IS NULL OR ${requesterRoomCondition('m.room_id', 2)})   -- ★ #564
           AND m.is_deleted = false
           AND m.created_at > COALESCE(
             (SELECT last_read_at FROM room_read_cursors WHERE room_id = m.room_id AND user_id = $1),
@@ -1456,7 +1466,7 @@ router.get('/unread', async (req, res) => {
         ORDER BY m.created_at ASC
         LIMIT 100
       `;
-      params = [userId];
+      params = [userId, requesterOf(res) as string];
     }
 
     const result = await pool.query<UnreadRow>(query, params);
@@ -1565,8 +1575,9 @@ router.get('/rooms', async (req, res) => {
          LIMIT 1
        ) partner ON r.type = 'direct'
        WHERE rm.user_id = $1
+         AND ($2::uuid IS NULL OR ${requesterRoomCondition('r.id', 2)})   -- ★ #564
        ORDER BY r.created_at DESC`,
-      [userId]
+      [userId, requesterOf(res)]
     );
     res.json({ rooms: result.rows });
   } catch (err) {
@@ -1640,7 +1651,7 @@ router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
  * 指定 user が room のメンバーか返す (#282: 委譲の権限チェック用)。
  * least privilege: bot 自身がメンバーのルームのみ照会可 (= 非メンバールームは 403)。
  */
-router.get('/rooms/:id/membership', requireUuidId, async (req, res) => {
+router.get('/rooms/:id/membership', requireUuidId, scopeByRoom('param'), async (req, res) => {
   const roomId = String(req.params.id);
   const botUserId = req.user!.id;
   const targetUserId = req.query.user_id as string | undefined;
