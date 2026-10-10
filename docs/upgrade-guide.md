@@ -29,6 +29,14 @@ git describe --tags        # 例: v0.5.0
 docker-compose exec -T postgres pg_dump -U tealus tealus > backup-$(date +%Y%m%d).sql
 ```
 
+> ★ **Windows の PowerShell 5.1 では上の `>` を使わないでください**。`>` が文字コードを変えて、ダンプが壊れます ([#566](https://github.com/gamasenninn/tealus/issues/566))。
+> コンテナの中でファイルに書いてから取り出す形にします (custom 形式。戻し方は下の「壊れたときの復元」):
+>
+> ```powershell
+> docker exec tealus_postgres pg_dump -U tealus -Fc -f /tmp/backup.dump tealus
+> docker cp tealus_postgres:/tmp/backup.dump .\backup.dump
+> ```
+
 ### 1. コードを取得
 
 ```bash
@@ -437,7 +445,8 @@ awk '/^P=\{project_name\}/{f=1} f&&/^```/{exit} f' "$S" | sh -n && echo "構文 
 | フォームが崩れて表示 / 送っても AI が起動しない | クライアント未ビルド、または migration（026）未適用 | 手順 3・4 を実行。MCP 経由で送るなら `tealus-mcp` のバージョンも確認 |
 | 画面が古いまま変わらない | ブラウザ / PWA のキャッシュ | ハードリロード（`Ctrl/⌘+Shift+R`）、PWA は再度リロード |
 | AI エージェントが無反応 | `agent-server` の `npm install` / 再起動忘れ | 手順 2・5 を実行 |
-| MCP で「トークンが無効です」 | 本体 server 再起動で JWT が失効 | Claude Code を reload（stdio MCP の JWT は server restart で失効する） |
+| `git pull` が「package-lock.json を上書きできない」で止まる (Aborting) | 前回の `npm install` が手元の package-lock.json を書き換えた (自分で変えていなくても起きる。[#566](https://github.com/gamasenninn/tealus/issues/566)) | `git checkout -- server/package-lock.json client/package-lock.json agent-server/package-lock.json` で手元の変更を捨ててから `git pull`。そのあと手順 2 の `npm install` |
+| MCP で「トークンが無効です」 | トークンの期限切れ (7 日)、本体の `JWT_SECRET` を変えた、またはそのアカウントを無効にした。★ 本体の再起動だけでは失効しない | Claude Code を reload (stdio MCP はログインし直す) |
 | MCP に新ツールが出ない | in-app reload / `/mcp` 再接続では反映されない | Claude Code を**フル再起動**（タグ固定なら pin も更新） |
 
 ---
@@ -453,3 +462,64 @@ cd ../server && npm install
 
 - **DB migration は基本「進める」方向のみ**です。新 migration が既存データを壊す設計は避けていますが（v0.6.0 の 026 は制約拡張のみで後方互換）、心配なら手順 0 のバックアップから復元してください。
 - 破壊的変更を伴うバージョンは、その版の「バージョン別ノート」に必ず明記します。
+
+---
+
+## 壊れたときの復元（DB・メディア・鍵と設定）
+
+ディスクの故障・誤操作などで本体のマシンを作り直すときの順番です ([#566](https://github.com/gamasenninn/tealus/issues/566))。
+**戻すには次の 3 つが要ります。** どれかが欠けると戻せないものがあるので、バックアップに入っているかを先に確かめてください。
+
+| もの | 中身 | 無いと |
+|------|------|--------|
+| DB のダンプ | `pg_dump` の出力 (custom 形式 `-Fc` か、プレーン SQL) | 投稿・利用者・部屋がすべて失われる |
+| メディア | `MEDIA_ROOT` の中身 (画像・動画・音声・ファイル・サムネイル) | 投稿は残るが、添付が開けない |
+| 鍵と設定 | `server/.env`・`agent-server/.env`・`agent-server/mcp_config.json`、`.gitignore` で外している `server/config/` のファイル (ルームトリガー・LINE のグループ など) | ★ `VAPID_*` を失うと全員のプッシュの登録がやり直し。`JWT_SECRET` を失うと全員がログインし直し。設定ファイルは手で作り直し |
+
+### 1. コードを取得
+
+```bash
+git clone https://github.com/gamasenninn/tealus.git && cd tealus
+git checkout <ダンプを取ったときのタグ>   # 新しい版に上げるのは、戻し終わって動くのを見てから
+```
+
+### 2. 鍵と設定を元の場所へ置く
+
+`server/.env`・`agent-server/.env`・`agent-server/mcp_config.json`・`server/config/` のファイルを、バックアップから同じ場所へ写します。
+
+### 3. DB を戻す
+
+```bash
+docker compose up -d postgres
+```
+
+★ **DB のパスワードを合わせる**。新しく作った DB の利用者のパスワードは `docker-compose.yml` の `POSTGRES_PASSWORD` (既定 `tealus_dev`) になります。`server/.env` の `DB_PASSWORD` を別の値にしていたら、DB 側を合わせます:
+
+```bash
+docker exec -it tealus_postgres psql -U tealus -c "ALTER USER tealus PASSWORD '<server/.env の DB_PASSWORD>'"
+```
+
+ダンプを戻します (形式で 2 通り):
+
+```bash
+# custom 形式 (-Fc、ファイルの先頭が PGDMP)
+docker cp backup.dump tealus_postgres:/tmp/backup.dump
+docker exec tealus_postgres pg_restore -U tealus -d tealus --no-owner --no-privileges /tmp/backup.dump
+
+# プレーン SQL (★ Windows の PowerShell 5.1 の < は使わない。bash で)
+docker exec -i tealus_postgres psql -U tealus tealus < backup.sql
+```
+
+そのあと `cd server && npm run migrate`。ダンプには適用済みの台帳 (`schema_migrations`) も入っているので、ダンプより新しい migration だけが流れます。
+
+### 4. メディアを戻す
+
+バックアップのメディアを、`server/.env` の `MEDIA_ROOT` へ**中の並びのまま**写します (`images/`・`voices/`・`thumbnails/` …)。DB の投稿はこの相対パスでファイルを指しています。
+
+### 5. 起動して確かめる
+
+手順 2 (依存) と 4 (クライアントのビルド) をしてから、本体 → agent-server → rtc-server の順に起動します。確かめること:
+
+- ログインできる / 古い部屋の投稿が出る / 画像・音声が開ける
+- AI (`@アシスタント`) が答える
+- プッシュ通知が届く (届かなければ `VAPID_*` が元と違う。各端末で通知を登録し直す)
