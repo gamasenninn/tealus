@@ -21,6 +21,9 @@ RUN cd agent-server && npm ci --omit=dev
 
 # agent-server source
 COPY agent-server/ ./agent-server/
+# ★ #555 起動時に相対 import で読む本体のファイル (どちらも他を読み込まない単独のファイル)。
+#   無いと ERR_MODULE_NOT_FOUND で起動しない。増えたら __tests__/unit/dockerImageFiles.test.mts が落ちる
+COPY server/src/services/glossaryRanker.mts server/src/services/honorific.mts ./server/src/services/
 
 WORKDIR /app/agent-server
 EXPOSE 4000
