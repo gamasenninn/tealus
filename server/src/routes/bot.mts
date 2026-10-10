@@ -14,6 +14,7 @@ import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName, rejectOversizedUpload } from '../middleware/upload.mts';
+import sharp from 'sharp';
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
@@ -326,6 +327,21 @@ router.post('/status', async (req, res) => {
   }
 });
 
+/** 画像なら寸法、画像・動画ならサムネイル (それ以外は null)。push-image / push-file で共通 (#548) */
+async function mediaExtras(file: Express.Multer.File): Promise<{ width: number | null; height: number | null; thumbnailPath: string | null }> {
+  let width: number | null = null;
+  let height: number | null = null;
+  if (file.mimetype.startsWith('image/')) {
+    try {
+      const metadata = await sharp(file.path).metadata();
+      width = metadata.width || null;
+      height = metadata.height || null;
+    } catch { /* ignore */ }
+  }
+  const thumbnailPath = await generateThumbnail(file.path, file.mimetype);
+  return { width, height, thumbnailPath };
+}
+
 /**
  * POST /api/bot/push-image
  * Send an image message to a room
@@ -367,17 +383,7 @@ router.post('/push-image', upload.single('image'), rejectOversizedUpload, requir
 
     // Get image dimensions
     const relativePath = `images/${file.filename}`;
-    let width: number | null = null;
-    let height: number | null = null;
-    try {
-      const { default: sharp } = await import('sharp');
-      const metadata = await sharp(file.path).metadata();
-      width = metadata.width || null;
-      height = metadata.height || null;
-    } catch (e) { /* ignore */ }
-
-    // Generate thumbnail
-    const thumbnailPath = await generateThumbnail(file.path, file.mimetype);
+    const { width, height, thumbnailPath } = await mediaExtras(file);
 
     // Insert media record
     const mediaResult = await client.query<MediaRow>(
@@ -465,11 +471,13 @@ router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireU
     const subdir = getSubdir(file.mimetype);
     const relativePath = `${subdir}/${file.filename}`;
 
+    // ★ #548 画像・動画ならサムネイルと寸法も (アシスタントの画像はこの口を通る。以前は 30 日で 93% が原寸のまま一覧に出ていた)
+    const { width, height, thumbnailPath } = await mediaExtras(file);
     const mediaResult = await client.query<MediaRow>(
-      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size]
+      [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size, width, height, thumbnailPath]
     );
 
     await client.query('COMMIT');

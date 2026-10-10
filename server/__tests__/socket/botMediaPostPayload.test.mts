@@ -132,4 +132,15 @@ describe('#6 #7 ボットの画像・ファイル: 送る中身', () => {
     expect(stable(emitted[0])).toMatchSnapshot();
     expect((recorded.machine[0] as { body: string }).body).toBe('報告書です');
   });
+  it('#548 ファイルの口で画像を送っても、サムネイルと寸法が付く (アシスタントの画像はここを通る)', async () => {
+    const res = await request(app).post('/api/bot/push-file').set('Authorization', `Bearer ${bot.token}`)
+      .field('room_id', roomId).attach('file', PNG, { filename: 'f.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    await settle();
+    const media = (emitted[0].media as Array<Record<string, unknown>>)[0];
+    expect(emitted[0].type).toBe('image');
+    expect(media.thumbnail_path).toBeTruthy();
+    expect(media.width).toBe(1);
+    expect(media.height).toBe(1);
+  });
 });
