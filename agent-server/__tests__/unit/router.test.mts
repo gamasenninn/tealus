@@ -75,6 +75,19 @@ describe('Router', () => {
       expect(result.tier).toBe('deep');
     });
 
+    test.each([
+      '@アシスタント この2つの動画から議事録を作成して',
+      '@アシスタント 本日のトランシーバーの履歴を読んで時間ごとに一覧にして整理して',
+      '先週の営業報告をまとめて',
+      'この記事を要約して',
+    ])('★ #567 部屋の履歴や動画から議事録・一覧・要約・まとめを作る依頼は light (以前は LLM が Deep に回し、利用者が /light で出し直した): %s', (text) => {
+      expect(classifyByRules(text)!.tier).toBe('light');
+    });
+
+    test('Deep キーワードだけの依頼は今までどおり Deep (light の規則に当たらない)', () => {
+      expect(classifyByRules('このコードをレビューして')!.tier).toBe('deep');
+    });
+
     test('判定不能は null を返す', () => {
       const result = classifyByRules('来月の売上はどうなりそう？')!;
       expect(result).toBeNull();

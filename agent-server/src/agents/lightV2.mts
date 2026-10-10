@@ -102,6 +102,32 @@ export function formatLightV2StartupLog(args: {
  * codex の起動オプション。★ #565 子プロセスへ渡す環境変数は許可した一覧だけ (agentChildEnv)。
  *   API キーは apiKey (codex-sdk が CODEX_API_KEY として足す)。subscription なら ~/.codex/auth.json (USERPROFILE / HOME で届く)
  */
+type ToolCallLike = { status?: string; server?: string; tool?: string; error?: { message?: string } | null; result?: unknown };
+
+/**
+ * 道具の呼び出しを 1 行の記録にする。
+ * ★ #567 tealus の道具はエラーを本文 (「エラー: …」) で返す。以前は OK と記録され、FAILED で探しても 0 件に見えた
+ *   (100 回中 4 回、どれも 10MB 超の添付)。本文が「エラー」で始まる / MCP の isError は TOOL_ERROR として warn
+ */
+export function describeToolCall(item: ToolCallLike): { level: 'info' | 'warn'; line: string } {
+  const status = item.status || '?';
+  const server = item.server || '?';
+  const tool = item.tool || '?';
+  if (item.error) {
+    return { level: 'warn', line: `[LightV2] mcp_tool_call FAILED: server=${server} tool=${tool} status=${status} error=${item.error.message || JSON.stringify(item.error).slice(0, 300)}` };
+  }
+  if (status === 'failed') {
+    return { level: 'warn', line: `[LightV2] mcp_tool_call status=failed: server=${server} tool=${tool} (no error field) item=${JSON.stringify(item).slice(0, 400)}` };
+  }
+  const result = item.result as { isError?: boolean; content?: Array<{ type?: string; text?: string }> } | undefined;
+  const firstText = Array.isArray(result?.content) ? result!.content.find((c) => c?.type === 'text')?.text ?? '' : '';
+  if (result?.isError || /^\s*エラー/.test(firstText)) {
+    return { level: 'warn', line: `[LightV2] mcp_tool_call TOOL_ERROR: server=${server} tool=${tool} status=${status} text=${firstText.slice(0, 200)}` };
+  }
+  const resultPreview = item.result ? JSON.stringify(item.result).slice(0, 200) : '(no result)';
+  return { level: 'info', line: `[LightV2] mcp_tool_call OK: server=${server} tool=${tool} status=${status} result=${resultPreview}` };
+}
+
 export function buildLightV2CodexOptions(mcp_servers: Record<string, CodexConfigObject>): CodexOptions {
   const codexOpts: CodexOptions = { config: { mcp_servers }, env: agentChildEnv() };
   const useSubscription = config.LIGHTV2_AUTH === 'subscription';
@@ -358,18 +384,9 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
               // MCP tool call の result/error 詳細を log (debug 用)
               const mcpItem: McpToolCallItem = event.item;
               const status = mcpItem.status || '?';
-              const server = mcpItem.server || '?';
               const tool = mcpItem.tool || '?';
-              if (mcpItem.error) {
-                logger.warn(`[LightV2] mcp_tool_call FAILED: server=${server} tool=${tool} status=${status} error=${mcpItem.error.message || JSON.stringify(mcpItem.error).slice(0, 300)}`);
-              } else if (status === 'failed') {
-                logger.warn(`[LightV2] mcp_tool_call status=failed: server=${server} tool=${tool} (no error field) item=${JSON.stringify(mcpItem).slice(0, 400)}`);
-              } else {
-                const resultPreview = mcpItem.result
-                  ? JSON.stringify(mcpItem.result).slice(0, 200)
-                  : '(no result)';
-                logger.info(`[LightV2] mcp_tool_call OK: server=${server} tool=${tool} status=${status} result=${resultPreview}`);
-              }
+              const described = describeToolCall(mcpItem as ToolCallLike);
+              logger[described.level](described.line);
               // #292 follow-up: LLM が send_message tool で自 room へ投函していたら、
               // 最終 response auto-post の重複を skip するため flag を立てる
               if (tool === 'send_message' && status === 'completed' && mcpItem.result) {

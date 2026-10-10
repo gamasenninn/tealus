@@ -162,3 +162,24 @@ describe('Light v2 の codex に渡す環境変数 (#565)', () => {
     }
   });
 });
+
+describe('道具の結果の記録 (#567)', () => {
+  const { describeToolCall } = require('../../src/agents/lightV2.mts') as typeof import('../../src/agents/lightV2.mts');
+  it('★ 本文が「エラー」で始まる結果は TOOL_ERROR (以前は OK と記録され、grep FAILED で 0 件に見えた)', () => {
+    const r = describeToolCall({ status: 'completed', server: 'tealus', tool: 'get_message_media', result: { content: [{ type: 'text', text: 'エラー: ファイルサイズが上限 (10MB) を超えています' }] } });
+    expect(r.level).toBe('warn');
+    expect(r.line).toMatch(/mcp_tool_call TOOL_ERROR: server=tealus tool=get_message_media/);
+  });
+  it('MCP の isError も TOOL_ERROR', () => {
+    expect(describeToolCall({ status: 'completed', server: 's', tool: 't', result: { isError: true, content: [{ type: 'text', text: 'boom' }] } }).line).toMatch(/TOOL_ERROR/);
+  });
+  it('ふつうの結果は今までどおり OK', () => {
+    const r = describeToolCall({ status: 'completed', server: 'tealus', tool: 'get_messages', result: { content: [{ type: 'text', text: '{"messages":[]}' }] } });
+    expect(r).toMatchObject({ level: 'info' });
+    expect(r.line).toMatch(/mcp_tool_call OK/);
+  });
+  it('error がある / status=failed は今までどおり FAILED', () => {
+    expect(describeToolCall({ status: 'failed', server: 's', tool: 't', error: { message: 'x' } }).line).toMatch(/FAILED/);
+    expect(describeToolCall({ status: 'failed', server: 's', tool: 't' }).line).toMatch(/status=failed/);
+  });
+});

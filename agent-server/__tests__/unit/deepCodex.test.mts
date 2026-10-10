@@ -385,3 +385,25 @@ describe('isAgentMessageEvent + extractAgentMessageText', () => {
     expect(isAgentMessageEvent({ type: 'item.completed', item: { type: 'mcp_tool_call' } })).toBe(false);
   });
 });
+
+/**
+ * #567 Deep codex の失敗の原因をログに残す。
+ * ★ 09-21 に Deep が道具を使えずに謝って終わったが、標準出力は返事しか拾わず、終了コード 0 なので標準エラーも捨てていて、原因が残らなかった
+ */
+describe('describeCodexEvent (#567)', () => {
+  const { describeCodexEvent } = require('../../src/agents/deepCodex.mts') as typeof import('../../src/agents/deepCodex.mts');
+  test('★ error / turn.failed のイベントは warn で残す', () => {
+    expect(describeCodexEvent({ type: 'error', message: 'mcp startup timeout' })).toMatchObject({ level: 'warn' });
+    expect(describeCodexEvent({ type: 'turn.failed', error: { message: 'boom' } })!.line).toMatch(/turn\.failed.*boom/);
+  });
+  test('★ 道具の呼び出しの結果は 1 行 (失敗は warn)', () => {
+    expect(describeCodexEvent({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'tealus', tool: 'get_messages', status: 'completed' } }))
+      .toMatchObject({ level: 'info' });
+    expect(describeCodexEvent({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'tealus', tool: 'get_messages', status: 'failed', error: { message: 'x' } } }))
+      .toMatchObject({ level: 'warn' });
+  });
+  test('返事や途中経過など、ほかのイベントは残さない (null)', () => {
+    expect(describeCodexEvent({ type: 'item.completed', item: { type: 'agent_message', text: 'hi' } })).toBeNull();
+    expect(describeCodexEvent({ type: 'turn.started' })).toBeNull();
+  });
+});

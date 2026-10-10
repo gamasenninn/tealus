@@ -259,6 +259,33 @@ export function buildCodexExecEnv({ codexHomePath, openaiApiKey, useSubscription
   return env;
 }
 
+type CodexEventLike = {
+  type?: string; message?: string; error?: { message?: string } | null;
+  item?: { type?: string; text?: string; server?: string; tool?: string; status?: string; error?: { message?: string } | null };
+};
+
+/**
+ * ★ #567 ログに残す codex のイベント。エラー (error / turn.failed) と道具の呼び出しの結果だけ。ほかは null
+ */
+export function describeCodexEvent(event: CodexEventLike | null | undefined): { level: 'info' | 'warn'; line: string } | null {
+  if (!event || typeof event !== 'object') return null;
+  if (event.type === 'error') return { level: 'warn', line: `[DeepCodex] error: ${String(event.message ?? JSON.stringify(event)).slice(0, 300)}` };
+  if (event.type === 'turn.failed') return { level: 'warn', line: `[DeepCodex] turn.failed: ${String(event.error?.message ?? JSON.stringify(event)).slice(0, 300)}` };
+  const it = event.item;
+  if (event.type === 'item.completed' && it?.type === 'mcp_tool_call') {
+    const failed = it.status === 'failed' || !!it.error;
+    return {
+      level: failed ? 'warn' : 'info',
+      line: `[DeepCodex] mcp_tool_call ${failed ? 'FAILED' : 'OK'}: server=${it.server ?? '?'} tool=${it.tool ?? '?'} status=${it.status ?? '?'}`
+        + (it.error?.message ? ` error=${it.error.message.slice(0, 200)}` : ''),
+    };
+  }
+  if (event.type === 'item.completed' && it?.type === 'error') {
+    return { level: 'warn', line: `[DeepCodex] item error: ${JSON.stringify(it).slice(0, 300)}` };
+  }
+  return null;
+}
+
 /**
  * JSONL line buffer: stdout chunk を行単位に切って parse する
  *
@@ -461,6 +488,9 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
       const events = lineBuffer.append(chunk);
       for (const event of events) {
         if (event.__parseError) continue;
+        // ★ #567 エラーと道具の呼び出しはログに残す (以前は返事しか拾わず、失敗の原因が残らなかった)
+        const described = describeCodexEvent(event);
+        if (described) logger[described.level](described.line);
         if (isAgentMessageEvent(event)) {
           const text = extractAgentMessageText(event);
           if (text && text.trim()) {
@@ -482,11 +512,16 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
     proc.on('close', async (code) => {
       clearTimeout(timer);
       deepRegistry.unregister(roomId);
+      // ★ #567 終了コード 0 でも標準エラーは残す (道具が起動しなかった理由などがここに出る。以前は 0 なら捨てていた)
+      if (code === 0 && stderr.trim()) logger.warn(`[DeepCodex] stderr (exit 0): ${stderr.trim().slice(-500)}`);
 
       // flush 残 buffer
       const finalEvents = lineBuffer.flush();
       for (const event of finalEvents) {
         if (event.__parseError) continue;
+        // ★ #567 エラーと道具の呼び出しはログに残す (以前は返事しか拾わず、失敗の原因が残らなかった)
+        const described = describeCodexEvent(event);
+        if (described) logger[described.level](described.line);
         if (isAgentMessageEvent(event)) {
           const text = extractAgentMessageText(event);
           if (text && text.trim()) lastAgentMessage = text;

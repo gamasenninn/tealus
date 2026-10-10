@@ -32,6 +32,9 @@ const DEEP_KEYWORDS: string[] = [
   'レポート作成', '戦略', '設計',
 ];
 
+// ★ #567 読んでまとめる依頼は light (Deep より速く、道具で部屋を読めば足りる)
+const LIGHT_SUMMARY_PATTERN = /議事録|要約|まとめて|一覧に|整理して/;
+
 /**
  * 先頭の @mention を除去する。
  *
@@ -80,6 +83,12 @@ function classifyByRules(content: string): RouteResult | null {
     if (pattern.test(trimmed)) {
       return { tier: 'router', response };
     }
+  }
+
+  // ★ #567 読んでまとめる依頼 (議事録・一覧・要約・まとめ・整理) は light。Deep キーワードより先に見る
+  //   以前は LLM が「部屋の履歴を読んで一覧に」「動画から議事録」を Deep に回し、利用者が /light を付けて出し直していた (Deep 4 件中 2 件)
+  if (LIGHT_SUMMARY_PATTERN.test(trimmed)) {
+    return { tier: 'light', prompt: trimmed };
   }
 
   // Deep キーワード
