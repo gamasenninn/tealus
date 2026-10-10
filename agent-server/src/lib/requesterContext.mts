@@ -10,6 +10,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
+import * as config from '../config.mts';
 
 const als = new AsyncLocalStorage<{ requesterId: string }>();
 
@@ -40,4 +41,14 @@ export function issueScopedToken(requesterId: string, { now = Date.now(), ttlMs 
 export function requesterForToken(token: string, now = Date.now()): string | null {
   const v = tokens.get(token);
   return v && v.expiresAt > now ? v.requesterId : null;
+}
+
+/**
+ * ★ 道具 (tealus-mcp) の接続先。依頼した人がいれば agent-server の中継 (使い捨ての鍵つき) に向け、
+ *   中継が X-Tealus-Requester を付けて本体へ流す。依頼した人がいなければ今までどおり本体へ直接。
+ *   Light v2 / Deep codex (lightV2.mts) と Deep claude (deep.mts) の両方がここを使う
+ */
+export function tealusApiUrlForCurrentRequester(): string {
+  const requesterId = currentRequester();
+  return requesterId ? `http://127.0.0.1:${config.PORT}/tealus-scoped/${issueScopedToken(requesterId)}` : config.TEALUS_API_URL;
 }

@@ -297,6 +297,17 @@ describe('createDeepMcpConfig — 資格情報を workspace の外に置く (#41
     expect(c.mcpServers.tealus).toBeDefined();
   });
 
+  test('★ #564 依頼した人がいれば、tealus の道具の接続先は中継 (/tealus-scoped/<鍵>)', async () => {
+    const { runAsRequester, requesterForToken } = require('../../src/lib/requesterContext.mts') as typeof import('../../src/lib/requesterContext.mts');
+    await runAsRequester('11111111-1111-4111-8111-111111111111', async () => {
+      const p = createDeepMcpConfig(workspacePath, 'room-1');
+      const c = JSON.parse(fsx.readFileSync(p, 'utf8')) as { mcpServers: { tealus: { env: { TEALUS_API_URL: string } } } };
+      const url = c.mcpServers.tealus.env.TEALUS_API_URL;
+      expect(url).toContain('/tealus-scoped/');
+      expect(requesterForToken(url.split('/').pop()!)).toBe('11111111-1111-4111-8111-111111111111');
+    });
+  });
+
   test('★★ ルーム固有 MCP の ${VAR} は実体に置き換わる (子プロセスは参照を解釈しない)', () => {
     process.env.TEST_DSN_419 = 'mysql://u:p@h/db';
     fsx.writeFileSync(pathx.join(workspacePath, 'mcp_config.json'), JSON.stringify({

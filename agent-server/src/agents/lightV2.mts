@@ -37,7 +37,7 @@ import {
 } from '../lib/codexAuthError.mts';
 import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
-import { currentRequester, issueScopedToken } from '../lib/requesterContext.mts';
+import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -95,15 +95,6 @@ export function formatLightV2StartupLog(args: {
   const model = args.model || '(未設定)';
   return `[LightV2] auth=${args.apiKey ? 'API key' : 'subscription'} `
     + `mcp_servers=${args.mcpServers.join(',')} model=${model}`;
-}
-
-/**
- * ★ #564 道具 (tealus-mcp) の接続先。依頼した人がいれば agent-server の中継 (使い捨ての鍵つき) に向け、
- *   中継が X-Tealus-Requester を付けて本体へ流す。依頼した人がいなければ今までどおり本体へ直接
- */
-export function tealusApiUrlForCurrentRequester(): string {
-  const requesterId = currentRequester();
-  return requesterId ? `http://127.0.0.1:${config.PORT}/tealus-scoped/${issueScopedToken(requesterId)}` : config.TEALUS_API_URL;
 }
 
 export function buildLightV2McpConfig(workspacePath: string | undefined): Record<string, CodexConfigObject> {

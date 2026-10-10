@@ -14,6 +14,7 @@ import * as botApi from '../lib/botApi.mts';
 import { updateContext } from '../context/sessionManager.mts';
 import * as deepRegistry from './deepRegistry.mts';
 import type { DeepProcess } from './deepRegistry.mts';
+import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
 
 interface McpServerDef {
   command: string;
@@ -55,7 +56,7 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
         command: 'npx',
         args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.7'],
         env: {
-          TEALUS_API_URL: config.TEALUS_API_URL,
+          TEALUS_API_URL: tealusApiUrlForCurrentRequester(),   // ★ #564 依頼した人の部屋に絞る (中継経由)
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
           TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
           // generate_and_send_image (#260) で DALL-E 3 を呼ぶため必要
