@@ -15,6 +15,7 @@ import { fetchReplyMessage } from '../socket/handlers/message.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
 import fs from 'node:fs';
+import { safeExt } from '../utils/safeExt.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -23,7 +24,7 @@ const VOICE_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirn
 const voiceStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, VOICE_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.webm';
+    const ext = safeExt(file.originalname, '.webm');   // ★ #561
     const name = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
     cb(null, name);
   },

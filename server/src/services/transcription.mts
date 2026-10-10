@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.mts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import OpenAI from 'openai';
 import { pool } from '../db/pool.mts';
 import { formatTranscription } from './formatting.mts';
@@ -90,8 +90,9 @@ export async function transcribeMessage(
       // codec=mp3 で Windows ffmpeg 標準ビルド互換 (libopus は build-dependent)
       tempPath = path.join(path.dirname(fullPath), `tealus-stt-${messageId}-v${version}.mp3`);
       try {
-        execSync(
-          `ffmpeg -i "${fullPath}" -y -vn -ar 16000 -ac 1 -q:a 4 "${tempPath}"`,
+        // ★ #561 引数は配列で渡す (コマンドを 1 本の文字列に組み立てない。thumbnail.mts と同じ)
+        execFileSync(
+          'ffmpeg', ['-i', fullPath, '-y', '-vn', '-ar', '16000', '-ac', '1', '-q:a', '4', tempPath],
           { stdio: ['ignore', 'pipe', 'pipe'] }  // stderr 捕捉 (失敗時の debug 用)
         );
         inputPath = tempPath;
@@ -122,7 +123,7 @@ export async function transcribeMessage(
       if (!fileInfo) {
         tempPath = fullPath + '.converted.mp3';
         try {
-          execSync(`ffmpeg -i "${fullPath}" -y -q:a 2 "${tempPath}" 2>/dev/null`);
+          execFileSync('ffmpeg', ['-i', fullPath, '-y', '-q:a', '2', tempPath], { stdio: 'ignore' });   // ★ #561
           inputPath = tempPath;
           ext = 'mp3';
         } catch (e) {

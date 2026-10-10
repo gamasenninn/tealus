@@ -13,6 +13,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { safeExt } from '../utils/safeExt.mts';
 
 export const LINE_CONTENT_API_BASE = 'https://api-data.line.me/v2/bot/message';
 export const LINE_STICKER_CDN_BASE = 'https://stickershop.line-scdn.net/stickershop/v1/sticker';
@@ -132,7 +133,7 @@ export async function saveLineContentToFile(
   await fs.mkdir(dir, { recursive: true });
 
   // 拡張子: originalFileName 優先 (= MIME type 不明な file に強い)、なければ MIME 推測
-  const originalExt = options.originalFileName ? path.extname(options.originalFileName) : '';
+  const originalExt = safeExt(options.originalFileName);   // ★ #561 英数字だけ
   const ext = originalExt || extensionForMime(mimeType);
 
   const random = crypto.randomBytes(12).toString('hex');

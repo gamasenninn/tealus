@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import type { Request, Response, NextFunction } from 'express';
+import { safeExt } from '../utils/safeExt.mts';
 
 export const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media');
 
@@ -79,7 +80,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     // Generate unique filename: timestamp-random.ext
-    const ext = path.extname(file.originalname);
+    const ext = safeExt(file.originalname);   // ★ #561 英数字だけ (元の名前の拡張子をそのまま付けない)
     const name = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
     cb(null, name);
   },
