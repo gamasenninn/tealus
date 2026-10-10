@@ -219,7 +219,7 @@ if (import.meta.main) {
         //   ★ upsertAlias は rejected を尊重して no-op なので、tombstone なら供給元をまたいで効く。
         const res = await pool.query(
           `UPDATE dictionary_aliases a
-              SET status = 'rejected'
+              SET status = 'rejected', updated_at = NOW()   -- ★ いつ外したかを残す (語と同じ)
              FROM dictionary_terms t
             WHERE t.id = a.term_id
               AND a.source = 'organon'

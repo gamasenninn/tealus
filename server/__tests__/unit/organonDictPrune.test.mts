@@ -9,6 +9,8 @@
  */
 import { selectPrunableAliases, type AliasRow } from '../../scripts/organonDictPrune.mts';
 import type { ProjectedTerm } from '../../scripts/organonDictProjection.mts';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const projected: ProjectedTerm[] = [
   { term: '五月女', category: 'person', aliases: ['ソウトメ', '早乙女'] },
@@ -111,4 +113,15 @@ describe('formatPrunableAliases', () => {
     expect(out[3]).toContain('2');
     expect(out[3]).toMatch(/省|残|他/);
   });
+});
+
+/**
+ * ★ 別名を tombstone にするときも updated_at を進める (語のほうは進めていた)。
+ *   10-10 に 3 行を外したとき、updated_at が外した時刻にならず「いつ外したか」が残らなかった (#547 と同じ穴)
+ */
+test('別名の tombstone の UPDATE は updated_at も進める', () => {
+  const src = fs.readFileSync(path.join(import.meta.dirname, '../../scripts/organonDictPrune.mts'), 'utf8');
+  const update = src.slice(src.indexOf('UPDATE dictionary_aliases a'), src.indexOf('FROM dictionary_terms t', src.indexOf('UPDATE dictionary_aliases a')));
+  expect(update).toMatch(/SET status = 'rejected'/);
+  expect(update).toMatch(/updated_at = NOW\(\)/);
 });
