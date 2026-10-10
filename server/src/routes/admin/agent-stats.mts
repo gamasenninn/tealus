@@ -2,6 +2,7 @@ import { logger } from '../../utils/logger.mts';
 import * as E from '../../constants/errors.mts';
 import express from 'express';
 import { pool } from '../../db/pool.mts';
+import { resolveTimeZone } from '../../lib/localTime.mts';
 
 export const router = express.Router();
 
@@ -52,10 +53,11 @@ router.get('/agent-stats', async (req, res) => {
     const statsResult = await pool.query<StatsRow>(
       `SELECT
         COUNT(*)::int AS total_responses,
-        COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)::int AS today_responses,
-        COUNT(*) FILTER (WHERE created_at >= date_trunc('week', CURRENT_DATE))::int AS week_responses
+        -- ★ #550 今日・今週は APP_TIMEZONE の暦で切る。以前は CURRENT_DATE (DB = UTC) で、日本時間 9:00 始まりになっていた
+        COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE $2) AT TIME ZONE $2)::int AS today_responses,
+        COUNT(*) FILTER (WHERE created_at >= date_trunc('week', now() AT TIME ZONE $2) AT TIME ZONE $2)::int AS week_responses
        FROM messages WHERE sender_id = ANY($1) AND is_deleted = false`,
-      [botIds]
+      [botIds, resolveTimeZone()]
     );
 
     // 平均応答時間（直近100件: ユーザーメッセージ→次のBot応答の時間差）

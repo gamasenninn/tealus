@@ -8,7 +8,8 @@
  */
 const DEFAULT_TZ = 'Asia/Tokyo';
 
-function resolveTimeZone(): string {
+/** APP_TIMEZONE (読めなければ既定)。SQL の暦の境目にも使う (#550) */
+export function resolveTimeZone(): string {
   const tz = process.env.APP_TIMEZONE || DEFAULT_TZ;
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: tz });
