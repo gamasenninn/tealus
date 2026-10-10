@@ -57,6 +57,19 @@ describe('parseDelegation (#295 `%` 委譲構文)', () => {
     expect(r.task).toBe('やあ');
   });
 
+  test('★ #567 部屋の名前に無い空白が入っていても、空白を無視して照合する (10-09 に 2 回「見つかりません」)', () => {
+    const r = parseDelegation('%社内DB 検索 売上を集計して', ROOMS) as DelegOk;
+    expect(r.ok).toBe(true);
+    expect(r.room.id).toBe('r-db');
+    expect(r.task).toBe('売上を集計して');
+  });
+
+  test('空白を無視した照合は、完全に一致する名前が無いときだけ (名前に空白を含む部屋は今までどおり)', () => {
+    const r = parseDelegation('%甲野太郎 ↔ アシスタント やあ', ROOMS) as DelegOk;
+    expect(r.room.id).toBe('r-ono');
+    expect(r.task).toBe('やあ');
+  });
+
   test('最長一致: 営業 と 営業部 があれば長い方を選ぶ', () => {
     const r = parseDelegation('%営業部 今月の数字', ROOMS) as DelegOk;
     expect(r.ok).toBe(true);

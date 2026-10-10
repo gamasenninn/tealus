@@ -55,7 +55,7 @@ function resolveLeadingRoom(rest: string, rooms: RoomRef[]): ResolveLeadingRoomR
     const after = rest.charAt(name.length);
     return after === '' || /\s/.test(after);
   });
-  if (candidates.length === 0) return { error: 'room_not_found' };
+  if (candidates.length === 0) return resolveIgnoringSpaces(rest, list);
 
   const maxLen = Math.max(...candidates.map((r) => r.name.length));
   const longest = candidates.filter((r) => r.name.length === maxLen);
@@ -63,6 +63,33 @@ function resolveLeadingRoom(rest: string, rooms: RoomRef[]): ResolveLeadingRoomR
 
   const room = longest[0];
   return { room: { id: room.id, name: room.name }, consumedLen: room.name.length };
+}
+
+/**
+ * ★ #567 完全に一致する名前が無いときだけ、空白を無視して照合する。
+ *   「%社内DB 検索 …」(部屋は「社内DB検索」) が room_not_found になっていた (10-09 に 2 回)。
+ *   名前の文字を、rest の空白を読み飛ばしながら順に合わせ、名前の直後が空白 / 文末なら一致
+ */
+function resolveIgnoringSpaces(rest: string, list: RoomRef[]): ResolveLeadingRoomResult {
+  const hits: { room: RoomRef; consumedLen: number; nameLen: number }[] = [];
+  for (const room of list) {
+    const name = (room && room.name ? room.name : '').replace(/\s+/g, '');
+    if (!name) continue;
+    let i = 0, j = 0;
+    while (i < rest.length && j < name.length) {
+      if (/\s/.test(rest[i])) { i++; continue; }
+      if (rest[i] !== name[j]) break;
+      i++; j++;
+    }
+    if (j < name.length) continue;
+    const after = rest.charAt(i);
+    if (after === '' || /\s/.test(after)) hits.push({ room, consumedLen: i, nameLen: name.length });
+  }
+  if (hits.length === 0) return { error: 'room_not_found' };
+  const maxLen = Math.max(...hits.map((h) => h.nameLen));
+  const longest = hits.filter((h) => h.nameLen === maxLen);
+  if (longest.length > 1) return { error: 'ambiguous' };
+  return { room: { id: longest[0].room.id, name: longest[0].room.name }, consumedLen: longest[0].consumedLen };
 }
 
 function parseDelegation(text: string, rooms: RoomRef[]): ParseDelegationResult {
