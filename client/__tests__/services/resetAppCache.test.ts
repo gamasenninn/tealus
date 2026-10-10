@@ -1,7 +1,8 @@
 /**
- * #528 「新しいバージョン」の更新とキャッシュクリアで、サービスワーカーを消す前にプッシュの宛先を本体から外す。
- * ★ 以前は外さずに消していたので、ブラウザの中では宛先が消え、本体には有効な行が残った。
- *   読み込み直すたびに新しい行ができ、古い行は送って 410 が返るまで有効のまま (小野さん 半年 480 行)
+ * #528 「新しいバージョン」の更新とキャッシュクリアで、本体に古い宛先の行が溜まらないようにする。
+ * ★ 以前は何もせずに消していたので、読み込み直すたびに新しい行ができ、古い行は送って 410 が返るまで有効のまま (小野さん 半年 480 行)
+ * ★★ #546 ブラウザの中の宛先は外さない。今の宛先を覚えておき、読み込み直した画面が登録できたあとで古い方だけ本体から外す
+ *   (#528 の初版は外していた。iPhone は利用者のタップなしでは宛先を作り直せず、更新した人に通知が届かなくなった)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -11,6 +12,7 @@ vi.mock('../../src/services/api', () => ({
 }));
 
 import { resetAppCache } from '../../src/services/resetAppCache';
+import { PREV_ENDPOINT_KEY } from '../../src/services/pushNotification';
 import { api } from '../../src/services/api';
 
 function stubBrowser({ withSubscription = true } = {}) {
@@ -33,13 +35,14 @@ function stubBrowser({ withSubscription = true } = {}) {
 }
 
 describe('resetAppCache (#528)', () => {
-  beforeEach(() => { order.length = 0; vi.mocked(api.unsubscribePush).mockClear(); });
+  beforeEach(() => { order.length = 0; vi.mocked(api.unsubscribePush).mockClear(); localStorage.clear(); });
 
-  it('★ サービスワーカーを消す前に、プッシュの宛先を本体から外す', async () => {
-    stubBrowser();
+  it('★★ #546 ブラウザの宛先も本体の行も外さず、今の宛先を覚えておく (読み込み直した画面が片づける)', async () => {
+    const { sub } = stubBrowser();
     await resetAppCache();
-    expect(api.unsubscribePush).toHaveBeenCalledWith('https://fcm.example/abc');
-    expect(order.indexOf('server-unsubscribe:https://fcm.example/abc')).toBeLessThan(order.indexOf('sw-unregister'));
+    expect(sub!.unsubscribe).not.toHaveBeenCalled();
+    expect(api.unsubscribePush).not.toHaveBeenCalled();
+    expect(localStorage.getItem(PREV_ENDPOINT_KEY)).toBe('https://fcm.example/abc');
   });
 
   it('キャッシュも消し、サービスワーカーも消す (今までどおり)', async () => {
@@ -50,17 +53,10 @@ describe('resetAppCache (#528)', () => {
     expect(order).toContain('sw-unregister');
   });
 
-  it('宛先が無い端末 (通知を許可していない) でも最後まで進む', async () => {
+  it('宛先が無い端末 (通知を許可していない) でも最後まで進み、何も覚えない', async () => {
     stubBrowser({ withSubscription: false });
     await resetAppCache();
-    expect(api.unsubscribePush).not.toHaveBeenCalled();
-    expect(order).toContain('sw-unregister');
-  });
-
-  it('★ 本体へ外すのに失敗しても、キャッシュとサービスワーカーは消す (更新を止めない)', async () => {
-    stubBrowser();
-    vi.mocked(api.unsubscribePush).mockRejectedValueOnce(new Error('offline'));
-    await expect(resetAppCache()).resolves.toBeUndefined();
+    expect(localStorage.getItem(PREV_ENDPOINT_KEY)).toBeNull();
     expect(order).toContain('sw-unregister');
   });
 

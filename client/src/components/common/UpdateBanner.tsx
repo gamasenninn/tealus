@@ -17,7 +17,7 @@ function UpdateBanner() {
   const reload = async () => {
     // 古い precache を捨ててから読み直す。ここを飛ばすと SW が再び古い版を返す。
     // caches / serviceWorker が無い環境でも必ず reload に到達させる (#356)。
-    // ★ #528 SW を消す前にプッシュの宛先を本体から外す (resetAppCache の中)
+    // ★ #528 #546 SW を消す前に今の宛先を覚える。読み込み直した画面が古い宛先を本体から外す (resetAppCache の中)
     await resetAppCache();
     location.reload();
   };

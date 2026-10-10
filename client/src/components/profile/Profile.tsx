@@ -7,6 +7,7 @@ import { ArrowLeft, Settings, LogOut, RefreshCw } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import { BUILD_ID } from '../../utils/buildVersion';
 import { resetAppCache } from '../../services/resetAppCache';
+import PushSubscribeButton from './PushSubscribeButton';
 import './Profile.css';
 
 function Profile() {
@@ -218,6 +219,8 @@ function Profile() {
         </label>
         {/* ★ 2026-10-08 アカウントごとの設定にした。プッシュ通知の音にも効く (通話の着信は対象外) */}
         <p className="profile-hint">どの端末で切り替えても、すべての端末に効きます。切ってもプッシュ通知は届きます (音だけ鳴らなくなります)。Android では画面の上に帯が出ず、通知の欄に静かに入ります。通話の着信は鳴ります。</p>
+        {/* ★ #546 宛先が無い端末だけボタンを出す (iPhone はタップなしでは登録し直せない) */}
+        <PushSubscribeButton />
       </div>
 
       <div className="profile-section">
@@ -279,7 +282,7 @@ function Profile() {
           // #356 caches / serviceWorker が無い環境 (非セキュアコンテキスト等) では
           // ここで TypeError が飛び、reload にすら到達せず「押しても無反応」になっていた。
           // 消せるものは消し、消せなくても必ず reload まで進める (resetAppCache の中)。
-          // ★ #528 SW を消す前にプッシュの宛先を本体から外す
+          // ★ #528 #546 SW を消す前に今の宛先を覚える。読み込み直した画面が古い宛先を本体から外す
           await resetAppCache();
           location.reload();
         }}>
