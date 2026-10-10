@@ -53,6 +53,22 @@ describe('POST /api/client-errors', () => {
     expect(logged()[0]).toMatch(/user=-/);
   });
 
+  it('★ #563 起きたときの状況 (ctx) を 1 行に添える。決まった項目だけ・長い値は切る', async () => {
+    await request(app).post('/api/client-errors').send({ ...valid, ctx: {
+      src: 'https://app.example/assets/index-x.js', line: 12, col: 34, vis: 'visible',
+      sinceLoadSec: 80, sinceVisibleSec: 21, standalone: true, online: true,
+      note: 'これは決まった項目ではない', vis2: 'x'.repeat(1000),
+    } });
+    const line = logged()[0];
+    expect(line).toMatch(/ctx=src=https:\/\/app\.example\/assets\/index-x\.js line=12 col=34 vis=visible sinceLoadSec=80 sinceVisibleSec=21 standalone=true online=true/);
+    expect(line).not.toMatch(/note=|vis2=/);
+  });
+
+  it('ctx が無い・形が崩れていれば ctx=- (古い画面からの便も受ける)', async () => {
+    await request(app).post('/api/client-errors').send({ ...valid, ctx: 'broken' });
+    expect(logged()[0]).toMatch(/ctx=-/);
+  });
+
   it('★ 長い値は切る・改行は 1 行にまとめる (ログを汚さない)', async () => {
     await request(app).post('/api/client-errors').send({ ...valid, message: 'x'.repeat(5000), stack: 'a\nb\nc\nd\ne\nf\ng' });
     const line = logged()[0];

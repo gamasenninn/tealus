@@ -40,6 +40,19 @@ function userIdFrom(header: string | undefined): string | null {
   }
 }
 
+/**
+ * ★ #563 起きたときの状況。決まった項目だけを、決まった順で 1 行にする (それ以外の欄は捨てる)。
+ *   iPhone は別オリジン扱いのエラーを「Script error.」に伏せるので、どのファイルか・表か裏か・何秒後かが手がかりになる
+ */
+const CTX_KEYS = ['src', 'line', 'col', 'vis', 'sinceLoadSec', 'sinceVisibleSec', 'standalone', 'online'] as const;
+function ctxLine(ctx: unknown): string {
+  if (!ctx || typeof ctx !== 'object' || Array.isArray(ctx)) return '-';
+  const c = ctx as Record<string, unknown>;
+  const parts = CTX_KEYS.filter((k) => c[k] !== undefined && ['string', 'number', 'boolean'].includes(typeof c[k]) || c[k] === null)
+    .map((k) => `${k}=${clip(String(c[k]), 200)}`);
+  return parts.length ? parts.join(' ') : '-';
+}
+
 router.post('/', (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   if (typeof body.kind !== 'string' || !KINDS.has(body.kind)) {
@@ -64,7 +77,7 @@ router.post('/', (req, res) => {
   const stack = typeof body.stack === 'string' ? body.stack.split('\n').slice(0, 6).join(' | ') : '';
   logger.warn(`[client-error] kind=${body.kind} path=${clip(body.path, 120)} build=${clip(body.build, 60)}`
     + ` user=${userId ? userId.slice(0, 8) : '-'} ua=${clip(req.headers['user-agent'], 120)}`
-    + ` message=${clip(body.message, 300)} at=${clip(stack, 500)}`);
+    + ` message=${clip(body.message, 300)} at=${clip(stack, 500)} ctx=${ctxLine(body.ctx)}`);
   res.status(204).end();
 });
 

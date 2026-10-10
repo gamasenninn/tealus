@@ -34,7 +34,9 @@ describe('reportClientError', () => {
     expect(body.message).toBe('Cannot read properties of undefined');
     expect(body.stack).toMatch(/ChatRoom/);
     expect(body.path).toBe(window.location.pathname);
-    expect(Object.keys(body).sort()).toEqual(['build', 'kind', 'message', 'path', 'stack']);
+    expect(Object.keys(body).sort()).toEqual(['build', 'ctx', 'kind', 'message', 'path', 'stack']);
+    // ★ #563 ctx も決まった項目だけ (本文などの中身を送らない)。ErrorEvent でないときはファイル・行は付かない
+    expect(Object.keys(body.ctx).sort()).toEqual(['online', 'sinceLoadSec', 'sinceVisibleSec', 'standalone', 'vis']);
   });
 
   it('★ 同じエラーは 1 回だけ送る (描画のたびに同じものが出ても溢れない)', async () => {
@@ -71,5 +73,16 @@ describe('reportClientError', () => {
     const kinds = sentBodies().map((b) => `${b.kind}:${b.message}`);
     expect(kinds).toContain('error:global boom');
     expect(kinds).toContain('unhandledrejection:promise boom');
+  });
+  it('★ #563 window の error では、起きたときの状況 (ファイル・行・表か裏か・経過秒) を ctx に添える', async () => {
+    const { installGlobalErrorHandlers } = await load();
+    installGlobalErrorHandlers();
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.', filename: 'https://app.example/assets/index-x.js', lineno: 12, colno: 34 }));
+    const b = sentBodies().find((x) => x.message === 'Script error.');
+    expect(b.ctx).toMatchObject({ src: 'https://app.example/assets/index-x.js', line: 12, col: 34, vis: 'visible' });
+    expect(typeof b.ctx.sinceLoadSec).toBe('number');
+    expect(typeof b.ctx.standalone).toBe('boolean');
+    expect(typeof b.ctx.online).toBe('boolean');
+    expect('sinceVisibleSec' in b.ctx).toBe(true);
   });
 });
