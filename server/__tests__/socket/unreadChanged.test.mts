@@ -25,6 +25,11 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     c.on('connect_error', reject);
   });
   const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+  // ★ 届くはずのものは「届くまで」待つ (最大 3 秒)。固定 300ms だと遅い CI で取りこぼし、10-10 に 1 回落ちた
+  const until = async (ok: () => boolean, ms = 3000) => {
+    for (const t0 = Date.now(); !ok() && Date.now() - t0 < ms;) await settle(25);
+    await settle(100);   // 余分に届かないことも見る
+  };
   const events = (s: ClientSocket) => { const got: unknown[] = []; s.on('unread:changed', (d: unknown) => got.push(d)); return got; };
 
   beforeAll(async () => {
@@ -51,7 +56,7 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     const got = events(pc);
     const res = await request(app).post(`/api/rooms/${roomId}/read`).set('Authorization', `Bearer ${me.token}`).send({ message_ids: [msgId] });
     expect(res.status).toBe(200);
-    await settle();
+    await until(() => got.length > 0);
     expect(got).toEqual([{ room_id: roomId }]);
   });
 
@@ -60,7 +65,7 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     const phone = await connect(me.token);
     const got = events(pc);
     phone.emit('message:read', { room_id: roomId, message_ids: [msgId] });
-    await settle();
+    await until(() => got.length > 0);
     expect(got).toEqual([{ room_id: roomId }]);
   });
 
@@ -68,7 +73,7 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     const pc = await connect(me.token);
     const got = events(pc);
     await request(app).post(`/api/rooms/${roomId}/read/all`).set('Authorization', `Bearer ${me.token}`);
-    await settle();
+    await until(() => got.length > 0);
     expect(got).toEqual([{ room_id: roomId }]);
   });
 
