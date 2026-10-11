@@ -151,6 +151,34 @@ describe('Deep Agent', () => {
       expect(botApi.pushMessage).toHaveBeenCalledWith('room1', expect.stringContaining('レポート'));
     });
 
+    // ★ #570 #565 は codex の子だけ絞っていた。Deep (claude、既定) の子には agent-server の環境変数が全部渡り、
+    //   AI が動かすシェルから DB のパスワードや bot のパスワードが見えた
+    test('★ claude の子プロセスには許可した環境変数だけを渡す (鍵・パスワードは渡さない)', async () => {
+      process.env.DB_PASSWORD = 'db-secret-570';
+      process.env.TEALUS_BOT_PASS = 'bot-secret-570';
+      const mockProcess = {
+        stdout: { on: jest.fn() }, stderr: { on: jest.fn() },
+        stdin: { write: jest.fn(), end: jest.fn() }, on: jest.fn(),
+      };
+      mockProcess.stdout.on.mockImplementation(() => {});
+      mockProcess.stderr.on.mockImplementation(() => {});
+      mockProcess.on.mockImplementation((event: string, cb: (code: number) => void) => {
+        if (event === 'close') setTimeout(() => cb(0), 5);
+      });
+      mockSpawn.mockReturnValueOnce(mockProcess);
+      try {
+        await processDeep({ roomId: 'room1', prompt: 'x', workspacePath: TEST_WORKSPACE, agentId: 'agent1', sessionId: null } as unknown as Parameters<typeof processDeep>[0]);
+        const env = (mockSpawn.mock.calls.at(-1)![2] as { env: Record<string, string> }).env;
+        expect(env.DB_PASSWORD).toBeUndefined();
+        expect(env.TEALUS_BOT_PASS).toBeUndefined();
+        expect(env.HOME).toBe(TEST_WORKSPACE);
+        expect(Object.keys(env).some((k) => k.toUpperCase() === 'PATH')).toBe(true);
+      } finally {
+        delete process.env.DB_PASSWORD;
+        delete process.env.TEALUS_BOT_PASS;
+      }
+    });
+
     test('タイムアウト時はエラーメッセージを送信 + sweepByWorkspacePath が呼ばれる (Step 27 follow-up)', async () => {
       // win32 で sweepByWorkspacePath が呼ばれる事を verify
       const origPlatform = process.platform;

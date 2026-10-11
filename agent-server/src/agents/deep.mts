@@ -10,6 +10,7 @@ import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
+import { agentChildEnv } from '../lib/childEnv.mts';
 import * as botApi from '../lib/botApi.mts';
 import { updateContext } from '../context/sessionManager.mts';
 import * as deepRegistry from './deepRegistry.mts';
@@ -135,6 +136,19 @@ export interface ProcessDeepArgs {
 /**
  * Deep Agent でメッセージを処理
  */
+/**
+ * ★ #570 claude の子プロセスに渡す環境変数。#565 の許可一覧 (agentChildEnv) を土台に、claude 自身が要るものだけ足す。
+ *   以前は agent-server の環境変数を全部渡していて、AI が動かすシェルから DB のパスワードや bot のパスワードが見えた。
+ *   ANTHROPIC_* / CLAUDE_CONFIG_DIR は claude の認証・設定の置き場 (使う環境だけにある)。HOME は workspace に向ける (従来どおり)
+ */
+export function deepChildEnv(workspacePath: string, source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env = agentChildEnv(source);
+  for (const [k, v] of Object.entries(source)) {
+    if (v !== undefined && (k.startsWith('ANTHROPIC_') || k === 'CLAUDE_CONFIG_DIR')) env[k] = v;
+  }
+  return { ...env, HOME: workspacePath };
+}
+
 export async function processDeep({ roomId, prompt, workspacePath, agentId, sessionId }: ProcessDeepArgs): Promise<void> {
   return new Promise((resolve) => {
     // MCP 設定を動的生成（Tealus MCP + ルーム固有 MCP）
@@ -153,7 +167,7 @@ export async function processDeep({ roomId, prompt, workspacePath, agentId, sess
       cwd: workspacePath,
       shell: process.platform === 'win32',
       timeout: config.DEEP_TIMEOUT,
-      env: { ...process.env, HOME: workspacePath },
+      env: deepChildEnv(workspacePath),
     }) as DeepProcess;
 
     // #250: cancel 用に registry に登録 (close/error/timeout で必ず unregister)
