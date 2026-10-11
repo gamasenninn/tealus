@@ -140,3 +140,14 @@ describe('★ #573 道具の子プロセスに渡す環境変数', () => {
     }
   });
 });
+
+describe('★ #577 自動の filesystem は固定した版', () => {
+  test('★ tealus-workspace-fs は 名前@版 で起動する', async () => {
+    const { MCPServerStdio } = require('@openai/agents');
+    const { FILESYSTEM_MCP_PACKAGE } = require('../../src/lib/mcpPackages.mts');
+    const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    const fsCall = (MCPServerStdio as jest.Mock).mock.calls.map((c) => c[0]).find((o: { name: string }) => o.name === 'tealus-workspace-fs');
+    expect(fsCall.args).toContain(FILESYSTEM_MCP_PACKAGE);
+  });
+});

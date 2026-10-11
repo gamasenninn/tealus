@@ -39,6 +39,7 @@ import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
 import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
 import { agentChildEnv } from '../lib/childEnv.mts';
+import { FILESYSTEM_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -168,7 +169,7 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
     const normalizedPath = workspacePath.replace(/\\/g, '/');
     const fsDef: McpServerDef = {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', normalizedPath],
+      args: ['-y', FILESYSTEM_MCP_PACKAGE, normalizedPath],
       env: {},
     };
     mcp_servers['workspace-fs'] = fsDef as unknown as CodexConfigObject;

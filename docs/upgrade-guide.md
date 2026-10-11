@@ -247,10 +247,12 @@ Deep が走らないルーム  → ★ 残ったまま。読める状態が続�
 
 ```jsonc
 // 変更前
-"args": ["-y", "@bytebase/dbhub@latest", "--transport", "stdio", "mysql://user:pass@host:3306/db"]
+"args": ["-y", "@bytebase/dbhub@1.5.0", "--transport", "stdio", "mysql://user:pass@host:3306/db"]
 // 変更後（実体は agent-server/.env の HKSDB_DSN へ）
-"args": ["-y", "@bytebase/dbhub@latest", "--transport", "stdio", "${HKSDB_DSN}"]
+"args": ["-y", "@bytebase/dbhub@1.5.0", "--transport", "stdio", "${HKSDB_DSN}"]
 ```
+
+★ #577 `@latest` や版なしにしないでください。起動のたびに、その時 registry が返す版が動きます (DSN を渡す子プロセスが、確かめていないコードになる)。上げるときは版を書き換え、先に手で 1 回 `npx -y <名前@版>` を流してキャッシュに入れます。
 
 ★ 未定義の変数は**そのまま残ります**（空文字にすると `mysql://:@host/db` のような
 「それらしく見えて壊れている」値になり、原因が分からなくなるため）。起動ログの `envRefs` の警告で気づけます。

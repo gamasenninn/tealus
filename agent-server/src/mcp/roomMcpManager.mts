@@ -13,6 +13,7 @@ import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
 import { agentChildEnv } from '../lib/childEnv.mts';
+import { FILESYSTEM_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 
 interface McpServerDef {
   command?: string;
@@ -189,7 +190,7 @@ async function createRoomMcp(key: string, roomId: string, workspacePath: string)
       const fsServer = new MCPServerStdio({
         name: 'tealus-workspace-fs',
         command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', normalizedPath],
+        args: ['-y', FILESYSTEM_MCP_PACKAGE, normalizedPath],
         env: agentChildEnv(),   // ★ #573 許可した環境変数だけ
         timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
         clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
