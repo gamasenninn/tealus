@@ -100,12 +100,13 @@ export function selectPrunableAliases(projected: ProjectedTerm[], rows: AliasRow
  *   `upsertTerm` の guard が rejected を尊重するので次の取り込みで復活しない (#375)。
  */
 async function loadActiveOrganonTerms(): Promise<(ActiveTermRow & { id: string })[]> {
-  const { rows } = await pool.query<{ id: string; term: string; source: string; updated_at: Date }>(
-    `SELECT id, term, source, updated_at
+  // ★ #569 基準線は seen_at (取り込みに出てきた時刻)。updated_at は中身の変更だけで進む
+  const { rows } = await pool.query<{ id: string; term: string; source: string; seen_at: Date }>(
+    `SELECT id, term, source, COALESCE(seen_at, updated_at) AS seen_at
        FROM dictionary_terms
       WHERE source = 'organon' AND status = 'active'`
   );
-  return rows.map((r) => ({ id: r.id, term: r.term, source: r.source, updatedAt: r.updated_at }));
+  return rows.map((r) => ({ id: r.id, term: r.term, source: r.source, seenAt: r.seen_at }));
 }
 
 /**
@@ -176,7 +177,7 @@ if (import.meta.main) {
         );
       }
       for (const r of staleWithId) {
-        console.log(`  - ${r.term}  最終更新 ${r.updatedAt.toISOString().slice(0, 16).replace('T', ' ')}`);
+        console.log(`  - ${r.term}  最後に射影で見た ${r.seenAt.toISOString().slice(0, 16).replace('T', ' ')}`);
       }
 
       // ★ 歯止め。alias / term それぞれの母数で判定する (#384、organon 班の Day 52 指摘)。

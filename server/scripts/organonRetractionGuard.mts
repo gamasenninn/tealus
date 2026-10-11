@@ -33,9 +33,10 @@
  *               ★ 比較対象は DB 自身なので、前回値を保存しなくてよい
  *   (b) 上限    1 回に落とせる件数の上限。超えたら **実行せず** 人へ回す
  *   (c) 滞留    「今回の射影に無い」だけでは足りず、**STALE_PULLS 回ずっと不在**を要求する
- *               ★ upsertTerm が present な行に必ず updated_at = NOW() を打つので、
- *                 「触られていない期間」がそのまま「不在の期間」になる。
- *                 organon 班が 8/30 に見つけた「updated_at が片方だけ止まる」が指紋。
+ *               ★ upsertTerm が present な行に必ず seen_at = NOW() を打つので、
+ *                 「出てこなかった期間」がそのまま「不在の期間」になる。
+ *                 ★ #569 以前は updated_at で測っていたが、#547 で updated_at が「中身が変わったとき
+ *                 だけ」進むようになり、変わらない語が全部「不在」に見えた (= この歯止めが外れていた)。
  *
  * ★★ 歯止めは **受け取る側**に置く。上流 (organon 側) が健診を厳しくしても、
  *   ttl が短くなる経路は他にありうる (手編集 / git の事故)。
@@ -61,7 +62,8 @@ export const DEFAULT_STALE_PULLS = 3;
 export interface ActiveTermRow {
   term: string;
   source: string;
-  updatedAt: Date;
+  /** ★ #569 最後に取り込みに出てきた時刻 (dictionary_terms.seen_at)。updated_at ではない */
+  seenAt: Date;
 }
 
 /**
@@ -101,7 +103,7 @@ export function selectStaleTerms(
 ): ActiveTermRow[] {
   const keep = new Set(projectedTerms);
   return rows.filter(
-    (r) => r.source === 'organon' && !keep.has(r.term) && r.updatedAt.getTime() < cutoff.getTime(),
+    (r) => r.source === 'organon' && !keep.has(r.term) && r.seenAt.getTime() < cutoff.getTime(),
   );
 }
 

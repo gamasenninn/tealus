@@ -28,10 +28,10 @@ const old = (days: number): Date => new Date(NOW.getTime() - days * DAY);
 
 describe('selectStaleTerms', () => {
   const rows: ActiveTermRow[] = [
-    { term: '重久', source: 'organon', updatedAt: old(55) },
-    { term: '古澤', source: 'organon', updatedAt: old(34) },
-    { term: '五月女', source: 'organon', updatedAt: old(0) }, // 今回の pull で触られた
-    { term: '手で足した語', source: 'manual', updatedAt: old(90) },
+    { term: '重久', source: 'organon', seenAt: old(55) },
+    { term: '古澤', source: 'organon', seenAt: old(34) },
+    { term: '五月女', source: 'organon', seenAt: old(0) }, // 今回の pull で触られた
+    { term: '手で足した語', source: 'manual', seenAt: old(90) },
   ];
   // ★ 基準は「K 回前の pull の時刻」。日数ではない (下の回帰テスト参照)。
   const cutoff = old(3);
@@ -48,7 +48,7 @@ describe('selectStaleTerms', () => {
   });
 
   it('★★ 直近の pull で触られた語は、射影から一度消えただけでは対象にしない', () => {
-    const rows2: ActiveTermRow[] = [{ term: '昨日から不在', source: 'organon', updatedAt: old(1) }];
+    const rows2: ActiveTermRow[] = [{ term: '昨日から不在', source: 'organon', seenAt: old(1) }];
     expect(selectStaleTerms([], rows2, cutoff)).toEqual([]);
   });
 });
@@ -79,7 +79,7 @@ describe('staleCutoff — ★ 「日数」ではなく「pull 回数」で切る
     // 10 日 pull が無く、直前の 1 回だけ走った状況。日数基準なら誤って撤去してしまう。
     const runs = [old(0), old(10), old(11)];
     const cutoff = staleCutoff(runs, 3);
-    const victim: ActiveTermRow[] = [{ term: '昨日消えた語', source: 'organon', updatedAt: old(10) }];
+    const victim: ActiveTermRow[] = [{ term: '昨日消えた語', source: 'organon', seenAt: old(10) }];
     // cutoff = 11 日前。updated_at (10 日前) はそれより新しいので対象外 = 落ちない。
     expect(cutoff).toEqual(old(11));
     expect(selectStaleTerms([], victim, cutoff!)).toEqual([]);

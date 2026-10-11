@@ -124,8 +124,10 @@ export async function runDbChecks(env: DoctorEnv): Promise<Finding[]> {
   //
   // ★★★ 基準線は **日数ではなく pull の回数**で切る。★ 規則は server 側の staleCutoff を
   //   そのまま使う (★★ 同じ仕事を 2 か所に書くと、片方だけ直して壊れを隠す)。
-  // ★★★★ `upsertTerm` は present な行に **必ず** `updated_at = NOW()` を打つので、
-  //   「K 回の pull で触られていない」= 「K 回続けて射影に居なかった」になる。
+  // ★★★★ `upsertTerm` は present な行に **必ず** `seen_at = NOW()` を打つので、
+  //   「K 回の pull で出てこなかった」= 「K 回続けて射影に居なかった」になる。
+  //   ★ #569 以前は updated_at で測っていた。#547 で updated_at が「中身が変わったときだけ」進むように
+  //   なり、変わらない語が全部「撤去待ち」に見えた (2026-10-11 の朝に 333/333 の誤報)。
   //   ★ 射影そのものは読まない (ttl の読み直しは server 側の仕事)。
   const backlog = await withClient(env, async (c) => {
     const runs = await c.query<{ ran_at: Date }>(
@@ -138,8 +140,8 @@ export async function runDbChecks(env: DoctorEnv): Promise<Finding[]> {
     }
     const stale = await c.query<{ term: string }>(
       `SELECT term FROM dictionary_terms
-        WHERE source = 'organon' AND status = 'active' AND updated_at < $1
-        ORDER BY updated_at`,
+        WHERE source = 'organon' AND status = 'active' AND COALESCE(seen_at, updated_at) < $1
+        ORDER BY COALESCE(seen_at, updated_at)`,
       [cutoff]
     );
     // ★ 別名は数えない (★★ 撤去対象が 射影との対の突き合わせで決まるため。判定側がそう書く)

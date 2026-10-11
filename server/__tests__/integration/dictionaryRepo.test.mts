@@ -201,6 +201,23 @@ describe('#547 updated_at は中身が変わったときだけ進む', () => {
     expect(new Date(changed.updated_at).getTime()).toBeGreaterThan(new Date('2026-01-02').getTime());
   });
 
+  // ★ #569 撤去の基準線 (K 回続けて射影に居なかった) は「取り込みに出てきた時刻」で測る。
+  //   #547 で updated_at が動かなくなり、doctor が 333/333 を「撤去待ち」と誤報した
+  test('★ 同じ中身の upsertTerm でも seen_at (取り込みに出てきた時刻) は進む', async () => {
+    const t = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    await getTestPool().query(`UPDATE dictionary_terms SET updated_at = '2026-01-01T00:00:00Z', seen_at = '2026-01-01T00:00:00Z' WHERE id = $1`, [t.id]);
+    const again = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    expect(new Date(again.updated_at).toISOString()).toBe('2026-01-01T00:00:00.000Z');
+    expect(new Date(again.seen_at!).getTime()).toBeGreaterThan(new Date('2026-01-02').getTime());
+  });
+
+  test('★ tombstone の語は seen_at も動かさない (取り込みが触らない)', async () => {
+    const t = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    await getTestPool().query(`UPDATE dictionary_terms SET status = 'rejected', seen_at = '2026-01-01T00:00:00Z' WHERE id = $1`, [t.id]);
+    const again = await repo.upsertTerm({ term: '鹿沼', category: 'place', source: 'organon' });
+    expect(new Date(again.seen_at!).toISOString()).toBe('2026-01-01T00:00:00.000Z');
+  });
+
   test('★ organon の取り込み (count 0) では別名の updated_at を動かさない', async () => {
     const t = await repo.upsertTerm({ term: '鹿沼' });
     const { row } = await repo.upsertAlias({ termId: t.id, alias: 'カヌマ', source: 'manual', count: 3 });

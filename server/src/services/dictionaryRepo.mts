@@ -24,6 +24,8 @@ export interface DictionaryTermRow {
   status: DictionaryTermStatus;
   created_at: Date;
   updated_at: Date;
+  /** ★ #569 最後に upsert (= 取り込み) に出てきた時刻。撤去の基準線はこちらで測る (updated_at は中身の変更だけ) */
+  seen_at?: Date | null;
 }
 
 /** dictionary_aliases の行 */
@@ -59,9 +61,11 @@ export interface UpsertTermInput {
  */
 export async function upsertTerm({ term, category = 'other', reading = null, description = null, source = 'manual', status = 'active' }: UpsertTermInput): Promise<DictionaryTermRow> {
   const { rows } = await pool.query<DictionaryTermRow>(
-    `INSERT INTO dictionary_terms (term, category, reading, description, source, status)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO dictionary_terms (term, category, reading, description, source, status, seen_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
      ON CONFLICT (term) DO UPDATE SET
+       -- ★ #569 中身が同じでも「出てきた」印は打つ (撤去の基準線はこれで測る)
+       seen_at     = NOW(),
        category    = EXCLUDED.category,
        reading     = COALESCE(EXCLUDED.reading, dictionary_terms.reading),
        description = COALESCE(EXCLUDED.description, dictionary_terms.description),
