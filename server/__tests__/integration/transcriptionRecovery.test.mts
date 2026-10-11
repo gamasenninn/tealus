@@ -7,7 +7,7 @@
  */
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
-import { recoverStuckFormatting } from '../../src/services/transcriptionRecovery.mts';
+import { recoverStuckFormatting, recoverStuckTranscribing } from '../../src/services/transcriptionRecovery.mts';
 
 describe('#536 起動時に、整えている途中で止まった文字起こしを整え直す', () => {
   let roomId: string;
@@ -75,5 +75,59 @@ describe('#536 起動時に、整えている途中で止まった文字起こ�
     const format = jest.fn().mockRejectedValueOnce(new Error('AI が落ちた')).mockResolvedValueOnce('整えた文');
     await expect(recoverStuckFormatting({ format, io: null })).resolves.toBe(2);
     expect(format).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * ★ #579 音を文字にしている途中 (pending / transcribing) で本体が再起動されると、「⏳ 文字起こし中...」のまま止まる。
+ *   #536 は formatting しか拾っておらず、より長い transcribing の窓 (投稿→生の文字 p50 4.4 秒) は無防備だった
+ */
+describe('★ #579 起動時に、音を文字にしている途中で止まったものをやり直す', () => {
+  let roomId: string;
+  let userId: string;
+  beforeAll(async () => { await setupTestDb(); });
+  afterAll(async () => { await closeTestDb(); });
+  beforeEach(async () => {
+    await cleanTestDb();
+    const u = await createTestUser({ login_id: 'EMP001', display_name: '話した人' });
+    userId = u.user.id;
+    const { rows } = await getTestPool().query<{ id: string }>(`INSERT INTO rooms (type, name) VALUES ('group', '部屋') RETURNING id`);
+    roomId = rows[0].id;
+  });
+  const voice = async (status: string, opts: { deleted?: boolean; type?: string; media?: boolean } = {}) => {
+    const { rows } = await getTestPool().query<{ id: string }>(
+      `INSERT INTO messages (room_id, sender_id, type, is_deleted) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [roomId, userId, opts.type ?? 'voice', opts.deleted ?? false]);
+    if (opts.media !== false) {
+      await getTestPool().query(`INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size) VALUES ($1, $2, 'a.wav', 'audio/wav', 10)`,
+        [rows[0].id, `voices/${rows[0].id}.wav`]);
+    }
+    await getTestPool().query(`INSERT INTO voice_transcriptions (message_id, version, status) VALUES ($1, 1, $2)`, [rows[0].id, status]);
+    return rows[0].id;
+  };
+
+  it('★ pending / transcribing のまま止まっているものを、添付のファイルでやり直す', async () => {
+    const a = await voice('transcribing');
+    const b = await voice('pending', { type: 'video' });
+    await voice('done');
+    await voice('formatting');                 // 整える途中は #536 の役目
+    await voice('transcribing', { deleted: true });
+    await voice('transcribing', { media: false }); // ファイルが無いものはやり直せない
+    const calls: Array<{ id: string; file: string; opts: Record<string, unknown> }> = [];
+    const n = await recoverStuckTranscribing({ transcribe: async (id, file, opts) => { calls.push({ id, file, opts: opts as Record<string, unknown> }); return null; } });
+    expect(n).toBe(2);
+    expect(calls.map((c) => c.id).sort()).toEqual([a, b].sort());
+    const vb = calls.find((c) => c.id === b)!;
+    expect(vb.file).toBe(`voices/${b}.wav`);
+    expect(vb.opts).toMatchObject({ roomId, version: 1, isVideo: true, messageType: 'video' });
+  });
+
+  it('1 件が失敗しても残りは続ける', async () => {
+    await voice('transcribing');
+    await voice('transcribing');
+    let n = 0;
+    const done = await recoverStuckTranscribing({ transcribe: async () => { n += 1; if (n === 1) throw new Error('boom'); return null; } });
+    expect(done).toBe(2);
+    expect(n).toBe(2);
   });
 });

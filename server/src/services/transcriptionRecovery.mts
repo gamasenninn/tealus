@@ -37,3 +37,39 @@ export async function recoverStuckFormatting(
   }
   return rows.length;
 }
+
+type Transcriber = (messageId: string, filePath: string, options: { io?: Server | null; roomId?: string | null; version?: number; isVideo?: boolean; messageType?: string }) => Promise<unknown>;
+
+/**
+ * ★ #579 起動時に、音を文字にしている途中 (pending / transcribing) で止まったものをやり直す。
+ *
+ * ★ #536 (上) は formatting だけを拾っていた。投稿→生の文字起こしは p50 4.4 秒・p95 6.2 秒で、
+ *   整える段 (約 2.5 秒) より長いのに拾われず、ここで落ちると「⏳ 文字起こし中...」のまま止まった。
+ * ★ 本体は 1 台・1 プロセスなので、起動した時点で pending / transcribing のまま残っているものは前のプロセスの取り残し。
+ *   拾うのは「最新の版がそれで、投稿が消えておらず、添付のファイルがある」もの。1 件ずつ順に、失敗しても続ける
+ * @returns やり直しを試みた件数
+ */
+export async function recoverStuckTranscribing(
+  { transcribe, io = null }: { transcribe?: Transcriber; io?: Server | null } = {},
+): Promise<number> {
+  const run: Transcriber = transcribe ?? (async (id, file, opts) => (await import('./transcription.mts')).transcribeMessage(id, file, opts));
+  const { rows } = await pool.query<{ message_id: string; room_id: string; version: number; type: string; file_path: string }>(
+    `SELECT vt.message_id, m.room_id, vt.version, m.type,
+            (SELECT mm.file_path FROM message_media mm WHERE mm.message_id = m.id ORDER BY mm.created_at LIMIT 1) AS file_path
+       FROM voice_transcriptions vt
+       JOIN messages m ON m.id = vt.message_id
+      WHERE vt.status IN ('pending', 'transcribing')
+        AND m.is_deleted = false
+        AND vt.version = (SELECT MAX(version) FROM voice_transcriptions x WHERE x.message_id = vt.message_id)
+        AND EXISTS (SELECT 1 FROM message_media mm WHERE mm.message_id = m.id)
+      ORDER BY vt.created_at`);
+  if (rows.length > 0) logger.info(`[transcription-recovery] 音を文字にしている途中で止まった ${rows.length} 件をやり直します`);
+  for (const r of rows) {
+    try {
+      await run(r.message_id, r.file_path, { io, roomId: r.room_id, version: r.version, isVideo: r.type === 'video', messageType: r.type });
+    } catch (err) {
+      logger.warn(`[transcription-recovery] やり直しに失敗 message=${r.message_id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return rows.length;
+}

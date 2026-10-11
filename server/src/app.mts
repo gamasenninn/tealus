@@ -365,7 +365,8 @@ if (import.meta.main) {
       .catch((err) => logger.warn(`[room-triggers] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
     // #536 整えている途中で前のプロセスが落ちた文字起こしを整え直す (「AIが文章を整えています…」のまま止まっていた)
     import('./services/transcriptionRecovery.mts')
-      .then(tr => tr.recoverStuckFormatting({ io }))
+      // ★ #579 音を文字にしている途中 (pending / transcribing) で止まったものもやり直す (「⏳ 文字起こし中...」のまま止まっていた)
+      .then(async tr => { await tr.recoverStuckFormatting({ io }); await tr.recoverStuckTranscribing({ io }); })
       .catch((err) => logger.warn(`[transcription-recovery] 起動時の整え直しに失敗: ${err instanceof Error ? err.message : String(err)}`));
     // #362 login の失敗カウンタの掃除。★ 口は外から到達できるので鍵は攻撃者が自由に作れる。
     //   窓を過ぎた鍵を定期的に落とす (上限での追い出しもあるが、平時はこちらで減る)。
