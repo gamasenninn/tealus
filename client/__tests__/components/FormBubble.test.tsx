@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FormSchema, Message } from '../../src/types';
 
-// api / socket / messageStore をモック (送信検証用)。REST 経路は sendRoomMessage 経由で api.sendMessage を叩く。
+// api / socket / messageStore をモック (送信検証用)。★ REST 送信 (api.sendMessage) は #575 で消した。呼ばれないことを見る
 const requestMock = vi.fn().mockResolvedValue({});
 const sendMessageMock = vi.fn().mockResolvedValue({});
 vi.mock('../../src/services/api', () => ({

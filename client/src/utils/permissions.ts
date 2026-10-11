@@ -27,6 +27,12 @@ export function canCreateRoom(user: UserLike): boolean {
   return !isGuest(user);
 }
 
+/** ★ #575 利用者の一覧・オンラインを引けるか。サーバーの canSearchUsers と同じ (admin / user)。ゲストは引けない */
+export function canSearchUsers(user: UserLike): boolean {
+  const role = getRole(user);
+  return role === 'admin' || role === 'user';
+}
+
 /** room へ他 user を招待する権限。guest は不可。 */
 export function canInviteToRoom(user: UserLike): boolean {
   return !isGuest(user);

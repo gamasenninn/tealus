@@ -4,7 +4,8 @@ import { getSocket } from './socket';
  * 部屋へテキストメッセージを送る唯一の経路 (#341後リファクタで 4 箇所の同型実装を集約)。
  *
  * ★ docs/05 §4 不変条件: `message.created` webhook は **socket 経路 (`message:send`) のみ** 発火する。
- *   REST (`api.sendMessage`) は webhook を発火しないため、cc-queue / LINE 等の consumer が起動しない。
+ *   REST (`POST /rooms/:id/messages`) は webhook を発火しないため、cc-queue / LINE 等の consumer が起動しない。
+ *   ★ 画面側の REST 送信の関数 (api.sendMessage) は #575 で消した (#537 以降、呼び手 0)。足し直さないこと
  *   → 新しいテキストは必ず socket で送る (切れていればつながり直すのを待つ、#537)。この判断を 1 箇所に閉じ込め、
  *   送信 UI を増やすたびに #336 (FormBubble が REST 送信で cc-queue 不起動) を再発させない。
  *

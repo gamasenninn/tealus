@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
+import { useAuthStore } from '../stores/authStore';
+import { canSearchUsers } from '../utils/permissions';
 
 interface UserPresencePayload {
   user_id: string;
 }
 
-// server 実応答は { online: string[] } (server/src/routes/users.mts:54)。
-// api.ts の OnlineUsersResponse は { user_ids } と定義されており実応答とずれているため
-// local に補正して読む (api.ts 側の修正は services バッチへ報告済み)。
-type OnlineUsersActualResponse = { online?: string[] };
 
 export interface UseOnlineStatusResult {
   onlineUsers: Set<string>;
@@ -22,7 +20,10 @@ export function useOnlineStatus(): UseOnlineStatusResult {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.getOnlineUsers().then(data => setOnlineUsers(new Set((data as unknown as OnlineUsersActualResponse).online))).catch(() => {});
+    // ★ #575 ゲストはオンラインを引けない (サーバーが 403)。呼ばない
+    if (canSearchUsers(useAuthStore.getState().user)) {
+      api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
+    }
 
     const socket = getSocket();
     if (socket) {

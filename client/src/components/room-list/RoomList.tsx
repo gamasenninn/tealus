@@ -8,7 +8,7 @@ import { getSocket, joinRoom, leaveRoom } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { canCreateRoom } from '../../utils/permissions';
+import { canCreateRoom, canSearchUsers } from '../../utils/permissions';
 import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import type { Room } from '../../types';
@@ -53,7 +53,10 @@ function RoomList() {
 
   useEffect(() => {
     fetchRooms();
-    api.getOnlineUsers().then(data => setOnlineUsers(new Set((data as unknown as { online?: string[] }).online))).catch(() => {});
+    // ★ #575 ゲストはオンラインを引けない (サーバーが 403)。呼ばない
+    if (canSearchUsers(useAuthStore.getState().user)) {
+      api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
+    }
   }, [fetchRooms]);
 
   // Join all rooms for real-time updates on room list

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, canDeleteRoomTag, roleLabel } from '../src/utils/permissions';
+import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, canDeleteRoomTag, canSearchUsers, roleLabel } from '../src/utils/permissions';
 
 describe('client permissions helper (#282 Phase D)', () => {
   const admin = { role: 'admin' };
@@ -38,6 +38,15 @@ describe('client permissions helper (#282 Phase D)', () => {
     expect(canCreateRoom(guest)).toBe(false);
     expect(canInviteToRoom(guest)).toBe(false);
     expect(canInviteToRoom(user)).toBe(true);
+  });
+
+  // ★ #575 ゲストは利用者の一覧・オンラインを引けない (サーバーの canSearchUsers と同じ)。
+  //   画面が毎回 GET /api/users/online を呼んで 403 を積んでいた
+  it('canSearchUsers は admin / user だけ true (サーバーと同じ)', () => {
+    expect(canSearchUsers(admin)).toBe(true);
+    expect(canSearchUsers(user)).toBe(true);
+    expect(canSearchUsers(guest)).toBe(false);
+    expect(canSearchUsers(null)).toBe(false);
   });
 
   it('roleLabel が日本語ラベルを返す (bot 優先)', () => {

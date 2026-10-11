@@ -247,14 +247,6 @@ class ApiClient {
     return this.request<{ message_id: string | null }>('GET', `/rooms/${roomId}/messages/first-of-day?${q}`);
   }
 
-  sendMessage(roomId: string, content: string, replyTo: string | null = null, forwardedFrom: string | null = null) {
-    return this.request<MessageResponse>('POST', `/rooms/${roomId}/messages`, {
-      content,
-      reply_to: replyTo,
-      forwarded_from: forwardedFrom,
-    });
-  }
-
   forwardMedia(targetRoomId: string, sourceMessageId: string) {
     return this.request<MessageResponse>('POST', `/rooms/${targetRoomId}/media/forward`, {
       source_message_id: sourceMessageId,
