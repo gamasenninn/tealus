@@ -106,7 +106,9 @@ router.post('/register', async (req, res) => {
  * Login with login_id and password
  */
 router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
-  const { login_id, password } = req.body;
+  const { password } = req.body;
+  // ★ スマホの予測変換で前後に空白 (全角を含む) が付くと「ID が違う」で落ちていた。パスワードは落とさない
+  const login_id = typeof req.body.login_id === 'string' ? req.body.login_id.trim() : req.body.login_id;
 
   // Validation
   if (!login_id || !password) {

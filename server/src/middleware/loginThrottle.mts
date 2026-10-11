@@ -55,7 +55,8 @@ declare module 'express-serve-static-core' {
  *   (オブジェクトを渡して鍵を壊す / 長い文字列で memory を伸ばす、をここで止める)
  */
 function normalizeLoginId(value: unknown): string {
-  const s = typeof value === 'string' ? value : (value == null ? '' : JSON.stringify(value) ?? '');
+  // ★ ログインは login_id の前後の空白を落として照合するので、鍵も落とす (付け替えで試行を増やされない)
+  const s = typeof value === 'string' ? value.trim() : (value == null ? '' : JSON.stringify(value) ?? '');
   return s.slice(0, MAX_KEY_LOGIN_ID_LEN);
 }
 

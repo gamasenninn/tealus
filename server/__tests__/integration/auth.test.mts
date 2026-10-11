@@ -179,6 +179,25 @@ describe('Auth API', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBeDefined();
     });
+
+    // ★ スマホの予測変換で login_id の前後に空白 (全角を含む) が付くと「ID が違う」で落ちていた (10-09 に 2 回)
+    it('★ login_id の前後の空白 (半角・全角) は落として照合する', async () => {
+      for (const login_id of [' EMP001', 'EMP001 ', '　EMP001　']) {
+        const res = await request(app).post('/api/auth/login').send({ login_id, password: 'password123' });
+        expect(res.status).toBe(200);
+        expect(res.body.user.login_id).toBe('EMP001');
+      }
+    });
+
+    it('★ 空白だけの login_id は 400 (欠けているのと同じ)', async () => {
+      const res = await request(app).post('/api/auth/login').send({ login_id: '  ', password: 'password123' });
+      expect(res.status).toBe(400);
+    });
+
+    it('★ パスワードの空白は落とさない (空白込みのパスワードは別物)', async () => {
+      const res = await request(app).post('/api/auth/login').send({ login_id: 'EMP001', password: ' password123 ' });
+      expect(res.status).toBe(401);
+    });
   });
 
   // ============================================

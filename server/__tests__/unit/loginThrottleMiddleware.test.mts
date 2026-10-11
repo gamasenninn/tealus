@@ -124,3 +124,17 @@ describe('記録の口', () => {
     expect(res.statusCode).toBe(429); // 同じ鍵が引けている
   });
 });
+
+describe('★ login_id の前後の空白 (ログインは空白を落として照合する)', () => {
+  test('★ 空白の付け方を変えても同じ鍵に数える (付け替えで試行を増やせない)', () => {
+    const { mw, throttle } = setup();
+    for (let i = 0; i < 3; i += 1) throttle.recordFailure(keyOf('1.2.3.4', 'EMP001'));
+    for (const id of [' EMP001', 'EMP001 ', '　EMP001　']) {
+      const res = fakeRes();
+      let called = false;
+      mw(req('1.2.3.4', id), res as never, () => { called = true; });
+      expect(called).toBe(false);
+      expect(res.statusCode).toBe(429);
+    }
+  });
+});
