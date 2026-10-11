@@ -34,6 +34,11 @@ export async function scopeToolArgs(
   args: Record<string, unknown>,
   ctx: { currentRoomId: string; known: Set<string>; messageRoomOf: (messageId: string) => Promise<string | null> },
 ): Promise<ScopeResult> {
+  // ★ #571 list_tags は bot が入っている全部屋のタグを返し、結果に部屋が無いので後から絞れない。
+  //   会話モードでは呼ばない (Light v2 は本体の口で依頼した人の部屋に絞っている。bot.mts の /tags)
+  if (name === 'list_tags') {
+    return { ok: false, output: '会話モードではタグの一覧は引けません。タグで探すときは、部屋を指定して search_messages の tag_names を使ってください。' };
+  }
   if (name === 'search_messages' && typeof args.room_id !== 'string') {
     return { ok: true, args: { ...args, room_id: ctx.currentRoomId } };
   }

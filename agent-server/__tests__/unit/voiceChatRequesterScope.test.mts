@@ -39,6 +39,12 @@ describe('scopeToolArgs', () => {
     expect((await scopeToolArgs('read_document', { message_id: 'm1' }, { currentRoomId: CUR, known, messageRoomOf: async () => OTHER })).ok).toBe(true);
     expect((await scopeToolArgs('read_document', { message_id: 'm1' }, { currentRoomId: CUR, known, messageRoomOf: noMsg })).ok).toBe(true);
   });
+  // ★ #571 list_tags の結果には部屋が無く、あとから絞れない (会話している人が入っていない部屋のタグ名も返った)
+  it('★ list_tags は呼ばずに返す (部屋を指定した検索を案内する)', async () => {
+    const r = await scopeToolArgs('list_tags', { limit: 30 }, { currentRoomId: CUR, known, messageRoomOf: noMsg });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.output).toContain('search_messages');
+  });
 });
 
 describe('filterListRooms', () => {
