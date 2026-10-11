@@ -15,7 +15,7 @@ import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import { parseSendArgs, parseGlobalArgs } from './parse-args.ts';
-import { waitForFileComplete, watchDirectory, getUnsent, writeLastSent } from './watch.ts';
+import { waitForFileComplete, watchDirectory, getUnsent, writeLastSent, sendWithRetry } from './watch.ts';
 
 // --- API response shapes ---
 
@@ -220,7 +220,8 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function sendVoiceFile(roomId: string, roomName: string, filePath: string): Promise<void> {
+/** ★ #578 届いたら true。失敗は false (呼び手が送り直す・記録を進めないを決める) */
+async function sendVoiceFile(roomId: string, roomName: string, filePath: string): Promise<boolean> {
   let token = await getToken();
   let result = await uploadFile(token, `/api/rooms/${roomId}/voice`, 'voice', filePath);
 
@@ -233,9 +234,10 @@ async function sendVoiceFile(roomId: string, roomName: string, filePath: string)
 
   if (result.message) {
     console.log(`✅ 音声送信: ${roomName} ← ${path.basename(filePath)}（文字起こし自動実行）`);
-  } else {
-    console.error('❌ 送信失敗:', result.error);
+    return true;
   }
+  console.error('❌ 送信失敗:', result.error);
+  return false;
 }
 
 async function cmdSend(args: string[]): Promise<void> {
@@ -272,12 +274,14 @@ async function cmdSend(args: string[]): Promise<void> {
         console.log(`📦 未送信ファイル: ${unsent.length}件`);
         for (const file of unsent) {
           console.log(`📁 catch-up: ${path.basename(file.path)}`);
-          try {
-            await sendVoiceFile(room.id, room.name, file.path);
-            writeLastSent(parsed.watchDir, new Date(file.mtime));
-          } catch (err) {
-            console.error(`❌ 送信失敗: ${errorMessage(err)}`);
+          // ★ #578 届いたときだけ記録を進める。届かなければそこで止める
+          //   (後ろの録音で「最後に送った時刻」を追い越すと、届かなかった録音が二度と送られない)
+          const ok = await sendWithRetry(() => sendVoiceFile(room.id, room.name, file.path));
+          if (!ok) {
+            console.error(`⚠️ catch-up を止めます (未送信のまま。次に起動したときにここから送ります): ${path.basename(file.path)}`);
+            break;
           }
+          writeLastSent(parsed.watchDir, new Date(file.mtime));
         }
         console.log('✅ catch-up 完了');
         console.log('');
@@ -292,8 +296,11 @@ async function cmdSend(args: string[]): Promise<void> {
       console.log(`📁 検知: ${path.basename(filePath)}`);
       const complete = await waitForFileComplete(filePath);
       if (complete) {
-        await sendVoiceFile(room.id, room.name, filePath);
-        writeLastSent(watchDir, new Date());
+        // ★ #578 送り直し込み。届いたときだけ「最後に送った時刻」を進める
+        //   (届かなかった録音は、次に起動したときの catch-up で送られる)
+        const ok = await sendWithRetry(() => sendVoiceFile(room.id, room.name, filePath));
+        if (ok) writeLastSent(watchDir, new Date());
+        else console.error(`⚠️ 送れませんでした (未送信のまま。次に起動したときの catch-up で送ります): ${path.basename(filePath)}`);
       } else {
         console.error(`⚠️ ファイル書き込み未完了（スキップ）: ${path.basename(filePath)}`);
       }

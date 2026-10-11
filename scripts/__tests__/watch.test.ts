@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { waitForFileComplete, watchDirectory } from '../watch.ts';
+import { waitForFileComplete, watchDirectory, sendWithRetry } from '../watch.ts';
 
 // テスト用一時ディレクトリ
 let tmpDir: string;
@@ -168,5 +168,45 @@ describe('watchDirectory', () => {
       expect(dupCount).toBe(1);
       done();
     }, 3000);
+  }, 10000);
+});
+
+
+// ★ #578 無線の送り込みは、本体の再起動中に送ると落ちて黙っていた (10-02 に 4 時間 6 分)。
+//   送り直しを入れ、どんな失敗でもプロセスを落とさない
+describe('★ #578 sendWithRetry', () => {
+  const noSleep = async () => {};
+  test('★ 失敗しても間を空けて送り直し、届いたら true', async () => {
+    const results = [false, false, true];
+    const attempt = jest.fn(async () => results.shift()!);
+    expect(await sendWithRetry(attempt, [1, 1, 1], noSleep)).toBe(true);
+    expect(attempt).toHaveBeenCalledTimes(3);
+  });
+  test('★ 例外 (つながらない) でも落ちずに送り直す', async () => {
+    let n = 0;
+    const attempt = jest.fn(async () => { n += 1; if (n < 2) throw new Error('connect ECONNREFUSED'); return true; });
+    expect(await sendWithRetry(attempt, [1, 1], noSleep)).toBe(true);
+  });
+  test('★ 送り直しを使い切ったら false (例外は投げない)', async () => {
+    const attempt = jest.fn(async () => { throw new Error('down'); });
+    expect(await sendWithRetry(attempt, [1, 1], noSleep)).toBe(false);
+    expect(attempt).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('★ #578 watchDirectory は callback の失敗でプロセスを落とさない', () => {
+  test('★ callback が reject しても次のファイルを検知する', (done) => {
+    const detected: string[] = [];
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const stop = watchDirectory(tmpDir, ['.wav'], async (filePath) => {
+      detected.push(path.basename(filePath));
+      if (detected.length === 1) throw new Error('send failed');
+      stop();
+      err.mockRestore();
+      expect(detected).toEqual(['a.wav', 'b.wav']);
+      done();
+    });
+    setTimeout(() => fs.writeFileSync(path.join(tmpDir, 'a.wav'), Buffer.alloc(16)), 200);
+    setTimeout(() => fs.writeFileSync(path.join(tmpDir, 'b.wav'), Buffer.alloc(16)), 2600);
   }, 10000);
 });

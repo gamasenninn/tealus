@@ -62,7 +62,7 @@ export async function waitForFileComplete(filePath: string, opts: WaitOptions = 
 export function watchDirectory(
   dir: string,
   extensions: string[],
-  onFile: (filePath: string) => void
+  onFile: (filePath: string) => void | Promise<void>
 ): () => void {
   const sent = new Set<string>();         // 送信済みファイル名（重複送信防止）
   const seen = new Map<string, number>(); // ファイル名 → タイムスタンプ（デバウンス用）
@@ -103,7 +103,11 @@ export function watchDirectory(
     // 送信済みとして記録
     sent.add(filename);
 
-    onFile(filePath);
+    // ★ #578 callback の失敗 (async の reject を含む) でプロセスを落とさない。
+    //   以前は await も catch もせず、本体の再起動中の送信で unhandled rejection になり、監視ごと落ちていた
+    Promise.resolve()
+      .then(() => onFile(filePath))
+      .catch((err) => console.error(`❌ ${path.basename(filePath)} の処理に失敗:`, err instanceof Error ? err.message : String(err)));
   });
 
   return function stop() {
@@ -160,4 +164,29 @@ export function getUnsent(dir: string, extensions: string[]): UnsentFile[] {
   // 古い順にソート
   files.sort((a, b) => a.mtime - b.mtime);
   return files;
+}
+
+
+/** ★ #578 送り直しの待ち時間 (ms)。本体の再起動は数秒なので、最初の数回で届く */
+export const RETRY_DELAYS_MS = [5_000, 15_000, 45_000, 120_000, 300_000];
+
+/**
+ * ★ #578 送信を、失敗したら間を空けて送り直す。届いたら true、使い切ったら false。**例外は投げない。**
+ * 以前は 1 回で諦め、本体の再起動中 (ECONNREFUSED) に当たるとプロセスごと落ちて 4 時間黙った (10-02)。
+ */
+export async function sendWithRetry(
+  attempt: () => Promise<boolean>,
+  delaysMs: number[] = RETRY_DELAYS_MS,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<boolean> {
+  for (let i = 0; ; i += 1) {
+    try {
+      if (await attempt()) return true;
+    } catch (err) {
+      console.error(`❌ 送信に失敗 (${i + 1} 回目):`, err instanceof Error ? err.message : String(err));
+    }
+    if (i >= delaysMs.length) return false;
+    console.log(`🔁 ${Math.round(delaysMs[i] / 1000)} 秒後に送り直します`);
+    await sleep(delaysMs[i]);
+  }
 }
