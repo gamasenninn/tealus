@@ -198,7 +198,10 @@ describe('Profile API', () => {
         .set('Authorization', `Bearer ${user1.token}`)
         .send({ current_password: 'wrongpass', new_password: 'newpass456' });
 
-      expect(res.status).toBe(401);
+      // ★ #574 401 ではなく 400。画面は「ログイン中の 401 = 認証切れ」でログアウトさせる (#539) ので、
+      //   打ち間違いで 401 を返すと、エラーの代わりにログイン画面へ飛ばされた
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('現在のパスワード');
     });
 
     it('should reject without required fields', async () => {

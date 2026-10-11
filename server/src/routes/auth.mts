@@ -301,7 +301,8 @@ router.put('/password', authenticate, async (req, res) => {
     const result = await pool.query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [req.user!.id]);
     const isValid = await bcrypt.compare(current_password, result.rows[0].password_hash);
     if (!isValid) {
-      return res.status(401).json({ error: '現在のパスワードが正しくありません' });
+      // ★ #574 401 にしない (画面はログイン中の 401 を認証切れとしてログアウトさせる、#539)
+      return res.status(400).json({ error: '現在のパスワードが正しくありません' });
     }
 
     const newHash = await bcrypt.hash(new_password, SALT_ROUNDS);
