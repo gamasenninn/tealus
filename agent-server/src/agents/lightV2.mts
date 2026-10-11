@@ -193,7 +193,8 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
   const globalConfigPath = path.join(import.meta.dirname, '..', '..', 'mcp_config.json');
   if (fs.existsSync(globalConfigPath)) {
     try {
-      const globalMcp = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8')) as { mcpServers?: Record<string, CodexConfigObject> };
+      // ★ #573 ${VAR} を実体に (鍵は設定の env で渡す。親の env の継承に頼らない)
+      const globalMcp = expandEnvRefs(JSON.parse(fs.readFileSync(globalConfigPath, 'utf8')) as { mcpServers?: Record<string, CodexConfigObject> });
       if (globalMcp.mcpServers) {
         for (const [name, def] of Object.entries(globalMcp.mcpServers)) {
           if (name === 'filesystem') continue;

@@ -19,6 +19,17 @@ import { logger } from './logger.mts';
 const REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 /**
+ * ★ #573 設定の ${VAR} から引かせない、本体の中核の鍵。
+ *   道具の設定ファイル (ルームの mcp_config.json) は workspace の中 = AI が書ける場所にある。
+ *   ここを引けると、AI が自分で書いた設定から署名鍵などを道具の子プロセスへ渡せてしまう。
+ *   道具が要る資格情報 (DSN・API キー) は今までどおり引ける。
+ */
+const CORE_SECRETS = new Set([
+  'JWT_SECRET', 'WEBHOOK_SECRET', 'DB_PASSWORD', 'DB_USER', 'DATABASE_URL',
+  'TEALUS_BOT_PASS', 'TEALUS_E2E_BOT_PASS', 'TEALUS_PASSWORD',
+]);
+
+/**
  * `${VAR}` を `env` の値に置き換える。文字列・配列・オブジェクトの中まで入る。
  *
  * ★ **定義されていない変数はそのまま残す。** 空文字にすると `mysql://:@host/db` のような
@@ -29,6 +40,10 @@ const REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 export function expandEnvRefs<T>(value: T, env: Record<string, string | undefined> = process.env): T {
   if (typeof value === 'string') {
     return value.replace(REF, (whole, name: string) => {
+      if (CORE_SECRETS.has(name.toUpperCase())) {
+        logger.warn(`[envRefs] \${${name}} は本体の中核の鍵なので、設定からは引けません (そのまま渡します)`);
+        return whole;
+      }
       const v = env[name];
       if (v === undefined) {
         logger.warn(`[envRefs] 環境変数 ${name} が未定義です (設定の \${${name}} をそのまま渡します)`);

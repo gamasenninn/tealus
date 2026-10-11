@@ -111,3 +111,32 @@ describe('roomMcpManager', () => {
     expect(names).toContain('room-room1-filesystem');
   });
 });
+
+// ★ #573 ルーム固有の道具の子プロセスにも、許可した環境変数だけを渡す (#565 / #570 と同じ形)。
+//   以前は agent-server の環境変数を全部渡していた (本体の署名鍵・DB のパスワードを含む)
+describe('★ #573 道具の子プロセスに渡す環境変数', () => {
+  test('★ 設定の道具・自動の filesystem とも、許可外の変数を渡さない (設定の env は渡す)', async () => {
+    process.env.JWT_SECRET = 'jwt-secret-573';
+    process.env.DB_PASSWORD = 'db-secret-573';
+    process.env.HKSDB_DSN = 'mysql://u:p@h/db';
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({
+        mcpServers: { custom_db: { command: 'node', args: ['db-mcp.js'], env: { DSN: '${HKSDB_DSN}' } } },
+      }));
+      const { MCPServerStdio } = require('@openai/agents');
+      const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
+      await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+      const calls = (MCPServerStdio as jest.Mock).mock.calls.map((c) => c[0] as { name: string; env: Record<string, string> });
+      expect(calls.length).toBeGreaterThan(0);
+      for (const c of calls) {
+        expect(c.env.JWT_SECRET).toBeUndefined();
+        expect(c.env.DB_PASSWORD).toBeUndefined();
+        expect(Object.keys(c.env).some((k) => k.toUpperCase() === 'PATH')).toBe(true);
+      }
+      const db = calls.find((c) => c.name === 'room-room1-custom_db')!;
+      expect(db.env.DSN).toBe('mysql://u:p@h/db');
+    } finally {
+      delete process.env.JWT_SECRET; delete process.env.DB_PASSWORD; delete process.env.HKSDB_DSN;
+    }
+  });
+});

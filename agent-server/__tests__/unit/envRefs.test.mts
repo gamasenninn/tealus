@@ -64,3 +64,17 @@ describe('expandEnvRefs — 設定の ${VAR} を実体に置き換える (#419)'
       .toEqual({ timeout: 30, enabled: true, nothing: null });
   });
 });
+
+// ★ #573 道具の設定ファイルは workspace の中 (AI が書ける場所) にある。
+//   設定の ${VAR} から本体の中核の鍵 (署名鍵・DB・bot のパスワード) は引けないようにする
+describe('★ #573 中核の鍵は ${VAR} で引けない', () => {
+  const env = { JWT_SECRET: 'j', WEBHOOK_SECRET: 'w', DB_PASSWORD: 'd', DATABASE_URL: 'u', TEALUS_BOT_PASS: 'b', TEALUS_E2E_BOT_PASS: 'e', HKSDB_DSN: 'dsn', TAVILY_API_KEY: 't' };
+  test('★ 中核の鍵の参照はそのまま残す', () => {
+    for (const k of ['JWT_SECRET', 'WEBHOOK_SECRET', 'DB_PASSWORD', 'DATABASE_URL', 'TEALUS_BOT_PASS', 'TEALUS_E2E_BOT_PASS']) {
+      expect(expandEnvRefs(`\${${k}}`, env)).toBe(`\${${k}}`);
+    }
+  });
+  test('道具の資格情報 (DSN・API キー) は今までどおり引ける', () => {
+    expect(expandEnvRefs({ a: '${HKSDB_DSN}', b: ['--key', '${TAVILY_API_KEY}'] }, env)).toEqual({ a: 'dsn', b: ['--key', 't'] });
+  });
+});

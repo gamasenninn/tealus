@@ -12,6 +12,7 @@ import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
+import { agentChildEnv } from '../lib/childEnv.mts';
 
 interface McpServerDef {
   command?: string;
@@ -94,7 +95,8 @@ async function connectTealusMcp(): Promise<MCPServerStdio[]> {
         command: 'npx',
         args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.7'],
         env: {
-          ...process.env,  // PATH 等の親 env を継承 (npx 実行に必須)
+          // ★ #573 許可した環境変数だけ (PATH 等は入る。以前は親の env を全部渡していた)
+          ...agentChildEnv(),
           TEALUS_API_URL: config.TEALUS_API_URL,
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
           TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
@@ -120,7 +122,8 @@ async function connectGlobalConfig(): Promise<MCPServerStdio[]> {
   const globalConfigPath = path.join(import.meta.dirname, '..', '..', 'mcp_config.json');
   if (fs.existsSync(globalConfigPath)) {
     try {
-      const globalConfig = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8')) as McpConfigFile;
+      // ★ #573 ${VAR} を実体に (ルームの設定と同じ。親の env を継承しなくなったので、鍵は設定の env で渡す)
+      const globalConfig = expandEnvRefs(JSON.parse(fs.readFileSync(globalConfigPath, 'utf8')) as McpConfigFile);
       if (globalConfig.mcpServers) {
         // filesystem はルームごとに自動生成するのでグローバルからは除外
         const filtered: Record<string, McpServerDef> = {};
@@ -187,7 +190,7 @@ async function createRoomMcp(key: string, roomId: string, workspacePath: string)
         name: 'tealus-workspace-fs',
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-filesystem', normalizedPath],
-        env: { ...process.env } as Record<string, string>,
+        env: agentChildEnv(),   // ★ #573 許可した環境変数だけ
         timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
         clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
       });
@@ -231,9 +234,9 @@ async function connectFromConfig(serverDefs: Record<string, McpServerDef>, prefi
       const server = new MCPServerStdio({
         name: `${prefix}-${name}`,
         fullCommand,
-        // #240: parent env を継承 + def.env で override
-        // (TAVILY_API_KEY 等の API key を必要とする user MCP のため必須)
-        env: { ...process.env, ...(def.env || {}) } as Record<string, string>,
+        // ★ #573 許可した環境変数 + 設定の env だけ。#240 は親の env を全部継承していたが、
+        //   API キー等は設定の env に ${VAR} で書く (例: "TAVILY_API_KEY": "${TAVILY_API_KEY}")
+        env: { ...agentChildEnv(), ...(def.env || {}) } as Record<string, string>,
         timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
         clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)
       });
