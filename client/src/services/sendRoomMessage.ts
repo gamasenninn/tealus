@@ -26,6 +26,11 @@ export interface SendRoomMessageOpts {
 /** ★ #537 つながっていないとき、つながり直すのを待つ長さ (再接続は 1〜5 秒ごとに試みる) */
 export const SEND_RECONNECT_WAIT_MS = 10_000;
 
+/** ★ #593 サーバの受け取りの返事 (ack) を待つ長さ。来なければ (古いサーバ) 今までどおり送れたとして扱う */
+export const SEND_ACK_WAIT_MS = 10_000;
+
+type SendAck = { ok: boolean; id?: string; error?: string };
+
 /** つながっていれば即、いなければ connect を待つ。待っても来なければ false */
 function waitForConnection(waitMs: number): Promise<boolean> {
   const socket = getSocket();
@@ -43,17 +48,23 @@ export async function sendRoomMessage({
   content,
   replyTo = null,
   forwardedFrom = null,
-}: SendRoomMessageOpts, { waitMs = SEND_RECONNECT_WAIT_MS }: { waitMs?: number } = {}): Promise<'socket'> {
+}: SendRoomMessageOpts, { waitMs = SEND_RECONNECT_WAIT_MS, ackWaitMs = SEND_ACK_WAIT_MS }: { waitMs?: number; ackWaitMs?: number } = {}): Promise<'socket'> {
   // ★ #537 つながっていなければ REST に回さず、つながり直すのを待つ。REST の口は配らないので、
   //   以前はつなぎ直しの数秒に送った便が、配信もプッシュもアシスタントも動かないまま DB にだけ入った
   if (!(await waitForConnection(waitMs))) {
     throw new Error('つながっていないため送れませんでした。電波を確かめて、もう一度送ってください');
   }
-  getSocket()!.emit('message:send', {
-    room_id: roomId,
-    content,
-    reply_to: replyTo,
-    forwarded_from: forwardedFrom,
+  // ★ #593 サーバの受け取りの返事を待つ。断られたら理由で投げる (呼び出し側は入力欄の文を残して理由を出す)。
+  //   以前は emit した時点で成功扱いで、メンバーでない部屋などへの便が黙って捨てられ、入力欄の文も消えていた
+  const ack = await new Promise<SendAck | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), ackWaitMs);
+    getSocket()!.emit('message:send', {
+      room_id: roomId,
+      content,
+      reply_to: replyTo,
+      forwarded_from: forwardedFrom,
+    }, (res: SendAck) => { clearTimeout(timer); resolve(res); });
   });
+  if (ack && !ack.ok) throw new Error(ack.error || '送れませんでした。もう一度お試しください');
   return 'socket';
 }

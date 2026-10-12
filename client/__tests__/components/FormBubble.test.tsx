@@ -8,7 +8,12 @@ const sendMessageMock = vi.fn().mockResolvedValue({});
 vi.mock('../../src/services/api', () => ({
   api: { request: (...a: unknown[]) => requestMock(...a), sendMessage: (...a: unknown[]) => sendMessageMock(...a) },
 }));
-const emitMock = vi.fn();
+// ★ #593 サーバは受け取りの返事 (ack) を返す。偽物も「保存できた」を返す (返さないと送信が 10 秒待つ)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const emitMock = vi.fn((...a: any[]) => {
+  const last = a[a.length - 1];
+  if (typeof last === 'function') (last as (r: unknown) => void)({ ok: true, id: 'new1' });
+});
 let connectListeners: Array<() => void> = [];
 let socketConnected = true;
 vi.mock('../../src/services/socket', () => ({

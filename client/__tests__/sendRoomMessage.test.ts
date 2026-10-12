@@ -8,7 +8,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const emitMock = vi.fn();
+// ★ #593 サーバは受け取りの返事 (ack) を返す。既定は「保存できた」を返す偽物
+let ackReply: { ok: boolean; id?: string; error?: string } | null = { ok: true, id: 'new1' };
+const emitMock = vi.fn((...a: unknown[]) => {
+  const last = a[a.length - 1];
+  if (typeof last === 'function' && ackReply) (last as (r: unknown) => void)(ackReply);
+});
 const sendMessageMock = vi.fn().mockResolvedValue({});
 type Listener = () => void;
 let socketState: { connected: boolean; listeners: Map<string, Listener[]> } | null;
@@ -28,7 +33,7 @@ import { sendRoomMessage } from '../src/services/sendRoomMessage';
 
 describe('sendRoomMessage', () => {
   beforeEach(() => {
-    emitMock.mockClear(); sendMessageMock.mockClear();
+    emitMock.mockClear(); sendMessageMock.mockClear(); ackReply = { ok: true, id: 'new1' };
     socketState = { connected: true, listeners: new Map() };
   });
 
@@ -48,7 +53,7 @@ describe('sendRoomMessage', () => {
     expect(emitMock).not.toHaveBeenCalled();
     connectNow();
     await expect(p).resolves.toBe('socket');
-    expect(emitMock).toHaveBeenCalledWith('message:send', { room_id: 'r1', content: 'hi', reply_to: null, forwarded_from: 'src1' });
+    expect(emitMock).toHaveBeenCalledWith('message:send', { room_id: 'r1', content: 'hi', reply_to: null, forwarded_from: 'src1' }, expect.any(Function));
     expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
@@ -70,4 +75,16 @@ describe('sendRoomMessage', () => {
     await sendRoomMessage({ roomId: 'r1', content: 'hi' });
     expect(emitMock.mock.calls[0][1]).toEqual({ room_id: 'r1', content: 'hi', reply_to: null, forwarded_from: null });
   });
+
+  // ★ #593 サーバが断ったら理由で投げる (画面は入力欄の文を残して理由を出す)。以前は emit した時点で成功扱いだった
+  it('★★ サーバが断ったら (ok: false) 理由で投げる', async () => {
+    ackReply = { ok: false, error: 'このルームのメンバーではないため送れませんでした' };
+    await expect(sendRoomMessage({ roomId: 'r1', content: 'hi' })).rejects.toThrow('このルームのメンバーではないため送れませんでした');
+  });
+
+  it('★ 返事が来ない (古いサーバ) なら、待ったあと今までどおり送れたとして扱う', async () => {
+    ackReply = null;
+    await expect(sendRoomMessage({ roomId: 'r1', content: 'hi' }, { ackWaitMs: 20 })).resolves.toBe('socket');
+  });
 });
+

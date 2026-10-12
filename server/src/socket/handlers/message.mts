@@ -67,21 +67,29 @@ export async function fetchForwardMessage(forwardId: string): Promise<ForwardMes
   return r;
 }
 
+/** #593 message:send の受け取りの返事 */
+type SendAck = { ok: true; id: string } | { ok: false; error: string };
+
 /**
  * Handle message:send event
  */
 export function registerMessageHandler(socket: Socket, io: Server): void {
-  socket.on('message:send', async (data: SendPayload) => {
+  socket.on('message:send', async (data: SendPayload, ack?: unknown) => {
+    // ★ #593 受け取りの返事。断ったら理由を返す (以前は黙って return し、画面は送れたつもりで入力欄を消していた)。
+    //   返事の受け手が無い古い画面 (ack 無しの emit) は今までどおり
+    const reply = (res: SendAck) => { if (typeof ack === 'function') ack(res); };
+    const reject = (error: string) => reply({ ok: false, error });
+
     // ★ 値の形を入口で確かめる (2026-10-01、部外者の総当たりで null / 崩れた ID が例外になっていた)
-    if (!data || typeof data !== 'object') return;
+    if (!data || typeof data !== 'object') return reject('送る内容が正しくありません');
     const { room_id, content, type = 'text', reply_to, forwarded_from } = data;
     logger.debug(`message:send user=${socket.user.id} room=${room_id} type=${type}`);
 
-    if (!isUuid(room_id) || typeof content !== 'string' || content.trim() === '') return;
+    if (!isUuid(room_id) || typeof content !== 'string' || content.trim() === '') return reject('送る内容が正しくありません');
     // ★ 画面からの投稿は text だけ (2026-10-02、services/messageTypes.mts)。system や form を名乗れない
     if (!SOCKET_POST_TYPES.includes(type)) {
       logger.warn(`message:send を断りました (type=${String(type).slice(0, 30)}): actor=${socket.user.display_name}(${socket.user.id}) room=${room_id}`);
-      return;
+      return reject('この種類の投稿は送れません');
     }
 
     // Verify membership
@@ -89,15 +97,16 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
       'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
       [room_id, socket.user.id]
     );
-    if (memberCheck.rows.length === 0) return;
+    if (memberCheck.rows.length === 0) return reject('このルームのメンバーではないため送れませんでした');
 
-    // ★ #482 返信先・転送元は指してよい投稿だけ。満たさなければ投稿ごと断る (メンバーでないときと同じく黙って返す)
+    // ★ #482 返信先・転送元は指してよい投稿だけ。満たさなければ投稿ごと断る
     const refs = await checkMessageRefs({ roomId: room_id, userId: socket.user.id, replyTo: reply_to, forwardedFrom: forwarded_from });
     if (!refs.ok) {
       logger.warn(`message:send を断りました (#482 ${refs.error}): actor=${socket.user.display_name}(${socket.user.id}) room=${room_id}`);
-      return;
+      return reject(refs.error);
     }
 
+    let saved = false;
     try {
       const result = await pool.query<{ id: string }>(
         `INSERT INTO messages (room_id, sender_id, content, type, reply_to, forwarded_from)
@@ -105,6 +114,8 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
          RETURNING *`,
         [room_id, socket.user.id, content.trim(), type, reply_to || null, forwarded_from || null]
       );
+      saved = true;
+      reply({ ok: true, id: result.rows[0].id });   // ★ #593 保存できた時点で返す (配信・通知を待たせない)
 
       const message = {
         ...result.rows[0],
@@ -141,6 +152,9 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
       });
     } catch (err) {
       logger.error('Socket message:send error:', err);
+      // ★ #593 保存より前で失敗したときだけ「送れなかった」と返す。保存した後 (配信・通知など) の失敗で返すと、
+      //   画面が文を残し、利用者が送り直して二重に投稿してしまう
+      if (!saved) reject('サーバで問題が起きたため送れませんでした。もう一度お試しください');
     }
   });
 }
