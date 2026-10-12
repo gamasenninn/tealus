@@ -156,7 +156,9 @@ export function getUnsent(dir: string, extensions: string[]): UnsentFile[] {
       if (!extensions.includes(ext)) continue;
       const filePath = path.join(dir, name);
       const stat = fs.statSync(filePath);
-      if (stat.mtimeMs > lastSent.getTime()) {
+      // ★ #587 .last_sent はミリ秒までしか持たない (toISOString)。NTFS の mtimeMs は端数を持つので、
+      //   切り捨ててから比べる (そうしないと最後に送った録音が「未送信」に見え、起動し直すたびに二重に送った)
+      if (Math.floor(stat.mtimeMs) > lastSent.getTime()) {
         files.push({ path: filePath, mtime: stat.mtimeMs });
       }
     }

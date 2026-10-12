@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { waitForFileComplete, watchDirectory, sendWithRetry, createWatchSender } from '../watch.ts';
+import { waitForFileComplete, watchDirectory, sendWithRetry, createWatchSender, getUnsent, writeLastSent } from '../watch.ts';
 
 // テスト用一時ディレクトリ
 let tmpDir: string;
@@ -277,5 +277,26 @@ describe('★ #582 createWatchSender (監視中の送信を順番に、送れな
     await enqueue('a');
     expect(await enqueue('b')).toBe(true);
     err.mockRestore();
+  });
+});
+
+describe('★ #587 getUnsent はファイル時刻の 1 ミリ秒未満の端数で「未送信」にしない', () => {
+  test('★ 最後に送った録音の mtime (端数つき) を .last_sent に書いたら、その録音は未送信に戻らない', () => {
+    const f = path.join(tmpDir, 'rec.wav');
+    fs.writeFileSync(f, Buffer.alloc(16));
+    const t = new Date('2026-10-12T05:34:56.087Z').getTime() / 1000 + 0.0007883; // 秒 (端数つき)
+    fs.utimesSync(f, t, t);
+    const mtimeMs = fs.statSync(f).mtimeMs;
+    writeLastSent(tmpDir, new Date(mtimeMs));             // tealus-cli と同じ書き方 (ミリ秒で切れる)
+    expect(getUnsent(tmpDir, ['.wav'])).toEqual([]);
+  });
+
+  test('1 ミリ秒でも新しい録音は未送信として返す', () => {
+    writeLastSent(tmpDir, new Date('2026-10-12T05:34:56.087Z'));
+    const f = path.join(tmpDir, 'next.wav');
+    fs.writeFileSync(f, Buffer.alloc(16));
+    const t = new Date('2026-10-12T05:34:56.088Z').getTime() / 1000;
+    fs.utimesSync(f, t, t);
+    expect(getUnsent(tmpDir, ['.wav']).map((u) => path.basename(u.path))).toEqual(['next.wav']);
   });
 });
