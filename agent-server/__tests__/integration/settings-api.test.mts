@@ -78,6 +78,9 @@ describe('設定 API 統合テスト', () => {
     const res = await request(app).get('/config/settings').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.settings).toHaveProperty('tool_tavily', true);
+    // ★ #590 今の経路で効いていない項目と理由 (画面がグレーアウトに使う)。config に経路が無ければ既定の v2
+    expect(Object.keys(res.body.inactive)).toContain('tool_tavily');
+    expect(res.body.light_backend).toBe('v2');
   });
 
   // --- 2. PUT /config/settings 正常 ---

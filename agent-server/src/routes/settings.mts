@@ -11,6 +11,7 @@ import * as botApi from '../lib/botApi.mts';
 import * as config from '../config.mts';
 import { invalidateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { TTS_ENGINES, TTS_VOICES, resolveRoomTts } from '../lib/ttsRoom.mts';
+import { inactiveAgentSettings } from '../context/settingsEffect.mts';
 
 export const router = express.Router();
 
@@ -30,7 +31,9 @@ const SAFE_ENV_KEYS = [
  * GET /config/settings — settings.json を返す
  */
 router.get('/settings', (req, res) => {
-  res.json({ settings: getAllSettings() });
+  // ★ #590 今の経路で効いていない項目と理由を添える (画面がグレーアウトに使う)
+  const lightBackend = config.AGENT_LIGHT_BACKEND || 'v2';
+  res.json({ settings: getAllSettings(), inactive: inactiveAgentSettings(lightBackend), light_backend: lightBackend });
 });
 
 /**

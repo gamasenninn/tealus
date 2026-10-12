@@ -5,7 +5,8 @@ export type AgentSettings = Record<string, unknown> & {
 
 export interface McpConfig { [key: string]: unknown }
 
-export interface SettingsResponse { settings: AgentSettings }
+// ★ #590 inactive = 今の AI の経路で読まれていない項目とその理由 (画面はグレーアウトする)
+export interface SettingsResponse { settings: AgentSettings; inactive?: Record<string, string>; light_backend?: string }
 export interface McpConfigResponse { mcpConfig: McpConfig }
 export interface EnvResponse { env: Record<string, string> }
 export interface SystemPromptResponse { custom: string; default: string; isCustom: boolean }

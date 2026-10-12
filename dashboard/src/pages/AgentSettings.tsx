@@ -3,9 +3,13 @@ import { agentApi } from '../services/agentApi';
 import type { AgentSettings as AgentSettingsData, McpConfig } from '../services/agentApi';
 import { Save, RotateCcw } from 'lucide-react';
 
+/** ★ #590 今の AI の経路で読まれていない項目は消さずに灰色にする (10-12 利用者判断) */
+const INACTIVE_STYLE = { opacity: 0.45 } as const;
+
 function AgentSettings() {
   const [tab, setTab] = useState('basic');
   const [settings, setSettings] = useState<AgentSettingsData>({});
+  const [inactive, setInactive] = useState<Record<string, string>>({});   // ★ #590 効いていない項目と理由
   const [mcpConfig, setMcpConfig] = useState<McpConfig>({});
   const [mcpText, setMcpText] = useState('');
   const [env, setEnv] = useState<Record<string, string>>({});
@@ -16,7 +20,7 @@ function AgentSettings() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    agentApi.getSettings().then(d => setSettings(d.settings)).catch(e => setError(e.message));
+    agentApi.getSettings().then(d => { setSettings(d.settings); setInactive(d.inactive ?? {}); }).catch(e => setError(e.message));
     agentApi.getMcpConfig().then(d => {
       setMcpConfig(d.mcpConfig);
       setMcpText(JSON.stringify(d.mcpConfig, null, 2));
@@ -35,7 +39,7 @@ function AgentSettings() {
   const handleSettingsSave = async () => {
     try {
       await agentApi.updateSettings(settings);
-      showMessage('設定を保存しました。Agent Server を再起動すると反映されます。');
+      showMessage('設定を保存しました。すぐに反映されます。');   // ★ #590 saveSettings はメモリも書き換える (再起動は要らない)
     } catch (e) { showError(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -109,13 +113,13 @@ function AgentSettings() {
               { key: 'tool_generate_image', label: '画像生成（DALL-E）', desc: 'プロンプトから画像を生成' },
               { key: 'tool_filesystem', label: 'ファイルシステム', desc: 'MCP経由でファイル操作' },
             ].map(({ key, label, desc }) => (
-              <div key={key} className="setting-row">
+              <div key={key} className="setting-row" style={inactive[key] ? INACTIVE_STYLE : undefined} title={inactive[key]}>
                 <div>
                   <div className="setting-label">{label}</div>
-                  <div className="setting-desc">{desc}</div>
+                  <div className="setting-desc">{inactive[key] ? `⚠ ${inactive[key]}` : desc}</div>
                 </div>
                 <label className="toggle">
-                  <input type="checkbox" checked={(settings[key] as boolean | undefined) ?? true} onChange={() => toggleSetting(key)} />
+                  <input type="checkbox" disabled={!!inactive[key]} checked={(settings[key] as boolean | undefined) ?? true} onChange={() => toggleSetting(key)} />
                   <span className="toggle-slider" />
                 </label>
               </div>
@@ -124,19 +128,20 @@ function AgentSettings() {
 
           <section className="settings-section">
             <h3>制限値</h3>
-            <div className="setting-row">
+            <div className="setting-row" style={inactive.max_turns ? INACTIVE_STYLE : undefined} title={inactive.max_turns}>
               <div>
                 <div className="setting-label">Max Turns</div>
-                <div className="setting-desc">1回の応答でのツール実行回数上限</div>
+                <div className="setting-desc">{inactive.max_turns ? `⚠ ${inactive.max_turns}` : '1回の応答でのツール実行回数上限'}</div>
               </div>
-              <input type="number" className="setting-number" value={settings.max_turns ?? 3} onChange={e => updateSetting('max_turns', parseInt(e.target.value) || 3)} min={1} max={20} />
+              {/* ★ #590 既定はサーバの LIGHT_MAX_TURNS (12)。以前は画面だけ 3 と出していた */}
+              <input type="number" className="setting-number" disabled={!!inactive.max_turns} value={settings.max_turns ?? 12} onChange={e => updateSetting('max_turns', parseInt(e.target.value) || 12)} min={1} max={20} />
             </div>
-            <div className="setting-row">
+            <div className="setting-row" style={inactive.context_messages ? INACTIVE_STYLE : undefined} title={inactive.context_messages}>
               <div>
                 <div className="setting-label">コンテキストメッセージ数</div>
-                <div className="setting-desc">会話履歴として参照するメッセージ数</div>
+                <div className="setting-desc">{inactive.context_messages ? `⚠ ${inactive.context_messages}` : '会話履歴として参照するメッセージ数'}</div>
               </div>
-              <input type="number" className="setting-number" value={settings.context_messages ?? 20} onChange={e => updateSetting('context_messages', parseInt(e.target.value) || 20)} min={1} max={100} />
+              <input type="number" className="setting-number" disabled={!!inactive.context_messages} value={settings.context_messages ?? 20} onChange={e => updateSetting('context_messages', parseInt(e.target.value) || 20)} min={1} max={100} />
             </div>
           </section>
 

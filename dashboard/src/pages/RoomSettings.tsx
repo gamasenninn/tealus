@@ -53,7 +53,7 @@ function RoomSettings() {
   const handleSettingsSave = async () => {
     try {
       await agentApi.updateRoomSettings(roomId, settings);
-      showMessage('ルーム設定を保存しました。Agent Server 再起動で反映されます。');
+      showMessage('ルーム設定を保存しました。次の投稿から反映されます。');   // ★ #590 dispatcher・読み上げが投稿ごとに読む
     } catch (e) { showError(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -75,7 +75,7 @@ function RoomSettings() {
     try {
       const parsed = JSON.parse(mcpText);
       await agentApi.updateRoomMcp(roomId, parsed);
-      showMessage('MCP 設定を保存しました。Agent Server 再起動で反映されます。');
+      showMessage('MCP 設定を保存しました。次の投稿から反映されます。');   // ★ #590 保存時に invalidateRoomMcp で繋ぎ直す
     } catch (e) { showError(e instanceof Error ? e.message : 'JSON の形式が正しくありません'); }
   };
 
