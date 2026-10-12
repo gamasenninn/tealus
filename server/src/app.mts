@@ -343,6 +343,8 @@ if (import.meta.main) {
   let roomTriggers: typeof import('./services/roomTriggerRunner.mts') | null = null;
   let loginThrottlePruneTimer: NodeJS.Timeout | null = null;
 
+  // ★ #585 起動時の拾い直しは、受付を始める前に作られた行だけを拾う (その後に届いた投稿は自分で文字起こしを始めるので、拾うと二重になる)
+  const recoverBefore = new Date();
   server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
     // #334: 未適用 migration の loud warn (採用者保護)。辞書テーブル不在を起動時に可視化
@@ -366,7 +368,7 @@ if (import.meta.main) {
     // #536 整えている途中で前のプロセスが落ちた文字起こしを整え直す (「AIが文章を整えています…」のまま止まっていた)
     import('./services/transcriptionRecovery.mts')
       // ★ #579 音を文字にしている途中 (pending / transcribing) で止まったものもやり直す (「⏳ 文字起こし中...」のまま止まっていた)
-      .then(async tr => { await tr.recoverStuckFormatting({ io }); await tr.recoverStuckTranscribing({ io }); })
+      .then(async tr => { await tr.recoverStuckFormatting({ io, startedAt: recoverBefore }); await tr.recoverStuckTranscribing({ io, startedAt: recoverBefore }); })
       .catch((err) => logger.warn(`[transcription-recovery] 起動時の整え直しに失敗: ${err instanceof Error ? err.message : String(err)}`));
     // #362 login の失敗カウンタの掃除。★ 口は外から到達できるので鍵は攻撃者が自由に作れる。
     //   窓を過ぎた鍵を定期的に落とす (上限での追い出しもあるが、平時はこちらで減る)。

@@ -69,6 +69,14 @@ describe('#536 起動時に、整えている途中で止まった文字起こ�
     expect(await recoverStuckFormatting({ format, io: null })).toBe(0);
   });
 
+  it('★ #585 受付を始めた後に作られた行は拾わない (起動直後の投稿を二重に整えない)', async () => {
+    await voice({ status: 'formatting' });
+    const format = jest.fn();
+    const n = await recoverStuckFormatting({ format, io: null, startedAt: new Date(Date.now() - 60_000) });
+    expect(n).toBe(0);
+    expect(format).not.toHaveBeenCalled();
+  });
+
   it('★ 1 件が失敗しても、残りは整え直す (起動を止めない)', async () => {
     await voice({ status: 'formatting' });
     await voice({ status: 'formatting' });
@@ -120,6 +128,14 @@ describe('★ #579 起動時に、音を文字にしている途中で止まっ�
     const vb = calls.find((c) => c.id === b)!;
     expect(vb.file).toBe(`voices/${b}.wav`);
     expect(vb.opts).toMatchObject({ roomId, version: 1, isVideo: true, messageType: 'video' });
+  });
+
+  it('★ #585 受付を始めた後に作られた行は拾わない (起動直後の投稿を二重に文字起こししない)', async () => {
+    await voice('pending');
+    const transcribe = jest.fn();
+    const n = await recoverStuckTranscribing({ transcribe, startedAt: new Date(Date.now() - 60_000) });
+    expect(n).toBe(0);
+    expect(transcribe).not.toHaveBeenCalled();
   });
 
   it('1 件が失敗しても残りは続ける', async () => {
