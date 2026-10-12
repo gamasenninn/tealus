@@ -204,10 +204,14 @@ function MemberList({ roomId, onClose }: MemberListProps) {
         <div className="member-items">
           {memberList.map(m => (
             <div key={m.user_id} className="member-item">
-              <div className="member-info">
-                {m.role === 'admin' && <span className="member-crown">👑</span>}
-                <span className="member-name">{m.display_name}</span>
-                {m.role === 'admin' && <span className="member-role-label">グループ管理者</span>}
+              <div className="member-main">
+                <div className="member-info">
+                  {m.role === 'admin' && <span className="member-crown">👑</span>}
+                  <span className="member-name">{m.display_name}</span>
+                  {m.role === 'admin' && <span className="member-role-label">グループ管理者</span>}
+                </div>
+                {/* ★ #591 プロフィールの「ひとこと」。以前は書けるのに誰の画面にも出なかった */}
+                {m.status_message?.trim() && <div className="member-status">{m.status_message}</div>}
               </div>
               {isAdmin && m.user_id !== user!.id && (
                 <button className="member-menu-btn" onClick={() => setMenuTarget(menuTarget === m.user_id ? null : m.user_id)}>

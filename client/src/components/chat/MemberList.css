@@ -177,6 +177,22 @@
   color: var(--text-primary);
 }
 
+/* #591 名前の行と「ひとこと」を縦に重ねる塊 (.member-item は横並び) */
+.member-main {
+  min-width: 0;
+  flex: 1;
+}
+
+/* #591 プロフィールの「ひとこと」 */
+.member-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .member-role-label {
   font-size: 11px;
   color: var(--color-warning-text);

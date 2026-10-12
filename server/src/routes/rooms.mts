@@ -197,7 +197,7 @@ router.post('/', async (req, res) => {
 
     // Fetch members
     const membersResult = await pool.query(
-      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url
+      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
        FROM room_members rm
        JOIN users u ON u.id = rm.user_id
        WHERE rm.room_id = $1`,
@@ -255,7 +255,7 @@ router.post('/direct', async (req, res) => {
     if (existingResult.rows.length > 0) {
       const room = existingResult.rows[0];
       const membersResult = await pool.query(
-        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url
+        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
          FROM room_members rm
          JOIN users u ON u.id = rm.user_id
          WHERE rm.room_id = $1`,
@@ -291,7 +291,7 @@ router.post('/direct', async (req, res) => {
       await client.query('COMMIT');
 
       const membersResult = await pool.query(
-        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url
+        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
          FROM room_members rm
          JOIN users u ON u.id = rm.user_id
          WHERE rm.room_id = $1`,
@@ -389,7 +389,7 @@ router.get('/:id', requireMember, async (req, res) => {
 
     // Get members
     const membersResult = await pool.query(
-      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url
+      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
        FROM room_members rm
        JOIN users u ON u.id = rm.user_id
        WHERE rm.room_id = $1`,

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../src/app.mts';
-import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
+import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 
 type TestUser = Awaited<ReturnType<typeof createTestUser>>;
@@ -189,6 +189,23 @@ describe('Rooms API', () => {
       expect(res.body.room.id).toBe(roomId);
       expect(res.body.room.name).toBe('開発チーム');
       expect(res.body.members).toHaveLength(3);
+    });
+
+    // ★ #591 プロフィールの「ひとこと」をメンバー一覧に出す (以前は書けるのに誰の画面にも出なかった)
+    it('★ メンバーに「ひとこと」(status_message) を添える', async () => {
+      await getTestPool().query("UPDATE users SET status_message = '外回り中' WHERE id = $1", [user2.user.id]);
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'ひとこと', member_ids: [user2.user.id] });
+      expect(createRes.body.members.find((m: { user_id: string }) => m.user_id === user2.user.id).status_message).toBe('外回り中');
+      const res = await request(app)
+        .get(`/api/rooms/${createRes.body.room.id}`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      const m2 = res.body.members.find((m: { user_id: string }) => m.user_id === user2.user.id);
+      const m1 = res.body.members.find((m: { user_id: string }) => m.user_id === user1.user.id);
+      expect(m2.status_message).toBe('外回り中');
+      expect(m1.status_message).toBeNull();
     });
 
     it('should reject access from non-member', async () => {
