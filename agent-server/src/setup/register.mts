@@ -10,10 +10,12 @@ import * as botApi from '../lib/botApi.mts';
 import { registerBotUserId } from '../webhook/handler.mts';
 import { startSweeper, warmSharedGlobal } from '../mcp/roomMcpManager.mts';
 import { loadSettings } from '../context/settingsManager.mts';
+import { markAgentReady, sleepUnlessKicked, setInitInProgress } from '../lib/initGate.mts';
 
 export interface InitializeAgentResult {
   ok: boolean;                                   // #581 試し直すかどうかの判定に使う
   error?: string;                                // #581 失敗の理由 (試し直しの警告に添える)
+  status?: number;                               // #589 ログインの状態コード (401 なら試し直さない)
   rooms: Array<{ id: string; name?: string }>;
   mcpServers?: unknown[];
 }
@@ -37,6 +39,7 @@ export async function initializeAgent(
 
     // BotユーザーIDとルーム一覧をWebhookハンドラーに登録
     registerBotUserId(user.id, displayName, rooms);
+    markAgentReady();   // ★ #589 待っている webhook に知らせる
 
     for (const room of rooms) {
       logger.debug(`  - ${room.name || 'DM'} (${room.id})`);
@@ -58,7 +61,8 @@ export async function initializeAgent(
     return { ok: true, rooms };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    if (!verbose) return { ok: false, error, rooms: [], mcpServers: [] };
+    const status = (err as { status?: number } | null)?.status;
+    if (!verbose) return { ok: false, error, status, rooms: [], mcpServers: [] };
     logger.error('=================================================');
     logger.error('AGENT INITIALIZATION FAILED');
     logger.error('=================================================');
@@ -75,31 +79,44 @@ export async function initializeAgent(
     logger.error('');
     logger.error('つながるまで自動で試し直します (#581)。資格情報の誤りなら .env を直して agent-server を再起動してください。');
     logger.error('=================================================');
-    return { ok: false, error, rooms: [], mcpServers: [] };
+    return { ok: false, error, status, rooms: [], mcpServers: [] };
   }
 }
 
 /** #581 試し直しの間隔。最後の値で頭打ち (以降 60 秒ごと) */
 export const INIT_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
 
-/** 停止 (SIGINT) を待たせない待ち。テストでは差し替える */
-function unrefSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms).unref());
-}
 
 /**
  * #581 起動時の初期化を、つながるまで試し直す。
  * ★ 以前は 1 回きりで、本体より先に agent-server が起きる (起動の順番の取り違え・本体の起動途中) と、
  *   webhook が全部 dispatcher のガードで捨てられ、再起動するまで AI が黙っていた
  * ★ 失敗の警告は 1・2・4・8… 回目だけ (60 秒ごとに続いてもログを埋めない)。つながったら回数を出す
+ * ★ #589 待ちの間に webhook が届いたら、待ちを起こしてすぐ試す (sleepUnlessKicked)。401 は試し直さない
  */
 export async function initializeAgentWithRetry(
-  { delaysMs = INIT_RETRY_DELAYS_MS, sleep = unrefSleep }: { delaysMs?: number[]; sleep?: (ms: number) => Promise<void> } = {},
+  { delaysMs = INIT_RETRY_DELAYS_MS, sleep = sleepUnlessKicked }: { delaysMs?: number[]; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<InitializeAgentResult> {
+  setInitInProgress(true);   // ★ #589 webhook の側が待つのは、試し直しが走っている間だけ
+  try {
+    return await retryLoop(delaysMs, sleep);
+  } finally {
+    setInitInProgress(false);
+  }
+}
+
+async function retryLoop(delaysMs: number[], sleep: (ms: number) => Promise<void>): Promise<InitializeAgentResult> {
   for (let attempt = 1; ; attempt++) {
     const result = await initializeAgent({ verbose: attempt === 1 });
     if (result.ok) {
       if (attempt > 1) logger.info(`[init-retry] ${attempt} 回目でつながりました`);
+      return result;
+    }
+    // ★ #589 資格情報の誤り (401) は試し直しても通らない。続けると本体のログインの歯止め (15 分に 5 回) に当たり、
+    //   .env を直して再起動しても 15 分入れなくなる
+    if (result.status === 401) {
+      logger.error('[init-retry] Bot のログイン ID かパスワードが違います (401)。試し直しはしません。'
+        + 'agent-server/.env の TEALUS_BOT_ID / TEALUS_BOT_PASS を直して、agent-server を再起動してください');
       return result;
     }
     const delay = delaysMs[Math.min(attempt - 1, delaysMs.length - 1)];

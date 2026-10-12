@@ -10,6 +10,7 @@ import * as botSendThrottle from '../lib/botSendThrottle.mts';
 import type { UnroutedAddressHint } from './ccQueue.mts';
 import { extractCcProjects, findDroppedCcMentions, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
 import { isMentioned } from './mention.mts';
+import { kickInitRetry, whenAgentReady, isInitInProgress } from '../lib/initGate.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
 
 // #213 Phase A polish: 自己ループ防止用 sender skip set (env CC_SKIP_SENDER_IDS、CSV)
@@ -30,6 +31,23 @@ export function registerBotUserId(userId: string, displayName?: string, rooms: A
   botAgentName = displayName || 'AI';
   rooms.forEach(r => botRoomIds.add(r.id));
   logger.info(`Registered bot user: ${userId} (${botAgentName}), ${botRoomIds.size} rooms`);
+}
+
+/** #589 初期化がまだのときに、つながるのを待つ上限 */
+const INIT_WAIT_MS = 15_000;
+
+/**
+ * ★ #589 初期化 (Bot のログイン) がまだなら、試し直しを起こしてつながるのを待つ。
+ *   以前は dispatcher のガードで捨てていた (試し直しの待ち = 最長 60 秒の間に届いた投稿が失われた)。
+ *   webhook が届いた = 本体は上がっているので、すぐ試せばたいていつながる
+ */
+async function waitForAgentInit(): Promise<void> {
+  if (botAgentId || !isInitInProgress()) return;   // 試し直しが走っていなければ待っても来ない
+  logger.warn('[init-wait] 初期化 (Bot のログイン) がまだです。試し直しを起こして、最大 15 秒つながるのを待ちます');
+  kickInitRetry();
+  if (!(await whenAgentReady(INIT_WAIT_MS))) {
+    logger.warn('[init-wait] 15 秒待ってもつながりませんでした。この投稿には応答できません');
+  }
 }
 
 /**
@@ -255,6 +273,7 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
   logger.info(`Message received: "${(message.content || '(media)').slice(0, 50)}" in room ${room.name || room.id}`);
 
   // ディスパッチ
+  await waitForAgentInit();   // ★ #589
   await dispatch({
     message,
     room,
@@ -334,6 +353,7 @@ async function handleMessageUpdated(payload: WebhookPayload): Promise<void> {
   }
 
   logger.info(`[edit-trigger] Mention newly added via edit in room ${room.name || room.id} → dispatch`);
+  await waitForAgentInit();   // ★ #589
   await dispatch({
     message: { ...message, type: message.type || 'text' },
     room,
@@ -389,6 +409,7 @@ async function handleTranscriptionCompleted(payload: WebhookPayload): Promise<vo
   logger.info(`Transcription completed: "${(text || '').slice(0, 50)}" in room ${room.id}`);
 
   // 文字起こしテキスト付きでディスパッチ
+  await waitForAgentInit();   // ★ #589
   await dispatch({
     message: { ...message, content: text, transcription },
     room,

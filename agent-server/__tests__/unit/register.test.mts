@@ -35,6 +35,7 @@ import { initializeAgent, initializeAgentWithRetry } from '../../src/setup/regis
 import * as botApi from '../../src/lib/botApi.mts';
 import { registerBotUserId } from '../../src/webhook/handler.mts';
 import { logger } from '../../src/lib/logger.mts';
+import { isInitInProgress } from '../../src/lib/initGate.mts';
 
 describe('Agent Registration', () => {
   beforeEach(() => {
@@ -122,4 +123,34 @@ describe('#581 起動時につながらなければ、つながるまで試し�
     const banners = (logger.error as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('AGENT INITIALIZATION FAILED'));
     expect(banners).toHaveLength(1);
   });
+
+  test('★ #589 パスワードの誤り (401) なら試し直さない (ログインの歯止めに当たるだけ)。.env を直すよう出す', async () => {
+    (botApi.login as jest.Mock).mockRejectedValueOnce(Object.assign(new Error('Bot login failed: x'), { status: 401 }));
+    const sleep = jest.fn((_ms: number) => Promise.resolve());
+    const result = await initializeAgentWithRetry({ delaysMs: [1], sleep });
+    expect(result.ok).toBe(false);
+    expect(botApi.login).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect((logger.error as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n')).toContain('.env');
+  });
+
+  test('★ #589 歯止め (429) やつながらない失敗は、今までどおり試し直す', async () => {
+    (botApi.login as jest.Mock)
+      .mockRejectedValueOnce(Object.assign(new Error('Bot login failed: too many'), { status: 429 }))
+      .mockRejectedValueOnce(new Error('fetch failed'));
+    const sleep = jest.fn((_ms: number) => Promise.resolve());
+    const result = await initializeAgentWithRetry({ delaysMs: [1], sleep });
+    expect(result.ok).toBe(true);
+    expect(botApi.login).toHaveBeenCalledTimes(3);
+  });
+
+  test('#589 試し直しが走っている間だけ「走っている」になる (webhook の側はそれを見て待つ)', async () => {
+    (botApi.login as jest.Mock).mockRejectedValueOnce(new Error('fetch failed'));
+    const seen: boolean[] = [];
+    const sleep = jest.fn(async (_ms: number) => { seen.push(isInitInProgress()); });
+    await initializeAgentWithRetry({ delaysMs: [1], sleep });
+    expect(seen).toEqual([true]);
+    expect(isInitInProgress()).toBe(false);
+  });
 });
+

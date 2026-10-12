@@ -70,7 +70,8 @@ export async function login(): Promise<LoginResult> {
 
   const data = await res.json() as { token?: string; user?: BotUser; error?: string };
   if (!data.token) {
-    throw new Error(`Bot login failed: ${data.error || 'Unknown error'}`);
+    // ★ #589 状態コードを添える。401 (資格情報の誤り) は試し直しても通らない (register の試し直しが見る)
+    throw Object.assign(new Error(`Bot login failed: ${data.error || 'Unknown error'}`), { status: res.status });
   }
 
   token = data.token;

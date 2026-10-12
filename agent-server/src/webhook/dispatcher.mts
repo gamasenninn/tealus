@@ -231,8 +231,9 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
   // initializeAgent() が失敗すると botAgentId が null のまま webhook が来る → null を path.join に渡して TypeError
   if (!agentId) {
     logger.error(`agent-server is not initialized (botAgentId is null). Cannot dispatch message in room ${roomId}.`);
-    logger.error('  This usually means initializeAgent() failed at startup.');
-    logger.error('  Check earlier logs for "Agent initialization failed" or "Bot login failed" errors.');
+    // ★ #589 起動時の初期化はつながるまで試し直している (#581)。handler が 15 秒待ってもつながらなかったときにここへ来る
+    logger.error('  起動時の初期化 (Bot のログイン) がまだ済んでいません。つながるまで自動で試し直しています。');
+    logger.error('  ログの [init-retry] を見てください (401 なら .env の Bot の資格情報の誤りで、試し直しはしていません)。');
     logger.error('  Common causes:');
     logger.error('    - Tealus server not reachable (TEALUS_API_URL incorrect)');
     logger.error('    - Bot credentials invalid (TEALUS_BOT_ID / TEALUS_BOT_PASS in agent-server/.env)');
