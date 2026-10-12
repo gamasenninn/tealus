@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useMessageStore } from '../src/stores/messageStore';
-import { quoteText } from '../src/utils/replyQuote';
+import { quoteText, roomPreview } from '../src/utils/replyQuote';
 
 type Q = { id: string; content: string | null; is_deleted?: boolean };
 const base = { room_id: 'r1', sender_id: 'u1', type: 'text', created_at: '2026-10-05T00:00:00Z' };
@@ -85,5 +85,25 @@ describe('quoteText — 引用に出す文字 (#501)', () => {
   });
   it('本文が無い (画像など) は今までどおり「(メディア)」', () => {
     expect(quoteText({ content: null })).toBe('(メディア)');
+  });
+});
+
+describe('#586 スタンプは UUID を出さず「🙂 スタンプ」(通知と同じ)', () => {
+  const uuid = '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b';
+  it('★ 返信の引用', () => {
+    expect(quoteText({ content: uuid, type: 'stamp' })).toBe('🙂 スタンプ');
+  });
+  it('★ 削除済みのスタンプは「削除されました」のまま', () => {
+    expect(quoteText({ content: uuid, type: 'stamp', is_deleted: true })).toBe('メッセージが削除されました');
+  });
+  it('★ トーク一覧のプレビュー', () => {
+    expect(roomPreview({ last_message_type: 'stamp', last_message_content: uuid })).toBe('🙂 スタンプ');
+  });
+  it('一覧: 本文があればそのまま / 本文の無い画像・動画・ファイルは種類 / 何も無ければ空', () => {
+    expect(roomPreview({ last_message_type: 'text', last_message_content: 'こんにちは' })).toBe('こんにちは');
+    expect(roomPreview({ last_message_type: 'image', last_message_content: null })).toBe('画像');
+    expect(roomPreview({ last_message_type: 'video', last_message_content: '' })).toBe('動画');
+    expect(roomPreview({ last_message_type: 'file', last_message_content: null })).toBe('ファイル');
+    expect(roomPreview({ last_message_type: null, last_message_content: null })).toBe('');
   });
 });

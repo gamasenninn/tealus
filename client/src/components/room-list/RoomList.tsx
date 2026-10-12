@@ -15,6 +15,7 @@ import type { Room } from '../../types';
 import { shouldPlayMessageSound } from '../../utils/messageSound';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './RoomList.css';
+import { roomPreview } from '../../utils/replyQuote';
 
 // ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
 const TAB_OPTIONS = [
@@ -135,13 +136,7 @@ function RoomList() {
     return date.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
   };
 
-  const getPreview = (room: RoomRow) => {
-    if (!room.last_message_content && room.last_message_type) {
-      const typeLabels: Record<string, string> = { image: '画像', video: '動画', file: 'ファイル' };
-      return typeLabels[room.last_message_type] || '';
-    }
-    return room.last_message_content || '';
-  };
+  const getPreview = (room: RoomRow) => roomPreview(room);   // ★ #586 スタンプは UUID を出さない
 
   const getRoomDisplayName = (room: RoomRow) => {
     if (room.type === 'group') return `${room.name}（${room.member_count}）`;
