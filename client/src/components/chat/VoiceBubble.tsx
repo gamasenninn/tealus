@@ -218,7 +218,10 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
           {transcription.status === 'formatting' && <span className="voice-trans-status">⏳ AIが文章を整えています...</span>}
           {transcription.status === 'done' && (
             <>
-              <span className="voice-trans-text">{highlightText(displayText)}</span>
+              {/* ★ #583 本文が空の done (無音の録音で Gemini も OpenAI も空) を白紙にしない */}
+              {displayText?.trim()
+                ? <span className="voice-trans-text">{highlightText(displayText)}</span>
+                : <span className="voice-trans-status">🔇 聞き取れませんでした</span>}
               {canEditTranscription && (
                 <div className="voice-trans-actions">
                   <button className="voice-edit-btn" onClick={handleStartEdit}>編集</button>
