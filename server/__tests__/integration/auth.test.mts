@@ -35,6 +35,14 @@ describe('Auth API', () => {
       expect(res.body.user.password_hash).toBeUndefined(); // パスワードハッシュは返さない
     });
 
+    it('★ #584 登録でも login_id の前後の空白 (半角・全角) を落とす', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ login_id: '　EMP001 ', display_name: '田中太郎', password: 'password123' });
+      expect(res.status).toBe(201);
+      expect(res.body.user.login_id).toBe('EMP001');
+    });
+
     // ★ 2026-09-28: 自己登録は「人の利用者が 0 人 = 最初の管理者づくり」のときだけ。
     //   2 人目からは管理者がダッシュボードで作る
     it('★ 人の利用者が 1 人でもいれば、登録は 403 で断る (同じ login_id でも)', async () => {

@@ -30,7 +30,9 @@ router.get('/users', async (req, res) => {
  * Create a new user
  */
 router.post('/users', async (req, res) => {
-  const { login_id, display_name, password, role = 'user', is_bot = false } = req.body;
+  const { display_name, password, role = 'user', is_bot = false } = req.body;
+  // ★ #584 前後の空白 (全角含む) を落として作る。ログインは落として照合する (#568) ので、空白つきの ID は入れなくなる
+  const login_id = typeof req.body.login_id === 'string' ? req.body.login_id.trim() : req.body.login_id;
 
   if (!login_id || !display_name || !password) {
     return res.status(400).json({ error: E.AUTH_REGISTER_REQUIRED });

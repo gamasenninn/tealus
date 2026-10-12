@@ -92,6 +92,34 @@ describe('Admin API', () => {
       expect(res.status).toBe(409);
     });
 
+    // ★ #584 ログインは login_id の前後の空白を落として照合する (#568)。作る側も落とさないと、空白つきの ID は二度と入れない
+    it('★ login_id の前後の空白 (半角・全角) を落として作る', async () => {
+      const res = await request(app)
+        .post('/api/admin/users')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: ' EMP200　', display_name: '空白', password: '1234' });
+      expect(res.status).toBe(201);
+      expect(res.body.user.login_id).toBe('EMP200');
+      const login = await request(app).post('/api/auth/login').send({ login_id: 'EMP200', password: '1234' });
+      expect(login.status).toBe(200);
+    });
+
+    it('★ 空白を落とすと既存の ID と同じなら 409', async () => {
+      const res = await request(app)
+        .post('/api/admin/users')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: 'EMP001 ', display_name: '重複', password: '1234' });
+      expect(res.status).toBe(409);
+    });
+
+    it('★ 空白だけの login_id は 400', async () => {
+      const res = await request(app)
+        .post('/api/admin/users')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: ' 　', display_name: '空白だけ', password: '1234' });
+      expect(res.status).toBe(400);
+    });
+
     it('should reject missing fields', async () => {
       const res = await request(app)
         .post('/api/admin/users')

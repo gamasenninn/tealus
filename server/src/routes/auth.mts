@@ -51,7 +51,9 @@ interface UserWithPasswordRow extends AuthUser {
  * Register a new user
  */
 router.post('/register', async (req, res) => {
-  const { login_id, display_name, password } = req.body;
+  const { display_name, password } = req.body;
+  // ★ #584 前後の空白 (全角含む) を落として作る。ログインは落として照合する (#568) ので、空白つきの ID は入れなくなる
+  const login_id = typeof req.body.login_id === 'string' ? req.body.login_id.trim() : req.body.login_id;
 
   // Validation
   if (!login_id || !display_name || !password) {
