@@ -58,7 +58,7 @@ mediasoup workers started: <N> worker(s)
 
 ## ステップ 2. 環境変数を設定 (~3 分)
 
-`rtc-server/.env`:
+`server/.env` に足す。★ rtc-server は**本体の `server/.env` を読みます** (`rtc-server/server.mts` の先頭。`rtc-server/.env` を作っても読まれません)。`JWT_SECRET` は本体の設定がそのまま使われます (下の例の `JWT_SECRET=` の行は書き足さなくてよい):
 
 ```ini
 RTC_PORT=3100

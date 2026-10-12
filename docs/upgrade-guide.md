@@ -263,7 +263,7 @@ MCP の道具 (グローバル・ルーム固有とも) に渡るのは、PATH �
 また、本体の中核の鍵 (`JWT_SECRET` / `WEBHOOK_SECRET` / `DB_PASSWORD` / `DATABASE_URL` / bot のパスワード) は `${VAR}` で引けません。
 
 ```jsonc
-"tavily": { "command": "npx", "args": ["-y", "tavily-mcp"], "env": { "TAVILY_API_KEY": "${TAVILY_API_KEY}" } }
+"tavily": { "command": "npx", "args": ["-y", "tavily-mcp@0.2.18"], "env": { "TAVILY_API_KEY": "${TAVILY_API_KEY}" } }
 ```
 
 **#419 そのものの DB migration は追加ゼロ**です。★ ただし同じ v0.10.0 で、ほかの変更が migration を足しています (下の「この版のほかの変更」と、この節の **0.**)。
