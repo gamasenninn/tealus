@@ -190,3 +190,58 @@ export async function sendWithRetry(
     await sleep(delaysMs[i]);
   }
 }
+
+/**
+ * ★ #582 監視中の送信を 1 本ずつ順番に処理し、送れなかった録音を覚えておく。
+ *
+ * 以前 (#578) は録音ごとに並行して送り、届くと .last_sent を「今の時刻」にしていた。
+ * 録音 A が送り直し中に後の録音 B が届くと .last_sent が A を越え、A は二度と送られなかった
+ * (catch-up は mtime > .last_sent しか見ず、プロセスの中でも送信済み扱い)。
+ *
+ * - 送れなかった録音は、次の録音の前に送り直す (本体が戻っていれば届く)
+ * - onAllSent (= .last_sent を進める) は「送れていない録音が 1 本も無いとき」だけ呼ぶ
+ * - 送信・記録が例外を投げても列は止まらない
+ */
+export function createWatchSender({
+  send,
+  onAllSent,
+  retry = sendWithRetry,
+}: {
+  send: (filePath: string) => Promise<boolean>;
+  onAllSent: (lastFilePath: string) => void;
+  retry?: (attempt: () => Promise<boolean>) => Promise<boolean>;
+}): (filePath: string) => Promise<boolean> {
+  const failed: string[] = [];
+  let chain: Promise<unknown> = Promise.resolve();
+
+  const run = async (filePath: string): Promise<boolean> => {
+    // 先に、送れなかった録音を古い順に送り直す (1 本でも送れなければそこで止める = 本体はまだ戻っていない)
+    while (failed.length > 0) {
+      const head = failed[0];
+      if (!(await retry(() => send(head)))) break;
+      console.log(`✅ 送り直せました: ${path.basename(head)}`);
+      failed.shift();
+    }
+    const ok = await retry(() => send(filePath));
+    if (!ok) failed.push(filePath);
+    if (failed.length === 0) {
+      try {
+        onAllSent(filePath);
+      } catch (err) {
+        console.error('❌ 最後に送った時刻を記録できませんでした:', err instanceof Error ? err.message : String(err));
+      }
+    } else {
+      console.error(`⚠️ 送れていない録音が ${failed.length} 本あります (次の録音の前に送り直します。最後に送った時刻は進めません): ${failed.map((f) => path.basename(f)).join(', ')}`);
+    }
+    return ok;
+  };
+
+  return (filePath: string) => {
+    const p = chain.then(() => run(filePath)).catch((err) => {
+      console.error(`❌ ${path.basename(filePath)} の送信の処理に失敗:`, err instanceof Error ? err.message : String(err));
+      return false;
+    });
+    chain = p;
+    return p;
+  };
+}

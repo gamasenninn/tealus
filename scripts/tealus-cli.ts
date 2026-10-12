@@ -15,7 +15,7 @@ import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import { parseSendArgs, parseGlobalArgs } from './parse-args.ts';
-import { waitForFileComplete, watchDirectory, getUnsent, writeLastSent, sendWithRetry } from './watch.ts';
+import { waitForFileComplete, watchDirectory, getUnsent, readLastSent, writeLastSent, sendWithRetry, createWatchSender } from './watch.ts';
 
 // --- API response shapes ---
 
@@ -292,15 +292,22 @@ async function cmdSend(args: string[]): Promise<void> {
     }
 
     const watchDir = parsed.watchDir;
+    // ★ #582 1 本ずつ順番に送り、送れなかった録音は次の録音の前に送り直す。
+    //   「最後に送った時刻」は送れていない録音が無いときだけ、送った録音のファイル時刻まで進める
+    //   (以前は並行に送って「今の時刻」を書き、送り直し中の先の録音を追い越していた)
+    const enqueueSend = createWatchSender({
+      send: (filePath) => sendVoiceFile(room.id, room.name, filePath),
+      onAllSent: (filePath) => {
+        const mtime = fs.statSync(filePath).mtimeMs;
+        const last = readLastSent(watchDir);
+        if (!last || mtime > last.getTime()) writeLastSent(watchDir, new Date(mtime));
+      },
+    });
     const stop = watchDirectory(watchDir, parsed.extensions, async (filePath) => {
       console.log(`📁 検知: ${path.basename(filePath)}`);
       const complete = await waitForFileComplete(filePath);
       if (complete) {
-        // ★ #578 送り直し込み。届いたときだけ「最後に送った時刻」を進める
-        //   (届かなかった録音は、次に起動したときの catch-up で送られる)
-        const ok = await sendWithRetry(() => sendVoiceFile(room.id, room.name, filePath));
-        if (ok) writeLastSent(watchDir, new Date());
-        else console.error(`⚠️ 送れませんでした (未送信のまま。次に起動したときの catch-up で送ります): ${path.basename(filePath)}`);
+        await enqueueSend(filePath);
       } else {
         console.error(`⚠️ ファイル書き込み未完了（スキップ）: ${path.basename(filePath)}`);
       }

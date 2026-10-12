@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { waitForFileComplete, watchDirectory, sendWithRetry } from '../watch.ts';
+import { waitForFileComplete, watchDirectory, sendWithRetry, createWatchSender } from '../watch.ts';
 
 // テスト用一時ディレクトリ
 let tmpDir: string;
@@ -209,4 +209,73 @@ describe('★ #578 watchDirectory は callback の失敗でプロセスを落と
     setTimeout(() => fs.writeFileSync(path.join(tmpDir, 'a.wav'), Buffer.alloc(16)), 200);
     setTimeout(() => fs.writeFileSync(path.join(tmpDir, 'b.wav'), Buffer.alloc(16)), 2600);
   }, 10000);
+});
+
+describe('★ #582 createWatchSender (監視中の送信を順番に、送れなかったものを覚えておく)', () => {
+  // retry は送り直しを省いた 1 回きりの送信 (sendWithRetry の中身は上で試している)
+  const once = async (attempt: () => Promise<boolean>) => { try { return await attempt(); } catch { return false; } };
+  const quiet = () => jest.spyOn(console, 'error').mockImplementation(() => {});
+
+  test('★ 1 本ずつ順番に送る (先の送信が終わるまで次を始めない)', async () => {
+    const log: string[] = [];
+    let releaseA!: () => void;
+    const send = jest.fn(async (f: string) => {
+      log.push(`start ${f}`);
+      if (f === 'a') await new Promise<void>((r) => { releaseA = r; });
+      log.push(`end ${f}`);
+      return true;
+    });
+    const enqueue = createWatchSender({ send, onAllSent: () => {}, retry: once });
+    const pa = enqueue('a');
+    const pb = enqueue('b');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(log).toEqual(['start a']);
+    releaseA();
+    await Promise.all([pa, pb]);
+    expect(log).toEqual(['start a', 'end a', 'start b', 'end b']);
+  });
+
+  test('★ 先の録音が送れず後の録音が届いても、「最後に送った時刻」を進めない', async () => {
+    const err = quiet();
+    const onAllSent = jest.fn();
+    const send = jest.fn(async (f: string) => f !== 'a');
+    const enqueue = createWatchSender({ send, onAllSent, retry: once });
+    expect(await enqueue('a')).toBe(false);
+    expect(await enqueue('b')).toBe(true);
+    expect(onAllSent).not.toHaveBeenCalled();
+    err.mockRestore();
+  });
+
+  test('★ 送れなかった録音は、次の録音の前に送り直す。全部届いたら進める', async () => {
+    const err = quiet();
+    const onAllSent = jest.fn();
+    let down = true;
+    const sent: string[] = [];
+    const send = jest.fn(async (f: string) => { if (down) return false; sent.push(f); return true; });
+    const enqueue = createWatchSender({ send, onAllSent, retry: once });
+    await enqueue('a');              // 本体が止まっている
+    down = false;
+    await enqueue('b');              // 戻った → a を先に送ってから b
+    expect(sent).toEqual(['a', 'b']);
+    expect(onAllSent).toHaveBeenCalledTimes(1);
+    expect(onAllSent).toHaveBeenCalledWith('b');
+    err.mockRestore();
+  });
+
+  test('全部届いていれば、届くたびに進める', async () => {
+    const onAllSent = jest.fn();
+    const enqueue = createWatchSender({ send: async () => true, onAllSent, retry: once });
+    await enqueue('a');
+    await enqueue('b');
+    expect(onAllSent.mock.calls).toEqual([['a'], ['b']]);
+  });
+
+  test('★ 送信や記録が例外を投げても、列は止まらない', async () => {
+    const err = quiet();
+    const onAllSent = jest.fn(() => { throw new Error('disk full'); });
+    const enqueue = createWatchSender({ send: async () => true, onAllSent, retry: once });
+    await enqueue('a');
+    expect(await enqueue('b')).toBe(true);
+    err.mockRestore();
+  });
 });
