@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useMessageStore } from '../src/stores/messageStore';
-import { quoteText, roomPreview } from '../src/utils/replyQuote';
+import { quoteText, roomPreview, replyBarText } from '../src/utils/replyQuote';
 
 type Q = { id: string; content: string | null; is_deleted?: boolean };
 const base = { room_id: 'r1', sender_id: 'u1', type: 'text', created_at: '2026-10-05T00:00:00Z' };
@@ -105,5 +105,28 @@ describe('#586 スタンプは UUID を出さず「🙂 スタンプ」(通知�
     expect(roomPreview({ last_message_type: 'video', last_message_content: '' })).toBe('動画');
     expect(roomPreview({ last_message_type: 'file', last_message_content: null })).toBe('ファイル');
     expect(roomPreview({ last_message_type: null, last_message_content: null })).toBe('');
+  });
+});
+
+describe('#588 トーク一覧と返信バーの抜け', () => {
+  it('★ 音声が最後なら「音声」(本文は NULL)', () => {
+    expect(roomPreview({ last_message_type: 'voice', last_message_content: null })).toBe('音声');
+  });
+  it('★ LINE の写真・動画 (本文が [氏名@グループ] だけ) には種類を添える', () => {
+    expect(roomPreview({ last_message_type: 'image', last_message_content: '[山田@出品]' })).toBe('[山田@出品] 画像');
+    expect(roomPreview({ last_message_type: 'video', last_message_content: '[山田@出品]' })).toBe('[山田@出品] 動画');
+    expect(roomPreview({ last_message_type: 'voice', last_message_content: '[山田@出品]' })).toBe('[山田@出品] 音声');
+  });
+  it('LINE の文章 ([氏名@グループ] のあとに本文) と、本文つきの画像はそのまま', () => {
+    expect(roomPreview({ last_message_type: 'text', last_message_content: '[山田@出品]\nこんにちは' })).toBe('[山田@出品]\nこんにちは');
+    expect(roomPreview({ last_message_type: 'image', last_message_content: '[山田@出品]\n見積書です' })).toBe('[山田@出品]\n見積書です');
+    expect(roomPreview({ last_message_type: 'text', last_message_content: '[メモ]' })).toBe('[メモ]');
+  });
+  it('★ 返信バー: スタンプは「🙂 スタンプ」、音声は文字起こし、無ければ (メディア)', () => {
+    expect(replyBarText({ type: 'stamp', content: '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b' })).toBe('🙂 スタンプ');
+    expect(replyBarText({ type: 'voice', content: null, transcription: { formatted_text: '整えた文', raw_text: '生' } })).toBe('整えた文');
+    expect(replyBarText({ type: 'voice', content: null, transcription: { formatted_text: null, raw_text: '生' } })).toBe('生');
+    expect(replyBarText({ type: 'image', content: null })).toBe('(メディア)');
+    expect(replyBarText({ type: 'text', content: 'こんにちは' })).toBe('こんにちは');
   });
 });

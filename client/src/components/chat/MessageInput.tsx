@@ -23,6 +23,7 @@ import { Mic, ChevronDown } from 'lucide-react';
 import type { Stamp } from '../../types';
 import './MessageInput.css';
 import { unlockAudio } from '../../services/audioContext';
+import { replyBarText } from '../../utils/replyQuote';
 
 /** useTransceiver の返す制御 object のうち MessageInput が使う部分 */
 interface TransceiverControls {
@@ -480,7 +481,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
     <>
       {replyTo && (
         <div className="message-input-reply">
-          <span>{replyTo.sender_display_name}: {replyTo.content || replyTo.transcription?.formatted_text || replyTo.transcription?.raw_text || '(メディア)'}</span>
+          <span>{replyTo.sender_display_name}: {replyBarText(replyTo)}</span>
           <button onClick={clearReplyTo}>✕</button>
         </div>
       )}
