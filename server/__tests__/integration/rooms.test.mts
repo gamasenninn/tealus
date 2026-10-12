@@ -208,6 +208,26 @@ describe('Rooms API', () => {
       expect(m1.status_message).toBeNull();
     });
 
+    // ★ #594 ゲストには自分以外のひとことを見せない (利用者一覧 GET /api/users と同じ方針)
+    it('★ ゲストには、自分以外の「ひとこと」を返さない', async () => {
+      await getTestPool().query("UPDATE users SET status_message = '外回り中' WHERE id = $1", [user2.user.id]);
+      await getTestPool().query("UPDATE users SET status_message = 'ゲストです', role = 'guest' WHERE id = $1", [user3.user.id]);
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'ゲストあり', member_ids: [user2.user.id, user3.user.id] });
+      const res = await request(app)
+        .get(`/api/rooms/${createRes.body.room.id}`)
+        .set('Authorization', `Bearer ${user3.token}`);
+      expect(res.status).toBe(200);
+      const byId = (id: string) => res.body.members.find((m: { user_id: string }) => m.user_id === id);
+      expect(byId(user2.user.id).status_message ?? null).toBeNull();
+      expect(byId(user3.user.id).status_message).toBe('ゲストです');   // 自分のは見える
+      // 社内の人には今までどおり見える
+      const res1 = await request(app).get(`/api/rooms/${createRes.body.room.id}`).set('Authorization', `Bearer ${user1.token}`);
+      expect(res1.body.members.find((m: { user_id: string }) => m.user_id === user2.user.id).status_message).toBe('外回り中');
+    });
+
     it('should reject access from non-member', async () => {
       const createRes = await request(app)
         .post('/api/rooms/direct')

@@ -6,7 +6,7 @@ import multer from 'multer';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } from '../middleware/roomAccess.mts';
-import { canCreateRoom, isGuest } from '../utils/permissions.mts';
+import { canCreateRoom, isGuest, canSearchUsers } from '../utils/permissions.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
 import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
@@ -46,6 +46,15 @@ interface AnnouncementMessageRow extends AttachableMessage {
 
 // All routes require authentication
 router.use(authenticate);
+
+/**
+ * ★ #594 部屋のメンバーを返すとき、ゲストには自分以外のプロフィールの「ひとこと」を見せない。
+ *   利用者一覧 (GET /api/users) と同じ方針 (canSearchUsers)。#591 で 4 か所に足したときに食い違っていた
+ */
+function membersFor<T extends { user_id: string; status_message?: string | null }>(viewer: { id: string; role?: string }, rows: T[]): T[] {
+  if (canSearchUsers(viewer)) return rows;
+  return rows.map((m) => (m.user_id === viewer.id ? m : { ...m, status_message: null }));
+}
 
 /**
  * GET /api/rooms/portal-links
@@ -206,7 +215,7 @@ router.post('/', async (req, res) => {
 
     // ★ #486 入った全員の接続を部屋に入れ、本人に知らせる (読み込み直すまで出なかった)
     announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
-    res.status(201).json({ room, members: membersResult.rows });
+    res.status(201).json({ room, members: membersFor(req.user!, membersResult.rows) });
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error('Create room error:', err);
@@ -261,7 +270,7 @@ router.post('/direct', async (req, res) => {
          WHERE rm.room_id = $1`,
         [room.id]
       );
-      return res.status(200).json({ room, members: membersResult.rows });
+      return res.status(200).json({ room, members: membersFor(req.user!, membersResult.rows) });
     }
 
     // Create new direct room
@@ -300,7 +309,7 @@ router.post('/direct', async (req, res) => {
 
       // ★ #486 1 対 1 の相手にも、読み込み直さずに出るようにする
       announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
-      res.status(201).json({ room, members: membersResult.rows });
+      res.status(201).json({ room, members: membersFor(req.user!, membersResult.rows) });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -410,7 +419,7 @@ router.get('/:id', requireMember, async (req, res) => {
     );
     const push_muted = muteResult.rows[0]?.push_muted ?? false;
 
-    res.json({ room: { ...roomResult.rows[0], push_muted }, members: membersResult.rows, last_read_message_id });
+    res.json({ room: { ...roomResult.rows[0], push_muted }, members: membersFor(req.user!, membersResult.rows), last_read_message_id });
   } catch (err) {
     logger.error('Get room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
