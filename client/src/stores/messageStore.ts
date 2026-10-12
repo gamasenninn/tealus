@@ -67,7 +67,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         isLoading: false,
       });
     } catch (err) {
-      set({ isLoading: false, error: 'メッセージの取得に失敗しました' });
+      // ★ #592 理由を添える (以前は権限が無いのも圏外も同じ定型文だった)
+      set({ isLoading: false, error: `メッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
 

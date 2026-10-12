@@ -19,6 +19,21 @@ const API_BASE = '/api';
 // GET のみ transient 失敗を限定リトライ + 全 method にタイムアウト。POST/PUT/DELETE は
 // 二重送信回避のためリトライしない。
 const RETRY_STATUS = new Set([408, 429, 502, 503, 504]);
+
+/**
+ * ★ #592 電波が切れたとき・時間切れのときに画面に出す文。以前はブラウザの英語
+ *   (Failed to fetch / Load failed / signal is aborted without reason) がそのまま赤字で出ていた。
+ *   ログイン・招待・名前の変更・転送・部屋の設定など 30 か所以上がこの通り道を通る。手本は #537 (sendRoomMessage)
+ */
+export const NETWORK_ERROR_MESSAGE = 'つながっていません。電波を確かめて、もう一度お試しください';
+export const TIMEOUT_ERROR_MESSAGE = '時間がかかりすぎました。電波を確かめて、もう一度お試しください';
+
+/** つながらない (TypeError) / 時間切れ (AbortError) を日本語の案内に置き換える。それ以外はそのまま */
+function friendlyNetworkError(err: unknown): unknown {
+  if (err instanceof Error && err.name === 'AbortError') return new Error(TIMEOUT_ERROR_MESSAGE);
+  if (err instanceof TypeError) return new Error(NETWORK_ERROR_MESSAGE);
+  return err;
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const withJitter = (ms: number) => ms + Math.floor(Math.random() * 150);
 
@@ -93,7 +108,15 @@ class ApiClient {
       }
 
       xhr.onload = () => {
-        const data = JSON.parse(xhr.responseText) as T & { error?: string };
+        // ★ #592 JSON でない応答 (プロキシの HTML の 413/502 など) でも必ず決着させる。
+        //   以前は JSON.parse の例外で Promise が決着せず、送信中のまま止まった
+        let data: (T & { error?: string }) | undefined;
+        try {
+          data = JSON.parse(xhr.responseText) as T & { error?: string };
+        } catch {
+          reject(new Error(`送れませんでした (応答 ${xhr.status})。もう一度お試しください`));
+          return;
+        }
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve(data);
         } else {
@@ -101,7 +124,7 @@ class ApiClient {
         }
       };
 
-      xhr.onerror = () => reject(new Error('アップロードに失敗しました'));
+      xhr.onerror = () => reject(new Error(NETWORK_ERROR_MESSAGE));   // ★ #592
       xhr.send(formData);
     });
   }
@@ -181,10 +204,10 @@ class ApiClient {
         // ネットワーク断（TypeError）/ タイムアウト（AbortError）は GET のみ transient 扱い。
         const isTransient = (err instanceof Error && err.name === 'AbortError') || err instanceof TypeError;
         if (isGet && isTransient) {
-          lastError = (err as Error).name === 'AbortError' ? new Error(`タイムアウト (${this.requestTimeoutMs}ms)`) : (err as Error);
+          lastError = friendlyNetworkError(err) as Error;   // ★ #592
           continue;
         }
-        throw err;
+        throw friendlyNetworkError(err);   // ★ #592 GET 以外は 1 回で確定する
       } finally {
         clearTimeout(timer);
       }
@@ -391,7 +414,7 @@ class ApiClient {
     } catch (e) {
       // fallback 指定メソッド (getCcProjects/getAgentIdentity) は失敗を silent に飲む
       if (fallback !== undefined) return fallback;
-      throw e;
+      throw friendlyNetworkError(e);   // ★ #592
     }
   }
 

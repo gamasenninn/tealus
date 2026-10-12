@@ -41,8 +41,9 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
     try {
       const data = await api.getRoom(roomId);
       set({ currentRoom: data.room, members: data.members, lastReadMessageId: data.last_read_message_id ?? null, error: null });
-    } catch {
-      set({ error: 'ルーム情報の取得に失敗しました' });
+    } catch (err) {
+      // ★ #592 理由を添える (以前は権限が無いのも圏外も同じ定型文だった。サーバの文・通信の案内は日本語)
+      set({ error: `ルームを開けませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
 
