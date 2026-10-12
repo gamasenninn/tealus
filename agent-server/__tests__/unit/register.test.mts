@@ -31,7 +31,7 @@ jest.mock('../../src/config.mts', () => ({
   TEALUS_API_URL: 'http://localhost:3000',
 }));
 
-import { initializeAgent } from '../../src/setup/register.mts';
+import { initializeAgent, initializeAgentWithRetry } from '../../src/setup/register.mts';
 import * as botApi from '../../src/lib/botApi.mts';
 import { registerBotUserId } from '../../src/webhook/handler.mts';
 import { logger } from '../../src/lib/logger.mts';
@@ -68,5 +68,58 @@ describe('Agent Registration', () => {
 
     await initializeAgent();
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
+  });
+
+  test('#581 結果に成否 (ok) を持たせる', async () => {
+    expect((await initializeAgent()).ok).toBe(true);
+    (botApi.login as jest.Mock).mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    expect((await initializeAgent()).ok).toBe(false);
+  });
+});
+
+describe('#581 起動時につながらなければ、つながるまで試し直す', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('★ 2 回失敗して 3 回目でつながる → Bot の ID は 1 回だけ登録される', async () => {
+    (botApi.login as jest.Mock)
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const sleep = jest.fn((_ms: number) => Promise.resolve());
+    const result = await initializeAgentWithRetry({ delaysMs: [5000, 15000, 30000, 60000], sleep });
+    expect(result.ok).toBe(true);
+    expect(botApi.login).toHaveBeenCalledTimes(3);
+    expect(registerBotUserId).toHaveBeenCalledTimes(1);
+    expect(sleep.mock.calls).toEqual([[5000], [15000]]);
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('3 回目'));
+  });
+
+  test('間隔は最後の値で頭打ちになる', async () => {
+    for (let i = 0; i < 5; i++) (botApi.login as jest.Mock).mockRejectedValueOnce(new Error('x'));
+    const sleep = jest.fn((_ms: number) => Promise.resolve());
+    await initializeAgentWithRetry({ delaysMs: [5, 15], sleep });
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([5, 15, 15, 15, 15]);
+  });
+
+  test('1 回目でつながれば待たない', async () => {
+    const sleep = jest.fn((_ms: number) => Promise.resolve());
+    await initializeAgentWithRetry({ delaysMs: [5], sleep });
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  test('失敗のたびの警告は 1・2・4・8… 回目だけ (60 秒ごとに 1 日続いてもログを埋めない)', async () => {
+    for (let i = 0; i < 9; i++) (botApi.login as jest.Mock).mockRejectedValueOnce(new Error('x'));
+    const sleep = jest.fn((_ms: number) => Promise.resolve());
+    await initializeAgentWithRetry({ delaysMs: [1], sleep });
+    const warns = (logger.warn as jest.Mock).mock.calls.map((c) => String(c[0])).filter((m) => m.includes('[init-retry]'));
+    expect(warns.map((m) => m.match(/(\d+) 回目/)?.[1])).toEqual(['1', '2', '4', '8']);
+  });
+
+  test('★ 大きなエラーの表示 (AGENT INITIALIZATION FAILED) は 1 回目だけ', async () => {
+    for (let i = 0; i < 4; i++) (botApi.login as jest.Mock).mockRejectedValueOnce(new Error('x'));
+    await initializeAgentWithRetry({ delaysMs: [1], sleep: () => Promise.resolve() });
+    const banners = (logger.error as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('AGENT INITIALIZATION FAILED'));
+    expect(banners).toHaveLength(1);
   });
 });

@@ -7,7 +7,7 @@
 import * as config from './config.mts';
 import { logger } from './lib/logger.mts';
 import { app } from './app.mts';
-import { initializeAgent } from './setup/register.mts';
+import { initializeAgentWithRetry } from './setup/register.mts';
 import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
 import { broadcastShutdown } from './webhook/ccSubscribers.mts';
 import { logOrganonInjectState } from './lib/organonContext.mts';
@@ -41,7 +41,8 @@ const server = app.listen(config.PORT, async () => {
   startVoiceLogJanitor();
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
-  await initializeAgent();
+  // ★ #581 つながるまで試し直す (本体より先に起きても、本体が上がれば AI が返事をする)
+  await initializeAgentWithRetry();
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {
