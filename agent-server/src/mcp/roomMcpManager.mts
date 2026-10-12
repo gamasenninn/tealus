@@ -12,7 +12,7 @@ import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
-import { agentChildEnv } from '../lib/childEnv.mts';
+import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
 import { FILESYSTEM_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 
 interface McpServerDef {
@@ -101,6 +101,7 @@ async function connectTealusMcp(): Promise<MCPServerStdio[]> {
           TEALUS_API_URL: config.TEALUS_API_URL,
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
           TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
+          ...tealusMcpToolEnv(),   // ★ #580 画像生成・PDF の vision の鍵 (#573 でここだけ抜けていた)
         } as Record<string, string>,
         timeout: MCP_CONNECT_TIMEOUT,                              // request timeout (ms)
         clientSessionTimeoutSeconds: MCP_CONNECT_TIMEOUT_SECONDS,  // #227 connect timeout (秒)

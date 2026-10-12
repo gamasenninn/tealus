@@ -31,3 +31,23 @@ export function agentChildEnv(source: NodeJS.ProcessEnv = process.env): Record<s
   }
   return env;
 }
+
+/**
+ * #580 tealus-mcp の道具が要る鍵。tealus-mcp を起こす 3 か所 (Light v2・Deep・会話モードの共有) はここから取る。
+ * ★ 以前は 3 か所に同じ一覧を手書きしていて、#573 で会話モードの 1 か所だけ抜けた
+ *   (画像生成 = OPENAI_API_KEY、read_document の vision = GOOGLE_API_KEY / DOCUMENT_VISION_*)
+ */
+const TEALUS_MCP_TOOL_KEYS = [
+  'OPENAI_API_KEY',              // generate_and_send_image (#260)
+  'GOOGLE_API_KEY',              // read_document の vision (Gemini)
+  'DOCUMENT_VISION_PROVIDER', 'DOCUMENT_VISION_MODEL', 'DOCUMENT_VISION_MAX_PAGES',
+];
+
+export function tealusMcpToolEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const k of TEALUS_MCP_TOOL_KEYS) {
+    const v = source[k];
+    if (v) env[k] = v;
+  }
+  return env;
+}

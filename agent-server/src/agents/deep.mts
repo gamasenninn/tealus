@@ -10,7 +10,7 @@ import path from 'node:path';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
-import { agentChildEnv } from '../lib/childEnv.mts';
+import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
 import * as botApi from '../lib/botApi.mts';
 import { updateContext } from '../context/sessionManager.mts';
 import * as deepRegistry from './deepRegistry.mts';
@@ -60,13 +60,7 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
           TEALUS_API_URL: tealusApiUrlForCurrentRequester(),   // ★ #564 依頼した人の部屋に絞る (中継経由)
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
           TEALUS_PASSWORD: config.TEALUS_BOT_PASS,
-          // generate_and_send_image (#260) で DALL-E 3 を呼ぶため必要
-          ...(config.OPENAI_API_KEY ? { OPENAI_API_KEY: config.OPENAI_API_KEY } : {}),
-          // read_document の vision fallback (Gemini) で必要
-          ...(process.env.GOOGLE_API_KEY ? { GOOGLE_API_KEY: process.env.GOOGLE_API_KEY } : {}),
-          ...(process.env.DOCUMENT_VISION_PROVIDER ? { DOCUMENT_VISION_PROVIDER: process.env.DOCUMENT_VISION_PROVIDER } : {}),
-          ...(process.env.DOCUMENT_VISION_MODEL ? { DOCUMENT_VISION_MODEL: process.env.DOCUMENT_VISION_MODEL } : {}),
-          ...(process.env.DOCUMENT_VISION_MAX_PAGES ? { DOCUMENT_VISION_MAX_PAGES: process.env.DOCUMENT_VISION_MAX_PAGES } : {}),
+          ...tealusMcpToolEnv(),   // ★ #580 画像生成・PDF の vision の鍵 (3 か所で同じ一覧)
         },
       },
     },

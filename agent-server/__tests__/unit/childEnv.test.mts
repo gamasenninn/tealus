@@ -4,7 +4,9 @@
  * ★ 値のパスはスラッシュで書く (ヒアドキュメント経由でバックスラッシュが減り \u が Unicode の書き方として読まれた)
  */
 jest.mock('../../src/lib/logger.mts', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
-import { agentChildEnv } from '../../src/lib/childEnv.mts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { agentChildEnv, tealusMcpToolEnv } from '../../src/lib/childEnv.mts';
 import { buildCodexExecEnv } from '../../src/agents/deepCodex.mts';
 
 const FAKE: NodeJS.ProcessEnv = {
@@ -49,6 +51,30 @@ describe('Deep codex (#565)', () => {
     } finally {
       for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
       Object.assign(process.env, saved);
+    }
+  });
+});
+
+describe('tealusMcpToolEnv (#580)', () => {
+  it('tealus-mcp の道具が要る鍵 (画像生成・PDF の vision) だけを取り出す', () => {
+    const env = tealusMcpToolEnv({
+      ...FAKE, DOCUMENT_VISION_PROVIDER: 'gemini', DOCUMENT_VISION_MODEL: 'm', DOCUMENT_VISION_MAX_PAGES: '5',
+    });
+    expect(env).toEqual({
+      OPENAI_API_KEY: 'sk-x', GOOGLE_API_KEY: 'g',
+      DOCUMENT_VISION_PROVIDER: 'gemini', DOCUMENT_VISION_MODEL: 'm', DOCUMENT_VISION_MAX_PAGES: '5',
+    });
+  });
+  it('無いものは入れない (空の値も)', () => {
+    expect(tealusMcpToolEnv({ OPENAI_API_KEY: '', PATH: '/bin' })).toEqual({});
+  });
+  it('★ tealus-mcp を起こす 3 か所 (Light v2・Deep・会話モードの共有) が、どれもこの関数で鍵を渡す', () => {
+    // 同じ一覧が 3 か所に手書きされていて、#573 で 1 か所 (roomMcpManager) だけ抜けた
+    const dir = path.join(__dirname, '../../src');
+    for (const rel of ['agents/lightV2.mts', 'agents/deep.mts', 'mcp/roomMcpManager.mts']) {
+      const src = fs.readFileSync(path.join(dir, rel), 'utf8');
+      expect({ rel, uses: src.includes('...tealusMcpToolEnv()') }).toEqual({ rel, uses: true });
+      expect({ rel, handWritten: /DOCUMENT_VISION_PROVIDER/.test(src) }).toEqual({ rel, handWritten: false });
     }
   });
 });
