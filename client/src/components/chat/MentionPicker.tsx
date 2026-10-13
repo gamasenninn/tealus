@@ -7,6 +7,8 @@ export interface MentionCandidate {
   display_name: string;
   avatar_url?: string | null;
   is_cc?: boolean;
+  /** false なら利用停止。候補に出さない (選んでも届かない)。持たない (古い本体・cc) は出す */
+  is_active?: boolean;
 }
 
 interface MentionPickerProps {
@@ -18,6 +20,7 @@ interface MentionPickerProps {
 
 function MentionPicker({ members, query, onSelect, onClose }: MentionPickerProps) {
   const filtered = members.filter(m => {
+    if (m.is_active === false) return false;   // ★ 利用停止の人 (改善ループ 10-13 の 4.)
     const name = m.display_name || '';
     return name.toLowerCase().includes((query || '').toLowerCase());
   });

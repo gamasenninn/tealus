@@ -206,7 +206,7 @@ router.post('/', async (req, res) => {
 
     // Fetch members
     const membersResult = await pool.query(
-      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
+      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active
        FROM room_members rm
        JOIN users u ON u.id = rm.user_id
        WHERE rm.room_id = $1`,
@@ -264,7 +264,7 @@ router.post('/direct', async (req, res) => {
     if (existingResult.rows.length > 0) {
       const room = existingResult.rows[0];
       const membersResult = await pool.query(
-        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
+        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active
          FROM room_members rm
          JOIN users u ON u.id = rm.user_id
          WHERE rm.room_id = $1`,
@@ -300,7 +300,7 @@ router.post('/direct', async (req, res) => {
       await client.query('COMMIT');
 
       const membersResult = await pool.query(
-        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
+        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active
          FROM room_members rm
          JOIN users u ON u.id = rm.user_id
          WHERE rm.room_id = $1`,
@@ -341,7 +341,9 @@ router.get('/', async (req, res) => {
               partner.display_name AS partner_display_name,
               partner.avatar_url AS partner_avatar_url,
               COALESCE(unread.count, 0)::int AS unread_count,
-              (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count
+              -- ★ 利用停止の人は数えない (一覧には「利用停止」と添えて残す、改善ループ 10-13 の 4.)
+              (SELECT COUNT(*)::int FROM room_members rmc JOIN users uc ON uc.id = rmc.user_id
+                WHERE rmc.room_id = r.id AND uc.is_active = true) AS member_count
        FROM rooms r
        JOIN room_members rm ON rm.room_id = r.id
        LEFT JOIN LATERAL (
@@ -398,7 +400,7 @@ router.get('/:id', requireMember, async (req, res) => {
 
     // Get members
     const membersResult = await pool.query(
-      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message
+      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active
        FROM room_members rm
        JOIN users u ON u.id = rm.user_id
        WHERE rm.room_id = $1`,

@@ -209,6 +209,8 @@ function MemberList({ roomId, onClose }: MemberListProps) {
                   {m.role === 'admin' && <span className="member-crown">👑</span>}
                   <span className="member-name">{m.display_name}</span>
                   {m.role === 'admin' && <span className="member-role-label">グループ管理者</span>}
+                  {/* ★ 利用停止の人も一覧には残す (誰がいたかは分かる)。人数には数えない (改善ループ 10-13 の 4.) */}
+                  {m.is_active === false && <span className="member-inactive">利用停止</span>}
                 </div>
                 {/* ★ #591 プロフィールの「ひとこと」。以前は書けるのに誰の画面にも出なかった */}
                 {m.status_message?.trim() && <div className="member-status">{m.status_message}</div>}

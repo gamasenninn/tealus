@@ -201,6 +201,15 @@
   border-radius: 8px;
 }
 
+/* 利用停止の人 (改善ループ 10-13 の 4.)。目立たせず、在籍していないことだけ分かる */
+.member-inactive {
+  font-size: 11px;
+  color: var(--text-placeholder);
+  border: 1px solid var(--text-placeholder);
+  padding: 0 6px;
+  border-radius: 8px;
+}
+
 .member-menu-btn {
   background: none;
   border: none;
