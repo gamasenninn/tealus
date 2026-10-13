@@ -515,6 +515,8 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
  *
  * CASCADE will cleanup: room_members, messages, message_media,
  * voice_transcriptions, message_reads, room_read_cursors, tags etc.
+ * ★ 別の部屋へ転送した写しは残る (forwarded_from に参照の縛りが無い、migration 038)。
+ *   縛りがあった頃は、写しが 1 つでもあると削除全体が 500 で失敗していた
  */
 router.delete('/:id', requireGroup, requireMember, requireCreator, requireSoloMember, async (req, res) => {
   const { id } = req.params;
