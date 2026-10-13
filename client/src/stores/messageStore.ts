@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import { patchMessage, patchQuotes } from './patchMessage';
-import { getCachedMessages, cacheMessages, evictRoomView, isGoneFromRoom } from './roomViewCache';
+import { getCachedMessages, cacheMessages, evictRoomView, isGoneFromRoom, markRoomReachable } from './roomViewCache';
 import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
@@ -9,6 +9,13 @@ export type StoreMessage = Message & { link_preview?: LinkPreview | null };
 
 /** #538 追いつくときに読む最大のページ数 (20 件 × 5 = 100 件)。超えたら最新に置き換える */
 const CATCH_UP_MAX_PAGES = 5;
+
+/**
+ * #600 監査 (10-14) 手元の一覧の「版」。部屋を開く・取り直す・離れるたびに進める。
+ *   読みに行く前に控え、戻ったときに変わっていたら書かない。遅れて届く応答だけでなく、
+ *   遅れて来る呼び出し (送信後の取り直し・読み足し・追いつき) も、別の部屋や新しい取り直しを上書きしない
+ */
+let version = 0;
 
 interface MessageState {
   messages: StoreMessage[];
@@ -22,6 +29,9 @@ interface MessageState {
   isLoading: boolean;
   error: string | null;
   replyTo: Message | null;
+  /** #600 部屋を開く (useSocketSync)。覚えた中身があれば先に出す。around は検索・引用から開いたとき */
+  openRoom: (roomId: string, around?: string | null) => Promise<void>;
+  /** 開いている部屋を取り直す (送信後・日付や引用へ飛ぶ・一番下へ)。★ #600 今の部屋でなければ何もしない */
   fetchMessages: (roomId: string, around?: string | null) => Promise<void>;
   loadMore: (roomId: string) => Promise<void>;
   /** #511 一番新しい投稿の後ろを読み足す */
@@ -61,47 +71,32 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   error: null,
   replyTo: null,
 
+  openRoom: async (roomId, around = null) => {
+    // ★ #600 前に開いたときの中身を先に出す (取り直しが届くまで「何もない画面」にしない)。
+    //   検索から特定の投稿に飛ぶ (around) ときは出さない (今までどおり取りに行く)。覚えた分が無ければ空から
+    const cached = around ? undefined : getCachedMessages(roomId);
+    set(cached
+      ? { roomId, messages: cached, isStale: true, hasMore: true, hasNewer: false, error: null }
+      : { roomId, messages: [], isStale: false, hasMore: true, hasNewer: false, error: null });
+    await load(roomId, around);
+  },
+
   fetchMessages: async (roomId, around = null) => {
-    // ★ #600 別の部屋を開くときは、前に開いたときの中身を先に出す (取り直しが届くまで「何もない画面」にしない)。
-    //   検索から特定の投稿に飛ぶ (around) ときは出さない (今までどおり取りに行く)
-    if (get().roomId !== roomId) {
-      const cached = around ? undefined : getCachedMessages(roomId);
-      set(cached
-        ? { roomId, messages: cached, isStale: true, hasMore: true, hasNewer: false }
-        : { roomId, isStale: false });
-    }
-    try {
-      set({ isLoading: true, error: null });
-      const data = await api.getMessages(roomId, null, 20, around);
-      if (get().roomId !== roomId) return;   // ★ #600 取りに行っている間に別の部屋へ移った: 今の部屋に書かない
-      set({
-        isStale: false,
-        messages: around ? data.messages : data.messages.reverse(),
-        // ★ #511 around は「その投稿以降」なので、件数は上 (古い方) があるかを表さない。
-        //   件数で決めていた頃は、最近の日へ飛ぶと上にもスクロールできなかった (無ければ loadMore が 0 件で止める)
-        hasMore: around ? true : data.messages.length >= 20,
-        hasNewer: around ? data.messages.length >= 20 : false,
-        isLoading: false,
-      });
-    } catch (err) {
-      if (get().roomId !== roomId) return;
-      // ★ #600 外された・消された部屋なら、覚えた分を捨てて画面からも消す。圏外などでは前の中身を出したまま理由を添える
-      if (isGoneFromRoom(err)) {
-        evictRoomView(roomId);
-        set({ messages: [], hasMore: false });
-      }
-      // ★ #592 理由を添える (以前は権限が無いのも圏外も同じ定型文だった)
-      set({ isLoading: false, isStale: false, error: `メッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
-    }
+    // ★ #600 監査 E: 送信後の取り直し (2 秒後) などが、別の部屋へ移ってから・一覧に戻ってから来ても何もしない。
+    //   以前はここで部屋を切り替えてしまい、移った先に前の部屋の中身を出し、移った先の取り直しを捨てていた
+    if (get().roomId !== roomId) return;
+    await load(roomId, around);
   },
 
   loadMore: async (roomId) => {
     const { messages, isLoading } = get();
     if (messages.length === 0 || isLoading) return;
+    const v0 = version;
     try {
       set({ isLoading: true });
       const oldestId = messages[0].id;
       const data = await api.getMessages(roomId, oldestId);
+      if (v0 !== version) return;   // ★ #600 監査 F: 読み足している間に部屋を移った・取り直した。今の一覧に混ぜない
       set((state) => ({
         messages: [...data.messages.reverse(), ...state.messages],
         hasMore: data.messages.length >= 20,
@@ -109,6 +104,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       }));
     } catch (err) {
       // ★ 理由を添える (#592 で fetchMessages だけ直し、ここは取り残していた。改善ループ 10-13)
+      if (v0 !== version) return;
       set({ isLoading: false, error: `過去のメッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
@@ -116,10 +112,12 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   loadNewer: async (roomId) => {
     const { messages, isLoading, hasNewer } = get();
     if (!hasNewer || messages.length === 0 || isLoading) return;
+    const v0 = version;
     try {
       set({ isLoading: true });
       const newestId = messages[messages.length - 1].id;
       const data = await api.getMessagesAfter(roomId, newestId);
+      if (v0 !== version) return;   // ★ #600 監査 F
       set((state) => {
         const have = new Set(state.messages.map((x) => x.id));
         return {
@@ -129,6 +127,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         };
       });
     } catch (err) {
+      if (v0 !== version) return;
       set({ isLoading: false, error: `新しいメッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
@@ -140,11 +139,13 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     if (hasNewer) return;   // 過去の位置を見ている最中。下へスクロールしたときに loadNewer が読み足す
     if (isLoading) return;  // 開いた直後の読み込み中 (検索から開いた位置を上書きしない)
     if (messages.length === 0) { await get().fetchMessages(roomId); return; }
+    const v0 = version;
     try {
       let newestId = messages[messages.length - 1].id;
       const fetched: Message[] = [];
       for (let page = 0; page < CATCH_UP_MAX_PAGES; page++) {
         const data = await api.getMessagesAfter(roomId, newestId, 20);
+        if (v0 !== version) return;   // ★ #600 監査 F: 追いついている間に部屋を移った・取り直した
         fetched.push(...data.messages);
         if (data.messages.length < 20) {
           set((state) => {
@@ -250,6 +251,36 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     //   過去の位置を見ていた (最新まで読んでいない) とき・取り直しが届いていないときは覚え直さない
     const { roomId, messages, hasNewer, isStale } = get();
     if (roomId && !hasNewer && !isStale) cacheMessages(roomId, messages);
-    set({ messages: [], roomId: null, isStale: false, hasMore: true, hasNewer: false, error: null, replyTo: null });
+    version++;   // 読みに行っている途中のものは、戻ってきても書かない
+    set({ messages: [], roomId: null, isStale: false, hasMore: true, hasNewer: false, isLoading: false, error: null, replyTo: null });
   },
 }));
+
+/** 最新 (または around の位置) を読んで一覧を置き換える。openRoom と fetchMessages が使う */
+async function load(roomId: string, around: string | null): Promise<void> {
+  const v = ++version;
+  try {
+    useMessageStore.setState({ isLoading: true, error: null });
+    const data = await api.getMessages(roomId, null, 20, around);
+    if (v !== version) return;   // ★ #600 取りに行っている間に部屋を移った・新しく取り直した: 書かない
+    markRoomReachable(roomId);   // 開けた (外されていない) ので、離れるときに覚えてよい
+    useMessageStore.setState({
+      isStale: false,
+      messages: around ? data.messages : data.messages.reverse(),
+      // ★ #511 around は「その投稿以降」なので、件数は上 (古い方) があるかを表さない。
+      //   件数で決めていた頃は、最近の日へ飛ぶと上にもスクロールできなかった (無ければ loadMore が 0 件で止める)
+      hasMore: around ? true : data.messages.length >= 20,
+      hasNewer: around ? data.messages.length >= 20 : false,
+      isLoading: false,
+    });
+  } catch (err) {
+    if (v !== version) return;
+    // ★ #600 外された・消された部屋なら、覚えた分を捨てて画面からも消す。圏外などでは前の中身を出したまま理由を添える
+    if (isGoneFromRoom(err)) {
+      evictRoomView(roomId);
+      useMessageStore.setState({ messages: [], hasMore: false });
+    }
+    // ★ #592 理由を添える (以前は権限が無いのも圏外も同じ定型文だった)
+    useMessageStore.setState({ isLoading: false, isStale: false, error: `メッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
+  }
+}

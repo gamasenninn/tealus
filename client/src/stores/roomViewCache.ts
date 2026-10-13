@@ -19,6 +19,11 @@ interface RoomView { room: Room; members: RoomMember[] }
 
 const messagesByRoom = new Map<string, StoreMessage[]>();
 const viewsByRoom = new Map<string, RoomView>();
+/**
+ * #600 監査 A: 外された・消された部屋。開いたまま外されると、捨てた直後に画面を閉じる処理 (clearMessages) が
+ *   同じ 20 件を覚え直していた。ここに入っている間は覚えない。開け直せたら (markRoomReachable) 外す
+ */
+const goneRooms = new Set<string>();
 
 /** 入れ直して「最近」にし、上限を超えた古い部屋から落とす */
 function put<T>(map: Map<string, T>, roomId: string, value: T): void {
@@ -32,7 +37,7 @@ export function getCachedMessages(roomId: string): StoreMessage[] | undefined {
 }
 
 export function cacheMessages(roomId: string, messages: StoreMessage[]): void {
-  if (messages.length === 0) return;
+  if (messages.length === 0 || goneRooms.has(roomId)) return;
   put(messagesByRoom, roomId, messages.slice(-MESSAGES_PER_ROOM));
 }
 
@@ -41,19 +46,27 @@ export function getCachedRoomView(roomId: string): RoomView | undefined {
 }
 
 export function cacheRoomView(roomId: string, view: RoomView): void {
+  markRoomReachable(roomId);   // 部屋の情報を取れた = 入れている
   put(viewsByRoom, roomId, view);
 }
 
 /** 外された・消された部屋の分を捨てる */
 export function evictRoomView(roomId: string): void {
+  goneRooms.add(roomId);
   messagesByRoom.delete(roomId);
   viewsByRoom.delete(roomId);
 }
 
-/** ログアウトで全部捨てる (同じ画面で別の人がログインしても前の人の会話を出さない) */
+/** 本体から中身を取れた (招き直された等)。また覚えてよい */
+export function markRoomReachable(roomId: string): void {
+  goneRooms.delete(roomId);
+}
+
+/** ログアウト・ログインで全部捨てる (同じ画面で別の人がログインしても前の人の会話を出さない) */
 export function clearRoomViewCache(): void {
   messagesByRoom.clear();
   viewsByRoom.clear();
+  goneRooms.clear();
 }
 
 /** 本体が「その部屋に入れない」と答えたか (外された 403 / 消された 404)。圏外などでは捨てない */

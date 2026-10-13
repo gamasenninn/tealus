@@ -50,6 +50,36 @@ describe('useMessageScroll: 前の中身を出している間 (#600)', () => {
     expect(sessionStorage.getItem('scrollPos:r3')).toBeNull();
   });
 
+  it('★★ #600 監査 C: 前の中身を上へ読んでいる途中に取り直しが届いても、一番下へ引き戻さない (既読にはする)', () => {
+    sessionStorage.clear();
+    state.messages = msgs(1, 20); state.isStale = true;
+    const { result, rerender } = renderHook(() => useMessageScroll('r4'));
+    const box = { scrollTop: 300, scrollHeight: 1000, clientHeight: 400, addEventListener: vi.fn() };
+    (result.current.messagesContainerRef as { current: unknown }).current = box;
+    vi.advanceTimersByTime(200);           // 覚えた分を出して一番下へ
+    box.scrollTop = 200;                   // 上へスクロールして読む
+    result.current.handleScroll();
+    state.messages = msgs(4, 23); state.isStale = false;
+    rerender();
+    vi.advanceTimersByTime(200);
+    expect(box.scrollTop).toBe(200);
+    expect(markRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('★ 前の中身の一番下にいたなら、取り直しが届いたら一番下へ合わせる', () => {
+    state.messages = msgs(1, 20); state.isStale = true;
+    const { result, rerender } = renderHook(() => useMessageScroll('r5'));
+    const box = { scrollTop: 0, scrollHeight: 1000, clientHeight: 400, addEventListener: vi.fn() };
+    (result.current.messagesContainerRef as { current: unknown }).current = box;
+    vi.advanceTimersByTime(200);
+    expect(box.scrollTop).toBe(1000);
+    box.scrollHeight = 1200;
+    state.messages = msgs(4, 23); state.isStale = false;
+    rerender();
+    vi.advanceTimersByTime(200);
+    expect(box.scrollTop).toBe(1200);
+  });
+
   it('初めて開く部屋 (覚えた分なし) は今までどおり、届いたら既読にする', () => {
     state.messages = []; state.isStale = false;
     const { rerender } = renderHook(() => useMessageScroll('r2'));

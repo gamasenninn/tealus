@@ -65,6 +65,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
   login: async (login_id, password) => {
     const data = await api.login(login_id, password);
+    // ★ #600 監査 B: ログアウトせずに /login から別の人が入っても、前の人が覚えた部屋の中身を出さない
+    clearRoomViewCache();
     api.setToken(data.token);
     connectSocket(data.token);
     set({ user: data.user, token: data.token });

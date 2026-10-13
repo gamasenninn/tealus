@@ -94,7 +94,7 @@ export interface UseSocketSyncResult {
 export function useSocketSync(roomId: string, targetMsgId: string | null = null): UseSocketSyncResult {
   const { user } = useAuthStore();
   const { selectRoom, clearCurrentRoom } = useRoomStore();
-  const { addMessage, fetchMessages, catchUp, clearMessages, updateMessageContent } = useMessageStore();
+  const { addMessage, openRoom, catchUp, clearMessages, updateMessageContent } = useMessageStore();
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [agentStatus, setAgentStatus] = useState<AgentStatusPayload | null>(null);
 
@@ -106,7 +106,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     setTypingUsers({});
 
     selectRoom(roomId);
-    fetchMessages(roomId, targetMsgId || null);
+    openRoom(roomId, targetMsgId || null);   // #600 覚えた中身があれば先に出す
 
     // #474 画面が裏にある間に届いた投稿は既読にせず溜めておき、戻ったときにまとめて既読にする。
     //   以前は開いたままの端末が裏でも既読にしていた (既読は人ごとに 1 つなので、他の端末に未読の数が出ない)

@@ -22,7 +22,7 @@ describe('messageStore.catchUp (#538)', () => {
   beforeEach(() => {
     vi.mocked(api.getMessages).mockReset();
     vi.mocked(api.getMessagesAfter).mockReset();
-    useMessageStore.setState({ messages: range(1, 20), hasMore: true, hasNewer: false, isLoading: false } as never);
+    useMessageStore.setState({ roomId: 'r1', messages: range(1, 20), hasMore: true, hasNewer: false, isLoading: false } as never);
   });
 
   it('★★ 手元の最後より新しい分を後ろに足す (前の分はそのまま)', async () => {

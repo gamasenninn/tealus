@@ -116,7 +116,9 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         sessionStorage.removeItem(`scrollPos:${roomId}`);
       } else {
         setTimeout(() => {
-          pinToBottom();   // ★ scrollIntoView を使わない (上と同じ理由)
+          // ★ scrollIntoView を使わない (上と同じ理由)。
+          // ★ #600 監査 C: 前の中身を上へ読んでいる途中に取り直しが届いたら引き戻さない (開いた直後は atBottom が true)
+          if (atBottom.current) pinToBottom();
           markReadWhenVisible();
         }, INITIAL_SCROLL_DELAY);
       }

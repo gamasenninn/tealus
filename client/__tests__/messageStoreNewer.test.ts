@@ -21,7 +21,7 @@ describe('messageStore — 新しい方へ読み足す (#511)', () => {
   beforeEach(() => {
     vi.mocked(api.getMessages).mockReset();
     vi.mocked(api.getMessagesAfter).mockReset();
-    useMessageStore.setState({ messages: [], hasMore: true, hasNewer: false, isLoading: false } as never);
+    useMessageStore.setState({ roomId: 'r1', messages: [], hasMore: true, hasNewer: false, isLoading: false } as never);
   });
 
   it('最新を読んだら hasNewer は false', async () => {

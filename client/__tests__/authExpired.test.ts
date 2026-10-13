@@ -43,3 +43,13 @@ describe('認証が切れたとき (#539)', () => {
     expect(cache.getCachedMessages('r1')).toBeUndefined();
   });
 });
+
+describe('ログイン (#600 監査 B)', () => {
+  it('★★ ログアウトせずに別の人がログインしても、前の人が覚えた部屋の中身を捨てる', async () => {
+    const cache = await import('../src/stores/roomViewCache');
+    cache.cacheMessages('r1', [{ id: 'm1' }] as never);
+    vi.spyOn(api, 'login').mockResolvedValue({ token: 't2', user: { id: 'u2' } } as never);
+    await useAuthStore.getState().login('b', 'x');
+    expect(cache.getCachedMessages('r1')).toBeUndefined();
+  });
+});

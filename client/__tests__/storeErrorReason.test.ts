@@ -19,7 +19,7 @@ describe('#592 開けなかった理由を添える', () => {
 
   it('★ メッセージ: 通信の案内を出す', async () => {
     vi.spyOn(api, 'getMessages').mockRejectedValue(new Error('つながっていません。電波を確かめて、もう一度お試しください'));
-    await useMessageStore.getState().fetchMessages('r1');
+    await useMessageStore.getState().openRoom('r1');
     expect(useMessageStore.getState().error).toContain('つながっていません');
   });
 });

@@ -10,7 +10,7 @@ import { renderHook, act } from '@testing-library/react';
 
 // --- 依存 mock（hook のロジックだけを検証するため最小化） ---
 const store = {
-  addMessage: vi.fn(), fetchMessages: vi.fn(), catchUp: vi.fn(), clearMessages: vi.fn(),
+  addMessage: vi.fn(), fetchMessages: vi.fn(), openRoom: vi.fn(), catchUp: vi.fn(), clearMessages: vi.fn(),
   updateMessageContent: vi.fn(), updateReadCount: vi.fn(), updateTranscription: vi.fn(),
   updateReactions: vi.fn(), updateLinkPreview: vi.fn(), markDeleted: vi.fn(),
   updatePublishStatus: vi.fn(), updateTags: vi.fn(), removeTag: vi.fn(),
