@@ -34,6 +34,7 @@ server/config/line-group-mappings.json
 server/config/line-members.json
 # #382 ルームトリガー: room_id / user id という端末固有の値を持つ。example はコミットする
 server/config/room-triggers.json
+server/config/watchdogs.json
 
 # Marp 生成物 (markdown source からビルド可能、commit 不要)
 docs/presentation/*.html

@@ -1,0 +1,36 @@
+{
+  "notify": {
+    "room_id": "00000000-0000-0000-0000-000000000000",
+    "room": "業務メモ",
+    "as_user_id": "00000000-0000-0000-0000-000000000000"
+  },
+  "watches": [
+    {
+      "id": "backup",
+      "name": "NAS へのバックアップ",
+      "kind": "backup_log",
+      "dir": "//nas/share/tealus-bak/logs",
+      "enabled": false
+    },
+    {
+      "id": "call-log",
+      "name": "通話履歴の取り込み",
+      "kind": "room_quiet",
+      "room_id": "00000000-0000-0000-0000-000000000000",
+      "room": "通話履歴",
+      "from_user_ids": ["00000000-0000-0000-0000-000000000000"],
+      "max_quiet_minutes": 150,
+      "hours": "09:00-17:00",
+      "days": "mon,tue,thu,fri,sat,sun",
+      "enabled": false
+    },
+    {
+      "id": "radio",
+      "name": "無線 (録音・文字起こし)",
+      "kind": "http_health",
+      "url": "http://localhost:9320/api/health",
+      "services": ["vox", "transcriber"],
+      "enabled": false
+    }
+  ]
+}

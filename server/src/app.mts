@@ -341,6 +341,7 @@ if (import.meta.main) {
   let capabilityWatcher: typeof import('./services/capabilityWatcher.mts') | null = null;
   let organonWatcher: typeof import('./services/organonWatcher.mts') | null = null;
   let roomTriggers: typeof import('./services/roomTriggerRunner.mts') | null = null;
+  let watchdogs: typeof import('./services/watchdogRunner.mts') | null = null;
   let loginThrottlePruneTimer: NodeJS.Timeout | null = null;
 
   // ★ #585 起動時の拾い直しは、受付を始める前に作られた行だけを拾う (その後に届いた投稿は自分で文字起こしを始めるので、拾うと二重になる)
@@ -365,6 +366,11 @@ if (import.meta.main) {
     import('./services/roomTriggerRunner.mts')
       .then(rt => { roomTriggers = rt; rt.startRoomTriggers(); })
       .catch((err) => logger.warn(`[room-triggers] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
+    // #595 見張り: 来るはずのもの (バックアップ・通話履歴・無線) が来ないとき業務メモに 1 回だけ知らせる (docs/09)。
+    // 設定 (server/config/watchdogs.json) が無ければ何もしない。
+    import('./services/watchdogRunner.mts')
+      .then(wd => { watchdogs = wd; wd.startWatchdogs(); })
+      .catch((err) => logger.warn(`[watchdogs] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
     // #536 整えている途中で前のプロセスが落ちた文字起こしを整え直す (「AIが文章を整えています…」のまま止まっていた)
     import('./services/transcriptionRecovery.mts')
       // ★ #579 音を文字にしている途中 (pending / transcribing) で止まったものもやり直す (「⏳ 文字起こし中...」のまま止まっていた)
@@ -395,7 +401,7 @@ if (import.meta.main) {
       if (notified > 0) logger.info(`[shutdown] cc-queue の購読者 ${notified} 件に再起動を予告しました`);
     },
     stopTimers: () => {
-      capabilityWatcher?.stop(); organonWatcher?.stop(); roomTriggers?.stopRoomTriggers();
+      capabilityWatcher?.stop(); organonWatcher?.stop(); roomTriggers?.stopRoomTriggers(); watchdogs?.stopWatchdogs();
       if (loginThrottlePruneTimer) { clearInterval(loginThrottlePruneTimer); loginThrottlePruneTimer = null; }
     },
     // ★ server.close() は await しない — cc-queue の中継は終わらないので callback が来ない
