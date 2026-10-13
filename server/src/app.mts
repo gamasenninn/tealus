@@ -47,6 +47,7 @@ import { router as stampRoutes } from './routes/stamps.mts';
 import { router as promptRoutes } from './routes/prompts.mts';
 import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
 import { mediaStatic } from './utils/mediaStatic.mts';
+import { isMediaHidden } from './services/deletedMedia.mts';
 import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 import { router as clientErrorRoutes } from './routes/clientErrors.mts';
@@ -247,8 +248,8 @@ app.use('/api/stamps', stampRoutes);
 app.use('/api/rooms/:id/prompts', promptRoutes);
 
 // Static media files
-// ★ 本体と切り離して開かせる (utils/mediaStatic.mts)
-app.use('/media', mediaStatic(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../media')));
+// ★ 本体と切り離して開かせる (utils/mediaStatic.mts)。★ #601 削除した投稿だけが使っていた添付は 404
+app.use('/media', mediaStatic(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../media'), { isHidden: (rel) => isMediaHidden(rel) }));
 
 // Health check
 app.get('/api/health', (req, res) => {

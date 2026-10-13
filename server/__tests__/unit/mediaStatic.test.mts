@@ -70,3 +70,59 @@ describe('mediaStatic — 中身から形式を推測させない', () => {
     expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
 });
+
+/**
+ * #601 削除した投稿の添付は 404 にする。判定 (DB) は外から渡し、配信の部品は DB を知らない
+ */
+describe('mediaStatic — 隠すファイル (#601)', () => {
+  const seen: string[] = [];
+  let hiddenApp: express.Express;
+  beforeAll(() => {
+    hiddenApp = express();
+    hiddenApp.use('/media', mediaStatic(root, {
+      isHidden: async (rel) => { seen.push(rel); return rel === 'files/g.png'; },
+    }));
+  });
+
+  it('★★ 隠すと言われたファイルは 404', async () => {
+    const res = await request(hiddenApp).get('/media/files/g.png');
+    expect(res.status).toBe(404);
+  });
+
+  it('隠さないファイルは今までどおり開ける (切り離しのヘッダも付く)', async () => {
+    const res = await request(hiddenApp).get('/media/files/a.html');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-security-policy']).toBe(MEDIA_SANDBOX);
+  });
+
+  it('★ 判定には /media からの相対パス (先頭の / なし・%エンコードを戻した形) を渡す', async () => {
+    seen.length = 0;
+    await request(hiddenApp).get('/media/files/h.md?x=1');
+    expect(seen).toEqual(['files/h.md']);
+  });
+
+  it('★ 判定が失敗したら開かせない (隠すべきものを出さない)', async () => {
+    const app2 = express();
+    app2.use('/media', mediaStatic(root, { isHidden: async () => { throw new Error('db down'); } }));
+    const res = await request(app2).get('/media/files/g.png');
+    expect(res.status).toBeGreaterThanOrEqual(500);
+  });
+});
+
+describe('mediaStatic — 隠すファイルを書き方の違いですり抜けさせない (#601)', () => {
+  let app3: express.Express;
+  beforeAll(() => {
+    app3 = express();
+    app3.use('/media', mediaStatic(root, { isHidden: async (rel) => rel === 'files/g.png' }));
+  });
+  it.each([
+    '/media/files/./g.png',
+    '/media/files/../files/g.png',
+    '/media/files/%67.png',
+    '/media/FILES/G.PNG',      // Windows は大文字小文字を区別しない
+    '/media/files/g.png.',     // Windows は末尾の . を無視する
+  ])('%s は開けない', async (url) => {
+    const res = await request(app3).get(url);
+    expect(res.status).not.toBe(200);
+  });
+});

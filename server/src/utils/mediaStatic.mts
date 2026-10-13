@@ -12,7 +12,10 @@
  *   変わらないことを 2026-09-30 に Chrome で確認。画面の中の <img> / <video> にはこのヘッダは効かない)。
  * ★ nosniff: 拡張子と違う中身 (テキストに見せた HTML など) を、ブラウザに推測で文書扱いさせない。
  */
+import fs from 'fs';
+import path from 'path';
 import express from 'express';
+import type { RequestHandler } from 'express';
 
 export const MEDIA_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads';
 
@@ -23,6 +26,37 @@ export function applyMediaHeaders(res: { setHeader(name: string, value: string):
   if (!NOT_SANDBOXED.test(filePath)) res.setHeader('Content-Security-Policy', MEDIA_SANDBOX);
 }
 
-export function mediaStatic(root: string) {
-  return express.static(root, { setHeaders: applyMediaHeaders });
+export interface MediaStaticOptions {
+  /**
+   * #601 開かせないファイルか (削除した投稿だけが使っていた添付)。true なら 404。
+   * 受け取るのは /media からの相対パス (例: images/xxx.png)。判定が失敗したら開かせない
+   */
+  isHidden?: (relPath: string) => Promise<boolean>;
+}
+
+export function mediaStatic(root: string, opts: MediaStaticOptions = {}): RequestHandler {
+  const serve = express.static(root, { setHeaders: applyMediaHeaders });
+  const { isHidden } = opts;
+  if (!isHidden) return serve;
+  let realRoot: string | null = null;
+  return async (req, res, next) => {
+    // ★ アドレスの文字列のまま突き合わせない。本番は Windows で、大文字小文字の違い・末尾の . ・%エンコード・
+    //   ../ でも同じファイルが開く。実際のファイルの正式な名前 (OS に引かせる) で突き合わせる
+    let rel: string;
+    try {
+      realRoot ??= await fs.promises.realpath(root);
+      const real = await fs.promises.realpath(path.join(realRoot, decodeURIComponent(req.path)));
+      rel = path.relative(realRoot, real).split(path.sep).join('/');
+    } catch {
+      return serve(req, res, next);   // ファイルが無い・壊れたアドレス: 今までどおり static が答える (404 / 400)
+    }
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return serve(req, res, next);   // 外へ出るアドレスは static が断る
+    try {
+      if (await isHidden(rel)) { res.status(404).end(); return; }
+    } catch (err) {
+      next(err);   // 判定できないときは開かせない (隠すべきものを出さない側に倒す)
+      return;
+    }
+    serve(req, res, next);
+  };
 }
