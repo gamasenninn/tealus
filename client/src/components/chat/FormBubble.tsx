@@ -34,6 +34,8 @@ interface FormBubbleProps {
 function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormBubbleProps) {
   const [values, setValues] = useState<FormValues>({});
   const [sending, setSending] = useState(false);
+  // ★ 送れなかった理由 (改善ループ 10-13。以前はボタンが戻るだけで何も出なかった)
+  const [sendError, setSendError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   // Q0 のような長いフォームが流れを占有するので、タイトルだけ残して畳めるようにする。
   // ★ 回答済みでも自動では畳まない — 「回答済み」でボタンが締まっていることが
@@ -87,6 +89,7 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
     e.stopPropagation();
     if (!canSubmit || sending || answered || !roomId) return;
     setSending(true);
+    setSendError(null);
     try {
       const content = buildAnswerText(schema, values);
       // socket 経路が webhook を発火し cc-queue routing に乗る (reply_mention 起動)。
@@ -96,7 +99,8 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {
       console.error('Form answer send error:', err);
-      setSending(false); // 失敗時は再試行可能に
+      setSendError(err instanceof Error ? err.message : String(err));
+      setSending(false); // 失敗時は再試行可能に (入力は state に残る)
     }
   };
 
@@ -191,6 +195,7 @@ function FormBubble({ message, schema, roomId, expanded, onToggleExpand }: FormB
         </div>
       ))}
 
+      {sendError && <div className="cform-error" role="alert">送れませんでした: {sendError}</div>}
       <button
         className="cform-submit"
         onClick={handleSubmit}

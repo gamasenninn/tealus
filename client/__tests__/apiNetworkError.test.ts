@@ -48,6 +48,14 @@ describe('#592 通信の失敗を日本語の案内に', () => {
     await expect(api.request('POST', '/x', {})).rejects.toThrow('権限がありません');
   });
 
+  // ★ 改善ループ 10-13 の 5.: _agentApi だけ時間切れが無く、AI の部屋の設定が回り続けることがあった
+  it('★ AI の部屋の設定 (_agentApi) も時間切れで止まり、日本語で返す', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, opts: RequestInit) => new Promise((_res, rej) => {
+      opts.signal?.addEventListener('abort', () => rej(abortErr()));
+    })));
+    await expect(api._agentApi('GET', '/config/x')).rejects.toThrow(TIMEOUT_ERROR_MESSAGE);
+  });
+
   it('★ AI の部屋の設定 (_agentApi) でつながらない → 日本語', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     await expect(api._agentApi('GET', '/config/x')).rejects.toThrow(NETWORK_ERROR_MESSAGE);

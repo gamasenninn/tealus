@@ -23,3 +23,27 @@ describe('#592 開けなかった理由を添える', () => {
     expect(useMessageStore.getState().error).toContain('つながっていません');
   });
 });
+
+/**
+ * ★ 改善ループ 10-13 の 5.: #592 で fetchMessages だけ直し、前後の読み込み (loadMore / loadNewer) は
+ *   理由を捨てた定型文のまま残っていた (同じ型の取り残し)
+ */
+describe('前後の読み込みに失敗した理由を添える', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const NET = 'つながっていません。電波を確かめて、もう一度お試しください';
+  const msg = (id: string) => ({ id, room_id: 'r1', created_at: '2026-10-13T00:00:00Z' });
+
+  it('★ 古いメッセージ (loadMore)', async () => {
+    useMessageStore.setState({ messages: [msg('m1')] as never, isLoading: false, error: null });
+    vi.spyOn(api, 'getMessages').mockRejectedValue(new Error(NET));
+    await useMessageStore.getState().loadMore('r1');
+    expect(useMessageStore.getState().error).toContain('つながっていません');
+  });
+
+  it('★ 新しいメッセージ (loadNewer)', async () => {
+    useMessageStore.setState({ messages: [msg('m1')] as never, isLoading: false, hasNewer: true, error: null });
+    vi.spyOn(api, 'getMessagesAfter').mockRejectedValue(new Error(NET));
+    await useMessageStore.getState().loadNewer('r1');
+    expect(useMessageStore.getState().error).toContain('つながっていません');
+  });
+});

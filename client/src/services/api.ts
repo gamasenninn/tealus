@@ -401,7 +401,15 @@ class ApiClient {
         opts.headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(body);
       }
-      const res = await fetch(`/agent-api${path}`, opts);
+      // ★ 時間切れを付ける (request() と同じ長さ)。以前は無く、agent-server が応答しないと設定画面が回り続けた (改善ループ 10-13)
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      let res: Response;
+      try {
+        res = await fetch(`/agent-api${path}`, { ...opts, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) {
         if (fallback !== undefined) return fallback;
         let err = errorMessage;

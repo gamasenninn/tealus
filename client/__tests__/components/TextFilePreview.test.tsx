@@ -176,7 +176,18 @@ describe('TextFilePreview component', () => {
     fireEvent.click(screen.getByRole('button', { name: /プレビューを開く/ }));
 
     await waitFor(() => expect(screen.getByText(/エラー/)).toBeInTheDocument());
-    expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
+    // ★ 改善ループ 10-13 の 5.: 以前は「HTTP 404」「Failed to fetch」と英語のまま出していた
+    expect(screen.getByText(/ファイルが見つかりません/)).toBeInTheDocument();
+    expect(screen.queryByText(/HTTP 404/)).toBeNull();
+  });
+
+  it('★ つながらないときは英語 (Failed to fetch) でなく日本語の案内', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const media = { file_path: 'line-files/x.md', file_name: 'x.md', mime_type: 'text/markdown' };
+    render(<TextFilePreview media={media} />);
+    fireEvent.click(screen.getByRole('button', { name: /プレビューを開く/ }));
+    await waitFor(() => expect(screen.getByText(/つながっていません/)).toBeInTheDocument());
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull();
   });
 
   it('JSON file は自動成形して <pre> 表示', async () => {

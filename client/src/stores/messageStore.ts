@@ -85,7 +85,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         isLoading: false,
       }));
     } catch (err) {
-      set({ isLoading: false, error: '過去メッセージの取得に失敗しました' });
+      // ★ 理由を添える (#592 で fetchMessages だけ直し、ここは取り残していた。改善ループ 10-13)
+      set({ isLoading: false, error: `過去のメッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
 
@@ -105,7 +106,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         };
       });
     } catch (err) {
-      set({ isLoading: false, error: '新しいメッセージの取得に失敗しました' });
+      set({ isLoading: false, error: `新しいメッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
 

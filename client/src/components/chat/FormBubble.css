@@ -135,6 +135,15 @@
   resize: vertical;
 }
 
+/* 送れなかった理由 (改善ループ 10-13) */
+.cform-error {
+  font-size: calc(var(--chat-font-size) - 2px);
+  color: var(--color-error-text);
+  background: var(--color-error-bg);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
 .cform-submit {
   align-self: flex-start;
   padding: 8px 20px;

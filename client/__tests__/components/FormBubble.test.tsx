@@ -149,6 +149,23 @@ describe('FormBubble', () => {
     expect(emitMock).toHaveBeenCalledTimes(1); // 増えない
   });
 
+  // ★ 改善ループ 10-13 の 5.: 送れなかったときはボタンが戻るだけで、何も出なかった
+  it('★ 送れなかったら理由を出し、もう一度押せる (入力は残る)', async () => {
+    emitMock.mockImplementationOnce((...a: unknown[]) => {
+      const last = a[a.length - 1];
+      if (typeof last === 'function') (last as (r: unknown) => void)({ ok: false, error: 'このルームのメンバーではありません' });
+    });
+    render(<FormBubble message={MSG} schema={SCHEMA} roomId="room1" />);
+    fireEvent.click(screen.getByLabelText('記録のみ'));
+    fireEvent.click(screen.getByRole('button', { name: '回答する' }));
+    await waitFor(() => expect(screen.getByText(/このルームのメンバーではありません/)).toBeTruthy());
+    expect(screen.getByRole('button', { name: '回答する' })).toBeTruthy();
+    // 送り直せたら理由は消える
+    fireEvent.click(screen.getByRole('button', { name: '回答する' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '回答済み' })).toBeTruthy());
+    expect(screen.queryByText(/このルームのメンバーではありません/)).toBeNull();
+  });
+
   // ── 畳み込み ──────────────────────────────────────────────
   // Q0 のような長いフォームが流れを占有するため、タイトルだけ残して畳めるようにする。
   // ★ 回答済みでも自動では畳まない: 既存の「回答済みで送信不可」の可視性を壊さないため。

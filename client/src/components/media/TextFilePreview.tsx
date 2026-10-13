@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import { NETWORK_ERROR_MESSAGE } from '../../services/api';
 import './TextFilePreview.css';
 
 const TEXT_EXTENSIONS = [
@@ -138,7 +139,8 @@ export default function TextFilePreview({ media }: TextFilePreviewProps) {
     setError(null);
     fetch(`/media/${media.file_path}`)
       .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        // ★ 英語 (HTTP 404 / Failed to fetch) をそのまま出さない (改善ループ 10-13。#592 の api.ts を通らない口だった)
+        if (!r.ok) throw new Error(r.status === 404 ? 'ファイルが見つかりません' : `ファイルを読み込めませんでした (${r.status})`);
         return r.text();
       })
       .then((text) => {
@@ -154,7 +156,7 @@ export default function TextFilePreview({ media }: TextFilePreviewProps) {
       })
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(e instanceof TypeError ? NETWORK_ERROR_MESSAGE : e instanceof Error ? e.message : String(e));
         setLoading(false);
       });
     return () => { cancelled = true; };
