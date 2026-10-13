@@ -74,6 +74,32 @@ describe('Message Delete API', () => {
       expect(m.media).toEqual([]);
     });
 
+    // ★ 改善ループ 10-13 の 3.: リンクのプレビュー・リアクション・タグは消した投稿にも付いたまま返っていた。
+    //   画面は「削除されました」しか出さないので見えないが、AI の道具 (共有 MCP) はこの JSON をそのまま渡す
+    it('★ 消した投稿には、リンクのプレビュー・リアクション・タグも付けない', async () => {
+      const msgId = (await request(app).post(`/api/rooms/${roomId}/messages`)
+        .set('Authorization', `Bearer ${user1.token}`).send({ content: 'https://example.com を見て' })).body.message.id;
+      const p = getTestPool();
+      await p.query(`INSERT INTO link_previews (message_id, url, title, description) VALUES ($1, 'https://example.com', '題名', '説明')`, [msgId]);
+      await p.query(`INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, '👍')`, [msgId, user2.user.id]);
+      const tagId = (await p.query(`INSERT INTO tags (room_id, name, created_by) VALUES ($1, '重要', $2) RETURNING id`, [roomId, user1.user.id])).rows[0].id;
+      await p.query(`INSERT INTO message_tags (message_id, tag_id, created_by) VALUES ($1, $2, $3)`, [msgId, tagId, user1.user.id]);
+
+      const before = (await request(app).get(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${user2.token}`))
+        .body.messages.find((x: any) => x.id === msgId);
+      expect(before.link_preview?.title).toBe('題名');   // 消す前は付く (検査が空振りしていない証拠)
+      expect(before.reactions).toHaveLength(1);
+      expect(before.tags).toHaveLength(1);
+
+      await request(app).delete(`/api/rooms/${roomId}/messages/${msgId}`).set('Authorization', `Bearer ${user1.token}`);
+      const m = (await request(app).get(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${user2.token}`))
+        .body.messages.find((x: any) => x.id === msgId);
+      expect(m.is_deleted).toBe(true);
+      expect(m.link_preview).toBeNull();
+      expect(m.reactions).toEqual([]);
+      expect(m.tags).toEqual([]);
+    });
+
     it('should reject deleting other users message', async () => {
       // user1 sends
       const msgRes = await request(app)

@@ -247,7 +247,8 @@ export async function attachTranscriptions(messages: AttachableMessage[]): Promi
  */
 export async function attachLinkPreviews(messages: AttachableMessage[]): Promise<void> {
   if (messages.length === 0) return;
-  const ids = messages.map(m => m.id);
+  // ★ 消した投稿には付けない (attachMedia と同じ)。画面は見せないが、AI の道具はこの JSON をそのまま渡す (改善ループ 10-13)
+  const ids = messages.filter(m => !m.is_deleted).map(m => m.id);
   const result = await pool.query<LinkPreviewRow>(
     'SELECT * FROM link_previews WHERE message_id = ANY($1)',
     [ids]
@@ -266,7 +267,7 @@ export async function attachLinkPreviews(messages: AttachableMessage[]): Promise
  */
 export async function attachReactions(messages: AttachableMessage[], userId: string): Promise<void> {
   if (messages.length === 0) return;
-  const ids = messages.map(m => m.id);
+  const ids = messages.filter(m => !m.is_deleted).map(m => m.id);   // ★ 消した投稿には付けない
   const result = await pool.query<ReactionRow>(
     `SELECT message_id, emoji, COUNT(*)::int as count,
             BOOL_OR(user_id = $2) as me
@@ -289,7 +290,7 @@ export async function attachReactions(messages: AttachableMessage[], userId: str
  */
 export async function attachTags(messages: AttachableMessage[]): Promise<void> {
   if (messages.length === 0) return;
-  const ids = messages.map(m => m.id);
+  const ids = messages.filter(m => !m.is_deleted).map(m => m.id);   // ★ 消した投稿には付けない
   const result = await pool.query<TagQueryRow>(
     `SELECT mt.message_id, t.id, t.name, t.is_todo, mt.is_done, mt.priority
      FROM message_tags mt
