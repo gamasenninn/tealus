@@ -4,8 +4,8 @@
  * ★ 判定は時計を受け取る純関数。★★ 知らせるのは「変わったとき」だけ (§3.2):
  *   正常 → 異常 で 1 回、異常 → 正常 で 1 回。異常が続いても鳴らさない。
  */
-import { loadWatchdogsFrom, markFor, type Watch, type RoomQuietWatch, type HttpHealthWatch } from '../../src/services/watchdogs.mts';
-import { judgeRoomQuiet, judgeHealth, judgeBackupLog, decideNotice } from '../../src/services/watchdogDecide.mts';
+import { loadWatchdogsFrom, markFor, type Watch, type RoomQuietWatch, type HeartbeatWatch } from '../../src/services/watchdogs.mts';
+import { judgeRoomQuiet, judgeHeartbeat, judgeBackupLog, decideNotice } from '../../src/services/watchdogDecide.mts';
 
 const ROOM = '00000000-0000-0000-0000-000000000002';
 const USER = '00000000-0000-0000-0000-000000000001';
@@ -18,8 +18,8 @@ const callLog = {
   from_user_ids: [BOT], max_quiet_minutes: 150, hours: '09:00-17:00', days: 'mon,tue,thu,fri,sat,sun', enabled: true,
 };
 const radio = {
-  id: 'radio', name: '無線', kind: 'http_health', url: 'http://localhost:9320/api/health',
-  services: ['vox', 'transcriber'], enabled: true,
+  id: 'radio', name: '無線', kind: 'heartbeat', heartbeat: 'radio-sender', from_user_id: BOT,
+  max_silence_minutes: 10, max_send_lag_minutes: 15, enabled: true,
 };
 const backup = { id: 'backup', name: 'バックアップ', kind: 'backup_log', dir: 'S:\\tealus-bak\\logs', enabled: true };
 
@@ -32,13 +32,26 @@ const one = (w: Record<string, unknown>): Watch => load([w]).watches[0];
 
 describe('設定の読み込み', () => {
   it('3 種類を読める', () => {
-    expect(load([callLog, radio, backup]).watches.map((w) => w.kind)).toEqual(['room_quiet', 'http_health', 'backup_log']);
+    expect(load([callLog, radio, backup]).watches.map((w) => w.kind)).toEqual(['room_quiet', 'heartbeat', 'backup_log']);
   });
 
   it('★ 壊れた行は落とすが、必ず warn を返す (黙って減らさない)', () => {
-    const r = loadWatchdogsFrom({ notify, watches: [callLog, { ...radio, services: [] }, { ...backup, kind: 'nope' }] });
+    const r = loadWatchdogsFrom({ notify, watches: [callLog, { ...radio, max_silence_minutes: 0 }, { ...backup, kind: 'nope' }] });
     expect(r.config!.watches.map((w) => w.id)).toEqual(['call-log']);
     expect(r.warnings).toHaveLength(2);
+  });
+
+  it('★ 相手の決めた形を読む http_health は、もう受け付けない (docs/09 §0)', () => {
+    const r = loadWatchdogsFrom({ notify, watches: [{ id: 'x', name: 'x', kind: 'http_health', url: 'http://localhost:9320/api/health', services: ['vox'] }] });
+    expect(r.config!.watches).toEqual([]);
+    expect(r.warnings[0]).toContain('http_health');
+  });
+
+  it('鼓動: 名前・送り手・閾値が要る。送り込みの遅れの閾値は省略できる', () => {
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...radio, heartbeat: 'a b' }] }).warnings).toHaveLength(1);
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...radio, from_user_id: 'x' }] }).warnings).toHaveLength(1);
+    const { max_send_lag_minutes: _drop, ...noLag } = radio;
+    expect((one(noLag) as HeartbeatWatch).max_send_lag_minutes).toBeUndefined();
   });
 
   it('稼働時間・曜日の書き間違いは warn', () => {
@@ -97,25 +110,51 @@ describe('room_quiet', () => {
   });
 });
 
-describe('http_health', () => {
-  const w = one(radio) as HttpHealthWatch;
-  const body = (vox: string, tr: string) => ({ overall: 'degraded', services: { vox, transcriber: tr, assistant: 'unknown' } });
+describe('heartbeat', () => {
+  const w = one(radio) as HeartbeatWatch;
+  const now = jst('2026-10-13T12:00:00');
+  const hb = (lastSeen: string, info: Record<string, unknown> = {}) => ({ last_seen: jst(lastSeen), info });
 
-  it('指定したサービスが全部 up なら ok (見ていない assistant は問わない)', () => {
-    expect(judgeHealth(w, { status: 200, body: body('up', 'up') }).state).toBe('ok');
+  it('鼓動が閾値以内に来ていれば ok', () => {
+    expect(judgeHeartbeat(w, hb('2026-10-13T11:59:00'), now).state).toBe('ok');
   });
 
-  it('1 つでも up でなければ down。どれかを書く', () => {
-    const o = judgeHealth(w, { status: 200, body: body('up', 'down') });
+  it('鼓動が閾値を超えて来なければ down。最後の時刻を添える', () => {
+    const o = judgeHeartbeat(w, hb('2026-10-13T11:49:00'), now);
     expect(o.state).toBe('down');
-    expect(o.detail).toContain('transcriber');
-    expect(o.detail).not.toContain('vox');
+    expect(o.detail).toContain('10 分');
+    expect(o.detail).toContain('10-13 11:49');
   });
 
-  it('届かない・200 でない・形が違う は down', () => {
-    expect(judgeHealth(w, { error: 'ECONNREFUSED' }).state).toBe('down');
-    expect(judgeHealth(w, { status: 502, body: null }).state).toBe('down');
-    expect(judgeHealth(w, { status: 200, body: 'html' }).state).toBe('down');
+  it('一度も来ていなければ down (★ 見ていないものを正常と言わない)', () => {
+    const o = judgeHeartbeat(w, null, now);
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('一度も');
+  });
+
+  it('★ 鼓動は来ていても、最新のファイルを送っていなければ down (生きているが働いていない)', () => {
+    const o = judgeHeartbeat(w, hb('2026-10-13T11:59:00', {
+      latest_file_at: jst('2026-10-13T11:40:00').toISOString(),
+      last_sent_at: jst('2026-10-13T11:20:00').toISOString(),
+    }), now);
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('送っていません');
+  });
+
+  it('遅れが閾値以内・時刻が無い・壊れている は遅れとして扱わない', () => {
+    const fresh = '2026-10-13T11:59:00';
+    expect(judgeHeartbeat(w, hb(fresh, {
+      latest_file_at: jst('2026-10-13T11:40:00').toISOString(), last_sent_at: jst('2026-10-13T11:30:00').toISOString(),
+    }), now).state).toBe('ok');
+    expect(judgeHeartbeat(w, hb(fresh, { latest_file_at: 'x', last_sent_at: null }), now).state).toBe('ok');
+  });
+
+  it('遅れの閾値を書いていなければ、遅れは見ない', () => {
+    const { max_send_lag_minutes: _drop, ...noLag } = radio;
+    const w2 = one(noLag) as HeartbeatWatch;
+    expect(judgeHeartbeat(w2, hb('2026-10-13T11:59:00', {
+      latest_file_at: jst('2026-10-13T11:40:00').toISOString(), last_sent_at: jst('2026-10-13T10:00:00').toISOString(),
+    }), now).state).toBe('ok');
   });
 });
 
@@ -131,8 +170,8 @@ describe('backup_log', () => {
 describe('decideNotice — 変わったときだけ知らせる', () => {
   const w = one(radio);
   const now = jst('2026-10-13T12:00:00');
-  const down = { state: 'down' as const, detail: 'transcriber が up ではありません (down)' };
-  const ok = { state: 'ok' as const, detail: 'vox・transcriber とも up' };
+  const down = { state: 'down' as const, detail: '鼓動が 10 分を超えて来ていません (最後の鼓動: 10-13 11:40)' };
+  const ok = { state: 'ok' as const, detail: '鼓動が来ています (最後の鼓動: 10-13 12:00)' };
 
   it('正常 → 異常 (前回の知らせ無し) で ⚠ を出す。2 行目に印', () => {
     const d = decideNotice(w, down, null, now);
@@ -140,7 +179,7 @@ describe('decideNotice — 変わったときだけ知らせる', () => {
     const lines = d.body!.split('\n');
     expect(lines[0]).toMatch(/^⚠ 無線 が止まっているようです/);
     expect(lines[1]).toBe(markFor('radio'));
-    expect(d.body).toContain('transcriber');
+    expect(d.body).toContain('鼓動が 10 分');
   });
 
   it('★ 異常が続いても鳴らさない (前回が ⚠)', () => {

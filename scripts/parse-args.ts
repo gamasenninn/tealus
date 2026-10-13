@@ -17,7 +17,12 @@ export interface WatchModeArgs {
   watchDir: string;
   extensions: string[];
   catchUp: boolean;
+  /** ★ #595 付けたときだけ、この名前で本体へ鼓動を送る (docs/09 §3.2) */
+  heartbeat?: string;
 }
+
+/** 本体の heartbeats の名前と同じ規則 (server/src/services/heartbeats.mts) */
+const HEARTBEAT_NAME_RE = /^[A-Za-z0-9._:-]{1,64}$/;
 
 export type ParsedSendArgs = SendModeArgs | WatchModeArgs;
 
@@ -74,7 +79,16 @@ export function parseSendArgs(args: string[]): ParsedSendArgs {
         extensions = ['.wav'];
       }
 
-      return { mode: 'watch', target, watchDir, extensions, catchUp: catchUpIdx !== -1 };
+      const hbIdx = args.indexOf('--heartbeat');
+      let heartbeat: string | undefined;
+      if (hbIdx !== -1) {
+        heartbeat = args[hbIdx + 1];
+        if (!heartbeat || heartbeat.startsWith('--') || !HEARTBEAT_NAME_RE.test(heartbeat)) {
+          throw new Error('--heartbeat の後に鼓動の名前を書いてください (英数字と . _ : - だけ)');
+        }
+      }
+
+      return { mode: 'watch', target, watchDir, extensions, catchUp: catchUpIdx !== -1, ...(heartbeat ? { heartbeat } : {}) };
     } else {
       // --voice 単体でファイルも --watch もなし
       throw new Error('--voice にはファイルパスまたは --watch を指定してください');

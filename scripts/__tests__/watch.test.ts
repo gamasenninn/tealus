@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { waitForFileComplete, watchDirectory, sendWithRetry, createWatchSender, getUnsent, writeLastSent } from '../watch.ts';
+import { waitForFileComplete, watchDirectory, sendWithRetry, createWatchSender, getUnsent, writeLastSent, heartbeatInfo } from '../watch.ts';
 
 // テスト用一時ディレクトリ
 let tmpDir: string;
@@ -298,5 +298,25 @@ describe('★ #587 getUnsent はファイル時刻の 1 ミリ秒未満の端数
     const t = new Date('2026-10-12T05:34:56.088Z').getTime() / 1000;
     fs.utimesSync(f, t, t);
     expect(getUnsent(tmpDir, ['.wav']).map((u) => path.basename(u.path))).toEqual(['next.wav']);
+  });
+});
+
+describe('★ #595 heartbeatInfo — 鼓動に添える「最新のファイル」と「最後に送った時刻」', () => {
+  const at = (iso: string, f: string) => { const t = new Date(iso).getTime() / 1000; fs.utimesSync(f, t, t); };
+
+  test('対象の拡張子でいちばん新しいファイルの時刻と、.last_sent を ISO で返す', () => {
+    const a = path.join(tmpDir, 'a.wav'); fs.writeFileSync(a, 'x'); at('2026-10-13T03:00:00.000Z', a);
+    const b = path.join(tmpDir, 'b.wav'); fs.writeFileSync(b, 'x'); at('2026-10-13T03:10:00.000Z', b);
+    const c = path.join(tmpDir, 'c.srt'); fs.writeFileSync(c, 'x'); at('2026-10-13T04:00:00.000Z', c); // 対象外
+    writeLastSent(tmpDir, new Date('2026-10-13T03:00:00.000Z'));
+    expect(heartbeatInfo(tmpDir, ['.wav'])).toEqual({
+      latest_file_at: '2026-10-13T03:10:00.000Z',
+      last_sent_at: '2026-10-13T03:00:00.000Z',
+    });
+  });
+
+  test('ファイルも .last_sent も無ければ null (★ 例外を投げない)', () => {
+    expect(heartbeatInfo(tmpDir, ['.wav'])).toEqual({ latest_file_at: null, last_sent_at: null });
+    expect(heartbeatInfo(path.join(tmpDir, 'no-such'), ['.wav'])).toEqual({ latest_file_at: null, last_sent_at: null });
   });
 });

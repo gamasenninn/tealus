@@ -14,22 +14,29 @@ import { logger } from '../utils/logger.mts';
 import { assessBackup, readLatestBackupLog, type BackupRead } from './backupLog.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
 import {
-  decideNotice, judgeBackupLog, judgeHealth, judgeRoomQuiet,
-  type HealthResponse, type LastNotice, type Observation,
+  decideNotice, judgeBackupLog, judgeHeartbeat, judgeRoomQuiet,
+  type LastNotice, type Observation,
 } from './watchdogDecide.mts';
-import { CONFIG_PATH, loadWatchdogs, markFor, type Notify, type RoomQuietWatch, type Watch, type WatchdogConfig } from './watchdogs.mts';
+import { getHeartbeat, type Heartbeat } from './heartbeats.mts';
+import {
+  CONFIG_PATH, loadWatchdogs, markFor,
+  type HeartbeatWatch, type Notify, type RoomQuietWatch, type Watch, type WatchdogConfig,
+} from './watchdogs.mts';
 
 /** 判定の間隔。止まったものに気づくのが最大これだけ遅れる。閾値 (150 分・26 時間) に比べて十分短い */
 const POLL_MS = 5 * 60_000;
-/** 起動の直後は他の常駐 (ptt など) がまだ上がっていないことがあるので、最初の判定を少し待つ */
-const FIRST_RUN_MS = 60_000;
-const HEALTH_TIMEOUT_MS = 5_000;
+/**
+ * 起動の直後は最初の判定を少し待つ。★ 本体が止まっている間は部品が鼓動を送れないので、
+ * 長く止まっていた直後に判定すると「鼓動が来ない」と誤って鳴る (docs/09 §7)。
+ * 部品の鼓動は 1 分ごとなので、2 分待てば 1 回は届いている。
+ */
+const FIRST_RUN_MS = 2 * 60_000;
 
 export interface RunDeps {
   now: Date;
   lastNotice: (w: Watch, notify: Notify) => Promise<LastNotice | null>;
   lastPostAt: (w: RoomQuietWatch) => Promise<Date | null>;
-  fetchHealth: (url: string) => Promise<HealthResponse>;
+  heartbeatOf: (w: HeartbeatWatch) => Promise<Heartbeat | null>;
   readBackup: (dir: string) => BackupRead;
   resolveSender: (userId: string) => Promise<SenderContext | null>;
   post: (input: { roomId: string; sender: SenderContext; content: string }) => Promise<PostAsUserResult>;
@@ -48,7 +55,7 @@ async function observe(w: Watch, deps: RunDeps): Promise<Observation> {
   switch (w.kind) {
     case 'backup_log': return judgeBackupLog(assessBackup(deps.readBackup(w.dir), deps.now));
     case 'room_quiet': return judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now);
-    case 'http_health': return judgeHealth(w, await deps.fetchHealth(w.url));
+    case 'heartbeat': return judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now);
   }
 }
 
@@ -107,16 +114,9 @@ async function lastPostAtFromRoom(w: RoomQuietWatch): Promise<Date | null> {
   return rows[0]?.at ?? null;
 }
 
-async function fetchHealthHttp(url: string): Promise<HealthResponse> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
-    const text = await res.text();
-    let body: unknown = text;
-    try { body = JSON.parse(text); } catch { /* JSON でなければ文字のまま渡す (judgeHealth が down にする) */ }
-    return { status: res.status, body };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
+/** ★ 名前だけでなく送り手でも絞る (別の人が同じ名前で送った鼓動を拾わない) */
+function heartbeatOfWatch(w: HeartbeatWatch): Promise<Heartbeat | null> {
+  return getHeartbeat(w.from_user_id, w.heartbeat);
 }
 
 async function resolveSenderFromDb(userId: string): Promise<SenderContext | null> {
@@ -141,7 +141,7 @@ async function tick(configPath: string, warned: { signature: string }): Promise<
     now: new Date(),
     lastNotice: lastNoticeFromRoom,
     lastPostAt: lastPostAtFromRoom,
-    fetchHealth: fetchHealthHttp,
+    heartbeatOf: heartbeatOfWatch,
     readBackup: readLatestBackupLog,
     resolveSender: resolveSenderFromDb,
     post: postAsUser,

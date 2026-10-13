@@ -15,7 +15,7 @@ import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import { parseSendArgs, parseGlobalArgs } from './parse-args.ts';
-import { waitForFileComplete, watchDirectory, getUnsent, readLastSent, writeLastSent, sendWithRetry, createWatchSender } from './watch.ts';
+import { waitForFileComplete, watchDirectory, getUnsent, readLastSent, writeLastSent, sendWithRetry, createWatchSender, heartbeatInfo } from './watch.ts';
 
 // --- API response shapes ---
 
@@ -240,6 +240,28 @@ async function sendVoiceFile(roomId: string, roomName: string, filePath: string)
   return false;
 }
 
+/** ★ #595 鼓動の間隔。本体の見張りは 10 分来なければ鳴る設定 (docs/09 §5) */
+const HEARTBEAT_INTERVAL_MS = 60_000;
+
+/**
+ * ★ #595 本体へ「生きている」を 1 回送る (docs/09 §3.2)。届いたら true。
+ * ★ 失敗しても監視は止めない (**例外を投げない**)。鼓動が届かないこと自体を、本体の見張りが拾う。
+ */
+async function sendHeartbeat(name: string, dir: string, extensions: string[]): Promise<boolean> {
+  try {
+    const body = { name, info: heartbeatInfo(dir, extensions) };
+    let r = await request<{ success?: boolean; error?: string }>('POST', '/api/bot/heartbeat', body, await getToken());
+    if (r.error && /トークン|認証|401|Unauthorized/i.test(r.error)) {
+      r = await request<{ success?: boolean; error?: string }>('POST', '/api/bot/heartbeat', body, await refreshToken());
+    }
+    if (r.success !== true) console.error(`⚠️ 鼓動を送れませんでした: ${r.error ?? '応答に success がありません'}`);
+    return r.success === true;
+  } catch (err) {
+    console.error(`⚠️ 鼓動を送れませんでした: ${errorMessage(err)}`);
+    return false;
+  }
+}
+
 async function cmdSend(args: string[]): Promise<void> {
   let parsed;
   try {
@@ -313,8 +335,24 @@ async function cmdSend(args: string[]): Promise<void> {
       }
     });
 
+    // ★ #595 --heartbeat を付けたときだけ、1 分ごとに本体へ鼓動を送る。届かなくなった・戻ったときだけ 1 行出す
+    let beatTimer: NodeJS.Timeout | null = null;
+    if (parsed.heartbeat) {
+      const hbName = parsed.heartbeat;
+      console.log(`   💓 鼓動: ${hbName} (${HEARTBEAT_INTERVAL_MS / 1000} 秒ごと)`);
+      let lastOk: boolean | null = null;
+      const beat = async () => {
+        const ok = await sendHeartbeat(hbName, watchDir, parsed.extensions);
+        if (ok && lastOk === false) console.log('💓 鼓動が届くようになりました');
+        lastOk = ok;
+      };
+      void beat();
+      beatTimer = setInterval(() => { void beat(); }, HEARTBEAT_INTERVAL_MS);
+    }
+
     process.on('SIGINT', () => {
       stop();
+      if (beatTimer) clearInterval(beatTimer);
       console.log('\n👋 監視終了');
       process.exit(0);
     });
@@ -469,6 +507,7 @@ switch (command) {
     console.log('  --voice --watch <dir>  ディレクトリを監視し、新規音声ファイルを自動送信');
     console.log('  --ext <拡張子>         対象拡張子をカンマ区切りで指定（デフォルト: .wav）');
     console.log('  --catch-up             起動時に未送信ファイルを自動送信');
+    console.log('  --heartbeat <名前>     監視中、1 分ごとに本体へ鼓動を送る (本体の見張りが止まったことに気づける。docs/09)');
     console.log('');
     console.log('グローバルオプション:');
     console.log('  --env <file>           envファイルを指定（例: --env .env.trx）');

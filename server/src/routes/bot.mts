@@ -25,6 +25,7 @@ import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
 import { announceRoomJoined } from '../services/roomJoined.mts';
+import { recordHeartbeat, validateHeartbeatBody } from '../services/heartbeats.mts';
 import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
@@ -325,6 +326,23 @@ router.post('/status', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error('Bot status error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * POST /api/bot/heartbeat
+ * Tealus の部品 (tealus-cli など) が「生きている」を送る (#595、docs/09 §3.2)。
+ * ★ 送った人と名前の組ごとに 1 行だけ覚える。部屋には何も流さない。
+ */
+router.post('/heartbeat', async (req, res) => {
+  const v = validateHeartbeatBody(req.body);
+  if (typeof v === 'string') return res.status(400).json({ error: v });
+  try {
+    await recordHeartbeat(req.user!.id, v.name, v.info);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Bot heartbeat error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

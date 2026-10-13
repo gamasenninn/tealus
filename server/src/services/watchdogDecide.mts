@@ -5,15 +5,14 @@
  * ★★ 知らせるのは「変わったとき」だけ (§3.2): 正常 → 異常 で ⚠ を 1 回、異常 → 正常 で ✅ を 1 回。
  */
 import type { BackupAssessment } from './backupLog.mts';
-import { markFor, type HttpHealthWatch, type RoomQuietWatch, type Watch } from './watchdogs.mts';
+import type { Heartbeat } from './heartbeats.mts';
+import { markFor, type HeartbeatWatch, type RoomQuietWatch, type Watch } from './watchdogs.mts';
 
 export type Observation =
   | { state: 'ok'; detail: string }
   | { state: 'down'; detail: string }
   /** 判定しない (稼働時間の外など)。★ 状態を変えない = ⚠ のまま夜を越す */
   | { state: 'skip'; detail: string };
-
-export type HealthResponse = { status: number; body: unknown } | { error: string };
 
 export interface LastNotice {
   kind: 'alert' | 'recover';
@@ -65,20 +64,40 @@ export function judgeRoomQuiet(w: RoomQuietWatch, lastPostAt: Date | null, now: 
   return { state: 'ok', detail: `${w.room || '部屋'} に投稿が来ています (最後の投稿: ${last})` };
 }
 
-/** 生存の口の JSON (`{"services": {"vox": "up", ...}}`) で、指定したサービスが全部 up か */
-export function judgeHealth(w: HttpHealthWatch, res: HealthResponse): Observation {
-  if ('error' in res) return { state: 'down', detail: `${w.url} に届きません (${res.error})` };
-  if (res.status !== 200) return { state: 'down', detail: `${w.url} が ${res.status} を返しました` };
-  const services = (res.body as { services?: unknown } | null)?.services;
-  if (typeof services !== 'object' || services === null) {
-    return { state: 'down', detail: `${w.url} の応答に services がありません` };
+function parseTime(v: unknown): Date | null {
+  if (typeof v !== 'string') return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Tealus の部品の鼓動 (docs/09 §3.2)。
+ *
+ * ★ 一度も来ていないのは異常 (見ていないものを正常と言わない)。
+ * ★★ 鼓動が来ていても、`info` の「最新のファイル」が「最後に送った時刻」より閾値を超えて新しければ異常
+ *   (生きているが働いていない。10-12 の #582・#587 はこの形だった)。時刻が無い・壊れているときは遅れとして扱わない。
+ */
+export function judgeHeartbeat(w: HeartbeatWatch, hb: Heartbeat | null, now: Date): Observation {
+  if (!hb) return { state: 'down', detail: `鼓動 (${w.heartbeat}) が一度も届いていません` };
+  const silent = Math.floor((now.getTime() - hb.last_seen.getTime()) / 60_000);
+  const last = formatJst(hb.last_seen);
+  if (silent > w.max_silence_minutes) {
+    return { state: 'down', detail: `鼓動が ${w.max_silence_minutes} 分を超えて来ていません (最後の鼓動: ${last})` };
   }
-  const s = services as Record<string, unknown>;
-  const notUp = w.services.filter((name) => s[name] !== 'up');
-  if (notUp.length > 0) {
-    return { state: 'down', detail: notUp.map((n) => `${n} が up ではありません (${String(s[n] ?? '応答に無い')})`).join(' / ') };
+  if (w.max_send_lag_minutes !== undefined) {
+    const latest = parseTime(hb.info.latest_file_at);
+    const sent = parseTime(hb.info.last_sent_at);
+    if (latest && sent) {
+      const lag = Math.floor((latest.getTime() - sent.getTime()) / 60_000);
+      if (lag > w.max_send_lag_minutes) {
+        return {
+          state: 'down',
+          detail: `動いてはいますが、最新のファイル (${formatJst(latest)}) を送っていません (最後に送ったのは ${formatJst(sent)})`,
+        };
+      }
+    }
   }
-  return { state: 'ok', detail: `${w.services.join('・')} とも up` };
+  return { state: 'ok', detail: `鼓動が来ています (最後の鼓動: ${last})` };
 }
 
 export function judgeBackupLog(a: BackupAssessment): Observation {

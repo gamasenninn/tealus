@@ -69,6 +69,18 @@ describe('parseSendArgs', () => {
       const result = asWatch(parseSendArgs(['Web部', '--voice', '--watch', '/path/to/dir']));
       expect(result.extensions).toEqual(['.wav']);
     });
+
+    // ★ #595 見張り (docs/09 §3.2): 付けたときだけ本体へ鼓動を送る
+    test('--heartbeat <名前> で鼓動の名前を受け取る。付けなければ undefined', () => {
+      expect(asWatch(parseSendArgs(['Web部', '--voice', '--watch', '/d', '--heartbeat', 'radio-sender'])).heartbeat).toBe('radio-sender');
+      expect(asWatch(parseSendArgs(['Web部', '--voice', '--watch', '/d'])).heartbeat).toBeUndefined();
+    });
+
+    test('--heartbeat の名前が無い・使えない文字ならエラー', () => {
+      expect(() => parseSendArgs(['Web部', '--voice', '--watch', '/d', '--heartbeat'])).toThrow('--heartbeat');
+      expect(() => parseSendArgs(['Web部', '--voice', '--watch', '/d', '--heartbeat', '--catch-up'])).toThrow('--heartbeat');
+      expect(() => parseSendArgs(['Web部', '--voice', '--watch', '/d', '--heartbeat', 'radio sender'])).toThrow('--heartbeat');
+    });
   });
 
   // パースルール: --voice の次が -- で始まるか

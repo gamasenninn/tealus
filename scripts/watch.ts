@@ -136,6 +136,26 @@ export function writeLastSent(dir: string, date: Date): void {
   fs.writeFileSync(filePath, date.toISOString());
 }
 
+/**
+ * ★ #595 鼓動に添える中身 (docs/09 §3.2)。本体はこれで「最新のファイルは新しいのに送っていない」(詰まり) を見る。
+ * ★ どちらもファイルの時刻 (.last_sent は送ったファイルの mtime) なので、同じ時計で比べられる。**例外を投げない。**
+ */
+export function heartbeatInfo(dir: string, extensions: string[]): { latest_file_at: string | null; last_sent_at: string | null } {
+  let latest = -1;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (!extensions.includes(path.extname(name).toLowerCase())) continue;
+      const m = Math.floor(fs.statSync(path.join(dir, name)).mtimeMs);
+      if (m > latest) latest = m;
+    }
+  } catch {}
+  const lastSent = readLastSent(dir);
+  return {
+    latest_file_at: latest >= 0 ? new Date(latest).toISOString() : null,
+    last_sent_at: lastSent && !Number.isNaN(lastSent.getTime()) ? lastSent.toISOString() : null,
+  };
+}
+
 export interface UnsentFile {
   path: string;
   mtime: number;

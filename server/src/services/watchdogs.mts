@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { isHeartbeatName } from './heartbeats.mts';
 
 export const CONFIG_PATH = path.join(import.meta.dirname, '..', '..', 'config', 'watchdogs.json');
 
@@ -45,13 +46,22 @@ export interface RoomQuietWatch extends WatchBase {
   days: number[];
 }
 
-export interface HttpHealthWatch extends WatchBase {
-  kind: 'http_health';
-  url: string;
-  services: string[];
+/**
+ * Tealus の部品が送る鼓動 (docs/09 §3.2)。
+ * ★ 相手 (ptt など) の決めた形の生存の口を読む `http_health` は作り直しで外した (§0: 会社の事情が本体に漏れる)。
+ */
+export interface HeartbeatWatch extends WatchBase {
+  kind: 'heartbeat';
+  /** 部品が送る名前 (`--heartbeat <name>`) */
+  heartbeat: string;
+  /** 部品がログインする利用者。★ 名前だけで引くと、別の人が同じ名前で送った鼓動を拾う */
+  from_user_id: string;
+  max_silence_minutes: number;
+  /** 書いたときだけ「最新のファイルを送っていない」も見る */
+  max_send_lag_minutes?: number;
 }
 
-export type Watch = BackupLogWatch | RoomQuietWatch | HttpHealthWatch;
+export type Watch = BackupLogWatch | RoomQuietWatch | HeartbeatWatch;
 
 export interface WatchdogConfig {
   notify: Notify;
@@ -124,15 +134,27 @@ function validate(raw: unknown, i: number): Watch | string {
       };
     }
 
-    case 'http_health':
-      if (!isNonEmptyString(r.url) || !/^https?:\/\//.test(r.url)) return `${label}: url が http(s) ではありません`;
-      if (!Array.isArray(r.services) || r.services.length === 0 || !r.services.every(isNonEmptyString)) {
-        return `${label}: services (見るサービス名) が 1 つ以上ありません`;
+    case 'heartbeat': {
+      if (!isHeartbeatName(r.heartbeat)) return `${label}: heartbeat (部品が送る名前) は英数字と . _ : - だけで書いてください`;
+      if (!isUuid(r.from_user_id)) return `${label}: from_user_id (部品がログインする利用者の id) が UUID ではありません`;
+      if (typeof r.max_silence_minutes !== 'number' || !(r.max_silence_minutes > 0)) {
+        return `${label}: max_silence_minutes が正の数ではありません`;
       }
-      return { ...base, kind: 'http_health', url: r.url, services: r.services as string[] };
+      if (r.max_send_lag_minutes !== undefined && (typeof r.max_send_lag_minutes !== 'number' || !(r.max_send_lag_minutes > 0))) {
+        return `${label}: max_send_lag_minutes は正の数で書くか、省いてください`;
+      }
+      return {
+        ...base, kind: 'heartbeat', heartbeat: r.heartbeat, from_user_id: r.from_user_id,
+        max_silence_minutes: r.max_silence_minutes,
+        ...(r.max_send_lag_minutes !== undefined ? { max_send_lag_minutes: r.max_send_lag_minutes as number } : {}),
+      };
+    }
+
+    case 'http_health':
+      return `${label}: kind "http_health" は使えなくなりました。相手の生存の口を本体が読む形はやめ、部品から鼓動 (heartbeat) を送ってもらいます (docs/09 §0)`;
 
     default:
-      return `${label}: kind "${String(r.kind)}" は backup_log / room_quiet / http_health のどれでもありません`;
+      return `${label}: kind "${String(r.kind)}" は backup_log / room_quiet / heartbeat のどれでもありません`;
   }
 }
 

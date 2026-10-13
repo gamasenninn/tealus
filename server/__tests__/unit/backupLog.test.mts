@@ -25,6 +25,18 @@ describe('assessBackup', () => {
     expect(a.kind === 'bad' && a.why).toContain('終了: 成功');
   });
 
+  it('★ 同じ日に 2 回流して後の回が失敗したら bad (記録は同じファイルに追記される。最後の「終了」の行で決める)', () => {
+    const twice = OK + '2026-10-13 15:47:18 === 開始 ===\n2026-10-13 15:47:18 メディア失敗: x\n2026-10-13 15:47:18 === 終了: ★ 失敗あり ===\n';
+    expect(assessBackup({ latest: log('backup-20261013.log', twice, '2026-10-13T15:47:18+09:00') }, NOW).kind).toBe('bad');
+    const thenOk = twice + '2026-10-13 16:00:00 === 開始 ===\n2026-10-13 16:00:30 === 終了: 成功 ===\n';
+    expect(assessBackup({ latest: log('backup-20261013.log', thenOk, '2026-10-13T16:00:30+09:00') }, NOW).kind).toBe('ok');
+  });
+
+  it('★ 開始したまま終わっていない (途中で止まった) なら bad', () => {
+    const cut = OK + '2026-10-13 15:47:18 === 開始 ===\n2026-10-13 15:47:20 DB ok\n';
+    expect(assessBackup({ latest: log('backup-20261013.log', cut, '2026-10-13T15:47:20+09:00') }, NOW).kind).toBe('bad');
+  });
+
   it(`${BACKUP_STALE_HOURS} 時間より古ければ bad (1 回飛んだ)`, () => {
     const a = assessBackup({ latest: log('backup-20261011.log', OK, '2026-10-11T03:00:25+09:00') }, NOW);
     expect(a.kind).toBe('bad');
