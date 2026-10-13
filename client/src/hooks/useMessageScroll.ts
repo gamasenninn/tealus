@@ -20,10 +20,12 @@ export interface UseMessageScrollResult {
  */
 export function useMessageScroll(roomId: string): UseMessageScrollResult {
   const { user } = useAuthStore();
-  const { messages, loadMore, hasMore, hasNewer, loadNewer, fetchMessages } = useMessageStore();
+  const { messages, isStale, loadMore, hasMore, hasNewer, loadNewer, fetchMessages } = useMessageStore();
   // ★ #511 最新まで読み終えていないか。イベントの中でも今の値を読むので ref に写す
   const hasNewerRef = useRef(hasNewer);
   hasNewerRef.current = hasNewer;
+  const isStaleRef = useRef(isStale);
+  isStaleRef.current = isStale;
   const isLoadingNewer = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -91,6 +93,13 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
   useEffect(() => {
     if (messages.length === 0) return;
 
+    // ★ #600 前に開いたときの中身を出している間は、まだ「開いた直後」。一番下に置くだけで、既読にも
+    //   上への読み足しにも進まない (離れている間の新着が入っていない)。取り直しが届いたら下の処理に進む
+    if (isInitialLoad.current && isStale) {
+      setTimeout(pinToBottom, INITIAL_SCROLL_DELAY);
+      return;
+    }
+
     if (isInitialLoad.current) {
       const savedScrollTop = sessionStorage.getItem(`scrollPos:${roomId}`);
 
@@ -123,7 +132,8 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         if (document.visibilityState === 'visible') markVisibleAsRead();
       }
     }
-  }, [messages.length]);
+    // ★ #600 isStale も見る: 取り直しが同じ件数 (20 → 20) で届くと、件数だけでは届いたことに気づけない
+  }, [messages.length, isStale]);
 
   // ★ #506 最下部にいる間は、投稿の中身が変わって (リンクのプレビューなど) 背が伸びても合わせ直す
   useEffect(() => {
@@ -201,7 +211,8 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    sessionStorage.setItem(`scrollPos:${roomId}`, String(container.scrollTop));
+    // ★ #600 前の中身を出している間の位置は残さない (取り直しが届いたときに「戻す位置」と取り違え、一番下へ行かなくなる)
+    if (!isStaleRef.current) sessionStorage.setItem(`scrollPos:${roomId}`, String(container.scrollTop));
     // ★ #506 新着が来る前の「最下部にいるか」を覚えておく (判定の幅は今までと同じ 100px)
     atBottom.current = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_NEAR_BOTTOM;
     ensureLoadListener();

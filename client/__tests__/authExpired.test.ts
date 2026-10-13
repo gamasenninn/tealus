@@ -35,4 +35,11 @@ describe('認証が切れたとき (#539)', () => {
     await vi.waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
     expect(unregister).toHaveBeenCalledTimes(1);
   });
+
+  it('★ #600 ログアウトで、覚えていた部屋の中身を捨てる (同じ画面で次の人に前の人の会話を出さない)', async () => {
+    const cache = await import('../src/stores/roomViewCache');
+    cache.cacheMessages('r1', [{ id: 'm1' }] as never);
+    await useAuthStore.getState().logout();
+    expect(cache.getCachedMessages('r1')).toBeUndefined();
+  });
 });

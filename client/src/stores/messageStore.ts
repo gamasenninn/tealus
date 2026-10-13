@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import { patchMessage, patchQuotes } from './patchMessage';
+import { getCachedMessages, cacheMessages, evictRoomView, isGoneFromRoom } from './roomViewCache';
 import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
@@ -11,6 +12,10 @@ const CATCH_UP_MAX_PAGES = 5;
 
 interface MessageState {
   messages: StoreMessage[];
+  /** #600 いま messages を持っている部屋 (離れたときに覚える先・遅れて届いた別の部屋の応答を捨てる目印) */
+  roomId: string | null;
+  /** #600 前に開いたときの中身を出している (取り直しがまだ届いていない) */
+  isStale: boolean;
   hasMore: boolean;
   /** #511 最新まで読み終えていないか (日付・引用へ飛んだあと)。true の間は届いた新着を後ろにつながない */
   hasNewer: boolean;
@@ -48,6 +53,8 @@ interface MessageState {
 
 export const useMessageStore = create<MessageState>()((set, get) => ({
   messages: [],
+  roomId: null,
+  isStale: false,
   hasMore: true,
   hasNewer: false,
   isLoading: false,
@@ -55,10 +62,20 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   replyTo: null,
 
   fetchMessages: async (roomId, around = null) => {
+    // ★ #600 別の部屋を開くときは、前に開いたときの中身を先に出す (取り直しが届くまで「何もない画面」にしない)。
+    //   検索から特定の投稿に飛ぶ (around) ときは出さない (今までどおり取りに行く)
+    if (get().roomId !== roomId) {
+      const cached = around ? undefined : getCachedMessages(roomId);
+      set(cached
+        ? { roomId, messages: cached, isStale: true, hasMore: true, hasNewer: false }
+        : { roomId, isStale: false });
+    }
     try {
       set({ isLoading: true, error: null });
       const data = await api.getMessages(roomId, null, 20, around);
+      if (get().roomId !== roomId) return;   // ★ #600 取りに行っている間に別の部屋へ移った: 今の部屋に書かない
       set({
+        isStale: false,
         messages: around ? data.messages : data.messages.reverse(),
         // ★ #511 around は「その投稿以降」なので、件数は上 (古い方) があるかを表さない。
         //   件数で決めていた頃は、最近の日へ飛ぶと上にもスクロールできなかった (無ければ loadMore が 0 件で止める)
@@ -67,8 +84,14 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         isLoading: false,
       });
     } catch (err) {
+      if (get().roomId !== roomId) return;
+      // ★ #600 外された・消された部屋なら、覚えた分を捨てて画面からも消す。圏外などでは前の中身を出したまま理由を添える
+      if (isGoneFromRoom(err)) {
+        evictRoomView(roomId);
+        set({ messages: [], hasMore: false });
+      }
       // ★ #592 理由を添える (以前は権限が無いのも圏外も同じ定型文だった)
-      set({ isLoading: false, error: `メッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
+      set({ isLoading: false, isStale: false, error: `メッセージを読み込めませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
   },
 
@@ -223,6 +246,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [], hasMore: true, hasNewer: false, error: null, replyTo: null });
+    // ★ #600 離れるときの姿を覚える (開いている間に届いた新着・削除・編集も入っている)。
+    //   過去の位置を見ていた (最新まで読んでいない) とき・取り直しが届いていないときは覚え直さない
+    const { roomId, messages, hasNewer, isStale } = get();
+    if (roomId && !hasNewer && !isStale) cacheMessages(roomId, messages);
+    set({ messages: [], roomId: null, isStale: false, hasMore: true, hasNewer: false, error: null, replyTo: null });
   },
 }));

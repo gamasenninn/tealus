@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import type { AuthResponse } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import { registerPushNotification, unregisterPushNotification } from '../services/pushNotification';
+import { clearRoomViewCache } from './roomViewCache';
 
 /** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
 const UNSUBSCRIBE_WAIT_MS = 3000;
@@ -80,6 +81,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     ]);
     api.setToken(null);
     disconnectSocket();
+    clearRoomViewCache();   // ★ #600 同じ画面で別の人がログインしても、前の人の会話を先に出さない
     set({ user: null, token: null });
   },
 

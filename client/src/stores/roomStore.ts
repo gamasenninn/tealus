@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import { syncBadgeFromRooms } from '../services/appBadge';
+import { getCachedRoomView, cacheRoomView, evictRoomView, isGoneFromRoom } from './roomViewCache';
 import type { Room, RoomMember } from '../types';
+
+/** #600 最後に開こうとした部屋。取りに行っている間に別の部屋へ移ったら、遅れて届いた応答を書かない */
+let selecting: string | null = null;
 
 interface RoomState {
   rooms: Room[];
@@ -38,10 +42,23 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
   },
 
   selectRoom: async (roomId) => {
+    selecting = roomId;
+    // ★ #600 別の部屋を開くときは、前に開いたときの見出し・メンバーを先に出す (取り直しが届くまで空にしない)。
+    //   未読の区切り (lastReadMessageId) は出さない: 取り直した値で決める
+    const cached = get().currentRoom?.id !== roomId ? getCachedRoomView(roomId) : undefined;
+    if (cached) set({ currentRoom: cached.room, members: cached.members, lastReadMessageId: null });
     try {
       const data = await api.getRoom(roomId);
+      if (selecting !== roomId) return;
+      cacheRoomView(roomId, { room: data.room, members: data.members });
       set({ currentRoom: data.room, members: data.members, lastReadMessageId: data.last_read_message_id ?? null, error: null });
     } catch (err) {
+      if (selecting !== roomId) return;
+      // ★ #600 外された・消された部屋なら、覚えた見出しを捨てて画面からも消す
+      if (isGoneFromRoom(err)) {
+        evictRoomView(roomId);
+        if (get().currentRoom?.id === roomId) set({ currentRoom: null, members: [], lastReadMessageId: null });
+      }
       // ★ #592 理由を添える (以前は権限が無いのも圏外も同じ定型文だった。サーバの文・通信の案内は日本語)
       set({ error: `ルームを開けませんでした: ${err instanceof Error ? err.message : String(err)}` });
     }
@@ -53,6 +70,7 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
       const data = await api.getRoom(roomId);
       // ★ 取りに行っている間に別の部屋へ移っていたら書かない
       if (get().currentRoom?.id !== roomId) return;
+      cacheRoomView(roomId, { room: data.room, members: data.members });   // #600
       set({ currentRoom: data.room, members: data.members });
     } catch {
       // 取り直しに失敗しても今の表示は残す (次の変化か読み込み直しで追いつく)

@@ -187,7 +187,7 @@ class ApiClient {
             lastError = new Error(`非JSON応答 (status ${res.status})`);
             continue;
           }
-          throw new Error(res.ok ? '応答の解析に失敗しました' : `リクエストに失敗しました (${res.status})`);
+          throw Object.assign(new Error(res.ok ? '応答の解析に失敗しました' : `リクエストに失敗しました (${res.status})`), { status: res.status });
         }
 
         if (!res.ok) {
@@ -197,7 +197,8 @@ class ApiClient {
             lastError = new Error(data?.error || `status ${res.status}`);
             continue;
           }
-          throw new Error(data?.error || 'リクエストに失敗しました');
+          // ★ #600 status も載せる (403 外された・404 消された を圏外と見分ける。覚えた部屋の中身を捨てるか決める)
+          throw Object.assign(new Error(data?.error || 'リクエストに失敗しました'), { status: res.status });
         }
         return data as T;
       } catch (err) {
