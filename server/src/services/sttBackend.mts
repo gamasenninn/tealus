@@ -202,11 +202,19 @@ export async function transcribeAudio({
   }
 
   const text = await transcribeOpenAI({ inputPath, ext, whisperPrompt, model, openaiClient });
+  const result = pickOpenAIResult(text, geminiTruncatedText, log);
   if (fellBackFromGemini) {
     // ★ 2026-09-27: 空応答が「無音」か「gemini が発話を落とした」かを、ログだけで分けられるように。
     //   実測 11 件中 10 件が無音 (chars=0)、1 件は「いいよ」を落としていた
-    log.info?.(`[stt] openai (gemini の後) chars=${text.length}`);
+    // ★ 2026-10-16: chars は**保存する答え**の文字数 (外国の文字で空にした便を「文字あり」と数えない)
+    const raw = result === text ? '' : ` (openai の答えは ${text.length} 字)`;
+    log.info?.(`[stt] openai (gemini の後) chars=${result.length}${raw}`);
   }
+  return result;
+}
+
+/** openai の答えから、保存する答えを決める (gemini の答えを残す / 空にする / そのまま) */
+function pickOpenAIResult(text: string, geminiTruncatedText: string | null, log: SttLogger): string {
   // ★ #520 無線は無音が長く、切断ガードが正しい短い答えを捨てることがある。そのとき openai が
   //   日本語でない文字を返すと、正しい答えが外国語に置き換わる (10-03「Туря левост」/ 09-29「Hi! Hi! Hi!」)。
   //   やり直しで救われる回の方が多い (7 日で 14 回中 7 回) ので、やり直し自体は残す。

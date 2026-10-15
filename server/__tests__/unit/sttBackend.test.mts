@@ -445,6 +445,20 @@ describe('transcribeAudio - gemini backend (#424)', () => {
     expect(lines.some((l) => l.includes('[stt] openai (gemini の後)') && l.includes('chars=3'))).toBe(true);
   });
 
+  // ★ 2026-10-16 改善ループ 4 回目: 外国の文字で空にした便が chars=5 と出ていた (行が判定より前)。
+  //   「0 = 無音」の数え方が 1 件ずつずれる。chars は保存した答えの文字数にし、元の文字数は添える
+  test('★ 外国の文字で空にしたら chars=0 (openai の元の文字数は添える)', async () => {
+    const fetchImpl = jest.fn().mockReturnValue(geminiResponse(''));
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', vocabTerms: VOCAB, openaiClient: fakeOpenAI('나이버성'), fetchImpl, log,
+    });
+    expect(text).toBe('');
+    const line = log.info.mock.calls.map((c) => String(c[0])).find((l) => l.includes('[stt] openai (gemini の後)'));
+    expect(line).toContain('chars=0');
+    expect(line).toContain('4 字');
+  });
+
   test('gemini が成功したときは openai の行を出さない', async () => {
     const fetchImpl = jest.fn().mockReturnValue(geminiResponse('ガマ、お昼に入ります。'));
     const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
