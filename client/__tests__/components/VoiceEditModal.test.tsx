@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Message } from '../../src/types';
 
 /**
@@ -208,5 +208,61 @@ describe('VoiceEditModal — キーボードのショートカット (#604)', ()
     const ev = new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true });
     screen.getByRole('textbox').dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
+  });
+});
+
+/**
+ * #604 の続き (利用者判断 2026-10-15): **PC (マウスとキーボードの端末) だけ**、開いたとき・前/次で移ったときに
+ * 入力欄へフォーカスを当てる (カーソルは最後)。スマホ・タブレットは上の 09-05 の判断どおり当てない。
+ * ★ 以前は Alt+→ で移ると入力欄が作り直されてフォーカスが裏の画面へ落ち、Tab も裏の画面を回っていた
+ */
+describe('VoiceEditModal — PC では入力欄にフォーカス (#604)', () => {
+  const setDesktop = (desktop: boolean) => {
+    window.matchMedia = vi.fn().mockImplementation((q: string) => ({
+      matches: desktop && q.includes('hover: hover'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  };
+  beforeEach(() => {
+    editTranscriptionMock.mockClear();
+    mockMessages.list = [voice('a', 'AAA'), voice('b', 'BBB'), voice('c', 'CCC')];
+  });
+  afterEach(() => { delete (window as { matchMedia?: unknown }).matchMedia; });
+
+  it('★★ PC: 開いた直後に入力欄へ。カーソルは文の最後', () => {
+    setDesktop(true);
+    render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(ta);
+    expect(ta.selectionStart).toBe(3);
+  });
+
+  it('★★ PC: Alt+→ で移ったあとも、新しい入力欄にフォーカス', async () => {
+    setDesktop(true);
+    render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowRight', altKey: true });
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('CCC'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox')));
+  });
+
+  it('★ スマホ: 移ったあとは入力欄に当てないが、フォーカスは編集画面の中に残す (裏の画面へ落とさない)', async () => {
+    setDesktop(false);
+    const { container } = render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('次 →'));
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('CCC'));
+    expect(document.activeElement).not.toBe(screen.getByRole('textbox'));
+    expect(container.querySelector('.modal-box')!.contains(document.activeElement)).toBe(true);
+  });
+
+  it('★ Tab は編集画面の中を回る (最後の次は最初へ、最初の Shift+Tab は最後へ)', () => {
+    setDesktop(true);
+    const { container } = render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    const box = container.querySelector('.modal-box')!;
+    const focusables = [...box.querySelectorAll<HTMLElement>('button:not([disabled]), textarea')];
+    const last = focusables[focusables.length - 1];
+    last.focus();
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(document.activeElement).toBe(focusables[0]);
+    fireEvent.keyDown(focusables[0], { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
   });
 });

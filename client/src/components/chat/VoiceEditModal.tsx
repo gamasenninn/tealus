@@ -40,6 +40,11 @@ interface VoiceEditModalProps {
  * ★ #379: 添付音声つきメッセージ (通話履歴等) からも使えるよう、一覧 / 本文 / 保存 /
  *   再生バー の 4 か所を注入できる。**省略時は従来どおり**。
  */
+/** #604 PC (マウスとキーボードの端末) か。タッチの端末では入力欄へ自動でフォーカスしない */
+function isDesktopPointer(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
 function VoiceEditModal({
   messageId, onClose, selectItems, textOf, save, renderPlayer, audioIdOf, title = '文字起こしを編集',
 }: VoiceEditModalProps) {
@@ -55,7 +60,7 @@ function VoiceEditModal({
 
   // ★ 開いた直後のフォーカス先 (2026-09-05)。詳細は textarea 側のコメント。
   const boxRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => { boxRef.current?.focus(); }, []);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // 音声再生 state (#248)
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -72,6 +77,21 @@ function VoiceEditModal({
   const filePath = current?.media?.[0]?.file_path;
   const audioUrl = filePath ? `/media/${filePath}` : null;
   const dirty = editText.trim() !== originalText.trim();
+
+  // ★ フォーカス (開いた直後・前/次で移った直後)。
+  //   #604 (2026-10-15 利用者判断): PC (マウスとキーボード) は入力欄へ当てる (カーソルは最後)。
+  //   スマホ・タブレットは 09-05 の判断どおり当てない (仮想キーボードが再生バーを押し出す) が、
+  //   フォーカスは編集画面の中に残す。入力欄は移るたびに作り直されるので、放っておくとフォーカスが裏の画面へ落ちる
+  useEffect(() => {
+    const box = boxRef.current;
+    const ta = textareaRef.current;
+    if (isDesktopPointer() && ta) {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    } else if (box && !box.contains(document.activeElement)) {
+      box.focus();
+    }
+  }, [currentId]);
 
   // 対象切替 (初期表示含む) でテキストと音声 state を読み直す
   useEffect(() => {
@@ -197,6 +217,20 @@ function VoiceEditModal({
   // #604 PC のショートカット (読み分けは utils/voiceEditKeys.ts)。動きはボタンと同じ
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement;
+    // ★ Tab は編集画面の中を回す (最後の次は最初へ)。抜けると裏のトーク画面を回ってしまう
+    if (e.key === 'Tab' && boxRef.current) {
+      const items = [...boxRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), textarea, input:not([disabled]), [tabindex="0"]')];
+      if (items.length > 0) {
+        const first = items[0];
+        const last = items[items.length - 1];
+        const goingOut = e.shiftKey ? (t === first || t === boxRef.current) : t === last;
+        if (goingOut) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        }
+      }
+      return;
+    }
     const action = voiceEditKeyAction({
       key: e.key, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
       // ★ 変換中。Safari は keyCode 229 でしか分からないことがある
@@ -279,6 +313,7 @@ function VoiceEditModal({
 
         <textarea
           key={currentId}
+          ref={textareaRef}
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
           /* ★ autoFocus を外した (2026-09-05)。スマホで開くと仮想キーボードが自動で出て、
@@ -287,7 +322,9 @@ function VoiceEditModal({
              ため、autoFocus を残すと移動のたびにキーボードが出る。連続編集が 1 タップ増えるが、
              ★ user 判断は「広いエリアで内容を確認して、修正が必要ならタップする」 ——
              移動直後は**読む場面**であって打つ場面ではない、という整理。
-             ★ フォーカス先は modal-box (boxRef)。当てないと Tab が裏のトーク画面へ抜ける。 */
+             ★ フォーカス先は modal-box (boxRef)。当てないと Tab が裏のトーク画面へ抜ける。
+             ★★ #604 (2026-10-15): ただし **PC (マウスとキーボード) は当てる** (仮想キーボードが無いので
+             押し出しが起きず、毎回クリックするのが手間だった)。判定と処理は上の useEffect */
           rows={6}
         />
 
