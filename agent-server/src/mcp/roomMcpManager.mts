@@ -13,7 +13,7 @@ import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
 import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
-import { FILESYSTEM_MCP_PACKAGE } from '../lib/mcpPackages.mts';
+import { FILESYSTEM_MCP_PACKAGE, TEALUS_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 
 interface McpServerDef {
   command?: string;
@@ -94,7 +94,7 @@ async function connectTealusMcp(): Promise<MCPServerStdio[]> {
       const tealusServer = new MCPServerStdio({
         name: 'tealus',
         command: 'npx',
-        args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.7'],
+        args: ['-y', TEALUS_MCP_PACKAGE],
         env: {
           // ★ #573 許可した環境変数だけ (PATH 等は入る。以前は親の env を全部渡していた)
           ...agentChildEnv(),

@@ -39,7 +39,7 @@ import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
 import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
 import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
-import { FILESYSTEM_MCP_PACKAGE } from '../lib/mcpPackages.mts';
+import { FILESYSTEM_MCP_PACKAGE, TEALUS_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -145,7 +145,7 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
   if (config.TEALUS_BOT_ID && config.TEALUS_BOT_PASS) {
     const tealusDef: McpServerDef = {
       command: 'npx',
-      args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.7'],
+      args: ['-y', TEALUS_MCP_PACKAGE],
       env: {
         // ★ #564 依頼した人がいれば中継 (/tealus-scoped/<鍵>) に向ける = 本体がその人の部屋だけに絞る
         TEALUS_API_URL: tealusApiUrlForCurrentRequester(),

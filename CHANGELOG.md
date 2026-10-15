@@ -10,6 +10,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **agent-server が使う tealus-mcp を v0.14.7 → v0.16.0 に** — Light v2・Deep・ルームごとの MCP から `send_form` (v0.14.8) と `edit_message` (v0.15.0) が見えていなかった (docs 班の確認)。版は `agent-server/src/lib/mcpPackages.mts` の `TEALUS_MCP_PACKAGE` 1 か所に。★ 上げたあと最初の起動は npx のダウンロードで遅いので、先に `npx -y github:gamasenninn/tealus-mcp#v0.16.0` を 1 回流しておく
+
 ## [0.11.1] - 2026-10-15
 
 ★ **0.11.0 の監査で見つかった、更新のときに踏む穴 2 つ** — 修正だけの版。

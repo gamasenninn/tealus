@@ -4,6 +4,7 @@
  * --dangerously-skip-permissions で全パーミッション許可
  * --mcp-config で Tealus MCP を接続（自律的コンテキスト取得）
  */
+import { TEALUS_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,7 +56,7 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
         // tealus-mcp は独立 repo (gamasenninn/tealus-mcp) に分離済 (#187)。
         // npx の GitHub 直接 install で取得する (zero-config、認証不要)。
         command: 'npx',
-        args: ['-y', 'github:gamasenninn/tealus-mcp#v0.14.7'],
+        args: ['-y', TEALUS_MCP_PACKAGE],
         env: {
           TEALUS_API_URL: tealusApiUrlForCurrentRequester(),   // ★ #564 依頼した人の部屋に絞る (中継経由)
           TEALUS_USER_ID: config.TEALUS_BOT_ID,
