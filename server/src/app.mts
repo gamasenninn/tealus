@@ -48,6 +48,7 @@ import { router as promptRoutes } from './routes/prompts.mts';
 import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
 import { mediaStatic } from './utils/mediaStatic.mts';
 import { isMediaHidden } from './services/deletedMedia.mts';
+import { errorHandler } from './middleware/errorHandler.mts';
 import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 import { router as clientErrorRoutes } from './routes/clientErrors.mts';
@@ -296,6 +297,9 @@ app.get('*', (req, res, next) => {
   // SPA fallback も更新の入口なので保存させない (#355)
   res.sendFile(clientIndexPath, { headers: { 'Cache-Control': NO_STORE } });
 });
+
+// ★ #603 想定外の失敗の受け口 (中身を返さない)。★ 必ず全部の口の後ろ (一番最後) に付けること
+app.use(errorHandler);
 
 // Socket.IO handlers (set up in tests or on direct run)
 setupSocketHandlers(io);
