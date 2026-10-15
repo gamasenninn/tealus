@@ -276,6 +276,17 @@
   cursor: default;
 }
 
+/* #604 PC のショートカットの案内。タッチの端末 (キーボードが無い前提) では出さない */
+.voice-edit-kbd {
+  font-family: inherit;
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+@media (hover: none) {
+  .voice-edit-kbd { display: none; }
+}
+
 /* History modal */
 
 .voice-history-item {

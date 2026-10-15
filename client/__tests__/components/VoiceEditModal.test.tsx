@@ -162,3 +162,51 @@ describe('VoiceEditModal — フォーカス (勝手にキーボードを出さ�
     expect(document.activeElement).not.toBe(container.querySelector('textarea'));
   });
 });
+
+/**
+ * #604 PC のショートカット。動きはボタンと同じ (保存してから動く・直していなければ保存しない)
+ */
+describe('VoiceEditModal — キーボードのショートカット (#604)', () => {
+  beforeEach(() => {
+    editTranscriptionMock.mockClear();
+    mockMessages.list = [voice('a', 'AAA'), voice('b', 'BBB'), voice('c', 'CCC')];
+  });
+
+  it('★★ テキスト欄の中で Alt+→ / Alt+← で次 / 前へ', async () => {
+    render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowRight', altKey: true });
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('CCC'));
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowLeft', altKey: true });
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('BBB'));
+  });
+
+  it('★ Ctrl+Enter で確定 (直していれば保存)、Esc で閉じる', async () => {
+    const onClose = vi.fn();
+    render(<VoiceEditModal messageId="b" onClose={onClose} />);
+    const box = screen.getByRole('textbox');
+    fireEvent.change(box, { target: { value: 'BBB2' } });
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(editTranscriptionMock).toHaveBeenCalledWith('b', 'BBB2'));
+    fireEvent.keyDown(box, { key: 'Escape' });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('★★ 日本語の変換中の Ctrl+Enter / Esc では保存も閉じもしない', async () => {
+    const onClose = vi.fn();
+    render(<VoiceEditModal messageId="b" onClose={onClose} />);
+    const box = screen.getByRole('textbox');
+    fireEvent.change(box, { target: { value: 'BBB2' } });
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true, isComposing: true });
+    fireEvent.keyDown(box, { key: 'Escape', keyCode: 229 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(editTranscriptionMock).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('★ Alt+← はブラウザの「戻る」に渡さない (preventDefault)', () => {
+    render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    const ev = new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true });
+    screen.getByRole('textbox').dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+});

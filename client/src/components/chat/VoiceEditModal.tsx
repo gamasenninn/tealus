@@ -9,6 +9,7 @@ import { voiceNav, navFor, transcriptionText } from '../../utils/voiceNav';
 import type { Message, Room } from '../../types';
 import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted } from '../../utils/audioExclusive';
 import { formatDuration } from '../../utils/format';
+import { voiceEditKeyAction } from '../../utils/voiceEditKeys';
 
 interface VoiceEditModalProps {
   messageId: string;
@@ -193,6 +194,26 @@ function VoiceEditModal({
     onClose();
   };
 
+  // #604 PC のショートカット (読み分けは utils/voiceEditKeys.ts)。動きはボタンと同じ
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const t = e.target as HTMLElement;
+    const action = voiceEditKeyAction({
+      key: e.key, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
+      // ★ 変換中。Safari は keyCode 229 でしか分からないことがある
+      isComposing: e.nativeEvent.isComposing || e.keyCode === 229,
+    }, { inTextarea: t.tagName === 'TEXTAREA', onButton: t.tagName === 'BUTTON' || t.tagName === 'INPUT' });
+    if (!action) return;
+    // ★ Alt+← はブラウザの「戻る」、Esc は裏の画面の閉じる処理にもなるので、ここで止める
+    e.preventDefault();
+    e.stopPropagation();
+    e.nativeEvent.stopPropagation();
+    if (action === 'next') void goTo(nav.nextId);
+    else if (action === 'prev') void goTo(nav.prevId);
+    else if (action === 'confirm') { if (!saving && dirty) void handleConfirm(); }
+    else if (action === 'back') void handleBack();
+    else if (action === 'toggle') handlePlayPause();   // 添付音声 (renderPlayer を渡された経路) は再生バーを持たないので何もしない
+  };
+
   if (!current) {
     // 対象が見つからない (削除等) → 閉じる
     return null;
@@ -205,6 +226,7 @@ function VoiceEditModal({
         tabIndex={-1}
         className="modal-box voice-edit-modal"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         <div className="voice-edit-header">
           <h3>{title}</h3>
@@ -238,6 +260,7 @@ function VoiceEditModal({
               className="voice-edit-play-btn"
               onClick={handlePlayPause}
               aria-label={isPlaying ? '一時停止' : '再生'}
+              title="再生 / 一時停止 (Ctrl+Space)"
             >
               {isPlaying ? '⏸' : '▶'}
             </button>
@@ -276,7 +299,7 @@ function VoiceEditModal({
             onClick={() => goTo(nav.prevId)}
             disabled={!nav.prevId || saving}
           >
-            ← 前
+            ← 前 <kbd className="voice-edit-kbd">Alt+←</kbd>
           </button>
           <button
             type="button"
@@ -284,14 +307,14 @@ function VoiceEditModal({
             onClick={() => goTo(nav.nextId)}
             disabled={!nav.nextId || saving}
           >
-            次 →
+            次 → <kbd className="voice-edit-kbd">Alt+→</kbd>
           </button>
         </div>
 
         <div className="voice-edit-buttons">
-          <button className="btn-cancel" onClick={handleBack}>戻る</button>
+          <button className="btn-cancel" onClick={handleBack}>戻る <kbd className="voice-edit-kbd">Esc</kbd></button>
           <button className="btn-primary" onClick={handleConfirm} disabled={saving || !dirty}>
-            {saving ? '保存中...' : '確定'}
+            {saving ? '保存中...' : <>確定 <kbd className="voice-edit-kbd">Ctrl+Enter</kbd></>}
           </button>
         </div>
       </div>
