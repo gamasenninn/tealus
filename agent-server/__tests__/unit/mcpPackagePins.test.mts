@@ -32,9 +32,13 @@ test('★ tealus-mcp はタグで固定し、edit_message のある v0.15.0 以�
   expect(maj > 0 || min >= 15).toBe(true);
 });
 
-test('★★ Light v2 の tealus は TEALUS_MCP_PACKAGE を使う', () => {
-  const cfg = buildLightV2McpConfig('C:\ws\room1') as Record<string, { args: string[] }>;
-  expect(cfg.tealus.args).toContain(TEALUS_MCP_PACKAGE);
+test('★★ 3 か所 (Light v2・Deep・ルームごと) とも TEALUS_MCP_PACKAGE を使う', () => {
+  // ★ 設定を組み立てて見ない: Light v2 は bot のログイン情報が無いと tealus を入れないので、
+  //   CI (.env 無し) では tealus が無く落ちた (2026-10-15)。ソースで確かめる (機械に依存しない)
+  const root = path.join(__dirname, '../../src');
+  for (const f of ['agents/lightV2.mts', 'agents/deep.mts', 'mcp/roomMcpManager.mts']) {
+    expect(fs.readFileSync(path.join(root, f), 'utf8')).toMatch(/args: \['-y', TEALUS_MCP_PACKAGE\]/);
+  }
 });
 
 test('★★ src の中に tealus-mcp の版を直書きしない (mcpPackages.mts の 1 か所だけ)', () => {
