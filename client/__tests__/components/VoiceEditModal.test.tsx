@@ -266,3 +266,22 @@ describe('VoiceEditModal — PC では入力欄にフォーカス (#604)', () =>
     expect(document.activeElement).toBe(last);
   });
 });
+
+describe('VoiceEditModal — 10 秒送りのキー (トランシーバーの経路、2026-10-15)', () => {
+  beforeEach(() => { mockMessages.list = [voice('a', 'AAA'), voice('b', 'BBB')]; });
+
+  it('★ Alt+. / Alt+, で自分の再生バーを 10 秒送る / 戻す (先頭より前へは行かない)', () => {
+    const { container } = render(<VoiceEditModal messageId="b" onClose={vi.fn()} />);
+    const audio = container.querySelector('audio')!;
+    Object.defineProperty(audio, 'duration', { value: 300, configurable: true });
+    audio.currentTime = 30;
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: '.', code: 'Period', altKey: true });
+    expect(audio.currentTime).toBe(40);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ',', code: 'Comma', altKey: true });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ',', code: 'Comma', altKey: true });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ',', code: 'Comma', altKey: true });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ',', code: 'Comma', altKey: true });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ',', code: 'Comma', altKey: true });
+    expect(audio.currentTime).toBe(0);
+  });
+});

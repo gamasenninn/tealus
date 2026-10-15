@@ -104,3 +104,24 @@ export function subscribeAudioSeek(selfId: string, onSeek: (req: SeekRequest) =>
   window.addEventListener(VOICE_SEEK, handler);
   return () => window.removeEventListener(VOICE_SEEK, handler);
 }
+
+/**
+ * 再生 / 一時停止の要求 (2026-10-15)。通話履歴の編集画面の Ctrl+Space から呼ぶ。
+ * ★ 編集画面は差し込まれた再生バー (MediaAudio) の要素を持たないので、シークと同じく ID 宛の合図で頼む。
+ *   受けるのは要素を持つ useExclusiveAudio
+ */
+export const VOICE_TOGGLE = 'voice:toggle';
+
+export function requestAudioToggle(id: string): void {
+  window.dispatchEvent(new CustomEvent(VOICE_TOGGLE, { detail: { messageId: id } }));
+}
+
+/** 自分宛の再生 / 一時停止の要求を受け取る。@returns 購読解除関数 */
+export function subscribeAudioToggle(selfId: string, onToggle: () => void): () => void {
+  const handler = (e: Event) => {
+    if ((e as CustomEvent<{ messageId?: string }>).detail?.messageId !== selfId) return;
+    onToggle();
+  };
+  window.addEventListener(VOICE_TOGGLE, handler);
+  return () => window.removeEventListener(VOICE_TOGGLE, handler);
+}

@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { voiceEditKeyAction } from '../src/utils/voiceEditKeys';
 
-type K = Partial<{ key: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; isComposing: boolean }>;
+type K = Partial<{ key: string; code: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; isComposing: boolean }>;
 const k = (e: K, inTextarea = true) => voiceEditKeyAction({ key: '', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, isComposing: false, ...e }, { inTextarea });
 
 describe('voiceEditKeyAction (#604)', () => {
@@ -51,6 +51,14 @@ describe('voiceEditKeyAction (#604)', () => {
     expect(onButton({ key: 'ArrowRight' })).toBeNull();
     expect(onButton({ key: 'ArrowRight', altKey: true })).toBe('next');
     expect(onButton({ key: 'Escape' })).toBe('back');
+  });
+
+  it('★★ Alt+, / Alt+. で 10 秒戻す / 送る (押したキーの場所で見る。Mac の Option では別の文字になるため)', () => {
+    expect(k({ key: ',', code: 'Comma', altKey: true })).toBe('back10');
+    expect(k({ key: '.', code: 'Period', altKey: true })).toBe('fwd10');
+    expect(k({ key: '≤', code: 'Comma', altKey: true })).toBe('back10');
+    expect(k({ key: '≥', code: 'Period', altKey: true }, false)).toBe('fwd10');
+    expect(k({ key: ',', code: 'Comma' })).toBeNull();   // 修飾キーなしは文字の入力
   });
 
   it('関係ないキーは null', () => {

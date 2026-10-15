@@ -7,7 +7,7 @@ import { useRoomStore } from '../../stores/roomStore';
 import { useAuthStore } from '../../stores/authStore';
 import { voiceNav, navFor, transcriptionText } from '../../utils/voiceNav';
 import type { Message, Room } from '../../types';
-import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted } from '../../utils/audioExclusive';
+import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted, requestAudioSeek, requestAudioToggle } from '../../utils/audioExclusive';
 import { formatDuration } from '../../utils/format';
 import { voiceEditKeyAction } from '../../utils/voiceEditKeys';
 
@@ -150,6 +150,15 @@ function VoiceEditModal({
     if (audio && isFinite(audio.duration)) setDuration(audio.duration);
   };
 
+  /** 自分の再生バー (トランシーバーの経路) を相対でシークする */
+  const seekBy = (by: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const dur = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+    audio.currentTime = Math.min(Math.max(audio.currentTime + by, 0), dur);
+    handleTimeUpdate();
+  };
+
   const handleEnded = () => {
     setIsPlaying(false);
     setProgress(0);
@@ -232,7 +241,7 @@ function VoiceEditModal({
       return;
     }
     const action = voiceEditKeyAction({
-      key: e.key, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
+      key: e.key, code: e.code, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
       // ★ 変換中。Safari は keyCode 229 でしか分からないことがある
       isComposing: e.nativeEvent.isComposing || e.keyCode === 229,
     }, { inTextarea: t.tagName === 'TEXTAREA', onButton: t.tagName === 'BUTTON' || t.tagName === 'INPUT' });
@@ -245,7 +254,19 @@ function VoiceEditModal({
     else if (action === 'prev') void goTo(nav.prevId);
     else if (action === 'confirm') { if (!saving && dirty) void handleConfirm(); }
     else if (action === 'back') void handleBack();
-    else if (action === 'toggle') handlePlayPause();   // 添付音声 (renderPlayer を渡された経路) は再生バーを持たないので何もしない
+    else if (action === 'toggle' || action === 'back10' || action === 'fwd10') {
+      // ★ 通話履歴 (再生バーを差し込まれた経路) は要素を持たないので、音声の ID 宛に頼む (時刻タグのシークと同じ道)
+      const injectedId = renderPlayer && audioIdOf && current ? audioIdOf(current) : null;
+      const by = action === 'back10' ? -10 : 10;
+      if (injectedId) {
+        if (action === 'toggle') requestAudioToggle(injectedId);
+        else requestAudioSeek(injectedId, { by });
+      } else if (action === 'toggle') {
+        handlePlayPause();
+      } else {
+        seekBy(by);
+      }
+    }
   };
 
   if (!current) {

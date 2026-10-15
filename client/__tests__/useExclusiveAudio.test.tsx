@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useExclusiveAudio } from '../src/hooks/useExclusiveAudio';
-import { VOICE_STARTED, VOICE_STOP_CONTINUOUS, notifyAudioStarted, requestAudioSeek } from '../src/utils/audioExclusive';
+import { VOICE_STARTED, VOICE_STOP_CONTINUOUS, notifyAudioStarted, requestAudioSeek, requestAudioToggle } from '../src/utils/audioExclusive';
 
 /**
  * #380: 標準の <audio controls> を 同時再生抑制の規約に参加させる React 側の接続。
@@ -153,5 +153,33 @@ describe('useExclusiveAudio — シーク', () => {
     const el = mountWithAudio('a', { currentTime: 30 });
     act(() => { requestAudioSeek('b', { to: 0 }); });
     expect(el.currentTime).toBe(30);
+  });
+});
+
+/**
+ * 通話履歴の編集画面の Ctrl+Space (2026-10-15)。編集画面は差し込まれた再生バーの要素を持たないので、
+ * シークと同じく「この音声の再生 / 一時停止」を合図で頼む。受けるのは要素を持つこの hook
+ */
+describe('useExclusiveAudio — 再生 / 一時停止の要求', () => {
+  function mount(id: string, paused: boolean) {
+    const el = { paused, play: vi.fn().mockResolvedValue(undefined), pause: vi.fn() } as unknown as HTMLAudioElement;
+    const { result } = renderHook(() => useExclusiveAudio(id));
+    result.current.ref.current = el;
+    return el;
+  }
+
+  it('★★ 止まっていれば再生、鳴っていれば止める', () => {
+    const stopped = mount('a', true);
+    act(() => { requestAudioToggle('a'); });
+    expect(stopped.play).toHaveBeenCalledTimes(1);
+    const playing = mount('b', false);
+    act(() => { requestAudioToggle('b'); });
+    expect(playing.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('他人宛では動かない', () => {
+    const el = mount('a', true);
+    act(() => { requestAudioToggle('z'); });
+    expect(el.play).not.toHaveBeenCalled();
   });
 });

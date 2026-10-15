@@ -28,10 +28,10 @@ function TranscriptSeekBar({ text, audioId }: TranscriptSeekBarProps) {
   //   バー自体を消さないのは、送り戻しはタグが無くても役に立つため。
   return (
     <div className="transcript-seek">
-      <button type="button" className="tseek-btn" onClick={() => requestAudioSeek(audioId, { by: -10 })}>
+      <button type="button" className="tseek-btn" title="10 秒戻す (Alt+,)" onClick={() => requestAudioSeek(audioId, { by: -10 })}>
         ⏪ 10秒
       </button>
-      <button type="button" className="tseek-btn" onClick={() => requestAudioSeek(audioId, { by: 10 })}>
+      <button type="button" className="tseek-btn" title="10 秒送る (Alt+.)" onClick={() => requestAudioSeek(audioId, { by: 10 })}>
         10秒 ⏩
       </button>
       {marks.length > 0 && (

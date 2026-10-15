@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted, subscribeAudioSeek } from '../utils/audioExclusive';
+import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted, subscribeAudioSeek, subscribeAudioToggle } from '../utils/audioExclusive';
 import type { SeekRequest } from '../utils/audioExclusive';
 
 export interface ExclusiveAudio {
@@ -53,6 +53,15 @@ export function useExclusiveAudio(id: string): ExclusiveAudio {
     // ★ readyState 0 で currentTime を書いても効かない (実装によっては例外) ので、一度だけ待つ。
     if (el.readyState === 0) el.addEventListener('loadedmetadata', apply, { once: true });
     else apply();
+  }), [id]);
+
+  // ★ 再生 / 一時停止の要求 (2026-10-15、通話履歴の編集画面の Ctrl+Space)。
+  //   play() を呼ぶと onPlay が走るので、同時再生抑制の規約にもそのまま乗る
+  useEffect(() => subscribeAudioToggle(id, () => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.paused) void el.play()?.catch(() => {});   // 自動再生の制限などで断られても投げない
+    else el.pause();
   }), [id]);
 
   return {

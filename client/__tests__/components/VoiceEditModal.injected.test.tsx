@@ -118,3 +118,48 @@ describe('VoiceEditModal — 添付音声からの連続編集 (#379)', () => {
     expect(el).toHaveAttribute('src', '/media/calls/b.m4a');
   });
 });
+
+/**
+ * 通話履歴の編集 (差し込まれた再生バー) でも、Ctrl+Space と 10 秒送りのキーが効く (2026-10-15)。
+ * 編集画面は再生バーの要素を持たないので、音声の ID 宛に合図を出す (時刻タグのシークと同じ道)
+ */
+describe('VoiceEditModal (差し込み) — 再生と 10 秒送りのキー', () => {
+  beforeEach(() => { mockMessages.list = [withAudio('x', 'X 本文'), withAudio('y', 'Y 本文')]; });
+
+  function renderWithAudioId() {
+    return render(
+      <VoiceEditModal
+        messageId="x"
+        selectItems={(msgs, uid, room) => editableAudioAttachmentMessages(msgs, uid, room?.message_edit_policy)}
+        textOf={(m) => m?.content || ''}
+        save={vi.fn().mockResolvedValue(undefined)}
+        renderPlayer={() => null}
+        audioIdOf={(m) => (m.media || [])[0]?.id ?? null}
+        onClose={vi.fn()}
+      />,
+    );
+  }
+  const capture = (type: string) => {
+    const got: unknown[] = [];
+    const h = (e: Event) => got.push((e as CustomEvent).detail);
+    window.addEventListener(type, h);
+    return { got, off: () => window.removeEventListener(type, h) };
+  };
+
+  it('★★ Ctrl+Space で、いま開いている音声に再生 / 一時停止を頼む', () => {
+    const c = capture('voice:toggle');
+    renderWithAudioId();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ' ', ctrlKey: true });
+    c.off();
+    expect(c.got).toEqual([{ messageId: 'x-m' }]);
+  });
+
+  it('★★ Alt+, / Alt+. で、いま開いている音声に 10 秒戻す / 送るを頼む', () => {
+    const c = capture('voice:seek');
+    renderWithAudioId();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ',', code: 'Comma', altKey: true });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: '.', code: 'Period', altKey: true });
+    c.off();
+    expect(c.got).toEqual([{ messageId: 'x-m', req: { by: -10 } }, { messageId: 'x-m', req: { by: 10 } }]);
+  });
+});
