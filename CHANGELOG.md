@@ -10,6 +10,18 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-15
+
+★ **0.11.0 の監査で見つかった、更新のときに踏む穴 2 つ** — 修正だけの版。
+
+### Fixed
+- **migration 040 を流す前に再起動すると、どの部屋も削除できなかった (500)** — 部屋の削除の中で `removed_media` へ記録する処理が失敗し、削除ごと取り消されていた。表が無いときは記録を飛ばして warn し、削除は通す
+- **起動時の確認が、034〜040 の流し忘れを知らせなかった** — 中核の表 (023) しか見ていなかった。台帳 (`schema_migrations`) と migration のファイルを突き合わせ、未適用があれば `[migration-check] ★ 未適用 N 件: …` と名前つきで warn する
+- 0.11.0 の記述の訂正: 034 を忘れるとログインもできない (ログインの問い合わせも新しい列を読む) / グローバルの codex の下限はモデルで違う (gpt-5.6-sol は 0.154、gpt-6.1-sol は 0.162) / #530 は動画 / 039 は #601
+
+### ★ 更新時の急所
+- 0.11.0 からは `git pull` → **server の再起動**だけ (migration・依存・client の変更なし)。0.10.0 から上げる場合は 0.11.0 の急所が全部当てはまる
+
 ## [0.11.0] - 2026-10-15
 
 ★ **毎日使う人の手間と、見えないところで止まっていたもの** — v0.10.0 から 10 日・約 150 コミット。改善ループ (調査役が読むだけで洗い出し → 利用者が選ぶ → 直す) を 1 日に何周も回し、**来るはずのものが来ないときに知らせる見張り** ([#595](https://github.com/gamasenninn/tealus/issues/595)) と、**画面の手触り** (トークを開いたときに前の中身を先に出す [#600](https://github.com/gamasenninn/tealus/issues/600)・音声編集のキーボード操作 [#604](https://github.com/gamasenninn/tealus/issues/604)) が入った。同じだけ **入口の締め直し** (AI の道具が読める範囲・子プロセスへ渡す環境変数・削除した投稿や部屋の添付) が入っている。
@@ -21,11 +33,11 @@
 - **★★★ ChatGPT アカウントの Codex から gpt-5.5 が外された** (2026-10-14 19:00 UTC、OpenAI の告知): Light v2 (subscription) と Deep Codex が `The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account` で止まる。直すには **2 つとも**:
   1. `cd agent-server && npm install` — `@openai/codex-sdk` を `^0.128.0` → `^0.162.1` に上げた。★ 古い codex (0.128) は新しいモデルを「新しい版にしてください」で断るので、**モデルだけ替えても直らない**
   2. `agent-server/.env` の `AGENT_LIGHT_MODEL` / `AGENT_DEEP_CODEX_MODEL` を `gpt-5.6-sol` に (本家の値。`gpt-6.1-sol` も codex 0.162.1 なら通る) → agent-server を再起動
-  - ★ `AGENT_CODEX_BIN` でグローバルの codex を指している環境は、グローバルの codex も 0.154 以上に (Deep はそちらを使う)
+  - ★ `AGENT_CODEX_BIN` でグローバルの codex を指している環境は、グローバルの codex も上げる (Deep はそちらを使う)。gpt-5.6-sol なら 0.154 以上、gpt-6.1-sol なら 0.162 以上
   - ★ プランや時期で使えるモデルは変わる。設定する前に `npx codex exec --skip-git-repo-check -m <モデル> "OK とだけ返して"` で 1 回試すこと
-- **★★★ migrate を先に、再起動はあと** — 034〜040 の 7 本。★★ **034 を流さずに再起動すると、ログインした後の操作がすべて失敗します** (認証のたびに `users.notification_sound` を読む)。036 が無いと organon の取り込みが失敗。★ 040 (`removed_media`) が無いまま再起動すると、削除した部屋の添付の判定は効かない (`[media] removed_media の表がありません` を 1 回 warn。削除した投稿の添付は隠す)。037 (`heartbeats`) が無いと `/api/bot/heartbeat` が失敗する
+- **★★★ migrate を先に、再起動はあと** — 034〜040 の 7 本。★★ **034 を流さずに再起動すると、ログインもその後の操作もすべて失敗します** (ログインと認証のたびに `users.notification_sound` を読む。プッシュの送信も)。036 が無いと organon の取り込みが失敗。★ 040 (`removed_media`) が無いまま再起動すると、**部屋の削除が 500** になる (0.11.1 で直した) / 削除した部屋の添付の判定は効かない (`[media] removed_media の表がありません` を warn。削除した投稿の添付は隠す)。037 (`heartbeats`) が無いと `/api/bot/heartbeat` が失敗する。★ 0.11.0 の起動時の確認はこれらの忘れを知らせない (0.11.1 で台帳と突き合わせるようにした)
 - **★ client を本番ビルドし直す** — 画面の変更が多い (#600 #604 #593 #539 など)。ビルドしないと何も変わらない (エラーは出ない)
-- **★ AI の子プロセスへ渡す環境変数は許可一覧になった** ([#565](https://github.com/gamasenninn/tealus/issues/565) [#570](https://github.com/gamasenninn/tealus/issues/570) [#573](https://github.com/gamasenninn/tealus/issues/573)) — MCP の道具が親の環境変数に頼って鍵 (`TAVILY_API_KEY` など) を読んでいた場合、**黙って届かなくなる**。道具の設定 (`env`) に明示すること (手順は [アップグレードガイド](docs/upgrade-guide.md))
+- **★ AI の子プロセスへ渡す環境変数は許可一覧になった** (10-10〜10-11) ([#565](https://github.com/gamasenninn/tealus/issues/565) [#570](https://github.com/gamasenninn/tealus/issues/570) [#573](https://github.com/gamasenninn/tealus/issues/573)) — MCP の道具が親の環境変数に頼って鍵 (`TAVILY_API_KEY` など) を読んでいた場合、**黙って届かなくなる**。道具の設定 (`env`) に明示すること (手順は [アップグレードガイド](docs/upgrade-guide.md))
 - **npx で起動する MCP の道具は版を固定する** ([#577](https://github.com/gamasenninn/tealus/issues/577)) — 設定に `@latest` 相当があれば固定を推奨
 - **(推奨) 本番は `NODE_ENV=production`** ([#603](https://github.com/gamasenninn/tealus/issues/603)) — 想定外の失敗の返し方はコードの受け口で決まるので NODE_ENV に頼らなくなったが、本番用の設定にしておく。★ production では記録の既定が info になり、ログイン・REST の `[debug]` 行が消える。今までどおり残すなら `LOG_LEVEL=debug` を明示
 - (任意) **見張り** ([#595](https://github.com/gamasenninn/tealus/issues/595)): `server/config/watchdogs.example.json` を写して `watchdogs.json` に。無ければ何もしない。無線の送り込みなど Tealus の部品は `tealus-cli --heartbeat <名前>` で鼓動を送れる。Windows 向けのバックアップのスクリプトを `scripts/backup/` に入れた
@@ -56,7 +68,7 @@
 - 「すべて既読」も後戻りしない [#553](https://github.com/gamasenninn/tealus/issues/553)。お知らせの部屋の既読をメンバー以外にも [#551](https://github.com/gamasenninn/tealus/issues/551)
 
 **Fixed (抜粋)**
-- 他の部屋へ転送された投稿がある部屋を削除できなかった (500) [#596](https://github.com/gamasenninn/tealus/issues/596)。リンクプレビューの URL の切り出し [#510](https://github.com/gamasenninn/tealus/issues/510)。LINE の画像のサムネイル / 0 バイト [#530](https://github.com/gamasenninn/tealus/issues/530) [#531](https://github.com/gamasenninn/tealus/issues/531)、アルバムの分割 [#552](https://github.com/gamasenninn/tealus/issues/552)。通話の待機中の表示が残る [#524](https://github.com/gamasenninn/tealus/issues/524) [#535](https://github.com/gamasenninn/tealus/issues/535)。iPhone の録音・トランシーバーの音量ゲージ [#562](https://github.com/gamasenninn/tealus/issues/562)。ゲストの画面が毎回失敗する呼び出しをしていた [#575](https://github.com/gamasenninn/tealus/issues/575)。会話モードが固まる [#432](https://github.com/gamasenninn/tealus/issues/432)。応答数の暦 [#550](https://github.com/gamasenninn/tealus/issues/550)。cc-queue の改行 [#541](https://github.com/gamasenninn/tealus/issues/541)。添付の索引 (035, 039) [#549](https://github.com/gamasenninn/tealus/issues/549)
+- 他の部屋へ転送された投稿がある部屋を削除できなかった (500) [#596](https://github.com/gamasenninn/tealus/issues/596)。リンクプレビューの URL の切り出し [#510](https://github.com/gamasenninn/tealus/issues/510)。LINE の動画の 0 バイト [#530](https://github.com/gamasenninn/tealus/issues/530)・画像のサムネイル [#531](https://github.com/gamasenninn/tealus/issues/531)、アルバムの分割 [#552](https://github.com/gamasenninn/tealus/issues/552)。通話の待機中の表示が残る [#524](https://github.com/gamasenninn/tealus/issues/524) [#535](https://github.com/gamasenninn/tealus/issues/535)。iPhone の録音・トランシーバーの音量ゲージ [#562](https://github.com/gamasenninn/tealus/issues/562)。ゲストの画面が毎回失敗する呼び出しをしていた [#575](https://github.com/gamasenninn/tealus/issues/575)。会話モードが固まる [#432](https://github.com/gamasenninn/tealus/issues/432)。応答数の暦 [#550](https://github.com/gamasenninn/tealus/issues/550)。cc-queue の改行 [#541](https://github.com/gamasenninn/tealus/issues/541)。添付の索引 (035 [#549](https://github.com/gamasenninn/tealus/issues/549) / 039 [#601](https://github.com/gamasenninn/tealus/issues/601))
 
 ### Security
 
@@ -1626,7 +1638,9 @@ OSS 公開準備の最終フェーズで実施した、採用者体験を磨く�
 - rtc-server と agent-server は同一モノリポ前提（相対 require を使用）
 - mcp-server は npm publish 未実施（[#187](https://github.com/gamasenninn/tealus/issues/187) で対応予定）
 
-[Unreleased]: https://github.com/gamasenninn/tealus/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/gamasenninn/tealus/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/gamasenninn/tealus/compare/v0.11.0...v0.11.1
+[0.11.0]: https://github.com/gamasenninn/tealus/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/gamasenninn/tealus/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/gamasenninn/tealus/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/gamasenninn/tealus/compare/v0.7.0...v0.8.0
