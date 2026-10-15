@@ -978,10 +978,12 @@ server {
         proxy_set_header Host $host;
     }
 
-    # メディアファイル配信（server 経由でも、Nginx 直配信でも可）
+    # メディアファイル配信 — ★ 必ず server 経由 (Nginx から直接配らない)
+    # 直接配ると、削除した投稿・部屋の添付が開けてしまい (#601 #602)、アップロードした HTML を
+    # 本体と切り離して開く CSP sandbox (mediaStatic) も付かない
     location /media/ {
-        alias /var/tealus/media/;
-        expires 30d;
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
     }
 }
 
