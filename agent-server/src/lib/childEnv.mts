@@ -39,6 +39,7 @@ export function agentChildEnv(source: NodeJS.ProcessEnv = process.env): Record<s
  */
 const TEALUS_MCP_TOOL_KEYS = [
   'OPENAI_API_KEY',              // generate_and_send_image (#260)
+  'OPENAI_IMAGE_MODEL',          // generate_and_send_image のモデル名 (★ 2026-10-15 まで抜けていて、.env に書いても届かなかった)
   'GOOGLE_API_KEY',              // read_document の vision (Gemini)
   'DOCUMENT_VISION_PROVIDER', 'DOCUMENT_VISION_MODEL', 'DOCUMENT_VISION_MAX_PAGES',
 ];

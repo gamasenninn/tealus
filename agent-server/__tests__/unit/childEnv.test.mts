@@ -68,6 +68,9 @@ describe('tealusMcpToolEnv (#580)', () => {
   it('無いものは入れない (空の値も)', () => {
     expect(tealusMcpToolEnv({ OPENAI_API_KEY: '', PATH: '/bin' })).toEqual({});
   });
+  it('★ 画像生成のモデル名 OPENAI_IMAGE_MODEL も渡す (2026-10-15 docs の最終チェック。許可が無く .env に書いても届かなかった)', () => {
+    expect(tealusMcpToolEnv({ OPENAI_IMAGE_MODEL: 'gpt-image-1.5', PATH: '/bin' })).toEqual({ OPENAI_IMAGE_MODEL: 'gpt-image-1.5' });
+  });
   it('★ tealus-mcp を起こす 3 か所 (Light v2・Deep・会話モードの共有) が、どれもこの関数で鍵を渡す', () => {
     // 同じ一覧が 3 か所に手書きされていて、#573 で 1 か所 (roomMcpManager) だけ抜けた
     const dir = path.join(__dirname, '../../src');

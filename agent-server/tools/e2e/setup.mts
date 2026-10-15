@@ -211,7 +211,7 @@ async function main(): Promise<void> {
   log(`次の手動 step:`);
   log(`  1. e2e-sandbox room の TTS を disable (Aivis 課金回避、room settings or admin UI)`);
   log(`  2. agent-server を再起動 (新 .env を反映)`);
-  log(`  3. node agent-server/tools/e2e/run.mts --filter S5 で smoke test`);
+  log(`  3. node agent-server/tools/e2e/run.mts --filter=S5 で smoke test`);
   log(`     (S5 = greeting、tool call なし最軽量)`);
 }
 

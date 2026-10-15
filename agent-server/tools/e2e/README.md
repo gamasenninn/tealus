@@ -49,7 +49,7 @@ TEALUS_E2E_ROOM_ID=<test room の UUID>
 node agent-server/tools/e2e/run.mts
 
 # 特定 scenario のみ
-node agent-server/tools/e2e/run.mts --filter S1,S2
+node agent-server/tools/e2e/run.mts --filter=S1,S2   # ★ = でつなぐ (空白だと黙って全部流れる)
 
 # dry-run (投下せず schema validation のみ)
 node agent-server/tools/e2e/run.mts --dry-run

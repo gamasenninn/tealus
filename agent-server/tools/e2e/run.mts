@@ -3,7 +3,8 @@
  * Light agent E2E verification harness — runner CLI (#262)
  *
  * Usage:
- *   node agent-server/tools/e2e/run.mts [--filter S1,S2] [--dry-run]
+ *   node agent-server/tools/e2e/run.mts [--filter=S1,S2] [--dry-run]
+ *   ★ --filter は = でつなぐ (空白で区切ると黙って無視され、全 scenario が流れる)
  *
  * 詳細: agent-server/tools/e2e/README.md
  */

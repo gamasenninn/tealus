@@ -37,6 +37,8 @@ docker-compose exec -T postgres pg_dump -U tealus tealus > backup-$(date +%Y%m%d
 > docker cp tealus_postgres:/tmp/backup.dump .\backup.dump
 > ```
 
+> ★ **コンテナ名は構成で違います**。ここの例は開発用の `docker-compose.yml` (`tealus_postgres`)。本番用の `docker-compose.full.yml` で動かしているなら **`tealus_postgres_prod`** に読み替え、`docker-compose exec` には `-f docker-compose.full.yml` を付けます。迷ったら `docker ps` で名前を確かめてください。
+
 ### 1. コードを取得
 
 ```bash
@@ -579,6 +581,8 @@ docker compose up -d postgres
 ```bash
 docker exec -it tealus_postgres psql -U tealus -c "ALTER USER tealus PASSWORD '<server/.env の DB_PASSWORD>'"
 ```
+
+★ この節の `tealus_postgres` も、本番用の構成では `tealus_postgres_prod` です (上の「コンテナ名は構成で違います」)。
 
 ダンプを戻します (形式で 2 通り):
 
