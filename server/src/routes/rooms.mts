@@ -10,6 +10,7 @@ import { canCreateRoom, isGuest, canSearchUsers } from '../utils/permissions.mts
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
 import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
+import { rememberRoomMedia } from '../services/deletedMedia.mts';
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -522,16 +523,25 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
  */
 router.delete('/:id', requireGroup, requireMember, requireCreator, requireSoloMember, async (req, res) => {
   const { id } = req.params;
+  const client = await pool.connect();
   try {
-    const result = await pool.query<{ id: string; name: string | null }>('DELETE FROM rooms WHERE id = $1 RETURNING id, name', [id]);
+    await client.query('BEGIN');
+    // ★ #602 消すと添付の行も CASCADE で消え、/media の判定 (#601) に引っかからなくなる。消す前に記録する
+    await rememberRoomMedia(String(id), client);
+    const result = await client.query<{ id: string; name: string | null }>('DELETE FROM rooms WHERE id = $1 RETURNING id, name', [id]);
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: E.ROOM_NOT_FOUND });
     }
+    await client.query('COMMIT');
     logger.info(`Room deleted: ${id} (${result.rows[0].name}) by user ${req.user!.id}`);
     res.json({ success: true, room_id: id });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     logger.error('Delete room error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
+  } finally {
+    client.release();
   }
 });
 
