@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { voiceEditKeyAction } from '../src/utils/voiceEditKeys';
 
-type K = Partial<{ key: string; code: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; isComposing: boolean }>;
+type K = Partial<{ key: string; code: string; keyCode: number; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; isComposing: boolean }>;
 const k = (e: K, inTextarea = true) => voiceEditKeyAction({ key: '', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, isComposing: false, ...e }, { inTextarea });
 
 describe('voiceEditKeyAction (#604)', () => {
@@ -59,6 +59,16 @@ describe('voiceEditKeyAction (#604)', () => {
     expect(k({ key: '≤', code: 'Comma', altKey: true })).toBe('back10');
     expect(k({ key: '≥', code: 'Period', altKey: true }, false)).toBe('fwd10');
     expect(k({ key: ',', code: 'Comma' })).toBeNull();   // 修飾キーなしは文字の入力
+  });
+
+  it('★★ 日本語入力がオンのとき (記号のキーが key=Process / keyCode 229 で届く) も Alt+, / Alt+. は効く (10-15 実機で反応しなかった)', () => {
+    expect(k({ key: 'Process', code: 'Comma', keyCode: 229, altKey: true })).toBe('back10');
+    expect(k({ key: 'Process', code: 'Period', keyCode: 229, altKey: true })).toBe('fwd10');
+  });
+
+  it('★ 修飾キーなしの keyCode 229 (Safari の変換の確定など) は今までどおり拾わない', () => {
+    expect(k({ key: 'Enter', keyCode: 229 })).toBeNull();
+    expect(k({ key: 'Escape', keyCode: 229 })).toBeNull();
   });
 
   it('関係ないキーは null', () => {

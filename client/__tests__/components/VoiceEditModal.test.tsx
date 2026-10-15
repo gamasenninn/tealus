@@ -285,3 +285,18 @@ describe('VoiceEditModal — 10 秒送りのキー (トランシーバーの経�
     expect(audio.currentTime).toBe(0);
   });
 });
+
+describe('VoiceEditModal — 前 / 次で移ったら前の音声を止める (10-15 実機)', () => {
+  beforeEach(() => { mockMessages.list = [voice('a', 'AAA'), voice('b', 'BBB')]; });
+
+  it('★★ Alt+→ で移ると、それまでの再生バーの音声を止める', async () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const { container } = render(<VoiceEditModal messageId="a" onClose={vi.fn()} />);
+    const before = container.querySelector('audio')!;
+    pause.mockClear();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowRight', altKey: true });
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('BBB'));
+    expect(pause.mock.contexts).toContain(before);
+    pause.mockRestore();
+  });
+});

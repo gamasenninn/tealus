@@ -85,6 +85,7 @@ describe('useExclusiveAudio (#380)', () => {
     const { result, unmount } = renderHook(() => useExclusiveAudio('m1'));
     const pause = attachFakeAudio(result);
     unmount();
+    pause.mockClear();   // ★ 外れるときに 1 回止める (2026-10-15) 分は数えない。見たいのは「外れた後に反応しない」
     act(() => notifyAudioStarted('other'));
     expect(pause).not.toHaveBeenCalled();
   });
@@ -181,5 +182,19 @@ describe('useExclusiveAudio — 再生 / 一時停止の要求', () => {
     const el = mount('a', true);
     act(() => { requestAudioToggle('z'); });
     expect(el.play).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 前 / 次で編集画面の再生バーが作り直されたとき、前の音声が鳴り続けた (10-15 実機)。
+ * ★ ブラウザは画面から外した <audio> を止めないので、外れるときに止める
+ */
+describe('useExclusiveAudio — 外れるときに止める', () => {
+  it('★★ unmount で pause する', () => {
+    const el = { paused: false, play: vi.fn(), pause: vi.fn() } as unknown as HTMLAudioElement;
+    const { result, unmount } = renderHook(() => useExclusiveAudio('a'));
+    result.current.ref.current = el;
+    unmount();
+    expect(el.pause).toHaveBeenCalled();
   });
 });

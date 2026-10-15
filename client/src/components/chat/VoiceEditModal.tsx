@@ -107,6 +107,13 @@ function VoiceEditModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId]);
 
+  // ★ 前 / 次で移ると <audio> は作り直される (key={currentId})。ブラウザは画面から外した音声を止めないので、
+  //   外れる前に止める (10-15 実機: Alt+→ で移っても前の音声が鳴り続けた)
+  useEffect(() => {
+    const el = audioRef.current;
+    return () => { el?.pause(); };
+  }, [currentId]);
+
   // ★ #380: 同時再生抑制の規約に参加する。この画面だけ参加しておらず、
   //   編集中に再生すると **裏のバブルが鳴りっぱなし**になり得た (VoiceBubble は参加済)。
   //   ここで止めるときは notifyAudioStopped を呼ばない —— 直前に相手が取った
@@ -241,9 +248,9 @@ function VoiceEditModal({
       return;
     }
     const action = voiceEditKeyAction({
-      key: e.key, code: e.code, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
-      // ★ 変換中。Safari は keyCode 229 でしか分からないことがある
-      isComposing: e.nativeEvent.isComposing || e.keyCode === 229,
+      key: e.key, code: e.code, keyCode: e.keyCode, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
+      // ★ 変換中。Safari は keyCode 229 でしか分からないことがある (229 の扱いは voiceEditKeys.ts)
+      isComposing: e.nativeEvent.isComposing,
     }, { inTextarea: t.tagName === 'TEXTAREA', onButton: t.tagName === 'BUTTON' || t.tagName === 'INPUT' });
     if (!action) return;
     // ★ Alt+← はブラウザの「戻る」、Esc は裏の画面の閉じる処理にもなるので、ここで止める

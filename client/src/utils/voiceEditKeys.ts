@@ -18,6 +18,8 @@ export interface KeyLike {
   key: string;
   /** 押したキーの場所 (KeyboardEvent.code)。Alt+, / Alt+. の判定に使う */
   code?: string;
+  /** KeyboardEvent.keyCode。229 = 日本語入力 (IME) が受け取ったキー */
+  keyCode?: number;
   altKey: boolean;
   ctrlKey: boolean;
   metaKey: boolean;
@@ -29,7 +31,11 @@ export function voiceEditKeyAction(
   e: KeyLike,
   { inTextarea, onButton = false }: { inTextarea: boolean; onButton?: boolean },
 ): VoiceEditKeyAction | null {
-  if (e.isComposing) return null;
+  // ★ 変換中は拾わない。keyCode 229 も変換中とみなすが、**修飾キー (Alt / Ctrl / ⌘) つきは除く**:
+  //   日本語入力がオンだと、記号のキーは変換していなくても key=Process / keyCode 229 で届く。
+  //   229 を一律に捨てていた頃は Alt+, / Alt+. が効かなかった (10-15 実機)。本当の変換中は isComposing が立つ
+  const modified = e.altKey || e.ctrlKey || e.metaKey;
+  if (e.isComposing || (e.keyCode === 229 && !modified)) return null;
   if (e.key === 'Escape') return 'back';
   if (e.altKey && !e.ctrlKey && !e.metaKey) {
     if (e.key === 'ArrowRight') return 'next';
