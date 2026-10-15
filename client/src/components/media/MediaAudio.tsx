@@ -4,6 +4,11 @@ import type { MediaItem } from '../../types';
 interface MediaAudioProps {
   media: MediaItem;
   className?: string;
+  /**
+   * 合図 (再生 / 一時停止・シーク・同時再生抑制) を受ける ID。省略時は media.id。
+   * ★ 編集画面の再生バーは裏の吹き出しと別の ID にする (audioAttachmentEditor.tsx、2026-10-15)
+   */
+  exclusiveId?: string;
 }
 
 /**
@@ -19,8 +24,8 @@ interface MediaAudioProps {
  *
  * preload="metadata" — 1 room に何十件も並ぶので本体は先読みしない。尺とシークバーは出す。
  */
-function MediaAudio({ media, className = 'media-audio' }: MediaAudioProps) {
-  const ex = useExclusiveAudio(media.id);
+function MediaAudio({ media, className = 'media-audio', exclusiveId }: MediaAudioProps) {
+  const ex = useExclusiveAudio(exclusiveId ?? media.id);
   return (
     <audio
       ref={ex.ref}

@@ -26,6 +26,7 @@ import { useMessageTags, type TagEntry } from '../../hooks/useMessageTags';
 import MessageEditModal from './MessageEditModal';
 import VoiceEditModal from './VoiceEditModal';
 import MediaAudio from '../media/MediaAudio';
+import { audioAttachmentEditorProps } from './audioAttachmentEditor';
 import { editableAudioAttachmentMessages } from '../../utils/voiceNav';
 import EditHistoryModal from './EditHistoryModal';
 import SystemMessage from './SystemMessage';
@@ -372,12 +373,8 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
           selectItems={(msgs, uid, room) => editableAudioAttachmentMessages(msgs, uid, room?.message_edit_policy)}
           textOf={(m) => m?.content || ''}
           save={async (id, text) => { await api.editMessage(roomId, id, text); }}
-          renderPlayer={(m) => {
-            const a = (m.media || []).find((x) => x.mime_type?.startsWith('audio/'));
-            return a ? <MediaAudio key={a.id} media={a} /> : null;
-          }}
-          // ★ 時刻タグのシーク先。再生バーと同じ音声を指す (2026-08-29)
-          audioIdOf={(m) => (m.media || []).find((x) => x.mime_type?.startsWith('audio/'))?.id ?? null}
+          // ★ 再生バーと音声 ID の組。裏の吹き出しと別の ID で動かす (audioAttachmentEditor.tsx、2026-10-15)
+          {...audioAttachmentEditorProps}
           onClose={() => setIsEditingMessage(false)}
         />
       ) : (

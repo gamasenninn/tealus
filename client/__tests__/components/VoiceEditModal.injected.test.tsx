@@ -163,3 +163,40 @@ describe('VoiceEditModal (差し込み) — 再生と 10 秒送りのキー', ()
     expect(c.got).toEqual([{ messageId: 'x-m', req: { by: -10 } }, { messageId: 'x-m', req: { by: 10 } }]);
   });
 });
+
+/**
+ * 10-15 実機: 通話履歴の編集画面で Ctrl+Space を押すと、裏のトーク画面の吹き出しの再生バーも一緒に鳴り、
+ * 次へ移っても裏が鳴り続けた。★ 編集画面の再生バーと吹き出しの再生バーが **同じ ID (添付の id)** で合図を受けていた。
+ * → 編集画面の再生バーは別の ID (editorAudioId) で受け、合図もそこへ出す (MessageBubble と同じ組を使って確かめる)
+ */
+import { audioAttachmentEditorProps } from '../../src/components/chat/audioAttachmentEditor';
+
+describe('通話履歴の編集画面の再生バーは、裏の吹き出しと別の ID で動く', () => {
+  beforeEach(() => { mockMessages.list = [withAudio('x', 'X 本文'), withAudio('y', 'Y 本文')]; });
+
+  it('★★ Ctrl+Space で鳴るのは編集画面の再生バーだけ (裏の吹き出しは鳴らない)', () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    const pausedDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'paused');
+    Object.defineProperty(HTMLMediaElement.prototype, 'paused', { configurable: true, get: () => true });
+    const { container } = render(
+      <div>
+        <div className="behind"><MediaAudio media={withAudio('x', '').media![0]} /></div>
+        <VoiceEditModal
+          messageId="x"
+          selectItems={(msgs, uid, room) => editableAudioAttachmentMessages(msgs, uid, room?.message_edit_policy)}
+          textOf={(m) => m?.content || ''}
+          save={vi.fn().mockResolvedValue(undefined)}
+          {...audioAttachmentEditorProps}
+          onClose={vi.fn()}
+        />
+      </div>,
+    );
+    const behind = container.querySelector('.behind audio');
+    const inModal = container.querySelector('.voice-edit-modal audio');
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: ' ', ctrlKey: true });
+    expect(play.mock.contexts).toContain(inModal);
+    expect(play.mock.contexts).not.toContain(behind);
+    play.mockRestore();
+    if (pausedDesc) Object.defineProperty(HTMLMediaElement.prototype, 'paused', pausedDesc);
+  });
+});
