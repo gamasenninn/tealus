@@ -37,7 +37,7 @@ describe('codex 経路に入っているかの判定', () => {
   });
 
   test('★ 使えるモデルなら警告しない', () => {
-    const r = checkCodexModels({ deepProvider: 'codex', deepAuth: 'subscription', deepModel: 'gpt-5.5' });
+    const r = checkCodexModels({ deepProvider: 'codex', deepAuth: 'subscription', deepModel: 'gpt-5.6-sol' });
     expect(r).toHaveLength(0);
   });
 });
@@ -70,12 +70,13 @@ describe('★★ Light v2 も同じ経路を通る', () => {
 });
 
 describe('★★★ 既知の使えないモデル (実測ベース)', () => {
-  test.each(['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5-mini', 'gpt-5.6'])('%s は使えないものとして載っている', (m) => {
+  // ★ 2026-10-15: gpt-5.5 は 10-14 19:00 UTC に ChatGPT アカウントの Codex から外された (朝礼の議事録が model_not_supported で失敗)
+  test.each(['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5-mini', 'gpt-5.6', 'gpt-5.5', 'gpt-6.1-sol'])('%s は使えないものとして載っている', (m) => {
     expect(KNOWN_UNSUPPORTED_CODEX_MODELS).toContain(m);
   });
 
   test('★ 使えると実測したものは載せない', () => {
-    expect(KNOWN_UNSUPPORTED_CODEX_MODELS).not.toContain('gpt-5.5');
+    expect(KNOWN_UNSUPPORTED_CODEX_MODELS).not.toContain('gpt-5.6-sol');
     expect(KNOWN_UNSUPPORTED_CODEX_MODELS).not.toContain('gpt-5.6-luna');
   });
 
@@ -91,7 +92,7 @@ describe('★★★★★ 警告の中身 — ★ 再ログインへ誤誘導さ
   const one = () => checkCodexModels({ deepProvider: 'codex', deepAuth: 'subscription', deepModel: 'gpt-5.4' })[0];
 
   test('★ 何を設定すればよいかを書く', () => {
-    expect(one().message).toContain('AGENT_DEEP_CODEX_MODEL=gpt-5.5');
+    expect(one().message).toContain('AGENT_DEEP_CODEX_MODEL=gpt-5.6-sol');
   });
 
   test('★★ 認証の問題ではないと明示する (★★★ 表示が auth failed になるため)', () => {
@@ -99,7 +100,7 @@ describe('★★★★★ 警告の中身 — ★ 再ログインへ誤誘導さ
   });
 
   test('★ 実測した日付を添える (★★ モデルの可否は変わるので、いつの情報か分かるように)', () => {
-    expect(one().message).toMatch(/2026-09-\d\d/);
+    expect(one().message).toMatch(/\d{4}-\d{2}-\d{2} 実測/);   // ★ 月を決め打ちしない (推奨を変えるたびに日付は変わる)
   });
 
   test('★★★ 「リストに無ければ安全」と読めない書き方にする', () => {

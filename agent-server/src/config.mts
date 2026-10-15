@@ -148,7 +148,9 @@ export const DEEP_CODEX_AUTH = process.env.DEEP_CODEX_AUTH || 'subscription';
 // ★ 実測 (2026-09-10): gpt-5.4 ✗ / gpt-5.4-mini ✗ / gpt-5.5-mini ✗ / gpt-5.6 ✗ / gpt-5.5 ○ / gpt-5.6-luna ○
 //   → ★★ mini は系統ごと不可。★★★ 「新しければ良い」でもない (名前ごとに違う)。
 // ★ 設定の取り違えは起動時に warn する (utils/codexModelGuard.mts)。**止めはしない**。
-export const AGENT_DEEP_CODEX_MODEL = process.env.AGENT_DEEP_CODEX_MODEL || 'gpt-5.5';
+// ★★★★ 2026-10-15: gpt-5.5 は 10-14 19:00 UTC に ChatGPT アカウントの Codex から外された → gpt-5.6-sol
+//   (OpenAI の案内の gpt-6.1-sol は実測で不可。gpt-5.6-sol は codex 0.128 では不可で、codex-sdk 0.162.1 で通る)
+export const AGENT_DEEP_CODEX_MODEL = process.env.AGENT_DEEP_CODEX_MODEL || 'gpt-5.6-sol';
 
 // Tavily
 export const TAVILY_API_KEY = process.env.TAVILY_API_KEY;

@@ -99,11 +99,12 @@ describe('config: Deep Codex env 4 件', () => {
    * ★ ここで固定するのは「値そのもの」ではなく **「既知の使えないモデルを既定にしない」**。
    *   ★★ 値だけ書くと、また使えなくなったときにテストが「古い値を守る」側に回る。
    */
-  test('AGENT_DEEP_CODEX_MODEL 未設定で default "gpt-5.5"', () => {
+  // ★★★★ 2026-10-15 に gpt-5.5 → gpt-5.6-sol へ (gpt-5.5 は 10-14 に ChatGPT アカウントの Codex から外された。gpt-6.1-sol は実測で不可)
+  test('AGENT_DEEP_CODEX_MODEL 未設定で default "gpt-5.6-sol"', () => {
     delete process.env.AGENT_DEEP_CODEX_MODEL;
     jest.resetModules();
     const config = require('../../src/config');
-    expect(config.AGENT_DEEP_CODEX_MODEL).toBe('gpt-5.5');
+    expect(config.AGENT_DEEP_CODEX_MODEL).toBe('gpt-5.6-sol');
   });
 
   test('★★ 既定値が「使えないと実測したモデル」になっていないこと', () => {

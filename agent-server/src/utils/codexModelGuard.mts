@@ -41,7 +41,11 @@
  * 2026-09-10  gpt-5.5-mini   ✗  (本家の実測)
  * 2026-09-10  gpt-5.6        ✗  (★ 採用者#2 の実測)
  * 2026-09-10  gpt-5.5        ○  / gpt-5.6-luna ○
+ * 2026-10-15  gpt-5.5        ✗  ★ 10-14 19:00 UTC に ChatGPT アカウントの Codex から外された (OpenAI の告知。朝礼の議事録が失敗)
+ * 2026-10-15  gpt-6.1-sol    ✗  ★ OpenAI の案内では Plus の置き換え先だが、本家で実測すると不可 (codex 0.154 / 0.162 とも)
+ * 2026-10-15  gpt-5.6-sol    ○  ★ ただし codex 0.128 では「新しい版にして」で不可。0.162.1 で通る (codex-sdk を上げた)
  * ```
+ * ★★ **「使える」は変わる** —— 9-10 に ○ だった gpt-5.5 が 10-14 に外された。推奨を変えたら下の日付も変える
  * ★ **mini は系統ごと不可。★★ 「新しければ良い」でもない** —— `gpt-5.6` は駄目で
  * `gpt-5.6-luna` は通る。★★★ **名前ごとに違うので、前方一致で判定しないこと。**
  *
@@ -52,13 +56,15 @@ export const KNOWN_UNSUPPORTED_CODEX_MODELS: readonly string[] = [
   'gpt-5.4-mini',
   'gpt-5.5-mini',
   'gpt-5.6',
+  'gpt-5.5',
+  'gpt-6.1-sol',
 ];
 
 /** いま使えると実測できているもの (★ 警告文で案内する先) */
-export const RECOMMENDED_CODEX_MODEL = 'gpt-5.5';
+export const RECOMMENDED_CODEX_MODEL = 'gpt-5.6-sol';
 
 /** 実測した日付 (★ モデルの可否は変わるので、いつの情報かを警告に載せる) */
-const MEASURED_ON = '2026-09-10';
+const MEASURED_ON = '2026-10-15';
 
 export interface CodexModelGuardInput {
   /** DEEP_AGENT_PROVIDER (既定 'claude') */

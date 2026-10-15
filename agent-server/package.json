@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@openai/agents": "^0.8.3",
-    "@openai/codex-sdk": "^0.128.0",
+    "@openai/codex-sdk": "^0.162.1",
     "cors": "^2.8.6",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
