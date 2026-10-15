@@ -504,7 +504,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       }
       return null;
     }
-    logger.error(`Light v2 Agent error: ${briefError(message)}`);
+    logger.error(lightV2ErrorLogLine(message, streamCause));
     await botApi.pushStatus(roomId, 'idle').catch(() => {});
     // #295: 委譲経由 (suppressAutoPost) の時はエラー文を委譲先に残さない。デリゲーターが
     //       runAgent の throw として捕捉し委譲元へ通知する。throw して呼出元に伝える。
@@ -527,6 +527,16 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
   } finally {
     lightRegistry.unregister(roomId);
   }
+}
+
+/**
+ * ★ Light v2 が落ちたときのログの 1 行 (2026-10-16)。
+ * 最後の例外は codex を止めたときの taskkill の出力の混入 (`Failed to parse item: 成功: PID …`) のことがあり、
+ * 本当の原因は stream の途中の error にしか無い。分かっていれば最後の行にも添える (最後の行だけ読んで誤読しない)。
+ */
+export function lightV2ErrorLogLine(message: string, streamCause: CodexAuthErrorResult | null): string {
+  const cause = streamCause?.kind ? ` (原因=${streamCause.kind}、直前の stream error を参照)` : '';
+  return `Light v2 Agent error${cause}: ${briefError(message)}`;
 }
 
 /**

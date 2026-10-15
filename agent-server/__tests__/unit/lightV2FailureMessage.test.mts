@@ -74,3 +74,26 @@ describe('buildLightV2FailureMessage (#431)', () => {
     expect(msg).toMatch(/ChatGPT アカウント/);
   });
 });
+
+/**
+ * ★ 2026-10-16 ログの 1 行。10-15 の朝礼の議事録の失敗では、最後の例外が
+ *   `Failed to parse item: 成功: PID … を終了しました` (codex を止めたときの taskkill の出力の混入) で、
+ *   ★ 本当の原因 (model_not_supported) は 1 行上の stream error にしか無かった。最後の行だけ読むと誤読する
+ */
+describe('lightV2ErrorLogLine', () => {
+  const { lightV2ErrorLogLine } = require('../../src/agents/lightV2.mts') as {
+    lightV2ErrorLogLine: (message: string, streamCause: ReturnType<typeof detectCodexAuthError> | null) => string;
+  };
+  const TASKKILL = 'Failed to parse item: 成功: PID 56372 のプロセス (PID 87464 の子プロセス) を終了しました。';
+
+  test('★★ stream で原因が分かっていれば、最後の行にも添える', () => {
+    const line = lightV2ErrorLogLine(TASKKILL, MODEL_400);
+    expect(line).toContain(`原因=${MODEL_400.kind}`);
+    expect(line).toContain('Failed to parse item');
+  });
+
+  test('★ 分からなければ今までどおり', () => {
+    expect(lightV2ErrorLogLine(TASKKILL, null)).toBe(`Light v2 Agent error: ${TASKKILL}`);
+    expect(lightV2ErrorLogLine(TASKKILL, UNKNOWN)).toBe(`Light v2 Agent error: ${TASKKILL}`);
+  });
+});
