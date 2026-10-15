@@ -10,6 +10,62 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-15
+
+★ **毎日使う人の手間と、見えないところで止まっていたもの** — v0.10.0 から 10 日・約 150 コミット。改善ループ (調査役が読むだけで洗い出し → 利用者が選ぶ → 直す) を 1 日に何周も回し、**来るはずのものが来ないときに知らせる見張り** ([#595](https://github.com/gamasenninn/tealus/issues/595)) と、**画面の手触り** (トークを開いたときに前の中身を先に出す [#600](https://github.com/gamasenninn/tealus/issues/600)・音声編集のキーボード操作 [#604](https://github.com/gamasenninn/tealus/issues/604)) が入った。同じだけ **入口の締め直し** (AI の道具が読める範囲・子プロセスへ渡す環境変数・削除した投稿や部屋の添付) が入っている。
+
+> **★ この版の影響範囲**: **全員に作業があります。** DB migration が **7 本** (`034`〜`040`) — ★★ **再起動の前に `npm run migrate`**。client の再ビルドも要ります。★★ **ChatGPT アカウントで Codex を使っている環境** (`LIGHTV2_AUTH=subscription` / `DEEP_AGENT_PROVIDER=codex`) は、agent-server の `npm install` と **モデルの切り替え** (`gpt-5.5` → `gpt-5.6-sol`) をしないと、議事録などの Light / Deep が止まったままです (下の急所)。
+
+### ★ 更新時の急所
+
+- **★★★ ChatGPT アカウントの Codex から gpt-5.5 が外された** (2026-10-14 19:00 UTC、OpenAI の告知): Light v2 (subscription) と Deep Codex が `The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account` で止まる。直すには **2 つとも**:
+  1. `cd agent-server && npm install` — `@openai/codex-sdk` を `^0.128.0` → `^0.162.1` に上げた。★ 古い codex (0.128) は新しいモデルを「新しい版にしてください」で断るので、**モデルだけ替えても直らない**
+  2. `agent-server/.env` の `AGENT_LIGHT_MODEL` / `AGENT_DEEP_CODEX_MODEL` を `gpt-5.6-sol` に (本家の値。`gpt-6.1-sol` も codex 0.162.1 なら通る) → agent-server を再起動
+  - ★ `AGENT_CODEX_BIN` でグローバルの codex を指している環境は、グローバルの codex も 0.154 以上に (Deep はそちらを使う)
+  - ★ プランや時期で使えるモデルは変わる。設定する前に `npx codex exec --skip-git-repo-check -m <モデル> "OK とだけ返して"` で 1 回試すこと
+- **★★★ migrate を先に、再起動はあと** — 034〜040 の 7 本。★★ **034 を流さずに再起動すると、ログインした後の操作がすべて失敗します** (認証のたびに `users.notification_sound` を読む)。036 が無いと organon の取り込みが失敗。★ 040 (`removed_media`) が無いまま再起動すると、削除した部屋の添付の判定は効かない (`[media] removed_media の表がありません` を 1 回 warn。削除した投稿の添付は隠す)。037 (`heartbeats`) が無いと `/api/bot/heartbeat` が失敗する
+- **★ client を本番ビルドし直す** — 画面の変更が多い (#600 #604 #593 #539 など)。ビルドしないと何も変わらない (エラーは出ない)
+- **★ AI の子プロセスへ渡す環境変数は許可一覧になった** ([#565](https://github.com/gamasenninn/tealus/issues/565) [#570](https://github.com/gamasenninn/tealus/issues/570) [#573](https://github.com/gamasenninn/tealus/issues/573)) — MCP の道具が親の環境変数に頼って鍵 (`TAVILY_API_KEY` など) を読んでいた場合、**黙って届かなくなる**。道具の設定 (`env`) に明示すること (手順は [アップグレードガイド](docs/upgrade-guide.md))
+- **npx で起動する MCP の道具は版を固定する** ([#577](https://github.com/gamasenninn/tealus/issues/577)) — 設定に `@latest` 相当があれば固定を推奨
+- **(推奨) 本番は `NODE_ENV=production`** ([#603](https://github.com/gamasenninn/tealus/issues/603)) — 想定外の失敗の返し方はコードの受け口で決まるので NODE_ENV に頼らなくなったが、本番用の設定にしておく。★ production では記録の既定が info になり、ログイン・REST の `[debug]` 行が消える。今までどおり残すなら `LOG_LEVEL=debug` を明示
+- (任意) **見張り** ([#595](https://github.com/gamasenninn/tealus/issues/595)): `server/config/watchdogs.example.json` を写して `watchdogs.json` に。無ければ何もしない。無線の送り込みなど Tealus の部品は `tealus-cli --heartbeat <名前>` で鼓動を送れる。Windows 向けのバックアップのスクリプトを `scripts/backup/` に入れた
+- (任意) 中継先を環境変数で変えられる: `AGENT_URL` / `RTC_URL` / `MCP_HTTP_URL` ([#556](https://github.com/gamasenninn/tealus/issues/556))。LINE のアルバムの束ね待ち `LINE_IMAGESET_FLUSH_MS` / `LINE_IMAGESET_MAX_WAIT_MS` ([#552](https://github.com/gamasenninn/tealus/issues/552))
+- Docker: compose は初回起動で migration を流さない ([#557](https://github.com/gamasenninn/tealus/issues/557))、`.dockerignore` を足し `up -d --build` に ([#558](https://github.com/gamasenninn/tealus/issues/558))
+
+### この版に入った変更の一覧 (分野別)
+
+**新しい入口**
+- **見張り** [#595](https://github.com/gamasenninn/tealus/issues/595): バックアップ・通話履歴・無線の送り込みが来ないとき、業務メモに 1 回だけ ⚠ / 戻ったら ✅。Tealus が見るのは自分の境界 (tealus-cli) まで — 部品から鼓動を送る (`POST /api/bot/heartbeat`・`heartbeats` 表)。設計は `docs/09`
+- **トークを開いたとき、前に開いたときの中身と見出しを先に出す** [#600](https://github.com/gamasenninn/tealus/issues/600): 取り直しが届いたら置き換える。覚えるのは画面を開いている間だけ (端末に書き残さない)
+- **音声の編集画面のキーボード操作 (PC)** [#604](https://github.com/gamasenninn/tealus/issues/604): Alt+→ / Alt+← で次 / 前、Ctrl+Enter で確定、Esc で戻る、Ctrl+Space で再生 / 一時停止、Alt+, / Alt+. で 10 秒戻す / 送る。PC では開いたとき入力欄にフォーカス。通話履歴の編集でも同じ
+
+**画面**
+- 通知音をアカウントの設定に [#516](https://github.com/gamasenninn/tealus/issues/516) [#518](https://github.com/gamasenninn/tealus/issues/518)。1 対 1 の部屋にも個人設定 (≡) [#517](https://github.com/gamasenninn/tealus/issues/517)。機械の投稿の画面の音をプッシュと合わせる [#519](https://github.com/gamasenninn/tealus/issues/519)。プロフィールの「ひとこと」をメンバー一覧に [#591](https://github.com/gamasenninn/tealus/issues/591)。利用停止にした人は「利用停止」と添えて残し、人数・メンションの候補から外す [#598](https://github.com/gamasenninn/tealus/issues/598)
+- マルチトーク: 最小化 / 最大化 [#504](https://github.com/gamasenninn/tealus/issues/504)、全パネルを最下部へ [#507](https://github.com/gamasenninn/tealus/issues/507)、入力欄を畳む [#513](https://github.com/gamasenninn/tealus/issues/513)、ドラッグで並べ替え [#515](https://github.com/gamasenninn/tealus/issues/515)。ルーム設定の「会話で使える道具」の一覧を畳む [#514](https://github.com/gamasenninn/tealus/issues/514)
+- 送った投稿に本体の受け取り (ack) を返し、断ったときは理由を出す [#593](https://github.com/gamasenninn/tealus/issues/593)。ログインの期限切れでログイン画面へ [#539](https://github.com/gamasenninn/tealus/issues/539)。切断中の送信 [#537](https://github.com/gamasenninn/tealus/issues/537)。つなぎ直したとき・表に戻ったときに抜けた分を足す [#538](https://github.com/gamasenninn/tealus/issues/538)
+- 画面のエラーを本体の記録に残す / 真っ白にしない [#525](https://github.com/gamasenninn/tealus/issues/525) [#563](https://github.com/gamasenninn/tealus/issues/563)。失敗に理由を添える・表示を日本語に [#592](https://github.com/gamasenninn/tealus/issues/592) [#599](https://github.com/gamasenninn/tealus/issues/599)
+
+**AI・音声・議事録**
+- Codex のモデルを `gpt-5.6-sol`、`@openai/codex-sdk` を 0.162.1 に (gpt-5.5 が外されたため。上の急所)
+- 無線の文字起こしで、OpenAI が外国の文字 (ハングル等) を作ったら無音扱いに。文字起こしの止まり・空の文字起こし [#536](https://github.com/gamasenninn/tealus/issues/536) [#579](https://github.com/gamasenninn/tealus/issues/579) [#583](https://github.com/gamasenninn/tealus/issues/583) [#585](https://github.com/gamasenninn/tealus/issues/585)
+- agent-server が本体より先に起きてもつなぎ直す [#581](https://github.com/gamasenninn/tealus/issues/581) [#589](https://github.com/gamasenninn/tealus/issues/589)。無線の送り込みの再送 [#578](https://github.com/gamasenninn/tealus/issues/578) [#582](https://github.com/gamasenninn/tealus/issues/582) [#587](https://github.com/gamasenninn/tealus/issues/587)。% 委譲の待ち合い [#545](https://github.com/gamasenninn/tealus/issues/545)。cc-stream が起こし続けない [#512](https://github.com/gamasenninn/tealus/issues/512)、接続コマンドに `CC_STREAM_GIVE_UP` [#484](https://github.com/gamasenninn/tealus/issues/484)
+- 辞書の語に最後に取り込みに出てきた時刻 (`seen_at`、036) — doctor の organon 撤去待ちの誤報を直した [#569](https://github.com/gamasenninn/tealus/issues/569)。organon の場所 (Location) を辞書の射影に [#559](https://github.com/gamasenninn/tealus/issues/559)。会話モードの道具に画像生成と PDF [#580](https://github.com/gamasenninn/tealus/issues/580)
+
+**通知・既読**
+- 通知の宛先の整理 (更新・キャッシュクリア後の古い宛先) [#508](https://github.com/gamasenninn/tealus/issues/508) [#509](https://github.com/gamasenninn/tealus/issues/509) [#528](https://github.com/gamasenninn/tealus/issues/528) [#546](https://github.com/gamasenninn/tealus/issues/546)。通知のタップで部屋へ [#544](https://github.com/gamasenninn/tealus/issues/544)。ログインの期限切れでログアウトするときも通知の登録を外せる
+- 「すべて既読」も後戻りしない [#553](https://github.com/gamasenninn/tealus/issues/553)。お知らせの部屋の既読をメンバー以外にも [#551](https://github.com/gamasenninn/tealus/issues/551)
+
+**Fixed (抜粋)**
+- 他の部屋へ転送された投稿がある部屋を削除できなかった (500) [#596](https://github.com/gamasenninn/tealus/issues/596)。リンクプレビューの URL の切り出し [#510](https://github.com/gamasenninn/tealus/issues/510)。LINE の画像のサムネイル / 0 バイト [#530](https://github.com/gamasenninn/tealus/issues/530) [#531](https://github.com/gamasenninn/tealus/issues/531)、アルバムの分割 [#552](https://github.com/gamasenninn/tealus/issues/552)。通話の待機中の表示が残る [#524](https://github.com/gamasenninn/tealus/issues/524) [#535](https://github.com/gamasenninn/tealus/issues/535)。iPhone の録音・トランシーバーの音量ゲージ [#562](https://github.com/gamasenninn/tealus/issues/562)。ゲストの画面が毎回失敗する呼び出しをしていた [#575](https://github.com/gamasenninn/tealus/issues/575)。会話モードが固まる [#432](https://github.com/gamasenninn/tealus/issues/432)。応答数の暦 [#550](https://github.com/gamasenninn/tealus/issues/550)。cc-queue の改行 [#541](https://github.com/gamasenninn/tealus/issues/541)。添付の索引 (035, 039) [#549](https://github.com/gamasenninn/tealus/issues/549)
+
+### Security
+
+★ 突き方は書きません。詳細は各 issue に。
+- AI の道具が読める部屋を、依頼した人の部屋に絞った [#564](https://github.com/gamasenninn/tealus/issues/564) [#571](https://github.com/gamasenninn/tealus/issues/571)。AI の子プロセスへ渡す環境変数を許可一覧に [#565](https://github.com/gamasenninn/tealus/issues/565) [#570](https://github.com/gamasenninn/tealus/issues/570) [#573](https://github.com/gamasenninn/tealus/issues/573)
+- 権限を取り消した後の口と、ボットの口の大きさの上限 [#529](https://github.com/gamasenninn/tealus/issues/529)。お知らせの切り替えの権限をそろえた [#540](https://github.com/gamasenninn/tealus/issues/540)。ゲストに見える情報 (同じ部屋の人のプロフィール) [#594](https://github.com/gamasenninn/tealus/issues/594)
+- 削除した投稿・部屋の添付を `/media` で返さない (ファイルは残す、040) [#522](https://github.com/gamasenninn/tealus/issues/522) [#597](https://github.com/gamasenninn/tealus/issues/597) [#601](https://github.com/gamasenninn/tealus/issues/601) [#602](https://github.com/gamasenninn/tealus/issues/602)
+- 壊れた ID は 400 [#543](https://github.com/gamasenninn/tealus/issues/543)。外部コマンドの呼び出しの引数化・保存名の拡張子の制限 [#561](https://github.com/gamasenninn/tealus/issues/561)。想定外の失敗で中身を返さない [#603](https://github.com/gamasenninn/tealus/issues/603)。テストが本番の DB に触れない [#572](https://github.com/gamasenninn/tealus/issues/572)
+
 ## [0.10.0] - 2026-10-05
 
 ★ **「書いていない」を「決めてある」に変える** — v0.9.0 から 2 か月・327 コミット。新しい入口が 3 つ (**ルームトリガー** [#382](https://github.com/gamasenninn/tealus/issues/382) / **会話モード** [#389](https://github.com/gamasenninn/tealus/issues/389) / **読み上げのエンジン選択** [#444](https://github.com/gamasenninn/tealus/issues/444)) 入り、同じだけ **入口の締め直し** (部屋の外のものを指す口・ゲスト・agent-server の設定 API) が入った。どちらも「経路ごとに書いてある / 書いていない」でばらついていたものを、1 か所の約束にそろえる作業だった (投稿経路の地図 `docs/07` [#383](https://github.com/gamasenninn/tealus/issues/383))。

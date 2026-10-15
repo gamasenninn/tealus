@@ -109,6 +109,8 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 |------|------|------|
 | `[migration-check] ... テーブルが見つかりません` | DB migration 忘れ | 手順 3（`npm run migrate`）を実行 |
 | `[build-check] client/dist/index.html が見つかりません` | クライアント未ビルド | 手順 4（`npm run build`）を実行 |
+| `[media] removed_media の表がありません` | DB migration 忘れ (v0.11.0 の 040) | 手順 3（`npm run migrate`）を実行。★ そのままだと削除した部屋の添付がまだ開ける |
+| `[model-guard] ... は ChatGPT アカウント (subscription) の codex では使えません` (agent-server) | Codex のモデルが外されたもの | v0.11.0 のノートの 1. を参照 |
 
 > どちらも **稼働は止まりません**（フォールバックで動き続ける）。だからこそ「気づかないうちに機能だけ欠ける」ので、更新直後にログを一度確認してください。
 
@@ -127,6 +129,68 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 > リリースを**出す側**の手順は [リリース チェックリスト](release-checklist.md) を参照してください。
 
 ## バージョン別ノート
+
+### → v0.11.0（見張り / トークを先に出す / 音声編集のキーボード操作 / Codex のモデル）
+
+> **★ 影響範囲**: **全員に作業があります。** DB migration が 7 本 (`034`〜`040`)、client の再ビルドも要ります。
+> ★★ ChatGPT アカウントで Codex を使っている環境 (`LIGHTV2_AUTH=subscription` / `DEEP_AGENT_PROVIDER=codex`) は **1. が最優先**です。
+> 一覧は [CHANGELOG](../CHANGELOG.md) の v0.11.0。
+
+#### 1. ★★★ Codex のモデルと codex-sdk（ChatGPT アカウントで使っている環境）
+
+2026-10-14 19:00 UTC に、OpenAI が **gpt-5.5 を ChatGPT アカウントの Codex から外しました**。そのままだと議事録などの Light v2 と Deep Codex が止まります
+(画面: 「そのモデルは ChatGPT アカウントの codex では使えません…」/ ログ: `The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account`)。
+
+```bash
+cd agent-server
+npm install                       # @openai/codex-sdk ^0.162.1 が入る (★ 古い 0.128 は新しいモデルを断る)
+npx codex exec --skip-git-repo-check -s read-only -m gpt-5.6-sol "OK とだけ返して"   # ★ 1 回試す
+```
+
+通ったら `agent-server/.env` を:
+
+```bash
+AGENT_LIGHT_MODEL=gpt-5.6-sol
+AGENT_DEEP_CODEX_MODEL=gpt-5.6-sol
+```
+
+agent-server を再起動します。
+
+- ★ **モデルだけ替えても直りません** — codex 0.128 は gpt-5.6-sol を「新しい版にしてください」で断ります (本家で実測)
+- ★ OpenAI の案内の `gpt-6.1-sol` も codex 0.162.1 なら通ります (0.154 以前は not supported)。プランや時期で使えるモデルは変わるので、**必ず 1 回試してから**設定してください
+- ★ `AGENT_CODEX_BIN` でグローバルの codex を指している場合、Deep はそちらを使います。グローバルの codex も 0.154 以上に (`npm i -g @openai/codex`)
+- API キーで使っている環境は影響ありません
+
+#### 2. ★★★ migrate は再起動の前に (忘れると 034 でログイン後の操作が全部止まる)
+
+```bash
+cd server && npm run migrate      # 034〜040 の 7 本が流れる (v0.10.0 の DB には台帳があるので、そのまま続きから)
+```
+
+| 番号 | 中身 | 忘れると |
+|---|---|---|
+| 034 | 通知音をアカウントの設定に (`users.notification_sound`) | ★★★ **ログインした後の操作がすべて失敗する** (認証のたびにこの列を読む) |
+| 035 / 039 | 添付の索引 | 遅くなるだけ |
+| 036 | 辞書の語の `seen_at` | ★ organon からの取り込み (辞書の語の登録) が失敗する |
+| 037 | 見張りの鼓動 (`heartbeats`) | `/api/bot/heartbeat` が失敗する |
+| 038 | 転送の参照の縛りを外す | 転送された投稿がある部屋を削除できない (500) |
+| 040 | 削除した部屋の添付 (`removed_media`) | 削除した部屋の添付が開けたまま (`[media] removed_media の表がありません` を 1 回 warn) |
+
+#### 3. ★ client を本番ビルドし直す
+
+画面の変更が多い版です (トークを先に出す #600・音声編集のキーボード操作 #604・送信の受け取り #593 など)。ビルドしないと何も変わりません (エラーは出ません)。
+
+#### 4. ★ 10-11 に入った 2 つの注意 (v0.10.0 から上げる環境は全部当てはまる)
+
+- **AI の子プロセスへ渡す環境変数は許可一覧になった** (#565 #570 #573) — MCP の道具が親の環境変数に頼って鍵を読んでいた場合、**黙って届かなくなる**。手順は [ルームの workspace から資格情報を追い出す（#419）](#-ルームの-workspace-から資格情報を追い出す419) の節の「★ #573」
+- **npx で起動する MCP の道具は版を固定する** (#577) — 同じ節の「★ #577」
+
+#### 5. 任意
+
+- **本番は `NODE_ENV=production` を推奨** (#603)。★ production では記録の既定が info になり、ログイン・REST の `[debug]` 行が消えます。今までどおり残すなら `LOG_LEVEL=debug` も
+- **見張り** (#595、`docs/09`): `server/config/watchdogs.example.json` を写して `watchdogs.json` に。Tealus の部品 (無線の送り込みなど) は `tealus-cli ... --heartbeat <名前>` で鼓動を送れます。Windows 向けのバックアップのスクリプトは `scripts/backup/`
+- 中継先: `AGENT_URL` / `RTC_URL` / `MCP_HTTP_URL` (#556)。LINE のアルバムの束ね待ち: `LINE_IMAGESET_FLUSH_MS` / `LINE_IMAGESET_MAX_WAIT_MS` (#552)
+- Docker: compose は初回起動で migration を流しません (#557)。`up -d --build` で (#558)
 
 ### → v0.10.0（ルームトリガー / 会話モード / 読み上げのエンジン / 入口の締め直し）
 

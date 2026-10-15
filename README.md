@@ -1024,13 +1024,8 @@ npm run build
 
 ## ロードマップ
 
-現場で実害が出たものを最優先で直します。それ以外は下の順で進めています。
-リリース履歴は [CHANGELOG.md](./CHANGELOG.md)、個別の議論は各 Issue にあります。
-
-1. **ローカル LLM 対応** ([#272](https://github.com/gamasenninn/tealus/issues/272)) — 推論先を差し替え可能にし、社内 GPU / Ollama に向けられるようにする
-2. **長尺音声の分割** ([#329](https://github.com/gamasenninn/tealus/issues/329)) — 長い会議音声を分割して文字起こしできるようにする
-
-順番待ち: organic ontology の理論的整理 ([#279](https://github.com/gamasenninn/tealus/issues/279)) / 複数 AI セッションが同じチャンネルを共有するときの配信制御 ([#359](https://github.com/gamasenninn/tealus/issues/359))
+現場で実害が出たものを最優先で直します。決まった順番の大きな項目は、いまは置いていません (休眠にしたものは Issue の「休眠」ラベル)。
+リリース履歴は [CHANGELOG.md](./CHANGELOG.md)、進行中の議論は [Issues](https://github.com/gamasenninn/tealus/issues) にあります。
 
 ## ライセンス
 

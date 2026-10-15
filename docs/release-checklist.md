@@ -37,7 +37,7 @@ cd client       && npx tsc --noEmit && npx vitest run
 | MCP ツール数 | 19 | tealus-mcp（別リポ）の `src/tools.js`。**版で見える数が違う**ので「v0.15.0 以降で 19」のように版を添える (v0.14.8 は 18) |
 | 絵文字リアクション | 7 | `client/src/components/chat/ContextMenu.tsx` の `REACTION_EMOJIS` |
 | 読み上げのエンジン / 声 | 3 エンジン (Aivis 10 / OpenAI 13 / Gemini 30) | `agent-server/src/lib/ttsRoom.mts` の `TTS_ENGINES` / `TTS_VOICES`。★ v0.10.0 で画面の `TTS_MODELS` (Aivis 10) からここへ移った |
-| migration の最新番号 | 033 | `server/src/db/migrations/` |
+| migration の最新番号 | 040 (v0.11.0) | `server/src/db/migrations/` |
 | cc-bridge の接続寿命 | 55 分 (3300 秒) | `agent-server/src/routes/ccQueue.mts` の `maxAgeMs()` 既定。★ **`SKILL.md` が取得失敗時の退避として 3300 をハードコードしている**ので、既定を変えたら消費側も直す |
 
 ```bash
