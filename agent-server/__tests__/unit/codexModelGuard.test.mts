@@ -71,12 +71,14 @@ describe('★★ Light v2 も同じ経路を通る', () => {
 
 describe('★★★ 既知の使えないモデル (実測ベース)', () => {
   // ★ 2026-10-15: gpt-5.5 は 10-14 19:00 UTC に ChatGPT アカウントの Codex から外された (朝礼の議事録が model_not_supported で失敗)
-  test.each(['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5-mini', 'gpt-5.6', 'gpt-5.5', 'gpt-6.1-sol'])('%s は使えないものとして載っている', (m) => {
+  test.each(['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5-mini', 'gpt-5.6', 'gpt-5.5'])('%s は使えないものとして載っている', (m) => {
     expect(KNOWN_UNSUPPORTED_CODEX_MODELS).toContain(m);
   });
 
   test('★ 使えると実測したものは載せない', () => {
     expect(KNOWN_UNSUPPORTED_CODEX_MODELS).not.toContain('gpt-5.6-sol');
+    // ★ gpt-6.1-sol は codex 0.162.1 で通る (0.154 以前は不可)。版しだいなので「使えない」には入れない
+    expect(KNOWN_UNSUPPORTED_CODEX_MODELS).not.toContain('gpt-6.1-sol');
     expect(KNOWN_UNSUPPORTED_CODEX_MODELS).not.toContain('gpt-5.6-luna');
   });
 
