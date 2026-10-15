@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, render } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useExclusiveAudio } from '../src/hooks/useExclusiveAudio';
 import { VOICE_STARTED, VOICE_STOP_CONTINUOUS, notifyAudioStarted, requestAudioSeek, requestAudioToggle } from '../src/utils/audioExclusive';
@@ -196,5 +196,20 @@ describe('useExclusiveAudio — 外れるときに止める', () => {
     result.current.ref.current = el;
     unmount();
     expect(el.pause).toHaveBeenCalled();
+  });
+
+  // ★ 2026-10-16 改善ループ 4 回目: 上のテストは ref を手で入れるので通るが、本物の <audio ref> では
+  //   React が外すときに ref を先に null にし、その後で cleanup が走る → pause が呼ばれていなかった
+  it('★★ 本物の <audio ref> に挿していても、外すときに pause する', () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    function Player() {
+      const { ref } = useExclusiveAudio('real');
+      return <audio ref={ref} />;
+    }
+    const { unmount } = render(<Player />);
+    pause.mockClear();
+    unmount();
+    expect(pause).toHaveBeenCalledTimes(1);
+    pause.mockRestore();
   });
 });

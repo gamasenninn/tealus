@@ -234,8 +234,9 @@ function VoiceEditModal({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement;
     // ★ Tab は編集画面の中を回す (最後の次は最初へ)。抜けると裏のトーク画面を回ってしまう
+    //   ★ 通話履歴の編集画面の再生バーは <audio controls> (2026-10-16 まで輪に入っていなかった)
     if (e.key === 'Tab' && boxRef.current) {
-      const items = [...boxRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), textarea, input:not([disabled]), [tabindex="0"]')];
+      const items = [...boxRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), textarea, input:not([disabled]), audio[controls], [tabindex="0"]')];
       if (items.length > 0) {
         const first = items[0];
         const last = items[items.length - 1];

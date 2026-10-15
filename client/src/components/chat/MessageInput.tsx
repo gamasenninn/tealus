@@ -25,6 +25,10 @@ import './MessageInput.css';
 import { unlockAudio } from '../../services/audioContext';
 import { replyBarText } from '../../utils/replyQuote';
 
+/** 入力欄が伸びる上限 (px)。★ MessageInput.css の `.message-input-text { max-height }` と同じ値にすること
+ *  (2026-10-16 まで JS は 150 で、CSS の 120 が勝っていた = 150 は効いていなかった) */
+const MAX_INPUT_HEIGHT = 120;
+
 /** useTransceiver の返す制御 object のうち MessageInput が使う部分 */
 interface TransceiverControls {
   isConnected: boolean;
@@ -77,7 +81,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
       ta.setSelectionRange(s, end ?? s);
       // 差し込んだ本文が複数行のことがあるので高さも合わせる (handleInput は user 入力でしか走らない)
       ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight, 150) + 'px';
+      ta.style.height = Math.min(ta.scrollHeight, MAX_INPUT_HEIGHT) + 'px';
     }, 0);
   }, []);
 
@@ -312,7 +316,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const textarea = e.target as HTMLTextAreaElement;
     textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+    textarea.style.height = Math.min(textarea.scrollHeight, MAX_INPUT_HEIGHT) + 'px';
   };
 
   // ＋ボタン / 貼り付け 共用のアップロード処理

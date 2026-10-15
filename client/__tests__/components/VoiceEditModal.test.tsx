@@ -265,6 +265,26 @@ describe('VoiceEditModal — PC では入力欄にフォーカス (#604)', () =>
     fireEvent.keyDown(focusables[0], { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(last);
   });
+
+  // ★ 2026-10-16 改善ループ 4 回目: 通話履歴の編集画面は再生バーが <audio controls> で、輪に入っていなかった
+  //   (最後の次で飛ばされ、再生バーから Shift+Tab すると裏の画面へ抜けた)
+  it('★ 差し込まれた <audio controls> も輪に入る (いちばん上なので、最後の次はそこへ)', () => {
+    setDesktop(true);
+    const { container } = render(
+      // ★ tabIndex=-1 は jsdom で focus() を効かせるためだけ (jsdom は audio[controls] を focusable と見ない)。
+      //   [tabindex="0"] には当たらないので、見ているのは selector の audio[controls]
+      <VoiceEditModal messageId="b" onClose={vi.fn()} renderPlayer={() => <audio controls tabIndex={-1} data-testid="player" />} />,
+    );
+    const box = container.querySelector('.modal-box')!;
+    const player = screen.getByTestId('player');
+    const buttons = [...box.querySelectorAll<HTMLElement>('button:not([disabled])')];
+    const last = buttons[buttons.length - 1];
+    last.focus();
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(document.activeElement).toBe(player);
+    fireEvent.keyDown(player, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
 });
 
 describe('VoiceEditModal — 10 秒送りのキー (トランシーバーの経路、2026-10-15)', () => {

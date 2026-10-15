@@ -57,7 +57,11 @@ export function useExclusiveAudio(id: string): ExclusiveAudio {
 
   // ★ 外れるときに止める (2026-10-15)。ブラウザは画面から外した <audio> を止めないので、
   //   編集画面で前 / 次に移ると前の音声が鳴り続けた。★ 止めた pause は onPause に来ない (要素が外れた後) ので通知はしない
-  useEffect(() => () => { ref.current?.pause(); }, []);
+  // ★★ 2026-10-16: React は外すときに ref を先に null にしてから cleanup を走らせる。ref.current だけを見ると
+  //   本物の <audio ref> では何も止まらなかった → 描画のたびに要素を控えておき、それを止める
+  const lastEl = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => { if (ref.current) lastEl.current = ref.current; });
+  useEffect(() => () => { (ref.current ?? lastEl.current)?.pause(); }, []);
 
   // ★ 再生 / 一時停止の要求 (2026-10-15、通話履歴の編集画面の Ctrl+Space)。
   //   play() を呼ぶと onPlay が走るので、同時再生抑制の規約にもそのまま乗る
