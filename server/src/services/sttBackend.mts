@@ -214,6 +214,13 @@ export async function transcribeAudio({
     log.warn(`[stt] openai のやり直しが日本語に見えないため gemini の答えを残す: openai="${text.slice(0, 20)}" gemini chars=${geminiTruncatedText.length}`);
     return geminiTruncatedText;
   }
+  // ★ openai は日本語を指定しているのに、無音のところでハングル等を作ることがある
+  //   (10-15 トランシーバー履歴「나이버성 오케이.」。gemini が空 → やり直し。空のやり直しは 34/34 が無音だった)。
+  //   外国の文字が入っていたら作られた言葉とみなして空 (無音) にする。英字 (OK など) は日本語の会話にも出るので残す
+  if (looksLikeForeignScript(text)) {
+    log.warn(`[stt] openai の答えに外国の文字があるため空にする: "${text.slice(0, 20)}"`);
+    return '';
+  }
   return text;
 }
 

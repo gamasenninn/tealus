@@ -87,6 +87,38 @@ describe('transcribeAudio - openai backend (default)', () => {
   });
 });
 
+/**
+ * 改善ループ 2 回目 (10-15) の 3.: openai は日本語を指定しているのに、無音のところでハングル等を作ることがある
+ * (10-15 10:17 トランシーバー履歴「나이버성 오케이.」、30 日で 2 件。どちらも gemini が空 → openai のやり直し)。
+ * ★ 外国の文字 (looksLikeForeignScript) が入っていたら作られた言葉とみなし、空 (無音) にする。
+ *   英字 (OK など) は日本語の会話にも出るので残す
+ */
+describe('transcribeAudio - openai が外国の文字を返したら空にする', () => {
+  test.each([
+    ['ハングル', '나이버성 오케이.'],
+    ['キリル文字', 'Туря левост.'],
+  ])('%s → 空', async (_label, openaiText) => {
+    const log = { warn: jest.fn(), error: jest.fn(), info: jest.fn() };
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient: fakeOpenAI(openaiText), log,
+    });
+    expect(text).toBe('');
+    // ★ 件数を後から数えられるように 1 行残す
+    expect(log.warn.mock.calls.some((c) => String(c[0]).includes('外国の文字'))).toBe(true);
+  });
+
+  test.each([
+    ['日本語', '社長、取れますか。'],
+    ['英字', 'OK'],
+    ['英字まじり', 'NTS の件、了解です'],
+  ])('%s → そのまま', async (_label, openaiText) => {
+    const text = await mod.transcribeAudio({
+      inputPath: tmpAudio, ext: 'wav', model: 'm', openaiClient: fakeOpenAI(openaiText),
+    });
+    expect(text).toBe(openaiText);
+  });
+});
+
 describe('transcribeAudio - local backend', () => {
   test('STT_BACKEND=local なら worker に POST し、ファイル path と glossary を送る', async () => {
     process.env.STT_BACKEND = 'local';
