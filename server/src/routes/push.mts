@@ -2,9 +2,49 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import express from 'express';
 import { pool } from '../db/pool.mts';
-import { authenticate } from '../middleware/auth.mts';
+import jwt from 'jsonwebtoken';
+import { authenticate, JWT_SECRET } from '../middleware/auth.mts';
 
 export const router = express.Router();
+
+/**
+ * DELETE /api/push/subscribe
+ * Remove a push subscription
+ *
+ * ★ 改善ループ 2 回目 (10-15) の 4.: この口だけは、署名が正しければ**期限切れのトークンでも受け付ける**。
+ *   ログインの期限が切れてログアウトするとき、画面はここを呼んでから宛先を外すが、期限切れで 401 になり
+ *   必ず失敗していた (登録が残り、次に送って 410 が返るまで消えなかった)。
+ *   署名で「誰か」は確かめられ、できるのは自分の登録を宛先つきで外すことだけなので、期限は問わない。
+ *   ★ 他の口 (登録など) は今までどおり authenticate で期限切れを断る。だからこの定義は router.use(authenticate) より前に置く
+ */
+router.delete('/subscribe', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  let userId: string;
+  try {
+    if (!authHeader?.startsWith('Bearer ')) throw new Error('no token');
+    const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET, { ignoreExpiration: true }) as { id?: unknown };
+    if (typeof decoded.id !== 'string') throw new Error('no id');
+    userId = decoded.id;
+  } catch {
+    return res.status(401).json({ error: 'トークンが無効です' });
+  }
+  const { endpoint } = req.body ?? {};
+
+  if (!endpoint) {
+    return res.status(400).json({ error: 'endpointは必須です' });
+  }
+
+  try {
+    await pool.query(
+      'DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
+      [userId, endpoint]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Push unsubscribe error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
 
 router.use(authenticate);
 
@@ -59,30 +99,6 @@ router.post('/subscribe', async (req, res) => {
     res.status(isNew ? 201 : 200).json({ subscription: result.rows[0] });
   } catch (err) {
     logger.error('Push subscribe error:', err);
-    res.status(500).json({ error: E.SERVER_ERROR });
-  }
-});
-
-/**
- * DELETE /api/push/subscribe
- * Remove a push subscription
- */
-router.delete('/subscribe', async (req, res) => {
-  const userId = req.user!.id;
-  const { endpoint } = req.body;
-
-  if (!endpoint) {
-    return res.status(400).json({ error: 'endpointは必須です' });
-  }
-
-  try {
-    await pool.query(
-      'DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
-      [userId, endpoint]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    logger.error('Push unsubscribe error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });
