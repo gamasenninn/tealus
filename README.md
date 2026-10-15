@@ -495,7 +495,7 @@ tealus/
 ├── rtc-server/                # mediasoup SFU（音声/ビデオ通話、トランシーバー、TTS 配信）
 │   ├── server.js              # signaling + PlainTransport
 │   ├── src/                   # ルーム・transport・consumer 管理
-│   └── tts-speak.js           # CLI: テキスト → Aivis Cloud → mediasoup 配信
+│   └── tts-speak.mts          # CLI: テキスト → Aivis Cloud → mediasoup 配信
 │
 ├── scripts/                   # CLI ツール群
 │   ├── tealus-cli.ts          # メッセージ送信・音声ファイルアップロード（--watch 対応）

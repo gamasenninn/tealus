@@ -8,7 +8,7 @@ const path = require("path");
 
 const ROOM_ID = "5a33a62c-8bf0-41cf-a748-c76a38ef1c7f";
 const PROJECT_DIR = process.env.CLAUDE_PROJECT_DIR || path.join(__dirname, "../..");
-const TTS_SPEAK = path.join(PROJECT_DIR, "rtc-server", "tts-speak.js");
+const TTS_SPEAK = path.join(PROJECT_DIR, "rtc-server", "tts-speak.mts");
 
 // stdin から通知メッセージを抽出
 let input = "";

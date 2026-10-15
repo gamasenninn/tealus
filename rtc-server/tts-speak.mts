@@ -3,13 +3,13 @@
  * TTS 読み上げ → トランシーバー送信 統合コマンド
  *
  * 使い方:
- *   node tts-speak.js <roomId> "読み上げるテキスト"
- *   node tts-speak.js <roomId> "テキスト" [modelUuid]
- *   echo "テキスト" | node tts-speak.js <roomId>
+ *   node tts-speak.mts <roomId> "読み上げるテキスト"
+ *   node tts-speak.mts <roomId> "テキスト" [modelUuid]
+ *   echo "テキスト" | node tts-speak.mts <roomId>
  *
  * 例:
- *   node tts-speak.js 5a33a62c-... "こんにちは、テストです"
- *   node tts-speak.js 5a33a62c-... "別の声で" 71e72188-2726-4739-9aa9-39567396fb2a
+ *   node tts-speak.mts 5a33a62c-... "こんにちは、テストです"
+ *   node tts-speak.mts 5a33a62c-... "別の声で" 71e72188-2726-4739-9aa9-39567396fb2a
  *
  * 環境変数(.env):
  *   AIVIS_API_KEY     — Aivis Cloud API キー（必須）
@@ -65,8 +65,8 @@ function readStdin(): Promise<string | null> {
 // --- Main (CLI only) ---
 async function main(): Promise<void> {
   if (!ROOM_ID) {
-    console.error("Usage: node tts-speak.js <roomId> \"テキスト\" [modelUuid]");
-    console.error("       echo \"テキスト\" | node tts-speak.js <roomId>");
+    console.error("Usage: node tts-speak.mts <roomId> \"テキスト\" [modelUuid]");
+    console.error("       echo \"テキスト\" | node tts-speak.mts <roomId>");
     process.exit(1);
   }
   if (!AIVIS_API_KEY) {
