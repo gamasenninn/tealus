@@ -12,6 +12,7 @@
 
 ### Fixed
 - **画像生成のモデル名 `OPENAI_IMAGE_MODEL` が tealus-mcp に届いていなかった** — #573 で子プロセスへ渡す環境変数を許可制にしたとき一覧から漏れ、agent-server の `.env` に書いても既定 (`gpt-image-1`) のままだった。`agent-server/src/lib/childEnv.mts` の `TEALUS_MCP_TOOL_KEYS` に足した
+- **node 直起動の Docker で Deep (codex) が codex を見つけなかった** — `AGENT_CODEX_BIN` が無いと PATH 任せで、`npm start` を通らない起動では `node_modules/.bin` が PATH に入らない。指定が無ければ agent-server 自身の `node_modules/.bin/codex` を先に使う (`npm start` と同じ順)。★ これで Deep も Light v2 と同じ版の codex になる (本家は Deep だけグローバルの 0.154 だった)。★ alpine (musl) で codex が動くかは未確認
 
 ### Changed
 - **agent-server が使う tealus-mcp を v0.14.7 → v0.16.0 に** — Light v2・Deep・ルームごとの MCP から `send_form` (v0.14.8) と `edit_message` (v0.15.0) が見えていなかった (docs 班の確認)。版は `agent-server/src/lib/mcpPackages.mts` の `TEALUS_MCP_PACKAGE` 1 か所に。★ 上げたあと最初の起動は npx のダウンロードで遅いので、先に `npx -y github:gamasenninn/tealus-mcp#v0.16.0` を 1 回流しておく

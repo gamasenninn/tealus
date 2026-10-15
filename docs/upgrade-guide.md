@@ -166,7 +166,7 @@ agent-server を再起動します。
 
 - ★ **モデルだけ替えても直りません** — codex 0.128 は gpt-5.6-sol を「新しい版にしてください」で断ります (本家で実測)
 - ★ OpenAI の案内の `gpt-6.1-sol` も codex 0.162.1 なら通ります (0.154 以前は not supported)。プランや時期で使えるモデルは変わるので、**必ず 1 回試してから**設定してください
-- ★ `AGENT_CODEX_BIN` でグローバルの codex を指している場合、Deep はそちらを使います。グローバルの codex も上げてください (`npm i -g @openai/codex`)。gpt-5.6-sol なら 0.154 以上、gpt-6.1-sol なら 0.162 以上 (本家で実測)
+- ★ `AGENT_CODEX_BIN` を指定しなければ、Deep も agent-server の node_modules の codex (Light と同じ版) を使います (v0.11.1 の次の版から。それまでは node 直起動の Docker で Deep が codex を見つけませんでした)。`AGENT_CODEX_BIN` でグローバルの codex を指している場合、Deep はそちらを使います。グローバルの codex も上げてください (`npm i -g @openai/codex`)。gpt-5.6-sol なら 0.154 以上、gpt-6.1-sol なら 0.162 以上 (本家で実測)
 - API キーで使っている環境は影響ありません
 
 #### 2. ★★★ migrate は再起動の前に (忘れると 034 でログインもできない)
