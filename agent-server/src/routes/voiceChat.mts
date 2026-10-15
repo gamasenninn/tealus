@@ -61,6 +61,8 @@ const DEFAULT_DENY = new Set([
   'write_file',
   'edit_file',
   'move_file',
+  // ★ 2026-10-16 tealus-mcp v0.16.0 で黙って増えた。'member' の部屋では声の聞き違いで他人の本文を書き換えられる
+  'edit_message',
 ]);
 
 /**

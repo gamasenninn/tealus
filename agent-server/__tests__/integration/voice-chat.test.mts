@@ -402,7 +402,7 @@ describe('POST /voice-chat/promote — 昇格 (R3)', () => {
  * ```
  * PROTECTED (send_message)  → 許可 (denied に書かれていても無視。★ /promote が使うため)
  * denied に在る             → 拒否
- * DEFAULT_DENY の 5 つ       → restored (voice_conversation_tools) に在れば許可、無ければ拒否
+ * DEFAULT_DENY の 6 つ       → restored (voice_conversation_tools) に在れば許可、無ければ拒否
  * それ以外                   → 許可
  * ```
  *
@@ -437,6 +437,8 @@ describe('POST /voice-chat/session — 既定で全許可 + 外す (#418)', () =
     { name: 'tavily_search', description: 'ニュース検索', inputSchema: { type: 'object', properties: {} } },
     { name: 'read_file', description: 'ファイルを読む', inputSchema: { type: 'object', properties: {} } },
     { name: 'write_file', description: '★ 消す系', inputSchema: { type: 'object', properties: {} } },
+    { name: 'edit_message', description: '★ 人の投稿を書き換える', inputSchema: { type: 'object', properties: {} } },
+    { name: 'send_form', description: 'フォームを送る', inputSchema: { type: 'object', properties: {} } },
     { name: 'send_message', description: '送信', inputSchema: { type: 'object', properties: {} } },
   ];
 
@@ -470,6 +472,14 @@ describe('POST /voice-chat/session — 既定で全許可 + 外す (#418)', () =
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
     expect(names()).not.toContain('delete_room');
     expect(names()).not.toContain('write_file');
+  });
+
+  test('★★ 人の投稿を書き換える edit_message も既定で出ない (2026-10-16、tealus-mcp v0.16.0 で黙って増えた)', async () => {
+    withRoom();
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(names()).not.toContain('edit_message');
+    expect(names()).toContain('send_form');   // ★ 投稿を足すだけの道具は許可のまま
   });
 
   test('★★ 消す系はルームごとに戻せる', async () => {
@@ -842,7 +852,7 @@ describe('GET /voice-chat/tools — 道具の一覧 (#418)', () => {
     );
     // ★ 既定で外れているものも一覧には出す (画面で「戻す」を選べるように)
     expect(res.body.default_denied).toEqual(
-      expect.arrayContaining(['delete_room', 'create_room', 'write_file', 'edit_file', 'move_file']),
+      expect.arrayContaining(['delete_room', 'create_room', 'write_file', 'edit_file', 'move_file', 'edit_message']),
     );
     // ★★ client にリストを二重持ちさせない (ここが唯一の出どころ)
     expect(res.body.protected).toEqual(['send_message']);
