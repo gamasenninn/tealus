@@ -355,7 +355,11 @@ if (import.meta.main) {
     logger.info(`Tealus server running on port ${PORT}`);
     // #334: 未適用 migration の loud warn (採用者保護)。辞書テーブル不在を起動時に可視化
     // (silent degrade 防止)。稼働は止めない — warn のみ。
-    void checkMigrations({ query: (sql) => pool.query(sql), warn: (m) => logger.warn(m) })
+    // ★ v0.11.0 の監査: 台帳とファイルも突き合わせる (034〜040 の流し忘れが起動ログに出なかった)
+    void checkMigrations({
+      query: (sql) => pool.query(sql), warn: (m) => logger.warn(m),
+      listFiles: () => fs.readdirSync(path.join(import.meta.dirname, 'db/migrations')).filter((f) => f.endsWith('.sql')).sort(),
+    })
       .catch((err) => logger.warn(`[migration-check] 確認をスキップ: ${err instanceof Error ? err.message : String(err)}`));
     // rtc-server reachability の動的検出を開始
     import('./services/capabilityWatcher.mts').then(cw => { capabilityWatcher = cw; cw.start(io); });

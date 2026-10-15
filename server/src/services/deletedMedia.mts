@@ -51,6 +51,13 @@ export async function isMediaHidden(relPath: string, db: Queryable = pool): Prom
  * #602 部屋を消す前に、その部屋の投稿の添付を removed_media へ記録する。部屋の削除と同じ処理 (トランザクション) の中で呼ぶ
  */
 export async function rememberRoomMedia(roomId: string, db: Queryable = pool): Promise<void> {
+  // ★ v0.11.0 の監査: 040 を流す前に再起動すると、ここの INSERT が失敗して部屋の削除ごと ROLLBACK (どの部屋も消せない)。
+  //   トランザクションの中で失敗すると後が続かないので、投げる前に表の有無を確かめ、無ければ記録を飛ばして削除は通す
+  const { rows: [t] } = await db.query<{ t: string | null }>(`SELECT to_regclass('public.removed_media')::text AS t`);
+  if (!t?.t) {
+    logger.warn(`[media] removed_media の表がありません。部屋 ${roomId} の添付を記録できないまま削除します (\`npm run migrate\` を流してください)`);
+    return;
+  }
   await db.query(
     `INSERT INTO removed_media (file_path)
      SELECT p FROM (

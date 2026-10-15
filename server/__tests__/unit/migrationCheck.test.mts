@@ -55,3 +55,54 @@ describe('checkMigrations', () => {
     expect(sql.toLowerCase()).toContain('dictionary_terms');
   });
 });
+
+/**
+ * v0.11.0 の監査 (2026-10-15): 起動時の確認は辞書の表 (023) しか見ていなかったので、034〜040 を流し忘れても
+ * 起動ログは静かだった (034 を忘れるとログインもできないのに)。
+ * ★ 台帳 (schema_migrations) とファイルを突き合わせ、未適用があれば名前つきで warn する
+ */
+describe('checkMigrations — 台帳とファイルの突き合わせ', () => {
+  const ledgerQuery = (applied: string[]) => async (sql: string) => {
+    if (sql.includes('schema_migrations')) return { rows: applied.map((filename) => ({ filename })) };
+    return { rows: [{ ok: 1 }] };
+  };
+
+  test('★★ 未適用があれば件数と名前を warn し ok=false', async () => {
+    const warns: string[] = [];
+    const ok = await checkMigrations({
+      query: ledgerQuery(['033_line_message_links.sql']),
+      warn: (m) => warns.push(m),
+      listFiles: () => ['033_line_message_links.sql', '034_user_notification_sound.sql', '040_removed_media.sql'],
+    });
+    expect(ok).toBe(false);
+    const all = warns.join('\n');
+    expect(all).toContain('未適用 2 件');
+    expect(all).toContain('034_user_notification_sound.sql');
+    expect(all).toContain('npm run migrate');
+  });
+
+  test('全部適用済みなら warn なし', async () => {
+    const warns: string[] = [];
+    const ok = await checkMigrations({
+      query: ledgerQuery(['033_a.sql', '034_b.sql']),
+      warn: (m) => warns.push(m),
+      listFiles: () => ['033_a.sql', '034_b.sql'],
+    });
+    expect(ok).toBe(true);
+    expect(warns).toHaveLength(0);
+  });
+
+  test('台帳が無い DB (v0.9.0 以前) では突き合わせない (runner が baseline を案内する)', async () => {
+    const warns: string[] = [];
+    const ok = await checkMigrations({
+      query: async (sql: string) => {
+        if (sql.includes('schema_migrations')) { throw undefinedTableError(); }
+        return { rows: [{ ok: 1 }] };
+      },
+      warn: (m) => warns.push(m),
+      listFiles: () => ['033_a.sql', '034_b.sql'],
+    });
+    expect(ok).toBe(true);
+    expect(warns).toHaveLength(0);
+  });
+});

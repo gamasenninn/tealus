@@ -10,7 +10,12 @@
  * 存在を確認し、無ければ「次に打つコマンド」を loud warn して setup 漏れを可視化する。
  *
  * DB 非依存にするため query / warn は注入する (テストは pool に触れない)。
+ *
+ * ★ v0.11.0 の監査 (2026-10-15): 中核テーブルだけを見ていたので、それより後の migration (034〜040) を
+ *   流し忘れても起動ログは静かだった (034 を忘れるとログインもできないのに)。
+ *   listFiles を渡されたら、台帳 (schema_migrations) とファイルを突き合わせて未適用を名前つきで warn する
  */
+import { planMigrations } from '../db/migrationPlan.mts';
 
 /** 存在を確認する中核テーブル (#327 辞書、023 で作成)。023 が無ければ 024/025 も無い。 */
 const CORE_TABLE = 'dictionary_terms';
@@ -20,16 +25,18 @@ export interface MigrationCheckDeps {
   query: (sql: string) => Promise<unknown>;
   /** warn 出力 (本番は logger.warn)。 */
   warn: (message: string) => void;
+  /** migration ファイル名の一覧 (本番は migrations フォルダを読む)。渡されたら台帳と突き合わせる */
+  listFiles?: () => string[];
 }
 
 /**
  * 中核テーブルの存在を確認する。無ければ warn を出して false を返す。
  * @returns テーブルが引けたら true (適用済み)、不在 / DB 不達なら false。
  */
-export async function checkMigrations({ query, warn }: MigrationCheckDeps): Promise<boolean> {
+export async function checkMigrations({ query, warn, listFiles }: MigrationCheckDeps): Promise<boolean> {
   try {
     await query(`SELECT 1 FROM ${CORE_TABLE} LIMIT 1`);
-    return true;
+    return listFiles ? await checkLedger(query, warn, listFiles) : true;
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === '42P01') {
@@ -46,4 +53,24 @@ export async function checkMigrations({ query, warn }: MigrationCheckDeps): Prom
     }
     return false;
   }
+}
+
+/** 台帳とファイルを突き合わせ、未適用があれば warn して false。台帳が無い DB (v0.9.0 以前) は runner に任せて true */
+async function checkLedger(
+  query: MigrationCheckDeps['query'],
+  warn: MigrationCheckDeps['warn'],
+  listFiles: () => string[],
+): Promise<boolean> {
+  let rows: { filename: string }[];
+  try {
+    ({ rows } = await query('SELECT filename FROM schema_migrations') as { rows: { filename: string }[] });
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === '42P01') return true;   // 台帳なし: npm run migrate が baseline を案内する
+    throw err;
+  }
+  const pending = planMigrations(listFiles(), new Set(rows.map((r) => r.filename)));
+  if (pending.length === 0) return true;
+  warn(`[migration-check] ★ 未適用 ${pending.length} 件: ${pending.join(', ')} — cd server && npm run migrate を実行してください`);
+  warn('[migration-check]   ★ 流すまで、新しい列・表を読む機能が失敗します (例: v0.11.0 の 034 が無いとログインできない)');
+  return false;
 }
