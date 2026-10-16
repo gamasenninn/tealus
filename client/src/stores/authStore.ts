@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import type { AuthResponse } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import { registerPushNotification, unregisterPushNotification } from '../services/pushNotification';
+import { registerPushNotification, startPushResumeRefresh, unregisterPushNotification } from '../services/pushNotification';
 import { clearRoomViewCache } from './roomViewCache';
 
 /** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
@@ -55,6 +55,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
       connectSocket(token);
       set({ user: data.user, token, isLoading: false });
       registerPushNotification();
+      startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
       void moveLegacySoundOff(data.user, set);
     } catch {
       localStorage.removeItem('token');
@@ -71,6 +72,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     connectSocket(data.token);
     set({ user: data.user, token: data.token });
     registerPushNotification();
+    startPushResumeRefresh();
     void moveLegacySoundOff(data.user, set);
     return data;
   },

@@ -7,21 +7,26 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const getPushState = vi.fn();
 const registerPushNotification = vi.fn();
+const refreshPushSubscription = vi.fn();
 vi.mock('../../src/services/pushNotification', () => ({
   getPushState: () => getPushState(),
   registerPushNotification: () => registerPushNotification(),
+  refreshPushSubscription: (...a: unknown[]) => refreshPushSubscription(...a),
 }));
 
 import PushSubscribeButton from '../../src/components/profile/PushSubscribeButton';
 
 describe('PushSubscribeButton (#546)', () => {
-  beforeEach(() => { getPushState.mockReset(); registerPushNotification.mockReset(); });
+  beforeEach(() => { getPushState.mockReset(); registerPushNotification.mockReset(); refreshPushSubscription.mockReset(); });
 
-  it('宛先がある端末では「受け取れます」とだけ出し、ボタンは出さない', async () => {
+  it('★ 宛先がある端末でも「登録し直す」を出す (10-16: 端末に宛先があっても本体側で外れていることがある)', async () => {
     getPushState.mockResolvedValue('subscribed');
+    refreshPushSubscription.mockResolvedValue(true);
     render(<PushSubscribeButton />);
-    expect(await screen.findByText(/この端末は通知を受け取れます/)).toBeTruthy();
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(await screen.findByText(/この端末には通知の宛先があります/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '登録し直す' }));
+    expect(refreshPushSubscription).toHaveBeenCalledWith(expect.any(Number), { force: true });
+    expect(await screen.findByText(/送り直しました/)).toBeTruthy();
   });
 
   it('★ 宛先が無い端末ではボタンを出し、タップで登録する', async () => {
@@ -30,7 +35,7 @@ describe('PushSubscribeButton (#546)', () => {
     render(<PushSubscribeButton />);
     fireEvent.click(await screen.findByRole('button', { name: 'この端末で通知を受け取る' }));
     expect(registerPushNotification).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/この端末は通知を受け取れます/)).toBeTruthy();
+    expect(await screen.findByText(/この端末には通知の宛先があります/)).toBeTruthy();
   });
 
   it('許可されていなければ、端末の設定で許可するよう案内する', async () => {

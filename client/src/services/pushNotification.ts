@@ -79,6 +79,68 @@ export async function getPushState(): Promise<PushState> {
   }
 }
 
+/** 宛先を本体へ送る (登録と送り直しで共通)。本体は同じ宛先なら「最後に送り直した時刻」を進め、外されていれば戻す */
+async function sendSubscription(subscription: PushSubscription): Promise<void> {
+  const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!)));
+  const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!)));
+  // 端末名を付ける (2026-09-29)。以前は送っておらず、登録がどの端末のものか見分けられなかった
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches
+    || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  await api.subscribePush({
+    endpoint: subscription.endpoint,
+    p256dh_key: p256dh,
+    auth_key: auth,
+    device_name: deviceLabel(navigator.userAgent, standalone),
+  });
+}
+
+export const PUSH_REFRESH_KEY = 'tealus:push:refreshedAt';
+const PUSH_REFRESH_INTERVAL_MS = 6 * 3_600_000;
+
+/**
+ * 画面が表に出たときに宛先を送り直す (2026-10-16、改善ループ 7 回目の 3)。
+ *
+ * ★ 送り直しはログインと最初の読み込みのときだけで、iPhone のアプリのように裏に残ったまま再開すると送らなかった
+ *   (10-10 に読んでいる人の宛先が 09-27 のまま)。本体は 30 日送り直されない宛先を外すので、使っている端末は送り直す。
+ * ★★ 許可を求めない・新しい宛先を作らない。許可済みで宛先がすでにあるときだけ (画面に戻るたびに確認が出ないように)。
+ * ★ 6 時間に 1 回まで。送れなかったら時刻を進めない。端末の保存領域が使えなくても送る (間引けないだけ)。
+ * @returns 送ったか
+ */
+export async function refreshPushSubscription(now = Date.now(), opts: { force?: boolean } = {}): Promise<boolean> {
+  if (isEmbeddedInSameApp()) return false;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker || !('PushManager' in window)) return false;
+  if (!opts.force) {
+    // ★ 記録が無い (初めて・保存領域が使えない) ときは「まだ送っていない」= 送る
+    let last: number | null = null;
+    try {
+      const v = localStorage.getItem(PUSH_REFRESH_KEY);
+      if (v !== null && Number.isFinite(Number(v))) last = Number(v);
+    } catch { /* 間引けないだけ */ }
+    if (last !== null && now - last < PUSH_REFRESH_INTERVAL_MS) return false;
+  }
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager?.getSubscription();
+    if (!subscription) return false;
+    await sendSubscription(subscription);
+    try { localStorage.setItem(PUSH_REFRESH_KEY, String(now)); } catch { /* 間引けないだけ */ }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let resumeListening = false;
+/** 画面が表に出るたびに refreshPushSubscription を呼ぶ (ログイン後に 1 回だけ張る) */
+export function startPushResumeRefresh(): void {
+  if (resumeListening || typeof document === 'undefined') return;
+  resumeListening = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void refreshPushSubscription();
+  });
+}
+
 export async function registerPushNotification(): Promise<PushRegisterResult> {
   // ★ #509 マルチトークのパネルの中では登録しない。購読は端末に 1 本でよく (親が持つ)、
   //   パネルごとに同時に subscribe() すると送り先が何本もでき、生き残る 1 本以外は送ったときに 410 で弾かれていた
@@ -109,18 +171,7 @@ export async function registerPushNotification(): Promise<PushRegisterResult> {
       });
     }
 
-    const p256dh = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!)));
-    const auth = btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!)));
-
-    // 端末名を付ける (2026-09-29)。以前は送っておらず、登録がどの端末のものか見分けられなかった
-    const standalone = window.matchMedia?.('(display-mode: standalone)').matches
-      || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    await api.subscribePush({
-      endpoint: subscription.endpoint,
-      p256dh_key: p256dh,
-      auth_key: auth,
-      device_name: deviceLabel(navigator.userAgent, standalone),
-    });
+    await sendSubscription(subscription);
     await forgetPreviousEndpoint(subscription.endpoint);
     return 'ok';
   } catch (err) {

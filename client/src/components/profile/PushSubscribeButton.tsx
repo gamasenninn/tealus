@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getPushState, registerPushNotification } from '../../services/pushNotification';
+import { getPushState, refreshPushSubscription, registerPushNotification } from '../../services/pushNotification';
 import type { PushState } from '../../services/pushNotification';
 
 /**
@@ -18,7 +18,24 @@ function PushSubscribeButton() {
   }, []);
 
   if (state === null || state === 'unsupported') return null;
-  if (state === 'subscribed') return <p className="profile-hint">この端末は通知を受け取れます。</p>;
+  // ★ 2026-10-16: 「受け取れます」と言い切らない。端末に宛先があっても、本体は 30 日送り直されない宛先を外す
+  //   (送り直しは画面が表に出たときに自動で行う)。届かないときの戻し道として「登録し直す」を出す
+  if (state === 'subscribed') {
+    const onResend = async () => {
+      setBusy(true);
+      setNote('');
+      const sent = await refreshPushSubscription(Date.now(), { force: true });
+      setBusy(false);
+      setNote(sent ? '送り直しました。' : '送り直せませんでした。少し待ってから、もう一度押してください。');
+    };
+    return (
+      <div>
+        <p className="profile-hint">この端末には通知の宛先があります。通知が届かないときは「登録し直す」を押してください。</p>
+        <button type="button" className="profile-save-btn" onClick={onResend} disabled={busy}>登録し直す</button>
+        {note && <p className="profile-hint">{note}</p>}
+      </div>
+    );
+  }
 
   const onClick = async () => {
     setBusy(true);

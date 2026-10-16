@@ -387,6 +387,11 @@ if (import.meta.main) {
       // ★ #579 音を文字にしている途中 (pending / transcribing) で止まったものもやり直す (「⏳ 文字起こし中...」のまま止まっていた)
       .then(async tr => { await tr.recoverStuckFormatting({ io, startedAt: recoverBefore }); await tr.recoverStuckTranscribing({ io, startedAt: recoverBefore }); })
       .catch((err) => logger.warn(`[transcription-recovery] 起動時の整え直しに失敗: ${err instanceof Error ? err.message : String(err)}`));
+    // ★ 2026-10-16 30 日送り直されない通知の宛先を外す (入れ直しなどで置き去りになった宛先へ送り続けていた)。
+    //   画面は表に出たときにも送り直すので、使っている端末は外れない。外れても開き直せば戻る
+    import('./services/push.mts')
+      .then(p => p.startPushStaleSweep())
+      .catch((err) => logger.warn(`[push] 古い宛先の掃除の起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
     // #362 login の失敗カウンタの掃除。★ 口は外から到達できるので鍵は攻撃者が自由に作れる。
     //   窓を過ぎた鍵を定期的に落とす (上限での追い出しもあるが、平時はこちらで減る)。
     loginThrottlePruneTimer = setInterval(() => loginThrottle.prune(), LOGIN_THROTTLE_WINDOW_MS);

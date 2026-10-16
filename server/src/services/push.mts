@@ -183,3 +183,40 @@ export async function sendPushToRoomMembers(
     logger.error('sendPushToRoomMembers error:', err);
   }
 }
+
+/**
+ * 30 日 (既定) 送り直されない通知の宛先を外す (2026-10-16、改善ループ 7 回目の 3)。
+ *
+ * ★ 画面はログイン・起動・表に出たとき (6 時間に 1 回まで) に宛先を送り直し、updated_at が進む。
+ *   送り直されない宛先は、入れ直し・別のブラウザなどで置き去りになったもの
+ *   (開発者 1 人に有効 9 本、1 回の通知で 9〜12 本送っていた)。
+ * ★ 外すのは印だけ (削除しない)。その端末で開き直せば送り直しで戻る (routes/push.mts の is_active = true)。
+ * ★ 7 日にしなかったのは、表に出たときの送り直しを入れる前の実測で、毎日使っている 4 人の唯一の宛先が
+ *   7 日より古かったため (10-10 に読んでいる人の宛先が 09-27 のまま)。
+ * @returns 外した数
+ */
+export async function deactivateStaleSubscriptions(days: number): Promise<number> {
+  if (!Number.isFinite(days) || days <= 0) return 0;   // ★ 壊れた設定で全部外さない
+  const { rowCount } = await pool.query(
+    `UPDATE push_subscriptions SET is_active = false, updated_at = now()
+      WHERE is_active AND updated_at < now() - make_interval(days => $1)`,
+    [Math.floor(days)],
+  );
+  return rowCount ?? 0;
+}
+
+let staleSweepTimer: NodeJS.Timeout | null = null;
+
+/** 起動時に 1 回 + 1 日ごとに掃除する。日数は PUSH_STALE_DAYS (既定 30) */
+export function startPushStaleSweep(): void {
+  if (staleSweepTimer) return;
+  const days = Number(process.env.PUSH_STALE_DAYS || 30);
+  const run = () => {
+    deactivateStaleSubscriptions(days)
+      .then((n) => { if (n > 0) logger.info(`[push] ${days} 日送り直されていない宛先を ${n} 本外しました`); })
+      .catch((err) => logger.warn(`[push] 古い宛先の掃除に失敗: ${err instanceof Error ? err.message : String(err)}`));
+  };
+  run();
+  staleSweepTimer = setInterval(run, 24 * 3_600_000);
+  staleSweepTimer.unref();  // ★ 停止を妨げない (#368)
+}

@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const unregister = vi.fn(() => Promise.resolve());
-vi.mock('../src/services/pushNotification', () => ({ registerPushNotification: vi.fn(), unregisterPushNotification: () => unregister() }));
+vi.mock('../src/services/pushNotification', () => ({ registerPushNotification: vi.fn(), startPushResumeRefresh: vi.fn(), unregisterPushNotification: () => unregister() }));
 vi.mock('../src/services/socket', () => ({ connectSocket: vi.fn(), disconnectSocket: vi.fn() }));
 
 const assign = vi.fn();
