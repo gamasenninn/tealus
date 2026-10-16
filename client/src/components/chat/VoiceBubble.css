@@ -452,4 +452,19 @@
     min-height: 0;
     resize: none;
   }
+
+  /* ★ 宛名の候補は 1 行の横スクロール (10-16)。折り返すと 16 個で 6 行ほどになり、
+     余りを取る textarea がキーボードを出した画面で 1 行ほどまで縮む (360px 幅での計算) */
+  .voice-edit-addresses {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .voice-edit-addresses-label,
+  .voice-edit-address {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
 }
