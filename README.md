@@ -430,7 +430,7 @@ npm run dev:demo
 ブラウザで `http://localhost:5174` → ユーザー ID: `alice` / パスワード: `demo1234` でログイン。
 README 冒頭のスクリーンショットと同じ画面がそのまま再現されます。
 
-詳細は [`server/scripts/seed-demo.js`](./server/scripts/seed-demo.js) のヘッダーコメントを参照。
+詳細は [`server/scripts/seed-demo.mts`](./server/scripts/seed-demo.mts) のヘッダーコメントを参照。
 
 ## テスト
 
@@ -473,7 +473,7 @@ tealus/
 │   │   ├── services/          # Push 通知、サムネイル生成、stamp 画像生成
 │   │   ├── db/                # DB 接続・マイグレーション
 │   │   ├── constants/, utils/ # エラーコード、ロガー
-│   │   └── app.js             # Express app エントリ
+│   │   └── app.mts            # Express app エントリ
 │   └── __tests__/
 │
 ├── agent-server/              # AI エージェント (Router / Light / Deep)
@@ -493,14 +493,14 @@ tealus/
 ├── mcp-server/                # 移転先案内のみ (実装は独立 repo gamasenninn/tealus-mcp へ)
 │
 ├── rtc-server/                # mediasoup SFU（音声/ビデオ通話、トランシーバー、TTS 配信）
-│   ├── server.js              # signaling + PlainTransport
+│   ├── server.mts             # signaling + PlainTransport
 │   ├── src/                   # ルーム・transport・consumer 管理
 │   └── tts-speak.mts          # CLI: テキスト → Aivis Cloud → mediasoup 配信
 │
 ├── scripts/                   # CLI ツール群
 │   ├── tealus-cli.ts          # メッセージ送信・音声ファイルアップロード（--watch 対応）
-│   ├── watch.js               # ディレクトリ監視
-│   └── seed-demo.js           # demo データ投入
+│   ├── watch.ts               # ディレクトリ監視
+│   └── pushWatch.mts          # push して CI まで見る (npm run push)
 │
 ├── media/                     # アップロードファイル保存先
 ├── docs/                      # 設計書

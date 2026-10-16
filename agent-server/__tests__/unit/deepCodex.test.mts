@@ -402,8 +402,34 @@ describe('describeCodexEvent (#567)', () => {
     expect(describeCodexEvent({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'tealus', tool: 'get_messages', status: 'failed', error: { message: 'x' } } }))
       .toMatchObject({ level: 'warn' });
   });
+  test('★ 資料の一覧の道具が「無い」(-32601) で失敗したのは想定どおり = info (10-16: codex 0.162.1 から Deep のたびに warn 3 行)', () => {
+    for (const tool of ['list_mcp_resources', 'list_mcp_resource_templates']) {
+      const d = describeCodexEvent({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'tealus', tool, status: 'failed',
+        error: { message: 'resources/list failed: resources/list failed for `tealus`: Mcp error: -32601: Method not found' } } });
+      expect(d).toMatchObject({ level: 'info' });
+      expect(d!.line).toContain('資料を持たない');
+    }
+  });
+  test('★ 資料の道具でも、ほかの失敗は warn のまま', () => {
+    expect(describeCodexEvent({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'tealus', tool: 'list_mcp_resources', status: 'failed', error: { message: 'timeout' } } }))
+      .toMatchObject({ level: 'warn' });
+  });
   test('返事や途中経過など、ほかのイベントは残さない (null)', () => {
     expect(describeCodexEvent({ type: 'item.completed', item: { type: 'agent_message', text: 'hi' } })).toBeNull();
     expect(describeCodexEvent({ type: 'turn.started' })).toBeNull();
+  });
+});
+
+describe('unexpectedStderr (10-16)', () => {
+  const { unexpectedStderr } = require('../../src/agents/deepCodex.mts') as typeof import('../../src/agents/deepCodex.mts');
+  const expected = [
+    '2026-10-15T15:41:27.139075Z ERROR codex_core::tools::router: error=resources/templates/list failed: resources/templates/list failed for `tealus`: Mcp error: -32601: Method not found',
+    '2026-10-15T15:41:27.155895Z ERROR codex_core::tools::router: error=resources/list failed: resources/list failed for `tealus`: Mcp error: -32601: Method not found',
+  ];
+  test('★ 資料の一覧の「無い」だけなら空 (= 警告を出さない)', () => {
+    expect(unexpectedStderr(expected.join('\n'))).toBe('');
+  });
+  test('★ ほかの行は残す (道具が起動しなかった理由などは #567 のとおり出す)', () => {
+    expect(unexpectedStderr([...expected, 'ERROR mcp startup failed: tealus'].join('\n'))).toBe('ERROR mcp startup failed: tealus');
   });
 });

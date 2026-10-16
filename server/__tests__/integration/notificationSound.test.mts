@@ -84,6 +84,21 @@ describe('通知音の設定 (アカウントごと)', () => {
     expect(byEndpoint[`https://push.example/${me.user.id}`].silent).toBeUndefined();
   });
 
+  it('★ 機械 (is_bot) には部屋の通知を送らない (10-16: 送り先の 61% が宛先 0 本の機械で、毎回空振りしていた)', async () => {
+    const pool = getTestPool();
+    await pool.query('UPDATE users SET is_bot = true WHERE id = $1', [other.user.id]);
+    for (const u of [me, other]) {
+      await pool.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key) VALUES ($1, $2, 'p', 'a')`,
+        [u.user.id, `https://push.example/${u.user.id}`]);
+    }
+    const sender = await createTestUser({ login_id: 'EMP003', display_name: '送り手' });
+    await pool.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, sender.user.id]);
+
+    await sendPushToRoomMembers(roomId, sender.user.id, { title: 't', body: 'b' }, new Set());
+
+    expect(mockSend.mock.calls.map(c => c[0].endpoint)).toEqual([`https://push.example/${me.user.id}`]);
+  });
+
   it('★ 部屋の一覧に自分の「このルームの通知」が載る', async () => {
     const before = await request(app).get('/api/rooms').set('Authorization', `Bearer ${me.token}`);
     expect(before.body.rooms.find((r: { id: string }) => r.id === roomId).push_muted).toBe(false);

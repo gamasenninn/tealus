@@ -76,6 +76,21 @@ export function formatPrunableAliases(rows: AliasRow[], limit = 50): string[] {
  * 現在の alias 行のうち、射影に含まれないものを返す (= 撤去してよい行)。
  * 判定は (term, alias) の組で行う。同じ alias 文字列でも用語が違えば別扱い。
  */
+/**
+ * organon 由来の alias を active と tombstone に分けて数える (2026-10-16)。
+ * ★ 9/14 に削除から tombstone に変えたあとも、表示と歯止めの母数と「DB が射影より多い」の判定が
+ *   tombstone 済みの行まで数えていた → organon alias を 1 つでも tombstone すると毎回誤報 (吉田 で 14 件目)。
+ */
+export function countOrganonAliases(rows: AliasRow[]): { active: number; tombstoned: number; other: number } {
+  let active = 0, tombstoned = 0, other = 0;
+  for (const r of rows) {
+    if (r.source !== 'organon') other++;
+    else if ((r.status ?? 'active') === 'rejected') tombstoned++;
+    else active++;
+  }
+  return { active, tombstoned, other };
+}
+
 export function selectPrunableAliases(projected: ProjectedTerm[], rows: AliasRow[]): AliasRow[] {
   // 区切りは alias に現れない文字にする (term と alias の境目が動くと判定がずれる)
   const key = (term: string, alias: string): string => JSON.stringify([term, alias]);
@@ -144,11 +159,11 @@ if (import.meta.main) {
 
   loadAliasRows()
     .then(async (rows) => {
-      const organonRows = rows.filter((r) => r.source === 'organon');
+      const counts = countOrganonAliases(rows);
       const prunable = selectPrunableAliases(projected, rows);
       console.log(`射影      ${projected.length} terms / ${projectedAliases} aliases`);
       console.log(
-        `DB        organon alias ${organonRows.length} 行 (他の出所 ${rows.length - organonRows.length} 行は対象外)`
+        `DB        organon alias active ${counts.active} 行 / tombstone ${counts.tombstoned} 行 (他の出所 ${counts.other} 行は対象外)`
       );
       console.log(`撤去対象  ${prunable.length} 行 (★ tombstone。削除しない)`);
       // ★ #384 何が消えるかを撃つ前に出す (term 側と同じ扱いに揃える)
@@ -183,7 +198,7 @@ if (import.meta.main) {
       // ★ 歯止め。alias / term それぞれの母数で判定する (#384、organon 班の Day 52 指摘)。
       const aliasPlan = planRetraction({
         projectedCount: projectedAliases,
-        dbActiveCount: organonRows.length,
+        dbActiveCount: counts.active,
         victimCount: prunable.length,
       });
       const termPlan = planRetraction({
@@ -200,7 +215,7 @@ if (import.meta.main) {
         //   読んだ人を「サーバが古いコードを掴んでいる」の調査へ送り込むところだった
         //   (★ その日は実際に再起動した直後で、疑う理由まで揃っていた)。
         //   ★★ 壊れた値は沈黙より悪い。条件を実際の不等号に合わせる。
-        if (organonRows.length > projectedAliases) {
+        if (counts.active > projectedAliases) {
           console.log('\n★ DB が射影より多い = 畳み込みが効いていない pull が回っている可能性。');
           console.log('  サーバの起動時刻と射影の更新時刻を比べること (古いコードのままなら再起動が先)。');
         }

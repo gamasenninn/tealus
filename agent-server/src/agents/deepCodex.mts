@@ -264,6 +264,21 @@ type CodexEventLike = {
   item?: { type?: string; text?: string; server?: string; tool?: string; status?: string; error?: { message?: string } | null };
 };
 
+const RESOURCE_TOOLS = new Set(['list_mcp_resources', 'list_mcp_resource_templates']);
+const NO_RESOURCES = /resources\/(templates\/)?list failed[^\n]*-32601/;
+
+function isNoResourcesError(tool: string | undefined, message: string | undefined): boolean {
+  return !!tool && RESOURCE_TOOLS.has(tool) && NO_RESOURCES.test(message ?? '');
+}
+
+/**
+ * 終了コード 0 のときの標準エラーから、想定どおりの行 (資料の一覧の -32601、上の説明) を除いた残り。
+ * ★ ほかの行は残す (#567: 道具が起動しなかった理由などがここに出る)
+ */
+export function unexpectedStderr(stderr: string): string {
+  return stderr.split(/\r?\n/).filter((l) => l.trim() && !NO_RESOURCES.test(l)).join('\n').trim();
+}
+
 /**
  * ★ #567 ログに残す codex のイベント。エラー (error / turn.failed) と道具の呼び出しの結果だけ。ほかは null
  */
@@ -274,6 +289,11 @@ export function describeCodexEvent(event: CodexEventLike | null | undefined): { 
   const it = event.item;
   if (event.type === 'item.completed' && it?.type === 'mcp_tool_call') {
     const failed = it.status === 'failed' || !!it.error;
+    // ★ 10-16: codex 0.162.1 から、AI が codex 備え付けの「資料の一覧」(list_mcp_resources 等) を呼ぶ。
+    //   tealus-mcp は資料を持たないので -32601 (無い) が返る = 想定どおり。warn にすると Deep のたびに 3 行出ていた
+    if (failed && isNoResourcesError(it.tool, it.error?.message)) {
+      return { level: 'info', line: `[DeepCodex] mcp_tool_call: server=${it.server ?? '?'} tool=${it.tool} — この MCP は資料を持たない (想定どおり)` };
+    }
     return {
       level: failed ? 'warn' : 'info',
       line: `[DeepCodex] mcp_tool_call ${failed ? 'FAILED' : 'OK'}: server=${it.server ?? '?'} tool=${it.tool ?? '?'} status=${it.status ?? '?'}`
@@ -513,7 +533,9 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
       clearTimeout(timer);
       deepRegistry.unregister(roomId);
       // ★ #567 終了コード 0 でも標準エラーは残す (道具が起動しなかった理由などがここに出る。以前は 0 なら捨てていた)
-      if (code === 0 && stderr.trim()) logger.warn(`[DeepCodex] stderr (exit 0): ${stderr.trim().slice(-500)}`);
+      // ★ 10-16 資料の一覧の -32601 (想定どおり) は除く
+      const rest = code === 0 ? unexpectedStderr(stderr) : '';
+      if (rest) logger.warn(`[DeepCodex] stderr (exit 0): ${rest.slice(-500)}`);
 
       // flush 残 buffer
       const finalEvents = lineBuffer.flush();

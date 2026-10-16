@@ -427,6 +427,12 @@ router.put('/:msgId', async (req: Request, res: Response) => {
       }
     }
 
+    // ★ 2026-10-16 同じ文なら版を積まない・編集済みにしない (音声の文字起こしと揃える。30 日で 2 件あった)
+    if (msg.content && msg.content.trim() === content.trim()) {
+      const current = await pool.query<MessageRow>('SELECT * FROM messages WHERE id = $1', [msgId]);
+      return res.json({ message: current.rows[0] });
+    }
+
     // Save current content to edit history (skip if first caption - no previous content)
     let newVersion = 0;
     if (msg.content) {

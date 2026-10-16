@@ -16,6 +16,6 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   const raw = (err as { status?: unknown; statusCode?: unknown } | null)?.status ?? (err as { statusCode?: unknown } | null)?.statusCode;
   const status = typeof raw === 'number' && raw >= 400 && raw <= 599 ? raw : 500;
   if (status >= 500) logger.error(`[error] ${req.method} ${req.path} ${status}`, err);
-  else logger.warn(`[error] ${req.method} ${req.path} ${status}: ${err instanceof Error ? err.message : String(err)}`);
+  else logger.warn(`[http] ${req.method} ${req.path} ${status}: ${err instanceof Error ? err.message : String(err)}`);
   res.status(status).json({ error: status >= 500 ? E.SERVER_ERROR : BAD_REQUEST });
 };

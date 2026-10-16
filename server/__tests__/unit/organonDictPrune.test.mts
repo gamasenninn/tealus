@@ -7,7 +7,7 @@
  *   正しい条件は **alias 自身の出所** で絞ること。ここを取り違えると、
  *   現場で学習した聞き取り揺れ (STT 補正に効いている側) が消える。
  */
-import { selectPrunableAliases, type AliasRow } from '../../scripts/organonDictPrune.mts';
+import { selectPrunableAliases, countOrganonAliases, type AliasRow } from '../../scripts/organonDictPrune.mts';
 import type { ProjectedTerm } from '../../scripts/organonDictProjection.mts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -124,4 +124,17 @@ test('別名の tombstone の UPDATE は updated_at も進める', () => {
   const update = src.slice(src.indexOf('UPDATE dictionary_aliases a'), src.indexOf('FROM dictionary_terms t', src.indexOf('UPDATE dictionary_aliases a')));
   expect(update).toMatch(/SET status = 'rejected'/);
   expect(update).toMatch(/updated_at = NOW\(\)/);
+});
+
+// ★ 10-16: tombstone 済みの行まで数え、「DB が射影より多い」を毎回誤報していた (吉田 で 14 件目)
+describe('countOrganonAliases', () => {
+  test('organon 由来を active と tombstone に分けて数える (他の出所は数えない)', () => {
+    const rows = [
+      { id: '1', term: 'a', alias: 'x', source: 'organon', status: 'active' },
+      { id: '2', term: 'a', alias: 'y', source: 'organon', status: 'rejected' },
+      { id: '3', term: 'a', alias: 'z', source: 'organon' },
+      { id: '4', term: 'a', alias: 'w', source: 'auto', status: 'active' },
+    ];
+    expect(countOrganonAliases(rows)).toEqual({ active: 2, tombstoned: 1, other: 1 });
+  });
 });

@@ -169,7 +169,8 @@ export async function sendPushToRoomMembers(
       `SELECT rm.user_id, u.notification_sound
          FROM room_members rm JOIN users u ON u.id = rm.user_id
         WHERE rm.room_id = $1 AND rm.user_id != $2 AND rm.push_muted = false
-          AND u.is_active = true`,   // ★ #529 利用停止にした人は除く
+          AND u.is_active = true     -- ★ #529 利用停止にした人は除く
+          AND NOT u.is_bot`,         // ★ 10-16 機械には送らない (送り先の 61% が宛先 0 本の機械で、毎回空振りしていた)
       [roomId, senderId]
     );
 
