@@ -14,13 +14,13 @@ import { logger } from '../utils/logger.mts';
 import { assessBackup, readLatestBackupLog, type BackupRead } from './backupLog.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
 import {
-  decideNotice, judgeBackupLog, judgeHeartbeat, judgeRoomQuiet,
-  type LastNotice, type Observation,
+  decideNotice, judgeBackupLog, judgeHeartbeat, judgePushReach, judgeRoomQuiet,
+  type LastNotice, type Observation, type PushTarget,
 } from './watchdogDecide.mts';
 import { getHeartbeat, type Heartbeat } from './heartbeats.mts';
 import {
   CONFIG_PATH, loadWatchdogs, markFor,
-  type HeartbeatWatch, type Notify, type RoomQuietWatch, type Watch, type WatchdogConfig,
+  type HeartbeatWatch, type Notify, type PushReachWatch, type RoomQuietWatch, type Watch, type WatchdogConfig,
 } from './watchdogs.mts';
 
 /** 判定の間隔。止まったものに気づくのが最大これだけ遅れる。閾値 (150 分・26 時間) に比べて十分短い */
@@ -34,10 +34,12 @@ const FIRST_RUN_MS = 2 * 60_000;
 
 export interface RunDeps {
   now: Date;
-  lastNotice: (w: Watch, notify: Notify) => Promise<LastNotice | null>;
+  /** ★ id で印を引く。push_reach は人ごとの id (`<行の id>:<user_id>`) */
+  lastNotice: (w: Pick<Watch, 'id'>, notify: Notify) => Promise<LastNotice | null>;
   lastPostAt: (w: RoomQuietWatch) => Promise<Date | null>;
   heartbeatOf: (w: HeartbeatWatch) => Promise<Heartbeat | null>;
   readBackup: (dir: string) => BackupRead;
+  pushTargets: (w: PushReachWatch) => Promise<PushTarget[]>;
   resolveSender: (userId: string) => Promise<SenderContext | null>;
   post: (input: { roomId: string; sender: SenderContext; content: string }) => Promise<PostAsUserResult>;
 }
@@ -51,40 +53,64 @@ export interface RunResult {
   error?: string;
 }
 
-async function observe(w: Watch, deps: RunDeps): Promise<Observation> {
+/** 知らせの単位。ふつうは設定の 1 行、push_reach は 1 人 (id は `<行の id>:<user_id>`) */
+interface Unit { id: string; name: string; observe: () => Promise<Observation> }
+
+async function unitsOf(w: Watch, deps: RunDeps): Promise<Unit[]> {
   switch (w.kind) {
-    case 'backup_log': return judgeBackupLog(assessBackup(deps.readBackup(w.dir), deps.now));
-    case 'room_quiet': return judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now);
-    case 'heartbeat': return judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now);
+    case 'backup_log': return [{ id: w.id, name: w.name, observe: async () => judgeBackupLog(assessBackup(deps.readBackup(w.dir), deps.now)) }];
+    case 'room_quiet': return [{ id: w.id, name: w.name, observe: async () => judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now) }];
+    case 'heartbeat': return [{ id: w.id, name: w.name, observe: async () => judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now) }];
+    case 'push_reach': {
+      // ★ 人ごとに開く。状態も人ごとの印から引くので、A が ⚠ のままでも B の ⚠ は出る (docs/09 §3.6)
+      const exclude = new Set(w.exclude_user_ids);
+      return (await deps.pushTargets(w))
+        .filter((t) => !exclude.has(t.user_id))
+        .map((t) => ({
+          id: `${w.id}:${t.user_id}`,
+          name: `${t.display_name} さんへの${w.name}`,
+          observe: async () => judgePushReach(t, w.active_within_days, deps.now),
+        }));
+    }
   }
 }
 
-/** 1 周ぶん。★ 1 行の失敗が他を止めないよう、行ごとに囲う */
+/** 1 周ぶん。★ 1 行の失敗が他を止めないよう、行ごとに (push_reach は人ごとにも) 囲う */
 export async function runOnce(config: WatchdogConfig, deps: RunDeps): Promise<RunResult[]> {
   const results: RunResult[] = [];
   let sender: SenderContext | null | undefined;
   for (const w of config.watches) {
     if (!w.enabled) continue;
+    let units: Unit[];
     try {
-      const obs = await observe(w, deps);
-      // ★ 稼働時間の外は前回の知らせも引かない (DB を無駄に叩かない)
-      if (obs.state === 'skip') { results.push({ id: w.id, state: 'skip', detail: obs.detail, posted: null }); continue; }
-      const d = decideNotice(w, obs, await deps.lastNotice(w, config.notify), deps.now);
-      if (!d.kind || !d.body) { results.push({ id: w.id, state: obs.state, detail: obs.detail, posted: null }); continue; }
-
-      if (sender === undefined) sender = await deps.resolveSender(config.notify.as_user_id);
-      if (!sender) {
-        results.push({ id: w.id, state: obs.state, detail: obs.detail, posted: null,
-          error: `投稿する人 (as_user_id ${config.notify.as_user_id}) が見つかりません` });
-        continue;
-      }
-      const posted = await deps.post({ roomId: config.notify.room_id, sender, content: d.body });
-      results.push(posted.ok
-        ? { id: w.id, state: obs.state, detail: obs.detail, posted: d.kind }
-        : { id: w.id, state: obs.state, detail: obs.detail, posted: null, error: posted.reason });
+      units = await unitsOf(w, deps);
     } catch (err) {
-      results.push({ id: w.id, state: 'error', detail: '判定中に例外', posted: null,
+      results.push({ id: w.id, state: 'error', detail: '対象の取得に失敗', posted: null,
         error: err instanceof Error ? err.message : String(err) });
+      continue;
+    }
+    for (const u of units) {
+      try {
+        const obs = await u.observe();
+        // ★ 稼働時間の外 (使っていない人) は前回の知らせも引かない (DB を無駄に叩かない)
+        if (obs.state === 'skip') { results.push({ id: u.id, state: 'skip', detail: obs.detail, posted: null }); continue; }
+        const d = decideNotice(u, obs, await deps.lastNotice(u, config.notify), deps.now);
+        if (!d.kind || !d.body) { results.push({ id: u.id, state: obs.state, detail: obs.detail, posted: null }); continue; }
+
+        if (sender === undefined) sender = await deps.resolveSender(config.notify.as_user_id);
+        if (!sender) {
+          results.push({ id: u.id, state: obs.state, detail: obs.detail, posted: null,
+            error: `投稿する人 (as_user_id ${config.notify.as_user_id}) が見つかりません` });
+          continue;
+        }
+        const posted = await deps.post({ roomId: config.notify.room_id, sender, content: d.body });
+        results.push(posted.ok
+          ? { id: u.id, state: obs.state, detail: obs.detail, posted: d.kind }
+          : { id: u.id, state: obs.state, detail: obs.detail, posted: null, error: posted.reason });
+      } catch (err) {
+        results.push({ id: u.id, state: 'error', detail: '判定中に例外', posted: null,
+          error: err instanceof Error ? err.message : String(err) });
+      }
     }
   }
   return results;
@@ -93,7 +119,7 @@ export async function runOnce(config: WatchdogConfig, deps: RunDeps): Promise<Ru
 // --- 本番の配線 ------------------------------------------------------------
 
 /** ★ 業務メモの自分の投稿 (印つき) のうち最新。1 行目が ⚠ なら「止まっていると知らせ済み」 */
-async function lastNoticeFromRoom(w: Watch, notify: Notify): Promise<LastNotice | null> {
+async function lastNoticeFromRoom(w: Pick<Watch, 'id'>, notify: Notify): Promise<LastNotice | null> {
   const { rows } = await pool.query<{ content: string; created_at: Date }>(
     `SELECT content, created_at FROM messages
       WHERE room_id = $1 AND sender_id = $2 AND is_deleted = false AND content LIKE $3
@@ -117,6 +143,30 @@ async function lastPostAtFromRoom(w: RoomQuietWatch): Promise<Date | null> {
 /** ★ 名前だけでなく送り手でも絞る (別の人が同じ名前で送った鼓動を拾わない) */
 function heartbeatOfWatch(w: HeartbeatWatch): Promise<Heartbeat | null> {
   return getHeartbeat(w.from_user_id, w.heartbeat);
+}
+
+/**
+ * push_reach の対象 (docs/09 §3.6): 有効で機械でない利用者のうち、部屋に 1 つ以上入っている人。
+ * ★ 「最近使っている」は既読の記録で見る (users.last_seen_at はどこからも更新されていない)
+ */
+async function pushTargetsFromDb(): Promise<PushTarget[]> {
+  const { rows } = await pool.query<PushTarget>(
+    `SELECT u.id AS user_id, u.display_name,
+            (SELECT COUNT(*)::int FROM push_subscriptions p WHERE p.user_id = u.id AND p.is_active) AS active_subs,
+            (SELECT COUNT(*)::int FROM push_subscriptions p WHERE p.user_id = u.id) AS total_subs,
+            (SELECT MAX(p.updated_at) FROM push_subscriptions p
+              WHERE p.user_id = u.id AND NOT p.is_active
+                -- ★ 無効にした時刻は 10-16 から updated_at に残す (push.mts)。それ以前の行の updated_at は
+                --   登録 (登録し直し) の時刻で、無効になった時刻ではない (本番の実例: 10-13 に無効 → 10-05 と出た)。
+                --   ★ 時刻が分からない行は数えない = 本文に時刻を書かない
+                AND p.updated_at >= TIMESTAMPTZ '2026-10-16 05:00:00+00') AS last_lost_at,
+            (SELECT MAX(c.last_read_at) FROM room_read_cursors c WHERE c.user_id = u.id) AS last_read_at
+       FROM users u
+      WHERE u.is_active AND NOT u.is_bot
+        AND EXISTS (SELECT 1 FROM room_members m WHERE m.user_id = u.id)
+      ORDER BY u.created_at`,
+  );
+  return rows;
 }
 
 async function resolveSenderFromDb(userId: string): Promise<SenderContext | null> {
@@ -143,6 +193,7 @@ async function tick(configPath: string, warned: { signature: string }): Promise<
     lastPostAt: lastPostAtFromRoom,
     heartbeatOf: heartbeatOfWatch,
     readBackup: readLatestBackupLog,
+    pushTargets: pushTargetsFromDb,
     resolveSender: resolveSenderFromDb,
     post: postAsUser,
   });

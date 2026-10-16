@@ -35,6 +35,16 @@
       "max_silence_minutes": 10,
       "max_send_lag_minutes": 15,
       "enabled": false
+    },
+    {
+      "id": "push",
+      "name": "プッシュ通知",
+      "kind": "push_reach",
+      "active_within_days": 30,
+      "exclude_user_ids": [
+        "00000000-0000-0000-0000-000000000000"
+      ],
+      "enabled": false
     }
   ]
 }

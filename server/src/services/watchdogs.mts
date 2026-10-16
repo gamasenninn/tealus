@@ -61,7 +61,18 @@ export interface HeartbeatWatch extends WatchBase {
   max_send_lag_minutes?: number;
 }
 
-export type Watch = BackupLogWatch | RoomQuietWatch | HeartbeatWatch;
+/**
+ * 通知の宛先が 0 本の人 (docs/09 §3.6、2026-10-16)。★ 1 行が人ごとの見張りに開く (印は `<id>:<user_id>`)
+ */
+export interface PushReachWatch extends WatchBase {
+  kind: 'push_reach';
+  /** この日数のうちに何か読んだ人だけを見る。使っていない人に知らせても本人が見ない */
+  active_within_days: number;
+  /** 見ない人 (試験用のアカウントなど) */
+  exclude_user_ids: string[];
+}
+
+export type Watch = BackupLogWatch | RoomQuietWatch | HeartbeatWatch | PushReachWatch;
 
 export interface WatchdogConfig {
   notify: Notify;
@@ -150,11 +161,25 @@ function validate(raw: unknown, i: number): Watch | string {
       };
     }
 
+    case 'push_reach': {
+      if (r.active_within_days !== undefined && (typeof r.active_within_days !== 'number' || !(r.active_within_days > 0))) {
+        return `${label}: active_within_days は正の数で書くか、省いてください (既定 30 日)`;
+      }
+      if (r.exclude_user_ids !== undefined && (!Array.isArray(r.exclude_user_ids) || !r.exclude_user_ids.every(isUuid))) {
+        return `${label}: exclude_user_ids (見ない人の user id) が UUID の配列ではありません`;
+      }
+      return {
+        ...base, kind: 'push_reach',
+        active_within_days: (r.active_within_days as number | undefined) ?? 30,
+        exclude_user_ids: (r.exclude_user_ids as string[] | undefined) ?? [],
+      };
+    }
+
     case 'http_health':
       return `${label}: kind "http_health" は使えなくなりました。相手の生存の口を本体が読む形はやめ、部品から鼓動 (heartbeat) を送ってもらいます (docs/09 §0)`;
 
     default:
-      return `${label}: kind "${String(r.kind)}" は backup_log / room_quiet / heartbeat のどれでもありません`;
+      return `${label}: kind "${String(r.kind)}" は backup_log / room_quiet / heartbeat / push_reach のどれでもありません`;
   }
 }
 

@@ -100,6 +100,43 @@ export function judgeHeartbeat(w: HeartbeatWatch, hb: Heartbeat | null, now: Dat
   return { state: 'ok', detail: `鼓動が来ています (最後の鼓動: ${last})` };
 }
 
+/** push_reach の 1 人ぶんの観測 (watchdogRunner が DB から持ってくる) */
+export interface PushTarget {
+  user_id: string;
+  display_name: string;
+  /** 今有効な宛先の数 */
+  active_subs: number;
+  /** これまでの宛先の数 (無効も含む)。0 = 一度も登録が無い */
+  total_subs: number;
+  /** 最後に宛先が無効になった時刻 (無ければ null) */
+  last_lost_at: Date | null;
+  /** 最後に何かを読んだ時刻 (`room_read_cursors.last_read_at` の最大)。★ users.last_seen_at は更新されていない */
+  last_read_at: Date | null;
+}
+
+/**
+ * 通知の宛先が 0 本の人 (docs/09 §3.6)。
+ *
+ * ★ 送信の失敗率を見ても見つからない —— **送っていないものは失敗として数えられない**。
+ * ★ 直近 `activeWithinDays` 日に何も読んでいない人は判定しない (知らせても本人が見ない)。
+ */
+export function judgePushReach(t: PushTarget, activeWithinDays: number, now: Date): Observation {
+  if (!t.last_read_at || now.getTime() - t.last_read_at.getTime() > activeWithinDays * 86_400_000) {
+    return { state: 'skip', detail: `直近 ${activeWithinDays} 日に使っていない` };
+  }
+  if (t.active_subs > 0) return { state: 'ok', detail: `通知の宛先が ${t.active_subs} 本あります` };
+  // ★ 無効にした時刻は 10-16 から残している。それ以前の行は時刻が分からない (last_lost_at = null) ので書かない
+  const why = t.total_subs === 0
+    ? '通知の宛先が一度も登録されていません'
+    : t.last_lost_at
+      ? `通知の宛先が 0 本です (最後の宛先が無効になったのは ${formatJst(t.last_lost_at)})`
+      : '通知の宛先が 0 本です (以前の宛先はすべて無効になっています)';
+  return {
+    state: 'down',
+    detail: `${why}。この人には通知が 1 件も届きません。\n直し方: 本人の端末で Tealus を開き、プロフィールの「この端末で通知を受け取る」を押す`,
+  };
+}
+
 export function judgeBackupLog(a: BackupAssessment): Observation {
   switch (a.kind) {
     case 'ok': return { state: 'ok', detail: `最後のバックアップ: ${a.name} (${a.hours} 時間前に成功)` };
@@ -111,7 +148,7 @@ export function judgeBackupLog(a: BackupAssessment): Observation {
 
 /** 投稿するか、するなら本文。★ 2 行目に印 (docs/09 §5、ルームトリガー §10 と同じ理由) */
 export function decideNotice(
-  w: Watch,
+  w: Pick<Watch, 'id' | 'name'>,
   obs: Observation,
   last: LastNotice | null,
   now: Date,

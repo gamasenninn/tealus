@@ -34,6 +34,7 @@ function deps(over: Partial<RunDeps> = {}): RunDeps & { posts: { roomId: string;
     lastPostAt: async () => jst('2026-10-13T11:50:00'),
     heartbeatOf: async () => ({ last_seen: jst('2026-10-13T11:59:00'), info: {} }),
     readBackup: () => ({ latest: OK_LOG }),
+    pushTargets: async () => [],
     resolveSender: async () => ({ id: USER, display_name: 'Claude', avatar_url: null }),
     post: async (input) => { posts.push({ roomId: input.roomId, content: input.content }); return { ok: true, messageId: 'm' } as never; },
     ...over,
@@ -113,5 +114,71 @@ describe('runOnce', () => {
     const r = await runOnce(config, d);
     expect(r.find((x) => x.id === 'radio')!.error).toContain(USER);
     expect(d.posts).toEqual([]);
+  });
+});
+
+// ★ push_reach は 1 行が人ごとの見張りに開く (docs/09 §3.6)
+describe('runOnce — push_reach', () => {
+  const A = '00000000-0000-0000-0000-0000000000a1';
+  const B = '00000000-0000-0000-0000-0000000000b2';
+  const TEST = '00000000-0000-0000-0000-0000000000c3';
+  const pushConfig = loadWatchdogsFrom({
+    notify: { room_id: NOTIFY_ROOM, room: '業務メモ', as_user_id: USER },
+    watches: [{ id: 'push', name: 'プッシュ通知', kind: 'push_reach', exclude_user_ids: [TEST], enabled: true }],
+  }).config!;
+  const t = (user_id: string, display_name: string, active_subs: number, last_read = '2026-10-13T09:00:00') => ({
+    user_id, display_name, active_subs, total_subs: 1,
+    last_lost_at: jst('2026-10-12T10:00:00'), last_read_at: jst(last_read),
+  });
+
+  it('★ 宛先 0 本の人だけ、人ごとの印で ⚠ を出す。外す人は見ない', async () => {
+    const asked: string[] = [];
+    const d = deps({
+      pushTargets: async () => [t(A, '田中', 0), t(B, '鈴木', 2), t(TEST, '試験', 0)],
+      lastNotice: async (w) => { asked.push(w.id); return null; },
+    });
+    const r = await runOnce(pushConfig, d);
+    expect(d.posts).toHaveLength(1);
+    expect(d.posts[0].content.split('\n')[0]).toBe('⚠ 田中 さんへのプッシュ通知 が止まっているようです');
+    expect(d.posts[0].content).toContain(markFor(`push:${A}`));
+    expect(asked).toEqual([`push:${A}`, `push:${B}`]);
+    expect(r.map((x) => [x.id, x.state])).toEqual([[`push:${A}`, 'down'], [`push:${B}`, 'ok']]);
+  });
+
+  it('★ 人ごとに状態を引く: A が ⚠ のままでも、あとから 0 本になった B の ⚠ は出る', async () => {
+    const d = deps({
+      pushTargets: async () => [t(A, '田中', 0), t(B, '鈴木', 0)],
+      lastNotice: async (w) => (w.id === `push:${A}` ? { kind: 'alert', at: jst('2026-10-13T15:20:00') } : null),
+    });
+    await runOnce(pushConfig, d);
+    expect(d.posts).toHaveLength(1);
+    expect(d.posts[0].content).toContain('鈴木');
+  });
+
+  it('登録し直したら ✅', async () => {
+    const d = deps({
+      pushTargets: async () => [t(A, '田中', 1)],
+      lastNotice: async () => ({ kind: 'alert', at: jst('2026-10-13T11:00:00') }),
+    });
+    await runOnce(pushConfig, d);
+    expect(d.posts[0].content).toMatch(/^✅ 田中 さんへのプッシュ通知 が戻りました/);
+  });
+
+  it('最近使っていない人は前回の知らせも引かない (skip)', async () => {
+    const asked: string[] = [];
+    const d = deps({
+      pushTargets: async () => [t(A, '田中', 0, '2026-08-01T09:00:00')],
+      lastNotice: async (w) => { asked.push(w.id); return null; },
+    });
+    const r = await runOnce(pushConfig, d);
+    expect(asked).toEqual([]);
+    expect(d.posts).toEqual([]);
+    expect(r[0].state).toBe('skip');
+  });
+
+  it('★ 対象の取得に失敗したら error 1 行 (他の見張りは止めない)', async () => {
+    const d = deps({ pushTargets: async () => { throw new Error('DB に届きません'); } });
+    const r = await runOnce(pushConfig, d);
+    expect(r).toEqual([expect.objectContaining({ id: 'push', state: 'error', error: expect.stringContaining('DB に届きません') })]);
   });
 });

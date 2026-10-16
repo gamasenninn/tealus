@@ -78,4 +78,11 @@ describe('sendPushToUser の失敗', () => {
     await sendPushToUser('u1', { title: 't' });
     expect(mockQuery.mock.calls.some(([sql]) => String(sql).includes('is_active = false'))).toBe(true);
   });
+
+  test('★ 無効にした時刻を残す (見張りの push_reach が「最後の宛先が無効になった時刻」に使う、docs/09 §3.6)', async () => {
+    mockSend.mockRejectedValue(webPushError(410, ''));
+    await sendPushToUser('u1', { title: 't' });
+    const sql = mockQuery.mock.calls.map(([s]) => String(s)).find((s) => s.includes('is_active = false'));
+    expect(sql).toMatch(/updated_at\s*=\s*now\(\)/i);
+  });
 });

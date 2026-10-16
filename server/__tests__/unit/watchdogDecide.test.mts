@@ -5,7 +5,7 @@
  *   正常 → 異常 で 1 回、異常 → 正常 で 1 回。異常が続いても鳴らさない。
  */
 import { loadWatchdogsFrom, markFor, type Watch, type RoomQuietWatch, type HeartbeatWatch } from '../../src/services/watchdogs.mts';
-import { judgeRoomQuiet, judgeHeartbeat, judgeBackupLog, decideNotice } from '../../src/services/watchdogDecide.mts';
+import { judgeRoomQuiet, judgeHeartbeat, judgeBackupLog, judgePushReach, decideNotice } from '../../src/services/watchdogDecide.mts';
 
 const ROOM = '00000000-0000-0000-0000-000000000002';
 const USER = '00000000-0000-0000-0000-000000000001';
@@ -206,5 +206,57 @@ describe('decideNotice — 変わったときだけ知らせる', () => {
     const skip = { state: 'skip' as const, detail: '稼働時間の外' };
     expect(decideNotice(w, skip, { kind: 'alert', at: now }, now).kind).toBeNull();
     expect(decideNotice(w, skip, null, now).kind).toBeNull();
+  });
+});
+
+// ★ 4 つ目の見方 push_reach (docs/09 §3.6、2026-10-16): 通知の宛先が 0 本の人
+describe('push_reach — 設定', () => {
+  const pushWatch = { id: 'push', name: 'プッシュ通知', kind: 'push_reach', enabled: true };
+
+  it('日数と外す人は省略できる (既定 30 日・外す人なし)', () => {
+    const w = one(pushWatch);
+    expect(w).toMatchObject({ kind: 'push_reach', active_within_days: 30, exclude_user_ids: [] });
+  });
+
+  it('日数が正の数でない・外す人が UUID の配列でないのは warn', () => {
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...pushWatch, active_within_days: 0 }] }).warnings[0]).toContain('active_within_days');
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...pushWatch, exclude_user_ids: ['x'] }] }).warnings[0]).toContain('exclude_user_ids');
+  });
+});
+
+describe('push_reach — 判定 (人ごと)', () => {
+  const now = jst('2026-10-16T13:00:00');
+  const target = {
+    user_id: USER, display_name: '田中', active_subs: 0, total_subs: 1,
+    last_lost_at: jst('2026-10-13T15:18:00'), last_read_at: jst('2026-10-16T09:00:00'),
+  };
+
+  it('有効な宛先が 1 本以上なら ok', () => {
+    expect(judgePushReach({ ...target, active_subs: 1 }, 30, now).state).toBe('ok');
+  });
+
+  it('★ 0 本なら down。最後の宛先が無効になった時刻と、直し方を添える', () => {
+    const o = judgePushReach(target, 30, now);
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('10-13 15:18');
+    expect(o.detail).toContain('この端末で通知を受け取る');
+  });
+
+  it('★ 無効になった時刻が分からない (10-16 以前の行) ときは時刻を書かない', () => {
+    const o = judgePushReach({ ...target, last_lost_at: null }, 30, now);
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('以前の宛先はすべて無効');
+    expect(o.detail).not.toContain('一度も');
+  });
+
+  it('一度も登録が無ければ、そう書く', () => {
+    const o = judgePushReach({ ...target, total_subs: 0, last_lost_at: null }, 30, now);
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('一度も');
+  });
+
+  it('★ 直近の日数に何も読んでいない人は判定しない (知らせても本人が見ない)', () => {
+    expect(judgePushReach({ ...target, last_read_at: jst('2026-09-10T09:00:00') }, 30, now).state).toBe('skip');
+    expect(judgePushReach({ ...target, last_read_at: null }, 30, now).state).toBe('skip');
   });
 });

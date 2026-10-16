@@ -133,7 +133,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
         if (statusCode === 410 || statusCode === 404) {
           // Subscription expired or invalid — mark inactive
           await pool.query(
-            'UPDATE push_subscriptions SET is_active = false WHERE id = $1',
+            'UPDATE push_subscriptions SET is_active = false, updated_at = now() WHERE id = $1',
             [sub.id]
           );
         }
