@@ -31,7 +31,16 @@ function DateSeparator({ date, hidden, onClick, sticky }: DateSeparatorProps) {
   return (
     <div className={`date-separator ${hidden ? 'hidden' : ''} ${sticky ? 'sticky' : ''}`}>
       {onClick
-        ? <button type="button" onClick={onClick} aria-label={`${label} — 日付へ移動`}>{label}</button>
+        ? (
+          // ★ 暦の印 (10-16)。印が無く、見た目で押せると分からなかった (14 日で 61 回、ほぼ 1 人)
+          <button type="button" onClick={onClick} aria-label={`${label} — 日付へ移動`} title="押すと日付を選んで移動できます">
+            <svg className="date-separator-icon" aria-hidden="true" viewBox="0 0 16 16" width="11" height="11">
+              <rect x="1.5" y="2.5" width="13" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M1.5 6.5h13M5 1v3M11 1v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            {label}
+          </button>
+        )
         : <span>{label}</span>}
     </div>
   );

@@ -42,6 +42,18 @@
   font-family: inherit;
 }
 
+/* 押せる札の暦の印 (10-16) */
+.date-separator button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.date-separator-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .date-separator button:active {
   background: rgba(0, 0, 0, 0.3);
 }
