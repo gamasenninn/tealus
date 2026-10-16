@@ -72,6 +72,8 @@ export interface PromptHistoryItem {
   created_at: string;
 }
 export interface PromptHistoryResponse { items: PromptHistoryItem[]; target_counts: Record<string, number> }
+/** 宛名の候補 (音声の編集画面)。部屋で人が直した版の冒頭の呼びかけを多い順に */
+export interface VoiceAddressCandidatesResponse { candidates: { text: string; count: number }[] }
 export interface AgentIdentityResponse { user_id: string | null; display_name: string | null }
 /** #356 配信中クライアントのビルド ID。未ビルド (dev) では null */
 export interface VersionResponse { build_id: string | null }
@@ -565,6 +567,10 @@ class ApiClient {
   // Transcription
   editTranscription(messageId: string, text: string) {
     return this.request<TranscriptionEditResponse>('PUT', `/messages/${messageId}/transcription`, { text });
+  }
+
+  getVoiceAddressCandidates(roomId: string) {
+    return this.request<VoiceAddressCandidatesResponse>('GET', `/rooms/${roomId}/voice-address-candidates`);
   }
 
   getTranscriptionHistory(messageId: string) {

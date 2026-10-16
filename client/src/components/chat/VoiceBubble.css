@@ -249,6 +249,34 @@
   flex-shrink: 0;
 }
 
+/* 宛名の候補 (2026-10-16)。折り返して並べ、横にはみ出さない */
+.voice-edit-addresses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.voice-edit-addresses-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.voice-edit-address {
+  padding: 4px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 999px;
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.voice-edit-address:hover {
+  background: var(--bg-hover, #f2f2f2);
+}
+
 .voice-edit-nav {
   display: flex;
   justify-content: space-between;

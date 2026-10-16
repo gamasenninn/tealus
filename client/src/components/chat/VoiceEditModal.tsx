@@ -10,6 +10,7 @@ import type { Message, Room } from '../../types';
 import { notifyAudioStarted, notifyAudioStopped, subscribeAudioStarted, requestAudioSeek, requestAudioToggle } from '../../utils/audioExclusive';
 import { formatDuration } from '../../utils/format';
 import { voiceEditKeyAction } from '../../utils/voiceEditKeys';
+import { applyAddress } from '../../utils/voiceAddress';
 
 interface VoiceEditModalProps {
   messageId: string;
@@ -57,6 +58,24 @@ function VoiceEditModal({
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ★ 宛名の候補 (2026-10-16 利用者判断)。無線の手直しの 6 割強は冒頭の宛名で、宛名は現場の呼び名なので
+  //   候補は部屋で人が直した版から本体が数える。音声メッセージの経路だけ (注入された経路 #379 の
+  //   通話履歴などは版の持ち方が違う)。★ 取れなくても編集は続けられる (候補を出さないだけ)
+  const [addressCandidates, setAddressCandidates] = useState<string[]>([]);
+  const roomId = currentRoom?.id;
+  useEffect(() => {
+    if (selectItems || !roomId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const data = await api.getVoiceAddressCandidates(roomId);
+        if (alive) setAddressCandidates(data.candidates.map((c) => c.text));
+      } catch { /* 候補が無いだけ */ }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
 
   // ★ 開いた直後のフォーカス先 (2026-09-05)。詳細は textarea 側のコメント。
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -356,6 +375,26 @@ function VoiceEditModal({
              押し出しが起きず、毎回クリックするのが手間だった)。判定と処理は上の useEffect */
           rows={6}
         />
+
+        {/* 宛名の候補 (2026-10-16): 押すと冒頭の呼びかけを差し替える (無ければ先頭に足す)。保存は確定 / 移動で */}
+        {addressCandidates.length > 0 && (
+          <div className="voice-edit-addresses" aria-label="宛名の候補">
+            <span className="voice-edit-addresses-label">宛名</span>
+            {addressCandidates.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="voice-edit-address"
+                onClick={() => {
+                  setEditText((t) => applyAddress(t, c));
+                  textareaRef.current?.focus();
+                }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 連続編集ナビ: 前/次 で隣の音声へ (未保存は自動保存) */}
         <div className="voice-edit-nav">
