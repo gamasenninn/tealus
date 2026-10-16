@@ -773,7 +773,7 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 
 ## 内部実装
 
-- agent-server cc-queue: `agent-server/src/webhook/ccQueue.js` + `handler.js`
+- agent-server cc-queue: `agent-server/src/webhook/ccQueue.mts` + `handler.mts`
 - listen-tealus skill: `.claude/skills/listen-tealus/SKILL.md` (http の接続コマンドは同じディレクトリの `cc-stream.sh` にも。食い違いはテストが落とす)
 - handle-tealus skill (PaneDeck のペイン用、受け取り方 C): `.claude/skills/handle-tealus/SKILL.md`
 - 返し方の決まり: [tealus-mcp `src/instructions.js`](https://github.com/gamasenninn/tealus-mcp/blob/main/src/instructions.js) (v0.16.0+)

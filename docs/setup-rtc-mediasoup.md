@@ -107,7 +107,7 @@ LAN IP の確認:
 
 ## ステップ 3. server 側 proxy を確認 (~1 分)
 
-server (port 3000) は `/rtc/*` を rtc-server (3100) に proxy している (`server/src/app.js`)。client は server 経由で rtc-server に接続するので、別途 firewall で 3100 を開ける必要はない (LAN 内なら)。
+server (port 3000) は `/rtc/*` を rtc-server (3100) に proxy している (`server/src/app.mts`)。client は server 経由で rtc-server に接続するので、別途 firewall で 3100 を開ける必要はない (LAN 内なら)。
 
 ```bash
 curl http://localhost:3000/rtc/health

@@ -1,8 +1,8 @@
 /**
  * TTS core: Aivis Cloud API 合成 + mediasoup PlainTransport 送信
  *
- * agent-server の自動読み上げ（ttsSpeak.js）と rtc-server の CLI
- * （tts-speak.js）で同一ロジックを使うための共通モジュール。
+ * agent-server の自動読み上げ（ttsSpeak.mts）と rtc-server の CLI
+ * （tts-speak.mts）で同一ロジックを使うための共通モジュール。
  * Node 標準 API（https / child_process / ws）のみ使用するため
  * どちらの node_modules からも動作する。
  */

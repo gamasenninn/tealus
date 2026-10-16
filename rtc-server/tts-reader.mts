@@ -6,8 +6,8 @@
  * AI エージェントのメッセージを TTS → PlainTransport でトランシーバーに読み上げる。
  *
  * 使い方:
- *   node tts-reader.js
- *   pm2 start tts-reader.js --name tts-reader
+ *   node tts-reader.mts
+ *   pm2 start tts-reader.mts --name tts-reader
  *
  * 環境変数(.env):
  *   AIVIS_API_KEY          — Aivis Cloud API キー（必須）

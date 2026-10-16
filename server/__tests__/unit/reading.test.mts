@@ -1,9 +1,32 @@
 /**
  * #327 読み供給サービス。pykakasi は DI stub で差し替え（subprocess を回避）。
  */
-import * as reading from '../../src/services/reading.mts';
+jest.mock('../../src/utils/logger.mts', () => ({ logger: {
+  info: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  error: jest.fn(),
+} }));
 
-beforeEach(() => reading._clearCache());
+import * as reading from '../../src/services/reading.mts';
+import { logger } from '../../src/utils/logger.mts';
+
+beforeEach(() => { reading._clearCache(); jest.clearAllMocks(); });
+
+describe('getReadings — pykakasi に失敗したとき (2026-10-16)', () => {
+  test('★ 失敗を記録に残す (以前は黙ってカナ→かなに落ち、辞書の学習の質だけが下がっていた)', async () => {
+    const stub = async () => { throw new Error('uv not found'); };
+    const m = await reading.getReadings(['カナ'], { pykakasiImpl: stub });
+    expect(m.get('カナ')).toBe('かな');
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('uv not found'));
+  });
+
+  test('★ 失敗したときの代わりの読みは覚えない (次に直っていれば正しい読みが取れる)', async () => {
+    await reading.getReadings(['小坂'], { pykakasiImpl: async () => { throw new Error('x'); } });
+    const m = await reading.getReadings(['小坂'], { pykakasiImpl: async () => ({ 小坂: 'こさか' }) });
+    expect(m.get('小坂')).toBe('こさか');
+  });
+});
 
 describe('getReadings', () => {
   test('pykakasi の読みを返す（漢字 garble）', async () => {

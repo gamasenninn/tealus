@@ -70,6 +70,21 @@ describe('Transcription Edit API', () => {
       expect(res.body.transcription.version).toBe(2);
     });
 
+    it('★ 最新の版と同じ文なら版を積まない (無変更の保存で「人が直した」印を作らない)', async () => {
+      const res = await request(app)
+        .put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ text: '  整形済みテキスト  ' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.transcription.version).toBe(1);
+      expect(res.body.transcription.formatted_text).toBe('整形済みテキスト');
+      const pool = getTestPool();
+      const rows = await pool.query('SELECT version, edited_by FROM voice_transcriptions WHERE message_id = $1', [messageId]);
+      expect(rows.rows).toHaveLength(1);
+      expect(rows.rows[0].edited_by).toBeNull();
+    });
+
     it('should reject edit by non-sender', async () => {
       const res = await request(app)
         .put(`/api/messages/${messageId}/transcription`)

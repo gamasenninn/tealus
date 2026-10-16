@@ -14,6 +14,10 @@
 - **音声の編集画面に「宛名の候補」** — 押すと冒頭の呼びかけを差し替える (無ければ先頭に足す)。無線の手直しは 7 日で 336 便中 123 便、6 割強が冒頭の宛名だった。宛名は現場の呼び名 (名簿に無い) なので、候補は**その部屋で人が直した版の冒頭**から多い順に数える (`GET /api/rooms/:id/voice-address-candidates`、直近 90 日・2 回以上・16 件まで)。設定は要らない。★ 通話履歴など添付音声の経路 (#379) には出さない。規則は `server/src/services/voiceAddress.mts` と `client/src/utils/voiceAddress.ts` の 2 か所 (数える側と当てる側)
 
 ### Fixed
+- **文字起こしを同じ文のまま保存すると版が積まれていた** — 最新の版と同じ文なら版を積まない (`PUT /api/messages/:id/transcription`)。積むと「人が直した」印 (手直しの台帳・辞書の学習・宛名の候補) を無変更の保存が作る。本番は 30 日で 4 件 (画面の表示が古いまま保存されたと推定)
+- **読み (pykakasi) の失敗が黙っていた** — 失敗を warn で残し、そのとき代わりに使ったカナ→かなの読みは覚えない (以前は覚えたので、一度失敗した語は再起動まで正しい読みに戻らなかった)
+- **Claude Code の通知を声で読む hook (`.claude/hooks/tts-notify.js`) を外した** — 7/11 から 2 つの理由 (`"type": "module"` の下で `require`・7/12 に消えた `tts-speak.js` を呼ぶ) で起動直後に落ち、失敗が表に出ないため誰も気づいていなかった。鳴る先は業務メモの部屋で、全セッションの全通知で鳴る作りだったので、直さずに外した (要るようになったら専用の部屋で作り直す)
+- 古いファイル名 (.js) のままだった使い方の表示・手順書 7 か所を .mts に
 - **画像生成のモデル名 `OPENAI_IMAGE_MODEL` が tealus-mcp に届いていなかった** — #573 で子プロセスへ渡す環境変数を許可制にしたとき一覧から漏れ、agent-server の `.env` に書いても既定 (`gpt-image-1`) のままだった。`agent-server/src/lib/childEnv.mts` の `TEALUS_MCP_TOOL_KEYS` に足した
 - **node 直起動の Docker で Deep (codex) が codex を見つけなかった** — `AGENT_CODEX_BIN` が無いと PATH 任せで、`npm start` を通らない起動では `node_modules/.bin` が PATH に入らない。指定が無ければ agent-server 自身の `node_modules/.bin/codex` を先に使う (`npm start` と同じ順)。★ これで Deep も Light v2 と同じ版の codex になる (本家は Deep だけグローバルの 0.154 だった)。★ alpine (musl) で codex が動くかは未確認
 

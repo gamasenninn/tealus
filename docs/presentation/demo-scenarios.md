@@ -88,7 +88,7 @@ audience 別 Full pitch / 短尺 / 動画 / LP すべてで使う **demo 素材*
 3. 編集履歴が voice_transcriptions テーブルに記録
    ↑ AI 版 (raw="タウン液") と user 編集版 (formatted="田植機") のペア
 4. 翌日: 「mining script を走らせます」
-   $ node scripts/mine_transcription_aliases.js --mode=by-term --threshold=2
+   $ node scripts/mine_transcription_aliases.mts --mode=by-term --threshold=2
 5. 結果: 「タウン液 → 田植機」が新 alias 候補として report
 6. user 確認 → vocabulary に追加
 7. 次回: 「タウン液」が AI 整形で自動的に「田植機」に正規化

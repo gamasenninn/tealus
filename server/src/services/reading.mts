@@ -13,6 +13,7 @@
  */
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { logger } from '../utils/logger.mts';
 
 export function kata2hira(s: string): string {
   return [...String(s || '')].map((c) => {
@@ -57,10 +58,16 @@ export async function getReadings(texts: string[], opts: { pykakasiImpl?: (t: st
   }
   if (need.length) {
     let readings: Record<string, string> = {};
-    try { readings = await impl(need); } catch { readings = {}; }
+    // ★ 2026-10-16: 失敗を記録に残す (以前は黙ってカナ→かなに落ち、漢字の garble が音韻ゲートで全部落ちても
+    //   誰も気づけなかった)。★ 失敗したときの代わりの読みは覚えない —— 覚えると、その語は再起動まで直らない
+    let failed = false;
+    try { readings = await impl(need); } catch (err) {
+      failed = true;
+      logger.warn(`[reading] pykakasi に失敗、カナ→かなで代用 (${need.length} 語): ${err instanceof Error ? err.message : String(err)}`);
+    }
     for (const t of need) {
       const r = (readings && readings[t]) || kata2hira(t);
-      cache.set(t, r);
+      if (!failed) cache.set(t, r);
       out.set(t, r);
     }
   }

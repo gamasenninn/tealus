@@ -80,6 +80,17 @@ router.put('/', authenticate, async (req, res) => {
     const rawText = latestResult.rows[0]?.raw_text || '';
     const priorFormatted = latestResult.rows[0]?.formatted_text || '';
 
+    // ★ 最新の版と同じ文なら版を積まない (2026-10-16)。積むと edited_by が付き、
+    //   「人が直した」印 (手直しの台帳・辞書の学習・宛名の候補) を無変更の保存が作る。
+    //   画面 (VoiceEditModal) も同じ文なら送らないが、表示が古いまま保存されると届く (30 日で 4 件)
+    if (latestResult.rows.length > 0 && priorFormatted.trim() === text.trim()) {
+      const current = await pool.query(
+        'SELECT message_id, version, raw_text, formatted_text, status FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1',
+        [messageId]
+      );
+      return res.json({ transcription: current.rows[0] });
+    }
+
     // Insert new version
     const result = await pool.query<{ message_id: string; version: number; raw_text: string | null; formatted_text: string; status: string }>(
       `INSERT INTO voice_transcriptions (message_id, version, raw_text, formatted_text, status, edited_by)

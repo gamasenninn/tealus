@@ -3,11 +3,11 @@
  * PlainTransport + RTP 送信テスト (#153)
  *
  * 使い方:
- *   node test-plain-rtp.js [roomId] [audioFile]
+ *   node test-plain-rtp.mts [roomId] [audioFile]
  *
  * 例:
- *   node test-plain-rtp.js test-room test_audio.ogg
- *   node test-plain-rtp.js  ← デフォルト: room=plain-test, 無音テスト
+ *   node test-plain-rtp.mts test-room test_audio.ogg
+ *   node test-plain-rtp.mts  ← デフォルト: room=plain-test, 無音テスト
  *
  * 前提:
  *   - rtc-server が起動している (localhost:3100)

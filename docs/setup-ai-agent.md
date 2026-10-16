@@ -393,7 +393,7 @@ module.exports = { processLight };
 
 `.env` で `AGENT_LIGHT_BACKEND=/abs/path/to/lightCustom.js` を指定。
 
-sample skeleton: `agent-server/src/agents/lightCustomExample.js`
+sample skeleton: `agent-server/src/agents/lightCustomExample.mts`
 
 ### 9.5-5. 不正値時の挙動 + 注意
 
