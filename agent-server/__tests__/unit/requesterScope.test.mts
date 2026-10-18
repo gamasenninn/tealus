@@ -123,6 +123,14 @@ describe('道具 (tealus-mcp) の接続先', () => {
     expect(mcp.tealus.env!.TEALUS_API_URL).toBe(cfg.TEALUS_API_URL);
   });
 
+  it('★ tealus の道具は required (codex が道具の付くのを待ってから始める)', () => {
+    // 2026-10-18: codex 0.162.1 は MCP を裏で遅れて付ける。npx github: の tealus-mcp は 3〜4 秒かかり、
+    //   AI が最初に見た道具の一覧に tealus が無く、10-17・10-18 の朝礼の議事録で「接続できない」になった
+    const { build } = load();
+    const mcp = build(undefined) as Record<string, { required?: boolean }>;
+    expect(mcp.tealus.required).toBe(true);
+  });
+
   it('★ 依頼した人がいれば、中継 (127.0.0.1 の /tealus-scoped/<鍵>) へ向ける', async () => {
     const { build, rc, cfg } = load();
     await rc.runAsRequester(U, async () => {

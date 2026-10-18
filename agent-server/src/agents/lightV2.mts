@@ -49,6 +49,7 @@ interface McpServerDef {
   command: string;
   args: string[];
   env: Record<string, string>;
+  required?: boolean;
 }
 
 // codex-sdk は ESM のみ。CommonJS から動的 import で読む
@@ -146,6 +147,10 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
     const tealusDef: McpServerDef = {
       command: 'npx',
       args: ['-y', TEALUS_MCP_PACKAGE],
+      // ★ 2026-10-18 codex 0.162.1 は MCP を裏で遅れて付ける。tealus-mcp (npx github:) は起動に 3〜4 秒かかり、
+      //   AI が最初に見た一覧に tealus が無いと「接続できない」で諦める (10-17・10-18 の朝礼の議事録)。
+      //   required にすると codex は付くまで待ってから始める (付かなければその回は失敗として出る)
+      required: true,
       env: {
         // ★ #564 依頼した人がいれば中継 (/tealus-scoped/<鍵>) に向ける = 本体がその人の部屋だけに絞る
         TEALUS_API_URL: tealusApiUrlForCurrentRequester(),

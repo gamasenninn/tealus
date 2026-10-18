@@ -79,6 +79,15 @@ describe('serializeMcpServersToToml', () => {
     expect(toml).toContain('USER_ID = "BOT"');
   });
 
+  test('required を持つ server は required = true を書く (無いものは書かない)', () => {
+    const toml = serializeMcpServersToToml({
+      tealus: { command: 'npx', args: [], env: {}, required: true },
+      fs: { command: 'npx', args: [], env: {} },
+    });
+    expect(toml).toContain('[mcp_servers.tealus]\ncommand = "npx"\nargs = []\nrequired = true');
+    expect(toml.match(/required/g)).toHaveLength(1);
+  });
+
   test('multiple servers 各 section', () => {
     const toml = serializeMcpServersToToml({
       a: { command: 'cmdA', args: [], env: {} },

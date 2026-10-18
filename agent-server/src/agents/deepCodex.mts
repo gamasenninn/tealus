@@ -31,6 +31,8 @@ export interface McpServerDef {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  /** codex が付くまで待つ (付かなければその回を失敗にする)。tealus だけに付ける (lightV2.mts) */
+  required?: boolean;
 }
 export type McpServersConfig = Record<string, McpServerDef>;
 
@@ -95,6 +97,9 @@ export function serializeMcpServersToToml(mcp_servers: McpServersConfig): string
     if (Array.isArray(def.args)) {
       const argsToml = def.args.map((a) => `"${tomlEscape(a)}"`).join(', ');
       lines.push(`args = [${argsToml}]`);
+    }
+    if (def.required === true) {
+      lines.push('required = true');
     }
     lines.push('');
     if (def.env && typeof def.env === 'object' && Object.keys(def.env).length > 0) {
