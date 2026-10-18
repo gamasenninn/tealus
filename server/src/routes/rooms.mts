@@ -11,6 +11,10 @@ import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
 import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
 import { rememberRoomMedia } from '../services/deletedMedia.mts';
+import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/appPass.mts';
+
+/** #607 通行証を出せないとき。★ 理由を外に言い分けない (どの条件で落ちたかは記録にだけ残す) */
+const APP_PASS_UNAVAILABLE = 'このアプリには通行証を出せません';
 
 const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../../../media'), 'icons');
 const iconStorage = multer.diskStorage({
@@ -425,6 +429,47 @@ router.get('/:id', requireMember, async (req, res) => {
     res.json({ room: { ...roomResult.rows[0], push_muted }, members: membersFor(req.user!, membersResult.rows), last_read_message_id });
   } catch (err) {
     logger.error('Get room error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * POST /api/rooms/:id/app-pass  (body: { index, url })
+ * #607 アプリパネルのアプリを開くための、2 分だけ有効な通行証つきの入口 URL を返す (docs/11 §5.2)。
+ * ★ 出すのは「その部屋のメンバー」で「通行証を添える」が付いたアプリ、鍵のあるサイトのときだけ。
+ *   出せない理由は外に言い分けない (どれも 404 と同じ文)。記録には残す
+ */
+router.post('/:id/app-pass', requireMember, async (req, res) => {
+  const roomId = String(req.params.id);
+  const { index, url } = req.body ?? {};
+  if (!Number.isInteger(index) || index < 0 || typeof url !== 'string') {
+    return res.status(400).json({ error: 'index (整数) と url を指定してください' });
+  }
+  const refuse = (why: string) => {
+    logger.info(`[app-pass] 出さない: room=${roomId} user=${req.user!.id} index=${index} — ${why}`);
+    return res.status(404).json({ error: APP_PASS_UNAVAILABLE });
+  };
+  // ★ 機械のアカウントは多くの部屋のメンバーなので、メンバーであることを人の印にしない
+  if (req.user!.is_bot) return refuse('機械のアカウント');
+  try {
+    const r = await pool.query<{ app_urls: Array<{ url?: unknown; pass?: unknown }> | null }>(
+      'SELECT app_urls FROM rooms WHERE id = $1', [roomId],
+    );
+    const entry = r.rows[0]?.app_urls?.[index];
+    if (!entry) return refuse('その番号のアプリが無い');
+    // ★ url も照らす: 開いている間に管理者が並べ替えたとき、別のアプリの通行証を出さない
+    if (entry.url !== url) return refuse('url が今の並びと合わない');
+    if (entry.pass !== true) return refuse('通行証を添えるが付いていない');
+    const target = passTarget(url);
+    if (!target) return refuse('https の URL でない');
+    const key = loadAppPassKey(target.host);
+    if (!key) return refuse(`鍵が無い (${target.host})`);
+    const token = signAppPass(key, {
+      aud: target.origin, room: roomId, sub: req.user!.id, name: req.user!.display_name, to: target.to,
+    }, Math.floor(Date.now() / 1000));
+    res.json({ url: buildGateUrl(target, token) });
+  } catch (err) {
+    logger.error('App pass error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

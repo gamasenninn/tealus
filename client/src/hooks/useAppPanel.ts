@@ -1,15 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { Room } from '../types';
+import type { Room, AppUrl } from '../types';
 
-// Room (types.ts) に app_urls が無いため local 補完 (server の room 応答が持つ)
-export interface AppUrl {
-  url: string;
-  title?: string;
-  auto_open?: boolean;
-  wake_lock?: boolean;
-  ratio?: number;
-}
+// ★ AppUrl の写しをここに持たない (#607 で pass を足したとき、片方だけ直す形になっていた)
+export type { AppUrl };
 
 type RoomWithAppUrls = Room & { app_urls?: AppUrl[] };
 

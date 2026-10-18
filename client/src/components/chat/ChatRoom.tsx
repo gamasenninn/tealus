@@ -10,6 +10,7 @@ import { getSocket } from '../../services/socket';
 import { api } from '../../services/api';
 import { useVoiceContinuousPlay } from '../../hooks/useVoiceContinuousPlay';
 import { useAppPanel } from '../../hooks/useAppPanel';
+import { useAppPassUrl } from '../../hooks/useAppPassUrl';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
@@ -59,6 +60,8 @@ function ChatRoom() {
   // #476 日付の札を押したら、その日を入れてカレンダーを開く
   const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom);
+  // #607 「通行証を添える」が付いたアプリは、通行証つきの入口 URL で開く (docs/11 §5.3)
+  const appFrameSrc = useAppPassUrl(roomId, appUrls[activeAppIndex], activeAppIndex, showAppPanel);
   useVoiceContinuousPlay(messages);
 
   // Search params
@@ -295,7 +298,7 @@ function ChatRoom() {
           {showAppPanel && (
             <iframe
               className="app-panel-iframe"
-              src={appUrls[activeAppIndex]?.url}
+              src={appFrameSrc}
               title={appUrls[activeAppIndex]?.title}
               allow="microphone; camera; autoplay; fullscreen"
             />

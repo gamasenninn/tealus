@@ -250,6 +250,16 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
   };
 
+  // #607 開くときに Tealus の通行証を添える (docs/11)。★ 相手側と取り決めがあるサイトにだけ効く
+  const handleTogglePass = async (index: number) => {
+    try {
+      const updated = appUrls.map((app, i) => i === index ? { ...app, pass: !app.pass } : app);
+      await api.updateRoom(roomId, { app_urls: updated });
+      setAppUrls(updated);
+      await selectRoom(roomId);
+    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+  };
+
   const handleAppRatioChange = async (index: number, ratio: string) => {
     try {
       const updated = appUrls.map((app, i) => i === index ? { ...app, ratio: parseInt(ratio) } : app);
@@ -442,6 +452,10 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
                 <label className="app-url-auto-open">
                   <input type="checkbox" checked={app.wake_lock || false} onChange={() => handleToggleWakeLock(i)} />
                   <span>画面をONに保つ</span>
+                </label>
+                <label className="app-url-auto-open" title="相手のサイトと取り決めがあるときだけ効きます。メンバーはパスワードなしで開けます">
+                  <input type="checkbox" checked={app.pass || false} onChange={() => handleTogglePass(i)} />
+                  <span>Tealus の通行証を添える</span>
                 </label>
               </div>
               <div className="app-url-actions">

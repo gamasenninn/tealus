@@ -73,6 +73,8 @@ export interface AppUrl {
   title?: string;
   auto_open?: boolean;
   wake_lock?: boolean;
+  /** #607 開くときに Tealus の通行証を添える (docs/11) */
+  pass?: boolean;
   ratio?: number;
 }
 

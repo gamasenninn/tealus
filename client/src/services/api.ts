@@ -496,6 +496,11 @@ class ApiClient {
     return this.request<{ room: Room }>('PUT', `/rooms/${roomId}`, data);
   }
 
+  /** #607 通行証つきの入口 URL (docs/11 §5.2)。出せないときは投げる */
+  getAppPass(roomId: string, index: number, url: string) {
+    return this.request<{ url: string }>('POST', `/rooms/${roomId}/app-pass`, { index, url });
+  }
+
   /** #463 自分の分だけ、このルームの通知を鳴らす / 鳴らさない */
   setRoomNotification(roomId: string, muted: boolean) {
     return this.request<{ push_muted: boolean }>('PUT', `/rooms/${roomId}/notification`, { muted });
