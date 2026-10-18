@@ -72,7 +72,7 @@ router.get('/portal-links', async (req, res) => {
   }
   try {
     const result = await pool.query(
-      'SELECT id, title, url, icon FROM portal_links WHERE is_active = true ORDER BY sort_order, created_at'
+      'SELECT id, title, url, icon, pass FROM portal_links WHERE is_active = true ORDER BY sort_order, created_at'
     );
     res.json({ links: result.rows });
   } catch (err) {
@@ -434,6 +434,53 @@ router.get('/:id', requireMember, async (req, res) => {
 });
 
 /**
+ * #607 部屋のアプリとホームのタブで共通の後半: URL の形 → 鍵 → 署名。
+ * 出せないときは refuse を呼んで null を返す (refuse が応答を返す)
+ */
+function issueAppPass(
+  url: string, room: string, user: { id: string; display_name: string }, refuse: (why: string) => unknown,
+): string | null {
+  const target = passTarget(url);
+  // ★ passTarget は http: のほか、パスが // や /\ で始まる https も断る (よそへ飛ばされないため)
+  if (!target) { refuse('https の URL でない、または行き先の形が崩れている'); return null; }
+  const key = loadAppPassKey(target.host);
+  if (!key) { refuse(`鍵が無い (${target.host})`); return null; }
+  const token = signAppPass(key, {
+    aud: target.origin, room, sub: user.id, name: user.display_name, to: target.to,
+  }, Math.floor(Date.now() / 1000));
+  return buildGateUrl(target, token);
+}
+
+/**
+ * POST /api/rooms/portal-links/:id/app-pass
+ * #607 ホーム画面のタブ (portal_links) の通行証 (docs/11 §5.4)。通す範囲は「タブが見えている人」=
+ * ゲストを除くログイン中の人 (GET /portal-links と同じ #282)。機械は除く。通行証の room は "home"
+ */
+router.post('/portal-links/:id/app-pass', async (req, res) => {
+  const linkId = String(req.params.id);
+  if (!isUuid(linkId)) return res.status(400).json({ error: badIdMessage(linkId) });
+  const refuse = (why: string) => {
+    logger.info(`[app-pass] 出さない: portal=${linkId} user=${req.user!.id} — ${why}`);
+    return res.status(404).json({ error: APP_PASS_UNAVAILABLE });
+  };
+  if (isGuest(req.user)) return refuse('ゲスト');
+  if (req.user!.is_bot) return refuse('機械のアカウント');
+  try {
+    const r = await pool.query<{ url: string; pass: boolean }>(
+      'SELECT url, pass FROM portal_links WHERE id = $1 AND is_active = true', [linkId],
+    );
+    const link = r.rows[0];
+    if (!link) return refuse('そのリンクが無い (または止めてある)');
+    if (link.pass !== true) return refuse('通行証を添えるが付いていない');
+    const gateUrl = issueAppPass(link.url, 'home', req.user!, refuse);
+    if (gateUrl) res.json({ url: gateUrl });
+  } catch (err) {
+    logger.error('Portal app pass error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
  * POST /api/rooms/:id/app-pass  (body: { index, url })
  * #607 アプリパネルのアプリを開くための、2 分だけ有効な通行証つきの入口 URL を返す (docs/11 §5.2)。
  * ★ 出すのは「その部屋のメンバー」で「通行証を添える」が付いたアプリ、鍵のあるサイトのときだけ。
@@ -460,14 +507,8 @@ router.post('/:id/app-pass', requireMember, async (req, res) => {
     // ★ url も照らす: 開いている間に管理者が並べ替えたとき、別のアプリの通行証を出さない
     if (entry.url !== url) return refuse('url が今の並びと合わない');
     if (entry.pass !== true) return refuse('通行証を添えるが付いていない');
-    const target = passTarget(url);
-    if (!target) return refuse('https の URL でない');
-    const key = loadAppPassKey(target.host);
-    if (!key) return refuse(`鍵が無い (${target.host})`);
-    const token = signAppPass(key, {
-      aud: target.origin, room: roomId, sub: req.user!.id, name: req.user!.display_name, to: target.to,
-    }, Math.floor(Date.now() / 1000));
-    res.json({ url: buildGateUrl(target, token) });
+    const gateUrl = issueAppPass(url, roomId, req.user!, refuse);
+    if (gateUrl) res.json({ url: gateUrl });
   } catch (err) {
     logger.error('App pass error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

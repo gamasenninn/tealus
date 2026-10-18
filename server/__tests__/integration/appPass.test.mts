@@ -130,3 +130,119 @@ describe('POST /api/rooms/:id/app-pass', () => {
     expect(a).not.toBe(b);
   });
 });
+
+/**
+ * #607 ホーム画面のタブ (portal_links) にも通行証を出す (docs/11 §5.4)。
+ * ★ 部屋のアプリだけに付けていて、ホームの社内ポータルが相手側の案内ページになった (改善ループ 8 回目の A)。
+ *   通す範囲は「タブが見えている人」= ゲストを除くログイン中の人 (#282)。機械は除く
+ */
+describe('POST /api/rooms/portal-links/:id/app-pass', () => {
+  let user: TestUser;
+  let keyDir: string;
+  const savedDir = process.env.APP_PASS_KEY_DIR;
+  const NO_PASS = 'このアプリには通行証を出せません';
+
+  beforeAll(async () => {
+    await setupTestDb();
+    keyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apppass-portal-'));
+    process.env.APP_PASS_KEY_DIR = keyDir;
+  });
+
+  afterAll(async () => {
+    if (savedDir === undefined) delete process.env.APP_PASS_KEY_DIR; else process.env.APP_PASS_KEY_DIR = savedDir;
+    fs.rmSync(keyDir, { recursive: true, force: true });
+    await closeTestDb();
+  });
+
+  beforeEach(async () => {
+    await cleanTestDb();
+    await getTestPool().query('DELETE FROM portal_links');
+    fs.writeFileSync(path.join(keyDir, 'apps.example.com.key'), KEY_HEX);
+    user = await createTestUser({ login_id: 'EMP010', display_name: '佐藤次郎' });
+  });
+
+  async function addLink(url: string, pass: boolean, isActive = true): Promise<string> {
+    const r = await getTestPool().query<{ id: string }>(
+      'INSERT INTO portal_links (title, url, pass, is_active) VALUES ($1, $2, $3, $4) RETURNING id',
+      ['社内ポータル', url, pass, isActive],
+    );
+    return r.rows[0].id;
+  }
+
+  const post = (u: TestUser, id: string) => request(app)
+    .post(`/api/rooms/portal-links/${id}/app-pass`)
+    .set('Authorization', `Bearer ${u.token}`)
+    .send({});
+
+  it('ログイン中の人には、入口の URL と検証できる通行証を返す (room は "home")', async () => {
+    const id = await addLink('https://apps.example.com/close/', true);
+    const res = await post(user, id);
+    expect(res.status).toBe(200);
+    const u = new URL(res.body.url);
+    expect(`${u.origin}${u.pathname}`).toBe('https://apps.example.com/tealus-gate/');
+    const [, body, sig] = u.searchParams.get('tealus_pass')!.split('.');
+    const expected = crypto.createHmac('sha256', Buffer.from(KEY_HEX, 'hex')).update(`v1.${body}`).digest();
+    expect(b64urlDecode(sig).equals(expected)).toBe(true);
+    expect(JSON.parse(b64urlDecode(body).toString('utf8'))).toMatchObject({
+      aud: 'https://apps.example.com', room: 'home', sub: user.user.id, name: '佐藤次郎', to: '/close/',
+    });
+  });
+
+  it('★ ゲストには出さない (タブ自体がゲストには見えない #282)', async () => {
+    const id = await addLink('https://apps.example.com/close/', true);
+    await getTestPool().query("UPDATE users SET role = 'guest' WHERE id = $1", [user.user.id]);
+    const res = await post(user, id);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe(NO_PASS);
+  });
+
+  it('★ 機械のアカウントには出さない', async () => {
+    const id = await addLink('https://apps.example.com/close/', true);
+    await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [user.user.id]);
+    const res = await post(user, id);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe(NO_PASS);
+  });
+
+  it('印の無いリンク・止めたリンク・無いリンク・鍵の無いサイトには出さない', async () => {
+    const noPass = await addLink('https://apps.example.com/close/', false);
+    const inactive = await addLink('https://apps.example.com/close/', true, false);
+    const noKey = await addLink('https://nokey.example.com/close/', true);
+    for (const id of [noPass, inactive, noKey, '00000000-0000-0000-0000-000000000000']) {
+      const res = await post(user, id);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe(NO_PASS);
+    }
+  });
+
+  it('形の崩れた ID は 400', async () => {
+    const res = await post(user, 'not-a-uuid');
+    expect(res.status).toBe(400);
+  });
+
+  it('管理者は PUT /api/admin/portal-links/:id で pass を付け外しできる (真偽値だけ)', async () => {
+    const id = await addLink('https://apps.example.com/close/', false);
+    await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [user.user.id]);
+    const put = (body: object) => request(app).put(`/api/admin/portal-links/${id}`)
+      .set('Authorization', `Bearer ${user.token}`).send(body);
+    const on = await put({ pass: true });
+    expect(on.status).toBe(200);
+    expect(on.body.link.pass).toBe(true);
+    expect((await put({ pass: 'yes' })).status).toBe(400);
+  });
+
+  it('管理者は登録のときにも pass を付けられる (付けなければ false)', async () => {
+    await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [user.user.id]);
+    const create = (body: object) => request(app).post('/api/admin/portal-links')
+      .set('Authorization', `Bearer ${user.token}`).send({ title: 't', url: 'https://apps.example.com/close/', ...body });
+    expect((await create({ pass: true })).body.link.pass).toBe(true);
+    expect((await create({})).body.link.pass).toBe(false);
+    expect((await create({ pass: 1 })).status).toBe(400);
+  });
+
+  it('ホームのタブの一覧に pass が載る (画面が通行証を取るかを決めるため)', async () => {
+    await addLink('https://apps.example.com/close/', true);
+    const res = await request(app).get('/api/rooms/portal-links').set('Authorization', `Bearer ${user.token}`);
+    expect(res.body.links[0].pass).toBe(true);
+  });
+});

@@ -4,11 +4,44 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-vi.mock('../../src/services/api', () => ({ api: { getAppPass: vi.fn() } }));
+vi.mock('../../src/services/api', () => ({ api: { getAppPass: vi.fn(), getPortalAppPass: vi.fn() } }));
 import { api } from '../../src/services/api';
-import { useAppPassUrl } from '../../src/hooks/useAppPassUrl';
+import { useAppPassUrl, usePortalPassUrl } from '../../src/hooks/useAppPassUrl';
 
 const getAppPass = vi.mocked(api.getAppPass);
+const getPortalAppPass = vi.mocked(api.getPortalAppPass);
+
+/**
+ * #607 ホーム画面のタブ (portal_links) も同じ扱い (改善ループ 8 回目の A)。
+ * ★ 部屋のアプリだけに付けていて、ホームの社内ポータルが相手側の案内ページになった
+ */
+describe('usePortalPassUrl (#607)', () => {
+  beforeEach(() => { getPortalAppPass.mockReset(); });
+
+  it('印の無いリンクは、元の URL をそのまま', () => {
+    const { result } = renderHook(() => usePortalPassUrl({ id: 'p1', url: 'https://a.example/' }, true));
+    expect(result.current).toBe('https://a.example/');
+    expect(getPortalAppPass).not.toHaveBeenCalled();
+  });
+
+  it('★ 印のあるリンクは、取れるまで about:blank、取れたら入口 URL', async () => {
+    getPortalAppPass.mockResolvedValue({ url: 'https://apps.example.com/tealus-gate/?tealus_pass=v1.p.q' });
+    const { result } = renderHook(() => usePortalPassUrl({ id: 'p1', url: 'https://apps.example.com/close/', pass: true }, true));
+    expect(result.current).toBe('about:blank');
+    expect(getPortalAppPass).toHaveBeenCalledWith('p1');
+    await waitFor(() => expect(result.current).toBe('https://apps.example.com/tealus-gate/?tealus_pass=v1.p.q'));
+  });
+
+  it('取れなかったら元の URL / タブが選ばれていない間は取りに行かない', async () => {
+    getPortalAppPass.mockRejectedValue(new Error('x'));
+    const link = { id: 'p1', url: 'https://apps.example.com/close/', pass: true };
+    const { result: closed } = renderHook(() => usePortalPassUrl(link, false));
+    expect(getPortalAppPass).not.toHaveBeenCalled();
+    expect(closed.current).toBe('about:blank');
+    const { result } = renderHook(() => usePortalPassUrl(link, true));
+    await waitFor(() => expect(result.current).toBe(link.url));
+  });
+});
 const APP = { title: '棚卸', url: 'https://apps.example.com/close/a', pass: true };
 
 describe('useAppPassUrl (#607)', () => {

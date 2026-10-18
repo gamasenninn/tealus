@@ -684,6 +684,11 @@ class ApiClient {
     return this.request<PortalLinksResponse>('GET', '/rooms/portal-links');
   }
 
+  /** #607 ホーム画面のタブの通行証つき入口 URL (docs/11 §5.4)。出せないときは投げる */
+  getPortalAppPass(linkId: string) {
+    return this.request<{ url: string }>('POST', `/rooms/portal-links/${linkId}/app-pass`, {});
+  }
+
   // Message publish
   togglePublish(roomId: string, messageId: string, isPublished: boolean) {
     return this.request('PATCH', `/rooms/${roomId}/messages/${messageId}/publish`, { is_published: isPublished });

@@ -32,6 +32,8 @@ function PortalManager() {
   const [formTitle, setFormTitle] = useState('');
   const [formUrl, setFormUrl] = useState('');
   const [formIcon, setFormIcon] = useState('');
+  // #607 開くときに Tealus の通行証を添える (docs/11 §5.4)
+  const [formPass, setFormPass] = useState(false);
 
   useEffect(() => { loadLinks(); }, []);
 
@@ -48,13 +50,14 @@ function PortalManager() {
     setFormTitle('');
     setFormUrl('');
     setFormIcon('');
+    setFormPass(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
-      const data: Partial<PortalLink> = { title: formTitle, url: formUrl, icon: formIcon || null };
+      const data: Partial<PortalLink> = { title: formTitle, url: formUrl, icon: formIcon || null, pass: formPass };
       if (editingId) {
         await api.updatePortalLink(editingId, data);
       } else {
@@ -73,6 +76,7 @@ function PortalManager() {
     setFormTitle(link.title);
     setFormUrl(link.url);
     setFormIcon(link.icon || '');
+    setFormPass(link.pass === true);
     setEditingId(link.id);
     setShowForm(true);
   };
@@ -120,6 +124,11 @@ function PortalManager() {
                 <label>アイコン（絵文字、任意）</label>
                 <input type="text" value={formIcon} onChange={e => setFormIcon(e.target.value)} placeholder="📋" />
               </div>
+              <div className="form-group">
+                <label title="相手のサイトと取り決めがあるときだけ効きます。ログイン中の人 (ゲストと機械を除く) はパスワードなしで開けます">
+                  <input type="checkbox" checked={formPass} onChange={e => setFormPass(e.target.checked)} /> Tealus の通行証を添える
+                </label>
+              </div>
               <div className="form-actions">
                 <button type="submit" className="admin-create-btn">{editingId ? '更新' : '登録'}</button>
                 <button type="button" className="admin-cancel-btn" onClick={() => { setShowForm(false); setEditingId(null); }}>キャンセル</button>
@@ -151,6 +160,7 @@ function PortalManager() {
                     <span className={`status-badge ${l.is_active ? 'active' : 'inactive'}`}>
                       {l.is_active ? '有効' : '無効'}
                     </span>
+                    {l.pass && <span className="status-badge active" title="Tealus の通行証を添える">通行証</span>}
                   </td>
                   <td className="admin-actions">
                     <button className="kebab-btn" onClick={(e) => {

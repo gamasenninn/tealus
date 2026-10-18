@@ -230,6 +230,8 @@ export interface PortalLink {
   icon?: string | null;
   sort_order?: number;
   is_active?: boolean;
+  /** #607 開くときに Tealus の通行証を添える (docs/11 §5.4) */
+  pass?: boolean;
 }
 
 export interface Webhook {

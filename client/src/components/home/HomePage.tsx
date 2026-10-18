@@ -4,7 +4,8 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { api } from '../../services/api';
 import BottomNav from '../common/BottomNav';
-import type { Message, MediaItem } from '../../types';
+import type { Message, MediaItem, PortalLink } from '../../types';
+import { usePortalPassUrl } from '../../hooks/useAppPassUrl';
 import './HomePage.css';
 
 // お知らせ API は is_unread を、media は file_path を返す (types.ts には未定義)
@@ -22,7 +23,7 @@ interface HomeTab {
 function HomePage() {
   const [activeTab, setActiveTab] = useState('announcements');
   const [announcements, setAnnouncements] = useState<AnnouncementMessage[]>([]);
-  const [portalLinks, setPortalLinks] = useState<Array<{ id: string; title: string; url: string }>>([]);
+  const [portalLinks, setPortalLinks] = useState<PortalLink[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   // Portal iframe load 状態 ('loading' | 'loaded' | 'timeout')
@@ -31,6 +32,9 @@ function HomePage() {
   const [iframeState, setIframeState] = useState<'loading' | 'loaded' | 'timeout'>('loading');
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const iframeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // #607 「通行証を添える」が付いたタブは、通行証つきの入口 URL で開く (docs/11 §5.4)
+  const activePortal = portalLinks.find((p) => `portal-${p.id}` === activeTab);
+  const portalSrc = usePortalPassUrl(activePortal, activeTab.startsWith('portal-'));
 
   useEffect(() => {
     loadAnnouncements();
@@ -49,7 +53,7 @@ function HomePage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, portalSrc]);  // ★ #607 通行証を取ってから src が変わるので、そこで測り直す
 
   const startIframeLoadWatch = () => {
     setIframeState('loading');
@@ -60,6 +64,8 @@ function HomePage() {
   };
 
   const handleIframeLoad = () => {
+    // ★ #607 通行証を待つ間の about:blank の読み込みで「読めた」にしない
+    if (portalSrc === 'about:blank') return;
     setIframeState('loaded');
     if (iframeTimeoutRef.current) {
       clearTimeout(iframeTimeoutRef.current);
@@ -235,7 +241,7 @@ function HomePage() {
               <iframe
                 ref={iframeRef}
                 className="home-iframe"
-                src={portal?.url}
+                src={portalSrc}
                 title={portal?.label}
                 allow="microphone; camera; autoplay; fullscreen"
                 onLoad={handleIframeLoad}

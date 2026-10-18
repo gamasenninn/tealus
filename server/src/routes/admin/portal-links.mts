@@ -22,16 +22,20 @@ router.get('/portal-links', async (req, res) => {
  * POST /api/admin/portal-links
  */
 router.post('/portal-links', async (req, res) => {
-  const { title, url, icon } = req.body;
+  const { title, url, icon, pass } = req.body;
   if (!title || !url) {
     return res.status(400).json({ error: 'タイトルとURLは必須です' });
+  }
+  // #607 開くときに Tealus の通行証を添える (docs/11 §5.4)。付けなければ false
+  if (pass !== undefined && typeof pass !== 'boolean') {
+    return res.status(400).json({ error: 'pass は true / false で指定してください' });
   }
   try {
     const maxOrder = await pool.query<{ next: number }>('SELECT COALESCE(MAX(sort_order), 0) + 1 as next FROM portal_links');
     const result = await pool.query(
-      `INSERT INTO portal_links (title, url, icon, sort_order, created_by)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [title, url, icon || null, maxOrder.rows[0].next, req.user!.id]
+      `INSERT INTO portal_links (title, url, icon, sort_order, created_by, pass)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [title, url, icon || null, maxOrder.rows[0].next, req.user!.id, pass === true]
     );
     res.status(201).json({ link: result.rows[0] });
   } catch (err) {
@@ -45,7 +49,11 @@ router.post('/portal-links', async (req, res) => {
  */
 router.put('/portal-links/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, url, icon, sort_order, is_active } = req.body;
+  const { title, url, icon, sort_order, is_active, pass } = req.body;
+  // #607 開くときに Tealus の通行証を添える (docs/11 §5.4)
+  if (pass !== undefined && typeof pass !== 'boolean') {
+    return res.status(400).json({ error: 'pass は true / false で指定してください' });
+  }
   try {
     const updates: string[] = [];
     const values: unknown[] = [];
@@ -55,6 +63,7 @@ router.put('/portal-links/:id', async (req, res) => {
     if (icon !== undefined) { updates.push(`icon = $${paramIndex++}`); values.push(icon); }
     if (sort_order !== undefined) { updates.push(`sort_order = $${paramIndex++}`); values.push(sort_order); }
     if (is_active !== undefined) { updates.push(`is_active = $${paramIndex++}`); values.push(is_active); }
+    if (pass !== undefined) { updates.push(`pass = $${paramIndex++}`); values.push(pass); }
     if (updates.length === 0) return res.status(400).json({ error: '更新する項目がありません' });
     values.push(id);
     const result = await pool.query(
