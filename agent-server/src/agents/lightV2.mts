@@ -50,6 +50,7 @@ interface McpServerDef {
   args: string[];
   env: Record<string, string>;
   required?: boolean;
+  startup_timeout_sec?: number;
 }
 
 // codex-sdk は ESM のみ。CommonJS から動的 import で読む
@@ -151,6 +152,9 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
       //   AI が最初に見た一覧に tealus が無いと「接続できない」で諦める (10-17・10-18 の朝礼の議事録)。
       //   required にすると codex は付くまで待ってから始める (付かなければその回は失敗として出る)
       required: true,
+      // ★ required と組で要る。codex の既定の待ちは 10 秒で、npx の手元の写しが無い (版を上げた直後など) と
+      //   16.5 秒かかり (roomMcpManager の実測)、その間は全部の回が失敗になる
+      startup_timeout_sec: 60,
       env: {
         // ★ #564 依頼した人がいれば中継 (/tealus-scoped/<鍵>) に向ける = 本体がその人の部屋だけに絞る
         TEALUS_API_URL: tealusApiUrlForCurrentRequester(),

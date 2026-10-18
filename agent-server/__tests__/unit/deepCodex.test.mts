@@ -88,6 +88,15 @@ describe('serializeMcpServersToToml', () => {
     expect(toml.match(/required/g)).toHaveLength(1);
   });
 
+  test('startup_timeout_sec を持つ server は数として書く (無いものは書かない)', () => {
+    const toml = serializeMcpServersToToml({
+      tealus: { command: 'npx', args: [], env: {}, required: true, startup_timeout_sec: 60 },
+      fs: { command: 'npx', args: [], env: {} },
+    });
+    expect(toml).toContain('required = true\nstartup_timeout_sec = 60\n');
+    expect(toml.match(/startup_timeout_sec/g)).toHaveLength(1);
+  });
+
   test('multiple servers 各 section', () => {
     const toml = serializeMcpServersToToml({
       a: { command: 'cmdA', args: [], env: {} },

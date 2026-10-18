@@ -131,6 +131,12 @@ describe('道具 (tealus-mcp) の接続先', () => {
     expect(mcp.tealus.required).toBe(true);
   });
 
+  it('★ required と組で、起動を待つ時間を 60 秒に延ばす (既定の 10 秒では、npx の写しが無いとき 16.5 秒で全部の回が失敗する)', () => {
+    const { build } = load();
+    const mcp = build(undefined) as Record<string, { startup_timeout_sec?: number }>;
+    expect(mcp.tealus.startup_timeout_sec).toBe(60);
+  });
+
   it('★ 依頼した人がいれば、中継 (127.0.0.1 の /tealus-scoped/<鍵>) へ向ける', async () => {
     const { build, rc, cfg } = load();
     await rc.runAsRequester(U, async () => {

@@ -33,6 +33,8 @@ export interface McpServerDef {
   env?: Record<string, string>;
   /** codex が付くまで待つ (付かなければその回を失敗にする)。tealus だけに付ける (lightV2.mts) */
   required?: boolean;
+  /** 起動を待つ秒数 (codex の既定は 10)。required と組で使う */
+  startup_timeout_sec?: number;
 }
 export type McpServersConfig = Record<string, McpServerDef>;
 
@@ -100,6 +102,9 @@ export function serializeMcpServersToToml(mcp_servers: McpServersConfig): string
     }
     if (def.required === true) {
       lines.push('required = true');
+    }
+    if (typeof def.startup_timeout_sec === 'number' && Number.isFinite(def.startup_timeout_sec)) {
+      lines.push(`startup_timeout_sec = ${def.startup_timeout_sec}`);
     }
     lines.push('');
     if (def.env && typeof def.env === 'object' && Object.keys(def.env).length > 0) {
