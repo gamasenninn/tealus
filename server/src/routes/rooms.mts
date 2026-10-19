@@ -496,6 +496,8 @@ router.post('/:id/app-pass', requireMember, async (req, res) => {
     logger.info(`[app-pass] 出さない: room=${roomId} user=${req.user!.id} index=${index} — ${why}`);
     return res.status(404).json({ error: APP_PASS_UNAVAILABLE });
   };
+  // ★ 改善ループ 9 回目の G: ホームの口はゲストを断っていたのに、部屋の口は断っていなかった (docs/11 §1 の「通さない人」)
+  if (isGuest(req.user)) return refuse('ゲスト');
   // ★ 機械のアカウントは多くの部屋のメンバーなので、メンバーであることを人の印にしない
   if (req.user!.is_bot) return refuse('機械のアカウント');
   try {

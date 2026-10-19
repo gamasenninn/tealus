@@ -184,7 +184,14 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
       try {
         const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8')) as { mcpServers?: Record<string, CodexConfigObject> };
         // ★ #419 ${VAR} を実体に置き換えてから codex へ渡す (codex は参照を解釈しない)
-        Object.assign(mcp_servers, expandEnvRefs(roomMcp.mcpServers || {}));
+        const roomServers = expandEnvRefs(roomMcp.mcpServers || {});
+        // ★ 改善ループ 9 回目の F: 以前は Object.assign で上書きし、部屋の設定に tealus を書くと
+        //   上の待ちの指定 (required) と中継の向け先が黙って消えた。tealus は部屋の設定では置き換えさせない
+        if (roomServers.tealus && mcp_servers.tealus) {
+          logger.warn(`[LightV2] 部屋の mcp_config.json の tealus は使わない (本体班の組み立てを優先): ${roomMcpPath}`);
+          delete roomServers.tealus;
+        }
+        Object.assign(mcp_servers, roomServers);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(`[LightV2] Failed to load room MCP config: ${message}`);

@@ -123,6 +123,11 @@ describe('POST /api/rooms/:id/app-pass', () => {
     expectNoPass(await post(member, { index: 0, url: APP }));
   });
 
+  it('★ ゲストには、メンバーでも出さない (ホームの口と揃える。改善ループ 9 回目の G)', async () => {
+    await getTestPool().query("UPDATE users SET role = 'guest' WHERE id = $1", [member.user.id]);
+    expectNoPass(await post(member, { index: 0, url: APP }));
+  });
+
   it('★ 出すたびに新しい通行証 (使い切りではないが、毎回作り直す)', async () => {
     const a = (await post(member, { index: 0, url: APP })).body.url;
     await new Promise((r) => setTimeout(r, 1100));
