@@ -13,6 +13,7 @@ import { router as agentRoutes } from './routes/agent.mts';
 import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
+import { requestLog } from './middleware/requestLog.mts';
 import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest } from './lib/configAuthz.mts';
 import { createScopedProxy } from './routes/scopedProxy.mts';
 
@@ -21,6 +22,8 @@ export const app = express();
 app.use('/tealus-scoped', createScopedProxy({ upstream: () => config.TEALUS_API_URL }));
 app.use(express.json());
 app.use(cors());
+// 断られた要求と変更には「誰が」を残す (改善ループ 9 回目の B・C)。★ /tealus-scoped は上で先に返るので通らない
+app.use(requestLog);
 
 // Health check（認証不要）
 app.get('/health', (req, res) => {

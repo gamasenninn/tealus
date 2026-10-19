@@ -21,6 +21,7 @@ import {
   DEFAULT_WINDOW_MS as LOGIN_THROTTLE_WINDOW_MS,
 } from './services/loginThrottle.mts';
 import { loginThrottle } from './middleware/loginThrottle.mts';
+import { requestLog } from './middleware/requestLog.mts';
 import { setupSocketHandlers } from './socket/index.mts';
 import { setIo } from './io-registry.mts';
 import { createSignalHandler, realSleep, realDeadline } from './utils/shutdown.mts';
@@ -213,17 +214,8 @@ app.use('/api/line', express.raw({ type: 'application/json' }), lineRoutes);
 
 app.use(express.json());
 
-// API リクエストログ
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const ms = Date.now() - start;
-    if (req.originalUrl.startsWith('/api/')) {
-      logger.debug(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
-    }
-  });
-  next();
-});
+// API リクエストログ (断られた要求と変更には「誰が」を残す。middleware/requestLog.mts)
+app.use(requestLog);
 
 // Routes
 // (LINE route は app.use(express.json()) より前に登録済、上部参照)
