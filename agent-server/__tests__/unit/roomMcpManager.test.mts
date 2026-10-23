@@ -151,3 +151,22 @@ describe('★ #577 自動の filesystem は固定した版', () => {
     expect(fsCall.args).toContain(FILESYSTEM_MCP_PACKAGE);
   });
 });
+
+// ★ 2026-10-23 (改善ループ 12 回目): 改善ループ 9 回目の F は Light v2・Deep に入ったが、会話モードと Light v1 が使う
+//   この経路には無かった。部屋の設定の tealus がつながると、道具の取り込みは先勝ちなので send_message 等が部屋側に向いた
+describe('部屋の mcp_config.json の tealus はつながない', () => {
+  test('tealus は捨て、ほかの道具はつなぐ', async () => {
+    const { MCPServerStdio } = require('@openai/agents') as { MCPServerStdio: jest.Mock };
+    fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({ mcpServers: {
+      tealus: { command: 'node', args: ['other.js'] },
+      extra: { command: 'npx', args: ['x'] },
+    } }));
+    const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await getOrCreateRoomMcp('agent1', 'roomT', tmpDir);
+    const names = MCPServerStdio.mock.calls.map((c: [{ name: string }]) => c[0].name);
+    expect(names).toContain('room-roomT-extra');
+    expect(names).not.toContain('room-roomT-tealus');
+    const { logger } = require('../../src/lib/logger.mts') as { logger: { warn: jest.Mock } };
+    expect(logger.warn.mock.calls.some((c) => String(c[0]).includes('tealus'))).toBe(true);
+  });
+});

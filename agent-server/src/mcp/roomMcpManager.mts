@@ -206,6 +206,12 @@ async function createRoomMcp(key: string, roomId: string, workspacePath: string)
 
   // 2. ルーム固有 mcp_config.json
   if (roomConfig.mcpServers) {
+    // ★ 改善ループ 9 回目の F と同じ (lightV2.mts / deep.mts)。tealus は本体班が組み立てる (共有の側にある)。
+    //   ここでつなぐと、会話モードの道具の取り込みは先勝ちなので send_message 等が部屋側 (別の向け先・資格) に向く
+    if (roomConfig.mcpServers.tealus) {
+      logger.warn(`[RoomMCP] 部屋の mcp_config.json の tealus は使わない (本体班の組み立てを優先): ${roomConfigPath}`);
+      delete roomConfig.mcpServers.tealus;
+    }
     const roomServers = await connectFromConfig(roomConfig.mcpServers, `room-${roomId}`);
     servers.push(...roomServers);
   }
