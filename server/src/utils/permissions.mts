@@ -19,7 +19,7 @@ export const ROLES = Object.freeze({
 });
 
 /** role を持ちうる object (AuthUser のほか、テストの partial user も受ける) */
-export type UserLike = { role?: string | null } | null | undefined;
+export type UserLike = { role?: string | null; is_bot?: boolean | null } | null | undefined;
 
 /**
  * Get user's role with null-safe access
@@ -68,6 +68,7 @@ export function canCreateRoom(user: UserLike): boolean {
  * 本 helper は role-class レベルの判定のみ、room membership は呼び出し側で行う。
  */
 export function canInviteToRoom(user: UserLike): boolean {
+  if (user?.is_bot) return false;   // ★ 改善ループ 13 回目: 機械は人の操作 (招待) をしない
   return isAdmin(user) || isUser(user);
 }
 

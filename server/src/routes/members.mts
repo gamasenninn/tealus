@@ -25,7 +25,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req: Request,
   // #282: guest は member であっても他 user を招待できない (fail-closed)。
   // client は招待ボタンを隠すが、API 直叩きもサーバーで弾く。
   if (!canInviteToRoom(req.user)) {
-    return res.status(403).json({ error: 'ゲストユーザはメンバーを招待できません' });
+    return res.status(403).json({ error: req.user?.is_bot ? '機械のアカウントはメンバーを招待できません' : 'ゲストユーザはメンバーを招待できません' });
   }
   const roomId = (req.params as { id: string }).id;
   const { user_id } = req.body;

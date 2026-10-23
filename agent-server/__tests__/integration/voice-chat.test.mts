@@ -68,6 +68,8 @@ function token(userId = 'u1'): string {
 function stubFetch(opts: { roomStatus?: number; enabled?: boolean; secretStatus?: number } = {}) {
   const { roomStatus = 200, enabled = true, secretStatus = 200 } = opts;
   global.fetch = jest.fn(async (url: string) => {
+      // ★ 改善ループ 13 回目: 会話モードは役割を本体に聞く (ゲストは断る)。ここの利用者はふつうの社員
+      if (String(url).includes('/api/auth/authz')) return { ok: true, status: 200, json: async () => ({ user_id: 'u1', role: 'user', room: null }) };
     if (String(url).includes('/api/rooms/')) {
       if (roomStatus !== 200) return { ok: false, status: roomStatus, json: async () => ({}) };
       return {
@@ -413,6 +415,8 @@ describe('POST /voice-chat/session — 既定で全許可 + 外す (#418)', () =
   /** room の JSON を組み立てる。restored = 戻す道具、denied = 外す道具 */
   const withRoom = (opts: { restored?: unknown; denied?: unknown } = {}) => {
     global.fetch = jest.fn(async (url: string) => {
+      // ★ 改善ループ 13 回目: 会話モードは役割を本体に聞く (ゲストは断る)。ここの利用者はふつうの社員
+      if (String(url).includes('/api/auth/authz')) return { ok: true, status: 200, json: async () => ({ user_id: 'u1', role: 'user', room: null }) };
       if (String(url).includes('/api/rooms/')) {
         return { ok: true, status: 200, json: async () => ({
           room: {

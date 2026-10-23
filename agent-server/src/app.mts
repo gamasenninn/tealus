@@ -14,7 +14,7 @@ import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
 import { requestLog } from './middleware/requestLog.mts';
-import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest } from './lib/configAuthz.mts';
+import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest, classifyVoiceChatRequest } from './lib/configAuthz.mts';
 import { createScopedProxy } from './routes/scopedProxy.mts';
 
 export const app = express();
@@ -62,7 +62,7 @@ app.use('/agent', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_UR
 // #405 Realtime 音声会話（認証必要）— docs/08 §12。使い捨てトークンの発行 / 道具の実行 / 計測。
 // 認証は JWT のみなので、route 側でさらに本体 /api/rooms/:id を引いて
 // 「参加しているか」と「そのルームで開けてよいか」の両方を確認する。
-app.use('/voice-chat', authenticate, voiceChatRoutes);
+app.use('/voice-chat', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL, classify: classifyVoiceChatRequest }), voiceChatRoutes);
 
 // cc-queue ストリーム（認証必要）— #214 CC セッションを別マシンで動かすための復路。
 // 認証は署名検証のみなので、route 側でさらに本体 /api/rooms を引いて参加ルームに絞る。

@@ -129,3 +129,19 @@ describe('#459 /voice-chat/log の session_id', () => {
     expect(fs.existsSync(path.join(tmpRoot, 'ws', '_voice-chat-logs', `${sid}.jsonl`))).toBe(true);
   });
 });
+
+// ★ 改善ループ 13 回目: 会話モードはメンバーかどうかしか見ず、会話モードを開けた部屋のゲストが AI (機械) の道具を使えた
+//   (cc-projects は #494 でゲストを断っているのに)
+describe('会話モードはゲストに開けない', () => {
+  test.each([
+    ['post', '/voice-chat/session'],
+    ['get', '/voice-chat/tools?room_id=r1&session_id=s'],
+    ['post', '/voice-chat/tool-call'],
+    ['post', '/voice-chat/promote'],
+  ])('★ ゲストの %s %s は 403', async (method, p) => {
+    roles['u-guest'] = 'guest';
+    const r = request(app) as unknown as Record<string, (p: string) => request.Test>;
+    const res = await r[method](p).set(auth('u-guest')).send({ room_id: 'r1' });
+    expect(res.status).toBe(403);
+  });
+});

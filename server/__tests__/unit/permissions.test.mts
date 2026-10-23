@@ -106,6 +106,12 @@ describe('canInviteToRoom — admin/user は可、guest は不可', () => {
   test('guest は招待不可', () => {
     expect(canInviteToRoom(guestUser)).toBe(false);
   });
+
+  // ★ 改善ループ 13 回目: 機械は role=user なので、入っている部屋なら誰でも (ゲストも機械も) 足せた。人の操作なので断る
+  //   (10 月に足したのは人だけ。機械が自分で入る口は /api/bot/rooms/:id/join で別)
+  test('機械 (is_bot) は招待不可', () => {
+    expect(canInviteToRoom({ role: 'user', is_bot: true })).toBe(false);
+  });
 });
 
 describe('canSearchUsers — admin/user は可、guest は不可', () => {

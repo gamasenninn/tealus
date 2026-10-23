@@ -4,13 +4,15 @@ import { clientLabel } from './clientLabel.mts';
 import { logger } from '../utils/logger.mts';
 import { pool } from '../db/pool.mts';
 import { JWT_SECRET } from '../middleware/auth.mts';
-import { isAdmin } from '../utils/permissions.mts';
+import { isAdmin, isGuest } from '../utils/permissions.mts';
 import { registerMessageHandler } from './handlers/message.mts';
 import { registerReadHandler } from './handlers/read.mts';
 import { registerTypingHandler } from './handlers/typing.mts';
 import { registerCallHandler } from './handlers/call.mts';
 import { setViewing, removeSocket } from './viewingRooms.mts';
 import type { SocketUser } from '../types.mts';
+
+const GUEST_ROOM = 'role:guest';
 
 // Online users: userId -> Set of socketIds
 const onlineUsers = new Map<string, Set<string>>();
@@ -65,6 +67,8 @@ export function setupSocketHandlers(io: Server): void {
 
     // Join user-specific room (for targeted events like stamp generation)
     socket.join(`user:${userId}`);
+    // ★ 在席をゲストに流さないための印 (改善ループ 13 回目。REST の /api/users/online もゲストには 403)
+    if (isGuest(socket.user)) socket.join(GUEST_ROOM);
 
     // Admin: join all rooms for dashboard monitoring
     if (isAdmin(socket.user)) {
@@ -79,7 +83,7 @@ export function setupSocketHandlers(io: Server): void {
     // Track online status
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
-      socket.broadcast.emit('user:online', { user_id: userId });
+      socket.broadcast.except(GUEST_ROOM).emit('user:online', { user_id: userId });
     }
     onlineUsers.get(userId)!.add(socket.id);
 
@@ -136,7 +140,7 @@ export function setupSocketHandlers(io: Server): void {
         sockets.delete(socket.id);
         if (sockets.size === 0) {
           onlineUsers.delete(userId);
-          socket.broadcast.emit('user:offline', { user_id: userId });
+          socket.broadcast.except(GUEST_ROOM).emit('user:offline', { user_id: userId });
         }
       }
     });

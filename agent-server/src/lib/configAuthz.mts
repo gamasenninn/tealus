@@ -89,6 +89,16 @@ export function classifyAgentRequest(req: AuthzRequest): ConfigPathKind | null {
   return { kind: 'global' };   // ★ 足した道を黙って開けない
 }
 
+/**
+ * ★ 改善ループ 13 回目: 会話モードはゲストに開けない (cc-projects の #494 と同じ考え)。
+ *   会話モードの道具は AI (機械) の資格で動くので、ゲストが部屋の外の機械の操作をできてしまう。
+ *   メンバーかどうかはハンドラが本体に聞く (resolveRoom)。ここは役割だけ。会話の記録 (/log) は判断しない
+ */
+export function classifyVoiceChatRequest(req: AuthzRequest): ConfigPathKind | null {
+  if (req.path === '/log') return null;
+  return { kind: 'staff' };
+}
+
 export interface ConfigAuthzOptions {
   apiUrl: string;
   /** どの種類の呼び出しか (既定は /config の分け方)。null を返すと判断せずハンドラへ渡す */
