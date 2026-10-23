@@ -421,8 +421,13 @@ router.get('/:id', requireMember, async (req, res) => {
     );
 
     // Get last read message ID for unread separator
+    // ★ 既読位置が入った時刻より古い (抜けて戻った) なら線を出さない。一覧の未読と同じ考え方 (docs/02、改善ループ 13 回目)
     const cursorResult = await pool.query<{ last_read_message_id: string | null }>(
-      'SELECT last_read_message_id FROM room_read_cursors WHERE room_id = $1 AND user_id = $2',
+      `SELECT rc.last_read_message_id
+         FROM room_read_cursors rc
+         LEFT JOIN room_members rm ON rm.room_id = rc.room_id AND rm.user_id = rc.user_id
+        WHERE rc.room_id = $1 AND rc.user_id = $2
+          AND (rm.joined_at IS NULL OR rc.last_read_at >= rm.joined_at)`,
       [id, req.user!.id]
     );
     const last_read_message_id = cursorResult.rows[0]?.last_read_message_id || null;

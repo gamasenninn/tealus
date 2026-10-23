@@ -105,4 +105,24 @@ describe('既読位置が無いときは、入った時刻から数える', () =
     const theirs = await request(app).get('/api/rooms/announcements').set('Authorization', `Bearer ${outsider.token}`);
     expect(theirs.body.messages.filter((m: { is_unread: boolean }) => m.is_unread)).toHaveLength(5);
   });
+
+  // ★ 改善ループ 13 回目: 「ここから未読」の線も同じ。古い既読位置の次に線を出すと、いない間の便が未読に見える
+  it('「ここから未読」の線: 既読位置が入り直した時刻より古ければ出さない (null)', async () => {
+    const pool = getTestPool();
+    const old = await pool.query<{ id: string }>(`SELECT id FROM messages WHERE room_id = $1 AND created_at = '2026-09-01T00:00:00Z'`, [roomId]);
+    await pool.query(`INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at) VALUES ($1, $2, $3, '2026-09-01T00:00:00Z')`,
+      [roomId, me.id, old.rows[0].id]);
+    const res = await request(app).get(`/api/rooms/${roomId}`).set('Authorization', `Bearer ${me.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.last_read_message_id).toBeNull();
+  });
+
+  it('「ここから未読」の線: 入った後の既読位置なら今までどおり返す', async () => {
+    const pool = getTestPool();
+    const m = await pool.query<{ id: string }>(`SELECT id FROM messages WHERE room_id = $1 AND created_at = '2026-10-02T00:00:00Z'`, [roomId]);
+    await pool.query(`INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at) VALUES ($1, $2, $3, '2026-10-02T00:00:00Z')`,
+      [roomId, me.id, m.rows[0].id]);
+    const res = await request(app).get(`/api/rooms/${roomId}`).set('Authorization', `Bearer ${me.token}`);
+    expect(res.body.last_read_message_id).toBe(m.rows[0].id);
+  });
 });
