@@ -59,6 +59,28 @@ test('機械 (is_bot) の変更は [change] に残さない (投稿・心拍で 
   expect(lines(info, '[change]')).toEqual([]);
 });
 
+// ★ 改善ループ 9 回目の D (2026-10-23): AI が代わりにした編集 (7 日で 98 件) は台帳に AI の名前で載るだけで、頼んだ人が残らなかった。
+//   中継が付ける X-Tealus-Requester (#564) を、機械の編集・削除のときだけ [change] に添える
+test('機械が頼まれて編集・削除したら、頼んだ人つきで [change] に残す', async () => {
+  const bot = { id: 'cccccccc-0000-0000-0000-000000000000', is_bot: true };
+  await request(appAs(bot)).put('/api/rooms/r1/messages/m1')
+    .set('X-Tealus-Requester', 'dddddddd-1111-4111-8111-111111111111').send({ content: '直した' });
+  await request(appAs(bot)).delete('/api/rooms/r1/messages/m2')
+    .set('X-Tealus-Requester', 'dddddddd-1111-4111-8111-111111111111');
+  await settle();
+  expect(lines(info, '[change]')).toEqual([
+    '[change] PUT /api/rooms/r1/messages/m1 200 by=cccccccc for=dddddddd fields=content',
+    '[change] DELETE /api/rooms/r1/messages/m2 200 by=cccccccc for=dddddddd fields=-',
+  ]);
+});
+
+test('機械の投稿 (POST) は頼まれていても残さない (1 日に数百行になる)', async () => {
+  await request(appAs({ id: 'cccccccc-0000-0000-0000-000000000000', is_bot: true })).post('/api/rooms/r1/messages')
+    .set('X-Tealus-Requester', 'dddddddd-1111-4111-8111-111111111111').send({ content: 'x' });
+  await settle();
+  expect(lines(info, '[change]')).toEqual([]);
+});
+
 test.each([401, 403, 429])('断られた要求 (%i) は [http-denied] に残す', async (status) => {
   await request(appAs(null, status)).post('/api/auth/login').send({ login_id: 'x', password: 'secret' });
   await settle();

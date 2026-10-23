@@ -18,6 +18,14 @@ const NOT_A_CHANGE = [
   /\/read$/, /^\/api\/push\/subscribe$/, /\/app-pass$/,
 ];
 
+const BOT_EDIT_METHODS = new Set(['PUT', 'PATCH', 'DELETE']);
+
+/** 中継が付ける「頼んだ人」の頭 8 字。形が崩れていれば null (記録に変な文字を入れない) */
+function onBehalfOf(req: Request): string | null {
+  const v = req.get('x-tealus-requester');
+  return v && /^[0-9a-f-]{36}$/i.test(v) ? v.slice(0, 8) : null;
+}
+
 function who(req: Request): string {
   return req.user?.id ? req.user.id.slice(0, 8) : '-';
 }
@@ -49,8 +57,14 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS'
-        && status >= 200 && status < 300 && !req.user?.is_bot && !NOT_A_CHANGE.some((re) => re.test(path))) {
-      logger.info(`[change] ${req.method} ${path} ${status} by=${who(req)} fields=${bodyFields(req)}`);
+        && status >= 200 && status < 300 && !NOT_A_CHANGE.some((re) => re.test(path))) {
+      if (!req.user?.is_bot) {
+        logger.info(`[change] ${req.method} ${path} ${status} by=${who(req)} fields=${bodyFields(req)}`);
+      } else if (BOT_EDIT_METHODS.has(req.method) && onBehalfOf(req)) {
+        // ★ 改善ループ 9 回目の D: 機械が頼まれて編集・削除したときは、頼んだ人 (中継の X-Tealus-Requester、#564) を添える。
+        //   台帳 (message_edits) には機械の名前しか載らない。機械の投稿 (POST) は数が多いので残さない
+        logger.info(`[change] ${req.method} ${path} ${status} by=${who(req)} for=${onBehalfOf(req)} fields=${bodyFields(req)}`);
+      }
     }
   });
   next();
