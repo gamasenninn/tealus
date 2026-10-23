@@ -61,6 +61,13 @@ describe('extractUrls (#510)', () => {
     expect(extractUrls('リンクは https://… にあります')).toEqual([]);
   });
 
+  // ★ 2026-10-23 (改善ループ 11 回目): 10-22 にサポート班の投稿 `**http://localhost**` で `http://localhost**` を取りに行き、error が出た
+  it('★ Markdown の太字の閉じ (**) を URL に巻き込まない', () => {
+    expect(extractUrls('**https://example.com/a**')[0]).toBe('https://example.com/a');
+    expect(extractUrls('見て: **https://example.com/a/b?q=1**。')[0]).toBe('https://example.com/a/b?q=1');
+    expect(extractUrls('*https://example.com/x*')[0]).toBe('https://example.com/x');
+  });
+
   it('無ければ空', () => {
     expect(extractUrls('URL なし')).toEqual([]);
     expect(extractUrls(null)).toEqual([]);

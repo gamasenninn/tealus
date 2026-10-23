@@ -12,7 +12,7 @@ import type { Server } from 'socket.io';
 //   (ブラウザからのコピーもこの形)、「URL の直後に日本語が続く」方がずっと多い
 const URL_REGEX = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&()*+,;=%]+/g;
 
-/** 対になっていない最初の閉じ括弧で切り、末尾の句読点を削る (`[x](https://a/b))` の `))` や文末の `.`) */
+/** 対になっていない最初の閉じ括弧で切り、末尾の句読点と強調の * を削る (`[x](https://a/b))` の `))` や文末の `.`) */
 function trimTrailing(url: string): string {
   let depth = 0;
   let u = url;
@@ -20,7 +20,8 @@ function trimTrailing(url: string): string {
     if (u[i] === '(') depth++;
     else if (u[i] === ')' && --depth < 0) { u = u.slice(0, i); break; }
   }
-  while (/[.,;:!?]$/.test(u)) u = u.slice(0, -1);
+  // ★ 末尾の * は Markdown の強調の閉じ (`**https://…**`)。URL の最後が * で終わることは実際には無い (2026-10-23)
+  while (/[.,;:!?*]$/.test(u)) u = u.slice(0, -1);
   return u;
 }
 
@@ -182,7 +183,8 @@ export function createOgpFetcher({ isAllowed = isPublicAddress, timeoutMs = 5000
       }
     } catch (err) {
       const e = err as { cause?: { code?: string }; message?: string };
-      if (e.cause?.code === 'ENOTPUBLIC') {
+      // ★ 名前が引けない (ENOTFOUND) も相手側の事情で、本体の不具合ではない。error に積むと障害の数え方が狂う (2026-10-23)
+      if (e.cause?.code === 'ENOTPUBLIC' || e.cause?.code === 'ENOTFOUND') {
         logger.info(`[link-preview] ${String(e.cause && (e.cause as Error).message)}`);
       } else {
         logger.error('OGP fetch error:', url, err instanceof Error ? err.message : String(err));

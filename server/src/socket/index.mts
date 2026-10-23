@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import type { Server } from 'socket.io';
+import { clientLabel } from './clientLabel.mts';
 import { logger } from '../utils/logger.mts';
 import { pool } from '../db/pool.mts';
 import { JWT_SECRET } from '../middleware/auth.mts';
@@ -58,7 +59,7 @@ export function setupSocketHandlers(io: Server): void {
   });
 
   io.on('connection', (socket) => {
-    logger.info(`Client connected: ${socket.user.display_name} (${socket.id})`);
+    logger.info(`Client connected: ${socket.user.display_name} (${socket.id}) ${clientLabel(socket.handshake, socket.conn.transport?.name)}`);
 
     const userId = socket.user.id;
 
