@@ -62,6 +62,37 @@ describe('#592 通信の失敗を日本語の案内に', () => {
   });
 });
 
+// ★ 2026-10-23 小野さん判断 (改善ループ 12 回目の B7): 会話モードの開始は MCP の冷間起動を吸収するので数十秒かかることがある。
+//   ふつうの 10 秒で切ると、電波のせいでないのに「時間がかかりすぎました」が出た
+describe('会話モードの開始は 60 秒まで待つ', () => {
+  beforeEach(() => { api.token = 'tok'; api.requestTimeoutMs = 50; });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
+
+  it('★ 開始 (session) はふつうの時間切れを越えても待つ', async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    vi.stubGlobal('fetch', vi.fn((_u: string, init: RequestInit) => new Promise((resolve) => {
+      init.signal?.addEventListener('abort', () => { aborted = true; });
+      setTimeout(() => resolve(new Response(JSON.stringify({ session_id: 's', client_secret: 'c', model: 'm' }), { status: 200 })), 30_000);
+    })));
+    const p = api.createVoiceChatSession('r1');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await expect(p).resolves.toMatchObject({ session_id: 's' });
+    expect(aborted).toBe(false);
+  });
+
+  it('60 秒を越えたら打ち切る', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_u: string, init: RequestInit) => new Promise((_r, reject) => {
+      init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    })));
+    const p = api.createVoiceChatSession('r1');
+    const rejected = expect(p).rejects.toThrow(TIMEOUT_ERROR_MESSAGE);
+    await vi.advanceTimersByTimeAsync(60_001);
+    await rejected;
+  });
+});
+
 describe('#592 添付の送信 (_upload)', () => {
   class FakeXhr {
     static last: FakeXhr;

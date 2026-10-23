@@ -26,6 +26,8 @@ const RETRY_STATUS = new Set([408, 429, 502, 503, 504]);
  *   ログイン・招待・名前の変更・転送・部屋の設定など 30 か所以上がこの通り道を通る。手本は #537 (sendRoomMessage)
  */
 export const NETWORK_ERROR_MESSAGE = 'つながっていません。電波を確かめて、もう一度お試しください';
+/** 会話モードの開始 (session・道具一覧) の時間切れ。MCP の冷間起動 (最悪 30 秒級) を吸収する */
+export const VOICE_CHAT_START_TIMEOUT_MS = 60_000;
 export const TIMEOUT_ERROR_MESSAGE = '時間がかかりすぎました。電波を確かめて、もう一度お試しください';
 
 /** つながらない (TypeError) / 時間切れ (AbortError) を日本語の案内に置き換える。それ以外はそのまま */
@@ -348,7 +350,8 @@ class ApiClient {
 
   /** 会話を始める。★ MCP の冷間起動をここで吸収するので、数十秒かかることがある */
   createVoiceChatSession(roomId: string): Promise<{ session_id: string; client_secret: string; model: string }> {
-    return this._agentApi('POST', '/voice-chat/session', { room_id: roomId }, { errorMessage: '会話を開始できませんでした' });
+    // ★ 開始は MCP の冷間起動を吸収するので数十秒かかることがある。ふつうの 10 秒では切らない (2026-10-23 小野さん判断)
+    return this._agentApi('POST', '/voice-chat/session', { room_id: roomId }, { errorMessage: '会話を開始できませんでした', timeoutMs: VOICE_CHAT_START_TIMEOUT_MS });
   }
 
   /** モデルが要求した道具を、サーバ側で実行して結果をもらう (ブラウザは実行しない) */
@@ -370,7 +373,7 @@ class ApiClient {
    * ★★ MCP を起こすので数秒〜数十秒かかる。設定画面を開いた時に 1 回だけ呼ぶ。
    */
   getVoiceChatTools(roomId: string): Promise<{ tools: Array<{ name: string; description: string }>; default_denied: string[]; protected: string[] }> {
-    return this._agentApi('GET', `/voice-chat/tools?room_id=${encodeURIComponent(roomId)}`);
+    return this._agentApi('GET', `/voice-chat/tools?room_id=${encodeURIComponent(roomId)}`, undefined, { timeoutMs: VOICE_CHAT_START_TIMEOUT_MS });   // 道具一覧も MCP を起こす
   }
 
   /** 計測イベントの送信 (docs/08 §12.6)。★ 失敗しても会話は止めない */
@@ -409,9 +412,9 @@ class ApiClient {
     method: string,
     path: string,
     body?: unknown,
-    extra: { as?: 'json' | 'blob'; fallback?: T; errorMessage?: string } = {},
+    extra: { as?: 'json' | 'blob'; fallback?: T; errorMessage?: string; timeoutMs?: number } = {},
   ): Promise<T> {
-    const { as = 'json', fallback, errorMessage = 'agent-server リクエストに失敗しました' } = extra;
+    const { as = 'json', fallback, errorMessage = 'agent-server リクエストに失敗しました', timeoutMs = this.requestTimeoutMs } = extra;
     try {
       const opts: RequestInit & { headers: Record<string, string> } = {
         method,
@@ -423,7 +426,7 @@ class ApiClient {
       }
       // ★ 時間切れを付ける (request() と同じ長さ)。以前は無く、agent-server が応答しないと設定画面が回り続けた (改善ループ 10-13)
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       let res: Response;
       try {
         res = await fetch(`/agent-api${path}`, { ...opts, signal: controller.signal });
