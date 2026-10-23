@@ -66,7 +66,7 @@ describe('#592 添付の送信 (_upload)', () => {
   class FakeXhr {
     static last: FakeXhr;
     status = 0; responseText = '';
-    upload = { onprogress: null as unknown };
+    upload = { onprogress: null as unknown, onload: null as unknown };
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
     aborted = false;
@@ -112,6 +112,35 @@ describe('#592 添付の送信 (_upload)', () => {
     FakeXhr.last.status = 200; FakeXhr.last.responseText = '{"ok":true}'; FakeXhr.last.onload!();
     await expect(p).resolves.toEqual({ ok: true });
     expect(FakeXhr.last.aborted).toBe(false);
+    vi.useRealTimers();
+  });
+
+  // ★ 改善ループ 13 回目: 送り終わった後 (サーバが動画のサムネイル等を作っている間) は onprogress が来ない。
+  //   そこまで 60 秒で切ると、サーバでは投稿ができているのに失敗に見え、送り直して二重になる
+  it('★ 送り終わった後は、応答を長く待つ (60 秒では切らない)', async () => {
+    vi.useFakeTimers();
+    api.uploadStallMs = 1000;
+    api.uploadResponseWaitMs = 5000;
+    const p = api._upload('/u', new FormData(), () => {});
+    const x = FakeXhr.last as unknown as { upload: { onprogress: (e: unknown) => void; onload: () => void } };
+    x.upload.onprogress({ lengthComputable: true, loaded: 4, total: 4 });
+    x.upload.onload();
+    vi.advanceTimersByTime(4000);
+    expect(FakeXhr.last.aborted).toBe(false);
+    FakeXhr.last.status = 201; FakeXhr.last.responseText = '{"ok":true}'; FakeXhr.last.onload!();
+    await expect(p).resolves.toEqual({ ok: true });
+    vi.useRealTimers();
+  });
+
+  it('送り終わった後も、応答がいつまでも来なければ打ち切る', async () => {
+    vi.useFakeTimers();
+    api.uploadStallMs = 1000;
+    api.uploadResponseWaitMs = 5000;
+    const p = api._upload('/u', new FormData(), () => {});
+    const rejected = expect(p).rejects.toThrow(TIMEOUT_ERROR_MESSAGE);
+    (FakeXhr.last as unknown as { upload: { onload: () => void } }).upload.onload();
+    vi.advanceTimersByTime(5001);
+    await rejected;
     vi.useRealTimers();
   });
 });

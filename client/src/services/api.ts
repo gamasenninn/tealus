@@ -84,6 +84,7 @@ class ApiClient {
   token: string | null;
   requestTimeoutMs: number;
   uploadStallMs: number;
+  uploadResponseWaitMs: number;
   retryBackoffMs: number[];
 
   constructor() {
@@ -92,6 +93,8 @@ class ApiClient {
     this.requestTimeoutMs = 10000;
     // ★ 添付は大きいので全体の時間でなく「最後にバイトが動いてから」で切る (改善ループ 12 回目)
     this.uploadStallMs = 60000;
+    // ★ 送り終わった後は onprogress が来ない (サーバが動画のサムネイル等を作っている)。そこは長く待つ (改善ループ 13 回目)
+    this.uploadResponseWaitMs = 5 * 60000;
     this.retryBackoffMs = [300, 800]; // GET transient retry の待ち時間（length = 最大リトライ回数）
   }
 
@@ -108,10 +111,12 @@ class ApiClient {
       //   バイトが uploadStallMs 動かなければ打ち切る (進むたびに数え直す)
       let stall: ReturnType<typeof setTimeout> | undefined;
       const settle = () => { if (stall) clearTimeout(stall); };
-      const arm = () => {
+      const arm = (ms = this.uploadStallMs) => {
         settle();
-        stall = setTimeout(() => { xhr.abort(); reject(new Error(TIMEOUT_ERROR_MESSAGE)); }, this.uploadStallMs);
+        stall = setTimeout(() => { xhr.abort(); reject(new Error(TIMEOUT_ERROR_MESSAGE)); }, ms);
       };
+      // ★ 送り終わったら、応答を待つ長い時間に切り替える (そこで 60 秒で切ると、サーバでは投稿ができているのに失敗に見え、二重に送られる)
+      xhr.upload.onload = () => arm(this.uploadResponseWaitMs);
       xhr.upload.onprogress = (e) => {
         arm();
         if (onProgress && e.lengthComputable) {

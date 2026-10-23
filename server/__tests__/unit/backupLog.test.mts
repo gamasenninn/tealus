@@ -98,4 +98,17 @@ describe('readLatestBackupLog', () => {
     await readLatestBackupLog('\\nas\stale', { fs: never, timeoutMs: 10, now: () => t + 16 * 60_000 });
     expect(calls).toBe(2);
   });
+
+  // ★ 改善ループ 13 回目: 見捨てる読み取りに上限が無いと、NAS が戻らない間 15 分ごとに 1 本ずつ libuv の手 (既定 4 本) を食い、
+  //   45 分で本体の fs と DNS (DB・OpenAI) まで止まる。固まった読み取りは 2 本まで (手を 2 本残す)
+  it('★ 固まった読み取りは 2 本まで。それ以上は重ねない', async () => {
+    let calls = 0;
+    const never = { readdir: () => { calls++; return new Promise<string[]>(() => {}); }, readFile: jest.fn(), stat: jest.fn() };
+    const t = Date.now();
+    await readLatestBackupLog('\\nas\cap', { fs: never, timeoutMs: 10, now: () => t });
+    await readLatestBackupLog('\\nas\cap', { fs: never, timeoutMs: 10, now: () => t + 16 * 60_000 });
+    const third = await readLatestBackupLog('\\nas\cap', { fs: never, timeoutMs: 10, now: () => t + 60 * 60_000 });
+    expect(calls).toBe(2);
+    expect(third.readError).toContain('前回');
+  });
 });

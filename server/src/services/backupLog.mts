@@ -44,12 +44,14 @@ interface BackupFs {
   stat: (file: string) => Promise<{ mtime: Date }>;
 }
 
-/** ★ 置き場ごとに、読み取りを始めた時刻を持つ。固まった NAS への読み取りを周回ごとに積まない (積むと libuv の 4 本の手が全部埋まる) */
-const inflight = new Map<string, number>();
+/** ★ 置き場ごとに、終わっていない読み取りの開始時刻を持つ。固まった NAS への読み取りを周回ごとに積まない (積むと libuv の 4 本の手が全部埋まる) */
+const inflight = new Map<string, number[]>();
+/** ★ 固まった読み取りは置き場ごとにこれだけまで (改善ループ 13 回目)。手を 2 本残し、本体の fs と DNS (DB・OpenAI) を止めない */
+const MAX_STUCK_READS = 2;
 /**
  * ★ 固まった読み取りがこれだけ戻らなければ、見捨てて次を許す (改善ループ 12 回目)。
  *   見捨てないと、裏の読み取りが永久に戻らないとき印も永久に残り、NAS が戻っても再起動まで ok に戻らない。
- *   判定の間隔 (5 分) の 3 回分。見捨てた読み取りは手を 1 本使ったままなので、積み上がる速さは 15 分に 1 本まで
+ *   判定の間隔 (5 分) の 3 回分。見捨てた読み取りは手を 1 本使ったままなので、本数は MAX_STUCK_READS で抑える
  */
 export const BACKUP_READ_ABANDON_MS = 15 * 60_000;
 
@@ -66,12 +68,13 @@ export async function readLatestBackupLog(
 ): Promise<BackupRead> {
   const bfs: BackupFs = opts.fs ?? fsp;
   const now = opts.now ?? Date.now;
-  const startedAt = inflight.get(dir);
-  if (startedAt !== undefined && now() - startedAt < BACKUP_READ_ABANDON_MS) {
+  const pending = inflight.get(dir) ?? [];
+  const newest = pending.length > 0 ? Math.max(...pending) : undefined;
+  if (pending.length >= MAX_STUCK_READS || (newest !== undefined && now() - newest < BACKUP_READ_ABANDON_MS)) {
     return { latest: null, readError: '前回の読み取りがまだ終わっていません (置き場が応答していない)' };
   }
   const myStart = now();
-  inflight.set(dir, myStart);
+  inflight.set(dir, [...pending, myStart]);
   const work = (async (): Promise<BackupRead> => {
     const names = (await bfs.readdir(dir)).filter((n) => LOG_RE.test(n)).sort();
     const name = names[names.length - 1];
@@ -79,7 +82,11 @@ export async function readLatestBackupLog(
     const file = path.join(dir, name);
     const content = (await bfs.readFile(file, 'utf8')).replace(/^﻿/, '');
     return { latest: { name, content, mtime: (await bfs.stat(file)).mtime } };
-  })().finally(() => { if (inflight.get(dir) === myStart) inflight.delete(dir); });   // ★ 見捨てた古い読み取りが、新しい印を消さない
+  })().finally(() => {
+    // ★ 自分の印だけ外す (見捨てた古い読み取りが、新しい読み取りの印を消さない)
+    const rest = (inflight.get(dir) ?? []).filter((t) => t !== myStart);
+    if (rest.length > 0) inflight.set(dir, rest); else inflight.delete(dir);
+  });
   const timeoutMs = opts.timeoutMs ?? BACKUP_READ_TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<BackupRead>((resolve) => {
