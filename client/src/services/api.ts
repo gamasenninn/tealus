@@ -83,12 +83,15 @@ export type UploadProgressHandler = (percent: number) => void;
 class ApiClient {
   token: string | null;
   requestTimeoutMs: number;
+  uploadStallMs: number;
   retryBackoffMs: number[];
 
   constructor() {
     this.token = localStorage.getItem('token');
     // #322 リトライ/タイムアウト設定（テストで上書き可能）
     this.requestTimeoutMs = 10000;
+    // ★ 添付は大きいので全体の時間でなく「最後にバイトが動いてから」で切る (改善ループ 12 回目)
+    this.uploadStallMs = 60000;
     this.retryBackoffMs = [300, 800]; // GET transient retry の待ち時間（length = 最大リトライ回数）
   }
 
@@ -101,15 +104,23 @@ class ApiClient {
       xhr.open('POST', url);
       xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
 
-      if (onProgress) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        };
-      }
+      // ★ 改善ループ 12 回目: 電波が途中で止まると、決着しないまま「アップロード中…」で入力欄ごと固まった。
+      //   バイトが uploadStallMs 動かなければ打ち切る (進むたびに数え直す)
+      let stall: ReturnType<typeof setTimeout> | undefined;
+      const settle = () => { if (stall) clearTimeout(stall); };
+      const arm = () => {
+        settle();
+        stall = setTimeout(() => { xhr.abort(); reject(new Error(TIMEOUT_ERROR_MESSAGE)); }, this.uploadStallMs);
+      };
+      xhr.upload.onprogress = (e) => {
+        arm();
+        if (onProgress && e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
 
       xhr.onload = () => {
+        settle();
         // ★ #592 JSON でない応答 (プロキシの HTML の 413/502 など) でも必ず決着させる。
         //   以前は JSON.parse の例外で Promise が決着せず、送信中のまま止まった
         let data: (T & { error?: string }) | undefined;
@@ -126,8 +137,9 @@ class ApiClient {
         }
       };
 
-      xhr.onerror = () => reject(new Error(NETWORK_ERROR_MESSAGE));   // ★ #592
+      xhr.onerror = () => { settle(); reject(new Error(NETWORK_ERROR_MESSAGE)); };   // ★ #592
       xhr.send(formData);
+      arm();
     });
   }
 

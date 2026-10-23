@@ -69,8 +69,10 @@ describe('#592 添付の送信 (_upload)', () => {
     upload = { onprogress: null as unknown };
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
+    aborted = false;
     open() {} setRequestHeader() {}
     send() { FakeXhr.last = this; }
+    abort() { this.aborted = true; }
   }
   beforeEach(() => { vi.stubGlobal('XMLHttpRequest', FakeXhr); });
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -87,5 +89,29 @@ describe('#592 添付の送信 (_upload)', () => {
     FakeXhr.last.responseText = '<html>413 Request Entity Too Large</html>';
     FakeXhr.last.onload!();
     await expect(p).rejects.toThrow('送れませんでした (応答 413)');
+  });
+
+  // ★ 改善ループ 12 回目: 電波が途中で止まると「アップロード中… 37%」のまま、入力欄も＋もマイクも押せなくなった (時間切れが無かった)
+  it('★ バイトが一定時間動かなければ打ち切り、「時間がかかりすぎました…」', async () => {
+    vi.useFakeTimers();
+    api.uploadStallMs = 1000;
+    const p = api._upload('/u', new FormData(), () => {});
+    const rejected = expect(p).rejects.toThrow(TIMEOUT_ERROR_MESSAGE);
+    vi.advanceTimersByTime(1001);
+    await rejected;
+    expect(FakeXhr.last.aborted).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('動いている間は打ち切らない (進むたびに数え直す)', async () => {
+    vi.useFakeTimers();
+    api.uploadStallMs = 1000;
+    const p = api._upload('/u', new FormData(), () => {});
+    const x = FakeXhr.last as unknown as { upload: { onprogress: (e: unknown) => void } };
+    for (let i = 1; i <= 3; i++) { vi.advanceTimersByTime(800); x.upload.onprogress({ lengthComputable: true, loaded: i, total: 4 }); }
+    FakeXhr.last.status = 200; FakeXhr.last.responseText = '{"ok":true}'; FakeXhr.last.onload!();
+    await expect(p).resolves.toEqual({ ok: true });
+    expect(FakeXhr.last.aborted).toBe(false);
+    vi.useRealTimers();
   });
 });
