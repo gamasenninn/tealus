@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Tag } from 'lucide-react';
-import { useConfirm } from '../../stores/confirmStore';
+import { useConfirm, notifyFailure } from '../../stores/confirmStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { canDeleteRoomTag } from '../../utils/permissions';
@@ -90,6 +90,7 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
       setRecentTags(tagsRes.tags.slice(0, 10));
     } catch (err) {
       console.error('Tag add error:', err);
+      notifyFailure('タグの追加', err);
     }
   };
 
@@ -100,6 +101,7 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
       onTagsChanged?.();
     } catch (err) {
       console.error('Tag remove error:', err);
+      notifyFailure('タグの取り外し', err);
     }
   };
 
@@ -125,6 +127,7 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
       }
     } catch (err) {
       console.error('Room tag delete error:', err);
+      notifyFailure('タグの削除', err);
     }
   };
 

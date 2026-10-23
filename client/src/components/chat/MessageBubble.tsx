@@ -38,6 +38,7 @@ import remarkBreaks from 'remark-breaks';
 import type { MediaItem, Message, Reaction } from '../../types';
 import { quoteText } from '../../utils/replyQuote';
 import './MessageBubble.css';
+import { notifyFailure } from '../../stores/confirmStore';
 
 // server 応答が持つが types.ts に無いフィールドの local 拡張:
 // - stamp: type='stamp' の展開済みスタンプ (file_path / label)
@@ -332,7 +333,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                   try {
                     await api.updateMessageTag(message.id, tag.id, { is_done: newDone });
                     await refreshTags();
-                  } catch (err) { console.error(err); }
+                  } catch (err) { console.error(err); notifyFailure('TODO の切り替え', err); }
                 }}
               >
                 {tag.is_done ? '☑' : '☐'} {tag.name}
@@ -383,10 +384,9 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
           media={message.media}
           onClose={() => setIsEditingMessage(false)}
           onConfirm={async (text) => {
-            try {
-              await api.editMessage(roomId, message.id, text);
-              setIsEditingMessage(false);
-            } catch (err) { console.error(err); }
+            // ★ 失敗はモーダルが受けて中に出す (改善ループ 12 回目)。ここで握りつぶさない
+            await api.editMessage(roomId, message.id, text);
+            setIsEditingMessage(false);
           }}
         />
       ))}

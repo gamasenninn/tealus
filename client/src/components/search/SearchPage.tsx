@@ -6,6 +6,7 @@ import { searchResultState } from '../../utils/searchNav';
 import { ArrowLeft, CheckSquare, Square, X, RefreshCw } from 'lucide-react';
 import type { Message, Tag } from '../../types';
 import './SearchPage.css';
+import { notifyFailure } from '../../stores/confirmStore';
 
 // search API は TODO 属性 + room 名を平坦化して返す (types.ts の Message には未定義)。
 // また応答 key は results (api.ts の SearchResponse は messages で実態と差分あり)。
@@ -220,6 +221,7 @@ function SearchPage() {
       setResults(prev => prev.map(r => r.id === result.id ? { ...r, is_done: newDone } : r));
     } catch (err) {
       console.error('Toggle done error:', err);
+      notifyFailure('TODO の切り替え', err);
     }
   };
 
@@ -232,6 +234,7 @@ function SearchPage() {
       setResults(prev => prev.map(r => r.id === result.id ? { ...r, priority: newPriority } : r));
     } catch (err) {
       console.error('Cycle priority error:', err);
+      notifyFailure('優先度の変更', err);
     }
   };
 

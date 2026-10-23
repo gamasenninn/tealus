@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Square } from 'lucide-react';
 import { api } from '../../services/api';
 import './AgentCancelButton.css';
+import { notifyFailure } from '../../stores/confirmStore';
 
 interface AgentCancelButtonProps {
   roomId: string;
@@ -23,6 +24,7 @@ function AgentCancelButton({ roomId }: AgentCancelButtonProps) {
       await api.cancelAgent(roomId);
     } catch (err) {
       console.error('Cancel error:', err);
+      notifyFailure('AI の中断', err);
     } finally {
       setBusy(false);
     }

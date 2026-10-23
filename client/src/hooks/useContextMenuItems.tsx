@@ -2,7 +2,7 @@ import { Copy, Reply, Tag, Pencil, ClipboardList, Trash2, History, Megaphone, Ch
 import type { ReactNode } from 'react';
 import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
-import { useConfirmStore } from '../stores/confirmStore';
+import { useConfirmStore, notifyFailure } from '../stores/confirmStore';
 import type { Message, Room } from '../types';
 
 export interface ContextMenuItem {
@@ -175,7 +175,7 @@ export function buildContextMenuItems({
       onClick: async () => {
         try {
           await api.togglePublish(roomId, message.id, !message.is_published);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error(err); notifyFailure(message.is_published ? 'お知らせの非公開' : 'お知らせへの公開', err); }
       },
     });
   }
@@ -196,7 +196,7 @@ export function buildContextMenuItems({
           try {
             await api.deleteMessage(roomId, message.id);
             useMessageStore.getState().markDeleted(message.id);
-          } catch (err) { console.error('Delete error:', err); }
+          } catch (err) { console.error('Delete error:', err); notifyFailure('削除', err); }
         }
       },
     });
@@ -206,7 +206,7 @@ export function buildContextMenuItems({
   const onReaction = async (emoji: string) => {
     try {
       await api.toggleReaction(roomId, message.id, emoji);
-    } catch (err) { console.error('Reaction error:', err); }
+    } catch (err) { console.error('Reaction error:', err); notifyFailure('リアクション', err); }
   };
 
   return { items, onReaction };

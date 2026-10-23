@@ -94,3 +94,26 @@ describe('buildContextMenuItems エージェントに送る (#338)', () => {
     expect(items.find((i) => i.label === 'エージェントに送る')).toBeFalsy();
   });
 });
+
+// ★ 改善ループ 12 回目: 削除・リアクションの失敗が console にしか出ず、確認のあとメッセージが黙って残った
+describe('buildContextMenuItems 失敗を知らせる', () => {
+  it('削除に失敗したら「削除に失敗しました: 理由」を出す', async () => {
+    const { api } = await import('../src/services/api');
+    const { useConfirmStore } = await import('../src/stores/confirmStore');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(api, 'deleteMessage').mockRejectedValue(new Error('削除できません'));
+    const { items } = buildContextMenuItems({
+      message: { id: 'm1', content: 'x', type: 'text' },
+      isOwn: true, roomId: 'r1', currentRoom: {},
+    } as unknown as BuildContextMenuItemsParams);
+    const del = items.find((i) => i.label === '削除')!;
+    const done = del.onClick() as unknown as Promise<void>;
+    // 確認に OK
+    await vi.waitFor(() => expect(useConfirmStore.getState().state).not.toBeNull());
+    useConfirmStore.getState()._resolve(true);
+    await done;
+    await vi.waitFor(() => expect((useConfirmStore.getState().state as { body: string } | null)?.body)
+      .toBe('削除に失敗しました: 削除できません'));
+    vi.restoreAllMocks();
+  });
+});

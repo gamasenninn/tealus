@@ -24,6 +24,7 @@ import type { Stamp } from '../../types';
 import './MessageInput.css';
 import { unlockAudio } from '../../services/audioContext';
 import { replyBarText } from '../../utils/replyQuote';
+import { notifyFailure } from '../../stores/confirmStore';
 
 /** 入力欄が伸びる上限 (px)。★ MessageInput.css の `.message-input-text { max-height }` と同じ値にすること
  *  (2026-10-16 まで JS は 150 で、CSS の 120 が勝っていた = 150 は効いていなかった) */
@@ -452,6 +453,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {
       console.error('Stamp send error:', err);
+      notifyFailure('スタンプの送信', err);
     }
   };
 

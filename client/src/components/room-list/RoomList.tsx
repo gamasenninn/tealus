@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useMultiTalkStore, roomClickAction } from '../../stores/multiTalkStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
-import { useConfirm } from '../../stores/confirmStore';
+import { useConfirm, notifyFailure } from '../../stores/confirmStore';
 import { getSocket, joinRoom, leaveRoom } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
@@ -286,6 +286,7 @@ function RoomList() {
                   fetchRooms();
                 } catch (err) {
                   console.error('Mark all read error:', err);
+                  notifyFailure('既読化', err);
                 }
               }
             }}>

@@ -121,3 +121,27 @@ describe('MessageEditModal — 開いた直後のフォーカス', () => {
     expect(document.activeElement).not.toBe(screen.getByText('確定'));
   });
 });
+
+// ★ 改善ループ 12 回目: 確定の失敗が console にしか出ず、モーダルが開いたまま何度でも押せた
+describe('MessageEditModal — 保存の失敗と連打', () => {
+  it('★ 失敗したら理由をモーダルの中に出し、文は残す', async () => {
+    const onConfirm = vi.fn().mockRejectedValue(new Error('この部屋では編集できません'));
+    render(<MessageEditModal initialText="元の文" onConfirm={onConfirm} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '直した文' } });
+    fireEvent.click(screen.getByRole('button', { name: '確定' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした: この部屋では編集できません');
+    expect(screen.getByRole('textbox')).toHaveValue('直した文');
+  });
+
+  it('★ 保存中は確定を押せない (二重に送らない)', async () => {
+    let finish: () => void = () => {};
+    const onConfirm = vi.fn().mockImplementation(() => new Promise<void>((r) => { finish = r; }));
+    render(<MessageEditModal initialText="元の文" onConfirm={onConfirm} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '確定' }));
+    const saving = await screen.findByRole('button', { name: '保存中...' });
+    expect(saving).toBeDisabled();
+    fireEvent.click(saving);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    finish();
+  });
+});

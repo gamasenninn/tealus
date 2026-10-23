@@ -58,6 +58,15 @@ export function notify(body: string, title?: string): Promise<void> {
   return useConfirmStore.getState().confirm({ body, title, hideCancel: true }).then(() => undefined);
 }
 
+/**
+ * 操作の失敗を知らせる (改善ループ 12 回目)。★ 以前は console にしか出さず、押しても何も起きないように見えた。
+ * 理由はサーバが日本語で返す (api 層が Error に包む)。取れなければ理由を付けない
+ */
+export function notifyFailure(what: string, err: unknown): Promise<void> {
+  const reason = err instanceof Error && err.message ? `: ${err.message}` : '';
+  return notify(`${what}に失敗しました${reason}`);
+}
+
 /** #485-5 文字を入れてもらう (prompt の代わり)。OK で入れた文字、キャンセルで null */
 export function promptText(opts: { body: string; title?: string; defaultValue?: string; placeholder?: string }): Promise<string | null> {
   return new Promise<string | null>((resolve) => {

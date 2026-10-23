@@ -25,6 +25,21 @@ interface MessageEditModalProps {
  */
 function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEditModalProps) {
   const [text, setText] = useState(initialText);
+  // ★ 改善ループ 12 回目: 失敗が console にしか出ず、開いたまま何度でも押せた。VoiceEditModal と同じ形にする
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const handleConfirm = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onConfirm(text);
+    } catch (err) {
+      setSaveError(`保存できませんでした${err instanceof Error && err.message ? `: ${err.message}` : ''}`);
+    } finally {
+      setSaving(false);
+    }
+  };
   const boxRef = useRef<HTMLDivElement | null>(null);
   const audios = (media ?? []).filter((m) => m.mime_type?.startsWith('audio/'));
 
@@ -61,9 +76,10 @@ function MessageEditModal({ initialText, media, onConfirm, onClose }: MessageEdi
              ★ rows={6} は 8/29 の判断のまま。タップすればキーボードは出るので理由は生きている。 */
           rows={6}
         />
+        {saveError && <p className="voice-edit-error" role="alert">{saveError}</p>}
         <div className="voice-edit-buttons">
           <button className="btn-cancel" onClick={onClose}>キャンセル</button>
-          <button className="btn-primary" onClick={() => onConfirm(text)} disabled={!text.trim()}>確定</button>
+          <button className="btn-primary" onClick={handleConfirm} disabled={saving || !text.trim()}>{saving ? '保存中...' : '確定'}</button>
         </div>
       </div>
     </div>
