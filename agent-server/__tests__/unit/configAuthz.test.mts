@@ -13,7 +13,7 @@
  */
 jest.mock('../../src/lib/logger.mts', () => ({ logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } }));
 
-import { classifyConfigPath, isAllowed, createConfigAuthz, type AuthzFacts } from '../../src/lib/configAuthz.mts';
+import { classifyConfigPath, classifyConfigRequest, isAllowed, createConfigAuthz, type AuthzFacts } from '../../src/lib/configAuthz.mts';
 
 const facts = (role: string, room: AuthzFacts['room'] = null): AuthzFacts => ({ user_id: 'u1', role, room });
 
@@ -153,5 +153,27 @@ describe('createConfigAuthz — ★ 利用者の鍵で本体に聞いて判断�
     const next = jest.fn();
     await mw(mkReq('/settings') as never, mkRes() as never, next);
     expect(next).toHaveBeenCalled();
+  });
+});
+
+// ★ 2026-10-23 (改善ループ 13 回目、小野さん判断「管理者だけに」): 部屋の MCP 設定には起動するコマンドを書ける。
+//   部屋の管理者 (一般の人・機械) が書けると、agent-server のマシンで任意のコマンドが動く。書き込みはシステム管理者だけ。読むのは今までどおり
+describe('classifyConfigRequest — 部屋の MCP 設定の書き込みは全体扱い', () => {
+  test.each([
+    ['PUT', '/room/abc/mcp', { kind: 'global' }],
+    ['POST', '/room/abc/mcp', { kind: 'global' }],
+    ['DELETE', '/room/abc/mcp', { kind: 'global' }],
+    ['GET', '/room/abc/mcp', { kind: 'room', roomId: 'abc' }],
+    ['PUT', '/room/abc/settings', { kind: 'room', roomId: 'abc' }],
+    ['PUT', '/room/abc/light-prompt', { kind: 'room', roomId: 'abc' }],
+  ])('%s %s', (method, p, want) => {
+    expect(classifyConfigRequest({ method, path: p })).toEqual(want);
+  });
+
+  test('★ 部屋の管理者は部屋の MCP を書けない・システム管理者は書ける', () => {
+    const room = { id: 'abc', type: 'group', member_role: 'admin' };
+    const kind = classifyConfigRequest({ method: 'PUT', path: '/room/abc/mcp' })!;
+    expect(isAllowed(kind, facts('user', room))).toBe(false);
+    expect(isAllowed(kind, facts('admin', null))).toBe(true);
   });
 });

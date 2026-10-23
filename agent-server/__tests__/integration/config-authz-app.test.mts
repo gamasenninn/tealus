@@ -66,3 +66,12 @@ describe('#458 /config の権限がアプリに組み込まれている', () => 
     expect(res.status).toBe(401);
   });
 });
+
+// ★ 2026-10-23 小野さん判断: 部屋の MCP 設定の書き込みはシステム管理者だけ (起動するコマンドを書けるため)
+describe('部屋の MCP 設定の書き込みはシステム管理者だけ (本物の app)', () => {
+  test('★ 一般の利用者 (部屋の管理者かどうかによらず) の PUT は 403', async () => {
+    const res = await request(app).put('/config/room/r1/mcp').set('Authorization', `Bearer ${tokenOf('u-user3')}`)
+      .send({ mcpConfig: { mcpServers: { x: { command: 'calc.exe' } } } });
+    expect(res.status).toBe(403);
+  });
+});

@@ -54,6 +54,17 @@ export function classifyConfigPath(p: string): ConfigPathKind {
   return { kind: 'global' };
 }
 
+/**
+ * /config の既定の分け方 (道 + 方法)。★ 部屋の MCP 設定の書き込みはシステム管理者だけ (2026-10-23 小野さん判断)。
+ *   MCP 設定には起動するコマンドを書けるので、部屋の管理者 (一般の人・機械・DM の当人) が書けると
+ *   agent-server のマシンで任意のコマンドが動く。読むのは今までどおり (部屋の管理者も見られる)
+ */
+const ROOM_MCP_PATH = /^\/room\/[^/]+\/mcp\/?$/;
+export function classifyConfigRequest(req: AuthzRequest): ConfigPathKind | null {
+  if (req.method !== 'GET' && req.method !== 'HEAD' && ROOM_MCP_PATH.test(req.path)) return { kind: 'global' };
+  return classifyConfigPath(req.path);
+}
+
 /** ★ 判断の表 (純関数)。ここだけが「だれが何を触ってよいか」を知っている */
 export function isAllowed(kind: ConfigPathKind, f: AuthzFacts): boolean {
   if (kind.kind === 'open') return true;
@@ -113,7 +124,7 @@ type Lookup = { status: 'ok'; facts: AuthzFacts } | { status: 'unauthorized' };
 
 export function createConfigAuthz({
   apiUrl, fetchImpl, now = Date.now, ttlMs = 10_000,
-  classify = (req) => classifyConfigPath(req.path),
+  classify = classifyConfigRequest,
 }: ConfigAuthzOptions) {
   const cache = new Map<string, { at: number; value: Lookup }>();
 
