@@ -120,6 +120,14 @@ router.get('/', async (req, res) => {
     if (keyword) {
       params.push(keyword);
       const kwIdx = paramIdx++;
+      // ★ 先に候補を索引 (trgm) で絞る (改善ループ 13 回目)。OR が LATERAL をまたぐと索引が使われず、
+      //   0 件でも毎回 3.4 万便を全部読んでいた (本番 300ms)。候補は文字起こしのどの版で当たってもよく、
+      //   下の条件 (最新の版で当たるか) は今までどおりなので、結果は変わらない
+      wheres.push(`m.id IN (
+        SELECT id FROM messages WHERE content ILIKE $${kwIdx}
+        UNION
+        SELECT message_id FROM voice_transcriptions WHERE formatted_text ILIKE $${kwIdx} OR raw_text ILIKE $${kwIdx}
+      )`);
       wheres.push(`(
         m.content ILIKE $${kwIdx}
         OR (m.type = 'voice' AND (vt.formatted_text ILIKE $${kwIdx} OR vt.raw_text ILIKE $${kwIdx}))

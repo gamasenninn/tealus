@@ -85,6 +85,18 @@ router.post('/', requireMemberOrAnnouncementReader, async (req: Request, res: Re
   }
 });
 
+/** 未読を数える境目。既読位置と入った時刻の新しい方 (どちらも無ければ 1970、docs/02) */
+async function unreadSince(roomId: string, userId: string): Promise<Date> {
+  const r = await pool.query<{ since: Date | null }>(
+    `SELECT GREATEST(
+       (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
+       (SELECT joined_at FROM room_members WHERE room_id = $1 AND user_id = $2)
+     ) AS since`,
+    [roomId, userId],
+  );
+  return r.rows[0]?.since ?? new Date(0);
+}
+
 /**
  * POST /api/rooms/:id/read/all
  * Mark all messages in the room as read.
@@ -95,16 +107,16 @@ router.post('/all', requireMember, async (req: Request, res: Response) => {
 
   try {
     // Count current unread
+    // ★ 境目 (既読位置と入った時刻の新しい方、docs/02) を先に値で引いてから数える (改善ループ 13 回目)。
+    //   副問い合わせのまま渡すと見積もりを誤り、1.2 万便の部屋で表全体を読んでいた (索引なら 0.1ms)
+    const since = await unreadSince(String(roomId), userId);
     const unreadRes = await pool.query<{ count: number }>(
       `SELECT COUNT(*)::int AS count FROM messages m
        WHERE m.room_id = $1
          AND m.sender_id != $2
          AND m.is_deleted = false
-         AND m.created_at > GREATEST(
-           (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
-           (SELECT joined_at FROM room_members WHERE room_id = $1 AND user_id = $2)   -- ★ docs/02
-         )`,
-      [roomId, userId]
+         AND m.created_at > $3`,
+      [roomId, userId, since]
     );
 
     // Advance cursor to the latest message

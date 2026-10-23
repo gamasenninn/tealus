@@ -88,6 +88,12 @@ describe('既読位置が無いときは、入った時刻から数える', () =
     expect(res.body.rooms.find((r: { id: string }) => r.id === roomId).unread_count).toBe(2);
     const all = await request(app).get('/api/bot/unread').set('Authorization', `Bearer ${me.token}`);
     expect(all.body.messages.map((m: { content: string }) => m.content)).toEqual(['便 2026-10-02', '便 2026-10-03']);
+    // ★ 改善ループ 13 回目: 通知のバッジ (push.mts) も同じ (pushUnreadTotal の例は既読位置が入った時刻より新しく、COALESCE でも通っていた)
+    await getTestPool().query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key) VALUES ($1, 'https://push.example/y', 'p', 'a')`, [me.id]);
+    mockSend.mockClear();
+    await sendPushToUser(me.id, { title: 't', body: 'b' });
+    expect(JSON.parse(mockSend.mock.calls[0][1]).total_unread).toBe(2);
     const ra = await request(app).post(`/api/rooms/${roomId}/read/all`).set('Authorization', `Bearer ${me.token}`);
     expect(ra.body.count).toBe(2);
   });

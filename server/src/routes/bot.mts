@@ -783,7 +783,8 @@ router.get('/messages/:id/media', scopeByMessage, requireUuidId, async (req, res
     if (parseInt(sel.file_size) > BOT_MEDIA_MAX_SIZE) {
       response.error = `ファイルサイズが上限 (${BOT_MEDIA_MAX_SIZE / 1024 / 1024}MB) を超えています。data_base64 は省略。`;
     } else {
-      const buffer = fs.readFileSync(filePath);
+      // ★ 非同期で読む (改善ループ 13 回目)。apps の画像取得が 1 日 7 千回あり、10MB の動画なら同期の間は全員が止まる
+      const buffer = await fs.promises.readFile(filePath);
       response.data_base64 = buffer.toString('base64');
     }
 

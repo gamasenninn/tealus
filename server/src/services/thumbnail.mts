@@ -46,6 +46,7 @@ async function generateVideoThumbnail(filePath: string): Promise<string | null> 
     const thumbnailPath = path.join(MEDIA_ROOT, 'thumbnails', thumbnailFilename);
 
     await new Promise<void>((resolve, reject) => {
+      // ★ 時間切れ 60 秒 (改善ループ 13 回目)。添付の投稿は DB の接続を握ったままここを待つので、固まった ffmpeg で詰まらせない
       execFile('ffmpeg', [
         '-i', filePath,
         '-ss', '00:00:01',
@@ -53,7 +54,7 @@ async function generateVideoThumbnail(filePath: string): Promise<string | null> 
         '-vf', `scale=${THUMBNAIL_WIDTH}:-1`,
         '-y',
         thumbnailPath,
-      ], (err) => {
+      ], { timeout: 60_000 }, (err) => {
         if (err) return reject(err);
         resolve();
       });
