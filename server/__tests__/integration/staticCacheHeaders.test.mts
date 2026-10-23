@@ -15,14 +15,21 @@ import request from 'supertest';
 import { app } from '../../src/app.mts';
 
 const clientDistPath = path.join(import.meta.dirname, '../../../client/dist');
-const createdDist = !fs.existsSync(path.join(clientDistPath, 'index.html')) && !fs.existsSync(clientDistPath);
-if (createdDist) {
-  fs.mkdirSync(path.join(clientDistPath, 'assets'), { recursive: true });
-  fs.writeFileSync(path.join(clientDistPath, 'index.html'), '<!doctype html><title>t</title>');
-  fs.writeFileSync(path.join(clientDistPath, 'sw.js'), '// sw');
-  fs.writeFileSync(path.join(clientDistPath, 'assets', 'index-abc12345.js'), '// asset');
+// ★ index.html が無いときだけ見本を置く (dist の器だけある = ビルドの途中、でも置く)。消すのは自分が置いたファイルだけ
+const created: string[] = [];
+if (!fs.existsSync(path.join(clientDistPath, 'index.html'))) {
+  const put = (rel: string, body: string) => {
+    const p = path.join(clientDistPath, rel);
+    if (fs.existsSync(p)) return;
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, body);
+    created.push(p);
+  };
+  put('index.html', '<!doctype html><title>t</title>');
+  put('sw.js', '// sw');
+  put(path.join('assets', 'index-abc12345.js'), '// asset');
 }
-afterAll(() => { if (createdDist) fs.rmSync(clientDistPath, { recursive: true, force: true }); });
+afterAll(() => { for (const p of created) fs.rmSync(p, { force: true }); });
 
 const hasClientBuild = fs.existsSync(path.join(clientDistPath, 'index.html'));
 

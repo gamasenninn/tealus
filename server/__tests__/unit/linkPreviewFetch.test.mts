@@ -139,3 +139,14 @@ describe('createOgpFetcher — 読む量と時間', () => {
     expect(Date.now() - t0).toBeLessThan(3000);
   });
 });
+
+// ★ 改善ループ 12 回目: 名前が引けない (ENOTFOUND) のは相手側の事情。error に積むと障害の数え方が狂う (10-22 に 1 件)
+describe('名前が引けない宛先', () => {
+  it('null を返し、error ではなく info に残す', async () => {
+    const { logger } = jest.requireMock('../../src/utils/logger.mts') as { logger: { error: jest.Mock; info: jest.Mock } };
+    logger.error.mockClear(); logger.info.mockClear();
+    expect(await fetchOgp('http://no-such-host.invalid/')).toBeNull();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalled();
+  });
+});

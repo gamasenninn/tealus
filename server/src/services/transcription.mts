@@ -11,6 +11,14 @@ import { promisify } from 'node:util';
  */
 const execFileAsync = promisify(execFile);
 const FFMPEG_TIMEOUT_MS = 5 * 60_000;
+
+/** 一時ファイルを消す。★ 失敗しても投げない (掃除の失敗で、文字起こしの失敗の記録が飛ばないように) */
+function removeTempQuietly(p: string | null): void {
+  if (!p) return;
+  try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (err) {
+    logger.warn(`[transcribe] 一時ファイルを消せませんでした: ${p} (${err instanceof Error ? err.message : String(err)})`);
+  }
+}
 import OpenAI from 'openai';
 import { pool } from '../db/pool.mts';
 import { formatTranscription } from './formatting.mts';
@@ -116,7 +124,7 @@ export async function transcribeMessage(
           throw new Error(`Extracted audio (${(audioSize / 1024 / 1024).toFixed(1)}MB) exceeds Whisper API 25MB limit. Video too long, chunk split needed (future work).`);
         }
       } catch (e) {
-        if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        removeTempQuietly(tempPath);   // ★ 殺した直後の ffmpeg がまだ掴んでいると Windows で EBUSY。元のエラーを上書きしない
         tempPath = null;
         const message = e instanceof Error ? e.message : String(e);
         const stderrRaw = (e as { stderr?: Buffer | string }).stderr;
@@ -140,7 +148,7 @@ export async function transcribeMessage(
           inputPath = tempPath;
           ext = 'mp3';
         } catch (e) {
-          if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          removeTempQuietly(tempPath);   // ★ 殺した直後の ffmpeg がまだ掴んでいると Windows で EBUSY。元のエラーを上書きしない
           tempPath = null;
         }
       }
@@ -198,7 +206,7 @@ export async function transcribeMessage(
     }
 
     // Cleanup temp file
-    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    removeTempQuietly(tempPath);   // ★ 殺した直後の ffmpeg がまだ掴んでいると Windows で EBUSY。元のエラーを上書きしない
     tempPath = null;
 
     // Bug 2 fix: 短い raw_text の AI 整形 skip (#269 follow-up、5/12 user 発見)
@@ -249,7 +257,7 @@ export async function transcribeMessage(
   } catch (err) {
     logger.error('Transcription error:', err);
     // Cleanup temp file on error
-    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    removeTempQuietly(tempPath);   // ★ 殺した直後の ffmpeg がまだ掴んでいると Windows で EBUSY。元のエラーを上書きしない
 
     await pool.query(
       `UPDATE voice_transcriptions SET status = 'error' WHERE message_id = $1 AND version = $2`,

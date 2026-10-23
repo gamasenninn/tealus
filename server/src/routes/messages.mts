@@ -382,9 +382,10 @@ router.put('/:msgId', async (req: Request, res: Response) => {
       content: string | null;
       type: string;
       is_deleted: boolean;
+      is_edited: boolean;
       message_edit_policy: string;
     }>(
-      `SELECT m.sender_id, m.content, m.type, m.is_deleted, r.message_edit_policy
+      `SELECT m.sender_id, m.content, m.type, m.is_deleted, m.is_edited, r.message_edit_policy
        FROM messages m JOIN rooms r ON r.id = m.room_id
        WHERE m.id = $1 AND m.room_id = $2`,
       [msgId, roomId]
@@ -449,9 +450,11 @@ router.put('/:msgId', async (req: Request, res: Response) => {
     }
 
     // Update message
+    // ★ 最初の説明文 (本文が無かった便) は編集ではない。版も積まないので、印だけ付けると履歴が空の「編集済み」になる (改善ループ 12 回目)
+    const isEdited = !!msg.content || !!msg.is_edited;
     const updateResult = await pool.query<MessageRow>(
-      'UPDATE messages SET content = $1, is_edited = true, updated_at = now() WHERE id = $2 RETURNING *',
-      [content.trim(), msgId]
+      'UPDATE messages SET content = $1, is_edited = $3, updated_at = now() WHERE id = $2 RETURNING *',
+      [content.trim(), msgId, isEdited]
     );
 
     // Socket.IO broadcast
@@ -459,7 +462,7 @@ router.put('/:msgId', async (req: Request, res: Response) => {
     io.to(roomId).emit('message:updated', {
       message_id: msgId,
       content: content.trim(),
-      is_edited: true,
+      is_edited: isEdited,
       edited_by: userId,
       edited_by_name: req.user!.display_name,
     });

@@ -47,4 +47,18 @@ describe('PUT /api/rooms/:id/messages/:msgId — 同じ文', () => {
     const { rows } = await getTestPool().query('SELECT content FROM message_edits WHERE message_id = $1', [msgId]);
     expect(rows).toEqual([{ content: 'こんにちは' }]);
   });
+
+  // ★ 改善ループ 12 回目: 写真に後から付けた最初の説明文で「(編集済み)」が付き、履歴を開くと空だった (本番 9 件)
+  it('★ 本文の無い便 (写真など) に最初の説明文を付けても、編集済みにしない・版も積まない', async () => {
+    await getTestPool().query('UPDATE messages SET content = NULL WHERE id = $1', [msgId]);
+    const res = await edit('現場の写真です');
+    expect(res.status).toBe(200);
+    expect(res.body.message.content).toBe('現場の写真です');
+    expect(res.body.message.is_edited).toBe(false);
+    const { rows } = await getTestPool().query('SELECT 1 FROM message_edits WHERE message_id = $1', [msgId]);
+    expect(rows).toHaveLength(0);
+    // 2 回目からは今までどおり編集
+    const again = await edit('現場の写真です (2 枚目)');
+    expect(again.body.message.is_edited).toBe(true);
+  });
 });

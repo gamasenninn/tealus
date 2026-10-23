@@ -86,4 +86,16 @@ describe('readLatestBackupLog', () => {
     expect(calls).toBe(1);
     expect(second.readError).toContain('前回');
   });
+
+  // ★ 改善ループ 12 回目: 裏の読み取りが永久に戻らないと「読み取り中」の印も永久に残り、NAS が戻っても再起動まで ok に戻らなかった
+  it('★ 前の読み取りが固まったまま 15 分を過ぎたら、次の読み取りを許す', async () => {
+    let calls = 0;
+    const never = { readdir: () => { calls++; return new Promise<string[]>(() => {}); }, readFile: jest.fn(), stat: jest.fn() };
+    const t = Date.now();
+    await readLatestBackupLog('\\nas\stale', { fs: never, timeoutMs: 10, now: () => t });
+    await readLatestBackupLog('\\nas\stale', { fs: never, timeoutMs: 10, now: () => t + 14 * 60_000 });
+    expect(calls).toBe(1);
+    await readLatestBackupLog('\\nas\stale', { fs: never, timeoutMs: 10, now: () => t + 16 * 60_000 });
+    expect(calls).toBe(2);
+  });
 });
