@@ -171,7 +171,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
           const data = await api.getMessageEdits(roomId, message.id);
           setEditHistory(data.edits as unknown as MessageEditEntry[]);
           setShowEditHistory(true);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error(err); notifyFailure('編集履歴の読み込み', err); }
       },
       onReply: () => setReplyTo(message),
       onShowTagModal: () => setShowTagModal(true),

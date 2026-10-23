@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { canCreateStamp } from '../../utils/permissions';
-import { useConfirm, promptText } from '../../stores/confirmStore';
+import { useConfirm, promptText, notifyFailure } from '../../stores/confirmStore';
 import { api } from '../../services/api';
 import StampGenerator from './StampGenerator';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
@@ -107,6 +107,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       loadPacks();
     } catch (err) {
       console.error('Delete pack error:', err);
+      notifyFailure('スタンプパックの削除', err);
     }
   };
 
@@ -120,6 +121,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       loadPacks();
     } catch (err) {
       console.error('Rename pack error:', err);
+      notifyFailure('名前の変更', err);
     }
   };
 
@@ -139,6 +141,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       setStamps(res.stamps);
     } catch (err) {
       console.error('Delete stamp error:', err);
+      notifyFailure('スタンプの削除', err);
     }
   };
 

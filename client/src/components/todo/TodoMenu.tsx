@@ -3,6 +3,7 @@ import { api } from '../../services/api';
 import { CheckSquare, Square, Plus } from 'lucide-react';
 import type { Tag } from '../../types';
 import './TodoMenu.css';
+import { notifyFailure } from '../../stores/confirmStore';
 
 // メッセージ付与タグの応答行 (server は id で返す。types.ts の MessageTag は tag_id で実態と差分あり)
 interface MessageTagRow {
@@ -51,6 +52,7 @@ function TodoMenu({ messageId, roomId, onClose, onTagsChanged }: TodoMenuProps) 
       onClose();
     } catch (err) {
       console.error('TODO tag toggle error:', err);
+      notifyFailure('TODO の付け外し', err);
     }
   };
 
@@ -64,6 +66,7 @@ function TodoMenu({ messageId, roomId, onClose, onTagsChanged }: TodoMenuProps) 
       setNewTagName('');
     } catch (err) {
       console.error('Create TODO tag error:', err);
+      notifyFailure('TODO タグの作成', err);
     } finally {
       setCreating(false);
     }

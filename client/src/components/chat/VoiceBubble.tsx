@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { api } from '../../services/api';
 import { renderKeywordHighlight } from '../../utils/highlight';
 import { formatDuration } from '../../utils/format';
-import { useConfirm, notify } from '../../stores/confirmStore';
+import { useConfirm, notify, notifyFailure } from '../../stores/confirmStore';
 import VoiceEditModal from './VoiceEditModal';
 import VoiceHistoryModal from './VoiceHistoryModal';
 import type { VoiceHistoryEntry } from './VoiceHistoryModal';
@@ -144,6 +144,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
       setShowHistory(true);
     } catch (err) {
       console.error('History error:', err);
+      notifyFailure('履歴の読み込み', err);
     }
   };
 
