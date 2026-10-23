@@ -96,6 +96,13 @@ describe('Deep Agent', () => {
       expect(args).toContain('sess-123');
     });
 
+    // ★ 改善ループ 13 回目: claude は作業場所 (cwd = AI が書ける場所) の .mcp.json やその人の設定の MCP も読む。
+    //   --dangerously-skip-permissions なので確認も出ない。本体班が組み立てた設定 (--mcp-config) だけを使わせる
+    test('★ --strict-mcp-config を付ける (組み立てた MCP の設定だけを使う)', () => {
+      const args = buildClaudeArgs({ workspacePath: TEST_WORKSPACE });
+      expect(args).toContain('--strict-mcp-config');
+    });
+
     test('session_id がない場合は --resume なし', () => {
       const args = buildClaudeArgs({
         workspacePath: TEST_WORKSPACE,

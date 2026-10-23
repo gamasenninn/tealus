@@ -111,7 +111,9 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
  * claude -p の引数を構築
  */
 export function buildClaudeArgs({ workspacePath, sessionId }: { workspacePath: string; sessionId?: string }): string[] {
-  const args = ['-p', '-', '--dangerously-skip-permissions'];
+  // ★ --strict-mcp-config (改善ループ 13 回目): 作業場所 (AI が書ける場所) の .mcp.json やその人の設定の MCP を読ませない。
+  //   --dangerously-skip-permissions なので確認も出ない。本体班が組み立てた設定 (--mcp-config) だけを使う
+  const args = ['-p', '-', '--dangerously-skip-permissions', '--strict-mcp-config'];
 
   // 動的生成された MCP 設定
   const mcpConfigPath = deepMcpConfigPath(workspacePath);   // ★ #419 workspace の外
