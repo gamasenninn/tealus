@@ -1458,7 +1458,7 @@ router.get('/unread', scopeByRoom('query'), async (req, res) => {
           AND m.is_deleted = false
           AND m.created_at > COALESCE(
             (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
-            '1970-01-01'
+            (SELECT joined_at FROM room_members WHERE room_id = $1 AND user_id = $2)   -- ★ docs/02
           )
         ORDER BY m.created_at ASC
         LIMIT 100
@@ -1479,7 +1479,7 @@ router.get('/unread', scopeByRoom('query'), async (req, res) => {
           AND m.is_deleted = false
           AND m.created_at > COALESCE(
             (SELECT last_read_at FROM room_read_cursors WHERE room_id = m.room_id AND user_id = $1),
-            '1970-01-01'
+            rm.joined_at   -- ★ docs/02
           )
         ORDER BY m.created_at ASC
         LIMIT 100

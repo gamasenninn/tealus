@@ -102,7 +102,7 @@ router.post('/all', requireMember, async (req: Request, res: Response) => {
          AND m.is_deleted = false
          AND m.created_at > COALESCE(
            (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
-           '1970-01-01'
+           (SELECT joined_at FROM room_members WHERE room_id = $1 AND user_id = $2)   -- ★ docs/02
          )`,
       [roomId, userId]
     );

@@ -2,7 +2,7 @@
  * 通知に載せる未読の合計 (バッジ用) の数え方を固定する (2026-09-28)
  *
  * ★ 数え方: 自分が入っているルームの、他人が送った・消されていない・既読位置より新しいメッセージ。
- *   既読位置が無いルームは全部を数える。
+ *   既読位置が無いルームは入った時刻から数える (2026-10-23、docs/02。unreadSinceJoin.test.mts)。
  * ★★ 集計を速く書き直した (本番の最大 539ms → 23ms)。書き直す前もこのテストは通る —— 挙動を変えていない証拠として置く。
  */
 const mockSend = jest.fn();
@@ -30,7 +30,7 @@ describe('通知の未読合計', () => {
 
     const room = async (name: string, members: string[]) => {
       const r = await pool.query<{ id: string }>(`INSERT INTO rooms (type, name) VALUES ('group', $1) RETURNING id`, [name]);
-      for (const u of members) await pool.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [r.rows[0].id, u]);
+      for (const u of members) await pool.query(`INSERT INTO room_members (room_id, user_id, joined_at) VALUES ($1, $2, '2026-01-01T00:00:00Z')`, [r.rows[0].id, u]);
       return r.rows[0].id;
     };
     const msg = (roomId: string, sender: string, at: string, deleted = false) =>
@@ -45,7 +45,7 @@ describe('通知の未読合計', () => {
     await msg(read, other.id, '2026-09-03T00:00:00Z', true);
     await msg(read, me.id, '2026-09-04T00:00:00Z');
 
-    // 既読位置なし: 他人の 2 を全部数える
+    // 既読位置なし: 入った (01-01) 後の他人の 2 を数える
     const unread = await room('既読なし', [me.id, other.id]);
     await msg(unread, other.id, '2026-08-01T00:00:00Z');
     await msg(unread, other.id, '2026-09-05T00:00:00Z');

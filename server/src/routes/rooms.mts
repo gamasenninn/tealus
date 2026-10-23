@@ -374,7 +374,7 @@ router.get('/', async (req, res) => {
            AND msg.sender_id != $1
            AND msg.created_at > COALESCE(
              (SELECT last_read_at FROM room_read_cursors WHERE room_id = r.id AND user_id = $1),
-             '1970-01-01'
+             rm.joined_at   -- ★ 既読位置が無ければ入った時刻から (入る前の便は未読にしない、docs/02)
            )
        ) unread ON true
        WHERE rm.user_id = $1
