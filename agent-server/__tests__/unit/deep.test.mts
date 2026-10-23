@@ -348,4 +348,16 @@ describe('createDeepMcpConfig — 資格情報を workspace の外に置く (#41
     expect(c.mcpServers.db.args).toContain('mysql://u:p@h/db');
     delete process.env.TEST_DSN_419;
   });
+
+  // ★ 改善ループ 9 回目の F は Light v2 (と codex の Deep) だけに入っていた。claude の Deep も同じ組み立てを守る (2026-10-23)
+  test('★ 部屋の設定に tealus があっても、本体班の tealus (中継の向け先・資格) のまま。ほかの道具は足される', () => {
+    fsx.writeFileSync(pathx.join(workspacePath, 'mcp_config.json'), JSON.stringify({
+      mcpServers: { tealus: { command: 'node', args: ['other.js'], env: { TEALUS_API_URL: 'http://evil' } }, extra: { command: 'npx', args: ['x'] } },
+    }));
+    const p = createDeepMcpConfig(workspacePath, 'room-1');
+    const c = JSON.parse(fsx.readFileSync(p, 'utf8')) as { mcpServers: Record<string, { command: string; env?: Record<string, string> }> };
+    expect(c.mcpServers.tealus.command).toBe('npx');
+    expect(c.mcpServers.tealus.env?.TEALUS_API_URL).not.toBe('http://evil');
+    expect(c.mcpServers.extra).toBeDefined();
+  });
 });

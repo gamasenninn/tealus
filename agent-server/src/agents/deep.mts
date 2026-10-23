@@ -73,7 +73,13 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
     try {
       const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8')) as { mcpServers?: Record<string, McpServerDef> };
       // ★ #419 設定には ${VAR} の参照だけを書き、実体は .env に置く。子プロセスは参照を解釈しない
-      Object.assign(mcpConfig.mcpServers, expandEnvRefs(roomMcp.mcpServers || {}));
+      const roomServers = expandEnvRefs(roomMcp.mcpServers || {});
+      // ★ 改善ループ 9 回目の F と同じ (lightV2.mts)。tealus は本体班が組み立てる (中継の向け先・機械の資格)。部屋の設定では置き換えさせない
+      if (roomServers.tealus) {
+        logger.warn(`[deep] 部屋の mcp_config.json の tealus は使わない (本体班の組み立てを優先): ${roomMcpPath}`);
+        delete roomServers.tealus;
+      }
+      Object.assign(mcpConfig.mcpServers, roomServers);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`Failed to load room MCP config: ${message}`);
