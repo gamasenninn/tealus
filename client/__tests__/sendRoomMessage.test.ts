@@ -82,9 +82,11 @@ describe('sendRoomMessage', () => {
     await expect(sendRoomMessage({ roomId: 'r1', content: 'hi' })).rejects.toThrow('このルームのメンバーではないため送れませんでした');
   });
 
-  it('★ 返事が来ない (古いサーバ) なら、待ったあと今までどおり送れたとして扱う', async () => {
+  // ★ 2026-10-23 小野さん判断 (改善ループ 12 回目の B1): 返事が来ないのは「届いていない」と見る。
+  //   以前は送れたとして扱い、電波の弱い所で入力欄の文が消えて相手に届かない、が黙って起きた (サーバは #593 から必ず返事する)
+  it('★ 返事が来なければ失敗として投げる (呼び出し側が文を残して「もう一度」を出す)', async () => {
     ackReply = null;
-    await expect(sendRoomMessage({ roomId: 'r1', content: 'hi' }, { ackWaitMs: 20 })).resolves.toBe('socket');
+    await expect(sendRoomMessage({ roomId: 'r1', content: 'hi' }, { ackWaitMs: 20 })).rejects.toThrow('届いたか確かめられませんでした');
   });
 });
 

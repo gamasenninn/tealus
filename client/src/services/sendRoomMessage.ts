@@ -26,7 +26,7 @@ export interface SendRoomMessageOpts {
 /** ★ #537 つながっていないとき、つながり直すのを待つ長さ (再接続は 1〜5 秒ごとに試みる) */
 export const SEND_RECONNECT_WAIT_MS = 10_000;
 
-/** ★ #593 サーバの受け取りの返事 (ack) を待つ長さ。来なければ (古いサーバ) 今までどおり送れたとして扱う */
+/** ★ #593 サーバの受け取りの返事 (ack) を待つ長さ。★ 来なければ失敗として投げる (2026-10-23 小野さん判断) */
 export const SEND_ACK_WAIT_MS = 10_000;
 
 type SendAck = { ok: boolean; id?: string; error?: string };
@@ -65,6 +65,10 @@ export async function sendRoomMessage({
       forwarded_from: forwardedFrom,
     }, (res: SendAck) => { clearTimeout(timer); resolve(res); });
   });
-  if (ack && !ack.ok) throw new Error(ack.error || '送れませんでした。もう一度お試しください');
+  // ★ 2026-10-23 小野さん判断: 返事が来ないのは「届いていない」と見て投げる (入力欄の文は呼び出し側が残す)。
+  //   以前は古いサーバのために送れたとして扱い、電波の弱い所で文が消えて相手に届かない、が黙って起きた。
+  //   まれに保存済みで返事だけ失われることがあるので、文言で「画面に出ていなければ」と添える (二重を防ぐ)
+  if (!ack) throw new Error('届いたか確かめられませんでした。画面に出ていなければ、もう一度送ってください');
+  if (!ack.ok) throw new Error(ack.error || '送れませんでした。もう一度お試しください');
   return 'socket';
 }
