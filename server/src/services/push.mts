@@ -126,7 +126,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       try {
         await webpush.sendNotification(
           pushSubscription,
-          JSON.stringify(enrichedPayload)
+          JSON.stringify(enrichedPayload),
+          { timeout: 10_000 },   // ★ 改善ループ 10 回目の F: 既定は時間切れ無し (相手のサーバが固まると送り終わらない)
         );
       } catch (err) {
         const statusCode = (err as { statusCode?: number }).statusCode;

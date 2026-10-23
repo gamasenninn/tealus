@@ -5,8 +5,12 @@ import { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscr
 import { fireWebhooks } from './webhook.mts';
 import type { Server } from 'socket.io';
 
+// ★ 時間切れはこちらで決める (改善ループ 10 回目の F)。SDK の既定は 10 分 × やり直し 2 回 = 最長 30 分で、
+//   相手が固まると音声が「文字起こし中」のまま残っていた
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 120_000,
+  maxRetries: 1,
 });
 
 const BASE_SYSTEM_PROMPT = `あなたは音声文字起こしテキストを自然な日本語に整形するアシスタントです。
