@@ -35,7 +35,7 @@
 
 ## ステップ 1. OpenAI API キーを取得 (~5 分)
 
-agent-server は **OpenAI API** を使って AI 応答を生成します。Light agent (gpt-4o-mini) を使うので **コストはごく少額** (1 メッセージで 0.001 ドル前後)。
+agent-server は **OpenAI API** を使って AI 応答を生成します。Light agent を使うので **コストは少額**。★ API キーだけで使うなら `.env` に `AGENT_LIGHT_BACKEND=v1` を書いてください (未設定の既定は codex 経由の v2。9.5 節)。
 
 1. https://platform.openai.com/api-keys にアクセス → ログイン (アカウント未作成なら sign up)
 2. **「+ Create new secret key」** をクリック
@@ -86,7 +86,7 @@ npm install
 cp .env.example .env
 ```
 
-> 💡 `npm install` で `EBADENGINE` エラーが出る場合は Node.js のバージョンが 20 未満。`node --version` を確認、20 未満なら [nvm](https://github.com/nvm-sh/nvm) で 22 を入れ直してください。
+> 💡 `npm install` で `EBADENGINE` エラーが出る場合は Node.js のバージョンが 24 未満。`node --version` を確認、24 未満なら [nvm](https://github.com/nvm-sh/nvm) で 24 を入れ直してください (`engines` は全パッケージ `>=24`)。
 
 ### 3-2. `.env` を編集
 
@@ -355,10 +355,10 @@ baseline は 5/6 PASS (S1 のみ LLM quality variance 検出 = 設計通り)。
 `agent-server/.env` に追加:
 
 ```bash
-# サブスクなし → 'v1' 推奨 (default、@openai/agents SDK)
+# サブスクなし (OpenAI API キーだけ) → 'v1' を明示する (@openai/agents SDK)
 AGENT_LIGHT_BACKEND=v1
 
-# ChatGPT Plus/Pro/Team 持ち + codex login 済 → 'v2' 推奨
+# ChatGPT Plus/Pro/Team 持ち + codex login 済 → 'v2' (★ 未設定のときの既定、agent-server/src/config.mts)
 # AGENT_LIGHT_BACKEND=v2
 # LIGHTV2_AUTH=subscription
 ```
@@ -369,8 +369,8 @@ agent-server 再起動。これで `/light` / Router 自動振分は config 指�
 
 | 状況 | 推奨 backend | 設定 |
 |---|---|---|
-| OpenAI API キーのみ (= 新規 OSS 採用者 default) | **v1** | 未設定 or `v1` |
-| ChatGPT Plus/Pro/Team 持ち、API cost 0 を活かしたい | **v2** + subscription | `v2` + `LIGHTV2_AUTH=subscription` |
+| OpenAI API キーのみ (= 新規 OSS 採用者) | **v1** | ★ `v1` を**明示**する (未設定は v2) |
+| ChatGPT Plus/Pro/Team 持ち、API cost 0 を活かしたい | **v2** + subscription | 未設定 or `v2` + `LIGHTV2_AUTH=subscription` |
 | 自作 backend で plug-in 実験 | 絶対 path | `/abs/path/to/file.js` |
 
 ### 9.5-3. `/light2` prefix の扱い

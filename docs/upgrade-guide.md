@@ -59,6 +59,7 @@ cd server        && npm install
 cd ../client     && npm install     # postinstall で client/dist を自動再ビルド
 cd ../agent-server && npm install    # ★ 忘れやすい（AI 応答が動かない原因になる）
 cd ../rtc-server && npm install      # postinstall で bundle を自動再ビルド（音声通話を使う場合）
+cd ../dashboard  && npm install      # postinstall で dashboard/dist を自動再ビルド（管理画面 /system）
 ```
 
 > `agent-server` の `npm install` 忘れは、AI エージェント（Light/Deep）や cc-* ブリッジが動かない典型原因です。
@@ -111,6 +112,7 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 |------|------|------|
 | `[migration-check] ... テーブルが見つかりません` | DB migration 忘れ | 手順 3（`npm run migrate`）を実行 |
 | `[build-check] client/dist/index.html が見つかりません` | クライアント未ビルド | 手順 4（`npm run build`）を実行 |
+| `[build-check] dashboard/dist/index.html が見つかりません` | 管理画面 (/system) 未ビルド。Bot ユーザーも webhook も作れない | `cd dashboard && npm install`（postinstall でビルド） |
 | `[migration-check] ★ 未適用 N 件: …` (v0.11.1 以降) | DB migration 忘れ | 手順 3（`npm run migrate`）を実行。★ 名前が出たものが流れていない |
 | `[media] removed_media の表がありません` | DB migration 忘れ (v0.11.0 の 040) | 手順 3（`npm run migrate`）を実行。★ そのままだと削除した部屋の添付がまだ開ける |
 | `[model-guard] ... は ChatGPT アカウント (subscription) の codex では使えません` (agent-server) | Codex のモデルが外されたもの | v0.11.0 のノートの 1. を参照 |
@@ -132,6 +134,10 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 > リリースを**出す側**の手順は [リリース チェックリスト](release-checklist.md) を参照してください。
 
 ## バージョン別ノート
+
+### → 次の版 (main を追っている場合は今すぐ)
+
+- ★ **migration 041 (`041_portal_links_pass.sql`) が増えました** (#607、10-18)。`cd server && npm run migrate` → **server の再起動**。忘れるとホーム画面のタブ (`GET /api/rooms/portal-links`) が全員 500 になります (起動ログに `[migration-check] ★ 未適用 1 件` が出ます)
 
 ### → v0.11.1（0.11.0 の監査で見つかった穴 2 つ）
 
@@ -539,6 +545,7 @@ awk '/^P=\{project_name\}/{f=1} f&&/^```/{exit} f' "$S" | sh -n && echo "構文 
 ```bash
 git checkout v0.5.0     # 元のバージョンへ
 cd client && npm install && npm run build
+cd ../dashboard && npm install
 cd ../server && npm install
 # プロセス再起動（server → agent-server → rtc-server）
 ```

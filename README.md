@@ -31,9 +31,11 @@ Tealus は **LINE ライクな直感 UI のオープンソース社内メッセ�
 git clone https://github.com/gamasenninn/tealus.git
 cd tealus
 docker-compose up -d
-cd server && cp .env.example .env && npm install && npm run dev
+cd server && cp .env.example .env && npm install && npm run migrate && npm run dev   # ★ migrate を忘れると空の DB で上がり、登録が 500
 # 別ターミナル
 cd client && npm install && npm run dev
+# 管理画面 (/system) を使うなら 1 回だけ (postinstall で dashboard/dist を作る)
+cd dashboard && npm install
 ```
 
 ブラウザで `http://localhost:5173` を開き、別ターミナルで初回管理者を登録（[Step 5](#5-初回ユーザー登録) 参照）。AI 連携や通話まで含めた全機能セットアップは [セットアップ](#セットアップ)、見た目を即体験したいなら [デモ環境](#7-仲間を追加--デモ環境でフル体験任意) を推奨。
