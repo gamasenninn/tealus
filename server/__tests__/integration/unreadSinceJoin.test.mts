@@ -79,4 +79,30 @@ describe('既読位置が無いときは、入った時刻から数える', () =
     const res = await request(app).get('/api/rooms').set('Authorization', `Bearer ${me.token}`);
     expect(res.body.rooms.find((r: { id: string }) => r.id === roomId).unread_count).toBe(1);
   });
+
+  // ★ 改善ループ 12 回目: 退会しても既読位置は残る。戻った人は古い既読位置が勝って、いない間の便が未読になっていた
+  it('抜けて戻った人は、古い既読位置より入り直した時刻が勝つ (いない間の便は未読にしない)', async () => {
+    await getTestPool().query(
+      `INSERT INTO room_read_cursors (room_id, user_id, last_read_at) VALUES ($1, $2, '2026-09-02T00:00:00Z')`, [roomId, me.id]);
+    const res = await request(app).get('/api/rooms').set('Authorization', `Bearer ${me.token}`);
+    expect(res.body.rooms.find((r: { id: string }) => r.id === roomId).unread_count).toBe(2);
+    const all = await request(app).get('/api/bot/unread').set('Authorization', `Bearer ${me.token}`);
+    expect(all.body.messages.map((m: { content: string }) => m.content)).toEqual(['便 2026-10-02', '便 2026-10-03']);
+    const ra = await request(app).post(`/api/rooms/${roomId}/read/all`).set('Authorization', `Bearer ${me.token}`);
+    expect(ra.body.count).toBe(2);
+  });
+
+  // ★ 改善ループ 12 回目: お知らせの「未読の点」(ホーム) も同じ数え方に。メンバーでない人 (お知らせは全員に出る) は今までどおり
+  it('お知らせの未読の点: メンバーは入った時刻から、メンバーでない人は今までどおり全部', async () => {
+    const pool = getTestPool();
+    await pool.query('UPDATE rooms SET is_announcement = true WHERE id = $1', [roomId]);
+    await pool.query('UPDATE messages SET is_published = true WHERE room_id = $1', [roomId]);
+    const mine = await request(app).get('/api/rooms/announcements').set('Authorization', `Bearer ${me.token}`);
+    expect(mine.status).toBe(200);
+    expect(mine.body.messages.filter((m: { is_unread: boolean }) => m.is_unread)).toHaveLength(2);
+
+    const outsider = await createTestUser({ login_id: 'EMP303', display_name: '部屋の外の人' });
+    const theirs = await request(app).get('/api/rooms/announcements').set('Authorization', `Bearer ${outsider.token}`);
+    expect(theirs.body.messages.filter((m: { is_unread: boolean }) => m.is_unread)).toHaveLength(5);
+  });
 });

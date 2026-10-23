@@ -65,7 +65,7 @@ async function calculateTotalUnreadForUser(userId: string): Promise<number> {
       FROM room_members rm
       LEFT JOIN room_read_cursors rc ON rc.room_id = rm.room_id AND rc.user_id = rm.user_id
       JOIN messages msg ON msg.room_id = rm.room_id
-                       AND msg.created_at > COALESCE(rc.last_read_at, rm.joined_at)   -- ★ 既読位置が無ければ入った時刻から (docs/02)
+                       AND msg.created_at > GREATEST(rc.last_read_at, rm.joined_at)   -- ★ 既読位置と入った時刻の新しい方から (docs/02)
       WHERE rm.user_id = $1
         AND msg.is_deleted = false
         AND msg.sender_id != $1

@@ -128,11 +128,17 @@ router.get('/announcements', async (req, res) => {
     await attachTranscriptions(messages);
 
     // Get read status for current user
-    const cursorResult = await pool.query<{ room_id: string; last_read_at: Date }>(
-      `SELECT room_id, last_read_at FROM room_read_cursors WHERE room_id = ANY($1) AND user_id = $2`,
+    // ★ メンバーなら一覧と同じく「既読位置と入った時刻の新しい方」から (docs/02、改善ループ 12 回目)。
+    //   お知らせはメンバーでない人にも出るので、その人は既読位置だけ (無ければ全部未読) —— 今までどおり
+    const cursorResult = await pool.query<{ room_id: string; last_read_at: Date | null }>(
+      `SELECT r.id AS room_id,
+              GREATEST(rc.last_read_at, rm.joined_at) AS last_read_at
+         FROM unnest($1::uuid[]) AS r(id)
+         LEFT JOIN room_read_cursors rc ON rc.room_id = r.id AND rc.user_id = $2
+         LEFT JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2`,
       [roomIds, req.user!.id]
     );
-    const cursors = Object.fromEntries(cursorResult.rows.map(r => [r.room_id, r.last_read_at]));
+    const cursors = Object.fromEntries(cursorResult.rows.filter(r => r.last_read_at).map(r => [r.room_id, r.last_read_at]));
 
     messages.forEach(m => {
       const lastRead = cursors[m.room_id];
@@ -372,9 +378,11 @@ router.get('/', async (req, res) => {
          WHERE msg.room_id = r.id
            AND msg.is_deleted = false
            AND msg.sender_id != $1
-           AND msg.created_at > COALESCE(
+           -- ★ 既読位置と入った時刻の新しい方から (入る前の便も、抜けていた間の便も未読にしない、docs/02)。
+           --   GREATEST は NULL を飛ばすので、既読位置が無ければ入った時刻になる
+           AND msg.created_at > GREATEST(
              (SELECT last_read_at FROM room_read_cursors WHERE room_id = r.id AND user_id = $1),
-             rm.joined_at   -- ★ 既読位置が無ければ入った時刻から (入る前の便は未読にしない、docs/02)
+             rm.joined_at
            )
        ) unread ON true
        WHERE rm.user_id = $1
