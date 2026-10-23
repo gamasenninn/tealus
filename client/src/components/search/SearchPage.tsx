@@ -38,6 +38,8 @@ function SearchPage() {
   const [query, setQuery] = useState(initialQuery || cachedData?.query || '');
   const [results, setResults] = useState<SearchResult[]>(cachedData?.results || []);
   const [searching, setSearching] = useState(false);
+  // ★ 読み込みの失敗を「ありません」と分ける (2026-10-23 小野さん判断)
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +92,7 @@ function SearchPage() {
   const doSearch = async (q: string, offset = 0) => {
     const seq = ++reqSeqRef.current;
     setSearching(true);
+    setLoadError(null);
     try {
       const data = await api.search(q.trim(), { roomId: roomId || undefined, offset });
       if (seq !== reqSeqRef.current) return;   // ★ もっと新しい検索が出ている
@@ -102,6 +105,7 @@ function SearchPage() {
       setHasMore(data.results.length >= 50);
     } catch (err) {
       console.error('Search error:', err);
+      if (seq === reqSeqRef.current) setLoadError(err instanceof Error ? err.message : '原因不明');
     } finally {
       if (seq === reqSeqRef.current) setSearching(false);
     }
@@ -112,6 +116,7 @@ function SearchPage() {
   const doTagSearch = async (tags: string[], isDone: string, sort: string, offset = 0, q: string = query) => {
     const seq = ++reqSeqRef.current;
     setSearching(true);
+    setLoadError(null);
     try {
       const opts: {
         roomId?: string; isDone?: string | boolean; sort?: string;
@@ -139,6 +144,7 @@ function SearchPage() {
       setHasMore(data.results.length >= 50);
     } catch (err) {
       console.error('Tag search error:', err);
+      if (seq === reqSeqRef.current) setLoadError(err instanceof Error ? err.message : '原因不明');
     } finally {
       if (seq === reqSeqRef.current) setSearching(false);
     }
@@ -370,7 +376,11 @@ function SearchPage() {
       }}>
         {searching && <div className="search-loading">検索中...</div>}
 
-        {!searching && (query.trim() || selectedTags.length > 0) && results.length === 0 && (
+        {!searching && loadError && (
+          <div className="search-empty" role="alert">読み込めませんでした: {loadError}</div>
+        )}
+
+        {!searching && !loadError && (query.trim() || selectedTags.length > 0) && results.length === 0 && (
           <div className="search-empty">
             {selectedTags.length > 0 ? '該当するメッセージはありません' : `「${query}」に一致するメッセージはありません`}
           </div>

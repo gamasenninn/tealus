@@ -44,3 +44,19 @@ describe('MediaGallery — 古い応答で新しい結果を上書きしない',
     expect(screen.getByAltText('タグの写真.jpg')).toBeTruthy();
   });
 });
+
+// ★ 2026-10-23 小野さん判断 (改善ループ 12 回目の B6): 読み込みの失敗を「メディアはまだありません」と同じ画面にしない
+describe('MediaGallery — 読み込みの失敗', () => {
+  it('★ 失敗したら「読み込めませんでした: 理由」を出し、「まだありません」は出さない', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    getMediaGallery.mockReset();
+    getMediaGallery.mockRejectedValue(new Error('時間がかかりすぎました。電波を確かめて、もう一度お試しください'));
+    render(
+      <MemoryRouter initialEntries={['/rooms/R1/media']}>
+        <Routes><Route path="/rooms/:roomId/media" element={<MediaGallery />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('読み込めませんでした: 時間がかかりすぎました');
+    expect(screen.queryByText('メディアはまだありません')).toBeNull();
+  });
+});

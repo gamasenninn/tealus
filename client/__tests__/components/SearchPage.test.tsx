@@ -124,3 +124,17 @@ describe('SearchPage — 結果を開くとき、どの検索から来たかを�
     expect(probe.textContent).toBe('/rooms/R1|{"fromSearch":{"roomId":null}}');
   });
 });
+
+// ★ 2026-10-23 小野さん判断 (改善ループ 12 回目の B6): 読み込みの失敗を「一致するものはありません」と同じ画面にしない
+describe('SearchPage — 読み込みの失敗', () => {
+  beforeEach(() => { search.mockClear(); sessionStorage.clear(); });
+
+  it('★ 検索が失敗したら「読み込めませんでした: 理由」を出し、「ありません」は出さない', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    search.mockRejectedValueOnce(new Error('つながっていません。電波を確かめて、もう一度お試しください'));
+    render(<MemoryRouter initialEntries={['/search']}><SearchPage /></MemoryRouter>);
+    fireEvent.change(screen.getByPlaceholderText('全ルーム検索...'), { target: { value: 'トラクター' } });
+    expect(await screen.findByRole('alert', {}, { timeout: 3000 })).toHaveTextContent('読み込めませんでした: つながっていません');
+    expect(screen.queryByText(/一致するメッセージはありません/)).toBeNull();
+  });
+});

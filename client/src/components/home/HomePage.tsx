@@ -26,6 +26,8 @@ function HomePage() {
   const [portalLinks, setPortalLinks] = useState<PortalLink[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  // ★ お知らせの読み込みの失敗を「お知らせはありません」と分ける (2026-10-23 小野さん判断)
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Portal iframe load 状態 ('loading' | 'loaded' | 'timeout')
   // X-Frame-Options block 時は load event がまだ発火するため timeout 検出だけでは
   // 不十分。常時表示の「新タブで開く」 button と組み合わせて user の動線確保。
@@ -84,6 +86,7 @@ function HomePage() {
 
   const loadAnnouncements = async () => {
     try {
+      setLoadError(null);
       const data = await api.getAnnouncements();
       setAnnouncements((data.messages || []) as AnnouncementMessage[]);
 
@@ -102,6 +105,7 @@ function HomePage() {
       }
     } catch (err) {
       console.error('Load announcements error:', err);
+      setLoadError(err instanceof Error ? err.message : '原因不明');
     } finally {
       setLoading(false);
     }
@@ -171,6 +175,8 @@ function HomePage() {
           <>
             {loading ? (
               <div className="home-empty">読み込み中...</div>
+            ) : loadError ? (
+              <div className="home-empty" role="alert">読み込めませんでした: {loadError}</div>
             ) : announcements.length === 0 ? (
               <div className="home-empty">お知らせはありません</div>
             ) : (

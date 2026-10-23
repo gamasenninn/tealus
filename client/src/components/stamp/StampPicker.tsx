@@ -33,6 +33,8 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
   const [selectedPack, setSelectedPack] = useState<string | null>(null);
   const [stamps, setStamps] = useState<StampItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // ★ 読み込みの失敗を「スタンプがありません」と分ける (2026-10-23 小野さん判断)
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [contextMenu, setContextMenu] = useState<StampContextMenuState | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -50,6 +52,7 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       }
     } catch (err) {
       console.error('Load packs error:', err);
+      setLoadError(err instanceof Error ? err.message : '原因不明');
     } finally {
       setLoading(false);
     }
@@ -60,8 +63,10 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
     try {
       const res = await api.getStampPack(pack.id);
       setStamps(res.stamps);
+      setLoadError(null);
     } catch (err) {
       console.error('Load stamps error:', err);
+      setLoadError(err instanceof Error ? err.message : '原因不明');
     }
   };
 
@@ -164,6 +169,8 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
 
       {loading ? (
         <div className="stamp-picker-loading">読み込み中...</div>
+      ) : loadError && stamps.length === 0 ? (
+        <div className="stamp-picker-empty" role="alert"><p>読み込めませんでした: {loadError}</p></div>
       ) : packs.length === 0 ? (
         <div className="stamp-picker-empty">
           <p>スタンプがありません</p>

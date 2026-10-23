@@ -29,6 +29,8 @@ function MediaGallery() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // ★ 読み込みの失敗を「まだありません」と分ける (2026-10-23 小野さん判断)
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
   const [videoPlayer, setVideoPlayer] = useState<GalleryMediaItem | null>(null);
@@ -42,6 +44,7 @@ function MediaGallery() {
     const seq = ++reqSeqRef.current;
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await api.getMediaGallery(roomId, {
         tag: selectedTag ?? undefined,
         category: selectedCategory ?? undefined,
@@ -53,6 +56,7 @@ function MediaGallery() {
       setHasMore(!!res.has_more);
     } catch (err) {
       console.error('Gallery load error:', err);
+      if (seq === reqSeqRef.current) setLoadError(err instanceof Error ? err.message : '原因不明');
     } finally {
       if (seq === reqSeqRef.current) setLoading(false);
     }
@@ -159,7 +163,11 @@ function MediaGallery() {
         </div>
       )}
 
-      {!loading && media.length === 0 && (
+      {!loading && loadError && (
+        <div className="gallery-empty" role="alert">読み込めませんでした: {loadError}</div>
+      )}
+
+      {!loading && !loadError && media.length === 0 && (
         <div className="gallery-empty">
           {selectedTag ? 'このタグのメディアはありません' : 'メディアはまだありません'}
         </div>
