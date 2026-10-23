@@ -2,8 +2,12 @@
  * #355 実際に返る Cache-Control を固定する。
  *
  * 純関数側 (unit/staticCache) が正しくても express への配線が抜けていれば意味がないので、
- * 配線そのものをここで押さえる。client/dist は未ビルドのこともあるため、
- * 「ビルド済みなら検証する」形にして未ビルド環境で赤くしない。
+ * 配線そのものをここで押さえる。
+ *
+ * ★ 2026-10-23 (改善ループ 11 回目): 以前は「ビルド済みなら検証する」形で、CI (client を build しない) では
+ *   3 本が skip・1 本が何も確かめずに緑だった = 配線が外れても CI は気づけなかった。
+ *   client/dist が無ければ、テストの間だけ小さな見本 (index.html / sw.js / assets/x.<hash>.js) を置いて必ず叩く。
+ *   ★★ 既にある dist (本番のビルド) には何も書かない・消さない。置いたものだけ後で消す
  */
 import fs from 'fs';
 import path from 'path';
@@ -11,6 +15,15 @@ import request from 'supertest';
 import { app } from '../../src/app.mts';
 
 const clientDistPath = path.join(import.meta.dirname, '../../../client/dist');
+const createdDist = !fs.existsSync(path.join(clientDistPath, 'index.html')) && !fs.existsSync(clientDistPath);
+if (createdDist) {
+  fs.mkdirSync(path.join(clientDistPath, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(clientDistPath, 'index.html'), '<!doctype html><title>t</title>');
+  fs.writeFileSync(path.join(clientDistPath, 'sw.js'), '// sw');
+  fs.writeFileSync(path.join(clientDistPath, 'assets', 'index-abc12345.js'), '// asset');
+}
+afterAll(() => { if (createdDist) fs.rmSync(clientDistPath, { recursive: true, force: true }); });
+
 const hasClientBuild = fs.existsSync(path.join(clientDistPath, 'index.html'));
 
 /** dist/assets から実在するハッシュ付きファイルを 1 つ拾う */
@@ -25,12 +38,11 @@ describe('静的配信の Cache-Control', () => {
   describe('更新の入口は保存させない', () => {
     it('SPA fallback (未知のパス) は no-store', async () => {
       const res = await request(app).get('/some/spa/route');
-      // 未ビルドなら 503 (案内 HTML) が返るのでその場合は対象外
-      if (res.status !== 200) return;
+      expect(res.status).toBe(200);
       expect(res.headers['cache-control']).toMatch(/no-store/);
     });
 
-    (hasClientBuild ? it : it.skip)('ルート / は no-store', async () => {
+    it('ルート / は no-store', async () => {
       const res = await request(app).get('/');
       expect(res.status).toBe(200);
       expect(res.headers['cache-control']).toMatch(/no-store/);
