@@ -38,7 +38,7 @@ export interface RunDeps {
   lastNotice: (w: Pick<Watch, 'id'>, notify: Notify) => Promise<LastNotice | null>;
   lastPostAt: (w: RoomQuietWatch) => Promise<Date | null>;
   heartbeatOf: (w: HeartbeatWatch) => Promise<Heartbeat | null>;
-  readBackup: (dir: string) => BackupRead;
+  readBackup: (dir: string) => Promise<BackupRead>;
   pushTargets: (w: PushReachWatch) => Promise<PushTarget[]>;
   resolveSender: (userId: string) => Promise<SenderContext | null>;
   post: (input: { roomId: string; sender: SenderContext; content: string }) => Promise<PostAsUserResult>;
@@ -58,7 +58,7 @@ interface Unit { id: string; name: string; observe: () => Promise<Observation> }
 
 async function unitsOf(w: Watch, deps: RunDeps): Promise<Unit[]> {
   switch (w.kind) {
-    case 'backup_log': return [{ id: w.id, name: w.name, observe: async () => judgeBackupLog(assessBackup(deps.readBackup(w.dir), deps.now)) }];
+    case 'backup_log': return [{ id: w.id, name: w.name, observe: async () => judgeBackupLog(assessBackup(await deps.readBackup(w.dir), deps.now)) }];
     case 'room_quiet': return [{ id: w.id, name: w.name, observe: async () => judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now) }];
     case 'heartbeat': return [{ id: w.id, name: w.name, observe: async () => judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now) }];
     case 'push_reach': {

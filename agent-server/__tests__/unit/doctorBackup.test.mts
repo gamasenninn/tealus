@@ -66,14 +66,14 @@ describe('readLatestBackupLog', () => {
   });
   afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  it('名前の日付がいちばん新しい backup-*.log を読む (BOM は外す)', () => {
-    const r = readLatestBackupLog(dir);
+  it('名前の日付がいちばん新しい backup-*.log を読む (BOM は外す)', async () => {
+    const r = await readLatestBackupLog(dir);
     expect(r.latest?.name).toBe('backup-20261001.log');
     expect(r.latest?.content.startsWith('2026-10-01')).toBe(true);
   });
 
-  it('★ 置き場が無ければ例外でなく readError を返す', () => {
-    const r = readLatestBackupLog(path.join(dir, 'nope'));
+  it('★ 置き場が無ければ例外でなく readError を返す', async () => {
+    const r = await readLatestBackupLog(path.join(dir, 'nope'));
     expect(r.latest).toBeNull();
     expect(r.readError).toBeTruthy();
   });

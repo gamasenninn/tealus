@@ -51,19 +51,39 @@ describe('assessBackup', () => {
 });
 
 describe('readLatestBackupLog', () => {
-  it('名前の日付がいちばん新しい記録を読む。BOM を落とす', () => {
+  it('名前の日付がいちばん新しい記録を読む。BOM を落とす', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bk-'));
     fs.writeFileSync(path.join(dir, 'backup-20261012.log'), 'old');
     fs.writeFileSync(path.join(dir, 'backup-20261013.log'), '﻿' + OK);
     fs.writeFileSync(path.join(dir, 'robocopy-20261014.log'), 'x');
-    const r = readLatestBackupLog(dir);
+    const r = await readLatestBackupLog(dir);
     expect(r.latest?.name).toBe('backup-20261013.log');
     expect(r.latest?.content.startsWith('2026')).toBe(true);
   });
 
-  it('置き場が無ければ例外を投げず readError を返す', () => {
-    const r = readLatestBackupLog(path.join(os.tmpdir(), 'no-such-dir-595'));
+  it('置き場が無ければ例外を投げず readError を返す', async () => {
+    const r = await readLatestBackupLog(path.join(os.tmpdir(), 'no-such-dir-595'));
     expect(r.latest).toBeNull();
     expect(r.readError).toBeTruthy();
+  });
+
+  // ★ 改善ループ 10 回目の D (2026-10-23): 置き場は NAS (UNC)。以前は同期で読んでいて、
+  //   NAS が応答しないと本体の全部 (チャット・通知) が止まる形だった。非同期にして、時間で切る
+  it('★ 置き場が応答しなければ、時間で切って readError を返す (待ち続けない)', async () => {
+    const never = { readdir: () => new Promise<string[]>(() => {}), readFile: jest.fn(), stat: jest.fn() };
+    const t0 = Date.now();
+    const r = await readLatestBackupLog('\\nas\bak', { fs: never, timeoutMs: 50 });
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(r.latest).toBeNull();
+    expect(r.readError).toContain('応答');
+  });
+
+  it('★ 前の読み取りがまだ終わっていなければ、重ねて読まない (固まった NAS に読み取りを積まない)', async () => {
+    let calls = 0;
+    const never = { readdir: () => { calls++; return new Promise<string[]>(() => {}); }, readFile: jest.fn(), stat: jest.fn() };
+    await readLatestBackupLog('\\nas\stuck', { fs: never, timeoutMs: 20 });
+    const second = await readLatestBackupLog('\\nas\stuck', { fs: never, timeoutMs: 20 });
+    expect(calls).toBe(1);
+    expect(second.readError).toContain('前回');
   });
 });

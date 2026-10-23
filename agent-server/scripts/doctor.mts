@@ -37,7 +37,7 @@ const findings: Finding[] = [
   judgeCiStatus(await fetchCiRuns(), new Date()),
   judgeDueDates(await fetchOpenIssues(), new Date()),
   await checkDocsIndex(),
-  judgeBackup({ dir: process.env.BACKUP_LOG_DIR, ...(process.env.BACKUP_LOG_DIR ? readLatestBackupLog(process.env.BACKUP_LOG_DIR) : { latest: null }) }, new Date()),
+  judgeBackup({ dir: process.env.BACKUP_LOG_DIR, ...(process.env.BACKUP_LOG_DIR ? await readLatestBackupLog(process.env.BACKUP_LOG_DIR) : { latest: null }) }, new Date()),
   ...(probe ? await runProbeChecks(process.env) : []),
 ];
 

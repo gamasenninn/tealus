@@ -1,7 +1,16 @@
 import { logger } from '../utils/logger.mts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+/**
+ * ★ ffmpeg は非同期で待つ (改善ループ 10 回目の D、2026-10-23)。以前は execFileSync で、
+ *   20 分の動画の音声抜き出し (数十秒) の間、本体の全員のチャットが止まっていた。
+ *   時間切れは、Whisper の上限 (25MB ≒ 20 分) の動画を抜き出すのに十分な長さ。固まった ffmpeg は殺す
+ */
+const execFileAsync = promisify(execFile);
+const FFMPEG_TIMEOUT_MS = 5 * 60_000;
 import OpenAI from 'openai';
 import { pool } from '../db/pool.mts';
 import { formatTranscription } from './formatting.mts';
@@ -91,9 +100,9 @@ export async function transcribeMessage(
       tempPath = path.join(path.dirname(fullPath), `tealus-stt-${messageId}-v${version}.mp3`);
       try {
         // ★ #561 引数は配列で渡す (コマンドを 1 本の文字列に組み立てない。thumbnail.mts と同じ)
-        execFileSync(
+        await execFileAsync(
           'ffmpeg', ['-i', fullPath, '-y', '-vn', '-ar', '16000', '-ac', '1', '-q:a', '4', tempPath],
-          { stdio: ['ignore', 'pipe', 'pipe'] }  // stderr 捕捉 (失敗時の debug 用)
+          { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }  // 失敗時は e.stderr に残る (debug 用)
         );
         inputPath = tempPath;
         ext = 'mp3';
@@ -123,7 +132,7 @@ export async function transcribeMessage(
       if (!fileInfo) {
         tempPath = fullPath + '.converted.mp3';
         try {
-          execFileSync('ffmpeg', ['-i', fullPath, '-y', '-q:a', '2', tempPath], { stdio: 'ignore' });   // ★ #561
+          await execFileAsync('ffmpeg', ['-i', fullPath, '-y', '-q:a', '2', tempPath], { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });   // ★ #561
           inputPath = tempPath;
           ext = 'mp3';
         } catch (e) {

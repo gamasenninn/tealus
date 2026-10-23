@@ -9,7 +9,7 @@
  *   書くのは repo の `scripts/backup/tealus-backup.ps1` (#595 で Tealus の機能にした)。この 2 つの文字列は約束。
  * ★★ 見ていないもの・読めないものを「成功」と言わない (ok 以外の 3 つはすべて異常として扱える形で返す)。
  */
-import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 /** 毎日 1 回のバックアップが 1 回飛んだら異常 (24h + 実行時間の揺れ 2h) */
@@ -35,17 +35,51 @@ export type BackupAssessment =
   | { kind: 'none' }
   | { kind: 'read-error'; error: string };
 
-/** 置き場から、名前の日付がいちばん新しい記録を読む。★ 例外を投げない */
-export function readLatestBackupLog(dir: string): BackupRead {
-  try {
-    const names = fs.readdirSync(dir).filter((n) => LOG_RE.test(n)).sort();
+/** 置き場が応答しないとき、ここで諦める。判定の間隔 (5 分) より十分短く、NAS の普段の応答 (1 秒未満) より十分長い */
+export const BACKUP_READ_TIMEOUT_MS = 15_000;
+
+interface BackupFs {
+  readdir: (dir: string) => Promise<string[]>;
+  readFile: (file: string, enc: 'utf8') => Promise<string>;
+  stat: (file: string) => Promise<{ mtime: Date }>;
+}
+
+/** ★ 置き場ごとに、読み取り中かを持つ。固まった NAS への読み取りを周回ごとに積まない (積むと libuv の 4 本の手が全部埋まる) */
+const inflight = new Set<string>();
+
+/**
+ * 置き場から、名前の日付がいちばん新しい記録を読む。★ 例外を投げない
+ *
+ * ★★ 非同期で読み、時間で切る (改善ループ 10 回目の D、2026-10-23)。置き場は NAS (UNC) で、
+ *   以前は同期 (readdirSync) で読んでいた —— NAS が応答しないと、その間は本体の全部 (チャット・通知) が止まる形だった。
+ *   時間で切っても、固まった読み取り自体は裏で残る。なので終わるまで次を重ねない (`inflight`)。
+ */
+export async function readLatestBackupLog(
+  dir: string,
+  opts: { fs?: BackupFs; timeoutMs?: number } = {},
+): Promise<BackupRead> {
+  const bfs: BackupFs = opts.fs ?? fsp;
+  if (inflight.has(dir)) return { latest: null, readError: '前回の読み取りがまだ終わっていません (置き場が応答していない)' };
+  inflight.add(dir);
+  const work = (async (): Promise<BackupRead> => {
+    const names = (await bfs.readdir(dir)).filter((n) => LOG_RE.test(n)).sort();
     const name = names[names.length - 1];
     if (!name) return { latest: null };
     const file = path.join(dir, name);
-    const content = fs.readFileSync(file, 'utf8').replace(/^﻿/, '');
-    return { latest: { name, content, mtime: fs.statSync(file).mtime } };
+    const content = (await bfs.readFile(file, 'utf8')).replace(/^﻿/, '');
+    return { latest: { name, content, mtime: (await bfs.stat(file)).mtime } };
+  })().finally(() => inflight.delete(dir));
+  const timeoutMs = opts.timeoutMs ?? BACKUP_READ_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<BackupRead>((resolve) => {
+    timer = setTimeout(() => resolve({ latest: null, readError: `置き場が ${Math.round(timeoutMs / 1000)} 秒応答しません` }), timeoutMs);
+  });
+  try {
+    return await Promise.race([work, timeout]);
   } catch (err) {
     return { latest: null, readError: err instanceof Error ? err.message : String(err) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

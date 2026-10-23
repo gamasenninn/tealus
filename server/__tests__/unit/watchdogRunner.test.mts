@@ -33,7 +33,7 @@ function deps(over: Partial<RunDeps> = {}): RunDeps & { posts: { roomId: string;
     lastNotice: async () => null,
     lastPostAt: async () => jst('2026-10-13T11:50:00'),
     heartbeatOf: async () => ({ last_seen: jst('2026-10-13T11:59:00'), info: {} }),
-    readBackup: () => ({ latest: OK_LOG }),
+    readBackup: async () => ({ latest: OK_LOG }),
     pushTargets: async () => [],
     resolveSender: async () => ({ id: USER, display_name: 'Claude', avatar_url: null }),
     post: async (input) => { posts.push({ roomId: input.roomId, content: input.content }); return { ok: true, messageId: 'm' } as never; },
@@ -82,7 +82,7 @@ describe('runOnce', () => {
     const d = deps({
       heartbeatOf: async (w) => { seen.push([w.heartbeat, w.from_user_id]); return { last_seen: jst('2026-10-13T11:59:00'), info: {} }; },
       lastPostAt: async (w) => { seen.push([w.room_id, w.from_user_ids]); return jst('2026-10-13T11:50:00'); },
-      readBackup: (dir) => { seen.push(dir); return { latest: OK_LOG }; },
+      readBackup: async (dir) => { seen.push(dir); return { latest: OK_LOG }; },
     });
     await runOnce(config, d);
     expect(seen).toEqual(['X:\\logs', ['00000000-0000-0000-0000-000000000002', [BOT]], ['radio-sender', BOT]]);

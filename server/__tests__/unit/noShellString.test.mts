@@ -19,3 +19,14 @@ test('server/src は child_process の exec / execSync を使わない', () => {
     .map((f) => path.relative(SRC, f));
   expect(offenders).toEqual([]);
 });
+
+/**
+ * ★ 改善ループ 10 回目の D (2026-10-23): 同期で子プロセスを待たない (execFileSync / spawnSync)。
+ *   本体は 1 本のプロセスで全員のチャットを回しているので、同期で待つ間は全員が止まる。
+ *   以前は動画の文字起こしの ffmpeg (20 分の動画で数十秒) が同期だった
+ */
+test('server/src は子プロセスを同期で待たない (execFileSync / spawnSync / execSync)', () => {
+  const offenders = walk(SRC).filter((f) => /\b(execFileSync|spawnSync|execSync)\s*\(/.test(fs.readFileSync(f, 'utf8')))
+    .map((f) => path.relative(SRC, f));
+  expect(offenders).toEqual([]);
+});
