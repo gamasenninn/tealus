@@ -46,6 +46,9 @@ export const NON_AUTH_PATTERNS: AuthFailPattern[] = [
   //   2026-09-06 は確かに CLI が古かったが、2026-09-11 は **CLI は新しく、モデルが使えなかった**。
   //   ★ 同じ行が 2 つの原因で出る以上、名前でも案内でも原因を断定しない。
   { kind: 'models_refresh_failed', re: /failed to decode models response|codex_models_manager/i },
+  // ★ 改善ループ 9 回目の H (2026-10-23): #606 で tealus の道具を required にしたので、道具が起動しないと
+  //   codex はこの行で止まる。案内の表に無く、英語の生の文が部屋に出ていた
+  { kind: 'mcp_startup_failed', re: /required MCP servers failed to initialize/i },
 ];
 
 /**
@@ -115,6 +118,12 @@ export function buildCodexErrorUserMessage(result: CodexAuthErrorResult): string
     return 'モデル一覧の取得に失敗しました。まず設定しているモデル名 '
       + '(AGENT_LIGHT_MODEL / AGENT_DEEP_CODEX_MODEL) を確認してください。'
       + '直らなければサーバーで codex を更新してください (`npm i -g @openai/codex@alpha`)。';
+  }
+  if (result.kind === 'mcp_startup_failed') {
+    // ★ どの道具かは codex の文にある (`initialize: <名前>: …`)。名前だけ添える (理由の英文は出さない)
+    const name = classifiableSlice(result.raw ?? '').match(/failed to initialize:\s*([A-Za-z0-9_.-]+)/i)?.[1];
+    return `AI の道具${name ? ` (${name})` : ''}が起動しませんでした。少し待ってから、もう一度送ってください。`
+      + '続くときはサーバーのログ (agent-server) を確認してください。';
   }
   // ★ 原因が分からないときは、原因を名乗らずに調べ先を出す
   return 'AI の起動に失敗しました。サーバーのログ (agent-server) を確認してください。';

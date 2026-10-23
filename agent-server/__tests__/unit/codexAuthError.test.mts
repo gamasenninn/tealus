@@ -273,3 +273,23 @@ describe('buildKnownCauseUserMessage — 分かったときだけ 1 行を返す
     expect(buildKnownCauseUserMessage(detectCodexAuthError('ERROR: 見たことのない何か'))).toBe(null);
   });
 });
+
+// ★ 改善ループ 9 回目の H (2026-10-23): #606 で tealus の道具を required にしたので、道具が起動しないと
+//   codex は「required MCP servers failed to initialize: …」で止まる。案内の表に無く、英語の生の文が部屋に出ていた
+describe('道具 (MCP) が起動しなかった', () => {
+  const RAW = 'required MCP servers failed to initialize: tealus: MCP client for `tealus` timed out after 60 seconds';
+
+  test('mcp_startup_failed として拾う (認証切れとは言わない)', () => {
+    const r = detectCodexAuthError(RAW);
+    expect(r.kind).toBe('mcp_startup_failed');
+    expect(r.isAuth).toBe(false);
+  });
+
+  test('利用者には日本語の案内 (英語の生の文を出さない)。どの道具かは添える', () => {
+    const msg = buildKnownCauseUserMessage(detectCodexAuthError(RAW));
+    expect(msg).not.toBeNull();
+    expect(msg).toMatch(/道具/);
+    expect(msg).toContain('tealus');
+    expect(msg).not.toMatch(/required MCP/);
+  });
+});
