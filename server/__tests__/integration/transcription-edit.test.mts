@@ -326,4 +326,29 @@ describe('Transcription Edit API', () => {
       expect(m.transcription).toBeTruthy();
     });
   });
+
+  // ★ 2026-10-24 小野さん判断 (B-12 案 2): 機械 (is_bot) が送った音声は、部屋の設定によらずメンバーなら直せる。
+  //   機械の音声 (トランシーバー履歴・通話履歴) は送り手が機械なので、設定がオフだと誰も直せなかった。人の音声は今までどおり
+  describe('機械が送った音声の文字起こし', () => {
+    it('★ 送り手が機械なら、設定がオフでもメンバーは直せる', async () => {
+      await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [user1.user.id]);
+      const res = await request(app).put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user2.token}`).send({ text: '無線を聞き直して直した' });
+      expect(res.status).toBe(200);
+    });
+
+    it('人が送った音声は、設定がオフなら今までどおり送り手だけ', async () => {
+      const res = await request(app).put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user2.token}`).send({ text: '他人が直そうとした' });
+      expect(res.status).toBe(403);
+    });
+
+    it('部屋の情報のメンバーに is_bot が載る (画面が編集ボタンを出すかの判断に使う)', async () => {
+      await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [user1.user.id]);
+      const res = await request(app).get(`/api/rooms/${roomId}`).set('Authorization', `Bearer ${user2.token}`);
+      const m = res.body.members.find((x: { user_id: string }) => x.user_id === user1.user.id);
+      expect(m.is_bot).toBe(true);
+    });
+  });
 });
+

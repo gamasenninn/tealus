@@ -65,6 +65,8 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const { roomId } = useParams() as { roomId: string };
   const { setReplyTo, setPendingAgentMessage } = useMessageStore();
   const { currentRoom, members } = useRoomStore();
+  // ★ 送り手が機械なら、部屋の設定によらず文字起こしを直せる (2026-10-24 小野さん判断、docs/02)
+  const senderIsBot = members.some((m) => m.user_id === message.sender_id && !!m.is_bot);
   const { assistantUserId, assistantName } = useAgentStore();
   // #338 Phase 1: アシスタントが当該ルームの member の時だけ「エージェントに送る」を出す
   const assistantInRoom = !!assistantUserId && !!assistantName
@@ -164,7 +166,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   // Context menu
   const showContextMenu = (x: number, y: number) => {
     const { items, onReaction } = buildContextMenuItems({
-      message, isOwn, roomId, currentRoom,
+      message, isOwn, roomId, currentRoom, senderIsBot,
       onEdit: () => setIsEditingMessage(true),
       onShowEditHistory: async () => {
         try {
@@ -297,7 +299,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                   </>
                 );
               })()}
-              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
+              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit || senderIsBot} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {formSchema && (
                 <FormBubble
                   message={message}

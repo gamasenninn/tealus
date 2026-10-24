@@ -30,6 +30,8 @@ export interface BuildContextMenuItemsParams {
   // #338 Phase 1: 「エージェントに送る」— compose ヘルパーへ橋渡し（自分の投稿のみ）
   onSendToAgent?: () => void;
   assistantInRoom?: boolean;
+  /** ★ 送り手が機械 (is_bot) か。機械の音声は設定によらず文字起こしを編集できる (2026-10-24 小野さん判断) */
+  senderIsBot?: boolean;
 }
 
 export interface ContextMenuItemsResult {
@@ -44,7 +46,7 @@ export function buildContextMenuItems({
   message, isOwn, roomId, currentRoom,
   onEdit, onShowEditHistory,
   onReply, onShowTagModal, onShowTodoMenu, onForward, onSelectText,
-  onSendToAgent, assistantInRoom,
+  onSendToAgent, assistantInRoom, senderIsBot
 }: BuildContextMenuItemsParams): ContextMenuItemsResult {
   const items: ContextMenuItem[] = [];
 
@@ -135,7 +137,7 @@ export function buildContextMenuItems({
   }
 
   // Voice transcription actions
-  const canEditTranscription = isOwn || currentRoom?.allow_member_transcription_edit;
+  const canEditTranscription = isOwn || currentRoom?.allow_member_transcription_edit || !!senderIsBot;
   if (canEditTranscription && message.type === 'voice' && message.transcription?.status === 'done') {
     items.push({
       icon: <Pencil size={16} />,

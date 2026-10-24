@@ -16,7 +16,8 @@ export interface VoiceNavInfo {
 }
 
 /** その user が編集可能な、文字起こし完了済みの音声メッセージを順序付きで返す。 */
-export function editableVoiceMessages(messages: Message[] | null | undefined, userId: string, allowMemberEdit: boolean): Message[] {
+/** ★ botIds: 部屋のメンバーのうち機械 (is_bot) の id。機械が送った音声は設定によらず編集できる (2026-10-24 小野さん判断、docs/02) */
+export function editableVoiceMessages(messages: Message[] | null | undefined, userId: string, allowMemberEdit: boolean, botIds?: Set<string>): Message[] {
   if (!Array.isArray(messages)) return [];
   return messages.filter(
     (m) =>
@@ -24,7 +25,7 @@ export function editableVoiceMessages(messages: Message[] | null | undefined, us
       m.type === 'voice' &&
       !m.is_deleted &&
       m.transcription?.status === 'done' &&
-      (allowMemberEdit || m.sender_id === userId)
+      (allowMemberEdit || m.sender_id === userId || !!botIds?.has(m.sender_id))
   );
 }
 
@@ -69,8 +70,8 @@ export function navFor(list: Message[], currentId: string): VoiceNavInfo {
 }
 
 /** currentId を中心としたナビ情報 (list / index / total / prevId / nextId / current)。 */
-export function voiceNav(messages: Message[] | null | undefined, currentId: string, userId: string, allowMemberEdit: boolean): VoiceNavInfo {
-  return navFor(editableVoiceMessages(messages, userId, allowMemberEdit), currentId);
+export function voiceNav(messages: Message[] | null | undefined, currentId: string, userId: string, allowMemberEdit: boolean, botIds?: Set<string>): VoiceNavInfo {
+  return navFor(editableVoiceMessages(messages, userId, allowMemberEdit, botIds), currentId);
 }
 
 /** メッセージの文字起こし表示テキスト (整形済み優先、無ければ生テキスト)。 */

@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import type { RoomMember } from '../../types';
 import { api } from '../../services/api';
 import TranscriptSeekBar from '../media/TranscriptSeekBar';
 import { useMessageStore } from '../../stores/messageStore';
@@ -46,6 +47,8 @@ function isDesktopPointer(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 }
 
+const NO_MEMBERS: RoomMember[] = [];
+
 function VoiceEditModal({
   messageId, onClose, selectItems, textOf, save, renderPlayer, audioIdOf, title = '文字起こしを編集',
 }: VoiceEditModalProps) {
@@ -53,6 +56,9 @@ function VoiceEditModal({
   const currentRoom = useRoomStore((s) => s.currentRoom);
   const userId = useAuthStore((s) => s.user?.id);
   const allowMemberEdit = !!currentRoom?.allow_member_transcription_edit;
+  // ★ 機械が送った音声は設定によらず直せる (2026-10-24、前/次の行き先にも入れる)
+  const members = useRoomStore((s) => s.members) ?? NO_MEMBERS;
+  const botIds = useMemo(() => new Set(members.filter((m) => m.is_bot).map((m) => m.user_id)), [members]);
 
   const [currentId, setCurrentId] = useState(messageId);
   const [editText, setEditText] = useState('');
@@ -90,7 +96,7 @@ function VoiceEditModal({
 
   const nav = selectItems
     ? navFor(selectItems(messages, userId as string, currentRoom ?? null), currentId)
-    : voiceNav(messages, currentId, userId as string, allowMemberEdit);
+    : voiceNav(messages, currentId, userId as string, allowMemberEdit, botIds);
   const current = nav.current;
   const originalText = (textOf ?? transcriptionText)(current);
   const filePath = current?.media?.[0]?.file_path;

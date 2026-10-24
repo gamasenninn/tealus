@@ -117,3 +117,20 @@ describe('buildContextMenuItems 失敗を知らせる', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('buildContextMenuItems 機械の音声の文字起こし (B-12 案 2)', () => {
+  it('★ 送り手が機械なら、設定がオフでも「文字起こしを編集」が出る', () => {
+    const { items } = buildContextMenuItems({
+      message: { id: 'v1', type: 'voice', sender_id: 'bot1', transcription: { status: 'done', formatted_text: 'x' } },
+      isOwn: false, roomId: 'r1', currentRoom: { allow_member_transcription_edit: false }, senderIsBot: true,
+    } as unknown as BuildContextMenuItemsParams);
+    expect(items.find((i) => i.label === '文字起こしを編集')).toBeTruthy();
+  });
+  it('人の音声で設定がオフなら出ない (今までどおり)', () => {
+    const { items } = buildContextMenuItems({
+      message: { id: 'v1', type: 'voice', sender_id: 'h1', transcription: { status: 'done', formatted_text: 'x' } },
+      isOwn: false, roomId: 'r1', currentRoom: { allow_member_transcription_edit: false }, senderIsBot: false,
+    } as unknown as BuildContextMenuItemsParams);
+    expect(items.find((i) => i.label === '文字起こしを編集')).toBeFalsy();
+  });
+});

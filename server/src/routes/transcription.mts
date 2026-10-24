@@ -23,6 +23,7 @@ interface VoiceMessageRow {
   sender_id: string;
   room_id: string;
   allow_member_transcription_edit: boolean;
+  sender_is_bot: boolean;
 }
 
 /**
@@ -42,14 +43,14 @@ router.put('/', authenticate, async (req, res) => {
     // Check message exists
     const msgResult = await pool.query<VoiceMessageRow>(
       // ★ #522 消した音声は「無い」と同じに扱う (手直し・やり直しで消した後も中身を作れていた)
-      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2 AND NOT m.is_deleted',
+      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit, COALESCE(su.is_bot, false) AS sender_is_bot FROM messages m JOIN rooms r ON r.id = m.room_id LEFT JOIN users su ON su.id = m.sender_id WHERE m.id = $1 AND m.type = $2 AND NOT m.is_deleted',
       [messageId, 'voice']
     );
     if (msgResult.rows.length === 0) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
 
-    const { sender_id, room_id, allow_member_transcription_edit } = msgResult.rows[0];
+    const { sender_id, room_id, allow_member_transcription_edit, sender_is_bot } = msgResult.rows[0];
 
     // ★ 送り手本人も、今その部屋のメンバーのときだけ (2026-10-02、利用者判断)。
     //   以前は送り手なら部屋を抜けた後も直せた (履歴は読めないのに)。文字の投稿の編集 (requireMember) と揃える
@@ -61,7 +62,8 @@ router.put('/', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
     }
     // 送り手以外は、ルームの設定でメンバーの編集が許されているときだけ
-    if (sender_id !== userId && !allow_member_transcription_edit) {
+    // ★ ただし機械 (is_bot) が送った音声はメンバーなら直せる (2026-10-24 小野さん判断、docs/02。送り手が機械だと誰も直せなかった)
+    if (sender_id !== userId && !allow_member_transcription_edit && !sender_is_bot) {
       return res.status(403).json({ error: '送信者のみ編集できます' });
     }
 
@@ -217,14 +219,14 @@ router.post('/retranscribe', authenticate, async (req: Request, res: Response) =
     // Check message exists + permission (same logic as PUT)
     const msgResult = await pool.query<VoiceMessageRow>(
       // ★ #522 消した音声は「無い」と同じに扱う (手直し・やり直しで消した後も中身を作れていた)
-      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit FROM messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = $1 AND m.type = $2 AND NOT m.is_deleted',
+      'SELECT m.sender_id, m.room_id, r.allow_member_transcription_edit, COALESCE(su.is_bot, false) AS sender_is_bot FROM messages m JOIN rooms r ON r.id = m.room_id LEFT JOIN users su ON su.id = m.sender_id WHERE m.id = $1 AND m.type = $2 AND NOT m.is_deleted',
       [messageId, 'voice']
     );
     if (msgResult.rows.length === 0) {
       return res.status(404).json({ error: 'メッセージが見つかりません' });
     }
 
-    const { sender_id, room_id, allow_member_transcription_edit } = msgResult.rows[0];
+    const { sender_id, room_id, allow_member_transcription_edit, sender_is_bot } = msgResult.rows[0];
 
     // ★ 送り手本人も、今その部屋のメンバーのときだけ (2026-10-02、PUT と同じ)
     const memberCheck = await pool.query(
@@ -234,7 +236,7 @@ router.post('/retranscribe', authenticate, async (req: Request, res: Response) =
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ error: 'ルームメンバーのみ再文字起こしできます' });
     }
-    if (sender_id !== userId && !allow_member_transcription_edit) {
+    if (sender_id !== userId && !allow_member_transcription_edit && !sender_is_bot) {   // ★ 編集と同じ (機械の音声はメンバーなら)
       return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
     }
 

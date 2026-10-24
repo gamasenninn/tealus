@@ -153,3 +153,13 @@ describe('navFor — 一覧を渡してナビ情報を得る (#379 汎用版)', 
     expect(navFor([m('a')], 'zzz').current).toBeNull();
   });
 });
+
+// ★ 2026-10-24 小野さん判断 (B-12 案 2): 機械が送った音声は、部屋の設定によらずメンバーなら直せる
+import { editableVoiceMessages as editable2 } from '../src/utils/voiceNav';
+describe('editableVoiceMessages — 機械の音声', () => {
+  const v = (id: string, sender: string) => ({ id, sender_id: sender, type: 'voice', is_deleted: false, transcription: { status: 'done' } }) as never;
+  it('★ 送り手が機械なら、設定がオフでも編集できる一覧に入る。人の音声は入らない', () => {
+    const list = editable2([v('a', 'bot1'), v('b', 'human2')], 'me', false, new Set(['bot1']));
+    expect(list.map((m: { id: string }) => m.id)).toEqual(['a']);
+  });
+});
