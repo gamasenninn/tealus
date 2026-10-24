@@ -184,8 +184,10 @@ router.post('/', async (req, res) => {
 
     // Create room
     const roomResult = await client.query<RoomRow>(
-      `INSERT INTO rooms (type, name, created_by)
-       VALUES ('group', $1, $2)
+      // ★ 新しいグループは「送った本人なら編集できる」(sender) で作る (2026-10-24 小野さん判断、docs/02)。
+      //   DB の列の既定は none のまま (1 対 1 と、それより前の部屋は変えない)
+      `INSERT INTO rooms (type, name, created_by, message_edit_policy)
+       VALUES ('group', $1, $2, 'sender')
        RETURNING *`,
       [name, userId]
     );

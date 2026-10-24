@@ -35,6 +35,13 @@ describe('部屋づくりで指定する人', () => {
 
   describe('グループ (POST /api/rooms)', () => {
     const create = (member_ids: unknown) => request(app).post('/api/rooms').set(auth()).send({ name: 'g', member_ids });
+    // ★ 2026-10-24 小野さん判断: 新しく作るグループは「送った本人なら編集できる」(sender)。以前は DB の既定の none (誰も編集できない) で、
+    //   自分の書き間違いも直せなかった (グループ 36 のうち 16 がこれ)。編集しても履歴と「(編集済み)」が残るので問題ない
+    it('★ 新しいグループの編集の設定は sender (送った本人なら編集できる)', async () => {
+      const res = await create([active]);
+      expect(res.status).toBe(201);
+      expect(res.body.room.message_edit_policy).toBe('sender');
+    });
     it('有効な人とボットは入れられる', async () => {
       const res = await create([active, bot]);
       expect(res.status).toBe(201);

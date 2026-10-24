@@ -22,7 +22,6 @@ describe('PUT /api/rooms/:id/messages/:msgId — 同じ文', () => {
     const room = await request(app).post('/api/rooms').set('Authorization', `Bearer ${user.token}`)
       .send({ name: 'テスト', member_ids: [other.user.id] });
     roomId = room.body.room.id;
-    await getTestPool().query("UPDATE rooms SET message_edit_policy = 'sender' WHERE id = $1", [roomId]);   // 新しい部屋の既定は編集させない
     const msg = await request(app).post(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${user.token}`)
       .send({ content: 'こんにちは' });
     msgId = msg.body.message.id;
