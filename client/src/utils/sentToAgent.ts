@@ -31,3 +31,29 @@ export function orderAgentMentions(names: string[], assistantName: string | null
   const rest = names.filter((n) => !(assistantName && n === assistantName));
   return [...first, ...rest].map((n) => `@${n}`).join(' ');
 }
+
+/**
+ * 入力欄の先頭に並んだ宛先 (targetNames のどれか) を拾う。宛先の帯の「選ばれている」はここから決める
+ * (2026-10-24 案 C: 押した宛先がその場で入力欄に入る。入力欄が唯一の正 = 手で消しても帯と食い違わない)
+ */
+export function leadingAgentMentions(text: string, targetNames: string[]): string[] {
+  const names: string[] = [];
+  let rest = text;
+  for (;;) {
+    const m = /^@(\S+)\s*/.exec(rest);
+    if (!m || !targetNames.includes(m[1])) return names;
+    names.push(m[1]);
+    rest = rest.slice(m[0].length);
+  }
+}
+
+/** 先頭の宛先を names の並びに差し替える。本文はそのまま。names が空なら本文だけに戻す */
+export function replaceLeadingAgentMentions(text: string, names: string[], targetNames: string[], assistantName: string | null | undefined): string {
+  let rest = text;
+  for (;;) {
+    const m = /^@(\S+)\s*/.exec(rest);
+    if (!m || !targetNames.includes(m[1])) break;
+    rest = rest.slice(m[0].length);
+  }
+  return names.length ? `${orderAgentMentions(names, assistantName)} ${rest}` : rest;
+}

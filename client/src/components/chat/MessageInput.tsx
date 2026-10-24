@@ -15,7 +15,7 @@ import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
 import type { MentionCandidate } from './MentionPicker';
-import { orderAgentMentions } from '../../utils/sentToAgent';
+import { leadingAgentMentions, replaceLeadingAgentMentions } from '../../utils/sentToAgent';
 import AgentPanel from './AgentPanel';
 import type { AgentPanelMode } from './AgentPanel';
 import type { PromptHistoryItem } from '../../services/api';
@@ -71,7 +71,6 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
     && members.some(m => m.user_id === assistantUserId);
 
   // 宛先選択後に埋める本文を保持（入口B。null なら入口A=ボタンでメンションのみ prepend）
-  const [pendingAgentBody, setPendingAgentBody] = useState<string | null>(null);
 
   /** focus して指定範囲を選択する。end 省略で末尾にカーソル */
   const focusTextareaRange = useCallback((start?: number, end?: number) => {
@@ -169,24 +168,19 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
     if (window.innerWidth < 768) textareaRef.current?.blur();
   }, [refreshPromptHistory]);
 
-  // 宛先を選んだら composer に反映。入口B(pendingAgentBody あり)は本文込みで置換、
-  // 入口A(ボタン)は先頭にメンションのみ prepend（本文はユーザーが続けて打つ）。
-  // ★ 宛先は複数選べる (2026-10-24 小野さん判断)。@アシスタント は先頭でないと応答しないので先頭に置く
-  const insertAgentMentions = useCallback((names: string[]) => {
-    setAgentPanel(null);
-    const mentions = orderAgentMentions(names, assistantName);
-    if (pendingAgentBody != null) {
-      setText(`${mentions} ${pendingAgentBody}`);
-      setPendingAgentBody(null);
-    } else if (slashMode) {
-      setText(`${mentions} `);  // `/朝礼` 等の絞り込み文字列は宛先で置き換える
+  // ★ 宛先の帯は押すたびに、その場で入力欄の先頭の宛先を差し替える (2026-10-24 小野さん判断 案 C、「決定」なし)。
+  //   どれが選ばれているかは入力欄の先頭から決める (手で消しても帯と食い違わない)。
+  //   @アシスタント は先頭でないと応答しないので先頭に置く。帯は入力欄を触るか送信すると閉じる
+  const selectedAgentTargets = useMemo(() => leadingAgentMentions(text, targetNames), [text, targetNames]);
+  const changeAgentTargets = useCallback((names: string[]) => {
+    if (slashMode) {
+      setText(replaceLeadingAgentMentions('', names, targetNames, assistantName));  // `/朝礼` 等の絞り込み文字列は宛先で置き換える
       setSlashMode(false);
       setSlashQuery('');
     } else {
-      setText(prev => `${mentions} ${prev}`);
+      setText(prev => replaceLeadingAgentMentions(prev, names, targetNames, assistantName));
     }
-    focusTextareaEnd();
-  }, [pendingAgentBody, slashMode, focusTextareaEnd, assistantName]);
+  }, [slashMode, targetNames, assistantName]);
 
   // 過去の指示を挿入。表示されていた文字列 (宛先込みの全文) がそのまま入る。送信はしない。
   // #358 変動する部分 (穴) があれば、そこを選択状態にして入れる。打てば置き換わり、
@@ -204,24 +198,23 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   // 🤖ボタン: 選ぶものが無い(履歴0件かつ宛先1つ)なら従来どおり 1 タップで即挿入。
   // 使い込んで履歴が溜まるとパネルが現れる (初見のユーザーに選択肢を突きつけない)。
   const onAgentButtonClick = useCallback(() => {
-    setPendingAgentBody(null);
     if (agentPanel) { closeAgentPanel(); return; }
     if (!shouldOpenAgentPanel({ historyCount: promptHistory.length, targetCount: agentTargets.length })) {
-      if (assistantName) insertAgentMentions([assistantName]);
+      if (assistantName) { changeAgentTargets([assistantName]); focusTextareaEnd(); }
       return;
     }
     openAgentPanel('compose');
-  }, [agentPanel, closeAgentPanel, promptHistory.length, agentTargets.length, assistantName, insertAgentMentions, openAgentPanel]);
+  }, [agentPanel, closeAgentPanel, promptHistory.length, agentTargets.length, assistantName, changeAgentTargets, focusTextareaEnd, openAgentPanel]);
 
   // 入口B: コンテキストメニュー「エージェントに送る」が対象 message を積んだら消費する。
-  // admin で宛先が複数なら picker を開き（本文は pendingAgentBody に退避）、単一なら直 prefill。
+  // admin で宛先が複数なら本文を入力欄に入れて宛先の帯を開く (押した宛先が先頭に入る)、単一なら直 prefill。
   useEffect(() => {
     if (!pendingAgentMessage) return;
     const msg = pendingAgentMessage;
     clearPendingAgentMessage();
     setReplyTo(msg);
     if (agentTargets.length > 1) {
-      setPendingAgentBody(extractAgentBody(msg));
+      setText(extractAgentBody(msg));
       // 本文は既にあるので、ここで見せるのは宛先だけ (履歴を出すと文脈が壊れる)
       openAgentPanel('target-only');
     } else if (assistantName) {
@@ -280,6 +273,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   const handleSend = async () => {
     const content = text.trim();
     if (!content || isSending) return;
+    setAgentPanel(null);  // ★ 宛先の帯は送信で閉じる (案 C)
 
     setIsSending(true);
     try {
@@ -517,7 +511,8 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
           targetCounts={targetCounts}
           mode={agentPanel}
           query={slashMode ? slashQuery : ''}
-          onSelectTargets={insertAgentMentions}
+          selected={selectedAgentTargets}
+          onChangeTargets={changeAgentTargets}
           onSelectHistory={insertPromptHistory}
           onClose={closeAgentPanel}
         />
@@ -564,6 +559,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
+          onClick={() => { if (agentPanel && !slashMode) closeAgentPanel(); }}  // ★ 入力欄を触ったら宛先の帯を閉じる (案 C)
           placeholder={window.innerWidth >= 768 ? 'メッセージを入力（Ctrl+Enterで送信）' : 'メッセージを入力'}
           rows={collapsible ? 4 : 1}
           disabled={isSending}

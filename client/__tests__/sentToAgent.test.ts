@@ -37,3 +37,27 @@ describe('orderAgentMentions', () => {
     expect(orderAgentMentions(['cc-organon', 'cc-tealus'], 'アシスタント')).toBe('@cc-organon @cc-tealus');
   });
 });
+
+// ★ 2026-10-24 小野さん判断 (案 C): 「決定」をなくし、押した宛先がその場で入力欄の先頭に入る。もう一度押すと消える
+import { leadingAgentMentions, replaceLeadingAgentMentions } from '../src/utils/sentToAgent';
+const TARGETS = ['アシスタント', 'cc-tealus', 'cc-hks-portal'];
+describe('leadingAgentMentions', () => {
+  it('先頭に並んだ宛先だけを拾う (宛先でない @ や本文の途中の @ は拾わない)', () => {
+    expect(leadingAgentMentions('@cc-tealus @cc-hks-portal 調べて @cc-organon', TARGETS)).toEqual(['cc-tealus', 'cc-hks-portal']);
+    expect(leadingAgentMentions('@田中 @cc-tealus 調べて', TARGETS)).toEqual([]);
+    expect(leadingAgentMentions('調べて', TARGETS)).toEqual([]);
+  });
+});
+describe('replaceLeadingAgentMentions', () => {
+  it('★ 先頭の宛先を選び直した並びに差し替え、本文はそのまま残す', () => {
+    expect(replaceLeadingAgentMentions('@cc-tealus 調べて', ['cc-tealus', 'cc-hks-portal'], TARGETS, 'アシスタント'))
+      .toBe('@cc-tealus @cc-hks-portal 調べて');
+  });
+  it('★ 全部外すと本文だけに戻る', () => {
+    expect(replaceLeadingAgentMentions('@cc-tealus 調べて', [], TARGETS, 'アシスタント')).toBe('調べて');
+  });
+  it('本文だけのところに宛先を足す。@アシスタント は先頭', () => {
+    expect(replaceLeadingAgentMentions('調べて', ['cc-tealus', 'アシスタント'], TARGETS, 'アシスタント'))
+      .toBe('@アシスタント @cc-tealus 調べて');
+  });
+});

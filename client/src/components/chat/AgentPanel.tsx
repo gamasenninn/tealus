@@ -29,8 +29,10 @@ interface AgentPanelProps {
   targetCounts: Record<string, number>;
   mode: AgentPanelMode;
   query: string;
-  /** ★ 選んだ宛先 (選んだ順)。押すたびに印が付き、「決定」でまとめて渡す (2026-10-24 小野さん判断) */
-  onSelectTargets: (names: string[]) => void;
+  /** ★ いま選ばれている宛先 (入力欄の先頭から親が決める)。パネルは状態を持たない (2026-10-24 案 C) */
+  selected: string[];
+  /** 押すたびに、足した / 外した後の並びを渡す。親はその場で入力欄の先頭を差し替える (「決定」なし) */
+  onChangeTargets: (names: string[]) => void;
   onSelectHistory: (content: string, holes: Hole[]) => void;
   onClose: () => void;
 }
@@ -60,13 +62,12 @@ function renderBody(item: PromptHistoryItem, bodyStart: number) {
 }
 
 function AgentPanel({
-  targets, history, targetCounts, mode, query, onSelectTargets, onSelectHistory, onClose,
+  targets, history, targetCounts, mode, query, selected, onChangeTargets, onSelectHistory, onClose,
 }: AgentPanelProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
-  // ★ 選んだ宛先 (選んだ順)。複数の班に同時に送ることが多いので、1 つ押した時点では入れない
-  const [picked, setPicked] = useState<string[]>([]);
-  const togglePicked = (name: string) =>
-    setPicked((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+  // ★ 押すたびに足す / 外す。複数の班に同時に送ることが多い (2026-10-24 小野さん判断)
+  const toggleTarget = (name: string) =>
+    onChangeTargets(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);
   const q = (query || '').toLowerCase();
 
   const ccNames = useMemo(
@@ -148,28 +149,16 @@ function AgentPanel({
           <button
             key={t.user_id}
             data-testid="agent-panel-chip"
-            className={`agent-panel-chip${t.is_cc ? ' cc' : ''}${picked.includes(t.display_name) ? ' picked' : ''}`}
-            aria-pressed={picked.includes(t.display_name)}
+            className={`agent-panel-chip${t.is_cc ? ' cc' : ''}${selected.includes(t.display_name) ? ' picked' : ''}`}
+            aria-pressed={selected.includes(t.display_name)}
             onMouseDown={(e) => {
               e.preventDefault(); // textarea のフォーカスを維持
-              togglePicked(t.display_name);
+              toggleTarget(t.display_name);
             }}
           >
-            {picked.includes(t.display_name) && '✓ '}@{t.display_name}
+            {selected.includes(t.display_name) && '✓ '}@{t.display_name}
           </button>
         ))}
-        {picked.length > 0 && (
-          <button
-            data-testid="agent-panel-confirm"
-            className="agent-panel-confirm"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onSelectTargets(picked);
-            }}
-          >
-            決定 ({picked.length})
-          </button>
-        )}
       </div>
 
       {shown.length > 0 && (

@@ -29,7 +29,8 @@ const baseProps = {
   targetCounts: { 'アシスタント': 5, 'cc-tealus': 2 },
   mode: 'compose' as const,
   query: '',
-  onSelectTargets: () => {},
+  selected: [] as string[],
+  onChangeTargets: () => {},
   onSelectHistory: () => {},
   onClose: () => {},
 };
@@ -48,25 +49,22 @@ describe('AgentPanel — 宛先チップ', () => {
     expect(chips()).toHaveLength(3);
   });
 
-  // ★ 2026-10-24 小野さん判断: 押すたびに印が付き (もう一度押すと外れる)、「決定」でまとめて入れる
-  it('★ チップを押すと印が付くだけで、まだ入れない。もう一度押すと外れる', () => {
-    const onSelectTargets = vi.fn();
-    render(<AgentPanel {...baseProps} onSelectTargets={onSelectTargets} />);
+  // ★ 2026-10-24 小野さん判断 (案 C): 押した宛先がその場で入力欄に入る (「決定」なし)。
+  //   どれが選ばれているかは入力欄の先頭から決める (selected) ので、パネルは状態を持たない
+  it('★ 押すと、今の選択にその宛先を足した並びを渡す。選ばれている宛先を押すと外した並び', () => {
+    const onChangeTargets = vi.fn();
+    const { rerender } = render(<AgentPanel {...baseProps} selected={['cc-organon']} onChangeTargets={onChangeTargets} />);
     fireEvent.mouseDown(chips()[1]);
+    expect(onChangeTargets).toHaveBeenLastCalledWith(['cc-organon', 'cc-tealus']);
+    rerender(<AgentPanel {...baseProps} selected={['cc-organon', 'cc-tealus']} onChangeTargets={onChangeTargets} />);
     expect(chips()[1].getAttribute('aria-pressed')).toBe('true');
-    expect(onSelectTargets).not.toHaveBeenCalled();
     fireEvent.mouseDown(chips()[1]);
-    expect(chips()[1].getAttribute('aria-pressed')).toBe('false');
+    expect(onChangeTargets).toHaveBeenLastCalledWith(['cc-organon']);
   });
 
-  it('★ 「決定」で選んだ宛先を選んだ順にまとめて渡す。1 つも選んでいなければ「決定」は出ない', () => {
-    const onSelectTargets = vi.fn();
-    render(<AgentPanel {...baseProps} onSelectTargets={onSelectTargets} />);
+  it('「決定」は出さない', () => {
+    render(<AgentPanel {...baseProps} selected={['cc-tealus']} />);
     expect(screen.queryByTestId('agent-panel-confirm')).toBeNull();
-    fireEvent.mouseDown(chips()[2]);
-    fireEvent.mouseDown(chips()[1]);
-    fireEvent.mouseDown(screen.getByTestId('agent-panel-confirm'));
-    expect(onSelectTargets).toHaveBeenCalledWith(['cc-organon', 'cc-tealus']);
   });
 });
 
