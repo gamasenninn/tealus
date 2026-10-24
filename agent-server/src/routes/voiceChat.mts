@@ -142,6 +142,7 @@ interface McpToolLike {
   inputSchema?: unknown;
 }
 interface McpServerLike {
+  name?: string;
   listTools: () => Promise<McpToolLike[]>;
   callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
@@ -334,6 +335,15 @@ export function buildInstructions(
 }
 
 /**
+ * ★ 道具は同じ名前なら先に取った方が勝つ。部屋の設定の道具 (room-<id>-…) を後ろに回し、共通 (本体班が組み立てた tealus など) を優先する
+ *   (改善ループ 15 回目)。並びが [部屋の分, 共通] のままだと、部屋の設定に別名で send_message を持つ道具を置けば横取りできた
+ */
+export function orderServersForToolPick<T extends { name?: string }>(servers: T[]): T[] {
+  const isRoom = (s: T) => typeof s.name === 'string' && s.name.startsWith('room-');
+  return [...servers.filter((s) => !isRoom(s)), ...servers.filter(isRoom)];
+}
+
+/**
  * POST /voice-chat/session — 会話を始める。
  * ★ ここが遅くてよい唯一の場所。MCP の冷間起動 (最悪 30 秒級) をここで吸収し、会話中に乗せない。
  */
@@ -366,7 +376,7 @@ router.post('/session', async (req, res) => {
     const serverOf = new Map<string, McpServerLike>();
     const picked: McpToolLike[] = [];
     const dropped: string[] = [];
-    for (const s of servers) {
+    for (const s of orderServersForToolPick(servers)) {
       let tools: McpToolLike[];
       try {
         tools = await s.listTools();
