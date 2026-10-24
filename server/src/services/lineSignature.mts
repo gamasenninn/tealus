@@ -6,7 +6,7 @@
  *
  * 関連:
  *   - LINE 公式 docs: https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/
- *   - LINE Bridge Phase 1 (#XXX、本日 Day 17 起票予定): Inbound 受信のみ
+ *   - LINE Bridge Phase 1 (#288): Inbound 受信のみ
  *
  * @module services/lineSignature
  */
