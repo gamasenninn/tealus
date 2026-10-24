@@ -105,7 +105,8 @@ function SearchPage() {
       setHasMore(data.results.length >= 50);
     } catch (err) {
       console.error('Search error:', err);
-      if (seq === reqSeqRef.current) setLoadError(err instanceof Error ? err.message : '原因不明');
+      // ★ 前の検索の結果を残すと、失敗の表示の下に別の語の結果が並ぶ (改善ループ 14 回目)
+      if (seq === reqSeqRef.current) { setLoadError(err instanceof Error ? err.message : '原因不明'); if (offset === 0) setResults([]); }
     } finally {
       if (seq === reqSeqRef.current) setSearching(false);
     }
@@ -144,7 +145,7 @@ function SearchPage() {
       setHasMore(data.results.length >= 50);
     } catch (err) {
       console.error('Tag search error:', err);
-      if (seq === reqSeqRef.current) setLoadError(err instanceof Error ? err.message : '原因不明');
+      if (seq === reqSeqRef.current) { setLoadError(err instanceof Error ? err.message : '原因不明'); if (offset === 0) setResults([]); }
     } finally {
       if (seq === reqSeqRef.current) setSearching(false);
     }

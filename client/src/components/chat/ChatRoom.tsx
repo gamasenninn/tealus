@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { canUseVoiceChat } from '../../utils/permissions';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useMessageStore } from '../../stores/messageStore';
@@ -190,7 +191,7 @@ function ChatRoom() {
         ))}
         {/* #405 Realtime 音声会話 (docs/08 §12)。★ 開けたルームにだけ出す — 既定 false なので
             開けていないルームではボタンは 1 つも増えない。トランシーバー接続中は音が重なるので出さない */}
-        {currentRoom?.voice_conversation_enabled && !transceiver.isConnected && !callStatus && (
+        {currentRoom?.voice_conversation_enabled && canUseVoiceChat(user) && !transceiver.isConnected && !callStatus && (
           <button
             className="chat-header-btn"
             onClick={() => setShowVoiceChat(true)}

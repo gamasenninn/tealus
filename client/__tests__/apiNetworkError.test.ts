@@ -93,6 +93,33 @@ describe('会話モードの開始は 60 秒まで待つ', () => {
   });
 });
 
+// ★ 改善ループ 14 回目: 会話モードの道具 (サーバの MCP は 30 秒まで待つ) と読み上げの合成 (500 字で 33 秒の実例) も 10 秒で切っていた。
+//   切ると画面は「失敗」とモデルに伝えるが、サーバでは実行が済む (send_message なら二重の芽)
+describe('会話モードの道具・読み上げは長めに待つ', () => {
+  beforeEach(() => { api.token = 'tok'; api.requestTimeoutMs = 50; });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
+  const slowOk = (ms: number, body: BodyInit) => vi.fn((_u: string, init: RequestInit) => new Promise((resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    setTimeout(() => resolve(new Response(body, { status: 200 })), ms);
+  }));
+
+  it('★ 道具の呼び出しは 30 秒かかっても切らない', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', slowOk(30_000, JSON.stringify({ output: 'ok', elapsed_ms: 30000 })));
+    const p = api.voiceChatToolCall('s', 'c', 'search_messages', '{}');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await expect(p).resolves.toMatchObject({ output: 'ok' });
+  });
+
+  it('★ 読み上げの合成は 40 秒かかっても切らない', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', slowOk(40_000, new Blob(['wav'])));
+    const p = api.synthesizeTts('こんにちは', 'r1');
+    await vi.advanceTimersByTimeAsync(40_001);
+    await expect(p).resolves.toBeInstanceOf(Blob);
+  });
+});
+
 describe('#592 添付の送信 (_upload)', () => {
   class FakeXhr {
     static last: FakeXhr;

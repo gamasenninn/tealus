@@ -66,6 +66,8 @@ function StampPicker({ onSelect, onClose }: StampPickerProps) {
       setLoadError(null);
     } catch (err) {
       console.error('Load stamps error:', err);
+      // ★ パックを切り替えて失敗したら、前のパックのスタンプを出したままにしない (改善ループ 14 回目)
+      setStamps([]);
       setLoadError(err instanceof Error ? err.message : '原因不明');
     }
   };

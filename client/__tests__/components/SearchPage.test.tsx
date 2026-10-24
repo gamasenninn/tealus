@@ -138,3 +138,20 @@ describe('SearchPage — 読み込みの失敗', () => {
     expect(screen.queryByText(/一致するメッセージはありません/)).toBeNull();
   });
 });
+
+describe('SearchPage — 失敗したら前の結果を残さない (改善ループ 14 回目)', () => {
+  beforeEach(() => { search.mockReset(); sessionStorage.clear(); });
+
+  it('★ 前の語の結果が、失敗の表示の下に並ばない', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    search.mockResolvedValueOnce({ results: [{ id: 'm1', room_id: 'r1', content: '前の語の結果です', type: 'text', created_at: '2026-10-24T00:00:00Z', sender_display_name: 'A', room_name: '部屋' }] } as never);
+    search.mockRejectedValueOnce(new Error('つながっていません'));
+    render(<MemoryRouter initialEntries={['/search']}><SearchPage /></MemoryRouter>);
+    const input = screen.getByPlaceholderText('全ルーム検索...');
+    fireEvent.change(input, { target: { value: 'トラクター' } });
+    expect(await screen.findByText(/前の語の結果です/, {}, { timeout: 3000 })).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'コンバイン' } });
+    expect(await screen.findByRole('alert', {}, { timeout: 3000 })).toHaveTextContent('読み込めませんでした');
+    expect(screen.queryByText(/前の語の結果です/)).toBeNull();
+  });
+});

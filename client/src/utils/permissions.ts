@@ -33,9 +33,16 @@ export function canSearchUsers(user: UserLike): boolean {
   return role === 'admin' || role === 'user';
 }
 
-/** room へ他 user を招待する権限。guest は不可。 */
+/** room へ他 user を招待する権限。guest は不可。★ 機械も不可 (サーバと揃える、改善ループ 13 回目) */
 export function canInviteToRoom(user: UserLike): boolean {
+  if (user?.is_bot) return false;
   return !isGuest(user);
+}
+
+/** ★ 会話モード (AI と話す) を使えるか。サーバはゲストに 403 を返す (10-23) ので、ボタンも出さない (改善ループ 14 回目) */
+export function canUseVoiceChat(user: UserLike): boolean {
+  const role = getRole(user);
+  return role === 'admin' || role === 'user';
 }
 
 /**

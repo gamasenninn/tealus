@@ -28,6 +28,8 @@ const RETRY_STATUS = new Set([408, 429, 502, 503, 504]);
 export const NETWORK_ERROR_MESSAGE = 'つながっていません。電波を確かめて、もう一度お試しください';
 /** 会話モードの開始 (session・道具一覧) の時間切れ。MCP の冷間起動 (最悪 30 秒級) を吸収する */
 export const VOICE_CHAT_START_TIMEOUT_MS = 60_000;
+/** 会話モードの道具の呼び出し。サーバの MCP の待ち (30 秒) より少し長く */
+export const VOICE_CHAT_TOOL_TIMEOUT_MS = 35_000;
 export const TIMEOUT_ERROR_MESSAGE = '時間がかかりすぎました。電波を確かめて、もう一度お試しください';
 
 /** つながらない (TypeError) / 時間切れ (AbortError) を日本語の案内に置き換える。それ以外はそのまま */
@@ -343,7 +345,8 @@ class ApiClient {
    * Uses room's TTS model setting. Safe to call from any component.
    */
   synthesizeTts(text: string, roomId: string): Promise<Blob> {
-    return this._agentApi<Blob>('POST', '/tts/synthesize', { text, room_id: roomId }, { as: 'blob', errorMessage: 'TTS に失敗しました' });
+    // ★ 長い文の合成は数十秒かかる (500 字で 33 秒の実例)。会話モードの開始と同じ 60 秒 (改善ループ 14 回目)
+    return this._agentApi<Blob>('POST', '/tts/synthesize', { text, room_id: roomId }, { as: 'blob', errorMessage: 'TTS に失敗しました', timeoutMs: VOICE_CHAT_START_TIMEOUT_MS });
   }
 
   // === #405 Realtime 音声会話 (docs/08 §12) — agent-server /voice-chat/... proxy 経由 ===
@@ -356,7 +359,8 @@ class ApiClient {
 
   /** モデルが要求した道具を、サーバ側で実行して結果をもらう (ブラウザは実行しない) */
   voiceChatToolCall(sessionId: string, callId: string, name: string, args: string): Promise<{ output: string; elapsed_ms: number; truncated?: boolean; original_bytes?: number }> {
-    return this._agentApi('POST', '/voice-chat/tool-call', { session_id: sessionId, call_id: callId, name, arguments: args });
+    // ★ サーバの MCP は 30 秒まで待つ。10 秒で切ると実行は済んだのに「失敗」と伝える (改善ループ 14 回目)
+    return this._agentApi('POST', '/voice-chat/tool-call', { session_id: sessionId, call_id: callId, name, arguments: args }, { timeoutMs: VOICE_CHAT_TOOL_TIMEOUT_MS });
   }
 
   /**

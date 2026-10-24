@@ -56,7 +56,8 @@ function MediaGallery() {
       setHasMore(!!res.has_more);
     } catch (err) {
       console.error('Gallery load error:', err);
-      if (seq === reqSeqRef.current) setLoadError(err instanceof Error ? err.message : '原因不明');
+      // ★ 前の条件の写真を残すと、失敗の表示の下に別の条件の写真が並ぶ (改善ループ 14 回目)
+      if (seq === reqSeqRef.current) { setLoadError(err instanceof Error ? err.message : '原因不明'); if (!append) setMedia([]); }
     } finally {
       if (seq === reqSeqRef.current) setLoading(false);
     }

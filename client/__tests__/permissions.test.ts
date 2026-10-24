@@ -56,3 +56,18 @@ describe('client permissions helper (#282 Phase D)', () => {
     expect(roleLabel(bot)).toBe('BOT');
   });
 });
+
+// ★ 改善ループ 14 回目: 会話モードはサーバがゲストを断る (403、10-23) のに、ボタンはゲストにも出ていた (押して初めて断られる)。
+//   招待と同じく、機械も人の操作なので出さない (サーバは 10-23 から機械の招待も断っている)
+import { canUseVoiceChat, canInviteToRoom as canInvite } from '../src/utils/permissions';
+describe('canUseVoiceChat', () => {
+  it('社員・管理者は使える / ゲストは使えない', () => {
+    expect(canUseVoiceChat({ role: 'user' })).toBe(true);
+    expect(canUseVoiceChat({ role: 'admin' })).toBe(true);
+    expect(canUseVoiceChat({ role: 'guest' })).toBe(false);
+    expect(canUseVoiceChat(null)).toBe(false);
+  });
+  it('招待も機械には出さない (サーバと揃える)', () => {
+    expect(canInvite({ role: 'user', is_bot: true })).toBe(false);
+  });
+});
