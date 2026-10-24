@@ -61,3 +61,18 @@ describe('replaceLeadingAgentMentions', () => {
       .toBe('@アシスタント @cc-tealus 調べて');
   });
 });
+
+// ★ 2026-10-24 小野さん判断: 自分の音声への「エージェントに送る」は、引用の箱を出さず「🎤 音声から」を 1 行だけ出す
+import { isAgentSendFromOwnVoice } from '../src/utils/sentToAgent';
+describe('isAgentSendFromOwnVoice (送った文字の便の側から見る)', () => {
+  const base = { id: 't1', sender_id: 'me', type: 'text', content: '@cc-tealus 調べて',
+    reply_to_message: { id: 'v1', type: 'voice', sender_id: 'me', content: '調べて', sender_display_name: '私' } } as unknown as Message;
+  it('★ 自分の音声への返信で、先頭が宛先なら true', () => {
+    expect(isAgentSendFromOwnVoice(base, 'アシスタント')).toBe(true);
+  });
+  it('人の音声・文字への返信・宛先の無い返信は false (今までどおり引用の箱)', () => {
+    expect(isAgentSendFromOwnVoice({ ...base, reply_to_message: { ...base.reply_to_message!, sender_id: 'other' } } as Message, 'アシスタント')).toBe(false);
+    expect(isAgentSendFromOwnVoice({ ...base, reply_to_message: { ...base.reply_to_message!, type: 'text' } } as Message, 'アシスタント')).toBe(false);
+    expect(isAgentSendFromOwnVoice({ ...base, content: '了解です' } as Message, 'アシスタント')).toBe(false);
+  });
+});

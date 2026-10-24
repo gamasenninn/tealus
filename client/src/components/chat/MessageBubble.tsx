@@ -1,4 +1,4 @@
-import { isSentToAgent } from '../../utils/sentToAgent';
+import { isSentToAgent, isAgentSendFromOwnVoice } from '../../utils/sentToAgent';
 import { useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
@@ -131,6 +131,21 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const renderReply = () => {
     if (!message.reply_to_message) return null;
     const replyId = message.reply_to_message.id;
+    // ★ 自分の音声から「エージェントに送る」で作った便は、引用の箱を出さず 1 行だけ (2026-10-24 小野さん判断)。押すと元の音声へ
+    if (isAgentSendFromOwnVoice(message, assistantName)) {
+      return (
+        <button
+          type="button"
+          className="bubble-reply-from-voice"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent('message:scroll-to', { detail: { id: replyId } }));
+          }}
+        >
+          🎤 音声から
+        </button>
+      );
+    }
     return (
       <div
         className="bubble-reply"

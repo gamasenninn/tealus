@@ -57,3 +57,13 @@ export function replaceLeadingAgentMentions(text: string, names: string[], targe
   }
   return names.length ? `${orderAgentMentions(names, assistantName)} ${rest}` : rest;
 }
+
+/**
+ * 送った文字の便の側から見て、自分の音声から「エージェントに送る」で作った便か (2026-10-24 小野さん判断)。
+ * この便は引用の箱を出さず「🎤 音声から」を 1 行だけ出す (自分の音声を自分で引用し、同じ文が 2 回見えるため)。
+ * 返信のつながりはデータとして残す (畳み込みの目印・AI が元の音声をたどれる)。条件は isSentToAgent と同じ
+ */
+export function isAgentSendFromOwnVoice(message: Message, assistantName: string | null | undefined): boolean {
+  const q = message.reply_to_message;
+  return !!q && q.type === 'voice' && q.sender_id === message.sender_id && startsWithAgentMention(message.content, assistantName);
+}
