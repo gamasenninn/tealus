@@ -144,3 +144,13 @@ describe('synthesizeOpenai — ★ 長い文は分けて並行', () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 });
+
+// ★ 改善ループ 14 回目: 読み上げは 500 字まで (ttsSpeak の MAX_LENGTH) なのに、分ける境目が 600 字で 1 回に送っていた。
+//   同じ 500 字が 14 秒・33 秒・60 秒切れ (10-23 19:26) とばらつき、切れると端末の読み上げに落ちた。短く分けて並行に送る
+test('★ 読み上げの上限 (500 字) の文は、分けて並行に送る (1 本に任せない)', async () => {
+  expect(OA_MAX_CHUNK).toBeLessThan(500);
+  const f = perInputFetch(true);
+  const text = ('朝礼の内容です。'.repeat(62)).slice(0, 500);
+  await synthesizeOpenai(text, { apiKey: 'k', fetchImpl: f as never });
+  expect(f.mock.calls.length).toBeGreaterThanOrEqual(2);
+});

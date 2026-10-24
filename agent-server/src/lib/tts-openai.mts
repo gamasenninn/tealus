@@ -33,7 +33,9 @@ export const DEFAULT_FORMAT = 'wav';
  * ★ 回数制限は 1 分 10,000 回 (応答の x-ratelimit-limit-requests、2026-09-26) なので回数は気にしなくてよい。
  * ★★ wav のときだけ分ける (mp3 などはつなげない)。
  */
-export const MAX_CHUNK_CHARS = 600;
+// ★ 250 字 (2026-10-24 改善ループ 14 回目): 読み上げの上限 500 字を 1 本で送ると 14〜60 秒とばらつき、60 秒で切れた (10-23 19:26)。
+//   2 本以上に分けて並行に送る (250 字で約 7 秒)
+export const MAX_CHUNK_CHARS = 250;
 export const MAX_PARALLEL = 5;
 
 /** response_format → Content-Type (★ 応答ヘッダが無いときの保険) */
