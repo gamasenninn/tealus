@@ -110,6 +110,16 @@ export function classifyVoiceChatRequest(req: AuthzRequest): ConfigPathKind | nu
   return { kind: 'staff' };
 }
 
+/**
+ * ★ 改善ループ 14 回目: 読み上げの合成で room_id を渡すときは、その部屋のメンバーだけ
+ *   (以前は所属を見ずに、その部屋の声の設定で合成していた。合成は有料)。room_id が無ければ既定の声なので判断しない
+ */
+export function classifyTtsRequest(req: AuthzRequest): ConfigPathKind | null {
+  const roomId = (req.body as { room_id?: unknown } | undefined)?.room_id;
+  if (req.method === 'POST' && req.path === '/synthesize' && typeof roomId === 'string' && roomId) return { kind: 'member', roomId };
+  return null;
+}
+
 export interface ConfigAuthzOptions {
   apiUrl: string;
   /** どの種類の呼び出しか (既定は /config の分け方)。null を返すと判断せずハンドラへ渡す */

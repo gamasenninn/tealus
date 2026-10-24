@@ -145,3 +145,11 @@ describe('会話モードはゲストに開けない', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ★ 改善ループ 14 回目: 読み上げの合成は部屋の所属を見ずに、room_id の部屋の声で合成していた (有料)
+describe('読み上げの合成 (room_id つき) は部屋のメンバーだけ', () => {
+  test('★ 入っていない部屋の room_id なら 403', async () => {
+    const res = await request(app).post('/tts/synthesize').set(auth('u-user')).send({ text: 'こんにちは', room_id: 'r1' });
+    expect(res.status).toBe(403);
+  });
+});

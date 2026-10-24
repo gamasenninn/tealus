@@ -14,7 +14,7 @@ import { router as ccQueueRoutes } from './routes/ccQueue.mts';
 import { router as voiceChatRoutes } from './routes/voiceChat.mts';
 import { authenticate } from './middleware/auth.mts';
 import { requestLog } from './middleware/requestLog.mts';
-import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest, classifyVoiceChatRequest } from './lib/configAuthz.mts';
+import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest, classifyVoiceChatRequest, classifyTtsRequest } from './lib/configAuthz.mts';
 import { createScopedProxy } from './routes/scopedProxy.mts';
 
 export const app = express();
@@ -53,7 +53,7 @@ app.use('/config', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_U
 app.use('/logs', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL, classify: classifyLogsRequest }), logsRoutes);
 
 // TTS API（認証必要）— #155 個人読み上げ用
-app.use('/tts', authenticate, ttsRoutes);
+app.use('/tts', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_API_URL, classify: classifyTtsRequest }), ttsRoutes);
 
 // Agent control API（認証必要）— #250 Deep agent cancel
 // ★ #459: cancel はそのルームのメンバーだけ (identity はログインだけ、cc-projects は社内の人だけ #494)
