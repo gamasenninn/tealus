@@ -292,8 +292,9 @@ router.post('/direct', async (req, res) => {
       await client.query('BEGIN');
 
       const roomResult = await client.query<RoomRow>(
-        `INSERT INTO rooms (type, created_by)
-         VALUES ('direct', $1)
+        // ★ 1 対 1 も「送った本人なら編集できる」(sender) で作る (2026-10-24 小野さん判断、docs/02)
+        `INSERT INTO rooms (type, created_by, message_edit_policy)
+         VALUES ('direct', $1, 'sender')
          RETURNING *`,
         [userId]
       );

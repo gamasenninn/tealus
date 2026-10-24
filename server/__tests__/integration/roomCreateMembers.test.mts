@@ -68,6 +68,14 @@ describe('部屋づくりで指定する人', () => {
 
   describe('1 対 1 (POST /api/rooms/direct)', () => {
     const direct = (partner_id: unknown) => request(app).post('/api/rooms/direct').set(auth()).send({ partner_id });
+    // ★ 2026-10-24 小野さん判断: 1 対 1 も「送った本人なら編集できる」(sender)。1 対 1 には部屋の設定の画面が無く、誰も変えられなかった
+    it('★ 新しい 1 対 1 の部屋の編集の設定は sender', async () => {
+      // ほかの項と同じ相手だと「既にある 1 対 1」(200) が返るので、この項だけの相手を作る
+      const partner = (await createTestUser({ login_id: 'EMP899', display_name: '1対1の相手' })).user.id;
+      const res = await direct(partner);
+      expect(res.status).toBe(201);
+      expect(res.body.room.message_edit_policy).toBe('sender');
+    });
     it('有効な人・ボットとは作れる', async () => {
       expect((await direct(active)).status).toBe(201);
       expect((await direct(bot)).status).toBe(201);
