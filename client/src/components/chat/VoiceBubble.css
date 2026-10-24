@@ -468,3 +468,14 @@
     white-space: nowrap;
   }
 }
+
+/* ★ 「エージェントに送る」で送った音声の文字起こしを畳んだ印 (2026-10-24)。押すと広がる */
+.voice-trans-folded {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  text-align: left;
+}

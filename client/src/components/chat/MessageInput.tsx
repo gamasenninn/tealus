@@ -15,6 +15,7 @@ import VoiceRecorder from './VoiceRecorder';
 import StampPicker from '../stamp/StampPicker';
 import MentionPicker from './MentionPicker';
 import type { MentionCandidate } from './MentionPicker';
+import { orderAgentMentions } from '../../utils/sentToAgent';
 import AgentPanel from './AgentPanel';
 import type { AgentPanelMode } from './AgentPanel';
 import type { PromptHistoryItem } from '../../services/api';
@@ -170,20 +171,22 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
 
   // 宛先を選んだら composer に反映。入口B(pendingAgentBody あり)は本文込みで置換、
   // 入口A(ボタン)は先頭にメンションのみ prepend（本文はユーザーが続けて打つ）。
-  const insertAgentMention = useCallback((name: string) => {
+  // ★ 宛先は複数選べる (2026-10-24 小野さん判断)。@アシスタント は先頭でないと応答しないので先頭に置く
+  const insertAgentMentions = useCallback((names: string[]) => {
     setAgentPanel(null);
+    const mentions = orderAgentMentions(names, assistantName);
     if (pendingAgentBody != null) {
-      setText(`@${name} ${pendingAgentBody}`);
+      setText(`${mentions} ${pendingAgentBody}`);
       setPendingAgentBody(null);
     } else if (slashMode) {
-      setText(`@${name} `);  // `/朝礼` 等の絞り込み文字列は宛先で置き換える
+      setText(`${mentions} `);  // `/朝礼` 等の絞り込み文字列は宛先で置き換える
       setSlashMode(false);
       setSlashQuery('');
     } else {
-      setText(prev => `@${name} ${prev}`);
+      setText(prev => `${mentions} ${prev}`);
     }
     focusTextareaEnd();
-  }, [pendingAgentBody, slashMode, focusTextareaEnd]);
+  }, [pendingAgentBody, slashMode, focusTextareaEnd, assistantName]);
 
   // 過去の指示を挿入。表示されていた文字列 (宛先込みの全文) がそのまま入る。送信はしない。
   // #358 変動する部分 (穴) があれば、そこを選択状態にして入れる。打てば置き換わり、
@@ -204,11 +207,11 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
     setPendingAgentBody(null);
     if (agentPanel) { closeAgentPanel(); return; }
     if (!shouldOpenAgentPanel({ historyCount: promptHistory.length, targetCount: agentTargets.length })) {
-      if (assistantName) insertAgentMention(assistantName);
+      if (assistantName) insertAgentMentions([assistantName]);
       return;
     }
     openAgentPanel('compose');
-  }, [agentPanel, closeAgentPanel, promptHistory.length, agentTargets.length, assistantName, insertAgentMention, openAgentPanel]);
+  }, [agentPanel, closeAgentPanel, promptHistory.length, agentTargets.length, assistantName, insertAgentMentions, openAgentPanel]);
 
   // 入口B: コンテキストメニュー「エージェントに送る」が対象 message を積んだら消費する。
   // admin で宛先が複数なら picker を開き（本文は pendingAgentBody に退避）、単一なら直 prefill。
@@ -514,7 +517,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
           targetCounts={targetCounts}
           mode={agentPanel}
           query={slashMode ? slashQuery : ''}
-          onSelectTarget={insertAgentMention}
+          onSelectTargets={insertAgentMentions}
           onSelectHistory={insertPromptHistory}
           onClose={closeAgentPanel}
         />

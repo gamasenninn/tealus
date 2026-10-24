@@ -29,7 +29,7 @@ const baseProps = {
   targetCounts: { 'アシスタント': 5, 'cc-tealus': 2 },
   mode: 'compose' as const,
   query: '',
-  onSelectTarget: () => {},
+  onSelectTargets: () => {},
   onSelectHistory: () => {},
   onClose: () => {},
 };
@@ -48,11 +48,25 @@ describe('AgentPanel — 宛先チップ', () => {
     expect(chips()).toHaveLength(3);
   });
 
-  it('チップを押すと宛先だけを挿入する', () => {
-    const onSelectTarget = vi.fn();
-    render(<AgentPanel {...baseProps} onSelectTarget={onSelectTarget} />);
+  // ★ 2026-10-24 小野さん判断: 押すたびに印が付き (もう一度押すと外れる)、「決定」でまとめて入れる
+  it('★ チップを押すと印が付くだけで、まだ入れない。もう一度押すと外れる', () => {
+    const onSelectTargets = vi.fn();
+    render(<AgentPanel {...baseProps} onSelectTargets={onSelectTargets} />);
     fireEvent.mouseDown(chips()[1]);
-    expect(onSelectTarget).toHaveBeenCalledWith('cc-tealus');
+    expect(chips()[1].getAttribute('aria-pressed')).toBe('true');
+    expect(onSelectTargets).not.toHaveBeenCalled();
+    fireEvent.mouseDown(chips()[1]);
+    expect(chips()[1].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('★ 「決定」で選んだ宛先を選んだ順にまとめて渡す。1 つも選んでいなければ「決定」は出ない', () => {
+    const onSelectTargets = vi.fn();
+    render(<AgentPanel {...baseProps} onSelectTargets={onSelectTargets} />);
+    expect(screen.queryByTestId('agent-panel-confirm')).toBeNull();
+    fireEvent.mouseDown(chips()[2]);
+    fireEvent.mouseDown(chips()[1]);
+    fireEvent.mouseDown(screen.getByTestId('agent-panel-confirm'));
+    expect(onSelectTargets).toHaveBeenCalledWith(['cc-organon', 'cc-tealus']);
   });
 });
 

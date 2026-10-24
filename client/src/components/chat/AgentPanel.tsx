@@ -29,7 +29,8 @@ interface AgentPanelProps {
   targetCounts: Record<string, number>;
   mode: AgentPanelMode;
   query: string;
-  onSelectTarget: (name: string) => void;
+  /** ★ 選んだ宛先 (選んだ順)。押すたびに印が付き、「決定」でまとめて渡す (2026-10-24 小野さん判断) */
+  onSelectTargets: (names: string[]) => void;
   onSelectHistory: (content: string, holes: Hole[]) => void;
   onClose: () => void;
 }
@@ -59,9 +60,13 @@ function renderBody(item: PromptHistoryItem, bodyStart: number) {
 }
 
 function AgentPanel({
-  targets, history, targetCounts, mode, query, onSelectTarget, onSelectHistory, onClose,
+  targets, history, targetCounts, mode, query, onSelectTargets, onSelectHistory, onClose,
 }: AgentPanelProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
+  // ★ 選んだ宛先 (選んだ順)。複数の班に同時に送ることが多いので、1 つ押した時点では入れない
+  const [picked, setPicked] = useState<string[]>([]);
+  const togglePicked = (name: string) =>
+    setPicked((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
   const q = (query || '').toLowerCase();
 
   const ccNames = useMemo(
@@ -143,15 +148,28 @@ function AgentPanel({
           <button
             key={t.user_id}
             data-testid="agent-panel-chip"
-            className={`agent-panel-chip${t.is_cc ? ' cc' : ''}`}
+            className={`agent-panel-chip${t.is_cc ? ' cc' : ''}${picked.includes(t.display_name) ? ' picked' : ''}`}
+            aria-pressed={picked.includes(t.display_name)}
             onMouseDown={(e) => {
               e.preventDefault(); // textarea のフォーカスを維持
-              onSelectTarget(t.display_name);
+              togglePicked(t.display_name);
             }}
           >
-            @{t.display_name}
+            {picked.includes(t.display_name) && '✓ '}@{t.display_name}
           </button>
         ))}
+        {picked.length > 0 && (
+          <button
+            data-testid="agent-panel-confirm"
+            className="agent-panel-confirm"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onSelectTargets(picked);
+            }}
+          >
+            決定 ({picked.length})
+          </button>
+        )}
       </div>
 
       {shown.length > 0 && (

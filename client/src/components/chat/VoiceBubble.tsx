@@ -25,9 +25,13 @@ interface VoiceBubbleProps {
   canEditTranscription?: boolean;
   replyMessage?: QuotedMessage | null;
   searchKeyword?: string | null;
+  /** ★ 「エージェントに送る」で送った音声 (2026-10-24 小野さん判断)。文字起こしを 1 行に畳む */
+  sentToAgent?: boolean;
 }
 
-function VoiceBubble({ message, media, transcription, isOwn, canEditTranscription, replyMessage, searchKeyword }: VoiceBubbleProps) {
+function VoiceBubble({ message, media, transcription, isOwn, canEditTranscription, replyMessage, searchKeyword, sentToAgent }: VoiceBubbleProps) {
+  // ★ 送った文字の便と同じ文が 2 回並ばないよう畳む。再生ボタンは残し、押せば広がる
+  const [foldOpen, setFoldOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -217,7 +221,12 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
           {transcription.status === 'pending' && <span className="voice-trans-status">⏳ 処理中...</span>}
           {transcription.status === 'transcribing' && <span className="voice-trans-status">⏳ 文字起こし中...</span>}
           {transcription.status === 'formatting' && <span className="voice-trans-status">⏳ AIが文章を整えています...</span>}
-          {transcription.status === 'done' && (
+          {transcription.status === 'done' && sentToAgent && !foldOpen && (
+            <button type="button" className="voice-trans-folded" onClick={() => setFoldOpen(true)}>
+              ▸ エージェントに送った文字起こし
+            </button>
+          )}
+          {transcription.status === 'done' && (!sentToAgent || foldOpen) && (
             <>
               {/* ★ #583 本文が空の done (無音の録音で Gemini も OpenAI も空) を白紙にしない */}
               {displayText?.trim()
@@ -280,6 +289,7 @@ export default memo(VoiceBubble, (prev, next) => {
     prev.transcription?.version === next.transcription?.version &&
     prev.isOwn === next.isOwn &&
     prev.canEditTranscription === next.canEditTranscription &&
+    prev.sentToAgent === next.sentToAgent &&
     prev.searchKeyword === next.searchKeyword &&
     prev.replyMessage?.id === next.replyMessage?.id &&
     // ★ #501 引用の写しが消された・直されたら描き直す (id だけだと古い中身が残る)

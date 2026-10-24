@@ -87,6 +87,27 @@
   border-color: #4fd1c5;
 }
 
+/* ★ 選んだ宛先 (押すたびに印、2026-10-24)。cc の色より後に置いて、選んだことを優先して見せる */
+.agent-panel-chip.picked {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.agent-panel-confirm {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  min-height: 36px;
+  border: none;
+  border-radius: 18px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .agent-panel-section {
   padding: 6px 12px;
   font-size: 12px;
