@@ -272,7 +272,9 @@ function runFailingLoop(env: Record<string, string>, killAfterSleeps: number, st
   try {
     out = execFileSync('sh', [SCRIPT, 'stubproj', 'http://stub.invalid', 'http://stub.invalid/agent-api/cc-queue', auth], {
       encoding: 'utf8',
-      timeout: 20000,
+      // ★ 60 秒 (2026-10-24)。Windows の sh は周ごとにプロセスを起こすのが遅く、20 周に 20 秒では届かない日があった
+      //   (19 周で時間切れ → 回数の検査が落ちる)。sleep の偽物が決めた回数で止めるので、普段は数秒で終わる
+      timeout: 60000,
       env: { ...process.env, ...env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
     });
   } catch (e) {
