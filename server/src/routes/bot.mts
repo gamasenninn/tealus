@@ -1647,7 +1647,9 @@ router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
       [roomId, userId]
     );
 
-    logger.info(`Bot joined room: ${req.user!.display_name} → ${roomId}`);
+    // ★ 本当に入ったときだけ info (改善ループ 16 回目。再 join でも毎回出て、7 日 255 行のほぼ全部が入室していない回だった)
+    if (inserted.rowCount && inserted.rowCount > 0) logger.info(`Bot joined room: ${req.user!.display_name} → ${roomId}`);
+    else logger.debug(`Bot join (既にメンバー): ${req.user!.display_name} → ${roomId}`);
 
     // #390: 新規に入った時だけルームに出す。人間の招待と同じ見え方に揃える。
     // ★ rowCount で判定するのは必須。再 join でも出すと、常時再接続する bot

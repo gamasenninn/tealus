@@ -214,3 +214,14 @@ describe('reportStep — 10 秒ごとに回したときに出る行 (★ 状態�
     expect(run((i) => (i < 5 ? '静穏待ち (あと 3 分)' : '間隔 (前回発火から 1.0 分 / 120 分)'), 10)).toEqual([0, 5]);
   });
 });
+
+// ★ 改善ループ 16 回目: 無効 (enabled: false) のトリガー 4 本が 1 時間ごとに「見送り」を出し、7 日で 640 行になっていた。
+//   1 時間に 1 回の鼓動は「動いているか分からない」を防ぐためで、有効なトリガーの話。無効は最初の 1 回だけ
+describe('shouldReport — 無効なトリガーは鼓動を出さない', () => {
+  it('★ 無効のままなら、1 時間たっても出さない (最初の 1 回は出す)', () => {
+    const t0 = new Date('2026-10-24T00:00:00Z');
+    const r = { fired: false, reason: '無効 (enabled: false)' };
+    expect(shouldReport(r, undefined, t0)).toBe(true);
+    expect(shouldReport(r, { reason: r.reason, at: t0 }, new Date(t0.getTime() + 2 * 3600_000))).toBe(false);
+  });
+});

@@ -178,6 +178,16 @@ let firstTimer: NodeJS.Timeout | null = null;
 let timer: NodeJS.Timeout | null = null;
 const lastStates = new Map<string, string>();
 
+/**
+ * 見張りの結果の 1 行 (改善ループ 16 回目)。★ 止まった (down) は warn (以前は info で、気づくべきものが埋もれた)。
+ * ★ 説明の改行は「 / 」に (業務メモの文面は改行のまま。ログだけ 1 行にする。2 行目が時刻も [tag] も無い行になっていた)
+ */
+export function watchdogLogLine(r: Pick<RunResult, 'id' | 'state' | 'detail' | 'posted'>): { level: 'info' | 'warn'; line: string } {
+  const detail = r.detail.replace(/\s*\n\s*/g, ' / ');
+  const line = `[watchdogs] ${r.id}: ${r.state} — ${detail}${r.posted ? ` (業務メモに ${r.posted === 'alert' ? '⚠' : '✅'} を投稿)` : ''}`;
+  return { level: r.state === 'down' ? 'warn' : 'info', line };
+}
+
 async function tick(configPath: string, warned: { signature: string }): Promise<void> {
   const { config, warnings } = loadWatchdogs(configPath);
   // ★ 同じ warn を 5 分ごとに出さない。ただし内容が変わったら必ず出す
@@ -198,10 +208,10 @@ async function tick(configPath: string, warned: { signature: string }): Promise<
     post: postAsUser,
   });
   for (const r of results) {
-    const line = `[watchdogs] ${r.id}: ${r.state} — ${r.detail}${r.posted ? ` (業務メモに ${r.posted === 'alert' ? '⚠' : '✅'} を投稿)` : ''}`;
+    const { level, line } = watchdogLogLine(r);
     if (r.error) { logger.warn(`${line} / ★ ${r.error}`); continue; }
     // ★ 5 分ごとに同じ行を出さない。状態が変わったときと投稿したときだけ
-    if (r.posted || lastStates.get(r.id) !== r.state) logger.info(line);
+    if (r.posted || lastStates.get(r.id) !== r.state) logger[level](line);
     lastStates.set(r.id, r.state);
   }
 }

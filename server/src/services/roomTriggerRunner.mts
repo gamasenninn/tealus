@@ -102,6 +102,8 @@ export function shouldReport(
   if (result.fired) return true;
   if (!prev) return true;
   if (reasonKind(prev.reason) !== reasonKind(result.reason)) return true;
+  // ★ 無効なトリガーは鼓動を出さない (改善ループ 16 回目。4 本で 7 日 640 行)。鼓動は有効なものが動いているかを見るため
+  if (result.reason.startsWith('無効')) return false;
   return now.getTime() - prev.at.getTime() >= HEARTBEAT_MS;
 }
 

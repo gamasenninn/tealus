@@ -76,7 +76,8 @@ export function setupSocketHandlers(io: Server): void {
         for (const r of result.rows) {
           socket.join(r.id);
         }
-        logger.info(`Admin ${socket.user.display_name} joined all ${result.rows.length} rooms for monitoring`);
+        // ★ debug (改善ループ 16 回目)。接続のたびに出て、info の 15% (7 日 1,683 行) を占めていた
+        logger.debug(`Admin ${socket.user.display_name} joined all ${result.rows.length} rooms for monitoring`);
       }).catch(() => {});
     }
 

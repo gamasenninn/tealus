@@ -126,6 +126,9 @@ export interface TranscribeAudioParams {
   log?: SttLogger;
 }
 
+/** gemini が空を返したときの印 (ログで「無音」と「落とした」を分けるのに使う) */
+const GEMINI_EMPTY = 'gemini returned empty text';
+
 /**
  * @returns raw text
  */
@@ -144,6 +147,7 @@ export async function transcribeAudio({
 }: TranscribeAudioParams): Promise<string> {
   const effectiveBackend = (backend || process.env.STT_BACKEND || 'openai').toLowerCase();
   let fellBackFromGemini = false;
+  let geminiWasEmpty = false;
   // ★ #520 切断ガードで捨てた gemini の答え。やり直しが日本語に見えないときに戻す
   let geminiTruncatedText: string | null = null;
 
@@ -161,7 +165,7 @@ export async function transcribeAudio({
         if (!text) {
           // ★ 空も fallback する — gemini が静かに壊れたとき (鍵切れ・応答形の変更) に
           //   全便が空になる事故を防ぐ。無音便は openai 側でも空になるので実害なし。
-          throw new Error('gemini returned empty text');
+          throw new Error(GEMINI_EMPTY);
         }
         const truncation = looksTruncated(inputPath, text);
         if (truncation) {
@@ -172,7 +176,14 @@ export async function transcribeAudio({
         return text;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        log.warn(`[stt] gemini backend failed, falling back to openai: ${message}`);
+        // ★ 空の答えは、ここでは warn にしない (改善ループ 16 回目)。多くは無線の空押し (無音) で、
+        //   openai も空なら害は無い。openai の答えを見てから下で決める。ほかの失敗 (切れた・503・時間切れ) は今までどおり warn
+        if (message === GEMINI_EMPTY) {
+          geminiWasEmpty = true;
+          log.info?.(`[stt] gemini returned empty text, openai でやり直します`);
+        } else {
+          log.warn(`[stt] gemini backend failed, falling back to openai: ${message}`);
+        }
         fellBackFromGemini = true;
         // fall through to openai
       }
@@ -209,6 +220,10 @@ export async function transcribeAudio({
     // ★ 2026-10-16: chars は**保存する答え**の文字数 (外国の文字で空にした便を「文字あり」と数えない)
     const raw = result === text ? '' : ` (openai の答えは ${text.length} 字)`;
     log.info?.(`[stt] openai (gemini の後) chars=${result.length}${raw}`);
+    // ★ gemini が空で openai に文字があった = gemini が発話を落とした。これだけが気づくべき失敗 (改善ループ 16 回目)
+    if (geminiWasEmpty && result.length > 0) {
+      log.warn(`[stt] gemini が発話を落とした (空を返した。openai で ${result.length} 字を拾った)`);
+    }
   }
   return result;
 }

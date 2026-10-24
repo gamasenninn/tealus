@@ -182,3 +182,17 @@ describe('runOnce — push_reach', () => {
     expect(r).toEqual([expect.objectContaining({ id: 'push', state: 'error', error: expect.stringContaining('DB に届きません') })]);
   });
 });
+
+// ★ 改善ループ 16 回目: 止まった (down) が info に出ていた。説明の「\n直し方:」で 2 行目が時刻も [tag] も無い行になっていた
+describe('watchdogLogLine', () => {
+  const { watchdogLogLine } = require('../../src/services/watchdogRunner.mts') as typeof import('../../src/services/watchdogRunner.mts');
+  it('★ down は warn、1 行にまとめる', () => {
+    const r = watchdogLogLine({ id: 'push:abc', state: 'down', detail: '宛先が 0 本です。\n直し方: 押す', posted: null });
+    expect(r.level).toBe('warn');
+    expect(r.line).not.toContain('\n');
+    expect(r.line).toContain('宛先が 0 本です。 / 直し方: 押す');
+  });
+  it('ok は info', () => {
+    expect(watchdogLogLine({ id: 'backup', state: 'ok', detail: '成功', posted: null }).level).toBe('info');
+  });
+});
