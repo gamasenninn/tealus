@@ -53,6 +53,9 @@ function ctxLine(ctx: unknown): string {
   return parts.length ? parts.join(' ') : '-';
 }
 
+
+const CRAWLER_UA = /Googlebot|bingbot|Applebot|YandexBot|Baiduspider|DuckDuckBot|crawler|spider/i;
+
 router.post('/', (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   if (typeof body.kind !== 'string' || !KINDS.has(body.kind)) {
@@ -71,6 +74,13 @@ router.post('/', (req, res) => {
     return;
   } else {
     c.n++;
+  }
+
+  // ★ 検索エンジンの巡回 (Googlebot のレンダラ等) の報告は利用者の障害ではない。warn に積まず debug に (改善ループ 14 回目)
+  if (CRAWLER_UA.test(String(req.headers['user-agent'] ?? ''))) {
+    logger.debug(`[client-error] 巡回からの報告を捨てた kind=${body.kind} ua=${clip(req.headers['user-agent'], 120)}`);
+    res.status(204).end();
+    return;
   }
 
   // スタックは先頭の数行 (どこで落ちたか) だけ。画面側が「部品 3 行 + 位置 3 行」で送ってくる

@@ -53,10 +53,12 @@ test('設定を変える要求は [change] に残す (誰が・欄の名前だ�
   expect(lines(info, '[change]')).toEqual(['[change] PUT /api/rooms/r1 200 by=aaaaaaaa fields=message_edit_policy']);
 });
 
-test('機械 (is_bot) の変更は [change] に残さない (投稿・心拍で 1 日に数千行になる)', async () => {
+// ★ 改善ループ 14 回目: 頼まれていない機械の編集 (10-23 に出品業務ボットが 7 回) も残らなかった。
+//   機械の編集・削除 (PUT/PATCH/DELETE) は頼んだ人が分からなくても for=- で残す (1 日に数件)。投稿 (POST) は今までどおり残さない
+test('機械 (is_bot) の編集・削除は、頼んだ人が無くても for=- で [change] に残す', async () => {
   await request(appAs({ id: 'bbbbbbbb-0000-0000-0000-000000000000', is_bot: true })).put('/api/rooms/r1').send({ name: 'x' });
   await settle();
-  expect(lines(info, '[change]')).toEqual([]);
+  expect(lines(info, '[change]')).toEqual(['[change] PUT /api/rooms/r1 200 by=bbbbbbbb for=- fields=name']);
 });
 
 // ★ 改善ループ 9 回目の D (2026-10-23): AI が代わりにした編集 (7 日で 98 件) は台帳に AI の名前で載るだけで、頼んだ人が残らなかった。

@@ -60,10 +60,11 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
         && status >= 200 && status < 300 && !NOT_A_CHANGE.some((re) => re.test(path))) {
       if (!req.user?.is_bot) {
         logger.info(`[change] ${req.method} ${path} ${status} by=${who(req)} fields=${bodyFields(req)}`);
-      } else if (BOT_EDIT_METHODS.has(req.method) && onBehalfOf(req)) {
+      } else if (BOT_EDIT_METHODS.has(req.method)) {
         // ★ 改善ループ 9 回目の D: 機械が頼まれて編集・削除したときは、頼んだ人 (中継の X-Tealus-Requester、#564) を添える。
         //   台帳 (message_edits) には機械の名前しか載らない。機械の投稿 (POST) は数が多いので残さない
-        logger.info(`[change] ${req.method} ${path} ${status} by=${who(req)} for=${onBehalfOf(req)} fields=${bodyFields(req)}`);
+        // ★ 改善ループ 14 回目: 頼まれていない機械の編集 (ボット自身の判断) も for=- で残す (10-23 に 7 回、記録 0 だった)
+        logger.info(`[change] ${req.method} ${path} ${status} by=${who(req)} for=${onBehalfOf(req) ?? '-'} fields=${bodyFields(req)}`);
       }
     }
   });

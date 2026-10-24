@@ -90,4 +90,14 @@ describe('POST /api/client-errors', () => {
     expect(over.status).toBe(429);
     expect(logged()).toHaveLength(CLIENT_ERROR_LIMIT);
   });
+
+  // ★ 改善ループ 14 回目: Google の巡回 (Googlebot のレンダラ) が SW の登録に失敗した報告が warn に 3 件並んだ (10-23 23:30)。
+  //   利用者の障害ではないので warn に積まない (エラーを数えるときに混ざる)
+  it('検索エンジンの巡回からの報告は warn に残さない', async () => {
+    const res = await request(app).post('/api/client-errors')
+      .set('User-Agent', 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
+      .send(valid);
+    expect(res.status).toBe(204);
+    expect(logged()).toEqual([]);
+  });
 });
