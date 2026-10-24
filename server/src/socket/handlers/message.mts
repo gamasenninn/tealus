@@ -92,15 +92,23 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
       return reject('この種類の投稿は送れません');
     }
 
-    // Verify membership
-    const memberCheck = await pool.query(
-      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-      [room_id, socket.user.id]
-    );
-    if (memberCheck.rows.length === 0) return reject('このルームのメンバーではないため送れませんでした');
+    // ★ 送る前の確認で DB が失敗しても、返事を返す (改善ループ 14 回目)。以前は返事が無く、画面は 10 秒待って
+    //   「届いたか確かめられませんでした」になっていた (保存していないので、送り直してよい)
+    let refs: Awaited<ReturnType<typeof checkMessageRefs>>;
+    try {
+      // Verify membership
+      const memberCheck = await pool.query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [room_id, socket.user.id]
+      );
+      if (memberCheck.rows.length === 0) return reject('このルームのメンバーではないため送れませんでした');
 
-    // ★ #482 返信先・転送元は指してよい投稿だけ。満たさなければ投稿ごと断る
-    const refs = await checkMessageRefs({ roomId: room_id, userId: socket.user.id, replyTo: reply_to, forwardedFrom: forwarded_from });
+      // ★ #482 返信先・転送元は指してよい投稿だけ。満たさなければ投稿ごと断る
+      refs = await checkMessageRefs({ roomId: room_id, userId: socket.user.id, replyTo: reply_to, forwardedFrom: forwarded_from });
+    } catch (err) {
+      logger.error(`message:send の確認に失敗: user=${socket.user.id} room=${room_id}: ${err instanceof Error ? err.message : String(err)}`);
+      return reject('送れませんでした。もう一度お試しください');
+    }
     if (!refs.ok) {
       logger.warn(`message:send を断りました (#482 ${refs.error}): actor=${socket.user.display_name}(${socket.user.id}) room=${room_id}`);
       return reject(refs.error);

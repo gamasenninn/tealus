@@ -8,6 +8,7 @@ import request from 'supertest';
 import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 import { app, server as appServer } from '../../src/app.mts';
+import { pool } from '../../src/db/pool.mts';
 
 type Ack = { ok: boolean; id?: string; error?: string };
 
@@ -74,5 +75,15 @@ describe('#593 message:send の受け取りの返事', () => {
     s.emit('message:send', { room_id: roomId, content: '古い画面' });
     s.emit('room:join', roomId);
     await expect(Promise.race([got, new Promise((r) => setTimeout(() => r('timeout'), 1500))])).resolves.not.toBe('timeout');
+  });
+
+  // ★ 改善ループ 14 回目: メンバーの確認の DB が失敗すると返事が返らず、画面は 10 秒待って「届いたか確かめられませんでした」になっていた
+  it('★ 送る前の確認で DB が失敗しても、ok: false と理由をすぐ返す', async () => {
+    const s = await connect(a.token);
+    const spy = jest.spyOn(pool, 'query').mockImplementationOnce(() => { throw new Error('DB が落ちています'); });
+    const ack = await send(s, { room_id: roomId, content: 'こんにちは' });
+    spy.mockRestore();
+    expect(ack.ok).toBe(false);
+    expect(ack.error).toContain('送れませんでした');
   });
 });
