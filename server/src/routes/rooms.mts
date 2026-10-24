@@ -129,11 +129,13 @@ router.get('/announcements', async (req, res) => {
 
     // Get read status for current user
     // ★ メンバーなら一覧と同じく「既読位置と入った時刻の新しい方」から (docs/02、改善ループ 12 回目)。
-    //   お知らせはメンバーでない人にも出るので、その人は既読位置だけ (無ければ全部未読) —— 今までどおり
+    //   お知らせはメンバーでない人にも出るので、その人は既読位置とアカウントを作った時刻の新しい方から
+    //   (2026-10-24 小野さん判断。新しく入った社員に過去のお知らせが全部未読で並ばないように)
     const cursorResult = await pool.query<{ room_id: string; last_read_at: Date | null }>(
       `SELECT r.id AS room_id,
-              GREATEST(rc.last_read_at, rm.joined_at) AS last_read_at
+              GREATEST(rc.last_read_at, COALESCE(rm.joined_at, u.created_at)) AS last_read_at
          FROM unnest($1::uuid[]) AS r(id)
+         JOIN users u ON u.id = $2
          LEFT JOIN room_read_cursors rc ON rc.room_id = r.id AND rc.user_id = $2
          LEFT JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2`,
       [roomIds, req.user!.id]

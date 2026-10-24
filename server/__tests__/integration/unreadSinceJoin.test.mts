@@ -99,7 +99,7 @@ describe('既読位置が無いときは、入った時刻から数える', () =
   });
 
   // ★ 改善ループ 12 回目: お知らせの「未読の点」(ホーム) も同じ数え方に。メンバーでない人 (お知らせは全員に出る) は今までどおり
-  it('お知らせの未読の点: メンバーは入った時刻から、メンバーでない人は今までどおり全部', async () => {
+  it('お知らせの未読の点: メンバーは入った時刻から、メンバーでない人はアカウントを作った時刻から', async () => {
     const pool = getTestPool();
     await pool.query('UPDATE rooms SET is_announcement = true WHERE id = $1', [roomId]);
     await pool.query('UPDATE messages SET is_published = true WHERE room_id = $1', [roomId]);
@@ -107,9 +107,11 @@ describe('既読位置が無いときは、入った時刻から数える', () =
     expect(mine.status).toBe(200);
     expect(mine.body.messages.filter((m: { is_unread: boolean }) => m.is_unread)).toHaveLength(2);
 
+    // ★ 2026-10-24: メンバーでない人はアカウントを作った時刻より後のお知らせだけ未読 (新しく入った社員に過去分が全部並ばない)
     const outsider = await createTestUser({ login_id: 'EMP303', display_name: '部屋の外の人' });
+    await pool.query(`UPDATE users SET created_at = '2026-09-20T00:00:00Z' WHERE id = $1`, [outsider.user.id]);
     const theirs = await request(app).get('/api/rooms/announcements').set('Authorization', `Bearer ${outsider.token}`);
-    expect(theirs.body.messages.filter((m: { is_unread: boolean }) => m.is_unread)).toHaveLength(5);
+    expect(theirs.body.messages.filter((m: { is_unread: boolean }) => m.is_unread)).toHaveLength(3);   // 09-30・10-02・10-03
   });
 
   // ★ 改善ループ 13 回目: 「ここから未読」の線も同じ。古い既読位置の次に線を出すと、いない間の便が未読に見える
