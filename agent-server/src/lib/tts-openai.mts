@@ -86,8 +86,17 @@ export async function synthesizeOpenai(
   if (chunks.length === 1) return one(text);
 
   // ★ 長い文: 分けて並行 → 元の順でつなぐ。★★ 1 つでも失敗したら throw (欠けた音声を返さない)
+  // ★ 失敗したかけらだけ 1 回やり直す (改善ループ 15 回目。250 字で分けて本数が増え、1 本の 429・時間切れで全体が落ちやすくなった)
+  const oneWithRetry = async (t: string) => {
+    try {
+      return await one(t);
+    } catch (err) {
+      logger.warn(`[TTS/openai] かけらの合成に失敗、1 回やり直します: ${err instanceof Error ? err.message : String(err)}`);
+      return one(t);
+    }
+  };
   const t0 = Date.now();
-  const parts = await mapLimited(chunks, MAX_PARALLEL, one);
+  const parts = await mapLimited(chunks, MAX_PARALLEL, oneWithRetry);
   const buffer = concatWav(parts.map((p) => p.buffer));
   logger.info(`[TTS/openai] ${text.length} 字を ${chunks.length} 分割・同時 ${MAX_PARALLEL} 本で合成 (${Date.now() - t0}ms)`);
   return { buffer, contentType: 'audio/wav' };

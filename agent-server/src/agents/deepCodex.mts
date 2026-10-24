@@ -271,6 +271,7 @@ export function buildCodexExecEnv({ codexHomePath, openaiApiKey, useSubscription
 
 type CodexEventLike = {
   type?: string; message?: string; error?: { message?: string } | null;
+  usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number; reasoning_output_tokens?: number };
   item?: { type?: string; text?: string; server?: string; tool?: string; status?: string; error?: { message?: string } | null };
 };
 
@@ -295,6 +296,11 @@ export function unexpectedStderr(stderr: string): string {
 export function describeCodexEvent(event: CodexEventLike | null | undefined): { level: 'info' | 'warn'; line: string } | null {
   if (!event || typeof event !== 'object') return null;
   if (event.type === 'error') return { level: 'warn', line: `[DeepCodex] error: ${String(event.message ?? JSON.stringify(event)).slice(0, 300)}` };
+  // ★ 使用量 (改善ループ 15 回目。以前は記録しておらず、Deep の費用が言えなかった)
+  if (event.type === 'turn.completed') {
+    const u = event.usage ?? {};
+    return { level: 'info', line: `[DeepCodex] turn completed, usage: input=${u.input_tokens} cached=${u.cached_input_tokens ?? '-'} output=${u.output_tokens} reasoning=${u.reasoning_output_tokens ?? '-'}` };
+  }
   if (event.type === 'turn.failed') return { level: 'warn', line: `[DeepCodex] turn.failed: ${String(event.error?.message ?? JSON.stringify(event)).slice(0, 300)}` };
   const it = event.item;
   if (event.type === 'item.completed' && it?.type === 'mcp_tool_call') {

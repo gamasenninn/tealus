@@ -127,8 +127,24 @@ export function describeToolCall(item: ToolCallLike): { level: 'info' | 'warn'; 
   if (result?.isError || /^\s*エラー/.test(firstText)) {
     return { level: 'warn', line: `[LightV2] mcp_tool_call TOOL_ERROR: server=${server} tool=${tool} status=${status} text=${firstText.slice(0, 200)}` };
   }
-  const resultPreview = item.result ? JSON.stringify(item.result).slice(0, 200) : '(no result)';
-  return { level: 'info', line: `[LightV2] mcp_tool_call OK: server=${server} tool=${tool} status=${status} result=${resultPreview}` };
+  const json = item.result ? JSON.stringify(item.result) : '';
+  const resultPreview = json ? json.slice(0, 200) : '(no result)';
+  // ★ 結果の大きさを残す (改善ループ 15 回目)。毎段の入力に積まれるので、費用の主な出どころを後から言えるように
+  return { level: 'info', line: `[LightV2] mcp_tool_call OK: server=${server} tool=${tool} status=${status} bytes=${Buffer.byteLength(json)} result=${resultPreview}` };
+}
+
+/**
+ * ★ 1 便の使用量の 1 行 (改善ループ 15 回目)。以前は input / output だけで、キャッシュが効いた分 (cached) と考えた分 (reasoning) を捨てていた
+ *   → 前置きを減らす価値があるかを言えなかった。★ input は便の中の全段の合計 (codex-sdk の turn.completed)
+ * ★ 100 万を超えた便は warn (10-17 に 1 便 270 万。道具が付く前に AI がシェルで探し回った)
+ */
+export const LIGHTV2_USAGE_WARN_TOKENS = 1_000_000;
+export function lightV2UsageLine(usage: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number; reasoning_output_tokens?: number } | undefined): { level: 'info' | 'warn'; line: string } {
+  const u = usage ?? {};
+  const base = `[LightV2] turn completed, usage: input=${u.input_tokens} cached=${u.cached_input_tokens ?? '-'} output=${u.output_tokens} reasoning=${u.reasoning_output_tokens ?? '-'}`;
+  return (u.input_tokens ?? 0) > LIGHTV2_USAGE_WARN_TOKENS
+    ? { level: 'warn', line: `${base} ★ 1 便で ${LIGHTV2_USAGE_WARN_TOKENS.toLocaleString()} を超えた` }
+    : { level: 'info', line: base };
 }
 
 export function buildLightV2CodexOptions(mcp_servers: Record<string, CodexConfigObject>): CodexOptions {
@@ -427,7 +443,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
             }
           } else if (event.type === 'turn.completed') {
             turnCompleted = true;
-            logger.info(`[LightV2] turn completed, usage: input=${event.usage?.input_tokens} output=${event.usage?.output_tokens}`);
+            { const u = lightV2UsageLine(event.usage); logger[u.level](u.line); }
           } else if (event.type === 'turn.failed') {
             logger.error(`[LightV2] turn failed: ${event.error?.message || 'unknown'}`);
           } else if (event.type === 'error') {

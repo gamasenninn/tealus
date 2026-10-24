@@ -17,13 +17,36 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-test('src の new OpenAI({...}) はすべて timeout と maxRetries を持つ', () => {
+/** `new OpenAI(` から対応する `)` までを取り出す (★ 引数に入れ子の {} があっても途中で切らない、改善ループ 15 回目) */
+function callsOf(src: string): string[] {
+  const out: string[] = [];
+  let i = src.indexOf('new OpenAI(');
+  while (i >= 0) {
+    let depth = 0;
+    let j = i + 'new OpenAI'.length;
+    for (; j < src.length; j++) {
+      if (src[j] === '(') depth++;
+      else if (src[j] === ')' && --depth === 0) break;
+    }
+    out.push(src.slice(i, j + 1));
+    i = src.indexOf('new OpenAI(', j);
+  }
+  return out;
+}
+
+test('src の new OpenAI(...) はすべて timeout と maxRetries を持つ', () => {
   const offenders: string[] = [];
   for (const f of walk(SRC)) {
-    const s = fs.readFileSync(f, 'utf8');
-    for (const m of s.matchAll(/new OpenAI\(\{([^}]*)\}\)/g)) {
-      if (!/timeout\s*:/.test(m[1]) || !/maxRetries\s*:/.test(m[1])) offenders.push(`${path.relative(SRC, f)}: ${m[0]}`);
+    for (const call of callsOf(fs.readFileSync(f, 'utf8'))) {
+      if (!/timeout\s*:/.test(call) || !/maxRetries\s*:/.test(call)) offenders.push(`${path.relative(SRC, f)}: ${call}`);
     }
   }
   expect(offenders).toEqual([]);
+});
+
+// ★ 改善ループ 15 回目: Light v1 のモデル呼び出しは Agents SDK の run() で、SDK は自分の既定クライアントを使う。
+//   light.mts で作った時間切れつきの openai は、渡さないと効かない (10-24 に付けた 2 分が効いていなかった)
+test('Light v1 は時間切れつきのクライアントを Agents SDK の既定にする', () => {
+  const src = fs.readFileSync(path.join(SRC, 'agents', 'light.mts'), 'utf8');
+  expect(src).toMatch(/setDefaultOpenAIClient\(openai[ )]/);
 });

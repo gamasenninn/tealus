@@ -451,3 +451,12 @@ describe('unexpectedStderr (10-16)', () => {
     expect(unexpectedStderr([...expected, 'ERROR mcp startup failed: tealus'].join('\n'))).toBe('ERROR mcp startup failed: tealus');
   });
 });
+
+// ★ 改善ループ 15 回目: Deep は使用量を記録していなかった (次に動いたとき、費用が言えない)
+describe('describeCodexEvent — 使用量', () => {
+  const { describeCodexEvent } = require('../../src/agents/deepCodex.mts') as typeof import('../../src/agents/deepCodex.mts');
+  it('turn.completed の usage を 1 行に残す (cached・reasoning も)', () => {
+    const r = describeCodexEvent({ type: 'turn.completed', usage: { input_tokens: 50000, cached_input_tokens: 40000, output_tokens: 900, reasoning_output_tokens: 200 } } as never);
+    expect(r).toEqual({ level: 'info', line: '[DeepCodex] turn completed, usage: input=50000 cached=40000 output=900 reasoning=200' });
+  });
+});

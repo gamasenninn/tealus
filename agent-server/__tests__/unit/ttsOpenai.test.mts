@@ -154,3 +154,21 @@ test('★ 読み上げの上限 (500 字) の文は、分けて並行に送る (
   await synthesizeOpenai(text, { apiKey: 'k', fetchImpl: f as never });
   expect(f.mock.calls.length).toBeGreaterThanOrEqual(2);
 });
+
+// ★ 改善ループ 15 回目: 250 字で分けて本数が増えた分、1 本の 429・時間切れで全体が端末の読み上げに落ちやすくなる。
+//   分けた分は、失敗したかけらだけ 1 回やり直す (2 回目も失敗したら今までどおり全体を失敗に)
+test('★ 分けたかけらが 1 回失敗しても、そのかけらだけやり直してつなぐ', async () => {
+  const ok = perInputFetch(true);
+  let failed = false;
+  const flaky = jest.fn(async (url: string, init: { body: string }) => {
+    if (!failed && JSON.parse(init.body).input.startsWith('二')) {
+      failed = true;
+      return { ok: false, status: 429, headers: { get: () => null }, text: async () => 'rate limited', arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    return ok(url, init);
+  });
+  const text = '一'.repeat(240) + '。' + '二'.repeat(240) + '。';
+  const got = await synthesizeOpenai(text, { apiKey: 'k', fetchImpl: flaky as never });
+  expect(got.buffer.subarray(44).toString()).toBe('一二');
+  expect(flaky.mock.calls.length).toBe(3);
+});

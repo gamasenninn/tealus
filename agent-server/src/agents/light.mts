@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { Agent, run, codeInterpreterTool, type MCPServer } from '@openai/agents';
+import { Agent, run, codeInterpreterTool, setDefaultOpenAIClient, type MCPServer } from '@openai/agents';
 import OpenAI from 'openai';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
@@ -21,6 +21,9 @@ import { briefError } from '../lib/briefError.mts';
 
 // ★ 2 分・やり直し 1 回 (改善ループ 14 回目。本体の文字起こし・整形と同じ。SDK の既定は 10 分 × やり直し 2 回)
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, timeout: 120_000, maxRetries: 1 });
+// ★ モデルの呼び出し (run()) は Agents SDK の既定クライアントを使うので、これを既定にしないと時間切れが効かない (改善ループ 15 回目)
+//   ★ Agents SDK は自分の openai (別の版) を持つので型が合わない。実行時の形 (responses / chat) は同じなので型だけ合わせる
+setDefaultOpenAIClient(openai as unknown as Parameters<typeof setDefaultOpenAIClient>[0]);
 
 // ★ #439 Step 5: loadSystemPrompt は lib/systemPrompt.mts へ移した。
 //   light.mts と lightV2.mts に **バイト単位で同じ実装**が 2 つあった (定数も同じ)。
