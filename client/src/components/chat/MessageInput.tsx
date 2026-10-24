@@ -426,6 +426,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
         setUploadProgress(progress);
       }, replyTo?.id);
       clearReplyTo();
+      collapse();   // #513 送ったら畳む (★ 2026-10-24 まで音声だけ抜けていて、返信を押して音声で返すと入力欄が残っていた)
       // Re-fetch messages and scroll to bottom
       await useMessageStore.getState().fetchMessages(roomId);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));

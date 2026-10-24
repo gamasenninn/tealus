@@ -14,7 +14,14 @@ vi.mock('../../src/services/api', () => ({ api: {
   getPromptHistory: vi.fn().mockResolvedValue({ items: [], target_counts: {} }),
   getMessages: vi.fn().mockResolvedValue({ messages: [] }),
   request: vi.fn().mockResolvedValue({}),
+  uploadVoice: vi.fn().mockResolvedValue({}),
 } }));
+// 録音パネルは「送信」を押すだけの代役にする (録音そのものはここでは試さない)
+vi.mock('../../src/components/chat/VoiceRecorder', () => ({
+  default: ({ onSend }: { onSend: (b: Blob, t: string) => void }) => (
+    <button data-testid="voice-send-stub" onClick={() => onSend(new Blob(['x']), 'audio/webm')}>送信</button>
+  ),
+}));
 vi.mock('../../src/services/socket', () => ({ getSocket: () => ({ emit: vi.fn() }) }));
 vi.mock('../../src/stores/agentStore', () => ({
   useAgentStore: () => ({ assistantUserId: null, assistantName: null, fetchIdentity: vi.fn() }),
@@ -80,6 +87,21 @@ describe('MessageInput — 畳める入力欄 (#513)', () => {
     expect(sendRoomMessage).toHaveBeenCalledWith(expect.objectContaining({ roomId: 'r1', content: '送ります' }));
     expect(textarea()).toBeNull();
     expect(bar().textContent).not.toContain('下書き');
+  });
+
+  // ★ 2026-10-24 小野さんの指摘: 返信を押して音声で返すと、広がった入力欄が残っていた (文字・スタンプは畳んでいた)
+  it('★★ 返信を押して音声で返したら、文字と同じく畳む', async () => {
+    Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: vi.fn().mockResolvedValue({ getAudioTracks: () => [], getTracks: () => [] }) },
+      configurable: true,
+    });
+    render(<MessageInput roomId="r1" collapsible />);
+    act(() => { useMessageStore.getState().setReplyTo({ id: 'm1', sender_display_name: 'A', content: 'x' } as never); });
+    await waitFor(() => expect(textarea()).not.toBeNull());
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: '音声で送る' })[0]); });
+    await act(async () => { fireEvent.click(await screen.findByTestId('voice-send-stub')); });
+    await waitFor(() => expect(textarea()).toBeNull());
   });
 
   it('★★ 返信先が付いたら自動で広げる (返信・「エージェントに送る」はどちらも返信先を付ける)', async () => {
