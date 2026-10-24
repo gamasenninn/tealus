@@ -88,7 +88,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     disconnectSocket();
     clearRoomViewCache();   // ★ #600 同じ画面で別の人がログインしても、前の人の会話を先に出さない
     // ★ 部屋の一覧と開いていた部屋も捨てる (改善ループ 15 回目。次の人のログイン直後に前の人の一覧が一瞬出ていた)
-    useRoomStore.setState({ rooms: [], currentRoom: null, members: [], lastReadMessageId: null });
+    useRoomStore.getState().reset();   // ★ 走っている取り直しの応答も捨てる (改善ループ 16 回目)
     set({ user: null, token: null });
   },
 

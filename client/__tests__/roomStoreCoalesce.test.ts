@@ -43,3 +43,18 @@ describe('fetchRooms — 走っている間の呼び出しはまとめる', () =
     expect(useRoomStore.getState().rooms).toEqual([{ id: 'ok' }]);
   });
 });
+
+// ★ 改善ループ 16 回目: ログアウトで一覧を消しても、その前に飛んでいた取り直しが返ると前の人の一覧が戻った
+describe('reset — ログアウトの後に返った古い応答は捨てる', () => {
+  beforeEach(() => { getRooms.mockReset(); useRoomStore.setState({ rooms: [] }); });
+
+  it('★ 取り直しの途中で reset したら、返ってきた一覧を入れない', async () => {
+    let resolve: (v: unknown) => void = () => {};
+    getRooms.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const p = useRoomStore.getState().fetchRooms();
+    useRoomStore.getState().reset();
+    resolve({ rooms: [{ id: '前の人の部屋' }] });
+    await p;
+    expect(useRoomStore.getState().rooms).toEqual([]);
+  });
+});

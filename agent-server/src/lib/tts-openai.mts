@@ -37,6 +37,8 @@ export const DEFAULT_FORMAT = 'wav';
 //   2 本以上に分けて並行に送る (250 字で約 7 秒)
 export const MAX_CHUNK_CHARS = 250;
 export const MAX_PARALLEL = 5;
+/** 429 (回数の上限) のやり直しの前に置く時間 */
+export const RETRY_429_WAIT_MS = 1500;
 
 /** response_format → Content-Type (★ 応答ヘッダが無いときの保険) */
 const FORMAT_TO_MIME: Record<string, string> = {
@@ -87,11 +89,17 @@ export async function synthesizeOpenai(
 
   // ★ 長い文: 分けて並行 → 元の順でつなぐ。★★ 1 つでも失敗したら throw (欠けた音声を返さない)
   // ★ 失敗したかけらだけ 1 回やり直す (改善ループ 15 回目。250 字で分けて本数が増え、1 本の 429・時間切れで全体が落ちやすくなった)
+  // ★★ やり直すのは相手が答えた失敗 (429・5xx) だけ (改善ループ 16 回目)。時間切れをやり直すと、画面は 60 秒で
+  //    諦めているので届かず、費用だけ倍になる。429 は少し置いてから
   const oneWithRetry = async (t: string) => {
     try {
       return await one(t);
     } catch (err) {
-      logger.warn(`[TTS/openai] かけらの合成に失敗、1 回やり直します: ${err instanceof Error ? err.message : String(err)}`);
+      const e = err as { name?: string; message?: string };
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw err;
+      const msg = e?.message ?? String(err);
+      logger.warn(`[TTS/openai] かけらの合成に失敗、1 回やり直します: ${msg}`);
+      if (/error 429/.test(msg)) await new Promise((r) => setTimeout(r, RETRY_429_WAIT_MS));
       return one(t);
     }
   };

@@ -22,7 +22,9 @@ import { briefError } from '../lib/briefError.mts';
 // ★ 2 分・やり直し 1 回 (改善ループ 14 回目。本体の文字起こし・整形と同じ。SDK の既定は 10 分 × やり直し 2 回)
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, timeout: 120_000, maxRetries: 1 });
 // ★ モデルの呼び出し (run()) は Agents SDK の既定クライアントを使うので、これを既定にしないと時間切れが効かない (改善ループ 15 回目)
-//   ★ Agents SDK は自分の openai (別の版) を持つので型が合わない。実行時の形 (responses / chat) は同じなので型だけ合わせる
+//   ★ 実行時は同じ openai (6.34、1 本だけ) だが、SDK の型は別の宣言の経路を通るので型だけ合わせる (改善ループ 16 回目に記述を直した)
+//   ★★ SDK は最初の run() で既定のクライアントを掴んで以後固定する。この行は run() より前に読まれている必要がある
+//      (今は dispatcher → lightBackendLoader で起動時に読まれる)。light.mts を遅れて読み込む形にすると黙って既定に戻る
 setDefaultOpenAIClient(openai as unknown as Parameters<typeof setDefaultOpenAIClient>[0]);
 
 // ★ #439 Step 5: loadSystemPrompt は lib/systemPrompt.mts へ移した。

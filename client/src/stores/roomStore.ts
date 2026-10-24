@@ -14,6 +14,8 @@ interface RoomState {
   lastReadMessageId: string | null;
   error: string | null;
   fetchRooms: () => Promise<void>;
+  /** ★ ログアウトで一覧・開いていた部屋を捨てる。走っている取り直しの応答も捨てる (改善ループ 16 回目) */
+  reset: () => void;
   selectRoom: (roomId: string) => Promise<void>;
   /** #489 開いている部屋の情報とメンバーだけを取り直す (既読の位置は動かさない)。別の部屋なら何もしない */
   refreshRoom: (roomId: string) => Promise<void>;
@@ -25,6 +27,8 @@ interface RoomState {
 
 let roomsInflight: Promise<void> | null = null;
 let roomsAgain = false;
+/** reset のたびに進める。取り直しの応答は、出したときと同じ世代のときだけ入れる */
+let roomsGeneration = 0;
 
 export const useRoomStore = create<RoomState>()((set, get) => ({
   rooms: [],
@@ -32,6 +36,13 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
   members: [],
   lastReadMessageId: null,
   error: null,
+
+  reset: () => {
+    roomsGeneration++;
+    roomsAgain = false;
+    set({ rooms: [], currentRoom: null, members: [], lastReadMessageId: null, error: null });
+    syncBadgeFromRooms([]);
+  },
 
   fetchRooms: () => {
     // ★ 走っている間に来た呼び出しはまとめ、終わった後に 1 回だけ取り直す (改善ループ 14 回目)。
@@ -41,12 +52,15 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
     roomsInflight = (async () => {
       do {
         roomsAgain = false;
+        const gen = roomsGeneration;
         try {
           const data = await api.getRooms();
+          if (gen !== roomsGeneration) return;   // ★ 途中でログアウトした = 前の人の一覧なので捨てる
           set({ rooms: data.rooms, error: null });
           // PWA App Badge を foreground でも自動 sync (#badge SPIKE、5/12)
           syncBadgeFromRooms(data.rooms);
         } catch {
+          if (gen !== roomsGeneration) return;
           set({ error: 'ルーム一覧の取得に失敗しました' });
         }
       } while (roomsAgain);

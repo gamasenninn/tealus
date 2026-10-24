@@ -172,3 +172,17 @@ test('★ 分けたかけらが 1 回失敗しても、そのかけらだけや�
   expect(got.buffer.subarray(44).toString()).toBe('一二');
   expect(flaky.mock.calls.length).toBe(3);
 });
+
+// ★ 改善ループ 16 回目: 時間切れのかけらをやり直すと、画面 (60 秒で諦める) には届かず費用だけ倍になる。
+//   やり直すのは相手が答えた失敗 (429・5xx) だけ。時間切れはやり直さない
+test('★ 時間切れのかけらはやり直さない', async () => {
+  const ok = perInputFetch(true);
+  const f = jest.fn(async (url: string, init: { body: string; signal?: AbortSignal }) => {
+    if (JSON.parse(init.body).input.startsWith('二')) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    return ok(url, init);
+  });
+  const text = '一'.repeat(240) + '。' + '二'.repeat(240) + '。';
+  await expect(synthesizeOpenai(text, { apiKey: 'k', fetchImpl: f as never })).rejects.toThrow();
+  expect(f.mock.calls.filter((c) => JSON.parse((c[1] as { body: string }).body).input.startsWith('二'))).toHaveLength(1);
+});
+
