@@ -22,6 +22,7 @@ jest.mock('@openai/agents', () => {
     run: jest.fn(),
     tool: jest.fn((opts: { name: string }) => ({ name: opts.name, _type: 'tool' })),
     codeInterpreterTool: jest.fn(() => ({ name: 'code_interpreter', _type: 'tool' })),
+    setDefaultOpenAIClient: jest.fn(),   // ★ light.mts が読み込み時に呼ぶ (改善ループ 15 回目)
   };
 });
 
