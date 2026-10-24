@@ -19,7 +19,8 @@ import { getSetting } from '../context/settingsManager.mts';
 import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
 
-const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
+// ★ 2 分・やり直し 1 回 (改善ループ 14 回目。本体の文字起こし・整形と同じ。SDK の既定は 10 分 × やり直し 2 回)
+const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, timeout: 120_000, maxRetries: 1 });
 
 // ★ #439 Step 5: loadSystemPrompt は lib/systemPrompt.mts へ移した。
 //   light.mts と lightV2.mts に **バイト単位で同じ実装**が 2 つあった (定数も同じ)。

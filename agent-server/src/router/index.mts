@@ -14,7 +14,8 @@ interface RouteResult {
   provider?: string;
 }
 
-const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
+// ★ 振り分けは短い判定なので 30 秒・やり直し 1 回 (改善ループ 14 回目。SDK の既定は 10 分 × やり直し 2 回)
+const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 });
 
 // 挨拶パターン
 const GREETING_PATTERNS: Array<{ pattern: RegExp; response: string }> = [

@@ -227,7 +227,7 @@ export async function runProbeChecks(env: DoctorEnv): Promise<Finding[]> {
   const needsApi = PROBE_ROUTES.some((r) => r.usesApiKey(env));
   if (needsApi && env.OPENAI_API_KEY) {
     try {
-      const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+      const client = new OpenAI({ apiKey: env.OPENAI_API_KEY, timeout: 15_000, maxRetries: 0 });   // 点検なので待たない
       const list = await client.models.list();
       available = new Set(list.data.map((m) => m.id));
     } catch (err) {
