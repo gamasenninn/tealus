@@ -23,6 +23,9 @@ interface RoomState {
   updateRoomInList: (roomId: string, updates: Partial<Room>) => void;
 }
 
+let roomsInflight: Promise<void> | null = null;
+let roomsAgain = false;
+
 export const useRoomStore = create<RoomState>()((set, get) => ({
   rooms: [],
   currentRoom: null,
@@ -30,15 +33,25 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
   lastReadMessageId: null,
   error: null,
 
-  fetchRooms: async () => {
-    try {
-      const data = await api.getRooms();
-      set({ rooms: data.rooms, error: null });
-      // PWA App Badge を foreground でも自動 sync (#badge SPIKE、5/12)
-      syncBadgeFromRooms(data.rooms);
-    } catch {
-      set({ error: 'ルーム一覧の取得に失敗しました' });
-    }
+  fetchRooms: () => {
+    // ★ 走っている間に来た呼び出しはまとめ、終わった後に 1 回だけ取り直す (改善ループ 14 回目)。
+    //   部屋を開く 1 操作で 2〜3 本重なっていた (既読の後・socket の知らせ・一覧の画面)。
+    //   まとめた人も「呼んだ後の状態」を受け取れるよう、取り直しが終わってから解決する
+    if (roomsInflight) { roomsAgain = true; return roomsInflight; }
+    roomsInflight = (async () => {
+      do {
+        roomsAgain = false;
+        try {
+          const data = await api.getRooms();
+          set({ rooms: data.rooms, error: null });
+          // PWA App Badge を foreground でも自動 sync (#badge SPIKE、5/12)
+          syncBadgeFromRooms(data.rooms);
+        } catch {
+          set({ error: 'ルーム一覧の取得に失敗しました' });
+        }
+      } while (roomsAgain);
+    })().finally(() => { roomsInflight = null; });
+    return roomsInflight;
   },
 
   selectRoom: async (roomId) => {
