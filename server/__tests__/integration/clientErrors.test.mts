@@ -100,4 +100,11 @@ describe('POST /api/client-errors', () => {
     expect(res.status).toBe(204);
     expect(logged()).toEqual([]);
   });
+
+  it('★ 巡回からの報告は回数制限の数に入れない (正規の報告を 429 にしない)', async () => {
+    const bot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+    for (let i = 0; i < 40; i++) await request(app).post('/api/client-errors').set('User-Agent', bot).send(valid);
+    const res = await request(app).post('/api/client-errors').send(valid);
+    expect(res.status).toBe(204);
+  });
 });

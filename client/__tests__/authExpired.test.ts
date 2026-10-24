@@ -42,6 +42,16 @@ describe('認証が切れたとき (#539)', () => {
     await useAuthStore.getState().logout();
     expect(cache.getCachedMessages('r1')).toBeUndefined();
   });
+
+  // ★ 改善ループ 15 回目: 部屋の一覧と開いていた部屋は残っていた (次の人のログイン直後、前の人の一覧が一瞬出る)
+  it('★ ログアウトで、部屋の一覧と開いていた部屋も捨てる', async () => {
+    const { useRoomStore } = await import('../src/stores/roomStore');
+    useRoomStore.setState({ rooms: [{ id: 'r1' }] as never, currentRoom: { id: 'r1' } as never, members: [{ user_id: 'u1' }] as never });
+    await useAuthStore.getState().logout();
+    expect(useRoomStore.getState().rooms).toEqual([]);
+    expect(useRoomStore.getState().currentRoom).toBeNull();
+    expect(useRoomStore.getState().members).toEqual([]);
+  });
 });
 
 describe('ログイン (#600 監査 B)', () => {

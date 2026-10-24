@@ -205,7 +205,14 @@ export function registerCallHandler(socket: Socket, io: Server): void {
     // ★ null が例外になっていた (2026-10-01)
     const roomId = data?.roomId as string;
     // ★ #483 メンバーである部屋だけ答える (以前はどの部屋でも、通話中か・何人かを答えていた)
-    if (!isUuid(roomId) || !(await isRoomMember(roomId, socket.user.id))) return;
+    if (!isUuid(roomId)) return;
+    // ★ DB が失敗しても未処理の reject にしない (改善ループ 15 回目。read.mts は try の中、ここだけ外だった)
+    try {
+      if (!(await isRoomMember(roomId, socket.user.id))) return;
+    } catch (err) {
+      logger.error(`call:getStatus のメンバー確認に失敗: user=${socket.user.id} room=${roomId}: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
     const call = activeCalls.get(roomId);
     socket.emit('call:status', {
       roomId,

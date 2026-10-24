@@ -63,6 +63,14 @@ router.post('/', (req, res) => {
     return;
   }
 
+  // ★ 検索エンジンの巡回 (Googlebot のレンダラ等) の報告は利用者の障害ではない。warn に積まず debug に (改善ループ 14 回目)。
+  //   ★ 回数制限より前で捨てる (改善ループ 15 回目)。後ろだと、巡回が同じ ip に見えたとき正規の未ログインの報告を 429 にしうる
+  if (CRAWLER_UA.test(String(req.headers['user-agent'] ?? ''))) {
+    logger.debug(`[client-error] 巡回からの報告を捨てた kind=${body.kind} ua=${clip(req.headers['user-agent'], 120)}`);
+    res.status(204).end();
+    return;
+  }
+
   const userId = userIdFrom(req.headers.authorization);
   const key = userId ?? `ip:${req.ip}`;
   const now = Date.now();
@@ -74,13 +82,6 @@ router.post('/', (req, res) => {
     return;
   } else {
     c.n++;
-  }
-
-  // ★ 検索エンジンの巡回 (Googlebot のレンダラ等) の報告は利用者の障害ではない。warn に積まず debug に (改善ループ 14 回目)
-  if (CRAWLER_UA.test(String(req.headers['user-agent'] ?? ''))) {
-    logger.debug(`[client-error] 巡回からの報告を捨てた kind=${body.kind} ua=${clip(req.headers['user-agent'], 120)}`);
-    res.status(204).end();
-    return;
   }
 
   // スタックは先頭の数行 (どこで落ちたか) だけ。画面側が「部品 3 行 + 位置 3 行」で送ってくる

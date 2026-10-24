@@ -32,4 +32,14 @@ describe('fetchRooms — 走っている間の呼び出しはまとめる', () =
     await useRoomStore.getState().fetchRooms();
     expect(getRooms).toHaveBeenCalledTimes(2);
   });
+
+  // ★ 改善ループ 15 回目: 失敗しても「走っている」の印が残らない (残ると、二度と取り直さない)
+  it('★ 取りに行って失敗しても、次の呼び出しはまた取りに行く', async () => {
+    getRooms.mockRejectedValueOnce(new Error('つながっていません')).mockResolvedValueOnce({ rooms: [{ id: 'ok' }] });
+    await useRoomStore.getState().fetchRooms();
+    expect(useRoomStore.getState().error).toBeTruthy();
+    await useRoomStore.getState().fetchRooms();
+    expect(getRooms).toHaveBeenCalledTimes(2);
+    expect(useRoomStore.getState().rooms).toEqual([{ id: 'ok' }]);
+  });
 });
