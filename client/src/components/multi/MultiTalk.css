@@ -70,11 +70,33 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   border: 1px solid var(--border-medium);
   background: white;
+  position: relative;
 }
 
+/* ★ 有効なパネルの印 (2026-10-25 小野さん判断 A+C)。以前は 1px の緑で、部屋の見出しの緑に溶けて見分けられなかった。
+   ・A: 見出しと違うオレンジの太い枠を常に出す
+   ・C: 有効になった瞬間に一度だけ太く光って、細い枠に戻る (.active が付いたときに 1 回走る)
+   ★ 枠は上に重ねる膜で描く (border を太くすると大きさが変わり、中の iframe の上には outline が出ない) */
 .multi-panel.active {
-  box-shadow: 0 4px 20px rgba(0, 180, 160, 0.2);
-  border-color: var(--primary);
+  box-shadow: 0 4px 20px rgba(255, 140, 0, 0.3);
+  border-color: #ff8c00;
+}
+.multi-panel.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid #ff8c00;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 5;
+  animation: multi-panel-activate 0.6s ease-out;
+}
+@keyframes multi-panel-activate {
+  0%   { border-width: 8px; box-shadow: inset 0 0 24px rgba(255, 140, 0, 0.6); }
+  100% { border-width: 3px; box-shadow: inset 0 0 0 rgba(255, 140, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .multi-panel.active::after { animation: none; }
 }
 
 /* ★ #503 帯はつかみとボタンだけの細い帯 (名前は中の見出しに出る。最小化したときだけ帯に出す)。
