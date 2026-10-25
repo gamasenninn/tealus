@@ -287,3 +287,44 @@ describe('MultiTalk — 部屋の改名をパネルの名前に反映', () => {
     expect(container.querySelector('.multi-panel-title')?.textContent).toBe('田中');
   });
 });
+
+/**
+ * ★ 有効なパネルは最前面に出す (2026-10-25 小野さん)。
+ *   パネルの中身は iframe なので、中を押しても親の onMouseDown は呼ばれず、有効にも前面にもならなかった
+ */
+describe('MultiTalk — 有効なパネルを最前面に', () => {
+  const twoPanels = () => localStorage.setItem('multiTalkPanels', JSON.stringify([
+    { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 },
+    { id: 2, roomId: 'r2', roomName: '整備', x: 100, y: 0, width: 400, height: 400 },
+  ]));
+  const zOf = (el: Element) => (el.parentElement as HTMLElement).style.zIndex;
+
+  it('★★ パネルの中 (iframe) を押すと、そのパネルが有効になり最前面に出る', () => {
+    twoPanels();
+    const { container } = renderMulti();
+    const frames = container.querySelectorAll('iframe');
+    fireEvent.load(frames[1]);
+    act(() => { frames[1].contentWindow!.dispatchEvent(new Event('pointerdown')); });
+    const panels = container.querySelectorAll('.multi-panel');
+    expect(panels[1].classList.contains('active')).toBe(true);
+    expect(zOf(panels[1])).toBe('10');
+    expect(zOf(panels[0])).toBe('1');
+
+    fireEvent.load(frames[0]);
+    act(() => { frames[0].contentWindow!.dispatchEvent(new Event('pointerdown')); });
+    expect(panels[0].classList.contains('active')).toBe(true);
+    expect(zOf(panels[0])).toBe('10');
+    expect(zOf(panels[1])).toBe('1');
+  });
+
+  it('★ 左の一覧で開いている部屋を押すと、そのパネルが最前面に出る', () => {
+    const { container } = renderMulti();
+    act(() => { useMultiTalkStore.getState().requestOpen({ id: 'r1', name: '営業' }); });
+    act(() => { useMultiTalkStore.getState().requestOpen({ id: 'r2', name: '整備' }); });
+    act(() => { useMultiTalkStore.getState().requestOpen({ id: 'r1', name: '営業' }); });
+    const panels = container.querySelectorAll('.multi-panel');
+    expect(panels[0].classList.contains('active')).toBe(true);
+    expect(zOf(panels[0])).toBe('10');
+    expect(zOf(panels[1])).toBe('1');
+  });
+});

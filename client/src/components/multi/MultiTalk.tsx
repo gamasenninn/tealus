@@ -316,6 +316,11 @@ function MultiTalk() {
                   className="multi-panel-iframe"
                   src={`/rooms/${panel.roomId}?embed=true`}
                   title={panel.roomName}
+                  // ★ 中を押したら、このパネルを有効にして最前面へ (2026-10-25)。iframe の中の操作は親の onMouseDown に届かない。
+                  //   同じオリジンなので中の window で拾う。部屋を移るたびに中の window が入れ替わるので、読み込みのたびに付け直す
+                  onLoad={(e) => {
+                    e.currentTarget.contentWindow?.addEventListener('pointerdown', () => setActivePanel(panel.id), true);
+                  }}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: interacting ? 'none' : 'auto' }}
                 />
                 {interacting && <div style={{ position: 'absolute', inset: 0 }} />}
