@@ -12,7 +12,19 @@ export function isWebUrl(value: unknown): boolean {
   }
 }
 
-/** app_urls は { url: http(s) } の配列。空の配列 (全部消す) は通す */
+const optional = (v: unknown, type: 'string' | 'boolean') => v === undefined || v === null || typeof v === type;
+
+/**
+ * app_urls は { url: http(s), title?: 文字, ratio?: 数, auto_open / wake_lock / pass?: true/false } の配列。空の配列 (全部消す) は通す。
+ * ★ 見出し (title) に文字以外が入ると、その部屋を開いた全員の画面が落ちる (セキュリティチェックループ 3 回目)
+ */
 export function isValidAppUrls(value: unknown): boolean {
-  return Array.isArray(value) && value.every(a => a !== null && typeof a === 'object' && isWebUrl((a as { url?: unknown }).url));
+  return Array.isArray(value) && value.every(a => {
+    if (a === null || typeof a !== 'object' || Array.isArray(a)) return false;
+    const o = a as Record<string, unknown>;
+    return isWebUrl(o.url)
+      && optional(o.title, 'string')
+      && (o.ratio === undefined || o.ratio === null || (typeof o.ratio === 'number' && Number.isFinite(o.ratio)))
+      && optional(o.auto_open, 'boolean') && optional(o.wake_lock, 'boolean') && optional(o.pass, 'boolean');
+  });
 }

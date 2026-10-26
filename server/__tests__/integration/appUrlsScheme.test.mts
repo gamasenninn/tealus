@@ -49,6 +49,13 @@ describe('app_urls / portal_links の URL の種類', () => {
     expect((await put([{ title: 'A' }])).status).toBe(400);
   });
 
+  it('★ 見出し・比率・切り替えの型が違うものは 400 (画面が落ちる値を保存しない)', async () => {
+    expect((await put([{ title: { a: 1 }, url: 'https://x.example.com' }])).status).toBe(400);
+    expect((await put([{ title: 'A', url: 'https://x.example.com', ratio: '50' }])).status).toBe(400);
+    expect((await put([{ title: 'A', url: 'https://x.example.com', pass: 'yes' }])).status).toBe(400);
+    expect((await put([{ title: 'A', url: 'https://x.example.com', ratio: 40, pass: true, auto_open: false, wake_lock: true }])).status).toBe(200);
+  });
+
   it('★ 空の配列 (全部消す) は通る', async () => {
     expect((await put([])).status).toBe(200);
   });

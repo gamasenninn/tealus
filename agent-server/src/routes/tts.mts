@@ -55,6 +55,7 @@ router.post('/synthesize', async (req, res) => {
     res.type(contentType).send(buffer);
   } catch (err) {
     logger.error(`[TTS] synthesize error: ${err instanceof Error ? err.message : String(err)}`);
-    res.status(500).json({ error: 'TTS synthesis failed', detail: err instanceof Error ? err.message : String(err) });
+    // ★ 合成エンジンの失敗文は記録にだけ残す (セキュリティチェックループ 3 回目)
+    res.status(500).json({ error: 'TTS synthesis failed' });
   }
 });
