@@ -6,6 +6,10 @@ import type { PushState } from '../../services/pushNotification';
  * #546 この端末にプッシュの宛先が無いとき、タップで登録し直す。
  * ★ iPhone は利用者のタップなしでは宛先を作れない。起動時の自動登録が通らなかった端末の戻し道
  */
+const SLOW_HINT_MS = 8000;
+const SLOW_HINT = '「通知を許可しますか」が出ていなければ、アドレスバーの右の小さなベルの印を押して「許可」してください。'
+  + 'ベルの印が無いときは、アドレスバーの左の印 → サイトの設定 → 通知 → 「許可」にして、画面を読み込み直してからもう一度押してください。';
+
 function PushSubscribeButton() {
   const [state, setState] = useState<PushState | null>(null);
   const [note, setNote] = useState('');
@@ -40,7 +44,10 @@ function PushSubscribeButton() {
   const onClick = async () => {
     setBusy(true);
     setNote('');
+    // ★ 2026-10-26: 答えが返らないまま何も言わずに止まっていた (Chrome が許可の問いを目立たない形にすると、押しても何も出ない)
+    const slow = setTimeout(() => setNote(SLOW_HINT), SLOW_HINT_MS);
     const result = await registerPushNotification();
+    clearTimeout(slow);
     setBusy(false);
     if (result === 'ok') setState('subscribed');
     else if (result === 'denied') setNote('通知が許可されていません。端末の設定で Tealus の通知を許可してから、もう一度押してください。');

@@ -3,7 +3,7 @@
  * ★ iPhone は利用者のタップなしでは宛先を作れない。外れてしまった端末の戻し道がこれまで無かった
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 const getPushState = vi.fn();
 const registerPushNotification = vi.fn();
@@ -60,5 +60,25 @@ describe('PushSubscribeButton (#546)', () => {
     const { container } = render(<PushSubscribeButton />);
     await waitFor(() => expect(getPushState).toHaveBeenCalled());
     expect(container.textContent).toBe('');
+  });
+});
+
+describe('PushSubscribeButton — 答えが返らないとき (2026-10-26 小野さん報告)', () => {
+  beforeEach(() => { getPushState.mockReset(); registerPushNotification.mockReset(); });
+
+  it('★★ 押して 8 秒たっても答えが無ければ、許可の問いの探し方を出す (何も言わずに止まらない)', async () => {
+    getPushState.mockResolvedValue('none');
+    registerPushNotification.mockReturnValue(new Promise(() => {}));   // Chrome が問いを目立たない形にして答えが来ない
+    render(<PushSubscribeButton />);
+    const btn = await screen.findByRole('button', { name: 'この端末で通知を受け取る' });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(btn);
+      expect(screen.queryByText(/ベルの印/)).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+      expect(screen.getByText(/ベルの印/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
