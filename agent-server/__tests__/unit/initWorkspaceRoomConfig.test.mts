@@ -41,10 +41,9 @@ test('★ 既に外の置き場にあれば上書きしない (管理者が編�
   expect(readRoomConfig(ws, 'CLAUDE.md')).toBe('# 管理者の指示');
 });
 
-test('★ 旧 (workspace 内) にあれば、初期化で外へ移して旧は消す', () => {
+test('★ 初期化は workspace 内の旧を読まない (移行は起動の 1 度だけ)。外に既定を書く', () => {
   fs.mkdirSync(ws, { recursive: true });
-  fs.writeFileSync(path.join(ws, 'room_settings.json'), '{"response_mode":"mention","enabled":true}');
+  fs.writeFileSync(path.join(ws, 'room_settings.json'), '{"response_mode":"all","enabled":true}');
   initWorkspace(ws);
-  expect(fs.existsSync(path.join(ws, 'room_settings.json'))).toBe(false);
-  expect(JSON.parse(readRoomConfig(ws, 'room_settings.json')!).response_mode).toBe('mention');
+  expect(JSON.parse(readRoomConfig(ws, 'room_settings.json')!).response_mode).not.toBe('all');
 });

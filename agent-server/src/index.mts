@@ -14,6 +14,10 @@ import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
 import { runDoctor } from './lib/doctor.mts';
 import { startVoiceLogJanitor } from './routes/voiceChat.mts';
+import { migrateAllRoomConfigs } from './lib/roomConfigPaths.mts';
+
+// ★ G-1 (2026-10-27): 部屋の設定を AI の作業場所の外へ移すのは、受け付けを始める前の 1 度だけ
+migrateAllRoomConfigs(config.WORKSPACE_ROOT);
 
 // Start server
 const server = app.listen(config.PORT, async () => {

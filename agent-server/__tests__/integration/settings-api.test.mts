@@ -178,7 +178,7 @@ describe('設定 API 統合テスト', () => {
 
 /**
  * G-1 (2026-10-27) ★★ ルームの設定 4 つの置き場は workspace の外 `<WORKSPACE_ROOT>/_room-configs/<agentId>/<roomId>/`。
- *   workspace (= AI が書ける場所) には書かない・そこからは読まない (旧にしか無ければ 1 度だけ移す)。
+ *   workspace (= AI が書ける場所) には書かない・そこからは読まない (旧からの移行は起動の 1 度だけ)。
  *   WORKSPACE_ROOT は上のモックで os.tmpdir()、agentId は bot-uuid。
  */
 describe('G-1 ルームの設定は workspace の外に置く', () => {
@@ -216,16 +216,14 @@ describe('G-1 ルームの設定は workspace の外に置く', () => {
     expect(s.body.settings.response_mode).toBe('mention');
   });
 
-  test('★ 旧 (workspace 内) にしか無ければ GET で 1 度だけ移し、旧は消す', async () => {
+  test('★ workspace 内の CLAUDE.md は GET でも読まない (移行は起動の 1 度だけ)', async () => {
     const room2 = `${room}-legacy`;
     const ws2 = path.join(ROOT, 'bot-uuid', room2);
     fs.mkdirSync(ws2, { recursive: true });
     fs.writeFileSync(path.join(ws2, 'CLAUDE.md'), '# 旧の指示');
     try {
       const res = await request(app).get(`/config/room/${room2}/claude-md`).set('Authorization', `Bearer ${token}`);
-      expect(res.body.content).toBe('# 旧の指示');
-      expect(fs.existsSync(path.join(ws2, 'CLAUDE.md'))).toBe(false);
-      expect(fs.readFileSync(roomConfigPath(ws2, 'CLAUDE.md'), 'utf8')).toBe('# 旧の指示');
+      expect(res.body.content ?? '').not.toBe('# 旧の指示');
     } finally {
       fs.rmSync(ws2, { recursive: true, force: true });
       fs.rmSync(path.dirname(roomConfigPath(ws2, 'CLAUDE.md')), { recursive: true, force: true });

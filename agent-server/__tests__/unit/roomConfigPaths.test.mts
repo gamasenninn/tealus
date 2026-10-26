@@ -20,6 +20,7 @@ import {
   roomConfigDir,
   roomConfigPath,
   readRoomConfig,
+  migrateAllRoomConfigs,
   writeRoomConfig,
   roomConfigExists,
   readRoomConfigJson,
@@ -91,28 +92,36 @@ describe('読み書き', () => {
   });
 });
 
-describe('★★★ 旧 (workspace 内) からの移行は 1 度だけ', () => {
-  test('新しい置き場に無く、旧にあれば: 読んで移し、旧を消す', () => {
+describe('★★★ 旧 (workspace 内) からの移行は起動のときに 1 度だけ', () => {
+  test('起動の移行: 旧にあって新しい置き場に無ければ移し、旧を消す (どの部屋も)', () => {
     fs.writeFileSync(path.join(ws, 'room_settings.json'), '{"response_mode":"mention"}');
+    fs.writeFileSync(path.join(ws, 'CLAUDE.md'), '# 管理者の指示');
+    expect(migrateAllRoomConfigs(root)).toBe(2);
     expect(readRoomConfig(ws, 'room_settings.json')).toBe('{"response_mode":"mention"}');
-    // 移った
-    expect(fs.readFileSync(roomConfigPath(ws, 'room_settings.json'), 'utf8')).toBe('{"response_mode":"mention"}');
-    // ★ 旧は消えている (AI がそこに書いても次は読まれない)
+    expect(readRoomConfig(ws, 'CLAUDE.md')).toBe('# 管理者の指示');
     expect(fs.existsSync(path.join(ws, 'room_settings.json'))).toBe(false);
+    expect(fs.existsSync(path.join(ws, 'CLAUDE.md'))).toBe(false);
   });
 
-  test('★★ 新しい置き場にあれば、旧 (AI が後から置いたもの) は読まない・消さない・上書きしない', () => {
+  test('★★★ 起動の後に workspace に置かれたもの (AI が書いたかもしれない) は読まない・移さない', () => {
+    migrateAllRoomConfigs(root);
+    fs.writeFileSync(path.join(ws, 'room_settings.json'), '{"response_mode":"all"}');
+    fs.writeFileSync(path.join(ws, 'mcp_config.json'), '{"mcpServers":{"evil":{"command":"x"}}}');
+    expect(readRoomConfig(ws, 'room_settings.json')).toBeNull();
+    expect(roomConfigExists(ws, 'mcp_config.json')).toBe(false);
+  });
+
+  test('★★ 新しい置き場にあれば、旧は移さない (読まれないまま)', () => {
     writeRoomConfig(ws, 'light_prompt.md', '管理者の指示');
     fs.writeFileSync(path.join(ws, 'light_prompt.md'), 'AI が書いた指示');
+    expect(migrateAllRoomConfigs(root)).toBe(0);
     expect(readRoomConfig(ws, 'light_prompt.md')).toBe('管理者の指示');
-    expect(fs.readFileSync(roomConfigPath(ws, 'light_prompt.md'), 'utf8')).toBe('管理者の指示');
   });
 
-  test('★ 存在の確認 (exists) でも移行は走る (読む前に exists で分岐する呼び出し側がある)', () => {
-    fs.writeFileSync(path.join(ws, 'mcp_config.json'), '{"mcpServers":{}}');
-    expect(roomConfigExists(ws, 'mcp_config.json')).toBe(true);
-    expect(fs.existsSync(roomConfigPath(ws, 'mcp_config.json'))).toBe(true);
-    expect(fs.existsSync(path.join(ws, 'mcp_config.json'))).toBe(false);
+  test('`_` で始まる置き場 (_room-configs など) は見ない / 根が無くても落ちない', () => {
+    expect(() => migrateAllRoomConfigs(path.join(root, 'no-such'))).not.toThrow();
+    writeRoomConfig(ws, 'CLAUDE.md', 'x');
+    expect(migrateAllRoomConfigs(root)).toBe(0);
   });
 
   test('workspace 自体が無くても落ちない', () => {

@@ -398,13 +398,11 @@ describe('G-1 ルームの設定は workspace の外から読む', () => {
     expect(c.mcpServers.evil).toBeUndefined();
   });
 
-  test('★ 旧 (workspace 内) にしか無ければ 1 度だけ移して使い、旧は消す', () => {
+  test('★★ workspace 内の mcp_config.json は読まない (AI が書ける場所。移行は起動の 1 度だけ)', () => {
     fsx.writeFileSync(pathx.join(workspacePath, 'mcp_config.json'), JSON.stringify({ mcpServers: { legacy: { command: 'npx', args: ['x'] } } }));
     const p = createDeepMcpConfig(workspacePath, 'room-1');
     const c = JSON.parse(fsx.readFileSync(p, 'utf8')) as { mcpServers: Record<string, unknown> };
-    expect(c.mcpServers.legacy).toBeDefined();
-    expect(fsx.existsSync(roomConfigPath(workspacePath, 'mcp_config.json'))).toBe(true);
-    expect(fsx.existsSync(pathx.join(workspacePath, 'mcp_config.json'))).toBe(false);
+    expect(c.mcpServers.legacy).toBeUndefined();
   });
 
   test('★★ ルームの CLAUDE.md は外の置き場から --append-system-prompt-file で明示的に渡す (cwd の自動読み込みに頼らない)', () => {

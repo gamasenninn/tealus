@@ -11,9 +11,9 @@
  *   `<WORKSPACE_ROOT>/_room-configs/<agentId>/<roomId>/<file>`
  *   (workspacePath = `<WORKSPACE_ROOT>/<agentId>/<roomId>` から 2 つ上が WORKSPACE_ROOT。deepMcpConfigPath と同じ約束)
  *
- * ★★★ 読み: 新しい置き場が先。無ければ旧 (workspace 内) を **1 度だけ**読んで移し、**旧は消す**。
- *   残すと「AI がそこに書いたもの」が次に読まれる理由になる (#419 の「古いものを消す」と同じ)。
- *   新しい置き場に既にあれば、旧に何があっても読まない・消さない (AI が後から置いたものかもしれない)。
+ * ★★★ 読み: 新しい置き場だけ。旧 (workspace 内) からの移行は**起動のときに 1 度だけ** (migrateAllRoomConfigs)。
+ *   ★ 読むたびに「無ければ旧から移す」にすると、設定の無い部屋で AI が workspace に置いたファイルが
+ *   次の読みで移されて効いてしまう (= 塞いだ穴がそのまま残る)。起動の後に workspace に現れたものは読まない
  * ★ 書き: 新しい置き場だけ。
  *
  * ★ これは「filesystem MCP の root の外・cwd の外」という置き方で守る。Deep は sandbox 無しで走るので
@@ -48,37 +48,49 @@ function legacyPath(workspacePath: string, file: RoomConfigFile): string {
 }
 
 /**
- * 旧 (workspace 内) にあって新しい置き場に無ければ移す (1 度だけ)。
- * @returns 移したら true
+ * 起動のときに 1 度だけ、すべての部屋の旧 (workspace 内) の設定を外へ移す。
+ * - `<root>/<agentId>/<roomId>/<file>` が対象 (`_` で始まる置き場は見ない)
+ * - 新しい置き場に既にあれば移さない (旧は読まれないまま残る)
+ * - 移したら旧は消す
+ * @returns 移した数
  */
-function migrateIfNeeded(workspacePath: string, file: RoomConfigFile): boolean {
-  const next = roomConfigPath(workspacePath, file);
-  if (fs.existsSync(next)) return false;
-  const old = legacyPath(workspacePath, file);
-  if (!fs.existsSync(old)) return false;
-  try {
-    const content = fs.readFileSync(old, 'utf8');
-    fs.mkdirSync(path.dirname(next), { recursive: true });
-    fs.writeFileSync(next, content);
-    fs.unlinkSync(old);
-    logger.info(`[room-config] workspace 内の ${file} を外へ移しました (G-1): ${old} → ${next}`);
-    return true;
-  } catch (err) {
-    // ★ 移せなかったときは旧を読まない (読むと AI が書ける場所が効き続ける)。壊れた沈黙にならないよう error で残す
-    logger.error(`[room-config] workspace 内の ${file} を外へ移せませんでした (この設定は効きません): ${old}: ${err instanceof Error ? err.message : String(err)}`);
-    return false;
+export function migrateAllRoomConfigs(workspaceRoot: string): number {
+  let moved = 0;
+  let agents: fs.Dirent[] = [];
+  try { agents = fs.readdirSync(workspaceRoot, { withFileTypes: true }); } catch { return 0; }
+  for (const a of agents) {
+    if (!a.isDirectory() || a.name.startsWith('_')) continue;
+    let rooms: fs.Dirent[] = [];
+    try { rooms = fs.readdirSync(path.join(workspaceRoot, a.name), { withFileTypes: true }); } catch { continue; }
+    for (const r of rooms) {
+      if (!r.isDirectory()) continue;
+      const ws = path.join(workspaceRoot, a.name, r.name);
+      for (const file of ROOM_CONFIG_FILES) {
+        const old = legacyPath(ws, file);
+        const next = roomConfigPath(ws, file);
+        if (!fs.existsSync(old) || fs.existsSync(next)) continue;
+        try {
+          fs.mkdirSync(path.dirname(next), { recursive: true });
+          fs.copyFileSync(old, next);
+          fs.unlinkSync(old);
+          moved++;
+        } catch (err) {
+          logger.error(`[room-config] workspace 内の ${file} を外へ移せませんでした (この設定は効きません): ${old}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
   }
+  if (moved > 0) logger.info(`[room-config] workspace 内の設定 ${moved} 個を外 (${ROOM_CONFIG_DIR_NAME}) へ移しました (G-1)`);
+  return moved;
 }
 
-/** 新しい置き場にあるか (★ 旧にしか無ければ先に移す) */
+/** 新しい置き場にあるか (★ workspace 内は見ない) */
 export function roomConfigExists(workspacePath: string, file: RoomConfigFile): boolean {
-  migrateIfNeeded(workspacePath, file);
   return fs.existsSync(roomConfigPath(workspacePath, file));
 }
 
-/** 中身を読む。無ければ null (★ 旧にしか無ければ先に移す) */
+/** 中身を読む。無ければ null (★ workspace 内は見ない) */
 export function readRoomConfig(workspacePath: string, file: RoomConfigFile): string | null {
-  migrateIfNeeded(workspacePath, file);
   const p = roomConfigPath(workspacePath, file);
   if (!fs.existsSync(p)) return null;
   try {
