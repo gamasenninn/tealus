@@ -205,6 +205,11 @@ jobs:
         working-directory: rtc-server
         run: npm run typecheck
 
+      # ★ 通話・トランシーバーの入口の守り (2026-10-26、D)
+      - name: Test rtc-server (node --test)
+        working-directory: rtc-server
+        run: npm test
+
   cli-test:
     runs-on: ubuntu-latest
     strategy:

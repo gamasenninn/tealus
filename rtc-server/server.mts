@@ -13,6 +13,7 @@ import os from 'node:os';
 import dns from 'node:dns';
 import jwt from 'jsonwebtoken';
 import url from 'node:url';
+import { isLocalUnproxied, checkRoomMember } from './wsAccess.mts';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -226,17 +227,23 @@ function getRoomPeers(roomId: string | null): Room {
 // --- JWT authentication for WebSocket ---
 interface WsAuthUser {
   id: string;
+  /** 本体にメンバーかを聞くときに使う本人の鍵 */
+  token: string;
 }
+
+// ★ D (2026-10-26): 部屋のメンバーかは本体に聞く (rtc-server は DB を持たない)
+const TEALUS_API_URL = process.env.TEALUS_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 
 function authenticateWs(req: http.IncomingMessage): WsAuthUser | null {
   const parsed = url.parse(req.url!, true);
   const token = parsed.query.token;
-  if (!token || !JWT_SECRET) {
-    // 認証なし — クライアント側の peerId を使う
+  if (!token || typeof token !== 'string' || !JWT_SECRET) {
+    // 認証なし — 同じマシンから直接のときだけ、クライアント側の peerId を使う (handleWebSocket)
     return null;
   }
   try {
-    return jwt.verify(token as string, JWT_SECRET) as WsAuthUser;
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+    return { id: decoded.id, token };
   } catch (e) {
     logger.warn("JWT verification failed:", e instanceof Error ? e.message : String(e));
     return null;
@@ -271,8 +278,13 @@ interface ServerMessage {
 
 // --- WebSocket signaling ---
 function handleWebSocket(ws: WebSocket, req: http.IncomingMessage): void {
-  // JWT 認証（token がなければ匿名モード — テスト用）
+  // JWT 認証。★ 鍵が無い・壊れているのは、同じマシンから直接 (古い読み上げの送り) のときだけ通す (D、2026-10-26)
   const user = authenticateWs(req);
+  if (!user && !isLocalUnproxied(req)) {
+    logger.warn(`[WS] 鍵の無い接続を断りました from=${req.socket.remoteAddress}`);
+    ws.close(4401, 'unauthorized');
+    return;
+  }
   let peerId: string | null = user?.id || null;
   let roomId: string | null = null;
 
@@ -297,6 +309,13 @@ function handleWebSocket(ws: WebSocket, req: http.IncomingMessage): void {
     try {
       switch (msg.type) {
         case "join": {
+          // ★ D (2026-10-26): ログインした人は、その部屋のメンバーのときだけ入れる
+          if (user && !(await checkRoomMember(TEALUS_API_URL, user.token, String(msg.roomId ?? '')))) {
+            logger.warn(`[WS] メンバーでない部屋への参加を断りました: ${user.id} -> room ${msg.roomId}`);
+            send(ws, { type: "error", message: "この部屋のメンバーではありません" });
+            ws.close(4403, 'forbidden');
+            return;
+          }
           peerId = peerId || msg.peerId || null;
           roomId = msg.roomId || "default";
           const existingRoom = getRoomPeers(roomId);
