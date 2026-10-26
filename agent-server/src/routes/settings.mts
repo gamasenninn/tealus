@@ -12,6 +12,7 @@ import * as config from '../config.mts';
 import { invalidateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { TTS_ENGINES, TTS_VOICES, resolveRoomTts } from '../lib/ttsRoom.mts';
 import { inactiveAgentSettings } from '../context/settingsEffect.mts';
+import { sendServerError } from '../lib/serverError.mts';
 
 export const router = express.Router();
 
@@ -48,8 +49,7 @@ router.put('/settings', (req, res) => {
     saveSettings(settings);
     res.json({ success: true });
   } catch (err) {
-    logger.error(`Save settings error: ${err instanceof Error ? err.message : String(err)}`);
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -65,7 +65,7 @@ router.get('/mcp', (req, res) => {
       res.json({ mcpConfig: { mcpServers: {} } });
     }
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -81,8 +81,7 @@ router.put('/mcp', (req, res) => {
     fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(mcpConfig, null, 2) + '\n');
     res.json({ success: true });
   } catch (err) {
-    logger.error(`Save MCP config error: ${err instanceof Error ? err.message : String(err)}`);
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -127,7 +126,7 @@ router.get('/env', (req, res) => {
     }
     res.json({ env });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -142,7 +141,7 @@ router.get('/system-prompt', (req, res) => {
     const defaultPrompt = fs.existsSync(defaultPath) ? fs.readFileSync(defaultPath, 'utf8') : '';
     res.json({ custom, default: defaultPrompt, isCustom: !!custom.trim() });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -162,7 +161,7 @@ router.put('/system-prompt', (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -274,7 +273,7 @@ router.get('/rooms', async (req, res) => {
     const rooms = await listAgentRooms(agentId);
     res.json({ rooms });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -301,7 +300,7 @@ router.get('/agent-room-counts', async (req, res) => {
     }
     res.json({ counts });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -310,7 +309,7 @@ router.get('/rooms/:agentId', async (req, res) => {
     const rooms = await listAgentRooms(req.params.agentId);
     res.json({ rooms });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -328,7 +327,7 @@ router.get('/room/:roomId/settings', (req, res) => {
       res.json({ settings: { response_mode: 'auto', enabled: true } });
     }
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -345,7 +344,7 @@ router.put('/room/:roomId/settings', (req, res) => {
     fs.writeFileSync(path.join(ws, 'room_settings.json'), JSON.stringify(settings, null, 2) + '\n');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -360,7 +359,7 @@ router.get('/room/:roomId/claude-md', (req, res) => {
     const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
     res.json({ content });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -377,7 +376,7 @@ router.put('/room/:roomId/claude-md', (req, res) => {
     fs.writeFileSync(path.join(ws, 'CLAUDE.md'), content);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -392,7 +391,7 @@ router.get('/room/:roomId/light-prompt', (req, res) => {
     const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
     res.json({ content });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -409,7 +408,7 @@ router.put('/room/:roomId/light-prompt', (req, res) => {
     fs.writeFileSync(path.join(ws, 'light_prompt.md'), content);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -427,7 +426,7 @@ router.get('/room/:roomId/mcp', (req, res) => {
       res.json({ mcpConfig: null });
     }
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -449,6 +448,6 @@ router.put('/room/:roomId/mcp', (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });

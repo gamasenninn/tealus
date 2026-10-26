@@ -5,6 +5,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import { sendServerError } from '../lib/serverError.mts';
 
 export const router = express.Router();
 const LOG_DIR = path.join(import.meta.dirname, '..', '..', 'logs');
@@ -28,7 +29,7 @@ router.get('/dates', (req, res) => {
       .reverse();
     res.json({ dates: files });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
 
@@ -100,6 +101,6 @@ router.get('/', (req, res) => {
 
     res.json({ logs: entries, total, date: targetDate });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    sendServerError(req, res, err);
   }
 });
