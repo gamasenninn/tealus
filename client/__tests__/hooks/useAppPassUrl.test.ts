@@ -99,3 +99,16 @@ describe('useAppPassUrl (#607)', () => {
     expect(result.current).toBe('https://apps.example.com/tealus-gate/?tealus_pass=second');
   });
 });
+
+describe('http / https 以外の URL は開かない (セキュリティチェックループ 2 回目)', () => {
+  it('★★ 部屋のアプリの URL が http / https でなければ about:blank (前に保存された分にも効く)', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'file:///c:/x']) {
+      const { result } = renderHook(() => useAppPassUrl('r1', { title: 'x', url }, 0, true));
+      expect(result.current).toBe('about:blank');
+    }
+  });
+  it('★ ホームのタブも同じ', () => {
+    const { result } = renderHook(() => usePortalPassUrl({ id: 'p1', url: 'javascript:alert(1)', pass: false }, true));
+    expect(result.current).toBe('about:blank');
+  });
+});

@@ -12,6 +12,7 @@ import { attachMedia, attachTranscriptions, type AttachableMessage } from '../se
 import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
 import { rememberRoomMedia } from '../services/deletedMedia.mts';
 import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/appPass.mts';
+import { isValidAppUrls } from '../utils/webUrl.mts';
 
 /** #607 通行証を出せないとき。★ 理由を外に言い分けない (どの条件で落ちたかは記録にだけ残す) */
 const APP_PASS_UNAVAILABLE = 'このアプリには通行証を出せません';
@@ -579,7 +580,10 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     if (name !== undefined) { updates.push(`name = $${paramIndex++}`); values.push(name); }
     if (allow_member_transcription_edit !== undefined) { updates.push(`allow_member_transcription_edit = $${paramIndex++}`); values.push(allow_member_transcription_edit); }
     if (is_announcement !== undefined) { updates.push(`is_announcement = $${paramIndex++}`); values.push(is_announcement); }
-    if (app_urls !== undefined) { updates.push(`app_urls = $${paramIndex++}`); values.push(JSON.stringify(app_urls)); }
+    if (app_urls !== undefined) {
+      if (!isValidAppUrls(app_urls)) return res.status(400).json({ error: 'アプリの URL は http:// か https:// で始めてください' });
+      updates.push(`app_urls = $${paramIndex++}`); values.push(JSON.stringify(app_urls));
+    }
     if (message_edit_policy !== undefined) { updates.push(`message_edit_policy = $${paramIndex++}`); values.push(message_edit_policy); }
     // #405 Realtime 音声会話 (docs/08 §12)。既定 false = 開けたルームにだけ入口が出る
     if (voice_conversation_enabled !== undefined) { updates.push(`voice_conversation_enabled = $${paramIndex++}`); values.push(voice_conversation_enabled); }

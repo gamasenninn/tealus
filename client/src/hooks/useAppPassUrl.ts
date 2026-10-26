@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import type { AppUrl, PortalLink } from '../types';
+import { isWebUrl } from '../utils/webUrl';
 
 const BLANK = 'about:blank';
 
@@ -20,7 +21,7 @@ function usePassUrl(
 
   useEffect(() => {
     setPassUrl(null);
-    if (!open || !url || !needsPass) return;
+    if (!open || !url || !needsPass || !isWebUrl(url)) return;
     let current = true;  // ★ 遅れて返った前の通行証で、今のものを上書きしない
     fetchPass()
       .then((r) => { if (current) setPassUrl(r.url); })
@@ -29,7 +30,8 @@ function usePassUrl(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPass は毎回作り直されるので fetchKey で見る
   }, [fetchKey, url, needsPass, open]);
 
-  if (!url) return BLANK;
+  // ★ http / https 以外 (前に保存された分も) は開かない
+  if (!url || !isWebUrl(url)) return BLANK;
   if (!needsPass) return url;
   return passUrl ?? BLANK;
 }

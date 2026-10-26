@@ -2,6 +2,9 @@ import { logger } from '../../utils/logger.mts';
 import * as E from '../../constants/errors.mts';
 import express from 'express';
 import { pool } from '../../db/pool.mts';
+import { isWebUrl } from '../../utils/webUrl.mts';
+
+const E_WEB_URL = 'URL は http:// か https:// で始めてください';
 
 export const router = express.Router();
 
@@ -26,6 +29,7 @@ router.post('/portal-links', async (req, res) => {
   if (!title || !url) {
     return res.status(400).json({ error: 'タイトルとURLは必須です' });
   }
+  if (!isWebUrl(url)) return res.status(400).json({ error: E_WEB_URL });
   // #607 開くときに Tealus の通行証を添える (docs/11 §5.4)。付けなければ false
   if (pass !== undefined && typeof pass !== 'boolean') {
     return res.status(400).json({ error: 'pass は true / false で指定してください' });
@@ -50,6 +54,7 @@ router.post('/portal-links', async (req, res) => {
 router.put('/portal-links/:id', async (req, res) => {
   const { id } = req.params;
   const { title, url, icon, sort_order, is_active, pass } = req.body;
+  if (url !== undefined && !isWebUrl(url)) return res.status(400).json({ error: E_WEB_URL });
   // #607 開くときに Tealus の通行証を添える (docs/11 §5.4)
   if (pass !== undefined && typeof pass !== 'boolean') {
     return res.status(400).json({ error: 'pass は true / false で指定してください' });

@@ -179,7 +179,7 @@ export function createOgpFetcher({ isAllowed = isPublicAddress, timeoutMs = 5000
           await res.body?.cancel();
           return null;
         }
-        return parseOgp(await readHead(res.body as ReadableStream<Uint8Array> | null, OGP_MAX_BYTES));
+        return parseOgp(await readHead(res.body as ReadableStream<Uint8Array> | null, OGP_MAX_BYTES), current);
       }
     } catch (err) {
       const e = err as { cause?: { code?: string }; message?: string };
@@ -196,10 +196,24 @@ export function createOgpFetcher({ isAllowed = isPublicAddress, timeoutMs = 5000
   };
 }
 
+/**
+ * 下見の画像の URL は、読んだページの場所から絶対にし、http / https だけを残す (セキュリティチェックループ 2 回目、2026-10-26)。
+ * ★ 相手のサイトが書いた値をそのまま <img src> に入れていた
+ */
+function absoluteWebImage(raw: string | null, pageUrl: URL): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw.trim(), pageUrl);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch OGP metadata from a URL */
 export const fetchOgp = createOgpFetcher();
 
-function parseOgp(html: string): OgpData | null {
+function parseOgp(html: string, pageUrl: URL): OgpData | null {
   const $ = cheerio.load(html);
 
   const title = $('meta[property="og:title"]').attr('content')
@@ -212,9 +226,10 @@ function parseOgp(html: string): OgpData | null {
     || $('meta[name="description"]').attr('content')
     || null;
 
-  const image_url = $('meta[property="og:image"]').attr('content')
+  const rawImage = $('meta[property="og:image"]').attr('content')
     || $('meta[name="twitter:image"]').attr('content')
     || null;
+  const image_url = absoluteWebImage(rawImage, pageUrl);
 
   if (!title && !description) return null;
 

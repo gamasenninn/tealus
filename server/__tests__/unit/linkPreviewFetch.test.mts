@@ -150,3 +150,22 @@ describe('名前が引けない宛先', () => {
     expect(logger.info).toHaveBeenCalled();
   });
 });
+
+describe('createOgpFetcher — 下見の画像の URL (セキュリティチェックループ 2 回目)', () => {
+  const page = (img: string) => `<html><head><meta property="og:title" content="T"><meta property="og:image" content="${img}"></head></html>`;
+  const fetcher = () => createOgpFetcher({ isAllowed: (ip) => ip === '127.0.0.1' });
+
+  it('★ 相対の画像は読んだページの場所から絶対にする', async () => {
+    handler = (_req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(page('/img/a.png')); };
+    expect((await fetcher()(`${base}/p/x`))?.image_url).toBe(`${base}/img/a.png`);
+  });
+
+  it('★★ http / https 以外の画像は捨てる (下見そのものは残す)', async () => {
+    for (const img of ['javascript:alert(1)', 'data:image/png;base64,AAAA', 'file:///c:/x.png']) {
+      handler = (_req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(page(img)); };
+      const r = await fetcher()(`${base}/p`);
+      expect(r?.title).toBe('T');
+      expect(r?.image_url).toBeNull();
+    }
+  });
+});

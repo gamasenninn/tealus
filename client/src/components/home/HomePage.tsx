@@ -7,6 +7,7 @@ import BottomNav from '../common/BottomNav';
 import type { Message, MediaItem, PortalLink } from '../../types';
 import { usePortalPassUrl } from '../../hooks/useAppPassUrl';
 import './HomePage.css';
+import { isWebUrl } from '../../utils/webUrl';
 
 // お知らせ API は is_unread を、media は file_path を返す (types.ts には未定義)
 type AnnouncementMessage = Omit<Message, 'media'> & {
@@ -252,7 +253,7 @@ function HomePage() {
                 allow="microphone; camera; autoplay; fullscreen"
                 onLoad={handleIframeLoad}
               />
-              {portal?.url && (
+              {isWebUrl(portal?.url) && (
                 <a
                   href={portal.url}
                   target="_blank"
@@ -276,7 +277,7 @@ function HomePage() {
                   <p className="home-iframe-overlay-msg">
                     サイトが埋め込み表示を許可していない可能性があります。新タブで開いてみてください。
                   </p>
-                  {portal?.url && (
+                  {isWebUrl(portal?.url) && (
                     <a
                       href={portal.url}
                       target="_blank"
