@@ -14,6 +14,7 @@ import { checkMessageRefs } from '../services/messageRefs.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { REST_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
+import { readRequester, scopeByRoom } from '../services/requesterScope.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -26,6 +27,9 @@ interface MessageRow extends AttachableMessage {
 }
 
 router.use(authenticate, requireMember);
+// ★ AI の道具 (bot の資格 + X-Tealus-Requester) から来たら、依頼した人もこの部屋のメンバーであること
+//   (セキュリティチェックループの C、2026-10-26 小野さん判断)。印が無ければ今までどおり
+router.use(readRequester, (req, res, next) => (req.user?.is_bot ? scopeByRoom('param')(req, res, next) : next()));
 
 // ★ 形の崩れたメッセージ ID には 500 でなく 400 と理由を返す (2026-10-01、#477 と同じ決まり)
 router.param('msgId', (_req, res, next, msgId: string) => {

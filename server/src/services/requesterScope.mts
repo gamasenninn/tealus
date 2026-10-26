@@ -33,11 +33,15 @@ async function requesterIn(roomId: string, requesterId: string): Promise<boolean
   return rows.length > 0;
 }
 
-/** room_id (query) / :id (部屋) の口の前に置く。依頼した人が入っていなければ 403 */
-export function scopeByRoom(from: 'query' | 'param') {
+/**
+ * room_id (query / body) / :id (部屋) の口の前に置く。依頼した人が入っていなければ 403
+ * ★ body は書き込みの口 (投稿・画像・ファイル・読み上げ)。multipart の口は multer の後に置く (セキュリティチェックループの C)
+ */
+export function scopeByRoom(from: 'query' | 'param' | 'body') {
   return async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
     const requesterId = requesterOf(res);
-    const roomId = String(from === 'query' ? req.query.room_id ?? '' : req.params.id ?? '');
+    const raw = from === 'query' ? req.query.room_id : from === 'body' ? (req.body as { room_id?: unknown } | undefined)?.room_id : req.params.id;
+    const roomId = String(raw ?? '');
     if (!requesterId || !roomId || !isUuid(roomId)) return next();   // 部屋の指定が無い・形が違うのは各口に任せる
     if (!(await requesterIn(roomId, requesterId))) return res.status(403).json({ error: DENIED });
     next();

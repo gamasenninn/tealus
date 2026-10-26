@@ -139,7 +139,7 @@ setInterval(() => {
  * POST /api/bot/push
  * Send a message to a room (with Socket.IO broadcast)
  */
-router.post('/push', async (req, res) => {
+router.post('/push', scopeByRoom('body'), async (req, res) => {
   const { room_id, content, type = 'text' } = req.body as { room_id?: string; content?: string; type?: string };
   const userId = req.user!.id;
 
@@ -175,7 +175,7 @@ router.post('/push', async (req, res) => {
  * Notify all room members to speak the given text via their browser's Web Speech API.
  * Used by agent-server when TTS_PROVIDER=browser (no DB write, no message creation).
  */
-router.post('/tts-speak', async (req, res) => {
+router.post('/tts-speak', scopeByRoom('body'), async (req, res) => {
   const { room_id, text } = req.body as { room_id?: string; text?: string };
   const userId = req.user!.id;
 
@@ -219,7 +219,7 @@ router.post('/tts-speak', async (req, res) => {
  * This is the new TTS delivery path that replaces mediasoup PlainTransport
  * for aivis-cloud auto-readout. See #189.
  */
-router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), requireUuidRoomId, async (req, res) => {
+router.post('/tts-audio', ttsAudioMemoryUpload.single('audio'), requireUuidRoomId, scopeByRoom('body'), async (req, res) => {
   const { room_id } = req.body as { room_id?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -366,7 +366,7 @@ async function mediaExtras(file: Express.Multer.File): Promise<{ width: number |
  * POST /api/bot/push-image
  * Send an image message to a room
  */
-router.post('/push-image', upload.single('image'), rejectOversizedUpload, requireUuidRoomId, async (req, res) => {
+router.post('/push-image', upload.single('image'), rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req, res) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -452,7 +452,7 @@ router.post('/push-image', upload.single('image'), rejectOversizedUpload, requir
  * Image / video は existing /push-image, /media path に lateral OK だが、
  * text / pdf 等の attached file は本 endpoint で。
  */
-router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireUuidRoomId, async (req, res) => {
+router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req, res) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -1365,7 +1365,7 @@ router.get('/tags', async (req, res) => {
  *
  * Body: { is_done: boolean }
  */
-router.patch('/messages/:id/tags/:tag_name/done', requireUuidId, async (req, res) => {
+router.patch('/messages/:id/tags/:tag_name/done', scopeByMessage, requireUuidId, async (req, res) => {
   const messageId = String(req.params.id);
   const tagName = String(req.params.tag_name);
   const userId = req.user!.id;
