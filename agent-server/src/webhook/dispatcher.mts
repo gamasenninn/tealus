@@ -2,8 +2,6 @@
  * Dispatcher
  * DM/グループ判定 → メンション検知 → Router → Light/Deep 振り分け
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import { logger } from '../lib/logger.mts';
 import * as config from '../config.mts';
 import * as botApi from '../lib/botApi.mts';
@@ -25,6 +23,7 @@ import { isMentioned } from './mention.mts';
 import type { WebhookMessage, DispatchParams } from '../types.mts';
 import { beginWait, endWait } from './delegationWait.mts';
 import { runAsRequester, withCurrentRequester } from '../lib/requesterContext.mts';
+import { readRoomConfigJson } from '../lib/roomConfigPaths.mts';
 
 // ルームごとの処理キュー（並行実行防止）
 const roomQueues = new Map<string, Promise<void>>();
@@ -253,12 +252,10 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
   // コンテキスト取得/作成
   const context = await getOrCreateContext(agentId, roomId);
 
-  // ルーム設定を読み込み（response_mode）
+  // ルーム設定を読み込み（response_mode）。★ G-1 置き場は workspace の外 (AI が response_mode を書き換えられないように)
   let roomSettings: { response_mode: string; enabled: boolean } = { response_mode: 'auto', enabled: true };
-  const roomSettingsPath = path.join(context.workspace_path, 'room_settings.json');
-  if (fs.existsSync(roomSettingsPath)) {
-    try { roomSettings = JSON.parse(fs.readFileSync(roomSettingsPath, 'utf8')); } catch {}
-  }
+  const stored = readRoomConfigJson<{ response_mode: string; enabled: boolean }>(context.workspace_path, 'room_settings.json');
+  if (stored) roomSettings = stored;
 
   // エージェント無効
   if (!roomSettings.enabled || roomSettings.response_mode === 'off') {

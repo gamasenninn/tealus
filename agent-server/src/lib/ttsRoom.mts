@@ -16,9 +16,9 @@
  *
  * @module lib/ttsRoom
  */
-import fs from 'node:fs';
 import path from 'node:path';
 import { getBotUserId } from './botApi.mts';
+import { readRoomConfigJson } from './roomConfigPaths.mts';
 
 export type TtsEngine = 'aivis' | 'openai' | 'gemini';
 
@@ -85,14 +85,14 @@ export function resolveRoomTts(globalProvider: string | undefined, room: RoomTts
   return voice ? { mode: 'server', engine, voice } : { mode: 'server', engine };
 }
 
-/** ★ ルームの room_settings.json を読む (★ 無い・壊れているときは null。読み上げのたびに読むので保存すればすぐ効く) */
+/** ★ ルームの room_settings.json を読む (★ 無い・壊れているときは null。読み上げのたびに読むので保存すればすぐ効く)
+ *  ★ G-1 置き場は workspace の外 `_room-configs` (lib/roomConfigPaths.mts)。workspace のパスは置き場を引くための鍵 */
 export function readRoomTtsSettings(roomId: string | undefined): RoomTtsSettings | null {
   if (!roomId) return null;
   try {
     const agentId = getBotUserId();
     if (!agentId) return null;
     const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT || path.join(import.meta.dirname, '../../agent-workspaces');
-    const settingsPath = path.join(workspaceRoot, agentId, roomId, 'room_settings.json');
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as RoomTtsSettings;
+    return readRoomConfigJson<RoomTtsSettings>(path.join(workspaceRoot, agentId, roomId), 'room_settings.json');
   } catch { return null; }
 }

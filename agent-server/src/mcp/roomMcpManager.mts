@@ -3,7 +3,7 @@
  *
  * MCP構成:
  * 1. filesystem MCP: ルームごとに自動生成（ワークスペースがルート）
- * 2. ルーム固有MCP: workspace/mcp_config.json（任意）
+ * 2. ルーム固有MCP: <WORKSPACE_ROOT>/_room-configs/<agentId>/<roomId>/mcp_config.json（任意。★ G-1 で workspace の外へ）
  * 3. グローバルMCP: agent-server/mcp_config.json（全ルーム共有、1プロセスのみ）
  */
 import { MCPServerStdio } from '@openai/agents';
@@ -14,6 +14,7 @@ import { logger } from '../lib/logger.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
 import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
 import { FILESYSTEM_MCP_PACKAGE, TEALUS_MCP_PACKAGE } from '../lib/mcpPackages.mts';
+import { readRoomConfigJson, roomConfigPath } from '../lib/roomConfigPaths.mts';
 
 interface McpServerDef {
   command?: string;
@@ -170,13 +171,14 @@ async function createRoomMcp(key: string, roomId: string, workspacePath: string)
   const servers: MCPServerStdio[] = [];
 
   // ルーム固有 mcp_config.json を先に読む（filesystem重複チェック用）
-  const roomConfigPath = path.join(workspacePath, 'mcp_config.json');
+  // ★ G-1 置き場は workspace の外 `_room-configs` (AI が write_file で道具を足せないように)
+  const roomConfigFile = roomConfigPath(workspacePath, 'mcp_config.json');
   let roomConfig: McpConfigFile = {};
-  if (fs.existsSync(roomConfigPath)) {
+  const rawRoomConfig = readRoomConfigJson<McpConfigFile>(workspacePath, 'mcp_config.json');
+  if (rawRoomConfig) {
     try {
       // ★ #419 設定には ${VAR} の参照だけを書き、実体は agent-server の .env に置く
-      //   (workspace は filesystem MCP の root なので、平文で置くと read_file で読める)
-      roomConfig = expandEnvRefs(JSON.parse(fs.readFileSync(roomConfigPath, 'utf8')) as McpConfigFile);
+      roomConfig = expandEnvRefs(rawRoomConfig);
     } catch (err) {
       logger.error(`[RoomMCP] Room config parse error: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -209,7 +211,7 @@ async function createRoomMcp(key: string, roomId: string, workspacePath: string)
     // ★ 改善ループ 9 回目の F と同じ (lightV2.mts / deep.mts)。tealus は本体班が組み立てる (共有の側にある)。
     //   ここでつなぐと、会話モードの道具の取り込みは先勝ちなので send_message 等が部屋側 (別の向け先・資格) に向く
     if (roomConfig.mcpServers.tealus) {
-      logger.warn(`[RoomMCP] 部屋の mcp_config.json の tealus は使わない (本体班の組み立てを優先): ${roomConfigPath}`);
+      logger.warn(`[RoomMCP] 部屋の mcp_config.json の tealus は使わない (本体班の組み立てを優先): ${roomConfigFile}`);
       delete roomConfig.mcpServers.tealus;
     }
     const roomServers = await connectFromConfig(roomConfig.mcpServers, `room-${roomId}`);

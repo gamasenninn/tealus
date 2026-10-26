@@ -2,8 +2,6 @@
  * Light Agent（OpenAI Agents SDK版）
  * Agent + run() パターンで MCP・ツール・セッション管理に対応
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import { Agent, run, codeInterpreterTool, setDefaultOpenAIClient, type MCPServer } from '@openai/agents';
 import OpenAI from 'openai';
 import * as config from '../config.mts';
@@ -18,6 +16,7 @@ import { createTools } from './lightTools.mts';
 import { getSetting } from '../context/settingsManager.mts';
 import * as lightRegistry from './lightRegistry.mts';
 import { briefError } from '../lib/briefError.mts';
+import { readRoomConfig } from '../lib/roomConfigPaths.mts';
 
 // ★ 2 分・やり直し 1 回 (改善ループ 14 回目。本体の文字起こし・整形と同じ。SDK の既定は 10 分 × やり直し 2 回)
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, timeout: 120_000, maxRetries: 1 });
@@ -47,11 +46,9 @@ export function createLightAgent(workspacePath: string, mcpServers: MCPServer[] 
       let prompt = parts.includes('system') ? loadSystemPrompt() : '';
       // ルーム固有 Light プロンプト
       if (parts.includes('roomPrompt') && workspacePath) {
-        const lightPromptPath = path.join(workspacePath, 'light_prompt.md');
-        if (fs.existsSync(lightPromptPath)) {
-          const roomPrompt = fs.readFileSync(lightPromptPath, 'utf8').trim();
-          if (roomPrompt) prompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
-        }
+        // ★ G-1 置き場は workspace の外 (AI が書ける場所から指示を読まない)
+        const roomPrompt = (readRoomConfig(workspacePath, 'light_prompt.md') ?? '').trim();
+        if (roomPrompt) prompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
       }
       if (workspacePath && mcpServers.length > 0) {
         const normalizedPath = workspacePath.replace(/\\/g, '/');

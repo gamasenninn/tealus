@@ -16,16 +16,23 @@ const { buildLightV2McpConfig } = require('../../src/agents/lightV2.mts') as {
   buildLightV2McpConfig: (ws: string | undefined) => Record<string, unknown>;
 };
 const { logger } = require('../../src/lib/logger.mts') as { logger: { warn: jest.Mock } };
+const { roomConfigPath } = require('../../src/lib/roomConfigPaths.mts') as typeof import('../../src/lib/roomConfigPaths.mts');
 
+// ★ G-1 ルームの mcp_config.json は workspace の外 (_room-configs)。workspace は <ROOT>/<agentId>/<roomId> の 2 階層
+let root: string;
 let ws: string;
 beforeEach(() => {
-  ws = fs.mkdtempSync(path.join(os.tmpdir(), 'room-mcp-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'room-mcp-'));
+  ws = path.join(root, 'agent-1', 'room-1');
+  fs.mkdirSync(ws, { recursive: true });
   (logger.warn as jest.Mock).mockClear();
 });
-afterEach(() => fs.rmSync(ws, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
 function writeRoomMcp(servers: Record<string, unknown>): void {
-  fs.writeFileSync(path.join(ws, 'mcp_config.json'), JSON.stringify({ mcpServers: servers }));
+  const p = roomConfigPath(ws, 'mcp_config.json');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify({ mcpServers: servers }));
 }
 
 test('部屋の設定に tealus があっても、本体班の tealus (required・待ち 60 秒) のまま', () => {

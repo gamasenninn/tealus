@@ -38,14 +38,15 @@ export interface ScanResult {
   scanned: number;
   skippedBig: number;
   binary: number;
-  /** コードが workspace に書き戻すもの (.codex_home / .deep_mcp_config.json) の数 */
+  /** コードが workspace に書き戻すもの (.codex_home / .deep_mcp_config.json / ★ G-1 ルームの設定 4 つ) の数 */
   backAgain: number;
   backAgainFiles: string[];
   targets: string[];
 }
 
-/** コードが workspace に書くもの。★ 名前だけで数える (中身は見ない)。 */
-const WRITTEN_BY_CODE = ['.codex_home', '.deep_mcp_config.json'];
+/** コードが workspace に書くもの。★ 名前だけで数える (中身は見ない)。
+ *  ★ G-1 (2026-10-27) ルームの設定 4 つも外 (_room-configs) へ移した。workspace に残っていれば「戻っている」 */
+const WRITTEN_BY_CODE = ['.codex_home', '.deep_mcp_config.json', 'room_settings.json', 'light_prompt.md', 'mcp_config.json', 'CLAUDE.md'];
 
 /**
  * workspace を全深さ歩いて、資格情報「らしきもの」の **種類と場所だけ** を返す。
@@ -118,5 +119,5 @@ if (import.meta.main) {
   }
   console.log('');
   for (const f of r.backAgainFiles) console.log(`  ★ 戻っている: ${f}`);
-  console.log(`コードが workspace に書くもの (.codex_home / .deep_mcp_config.json): ${r.backAgain} 件`);
+  console.log(`コードが workspace に書くもの (.codex_home / .deep_mcp_config.json / ルームの設定 4 つ): ${r.backAgain} 件`);
 }

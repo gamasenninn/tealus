@@ -31,17 +31,22 @@ jest.mock('../../src/lib/botApi.mts', () => ({
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { roomConfigPath } from '../../src/lib/roomConfigPaths.mts';
 
+// ★ G-1 ルームの mcp_config.json は workspace の外 (_room-configs)。workspace は契約どおり <ROOT>/<agentId>/<roomId> の 2 階層
+let tmpRoot: string;
 let tmpDir: string;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-int-test-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-int-test-'));
+  tmpDir = path.join(tmpRoot, 'agent1', 'room1');
+  fs.mkdirSync(tmpDir, { recursive: true });
   jest.resetModules();
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 describe('MCP ライフサイクル統合テスト', () => {
@@ -113,7 +118,9 @@ describe('MCP ライフサイクル統合テスト', () => {
 
   // --- 6. ルーム固有 mcp_config.json ---
   test('6. ルーム固有 mcp_config.json があれば追加サーバーを接続', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({
+    const p = roomConfigPath(tmpDir, 'mcp_config.json');
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify({
       mcpServers: {
         custom_db: { command: 'node', args: ['db-mcp.js'] }
       }

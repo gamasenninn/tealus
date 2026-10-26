@@ -40,6 +40,7 @@ import { briefError } from '../lib/briefError.mts';
 import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
 import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
 import { FILESYSTEM_MCP_PACKAGE, TEALUS_MCP_PACKAGE } from '../lib/mcpPackages.mts';
+import { readRoomConfig, readRoomConfigJson, roomConfigPath } from '../lib/roomConfigPaths.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -193,12 +194,12 @@ export function buildLightV2McpConfig(workspacePath: string | undefined): Record
     mcp_servers['workspace-fs'] = fsDef as unknown as CodexConfigObject;
   }
 
-  // 3. ルーム固有 MCP
+  // 3. ルーム固有 MCP (★ G-1 置き場は workspace の外 `_room-configs`。filesystem MCP の root = workspace から読まない)
   if (workspacePath) {
-    const roomMcpPath = path.join(workspacePath, 'mcp_config.json');
-    if (fs.existsSync(roomMcpPath)) {
+    const roomMcpPath = roomConfigPath(workspacePath, 'mcp_config.json');
+    const roomMcp = readRoomConfigJson<{ mcpServers?: Record<string, CodexConfigObject> }>(workspacePath, 'mcp_config.json');
+    if (roomMcp) {
       try {
-        const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8')) as { mcpServers?: Record<string, CodexConfigObject> };
         // ★ #419 ${VAR} を実体に置き換えてから codex へ渡す (codex は参照を解釈しない)
         const roomServers = expandEnvRefs(roomMcp.mcpServers || {});
         // ★ 改善ループ 9 回目の F: 以前は Object.assign で上書きし、部屋の設定に tealus を書くと
@@ -328,11 +329,9 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     let systemPrompt = parts.includes('system') ? loadSystemPrompt() : '';
     // ルーム固有 Light プロンプト (Light v1 と parity、#258 follow-up)
     if (parts.includes('roomPrompt') && workspacePath) {
-      const lightPromptPath = path.join(workspacePath, 'light_prompt.md');
-      if (fs.existsSync(lightPromptPath)) {
-        const roomPrompt = fs.readFileSync(lightPromptPath, 'utf8').trim();
-        if (roomPrompt) systemPrompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
-      }
+      // ★ G-1 置き場は workspace の外 (AI が書ける場所から指示を読まない)
+      const roomPrompt = (readRoomConfig(workspacePath, 'light_prompt.md') ?? '').trim();
+      if (roomPrompt) systemPrompt += `\n\n## ルーム固有の指示\n${roomPrompt}`;
     }
     if (parts.includes('memory')) {
       const memory = loadMemoryForPrompt(workspacePath);

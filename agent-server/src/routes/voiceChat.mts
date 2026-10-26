@@ -37,6 +37,7 @@ import { resolveRoomArg } from '../lib/voiceChatRoomArg.mts';
 import { capToolOutput } from '../lib/voiceChatToolOutput.mts';
 import { requesterRoomIds, scopeToolArgs, filterListRooms } from '../lib/voiceChatRequesterScope.mts';
 import { pool } from '../context/sessionManager.mts';
+import { readRoomConfig } from '../lib/roomConfigPaths.mts';
 
 export const router = express.Router();
 
@@ -282,9 +283,9 @@ export function buildInstructions(
   const use = partsFor('conversation');
 
   try {
-    const roomPrompt = path.join(workspacePath, 'light_prompt.md');
-    if (use.includes('roomPrompt') && fs.existsSync(roomPrompt)) {
-      const text = fs.readFileSync(roomPrompt, 'utf8').trim();
+    // ★ G-1 置き場は workspace の外 `_room-configs` (AI が書ける場所から指示を読まない)
+    if (use.includes('roomPrompt')) {
+      const text = (readRoomConfig(workspacePath, 'light_prompt.md') ?? '').trim();
       if (text) parts.push(`## このルームの決まり\n\n${text}`);
     }
   } catch (err) {

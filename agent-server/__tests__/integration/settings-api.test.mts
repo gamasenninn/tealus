@@ -175,3 +175,60 @@ describe('設定 API 統合テスト', () => {
     expect(res.body).toHaveProperty('content');
   });
 });
+
+/**
+ * G-1 (2026-10-27) ★★ ルームの設定 4 つの置き場は workspace の外 `<WORKSPACE_ROOT>/_room-configs/<agentId>/<roomId>/`。
+ *   workspace (= AI が書ける場所) には書かない・そこからは読まない (旧にしか無ければ 1 度だけ移す)。
+ *   WORKSPACE_ROOT は上のモックで os.tmpdir()、agentId は bot-uuid。
+ */
+describe('G-1 ルームの設定は workspace の外に置く', () => {
+  const { roomConfigPath } = require('../../src/lib/roomConfigPaths.mts') as typeof import('../../src/lib/roomConfigPaths.mts');
+  const ROOT = os.tmpdir();
+  const room = `g1-room-${process.pid}-${Date.now()}`;
+  const ws = path.join(ROOT, 'bot-uuid', room);
+  afterAll(() => {
+    fs.rmSync(ws, { recursive: true, force: true });
+    fs.rmSync(path.dirname(roomConfigPath(ws, 'CLAUDE.md')), { recursive: true, force: true });
+  });
+
+  test('★★ PUT light-prompt / claude-md / settings / mcp は _room-configs に書き、workspace には何も置かない', async () => {
+    const h = { Authorization: `Bearer ${token}` };
+    expect((await request(app).put(`/config/room/${room}/light-prompt`).set(h).send({ content: '決まり' })).status).toBe(200);
+    expect((await request(app).put(`/config/room/${room}/claude-md`).set(h).send({ content: '# 指示' })).status).toBe(200);
+    expect((await request(app).put(`/config/room/${room}/settings`).set(h).send({ settings: { response_mode: 'mention', enabled: true } })).status).toBe(200);
+    expect((await request(app).put(`/config/room/${room}/mcp`).set(h).send({ mcpConfig: { mcpServers: {} } })).status).toBe(200);
+
+    for (const f of ['light_prompt.md', 'CLAUDE.md', 'room_settings.json', 'mcp_config.json'] as const) {
+      expect(fs.existsSync(roomConfigPath(ws, f))).toBe(true);
+      expect(fs.existsSync(path.join(ws, f))).toBe(false);
+    }
+    expect(fs.readFileSync(roomConfigPath(ws, 'light_prompt.md'), 'utf8')).toBe('決まり');
+    expect(path.relative(ws, roomConfigPath(ws, 'light_prompt.md')).startsWith('..')).toBe(true);
+  });
+
+  test('★ GET は _room-configs を返す (workspace の中に AI が置いたものは返さない)', async () => {
+    fs.mkdirSync(ws, { recursive: true });
+    fs.writeFileSync(path.join(ws, 'light_prompt.md'), 'AI が書いた決まり');
+    const res = await request(app).get(`/config/room/${room}/light-prompt`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.content).toBe('決まり');
+    const s = await request(app).get(`/config/room/${room}/settings`).set('Authorization', `Bearer ${token}`);
+    expect(s.body.settings.response_mode).toBe('mention');
+  });
+
+  test('★ 旧 (workspace 内) にしか無ければ GET で 1 度だけ移し、旧は消す', async () => {
+    const room2 = `${room}-legacy`;
+    const ws2 = path.join(ROOT, 'bot-uuid', room2);
+    fs.mkdirSync(ws2, { recursive: true });
+    fs.writeFileSync(path.join(ws2, 'CLAUDE.md'), '# 旧の指示');
+    try {
+      const res = await request(app).get(`/config/room/${room2}/claude-md`).set('Authorization', `Bearer ${token}`);
+      expect(res.body.content).toBe('# 旧の指示');
+      expect(fs.existsSync(path.join(ws2, 'CLAUDE.md'))).toBe(false);
+      expect(fs.readFileSync(roomConfigPath(ws2, 'CLAUDE.md'), 'utf8')).toBe('# 旧の指示');
+    } finally {
+      fs.rmSync(ws2, { recursive: true, force: true });
+      fs.rmSync(path.dirname(roomConfigPath(ws2, 'CLAUDE.md')), { recursive: true, force: true });
+    }
+  });
+});

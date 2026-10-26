@@ -7,6 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
+import { roomConfigExists, writeRoomConfig } from '../lib/roomConfigPaths.mts';
 
 export interface AgentContextRow {
   agent_id: string;
@@ -129,9 +130,10 @@ export function initWorkspace(workspacePath: string): void {
     }
 
     // CLAUDE.md テンプレート作成
-    const claudeMdPath = path.join(workspacePath, 'CLAUDE.md');
-    if (!fs.existsSync(claudeMdPath)) {
-      fs.writeFileSync(claudeMdPath, `# Tealus AIエージェント
+    // ★ G-1 置き場は workspace の外 `_room-configs` (lib/roomConfigPaths.mts)。Deep には --append-system-prompt-file で渡す。
+    //   以前は workspace (= Deep の cwd) に置いて claude の自動読み込みに任せていた = AI が自分の指示を書き換えて持ち越せた
+    if (!roomConfigExists(workspacePath, 'CLAUDE.md')) {
+      writeRoomConfig(workspacePath, 'CLAUDE.md', `# Tealus AIエージェント
 
 あなたはTealusメッセンジャーのAIチームメンバーです。
 ソフトウェアエンジニアリングだけでなく、ビジネス分析、リサーチ、一般知識、
@@ -151,15 +153,14 @@ export function initWorkspace(workspacePath: string): void {
 
 ## 共有メモリ
 
-過去の会話で蓄積した記憶や user 情報は @memory/MEMORY.md を参照してください。
+過去の会話で蓄積した記憶や user 情報は、作業ディレクトリの memory/MEMORY.md を読んで参照してください。
 このファイルは Light agent が能動的に書き、Deep agent (本 session) からは読み取りで参照します。
 `);
     }
 
-    // room_settings.json 初期化
-    const roomSettingsPath = path.join(workspacePath, 'room_settings.json');
-    if (!fs.existsSync(roomSettingsPath)) {
-      fs.writeFileSync(roomSettingsPath, JSON.stringify({ response_mode: 'auto', enabled: true }, null, 2) + '\n');
+    // room_settings.json 初期化 (★ G-1 置き場は workspace の外)
+    if (!roomConfigExists(workspacePath, 'room_settings.json')) {
+      writeRoomConfig(workspacePath, 'room_settings.json', JSON.stringify({ response_mode: 'auto', enabled: true }, null, 2) + '\n');
     }
 
     // MEMORY.md 初期化

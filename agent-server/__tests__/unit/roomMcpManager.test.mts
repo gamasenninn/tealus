@@ -27,18 +27,29 @@ jest.mock('../../src/config.mts', () => ({
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { roomConfigPath } from '../../src/lib/roomConfigPaths.mts';
 
+// ★ G-1 ルームの mcp_config.json の置き場は workspace の外 <ROOT>/_room-configs/<agentId>/<roomId>/。
+//   workspace は契約どおり <ROOT>/<agentId>/<roomId> の 2 階層にする (1 階層だと _room-configs が temp の外に作られる。deep.test.mts と同じ穴)
+let tmpRoot: string;
 let tmpDir: string;
+const writeRoomMcp = (ws: string, obj: unknown) => {
+  const p = roomConfigPath(ws, 'mcp_config.json');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(obj));
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+  tmpDir = path.join(tmpRoot, 'agent1', 'room1');
+  fs.mkdirSync(tmpDir, { recursive: true });
   // roomMcpManager のキャッシュをクリア（モジュールリロード）
   jest.resetModules();
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 describe('roomMcpManager', () => {
@@ -85,11 +96,11 @@ describe('roomMcpManager', () => {
   });
 
   test('ルーム固有mcp_config.jsonがあれば追加サーバーを接続', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({
+    writeRoomMcp(tmpDir, {
       mcpServers: {
         custom_db: { command: 'node', args: ['db-mcp.js'] }
       }
-    }));
+    });
 
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     const servers = await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
@@ -98,11 +109,11 @@ describe('roomMcpManager', () => {
   });
 
   test('ルーム固有configにfilesystemがあれば自動生成スキップ', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({
+    writeRoomMcp(tmpDir, {
       mcpServers: {
         filesystem: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/custom/path'] }
       }
-    }));
+    });
 
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     const servers = await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
@@ -120,9 +131,9 @@ describe('★ #573 道具の子プロセスに渡す環境変数', () => {
     process.env.DB_PASSWORD = 'db-secret-573';
     process.env.HKSDB_DSN = 'mysql://u:p@h/db';
     try {
-      fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({
+      writeRoomMcp(tmpDir, {
         mcpServers: { custom_db: { command: 'node', args: ['db-mcp.js'], env: { DSN: '${HKSDB_DSN}' } } },
-      }));
+      });
       const { MCPServerStdio } = require('@openai/agents');
       const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
       await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
@@ -157,10 +168,10 @@ describe('★ #577 自動の filesystem は固定した版', () => {
 describe('部屋の mcp_config.json の tealus はつながない', () => {
   test('tealus は捨て、ほかの道具はつなぐ', async () => {
     const { MCPServerStdio } = require('@openai/agents') as { MCPServerStdio: jest.Mock };
-    fs.writeFileSync(path.join(tmpDir, 'mcp_config.json'), JSON.stringify({ mcpServers: {
+    writeRoomMcp(tmpDir, { mcpServers: {
       tealus: { command: 'node', args: ['other.js'] },
       extra: { command: 'npx', args: ['x'] },
-    } }));
+    } });
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     await getOrCreateRoomMcp('agent1', 'roomT', tmpDir);
     const names = MCPServerStdio.mock.calls.map((c: [{ name: string }]) => c[0].name);

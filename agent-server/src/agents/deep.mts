@@ -17,6 +17,7 @@ import { updateContext } from '../context/sessionManager.mts';
 import * as deepRegistry from './deepRegistry.mts';
 import type { DeepProcess } from './deepRegistry.mts';
 import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
+import { readRoomConfigJson, roomConfigExists, roomConfigPath } from '../lib/roomConfigPaths.mts';
 
 interface McpServerDef {
   command: string;
@@ -67,11 +68,11 @@ export function createDeepMcpConfig(workspacePath: string, roomId: string): stri
     },
   };
 
-  // ルーム固有 MCP があればマージ
-  const roomMcpPath = path.join(workspacePath, 'mcp_config.json');
-  if (fs.existsSync(roomMcpPath)) {
+  // ルーム固有 MCP があればマージ (★ G-1 置き場は workspace の外 `_room-configs`。AI が書ける場所から読まない)
+  const roomMcpPath = roomConfigPath(workspacePath, 'mcp_config.json');
+  const roomMcp = readRoomConfigJson<{ mcpServers?: Record<string, McpServerDef> }>(workspacePath, 'mcp_config.json');
+  if (roomMcp) {
     try {
-      const roomMcp = JSON.parse(fs.readFileSync(roomMcpPath, 'utf8')) as { mcpServers?: Record<string, McpServerDef> };
       // ★ #419 設定には ${VAR} の参照だけを書き、実体は .env に置く。子プロセスは参照を解釈しない
       const roomServers = expandEnvRefs(roomMcp.mcpServers || {});
       // ★ 改善ループ 9 回目の F と同じ (lightV2.mts)。tealus は本体班が組み立てる (中継の向け先・機械の資格)。部屋の設定では置き換えさせない
@@ -119,6 +120,14 @@ export function buildClaudeArgs({ workspacePath, sessionId }: { workspacePath: s
   const mcpConfigPath = deepMcpConfigPath(workspacePath);   // ★ #419 workspace の外
   if (fs.existsSync(mcpConfigPath)) {
     args.push('--mcp-config', mcpConfigPath);
+  }
+
+  // ★ G-1 ルームの CLAUDE.md (ダッシュボードで編集する Deep の指示) は workspace の外 `_room-configs` に置き、
+  //   明示的に渡す (--append-system-prompt-file、claude 2.1.x)。以前は cwd = workspace に置いて claude の自動読み込みに
+  //   任せていた = AI が自分の指示を書き換えて持ち越せた。★ claude は cwd の CLAUDE.md も今までどおり自動で読む
+  //   (AI が新しく置いたものはここでは止めていない。管理者が書いた指示を AI が書き換えられない、が守りの中身)
+  if (roomConfigExists(workspacePath, 'CLAUDE.md')) {
+    args.push('--append-system-prompt-file', roomConfigPath(workspacePath, 'CLAUDE.md'));
   }
 
   if (sessionId) {

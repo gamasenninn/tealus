@@ -563,6 +563,10 @@ describe('POST /voice-chat/session — ルーム固有の指示', () => {
   const pathx = require('node:path') as typeof import('node:path');
   // ★ fs をモックせず、**本物のワークスペース**を作る (本番と同じ経路を通す)
   const roomWs = pathx.join(process.env.AGENT_WORKSPACE_ROOT as string, 'agent-1', 'r1');
+  // ★ G-1 ルームの指示の置き場は workspace の外 (_room-configs)。AI が書ける場所から指示を読まない
+  const { roomConfigPath } = require('../../src/lib/roomConfigPaths.mts') as typeof import('../../src/lib/roomConfigPaths.mts');
+  const promptPath = roomConfigPath(roomWs, 'light_prompt.md');
+  const writePrompt = (text: string) => { fsx.mkdirSync(pathx.dirname(promptPath), { recursive: true }); fsx.writeFileSync(promptPath, text); };
 
   const instructions = () => {
     const c = (global.fetch as jest.Mock).mock.calls.find((x) => String(x[0]).includes('client_secrets'));
@@ -574,11 +578,12 @@ describe('POST /voice-chat/session — ルーム固有の指示', () => {
     mockListTools.mockReset().mockResolvedValue(TOOLS);
     stubFetch();
     fsx.mkdirSync(roomWs, { recursive: true });
+    fsx.rmSync(promptPath, { force: true });
     fsx.rmSync(pathx.join(roomWs, 'light_prompt.md'), { force: true });
   });
 
   test('★ light_prompt.md があれば instructions に載る', async () => {
-    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), '## このルームの決まり\n入荷は入庫と読み替える');
+    writePrompt('## このルームの決まり\n入荷は入庫と読み替える');
     await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
     expect(instructions()).toContain('入荷は入庫と読み替える');
@@ -592,7 +597,7 @@ describe('POST /voice-chat/session — ルーム固有の指示', () => {
   });
 
   test('★★ 共通の指示は消えない (ルーム固有が上書きしない)', async () => {
-    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), 'ルームの決まり');
+    writePrompt('ルームの決まり');
     await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
     const ins = instructions();
@@ -601,10 +606,19 @@ describe('POST /voice-chat/session — ルーム固有の指示', () => {
   });
 
   test('★ 空のファイルなら足さない (見出しだけが増えない)', async () => {
-    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), '   \n');
+    writePrompt('   \n');
     await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
     expect(instructions()).not.toContain('このルームの決まり');
+  });
+
+  test('★★ G-1 workspace の中に AI が置いた light_prompt.md は、外に指示があれば読まない', async () => {
+    writePrompt('管理者の決まり');
+    fsx.writeFileSync(pathx.join(roomWs, 'light_prompt.md'), 'AI が書いた決まり');
+    await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(instructions()).toContain('管理者の決まり');
+    expect(instructions()).not.toContain('AI が書いた決まり');
   });
 });
 

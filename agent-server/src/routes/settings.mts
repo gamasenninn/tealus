@@ -13,6 +13,7 @@ import { invalidateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { TTS_ENGINES, TTS_VOICES, resolveRoomTts } from '../lib/ttsRoom.mts';
 import { inactiveAgentSettings } from '../context/settingsEffect.mts';
 import { sendServerError } from '../lib/serverError.mts';
+import { readRoomConfig, readRoomConfigJson, writeRoomConfig } from '../lib/roomConfigPaths.mts';
 
 export const router = express.Router();
 
@@ -251,11 +252,9 @@ async function listAgentRooms(agentId: string): Promise<RoomSummary[]> {
   for (const roomId of fs.readdirSync(agentDir)) {
     const roomDir = path.join(agentDir, roomId);
     if (!fs.statSync(roomDir).isDirectory()) continue;
-    const settingsPath = path.join(roomDir, 'room_settings.json');
-    let settings: RoomSettingsFile = { response_mode: 'auto', enabled: true };
-    if (fs.existsSync(settingsPath)) {
-      try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as RoomSettingsFile; } catch { /* ignore */ }
-    }
+    // ★ G-1 設定の置き場は workspace の外 (_room-configs)。ルームの一覧は workspace のフォルダで数える (今までどおり)
+    const settings: RoomSettingsFile = readRoomConfigJson<RoomSettingsFile>(roomDir, 'room_settings.json')
+      ?? { response_mode: 'auto', enabled: true };
     const info = roomInfoMap.get(roomId);
     if (!info) continue; // 退出済みルームはスキップ
     rooms.push({ room_id: roomId, name: info.name, type: info.type, member_count: info.member_count, ...settings });
@@ -313,16 +312,21 @@ router.get('/rooms/:agentId', async (req, res) => {
   }
 });
 
+// ★ G-1 (2026-10-27) ルームの設定 4 つ (room_settings.json / CLAUDE.md / light_prompt.md / mcp_config.json) の置き場は
+//   workspace の外 `<WORKSPACE_ROOT>/_room-configs/<agentId>/<roomId>/` (lib/roomConfigPaths.mts)。
+//   workspace は AI が書ける場所 (filesystem MCP の root・Deep の cwd) なので、そこに置くと注入された AI が
+//   応答モードや道具や指示を書き換えて持ち越せた。ここでは workspace のパスを「置き場を引く鍵」としてだけ使う。
+
 /**
  * GET /config/room/:roomId/settings — room_settings.json
  */
 router.get('/room/:roomId/settings', (req, res) => {
   const ws = resolveRoomWorkspace(req.params.roomId);
   if (!ws) return res.status(404).json({ error: 'Workspace not found' });
-  const filePath = path.join(ws, 'room_settings.json');
   try {
-    if (fs.existsSync(filePath)) {
-      res.json({ settings: JSON.parse(fs.readFileSync(filePath, 'utf8')) });
+    const text = readRoomConfig(ws, 'room_settings.json');
+    if (text !== null) {
+      res.json({ settings: JSON.parse(text) });
     } else {
       res.json({ settings: { response_mode: 'auto', enabled: true } });
     }
@@ -340,8 +344,8 @@ router.put('/room/:roomId/settings', (req, res) => {
   const { settings } = req.body as { settings?: RoomSettingsFile };
   if (!settings) return res.status(400).json({ error: 'settings が必要です' });
   try {
-    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
-    fs.writeFileSync(path.join(ws, 'room_settings.json'), JSON.stringify(settings, null, 2) + '\n');
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });   // ルームの一覧は workspace のフォルダで数える
+    writeRoomConfig(ws, 'room_settings.json', JSON.stringify(settings, null, 2) + '\n');
     res.json({ success: true });
   } catch (err) {
     sendServerError(req, res, err);
@@ -354,10 +358,8 @@ router.put('/room/:roomId/settings', (req, res) => {
 router.get('/room/:roomId/claude-md', (req, res) => {
   const ws = resolveRoomWorkspace(req.params.roomId);
   if (!ws) return res.status(404).json({ error: 'Workspace not found' });
-  const filePath = path.join(ws, 'CLAUDE.md');
   try {
-    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-    res.json({ content });
+    res.json({ content: readRoomConfig(ws, 'CLAUDE.md') ?? '' });
   } catch (err) {
     sendServerError(req, res, err);
   }
@@ -373,7 +375,7 @@ router.put('/room/:roomId/claude-md', (req, res) => {
   if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
   try {
     if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
-    fs.writeFileSync(path.join(ws, 'CLAUDE.md'), content);
+    writeRoomConfig(ws, 'CLAUDE.md', content);
     res.json({ success: true });
   } catch (err) {
     sendServerError(req, res, err);
@@ -386,10 +388,8 @@ router.put('/room/:roomId/claude-md', (req, res) => {
 router.get('/room/:roomId/light-prompt', (req, res) => {
   const ws = resolveRoomWorkspace(req.params.roomId);
   if (!ws) return res.status(404).json({ error: 'Workspace not found' });
-  const filePath = path.join(ws, 'light_prompt.md');
   try {
-    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-    res.json({ content });
+    res.json({ content: readRoomConfig(ws, 'light_prompt.md') ?? '' });
   } catch (err) {
     sendServerError(req, res, err);
   }
@@ -405,7 +405,7 @@ router.put('/room/:roomId/light-prompt', (req, res) => {
   if (content === undefined) return res.status(400).json({ error: 'content が必要です' });
   try {
     if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
-    fs.writeFileSync(path.join(ws, 'light_prompt.md'), content);
+    writeRoomConfig(ws, 'light_prompt.md', content);
     res.json({ success: true });
   } catch (err) {
     sendServerError(req, res, err);
@@ -418,10 +418,10 @@ router.put('/room/:roomId/light-prompt', (req, res) => {
 router.get('/room/:roomId/mcp', (req, res) => {
   const ws = resolveRoomWorkspace(req.params.roomId);
   if (!ws) return res.status(404).json({ error: 'Workspace not found' });
-  const filePath = path.join(ws, 'mcp_config.json');
   try {
-    if (fs.existsSync(filePath)) {
-      res.json({ mcpConfig: JSON.parse(fs.readFileSync(filePath, 'utf8')) });
+    const text = readRoomConfig(ws, 'mcp_config.json');
+    if (text !== null) {
+      res.json({ mcpConfig: JSON.parse(text) });
     } else {
       res.json({ mcpConfig: null });
     }
@@ -440,7 +440,7 @@ router.put('/room/:roomId/mcp', (req, res) => {
   if (!mcpConfig) return res.status(400).json({ error: 'mcpConfig が必要です' });
   try {
     if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
-    fs.writeFileSync(path.join(ws, 'mcp_config.json'), JSON.stringify(mcpConfig, null, 2) + '\n');
+    writeRoomConfig(ws, 'mcp_config.json', JSON.stringify(mcpConfig, null, 2) + '\n');
     // MCP キャッシュを即時無効化（次回メッセージで新設定で再接続）
     const agentId = botApi.getBotUserId();
     if (agentId) {

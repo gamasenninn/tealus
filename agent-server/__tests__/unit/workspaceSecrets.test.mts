@@ -55,6 +55,19 @@ describe('#419 workspace 走査', () => {
     expect(scanWorkspaceSecrets(root).backAgain).toBeGreaterThan(0);
   });
 
+  it('★ G-1 ルームの設定 4 つが workspace に残っていれば「戻っている」と数える (置き場は _room-configs)', () => {
+    const root = tmpTree({
+      'agent1/room1/room_settings.json': '{}',
+      'agent1/room1/light_prompt.md': 'x',
+      'agent1/room1/mcp_config.json': '{}',
+      'agent1/room1/CLAUDE.md': '# x',
+      '_room-configs/agent1/room1/mcp_config.json': '{}',   // ★ 正しい置き場は数えない
+    });
+    const r = scanWorkspaceSecrets(root);
+    expect(r.backAgain).toBe(4);
+    expect(r.backAgainFiles.some((f) => f.includes('_room-configs'))).toBe(false);
+  });
+
   it('読めない root でも落ちない (★ 診断は止めない)', () => {
     const r = scanWorkspaceSecrets(path.join(os.tmpdir(), 'does-not-exist-' + Date.now()));
     expect(r.hits).toEqual([]);
