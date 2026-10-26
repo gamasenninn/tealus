@@ -12,7 +12,7 @@ import { fireWebhooks } from '../services/webhook.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
 import { announcePost } from '../services/postEffects.mts';
-import { REST_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.mts';
+import { REST_POST_TYPES, typeNotAllowedMessage, MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
 import { readRequester, scopeByRoom } from '../services/requesterScope.mts';
 
@@ -59,6 +59,7 @@ router.post('/', async (req: Request, res: Response) => {
   if (!content || content.trim() === '') {
     return res.status(400).json({ error: 'メッセージ内容は必須です' });
   }
+  if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) return res.status(400).json({ error: contentTooLongMessage(content.length) });
   // ★ この口は text と stamp だけ (2026-10-02、services/messageTypes.mts)
   if (!REST_POST_TYPES.includes(type)) return res.status(400).json({ error: typeNotAllowedMessage(type, REST_POST_TYPES) });
   // ★ #543 スタンプの中身はスタンプの ID。確かめずに保存すると、その部屋の一覧を読むたびに全員 500 になった
@@ -378,6 +379,7 @@ router.put('/:msgId', async (req: Request, res: Response) => {
   if (!content || !content.trim()) {
     return res.status(400).json({ error: 'メッセージ内容は必須です' });
   }
+  if (typeof content === 'string' && content.length > MAX_CONTENT_LENGTH) return res.status(400).json({ error: contentTooLongMessage(content.length) });
 
   try {
     // Get message and room policy

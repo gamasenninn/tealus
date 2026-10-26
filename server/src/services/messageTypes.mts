@@ -18,3 +18,12 @@ export const BOT_POST_TYPES: readonly string[] = ['text', 'form'];
 export function typeNotAllowedMessage(type: unknown, allowed: readonly string[]): string {
   return `type「${String(type).slice(0, 30)}」はこの口では使えません (使えるのは ${allowed.join(' / ')})`;
 }
+
+/**
+ * 本文の長さの上限 (セキュリティチェックループの K、2026-10-27)。
+ * ★ 以前は上限が無かった (JSON の受け取りの 100KB / socket の 1MB だけ)。本番の最長は人 20,248 字・機械 21,783 字 (10-27 実測) なので、
+ *   その倍以上にして普段の貼り付けは止めない
+ */
+export const MAX_CONTENT_LENGTH = 50_000;
+export const contentTooLongMessage = (len: number): string =>
+  `本文が長すぎます (${len.toLocaleString()} 字。${MAX_CONTENT_LENGTH.toLocaleString()} 字まで)。分けて送ってください`;

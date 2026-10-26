@@ -24,9 +24,9 @@ cc-tealus bridge は **agent-server と Claude Code が同マシン前提** で�
 
 ### 2026-05-08 採用者第 1 号 (藤井さん) dogfood で発覚
 
-- Tealus server: `192.168.11.12`
-- agent-server (port 4000): `192.168.11.10`
-- Claude Code: `192.168.11.10` 想定 → 実は別マシンに居て bridge 不成立
+- Tealus server: `192.0.2.12`
+- agent-server (port 4000): `192.0.2.11`
+- Claude Code: `192.0.2.11` 想定 → 実は別マシンに居て bridge 不成立
 
 ベータテスト連絡板で議論、network mount 系 (NFS / SMB / SSHFS / Rclone) は **inotify が remote write を検知できない原理的制約** で全滅。`Syncthing` のみが「両機 local file として配置 + 裏で双方向 sync」アプローチで動く事を確認。
 

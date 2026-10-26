@@ -6,7 +6,7 @@
  *
  * ## ★ 鍵に使う IP について (経路が 3 段あるので注意)
  *
- *   client → Cloudflare → NAS(nginx) 192.168.11.213 → 本体 :3000
+ *   client → Cloudflare → NAS(nginx) 192.0.2.10 → 本体 :3000
  *
  * `trust proxy` を設定しないと `req.ip` は **NAS の IP** になり、外から来た全員が
  * 同じ鍵に集まる。そうなると鍵は実質 login_id だけになり、

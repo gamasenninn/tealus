@@ -13,6 +13,8 @@ import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.
 import { rememberRoomMedia } from '../services/deletedMedia.mts';
 import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/appPass.mts';
 import { isValidAppUrls } from '../utils/webUrl.mts';
+import { imageExt, imageOnlyFilter } from '../utils/imageUpload.mts';
+import { REQUESTER_HEADER } from '../services/requesterScope.mts';
 
 /** #607 通行証を出せないとき。★ 理由を外に言い分けない (どの条件で落ちたかは記録にだけ残す) */
 const APP_PASS_UNAVAILABLE = 'このアプリには通行証を出せません';
@@ -21,11 +23,11 @@ const ICON_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dirna
 const iconStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, ICON_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = imageExt(file.originalname, file.mimetype);   // ★ 画像の拡張子だけ (L)
     cb(null, `${req.params.id}-${Date.now()}${ext}`);
   },
 });
-const iconUpload = multer({ storage: iconStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+const iconUpload = multer({ storage: iconStorage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageOnlyFilter });
 
 export const router = express.Router();
 
@@ -176,6 +178,11 @@ router.post('/', async (req, res) => {
   const bad = requested.find((id) => !isUuid(id));
   if (bad !== undefined) return res.status(400).json({ error: badIdMessage(String(bad)) });
   const otherIds = [...new Set(requested as string[])].filter((id) => id !== userId);
+  // ★ AI の道具 (機械 + 依頼した人の印) からは人を入れた部屋を作らない (セキュリティチェックループの E、2026-10-27)。
+  //   仕込まれた 1 文で、ゲストや大勢を入れた部屋を作って中身を運べた。印の無い機械 (Claude Code の班など) は今までどおり
+  if (req.user!.is_bot && req.get(REQUESTER_HEADER) !== undefined && otherIds.length > 0) {
+    return res.status(403).json({ error: 'AI の道具からは、人を入れた部屋を作れません' });
+  }
   if (otherIds.length > 0) {
     const ok = await pool.query<{ n: number }>('SELECT count(*)::int n FROM users WHERE id = ANY($1::uuid[]) AND is_active = true', [otherIds]);
     if (ok.rows[0].n !== otherIds.length) return res.status(400).json({ error: 'メンバーに指定できないユーザーが含まれています' });

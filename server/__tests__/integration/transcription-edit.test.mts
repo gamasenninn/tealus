@@ -337,6 +337,17 @@ describe('Transcription Edit API', () => {
       expect(res.status).toBe(200);
     });
 
+    it('★ ただしゲストは、機械の音声でも直せない (設定がオフのとき。セキュリティチェックループの L)', async () => {
+      await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [user1.user.id]);
+      await getTestPool().query("UPDATE users SET role = 'guest' WHERE id = $1", [user2.user.id]);
+      const res = await request(app).put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user2.token}`).send({ text: 'ゲストが直そうとした' });
+      expect(res.status).toBe(403);
+      const re = await request(app).post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user2.token}`).send({});
+      expect(re.status).toBe(403);
+    });
+
     it('人が送った音声は、設定がオフなら今までどおり送り手だけ', async () => {
       const res = await request(app).put(`/api/messages/${messageId}/transcription`)
         .set('Authorization', `Bearer ${user2.token}`).send({ text: '他人が直そうとした' });

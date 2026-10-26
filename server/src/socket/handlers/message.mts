@@ -4,7 +4,7 @@ import { pool } from '../../db/pool.mts';
 import { isUuid } from '../../utils/uuid.mts';
 import { announcePost } from '../../services/postEffects.mts';
 import { checkMessageRefs } from '../../services/messageRefs.mts';
-import { SOCKET_POST_TYPES } from '../../services/messageTypes.mts';
+import { SOCKET_POST_TYPES, MAX_CONTENT_LENGTH, contentTooLongMessage } from '../../services/messageTypes.mts';
 import { REPLY_SELECT, normalizeReply, type ReplyMessageRow } from '../../services/messageAttachments.mts';
 
 interface ForwardMessageRow extends ReplyMessageRow {
@@ -86,6 +86,7 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
     logger.debug(`message:send user=${socket.user.id} room=${room_id} type=${type}`);
 
     if (!isUuid(room_id) || typeof content !== 'string' || content.trim() === '') return reject('送る内容が正しくありません');
+    if (content.length > MAX_CONTENT_LENGTH) return reject(contentTooLongMessage(content.length));   // ★ K: socket は 1MB まで通るので、ここで同じ上限
     // ★ 画面からの投稿は text だけ (2026-10-02、services/messageTypes.mts)。system や form を名乗れない
     if (!SOCKET_POST_TYPES.includes(type)) {
       logger.warn(`message:send を断りました (type=${String(type).slice(0, 30)}): actor=${socket.user.display_name}(${socket.user.id}) room=${room_id}`);

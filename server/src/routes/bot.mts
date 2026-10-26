@@ -19,7 +19,7 @@ import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { transcribeMessage } from '../services/transcription.mts';
 import { postAsUser } from '../services/postAsUser.mts';
-import { BOT_POST_TYPES, typeNotAllowedMessage } from '../services/messageTypes.mts';
+import { BOT_POST_TYPES, typeNotAllowedMessage, MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
@@ -149,6 +149,7 @@ router.post('/push', scopeByRoom('body'), async (req, res) => {
   if (!content || !content.trim()) {
     return res.status(400).json({ error: 'content は必須です' });
   }
+  if (content.length > MAX_CONTENT_LENGTH) return res.status(400).json({ error: contentTooLongMessage(content.length) });
   // ★ ボットの投稿は text と form だけ (2026-10-02、services/messageTypes.mts)。AI が system などを混ぜる間違いを止める
   if (!BOT_POST_TYPES.includes(type)) return res.status(400).json({ error: typeNotAllowedMessage(type, BOT_POST_TYPES) });
 

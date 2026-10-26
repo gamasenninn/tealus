@@ -8,6 +8,7 @@ import { authenticate } from '../middleware/auth.mts';
 import { learnFromEdit } from '../services/dictionaryLearner.mts';
 import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
+import { isGuest } from '../utils/permissions.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -63,7 +64,10 @@ router.put('/', authenticate, async (req, res) => {
     }
     // 送り手以外は、ルームの設定でメンバーの編集が許されているときだけ
     // ★ ただし機械 (is_bot) が送った音声はメンバーなら直せる (2026-10-24 小野さん判断、docs/02。送り手が機械だと誰も直せなかった)
-    if (sender_id !== userId && !allow_member_transcription_edit && !sender_is_bot) {
+    // ★ ゲストは機械の音声でも直せない (セキュリティチェックループの L、2026-10-27)。ゲストの原則「招かれた部屋の中だけ」(#282) の上でも、
+    //   直した文は辞書の自己成長と手直しの台帳に流れるため
+    const machineVoiceOk = sender_is_bot && !isGuest(req.user!);
+    if (sender_id !== userId && !allow_member_transcription_edit && !machineVoiceOk) {
       return res.status(403).json({ error: '送信者のみ編集できます' });
     }
 
@@ -236,7 +240,7 @@ router.post('/retranscribe', authenticate, async (req: Request, res: Response) =
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ error: 'ルームメンバーのみ再文字起こしできます' });
     }
-    if (sender_id !== userId && !allow_member_transcription_edit && !sender_is_bot) {   // ★ 編集と同じ (機械の音声はメンバーなら)
+    if (sender_id !== userId && !allow_member_transcription_edit && !(sender_is_bot && !isGuest(req.user!))) {   // ★ 編集と同じ (機械の音声はゲスト以外のメンバーなら)
       return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
     }
 

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMessageStore } from '../../stores/messageStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useAuthStore } from '../../stores/authStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { api } from '../../services/api';
 import ImageGrid from '../media/ImageGrid';
@@ -69,6 +70,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   // ★ 送り手が機械なら、部屋の設定によらず文字起こしを直せる (2026-10-24 小野さん判断、docs/02)
   const senderIsBot = members.some((m) => m.user_id === message.sender_id && !!m.is_bot);
   const { assistantUserId, assistantName } = useAgentStore();
+  const isGuestUser = useAuthStore((s) => s.user?.role === 'guest');   // ★ ゲストは機械の音声でも直せない (本体と同じ、L)
   // ★ 「エージェントに送る」で送った音声は文字起こしを畳む (2026-10-24 小野さん判断)。真偽だけを取り出すので、ほかの便が増えても描き直さない
   const sentToAgent = useMessageStore((s) => isSentToAgent(message, s.messages, assistantName));
   // #338 Phase 1: アシスタントが当該ルームの member の時だけ「エージェントに送る」を出す
@@ -317,7 +319,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                   </>
                 );
               })()}
-              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit || senderIsBot} sentToAgent={sentToAgent} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
+              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit || (senderIsBot && !isGuestUser)} sentToAgent={sentToAgent} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {formSchema && (
                 <FormBubble
                   message={message}

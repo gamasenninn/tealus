@@ -24,7 +24,7 @@ test('★★ 本体の中継を通ったもの (外から) は、同じマシン
 
 test('★★ 社内 LAN の別のマシンからは鍵なしでは入れない', () => {
   assert.equal(isLocalUnproxied(req('192.168.1.20')), false);
-  assert.equal(isLocalUnproxied(req('10.231.0.2')), false);
+  assert.equal(isLocalUnproxied(req('10.0.0.2')), false);
 });
 
 test('★★ メンバーかどうかは本体に聞く: 200 なら入れる、それ以外は断る', async () => {

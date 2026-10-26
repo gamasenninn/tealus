@@ -134,3 +134,35 @@ describe('bot の書き込みも依頼した人の部屋に絞る (C)', () => {
     expect((await auth(request(app).put(`/api/rooms/${roomA}/messages/${msgA}`), u.user.id).send({ content: '直した' })).status).toBe(200);
   });
 });
+
+/**
+ * ★ AI の道具 (依頼した人の印つき) からは、人を入れた部屋を作れない (セキュリティチェックループの E、2026-10-27)。
+ *   仕込まれた 1 文で、ゲストや大勢を入れた部屋を作って中身を運べた。本番で機械が作った部屋 3 つはどれも印の無い道 (Claude Code の班など)
+ */
+describe('AI の道具から人を入れた部屋を作らない (E)', () => {
+  let bot: T, u: T, v: T;
+  const H = 'X-Tealus-Requester';
+  beforeAll(async () => {
+    await setupTestDb();
+    await cleanTestDb();
+    bot = await createTestUser({ login_id: 'BOTE01', display_name: 'アシスタント' });
+    u = await createTestUser({ login_id: 'EMPE01', display_name: '依頼した人' });
+    v = await createTestUser({ login_id: 'EMPE02', display_name: '別の人' });
+    await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [bot.user.id]);
+  });
+  afterAll(async () => { await closeTestDb(); });
+  const create = (member_ids: string[], requester?: string) => {
+    const r = request(app).post('/api/rooms').set('Authorization', `Bearer ${bot.token}`);
+    return (requester ? r.set(H, requester) : r).send({ name: '新しい部屋', member_ids });
+  };
+
+  it('★★ 印つきで人を入れようとしたら 403', async () => {
+    expect((await create([u.user.id, v.user.id], u.user.id)).status).toBe(403);
+  });
+  it('★ 印が無ければ今までどおり (Claude Code の班などが部屋を作る道)', async () => {
+    expect((await create([u.user.id])).status).toBe(201);
+  });
+  it('印つきでも、人を入れない部屋は作れる', async () => {
+    expect((await create([], u.user.id)).status).toBe(201);
+  });
+});

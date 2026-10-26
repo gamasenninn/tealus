@@ -18,11 +18,11 @@ const AVATAR_DIR = path.join(process.env.MEDIA_ROOT || path.join(import.meta.dir
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, AVATAR_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = imageExt(file.originalname, file.mimetype);   // ★ 画像の拡張子だけ (L)
     cb(null, `${req.user!.id}-${Date.now()}${ext}`);
   },
 });
-const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageOnlyFilter });
 
 /** ★ #498 DB の列の上限と同じ (users.display_name varchar(50) / status_message varchar(100)) */
 const DISPLAY_NAME_MAX = 50;
@@ -40,6 +40,7 @@ function refreshConnectedUser(userId: string, patch: { display_name?: string; av
 export const router = express.Router();
 
 import { SALT_ROUNDS } from '../constants/config.mts';
+import { imageExt, imageOnlyFilter } from '../utils/imageUpload.mts';
 
 /** login クエリで password_hash も一緒に取得する行 (レスポンス前に削除する) */
 interface UserWithPasswordRow extends AuthUser {
