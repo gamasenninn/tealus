@@ -37,6 +37,7 @@ import { upsertGroupEntry, readGroupName } from '../services/lineGroupCatalog.mt
 import { getMemberDisplayName } from '../services/lineMemberCatalog.mts';
 import { recordLineMessageLinks, findLinkedMessageId } from '../services/lineMessageLinks.mts';
 import { logger } from '../utils/logger.mts';
+import { applyContentLabel } from '../utils/lineContent.mts';
 
 export const router = express.Router();
 
@@ -127,19 +128,6 @@ async function resolveSenderLabel(
 
   const groupName = readGroupName(groupId);
   return groupName ? `${name}@${groupName}` : name;
-}
-
-/**
- * content 先頭に「**ラベル**」を付与する (= #309 案A)。
- * - label が null/空 → body をそのまま返す (= 従来挙動、body は undefined もあり得る)
- * - body あり → 「**label**\n本文」、body 無し (= media caption) → 「**label**」
- */
-function applyContentLabel(label: string | null | undefined, body: string): string;
-function applyContentLabel(label: string | null | undefined, body: string | undefined): string | undefined;
-function applyContentLabel(label: string | null | undefined, body: string | undefined): string | undefined {
-  if (!label) return body;
-  const head = `[${label}]`;
-  return (body && body.length > 0) ? `${head}\n${body}` : head;
 }
 
 const SECRET_PATH = process.env.LINE_WEBHOOK_SECRET_PATH;
