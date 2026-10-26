@@ -328,3 +328,23 @@ describe('MultiTalk — 有効なパネルを最前面に', () => {
     expect(zOf(panels[1])).toBe('1');
   });
 });
+
+describe('MultiTalk — パネルの中が別のサイトへ移ったとき', () => {
+  it('★ 中の window に触れられなくても (別オリジン)、読み込みで投げない', () => {
+    localStorage.setItem('multiTalkPanels', JSON.stringify([
+      { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 },
+    ]));
+    const { container } = renderMulti();
+    const frame = container.querySelector('iframe')!;
+    const w = frame.contentWindow!;
+    const orig = w.addEventListener;
+    w.addEventListener = () => { throw new DOMException('Blocked a frame', 'SecurityError'); };
+    const errors: unknown[] = [];
+    const onErr = (e: ErrorEvent) => { errors.push(e.error); e.preventDefault(); };
+    window.addEventListener('error', onErr);
+    fireEvent.load(frame);
+    window.removeEventListener('error', onErr);
+    w.addEventListener = orig;
+    expect(errors).toEqual([]);
+  });
+});

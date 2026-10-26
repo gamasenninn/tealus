@@ -318,8 +318,11 @@ function MultiTalk() {
                   title={panel.roomName}
                   // ★ 中を押したら、このパネルを有効にして最前面へ (2026-10-25)。iframe の中の操作は親の onMouseDown に届かない。
                   //   同じオリジンなので中の window で拾う。部屋を移るたびに中の window が入れ替わるので、読み込みのたびに付け直す
+                  //   ★ 中のリンクで別のサイトへ移ったときは中の window に触れられない (SecurityError)。そのときは付けない
                   onLoad={(e) => {
-                    e.currentTarget.contentWindow?.addEventListener('pointerdown', () => setActivePanel(panel.id), true);
+                    try {
+                      e.currentTarget.contentWindow?.addEventListener('pointerdown', () => setActivePanel(panel.id), true);
+                    } catch { /* 別オリジン */ }
                   }}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: interacting ? 'none' : 'auto' }}
                 />

@@ -16,6 +16,7 @@ import { authenticate } from './middleware/auth.mts';
 import { requestLog } from './middleware/requestLog.mts';
 import { createConfigAuthz, classifyLogsRequest, classifyAgentRequest, classifyVoiceChatRequest, classifyTtsRequest } from './lib/configAuthz.mts';
 import { createScopedProxy } from './routes/scopedProxy.mts';
+import { errorHandler } from './middleware/errorHandler.mts';
 
 export const app = express();
 // ★ #564 AI の道具のための中継。本文をそのまま本体へ流すので express.json より前に置く
@@ -67,3 +68,6 @@ app.use('/voice-chat', authenticate, createConfigAuthz({ apiUrl: config.TEALUS_A
 // cc-queue ストリーム（認証必要）— #214 CC セッションを別マシンで動かすための復路。
 // 認証は署名検証のみなので、route 側でさらに本体 /api/rooms を引いて参加ルームに絞る。
 app.use('/cc-queue', authenticate, ccQueueRoutes);
+
+// ★ 想定外の失敗の受け口。一番最後に置く (中のパスやスタックを返さない、セキュリティチェックループ 1 回目)
+app.use(errorHandler);
