@@ -72,3 +72,32 @@ describe('app_urls / portal_links の URL の種類', () => {
     expect(upd.status).toBe(400);
   });
 });
+
+describe('webhook の宛先と応答の見出し (セキュリティチェックループ 3 回目)', () => {
+  let sysadmin: TestUser;
+  beforeAll(async () => { await setupTestDb(); });
+  afterAll(async () => { await closeTestDb(); });
+  beforeEach(async () => {
+    await cleanTestDb();
+    sysadmin = await createTestUser({ login_id: 'ADM002', display_name: '管理者' });
+    await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [sysadmin.user.id]);
+  });
+
+  it('★ webhook の宛先も http / https だけ (登録・直す)', async () => {
+    const bad = await request(app).post('/api/admin/webhooks')
+      .set('Authorization', `Bearer ${sysadmin.token}`).send({ url: 'file:///c:/x' });
+    expect(bad.status).toBe(400);
+    const ok = await request(app).post('/api/admin/webhooks')
+      .set('Authorization', `Bearer ${sysadmin.token}`).send({ url: 'http://localhost:4000/webhook' });
+    expect(ok.status).toBe(201);
+    const upd = await request(app).put(`/api/admin/webhooks/${ok.body.webhook.id}`)
+      .set('Authorization', `Bearer ${sysadmin.token}`).send({ url: 'gopher://x' });
+    expect(upd.status).toBe(400);
+  });
+
+  it('★ 応答に X-Powered-By を出さず、nosniff を付ける', async () => {
+    const res = await request(app).get('/api/health');
+    expect(res.headers['x-powered-by']).toBeUndefined();
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+});

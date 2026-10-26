@@ -107,6 +107,10 @@ export const io = new Server(server, {
 setIo(io);
 
 // Middleware
+// ★ 中の作りを名乗らない・形式の推測をさせない (セキュリティチェックループ 3 回目)。
+//   ★ X-Frame-Options / CSP はマルチ画面・アプリパネルの埋め込みを確かめてから (承認待ち)
+app.disable('x-powered-by');
+app.use((_req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); next(); });
 app.use(cors());
 
 // Agent Server proxy（express.json() より前に配置 — body をパースせずに転送するため）

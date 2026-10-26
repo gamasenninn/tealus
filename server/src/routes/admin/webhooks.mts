@@ -3,6 +3,9 @@ import * as E from '../../constants/errors.mts';
 import express from 'express';
 import { pool } from '../../db/pool.mts';
 import { dispatchWebhook } from '../../services/webhook.mts';
+import { isWebUrl } from '../../utils/webUrl.mts';
+
+const E_WEB_URL = 'URL は http:// か https:// で始めてください';
 
 export const router = express.Router();
 
@@ -65,6 +68,8 @@ router.post('/webhooks', async (req, res) => {
   if (!url) {
     return res.status(400).json({ error: 'URLは必須です' });
   }
+  // ★ 宛先は http / https だけ (セキュリティチェックループ 3 回目)
+  if (!isWebUrl(url)) return res.status(400).json({ error: E_WEB_URL });
 
   try {
     const result = await pool.query(
@@ -88,6 +93,7 @@ router.post('/webhooks', async (req, res) => {
 router.put('/webhooks/:id', async (req, res) => {
   const { id } = req.params;
   const { url, room_id, secret, events, is_active } = req.body;
+  if (url !== undefined && !isWebUrl(url)) return res.status(400).json({ error: E_WEB_URL });
 
   try {
     const updates: string[] = [];
