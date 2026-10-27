@@ -193,7 +193,7 @@ function MultiTalk() {
     setPanels(prev => prev.map(p => p.id === id ? toggleMinimize(p) : p));
   };
 
-  // 帯のダブルクリック: 最小化中なら戻す、それ以外は読みやすい大きさ (幅 480・高さは置き場の半分。2026-10-27、panelWindow.ts)。
+  // 帯のダブルクリック: 最小化中なら戻す、それ以外は読みやすい大きさ (幅は 480 以上ならそのまま・高さは置き場の半分。2026-10-27、panelWindow.ts)。
   // ★ 1 回のクリックでは戻さない (帯はドラッグのつかみ)
   const barDoubleClick = (id: number) => {
     const area = maxArea();

@@ -15,6 +15,12 @@ describe('帯のダブルクリック', () => {
     expect(FIT_WIDTH).toBe(480);
   });
 
+  // ★ 2026-10-27 小野さん: 幅が十分大きければそのまま (480 より狭いときだけ 480 に広げる)
+  it('★ 幅が 480 以上ならその幅を残す (高さだけ置き場の半分)', () => {
+    const p = onBarDoubleClick({ x: 100, y: 50, width: 700, height: 200 }, area);
+    expect(p).toMatchObject({ x: 100, y: 50, width: 700, height: 450 });
+  });
+
   it('★ 置き場からはみ出すなら中へ寄せる', () => {
     const p = onBarDoubleClick({ x: 1500, y: 800, width: 300, height: 200 }, area);
     expect(p.x + p.width).toBeLessThanOrEqual(area.x + area.width);
