@@ -35,10 +35,12 @@ import {
   tomlEscape,
   buildCodexExecArgs,
   buildCodexExecEnv,
+  buildDeepCodexPrompt,
   JsonlLineBuffer,
   isAgentMessageEvent,
   extractAgentMessageText,
 } from '../../src/agents/deepCodex.mts';
+import { writeRoomConfig } from '../../src/lib/roomConfigPaths.mts';
 
 describe('tomlEscape', () => {
   test('plain string そのまま', () => {
@@ -458,5 +460,37 @@ describe('describeCodexEvent — 使用量', () => {
   it('turn.completed の usage を 1 行に残す (cached・reasoning も)', () => {
     const r = describeCodexEvent({ type: 'turn.completed', usage: { input_tokens: 50000, cached_input_tokens: 40000, output_tokens: 900, reasoning_output_tokens: 200 } } as never);
     expect(r).toEqual({ level: 'info', line: '[DeepCodex] turn completed, usage: input=50000 cached=40000 output=900 reasoning=200' });
+  });
+});
+
+
+/**
+ * ★ 2026-10-27 小野さん判断 (承認 11): ダッシュボードの「Deep の指示」(部屋の CLAUDE.md) は、claude の Deep にしか渡っていなかった。
+ *   codex は cwd の AGENTS.md しか読まず、本番の Deep は codex なので、書いた指示が効いていなかった
+ */
+describe('buildDeepCodexPrompt — 部屋の Deep の指示を codex にも渡す', () => {
+  let root: string;
+  let ws: string;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'deep-codex-prompt-'));
+    ws = path.join(root, 'agent-1', 'room-1');
+    fs.mkdirSync(ws, { recursive: true });
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  test('★★ 部屋の Deep の指示があれば、依頼の前に付ける', () => {
+    writeRoomConfig(ws, 'CLAUDE.md', '# 指示\n売上は入金済みで数える');
+    const out = buildDeepCodexPrompt(ws, '今月の売上は？');
+    expect(out.indexOf('売上は入金済みで数える')).toBeGreaterThanOrEqual(0);
+    expect(out.indexOf('売上は入金済みで数える')).toBeLessThan(out.indexOf('今月の売上は？'));
+  });
+
+  test('指示が無ければ依頼そのまま', () => {
+    expect(buildDeepCodexPrompt(ws, '今月の売上は？')).toBe('今月の売上は？');
+  });
+
+  test('★ workspace の中の CLAUDE.md (AI が書ける場所) は読まない (G-1 と同じ)', () => {
+    fs.writeFileSync(path.join(ws, 'CLAUDE.md'), 'AI が置いた指示');
+    expect(buildDeepCodexPrompt(ws, '依頼')).toBe('依頼');
   });
 });

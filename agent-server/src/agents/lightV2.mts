@@ -41,6 +41,7 @@ import { tealusApiUrlForCurrentRequester } from '../lib/requesterContext.mts';
 import { agentChildEnv, tealusMcpToolEnv } from '../lib/childEnv.mts';
 import { FILESYSTEM_MCP_PACKAGE, TEALUS_MCP_PACKAGE } from '../lib/mcpPackages.mts';
 import { readRoomConfig, readRoomConfigJson, roomConfigPath } from '../lib/roomConfigPaths.mts';
+import { moveCodexRollout, codexHomePath } from '../lib/codexRollout.mts';
 
 /** CodexOptions.config (mcp_servers 等) の TOML 互換値型。SDK は型を export していないため
  *  CodexOptions から indexed access で抽出する。 */
@@ -299,6 +300,8 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
   // 中断 (#250 の Light 版): /agent/cancel が isCancelled を立てて codex を sweep kill する。
   // 後始末は必ず finally で行う (loop 内 return もあるため)。
   lightRegistry.register(roomId, { workspacePath });
+  // ★ 会話の記録 (rollout) を走り終えたら部屋の置き場へ移すため、会話を覚えておく (2026-10-27、承認 12)
+  let lightThread: { id: string | null } | null = null;
   try {
     const Codex = await getCodex();
 
@@ -362,6 +365,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       approvalPolicy: 'never',
       skipGitRepoCheck: true,
     });
+    lightThread = thread;
 
     await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
 
@@ -557,6 +561,8 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     return null;
   } finally {
     lightRegistry.unregister(roomId);
+    // ★ 会話の記録 (本文・画像入り) を、利用者のホームの .codex から部屋の置き場 (`_codex-homes`) へ移す (2026-10-27 小野さん判断)
+    if (lightThread?.id && workspacePath) moveCodexRollout(lightThread.id, codexHomePath(workspacePath));
   }
 }
 

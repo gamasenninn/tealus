@@ -25,6 +25,8 @@ import * as config from '../config.mts';
 import { buildLightV2McpConfig } from './lightV2.mts';
 import { detectCodexAuthError, buildCodexErrorUserMessage } from '../lib/codexAuthError.mts';
 import { agentChildEnv } from '../lib/childEnv.mts';
+import { readRoomConfig } from '../lib/roomConfigPaths.mts';
+import { codexHomePath } from '../lib/codexRollout.mts';
 
 /** MCP server 定義 (deep.mts の createDeepMcpConfig 同 form) */
 export interface McpServerDef {
@@ -118,17 +120,9 @@ export function serializeMcpServersToToml(mcp_servers: McpServersConfig): string
   return lines.join('\n');
 }
 
-/**
- * ★ #419 CODEX_HOME の置き場。**workspace の外**に置く。
- *   `<WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId>`
- *   (`deepMcpConfigPath` と同じ考え方。workspacePath から 2 つ上が WORKSPACE_ROOT)
- */
-export function codexHomePath(workspacePath: string): string {
-  const roomDir = path.basename(workspacePath);
-  const agentDir = path.basename(path.dirname(workspacePath));
-  const workspaceRoot = path.dirname(path.dirname(workspacePath));
-  return path.join(workspaceRoot, '_codex-homes', agentDir, roomDir);
-}
+// ★ #419 CODEX_HOME の置き場 (`<WORKSPACE_ROOT>/_codex-homes/<agentId>/<roomId>`) は lib/codexRollout.mts に 1 つ
+//   (2026-10-27、Light v2 の会話の記録も同じ置き場へ移すため)
+export { codexHomePath };
 
 /**
  * CODEX_HOME を準備する:
@@ -229,6 +223,17 @@ export function writeBackCodexAuth(codexHomePath: string, codexHomeSrcDir: strin
     logger.warn(`[deepCodex] auth.json writeback failed: ${err instanceof Error ? err.message : String(err)}`);
     return false;
   }
+}
+
+/**
+ * codex に渡す依頼文。部屋の「Deep の指示」(ダッシュボードで編集する CLAUDE.md、`_room-configs`) があれば先頭に付ける。
+ * ★ 2026-10-27 小野さん判断。以前は claude の Deep (--append-system-prompt-file) にしか渡っておらず、codex は cwd の AGENTS.md しか
+ *   読まないので、本番の Deep (codex) では書いた指示が効いていなかった。★ workspace の中の CLAUDE.md (AI が書ける場所) は読まない (G-1)
+ */
+export function buildDeepCodexPrompt(workspacePath: string, prompt: string): string {
+  const roomInstructions = readRoomConfig(workspacePath, 'CLAUDE.md')?.trim();
+  if (!roomInstructions) return prompt;
+  return `# この部屋の Deep の指示 (管理者が設定)\n\n${roomInstructions}\n\n---\n\n${prompt}`;
 }
 
 /**
@@ -470,7 +475,8 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
     });
 
     logger.info(`Deep Codex Agent starting: codex ${args.slice(0, 6).join(' ')}... auth=${useSubscription ? 'subscription' : 'api-key'} model=${model}`);
-    logger.debug(`Deep Codex Agent full prompt:\n${prompt}`);
+    const fullPrompt = buildDeepCodexPrompt(workspacePath, prompt);
+    logger.debug(`Deep Codex Agent full prompt:\n${fullPrompt}`);
 
     botApi.pushStatus(roomId, 'analyzing', '高度な分析中...').catch(() => {});
 
@@ -484,7 +490,7 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
 
     deepRegistry.register(roomId, proc);
 
-    proc.stdin!.write(prompt);
+    proc.stdin!.write(fullPrompt);
     proc.stdin!.end();
 
     proc._tealusCancelled = false;
