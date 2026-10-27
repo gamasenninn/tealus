@@ -8,6 +8,18 @@ import { useRoomStore } from './roomStore';
 
 /** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
 const UNSUBSCRIBE_WAIT_MS = 3000;
+
+/**
+ * 同じ画面で次の人に、前の人が覚えたものを出さない。ログアウトと、ログアウトせずに /login から入る道の両方から呼ぶ
+ * (改善ループ 19 回目に 1 つにまとめた。logout にだけ足していて、login の道に残っていた)
+ */
+function forgetPreviousUser(): void {
+  clearRoomViewCache();   // ★ #600 部屋の中身
+  // ★ 部屋の一覧と開いていた部屋 (改善ループ 15 回目)。走っている取り直しの応答も捨てる (16 回目)
+  useRoomStore.getState().reset();
+  // ★ 検索の結果 (本文入り) とスクロール位置 (18 回目)
+  try { sessionStorage.removeItem('searchCache'); sessionStorage.removeItem('searchScroll'); } catch { /* 保存領域が使えないだけ */ }
+}
 import type { User } from '../types';
 import { LEGACY_SOUND_KEY, shouldMoveLegacySoundOff } from '../utils/messageSound';
 
@@ -73,8 +85,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
   login: async (login_id, password) => {
     const data = await api.login(login_id, password);
-    // ★ #600 監査 B: ログアウトせずに /login から別の人が入っても、前の人が覚えた部屋の中身を出さない
-    clearRoomViewCache();
+    // ★ #600 監査 B: ログアウトせずに /login から別の人が入っても、前の人が覚えたものを出さない
+    forgetPreviousUser();
     api.setToken(data.token);
     connectSocket(data.token);
     set({ user: data.user, token: data.token });
@@ -92,11 +104,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     ]);
     api.setToken(null);
     disconnectSocket();
-    clearRoomViewCache();   // ★ #600 同じ画面で別の人がログインしても、前の人の会話を先に出さない
-    // ★ 部屋の一覧と開いていた部屋も捨てる (改善ループ 15 回目。次の人のログイン直後に前の人の一覧が一瞬出ていた)
-    useRoomStore.getState().reset();   // ★ 走っている取り直しの応答も捨てる (改善ループ 16 回目)
-    // ★ 検索の結果 (本文入り) も捨てる (改善ループ 18 回目)。同じタブで次の人が検索を開くと、前の人の結果が出ていた
-    try { sessionStorage.removeItem('searchCache'); sessionStorage.removeItem('searchScroll'); } catch { /* 保存領域が使えないだけ */ }
+    forgetPreviousUser();
     set({ user: null, token: null });
   },
 

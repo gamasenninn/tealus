@@ -54,6 +54,12 @@ describe('本文の長さの上限', () => {
     }
   });
 
+  // ★ 改善ループ 19 回目: express.json の既定 100KB で、日本語は約 3 万 4 千字で先に 413 (理由の分からない文) になっていた
+  it('★ 日本語 4 万字 (約 12 万バイト) も 5 万字の決まりどおり通る', async () => {
+    const res = await request(app).post('/api/bot/push').set('Authorization', `Bearer ${bot.token}`).send({ room_id: roomId, content: 'あ'.repeat(40_000) });
+    expect(res.status).toBe(201);
+  });
+
   it('★ 文字起こしの手直しも同じ上限', async () => {
     const res = await request(app).put('/api/messages/00000000-0000-4000-8000-000000000000/transcription')
       .set('Authorization', `Bearer ${u.token}`).send({ text: big });

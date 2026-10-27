@@ -68,6 +68,6 @@ export function singleImage(upload: multer.Multer, field: string, limitMb: numbe
 /** req.file が無いときの 400 の文。★ 種類で断ったのに「添付されていません」と言わない */
 export function imageUploadError(req: Request): string {
   return (req as MarkedRequest)[REJECTED] !== undefined
-    ? '画像 (JPEG・PNG・GIF・WebP・HEIC・AVIF) だけ受け付けます'
+    ? '画像 (JPEG・PNG・GIF・WebP) を選んでください'   // ★ 19 回目: HEIC・AVIF は書かない (Chrome では描けず、拡張子では通さない)
     : '画像ファイルが添付されていません';
 }

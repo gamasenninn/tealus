@@ -216,7 +216,9 @@ app.use('/mcp', createProxyMiddleware({
 // routes/line.mts は LINE 公式 spec 準拠で常に 2xx 返却 (= 6/4 200 fix、webhook auto-suspend 防止)
 app.use('/api/line', express.raw({ type: 'application/json' }), lineRoutes);
 
-app.use(express.json());
+// ★ 受け取る大きさは socket (1MB) と揃える (改善ループ 19 回目)。既定の 100KB では、日本語は約 3 万 4 千字で
+//   本文の決まり (5 万字) より先に 413 になり、理由の分からない文が返っていた
+app.use(express.json({ limit: '1mb' }));
 
 // API リクエストログ (断られた要求と変更には「誰が」を残す。middleware/requestLog.mts)
 app.use(requestLog);

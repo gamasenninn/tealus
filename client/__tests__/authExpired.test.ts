@@ -95,4 +95,16 @@ describe('ログイン (#600 監査 B)', () => {
     await useAuthStore.getState().login('b', 'x');
     expect(cache.getCachedMessages('r1')).toBeUndefined();
   });
+
+  // ★ 改善ループ 19 回目: logout に足してきた「前の人を忘れる」(部屋の一覧・検索の結果) が login の道に無かった
+  it('★ ログアウトせずに別の人が入っても、前の人の部屋の一覧と検索の結果を捨てる', async () => {
+    const { useRoomStore } = await import('../src/stores/roomStore');
+    useRoomStore.setState({ rooms: [{ id: 'r1' }] as never, currentRoom: { id: 'r1' } as never });
+    sessionStorage.setItem('searchCache', '{"q":"x"}');
+    vi.spyOn(api, 'login').mockResolvedValue({ token: 't3', user: { id: 'u3' } } as never);
+    await useAuthStore.getState().login('c', 'x');
+    expect(useRoomStore.getState().rooms).toEqual([]);
+    expect(useRoomStore.getState().currentRoom).toBeNull();
+    expect(sessionStorage.getItem('searchCache')).toBeNull();
+  });
 });

@@ -21,7 +21,9 @@ import { errorHandler } from './middleware/errorHandler.mts';
 export const app = express();
 // ★ #564 AI の道具のための中継。本文をそのまま本体へ流すので express.json より前に置く
 app.use('/tealus-scoped', createScopedProxy({ upstream: () => config.TEALUS_API_URL }));
-app.use(express.json());
+// ★ 本体の webhook は投稿の本文を丸ごと載せる (改善ループ 19 回目)。既定の 100KB では日本語約 3 万 4 千字で 413 になり、
+//   本体は 4xx をやり直さないので AI が起動しなかった。本文の決まり (5 万字) が入る大きさにする
+app.use(express.json({ limit: '1mb' }));
 app.use(cors());
 // 断られた要求と変更には「誰が」を残す (改善ループ 9 回目の B・C)。★ /tealus-scoped は上で先に返るので通らない
 app.use(requestLog);

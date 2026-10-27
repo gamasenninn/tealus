@@ -12,6 +12,7 @@ describe('画像でないファイルを断ったときの文 (2026-10-27 改善
     const { req, accepted } = run('application/octet-stream');
     expect(accepted).toBe(false);
     expect(imageUploadError(req)).toContain('JPEG');
+    expect(imageUploadError(req)).not.toContain('HEIC');   // ★ 19 回目: 拡張子で .heic を通さないのに「HEIC も受け付けます」と言っていた
   });
   it('★ 種類が空・octet-stream で届いても、どのブラウザでも描ける拡張子なら通す', () => {
     const req = {} as Parameters<typeof imageOnlyFilter>[0];

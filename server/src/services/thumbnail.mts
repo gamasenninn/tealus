@@ -28,7 +28,10 @@ async function generateImageThumbnail(filePath: string): Promise<string | null> 
     const thumbnailFilename = `${basename}_thumb${ext}`;
     const thumbnailPath = path.join(MEDIA_ROOT, 'thumbnails', thumbnailFilename);
 
+    // ★ .rotate() (引数なし) で写真の向き (EXIF の Orientation) に従って起こす (改善ループ 19 回目)。
+    //   sharp は既定で向きを見ず、出力から EXIF も落とすので、スマホの縦写真のサムネイルが横倒しになっていた
     await sharp(filePath)
+      .rotate()
       .resize(THUMBNAIL_WIDTH)
       .toFile(thumbnailPath);
 
