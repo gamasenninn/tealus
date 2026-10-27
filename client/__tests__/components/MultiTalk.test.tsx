@@ -16,8 +16,10 @@ function renderMulti() {
 beforeEach(() => {
   // jsdom に無い。PWA (standalone) でないときの値を返す
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {} })) as never;
+  localStorage.removeItem('multiTalkPanels:me');
   localStorage.removeItem('multiTalkPanels');
   useAuthStore.setState({ user: { id: 'me', role: 'user', display_name: '私' } } as never);
+  useRoomStore.setState({ rooms: [] } as never);
   useMultiTalkStore.setState({ pendingOpen: null, openRoomIds: [], sidebarHidden: false });
 });
 
@@ -60,7 +62,7 @@ describe('MultiTalk (#502)', () => {
   });
 
   it('前に開いていたパネル (localStorage) も、開いている部屋として知らせる', () => {
-    localStorage.setItem('multiTalkPanels', JSON.stringify([{ id: 1, roomId: 'r9', roomName: '前の部屋', x: 0, y: 0, width: 400, height: 400 }]));
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([{ id: 1, roomId: 'r9', roomName: '前の部屋', x: 0, y: 0, width: 400, height: 400 }]));
     renderMulti();
     expect(useMultiTalkStore.getState().openRoomIds).toEqual(['r9']);
   });
@@ -114,11 +116,11 @@ describe('MultiTalk — パネルの帯 (#503)', () => {
  */
 describe('MultiTalk — 元に戻す (#504)', () => {
   const start = { id: 1, roomId: 'r1', roomName: '営業', x: 10, y: 20, width: 400, height: 500 };
-  const saved = () => JSON.parse(localStorage.getItem('multiTalkPanels')!)[0];
+  const saved = () => JSON.parse(localStorage.getItem('multiTalkPanels:me')!)[0];
   const geom = () => { const p = saved(); return { x: p.x, y: p.y, width: p.width, height: p.height }; };
   const startGeom = { x: 10, y: 20, width: 400, height: 500 };
   function renderOne() {
-    localStorage.setItem('multiTalkPanels', JSON.stringify([start]));
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([start]));
     return renderMulti();
   }
 
@@ -194,7 +196,7 @@ describe('MultiTalk — 元に戻す (#504)', () => {
  */
 describe('MultiTalk — すべて最下部へ (#507)', () => {
   it('★★ 開いている全パネルの中の画面へ scroll:bottom (instant) を送る', () => {
-    localStorage.setItem('multiTalkPanels', JSON.stringify([
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([
       { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 },
       { id: 2, roomId: 'r2', roomName: '整備', x: 400, y: 0, width: 400, height: 400, minimized: true },
     ]));
@@ -225,11 +227,11 @@ describe('MultiTalk — 閉じる・クリックでは並べ直さない', () =>
     // 整列せずに開いた新しいパネル (営業の上に重なっている)
     { id: 3, roomId: 'r3', roomName: '新しい', x: 20, y: 20, width: 500, height: 700 },
   ];
-  const saved = () => JSON.parse(localStorage.getItem('multiTalkPanels') || '[]') as Array<{ id: number; x: number; y: number; width: number; height: number }>;
+  const saved = () => JSON.parse(localStorage.getItem('multiTalkPanels:me') || '[]') as Array<{ id: number; x: number; y: number; width: number; height: number }>;
   const geomOf = (id: number) => { const p = saved().find((x) => x.id === id)!; return { x: p.x, y: p.y, width: p.width, height: p.height }; };
   const panelOf = (container: HTMLElement, title: string) => container.querySelector(`iframe[title="${title}"]`)!.closest('.multi-panel') as HTMLElement;
 
-  beforeEach(() => localStorage.setItem('multiTalkPanels', JSON.stringify(tiled)));
+  beforeEach(() => localStorage.setItem('multiTalkPanels:me', JSON.stringify(tiled)));
 
   it('★★ 閉じるボタンを押して離しても、残りのパネルは動かない', () => {
     const { container } = renderMulti();
@@ -269,17 +271,17 @@ describe('MultiTalk — 閉じる・クリックでは並べ直さない', () =>
  */
 describe('MultiTalk — 部屋の改名をパネルの名前に反映', () => {
   it('★ 一覧の部屋の名前が変わったら、パネルの名前も変わる', () => {
-    localStorage.setItem('multiTalkPanels', JSON.stringify([
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([
       { id: 1, roomId: 'r1', roomName: '古い名前', x: 0, y: 0, width: 400, height: 400, minimized: true },
     ]));
     useRoomStore.setState({ rooms: [{ id: 'r1', type: 'group', name: '新しい名前' }] as never });
     const { container } = renderMulti();
     expect(container.querySelector('.multi-panel-title')?.textContent).toBe('新しい名前');
-    expect(JSON.parse(localStorage.getItem('multiTalkPanels')!)[0].roomName).toBe('新しい名前');
+    expect(JSON.parse(localStorage.getItem('multiTalkPanels:me')!)[0].roomName).toBe('新しい名前');
   });
 
   it('1 対 1 (名前の無い部屋) の名前は変えない', () => {
-    localStorage.setItem('multiTalkPanels', JSON.stringify([
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([
       { id: 1, roomId: 'd1', roomName: '田中', x: 0, y: 0, width: 400, height: 400, minimized: true },
     ]));
     useRoomStore.setState({ rooms: [{ id: 'd1', type: 'direct', name: null }] as never });
@@ -293,7 +295,7 @@ describe('MultiTalk — 部屋の改名をパネルの名前に反映', () => {
  *   パネルの中身は iframe なので、中を押しても親の onMouseDown は呼ばれず、有効にも前面にもならなかった
  */
 describe('MultiTalk — 有効なパネルを最前面に', () => {
-  const twoPanels = () => localStorage.setItem('multiTalkPanels', JSON.stringify([
+  const twoPanels = () => localStorage.setItem('multiTalkPanels:me', JSON.stringify([
     { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 },
     { id: 2, roomId: 'r2', roomName: '整備', x: 100, y: 0, width: 400, height: 400 },
   ]));
@@ -331,7 +333,7 @@ describe('MultiTalk — 有効なパネルを最前面に', () => {
 
 describe('MultiTalk — パネルの中が別のサイトへ移ったとき', () => {
   it('★ 中の window に触れられなくても (別オリジン)、読み込みで投げない', () => {
-    localStorage.setItem('multiTalkPanels', JSON.stringify([
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([
       { id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 },
     ]));
     const { container } = renderMulti();
@@ -346,5 +348,50 @@ describe('MultiTalk — パネルの中が別のサイトへ移ったとき', ()
     window.removeEventListener('error', onErr);
     w.addEventListener = orig;
     expect(errors).toEqual([]);
+  });
+});
+
+/**
+ * ★ 2026-10-27 小野さん判断 (承認 8): パネルは端末に 1 つの置き場で覚えていて、同じ PC で別の人が入ると前の人のパネルが開き、
+ *   入れない部屋のパネルはエラーを出し続けた。人ごとに覚え、入れない部屋 (一覧に無い部屋) のパネルは閉じる
+ */
+describe('MultiTalk — 人ごとに覚える・入れない部屋は閉じる', () => {
+  const panel = (roomId: string, id = 1) => ({ id, roomId, roomName: roomId, x: 0, y: 0, width: 400, height: 400 });
+
+  it('★★ 別の人のパネルは開かない', () => {
+    localStorage.setItem('multiTalkPanels:other', JSON.stringify([panel('r1')]));
+    const { container } = renderMulti();
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(0);
+  });
+
+  it('★ 前の置き場 (人の区別なし) は、最初に開いた人へ 1 度だけ移して消す', () => {
+    localStorage.setItem('multiTalkPanels', JSON.stringify([panel('r1')]));
+    const { container } = renderMulti();
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
+    expect(localStorage.getItem('multiTalkPanels')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('multiTalkPanels:me')!)).toHaveLength(1);
+  });
+
+  it('★★ 部屋の一覧に無い部屋 (外された・入っていない) のパネルは閉じる', () => {
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([panel('r1', 1), panel('gone', 2)]));
+    useRoomStore.setState({ rooms: [{ id: 'r1', type: 'group', name: 'r1' }] } as never);
+    const { container } = renderMulti();
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
+    expect(useMultiTalkStore.getState().openRoomIds).toEqual(['r1']);
+  });
+
+  it('部屋の一覧がまだ空 (読み込み前・失敗) なら閉じない', () => {
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([panel('r1')]));
+    const { container } = renderMulti();
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
+  });
+
+  it('★ 開いている間に部屋から外されたら、そのパネルを閉じる', () => {
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([panel('r1', 1), panel('r2', 2)]));
+    useRoomStore.setState({ rooms: [{ id: 'r1', type: 'group', name: 'r1' }, { id: 'r2', type: 'group', name: 'r2' }] } as never);
+    const { container } = renderMulti();
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(2);
+    act(() => { useRoomStore.setState({ rooms: [{ id: 'r1', type: 'group', name: 'r1' }] } as never); });
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
   });
 });

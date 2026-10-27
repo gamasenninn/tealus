@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal, ArrowDownToLine } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
 import { useRoomStore } from '../../stores/roomStore';
+import { useAuthStore } from '../../stores/authStore';
 import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, type PanelWindowState } from './panelWindow';
 import { findInsertTarget, insertPanel, layoutPanels, type InsertHint, type LayoutMode } from './panelOrder';
 import './MultiTalk.css';
@@ -28,34 +29,41 @@ interface TalkPanel extends PanelWindowState {
   // x / y / width / height、#503 minimized (帯に名前を出す)、#504 maximized と戻す先は PanelWindowState
 }
 
+/**
+ * パネルの置き場は人ごと (2026-10-27 小野さん判断)。★ 以前は端末に 1 つ ('multiTalkPanels') で、
+ * 同じ PC で別の人が入ると前の人のパネルが開いた。前の置き場は、最初に開いた人へ 1 度だけ移して消す
+ */
+const LEGACY_PANELS_KEY = 'multiTalkPanels';
+const panelsKey = (userId: string) => `${LEGACY_PANELS_KEY}:${userId}`;
+function loadPanels(userId: string): TalkPanel[] {
+  try {
+    const saved = localStorage.getItem(panelsKey(userId));
+    if (saved !== null) return JSON.parse(saved) as TalkPanel[];
+    const legacy = localStorage.getItem(LEGACY_PANELS_KEY);
+    if (legacy === null) return [];
+    localStorage.removeItem(LEGACY_PANELS_KEY);
+    return JSON.parse(legacy) as TalkPanel[];
+  } catch { return []; }
+}
+
 function MultiTalk() {
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.user?.id ?? 'anon');
   const pendingOpen = useMultiTalkStore((s) => s.pendingOpen);
   const sidebarHidden = useMultiTalkStore((s) => s.sidebarHidden);
-  const [panels, setPanels] = useState<TalkPanel[]>(() => {
-    try {
-      const saved = localStorage.getItem('multiTalkPanels');
-      return saved ? (JSON.parse(saved) as TalkPanel[]) : [];
-    } catch { return []; }
-  });
+  const [panels, setPanels] = useState<TalkPanel[]>(() => loadPanels(userId));
   const [activePanel, setActivePanel] = useState<number | null>(null);
   const [interacting, setInteracting] = useState(false);
   // ★ ドラッグ中に「ここで離すと、この前 / 後ろに入る」を見せる (2026-10-06)
   const [dropHint, setDropHint] = useState<InsertHint | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const panelCounter = useRef((() => {
-    try {
-      const saved = localStorage.getItem('multiTalkPanels');
-      const p = saved ? (JSON.parse(saved) as TalkPanel[]) : [];
-      return p.length > 0 ? Math.max(...p.map(x => x.id)) : 0;
-    } catch { return 0; }
-  })());
+  const panelCounter = useRef(panels.length > 0 ? Math.max(...panels.map(x => x.id)) : 0);
 
   // panels 変更時に localStorage に保存。★ #502 開いている部屋を左の一覧の印のために店へ知らせる
   useEffect(() => {
-    localStorage.setItem('multiTalkPanels', JSON.stringify(panels));
+    try { localStorage.setItem(panelsKey(userId), JSON.stringify(panels)); } catch { /* 保存領域が使えないだけ */ }
     useMultiTalkStore.getState().setOpenRoomIds(panels.map(p => p.roomId));
-  }, [panels]);
+  }, [panels, userId]);
 
   // ★ #535 部屋の改名をパネルの名前 (最小化した帯・title) に反映する。以前は開いたときの名前のままだった。
   //   名前の無い部屋 (1 対 1) は開いたときの相手の名前を残す
@@ -63,7 +71,12 @@ function MultiTalk() {
   useEffect(() => {
     setPanels((prev) => {
       let changed = false;
-      const next = prev.map((p) => {
+      // ★ 部屋の一覧に無い部屋 (外された・入っていない) のパネルは閉じる (2026-10-27 小野さん判断)。以前はエラーを出し続けた。
+      //   一覧が空 (読み込み前・失敗) のときは閉じない
+      const ids = new Set(rooms.map((r) => r.id));
+      const kept = rooms.length > 0 ? prev.filter((p) => ids.has(p.roomId)) : prev;
+      if (kept.length !== prev.length) changed = true;
+      const next = kept.map((p) => {
         const name = rooms.find((r) => r.id === p.roomId)?.name;
         if (!name || name === p.roomName) return p;
         changed = true;
