@@ -58,6 +58,24 @@ describe('Room Edit API', () => {
       expect(res.body.room.name).toBe('新しいグループ名');
     });
 
+    // ★ 改善ループ 18 回目: 列は VARCHAR(100) なのに長さを見ておらず、DB の例外で 500 になっていた
+    it('★ グループ名は 100 字まで (作るときも変えるときも 400)', async () => {
+      const long = 'あ'.repeat(101);
+      const put = await request(app).put(`/api/rooms/${groupId}`).set('Authorization', `Bearer ${admin.token}`).send({ name: long });
+      expect(put.status).toBe(400);
+      expect(put.body.error).toMatch(/100/);
+      const post = await request(app).post('/api/rooms').set('Authorization', `Bearer ${admin.token}`).send({ name: long, member_ids: [user1.user.id] });
+      expect(post.status).toBe(400);
+      const ok = await request(app).put(`/api/rooms/${groupId}`).set('Authorization', `Bearer ${admin.token}`).send({ name: 'あ'.repeat(100) });
+      expect(ok.status).toBe(200);
+    });
+
+    it('★ アイコンが 5MB を超えたら 413 (500 にしない)', async () => {
+      const res = await request(app).post(`/api/rooms/${groupId}/icon`).set('Authorization', `Bearer ${admin.token}`)
+        .attach('icon', Buffer.alloc(5 * 1024 * 1024 + 1), { filename: 'big.png', contentType: 'image/png' });
+      expect(res.status).toBe(413);
+    });
+
     it('should reject by non-admin', async () => {
       const res = await request(app)
         .put(`/api/rooms/${groupId}`)

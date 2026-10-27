@@ -19,7 +19,7 @@ let app: express.Express;
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'media-static-'));
   fs.mkdirSync(path.join(root, 'files'));
-  for (const name of ['a.html', 'b.htm', 'c.svg', 'd.xml', 'e.xhtml', 'f.pdf', 'g.png', 'h.md', 'noext']) {
+  for (const name of ['a.html', 'b.htm', 'c.svg', 'd.xml', 'e.xhtml', 'f.pdf', 'g.png', 'h.md', 'noext', 'i.heic', 'j.heif', 'k.avif']) {
     fs.writeFileSync(path.join(root, 'files', name), 'x');
   }
   app = express();
@@ -28,6 +28,15 @@ beforeAll(() => {
 
 afterAll(() => {
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+describe('mediaStatic — 新しい画像の形式にも種類を付ける (改善ループ 18 回目)', () => {
+  // ★ express の古い mime 表に無く、application/octet-stream で配っていた (nosniff 下ではブラウザが画像と扱わないことがある)
+  it.each([['i.heic', 'image/heic'], ['j.heif', 'image/heif'], ['k.avif', 'image/avif']])('%s → %s', async (name, type) => {
+    const res = await request(app).get(`/media/files/${name}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe(type);
+  });
 });
 
 describe('mediaStatic — 文書として開けるものは切り離して開く', () => {

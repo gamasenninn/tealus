@@ -13,8 +13,16 @@ import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.
 import { rememberRoomMedia } from '../services/deletedMedia.mts';
 import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/appPass.mts';
 import { isValidAppUrls } from '../utils/webUrl.mts';
-import { imageExt, imageOnlyFilter, imageUploadError } from '../utils/imageUpload.mts';
+import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
 import { REQUESTER_HEADER } from '../services/requesterScope.mts';
+
+/**
+ * グループ名は DB の列 (rooms.name VARCHAR(100)) と同じ 100 字まで (改善ループ 18 回目)。
+ * ★ 以前は長さを見ず、101 字以上は DB の例外で 500 になっていた (表示名・一言は #498 で同じ直しをしてある)
+ */
+const ROOM_NAME_MAX = 100;
+const ROOM_NAME_ERROR = `グループ名は ${ROOM_NAME_MAX} 字までです`;
+const isValidRoomName = (name: unknown): boolean => typeof name === 'string' && name.trim() !== '' && name.length <= ROOM_NAME_MAX;
 
 /** #607 通行証を出せないとき。★ 理由を外に言い分けない (どの条件で落ちたかは記録にだけ残す) */
 const APP_PASS_UNAVAILABLE = 'このアプリには通行証を出せません';
@@ -171,6 +179,7 @@ router.post('/', async (req, res) => {
   if (!name) {
     return res.status(400).json({ error: 'グループ名は必須です' });
   }
+  if (!isValidRoomName(name)) return res.status(400).json({ error: ROOM_NAME_ERROR });
 
   // ★ 指定された人は「存在して有効な人」だけ (2026-10-02、routes/members.mts の追加口と同じ)。
   //   以前は確かめず、存在しない ID・重複で 500、無効にした人も入れられた。重複と自分自身は 1 人にまとめる
@@ -584,7 +593,10 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
     const values: unknown[] = [];
     let paramIndex = 1;
 
-    if (name !== undefined) { updates.push(`name = $${paramIndex++}`); values.push(name); }
+    if (name !== undefined) {
+      if (!isValidRoomName(name)) return res.status(400).json({ error: ROOM_NAME_ERROR });
+      updates.push(`name = $${paramIndex++}`); values.push(name);
+    }
     if (allow_member_transcription_edit !== undefined) { updates.push(`allow_member_transcription_edit = $${paramIndex++}`); values.push(allow_member_transcription_edit); }
     if (is_announcement !== undefined) { updates.push(`is_announcement = $${paramIndex++}`); values.push(is_announcement); }
     if (app_urls !== undefined) {
@@ -666,7 +678,7 @@ router.delete('/:id', requireGroup, requireMember, requireCreator, requireSoloMe
  * POST /api/rooms/:id/icon
  * Upload group icon (group admin only)
  */
-router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, iconUpload.single('icon'), async (req, res) => {
+router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, singleImage(iconUpload, 'icon', 5), async (req, res) => {
   const { id } = req.params;
 
   try {

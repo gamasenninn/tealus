@@ -54,6 +54,39 @@ describe('認証が切れたとき (#539)', () => {
   });
 });
 
+// ★ 改善ループ 18 回目: 期限切れのまま開き直すと、宛先の取り外しが鍵なしで飛んで 401 になっていた (14 日で 10 回)。
+//   initialize の catch がトークンを先に消し、ログアウトの取り外しは getRegistration を待った後に本体へ送るため
+describe('期限切れのまま開き直したとき', () => {
+  it('★★ 宛先の取り外しを本体へ送る時点で、まだ鍵を持っている', async () => {
+    let tokenWhenSent: string | null | undefined;
+    unregister.mockImplementationOnce(async () => {
+      await new Promise((r) => setTimeout(r, 0));   // 本物は getRegistration・getSubscription を待ってから送る
+      tokenWhenSent = api.token;
+    });
+    localStorage.setItem('token', 'expired');
+    vi.spyOn(api, 'getMe').mockImplementationOnce(async () => {
+      api.notifyUnauthorized();   // 本物の api は 401 で知らせてから投げる
+      throw Object.assign(new Error('401'), { status: 401 });
+    });
+    useAuthStore.setState({ user: null, token: null, isLoading: true });
+    await useAuthStore.getState().initialize();
+    await vi.waitFor(() => expect(tokenWhenSent).not.toBeUndefined());
+    expect(tokenWhenSent).toBe('expired');
+    await vi.waitFor(() => expect(api.token).toBeNull());
+    expect(useAuthStore.getState().isLoading).toBe(false);
+  });
+});
+
+describe('ログアウトで前の人の検索を捨てる (改善ループ 18 回目)', () => {
+  it('★ 検索の結果 (本文入り) とスクロール位置を消す', async () => {
+    sessionStorage.setItem('searchCache', '{"q":"x"}');
+    sessionStorage.setItem('searchScroll', '10');
+    await useAuthStore.getState().logout();
+    expect(sessionStorage.getItem('searchCache')).toBeNull();
+    expect(sessionStorage.getItem('searchScroll')).toBeNull();
+  });
+});
+
 describe('ログイン (#600 監査 B)', () => {
   it('★★ ログアウトせずに別の人がログインしても、前の人が覚えた部屋の中身を捨てる', async () => {
     const cache = await import('../src/stores/roomViewCache');

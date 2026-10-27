@@ -40,7 +40,7 @@ function refreshConnectedUser(userId: string, patch: { display_name?: string; av
 export const router = express.Router();
 
 import { SALT_ROUNDS } from '../constants/config.mts';
-import { imageExt, imageOnlyFilter, imageUploadError } from '../utils/imageUpload.mts';
+import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
 
 /** login クエリで password_hash も一緒に取得する行 (レスポンス前に削除する) */
 interface UserWithPasswordRow extends AuthUser {
@@ -267,7 +267,7 @@ router.put('/profile', authenticate, async (req, res) => {
  * POST /api/auth/avatar
  * Upload own avatar image
  */
-router.post('/avatar', authenticate, avatarUpload.single('avatar'), async (req, res) => {
+router.post('/avatar', authenticate, singleImage(avatarUpload, 'avatar', 5), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: imageUploadError(req) });
   }

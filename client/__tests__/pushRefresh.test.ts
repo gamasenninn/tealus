@@ -52,6 +52,14 @@ describe('refreshPushSubscription', () => {
     expect(subscribePush).toHaveBeenCalledTimes(2);
   });
 
+  // ★ 改善ループ 18 回目: ブラウザが宛先を差し替えても (pushsubscriptionchange)、時刻だけを見て 6 時間送らなかった
+  it('★ 宛先が前回と変わっていたら、6 時間以内でも送る', async () => {
+    await refreshPushSubscription(1_000_000);
+    current = { ...sub, endpoint: 'https://fcm.example/y' };
+    expect(await refreshPushSubscription(1_000_000 + 60_000)).toBe(true);
+    expect(subscribePush).toHaveBeenLastCalledWith(expect.objectContaining({ endpoint: 'https://fcm.example/y' }));
+  });
+
   it('force なら間引かない (プロフィールの「登録し直す」)', async () => {
     await refreshPushSubscription(1_000_000);
     expect(await refreshPushSubscription(1_000_001, { force: true })).toBe(true);

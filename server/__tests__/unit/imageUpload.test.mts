@@ -13,12 +13,15 @@ describe('画像でないファイルを断ったときの文 (2026-10-27 改善
     expect(accepted).toBe(false);
     expect(imageUploadError(req)).toContain('JPEG');
   });
-  it('★ 種類が空・octet-stream で届いても、拡張子が画像なら通す (Windows の Chrome は .heic に種類を付けないことがある)', () => {
+  it('★ 種類が空・octet-stream で届いても、どのブラウザでも描ける拡張子なら通す', () => {
     const req = {} as Parameters<typeof imageOnlyFilter>[0];
     let accepted: boolean | undefined;
     for (const mimetype of ['', 'application/octet-stream']) {
-      imageOnlyFilter(req, { mimetype, originalname: 'IMG_0001.HEIC' } as Express.Multer.File, ((_e: unknown, ok?: boolean) => { accepted = ok; }) as never);
+      imageOnlyFilter(req, { mimetype, originalname: 'IMG_0001.JPG' } as Express.Multer.File, ((_e: unknown, ok?: boolean) => { accepted = ok; }) as never);
       expect(accepted).toBe(true);
+      // ★ 18 回目: .heic は通さない (Chrome・Android では描けないアバターになり、断られないので気づけない)
+      imageOnlyFilter(req, { mimetype, originalname: 'IMG_0001.HEIC' } as Express.Multer.File, ((_e: unknown, ok?: boolean) => { accepted = ok; }) as never);
+      expect(accepted).toBe(false);
     }
     imageOnlyFilter(req, { mimetype: '', originalname: 'a.html' } as Express.Multer.File, ((_e: unknown, ok?: boolean) => { accepted = ok; }) as never);
     expect(accepted).toBe(false);

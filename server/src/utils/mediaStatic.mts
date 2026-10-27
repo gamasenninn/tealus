@@ -21,8 +21,16 @@ export const MEDIA_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups all
 
 const NOT_SANDBOXED = /\.pdf$/i;
 
+/**
+ * express (send 0.19 の mime 表) が知らない画像の形式 (改善ループ 18 回目)。
+ * ★ 知らないと application/octet-stream で配り、nosniff 下ではブラウザが画像と扱わないことがある
+ */
+const EXTRA_TYPES: Record<string, string> = { '.heic': 'image/heic', '.heif': 'image/heif', '.avif': 'image/avif' };
+
 export function applyMediaHeaders(res: { setHeader(name: string, value: string): void }, filePath: string): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  const extra = EXTRA_TYPES[path.extname(filePath).toLowerCase()];
+  if (extra) res.setHeader('Content-Type', extra);   // ★ send は Content-Type が既にあれば上書きしない
   if (!NOT_SANDBOXED.test(filePath)) res.setHeader('Content-Security-Policy', MEDIA_SANDBOX);
 }
 

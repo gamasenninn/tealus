@@ -95,6 +95,7 @@ async function sendSubscription(subscription: PushSubscription): Promise<void> {
 }
 
 export const PUSH_REFRESH_KEY = 'tealus:push:refreshedAt';
+const PUSH_REFRESH_ENDPOINT_KEY = 'tealus:push:refreshedEndpoint';
 const PUSH_REFRESH_INTERVAL_MS = 6 * 3_600_000;
 
 /**
@@ -110,21 +111,28 @@ export async function refreshPushSubscription(now = Date.now(), opts: { force?: 
   if (isEmbeddedInSameApp()) return false;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
   if (!('serviceWorker' in navigator) || !navigator.serviceWorker || !('PushManager' in window)) return false;
-  if (!opts.force) {
-    // ★ 記録が無い (初めて・保存領域が使えない) ときは「まだ送っていない」= 送る
-    let last: number | null = null;
-    try {
-      const v = localStorage.getItem(PUSH_REFRESH_KEY);
-      if (v !== null && Number.isFinite(Number(v))) last = Number(v);
-    } catch { /* 間引けないだけ */ }
-    if (last !== null && now - last < PUSH_REFRESH_INTERVAL_MS) return false;
-  }
   try {
     const registration = await navigator.serviceWorker.getRegistration();
     const subscription = await registration?.pushManager?.getSubscription();
     if (!subscription) return false;
+    if (!opts.force) {
+      // ★ 記録が無い (初めて・保存領域が使えない) ときは「まだ送っていない」= 送る
+      // ★ 宛先が前回と変わっていたら間引かない (改善ループ 18 回目)。ブラウザが差し替えても (pushsubscriptionchange、
+      //   custom-sw.js では受けていない)、時刻だけを見て最長 6 時間送らなかった
+      let last: number | null = null;
+      let lastEndpoint: string | null = null;
+      try {
+        const v = localStorage.getItem(PUSH_REFRESH_KEY);
+        if (v !== null && Number.isFinite(Number(v))) last = Number(v);
+        lastEndpoint = localStorage.getItem(PUSH_REFRESH_ENDPOINT_KEY);
+      } catch { /* 間引けないだけ */ }
+      if (last !== null && now - last < PUSH_REFRESH_INTERVAL_MS && lastEndpoint === subscription.endpoint) return false;
+    }
     await sendSubscription(subscription);
-    try { localStorage.setItem(PUSH_REFRESH_KEY, String(now)); } catch { /* 間引けないだけ */ }
+    try {
+      localStorage.setItem(PUSH_REFRESH_KEY, String(now));
+      localStorage.setItem(PUSH_REFRESH_ENDPOINT_KEY, subscription.endpoint);
+    } catch { /* 間引けないだけ */ }
     return true;
   } catch {
     return false;

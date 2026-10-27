@@ -58,7 +58,13 @@ export const useAuthStore = create<AuthState>()((set) => ({
       registerPushNotification();
       startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
       void moveLegacySoundOff(data.user, set);
-    } catch {
+    } catch (err) {
+      // ★ 401 は api が知らせ、ログアウト (下の setOnUnauthorized) が鍵を消す。ここで先に消すと、ログアウトの宛先の取り外しが
+      //   鍵なしで飛んで 401 になり、本体に死んだ宛先が残っていた (改善ループ 18 回目、14 日で 10 回)
+      if ((err as { status?: number } | null)?.status === 401) {
+        set({ user: null, token: null, isLoading: false });
+        return;
+      }
       localStorage.removeItem('token');
       api.setToken(null);
       set({ user: null, token: null, isLoading: false });
@@ -89,6 +95,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
     clearRoomViewCache();   // ★ #600 同じ画面で別の人がログインしても、前の人の会話を先に出さない
     // ★ 部屋の一覧と開いていた部屋も捨てる (改善ループ 15 回目。次の人のログイン直後に前の人の一覧が一瞬出ていた)
     useRoomStore.getState().reset();   // ★ 走っている取り直しの応答も捨てる (改善ループ 16 回目)
+    // ★ 検索の結果 (本文入り) も捨てる (改善ループ 18 回目)。同じタブで次の人が検索を開くと、前の人の結果が出ていた
+    try { sessionStorage.removeItem('searchCache'); sessionStorage.removeItem('searchScroll'); } catch { /* 保存領域が使えないだけ */ }
     set({ user: null, token: null });
   },
 

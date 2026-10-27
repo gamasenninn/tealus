@@ -171,6 +171,28 @@ describe('Profile API', () => {
 
       expect(res.status).toBe(401);
     });
+
+    // ★ 改善ループ 18 回目: 5MB を超えると multer の例外が 500 になっていた
+    it('★ 5MB を超えたら 413 と上限の文 (500 にしない)', async () => {
+      const res = await request(app)
+        .post('/api/auth/avatar')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .attach('avatar', Buffer.alloc(5 * 1024 * 1024 + 1), { filename: 'big.png', contentType: 'image/png' });
+
+      expect(res.status).toBe(413);
+      expect(res.body.error).toMatch(/5MB/);
+    });
+
+    it('★ 画像でないものは「画像だけ受け付けます」', async () => {
+      const res = await request(app)
+        .post('/api/auth/avatar')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .attach('avatar', Buffer.from('<html></html>'), { filename: 'a.html', contentType: 'text/html' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/画像/);
+      expect(res.body.error).not.toMatch(/添付されていません/);
+    });
   });
 
   // ============================================
