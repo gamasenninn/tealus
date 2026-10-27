@@ -27,6 +27,8 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  /** ★ 本体につながらないまま開いた (鍵は残している)。画面は「つながっていません」を出し、つなぎ直す (2026-10-27) */
+  offline: boolean;
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
   logout: () => Promise<void>;
@@ -51,10 +53,11 @@ async function moveLegacySoundOff(user: User, set: (s: Partial<AuthState>) => vo
   }
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
+export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   token: localStorage.getItem('token'),
   isLoading: true,
+  offline: false,
 
   initialize: async () => {
     const token = localStorage.getItem('token');
@@ -66,15 +69,23 @@ export const useAuthStore = create<AuthState>()((set) => ({
       api.setToken(token);
       const data = await api.getMe();
       connectSocket(token);
-      set({ user: data.user, token, isLoading: false });
+      set({ user: data.user, token, isLoading: false, offline: false });
       registerPushNotification();
       startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
       void moveLegacySoundOff(data.user, set);
     } catch (err) {
       // ★ 401 は api が知らせ、ログアウト (下の setOnUnauthorized) が鍵を消す。ここで先に消すと、ログアウトの宛先の取り外しが
       //   鍵なしで飛んで 401 になり、本体に死んだ宛先が残っていた (改善ループ 18 回目、14 日で 10 回)
-      if ((err as { status?: number } | null)?.status === 401) {
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 401) {
         set({ user: null, token: null, isLoading: false });
+        return;
+      }
+      // ★ つながらない (圏外・時間切れ・本体の 5xx) なら鍵を残す (2026-10-27 小野さん判断)。以前は鍵を消してログイン画面に落とし、
+      //   電波が戻ってもパスワードの入れ直しになっていた。ログイン中の読み直し (プロフィールの保存の後など) なら今の画面のまま
+      if (status === undefined || status >= 500 || status === 408 || status === 429) {
+        if (get().user) { set({ isLoading: false }); return; }
+        set({ isLoading: false, offline: true });
         return;
       }
       localStorage.removeItem('token');
@@ -89,7 +100,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     forgetPreviousUser();
     api.setToken(data.token);
     connectSocket(data.token);
-    set({ user: data.user, token: data.token });
+    set({ user: data.user, token: data.token, offline: false });
     registerPushNotification();
     startPushResumeRefresh();
     void moveLegacySoundOff(data.user, set);
@@ -105,7 +116,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     api.setToken(null);
     disconnectSocket();
     forgetPreviousUser();
-    set({ user: null, token: null });
+    set({ user: null, token: null, offline: false });
   },
 
   setNotificationSound: async (on) => {

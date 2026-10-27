@@ -30,8 +30,29 @@ function PrivateRoute({ children }: { children: ReactNode }) {
   return user ? children : <Navigate to="/login" />;
 }
 
+/**
+ * 本体につながらないまま開いたとき (2026-10-27 小野さん判断)。★ 以前は鍵を消してログイン画面に落とし、
+ * 電波が戻ってもパスワードの入れ直しになっていた。鍵は残し、10 秒ごとと電波が戻ったときにつなぎ直す
+ */
+function OfflineScreen({ onRetry, onLogout }: { onRetry: () => Promise<void>; onLogout: () => Promise<void> }) {
+  useEffect(() => {
+    const retry = () => { void onRetry(); };
+    const timer = setInterval(retry, 10_000);
+    window.addEventListener('online', retry);
+    return () => { clearInterval(timer); window.removeEventListener('online', retry); };
+  }, [onRetry]);
+  return (
+    <div className="loading offline-screen">
+      <p>Tealus につながっていません</p>
+      <p className="offline-screen-sub">電波が戻ると、自動でつなぎ直します (ログインはそのままです)</p>
+      <button type="button" onClick={() => { void onRetry(); }}>もう一度つなぐ</button>
+      <button type="button" className="offline-screen-logout" onClick={() => { void onLogout().finally(() => window.location.assign('/login')); }}>別のアカウントでログインする</button>
+    </div>
+  );
+}
+
 function App() {
-  const { initialize, isLoading, user } = useAuthStore();
+  const { initialize, isLoading, user, offline, logout } = useAuthStore();
   const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
   const { incomingCall, activeCall, acceptCall, rejectCall, endCall, getCallUrl } = useCallNotification();
 
@@ -48,6 +69,9 @@ function App() {
 
   if (isLoading) {
     return <div className="loading">読み込み中...</div>;
+  }
+  if (offline && !user) {
+    return <OfflineScreen onRetry={initialize} onLogout={logout} />;
   }
 
   const callUrl = getCallUrl();

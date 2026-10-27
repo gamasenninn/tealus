@@ -87,6 +87,13 @@ body {
   font-size: 16px;
 }
 
+/* つながらないまま開いたとき (2026-10-27、App.tsx の OfflineScreen) */
+.offline-screen { flex-direction: column; gap: 12px; padding: 0 16px; text-align: center; }
+.offline-screen p { margin: 0; }
+.offline-screen-sub { font-size: 13px; }
+.offline-screen button { font-size: 16px; padding: 10px 20px; border-radius: 8px; border: none; background: var(--primary); color: #fff; }
+.offline-screen .offline-screen-logout { background: none; color: #888; font-size: 13px; text-decoration: underline; }
+
 /* PC responsive — center the app */
 @media (min-width: 481px) {
   body {

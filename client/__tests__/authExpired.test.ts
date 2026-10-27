@@ -77,6 +77,43 @@ describe('期限切れのまま開き直したとき', () => {
   });
 });
 
+// ★ 2026-10-27 小野さん判断 (承認 6): 圏外・電波が弱いまま開くとログアウトされ、パスワードの入れ直しになっていた。
+//   鍵を消すのは本体が 401 と言ったときだけ。つながらないときは鍵を残し「つながっていません」にする
+describe('つながらないまま開いたとき', () => {
+  it('★★ 鍵を残し、ログイン画面ではなく「つながっていません」にする。つながったら入れる', async () => {
+    localStorage.setItem('token', 'good');
+    useAuthStore.setState({ user: null, token: null, isLoading: true, offline: false });
+    vi.spyOn(api, 'getMe').mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await useAuthStore.getState().initialize();
+    expect(localStorage.getItem('token')).toBe('good');
+    expect(useAuthStore.getState().offline).toBe(true);
+    expect(useAuthStore.getState().isLoading).toBe(false);
+    vi.spyOn(api, 'getMe').mockResolvedValueOnce({ user: { id: 'u1' } } as never);
+    await useAuthStore.getState().initialize();
+    expect(useAuthStore.getState().offline).toBe(false);
+    expect(useAuthStore.getState().user).toEqual({ id: 'u1' });
+  });
+
+  it('★ 本体の 5xx も同じ (鍵を残す)', async () => {
+    localStorage.setItem('token', 'good');
+    useAuthStore.setState({ user: null, token: null, isLoading: true, offline: false });
+    vi.spyOn(api, 'getMe').mockRejectedValueOnce(Object.assign(new Error('502'), { status: 502 }));
+    await useAuthStore.getState().initialize();
+    expect(localStorage.getItem('token')).toBe('good');
+    expect(useAuthStore.getState().offline).toBe(true);
+  });
+
+  it('★ ログイン中に読み直して失敗したとき (プロフィールの保存の後など) は、今の画面のまま', async () => {
+    localStorage.setItem('token', 'good');
+    useAuthStore.setState({ user: { id: 'u1' } as never, token: 'good', isLoading: false, offline: false });
+    vi.spyOn(api, 'getMe').mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await useAuthStore.getState().initialize();
+    expect(useAuthStore.getState().user).toEqual({ id: 'u1' });
+    expect(useAuthStore.getState().offline).toBe(false);
+    expect(localStorage.getItem('token')).toBe('good');
+  });
+});
+
 describe('ログアウトで前の人の検索を捨てる (改善ループ 18 回目)', () => {
   it('★ 検索の結果 (本文入り) とスクロール位置を消す', async () => {
     sessionStorage.setItem('searchCache', '{"q":"x"}');
