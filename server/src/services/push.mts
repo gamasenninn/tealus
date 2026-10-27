@@ -193,15 +193,22 @@ export async function sendPushToRoomMembers(
  *   送り直されない宛先は、入れ直し・別のブラウザなどで置き去りになったもの
  *   (開発者 1 人に有効 9 本、1 回の通知で 9〜12 本送っていた)。
  * ★ 外すのは印だけ (削除しない)。その端末で開き直せば送り直しで戻る (routes/push.mts の is_active = true)。
+ * ★ その人の最後の 1 本 (いちばん新しい有効な宛先) は外さない (2026-10-27)。送れなくなれば 410 で外れる
  * ★ 7 日にしなかったのは、表に出たときの送り直しを入れる前の実測で、毎日使っている 4 人の唯一の宛先が
  *   7 日より古かったため (10-10 に読んでいる人の宛先が 09-27 のまま)。
  * @returns 外した数
  */
 export async function deactivateStaleSubscriptions(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) return 0;   // ★ 壊れた設定で全部外さない
+  // ★ その人のいちばん新しい有効な宛先は外さない (2026-10-27 小野さん判断)。古い版の画面は送り直さないので、毎日使っている人
+  //   (西村さん) の唯一の宛先まで外していた (14 日で 1,483 回送り、失敗 0)。置き去りの宛先は、新しい宛先がある人の古い方
   const { rowCount } = await pool.query(
     `UPDATE push_subscriptions SET is_active = false, updated_at = now()
-      WHERE is_active AND updated_at < now() - make_interval(days => $1)`,
+      WHERE is_active AND updated_at < now() - make_interval(days => $1)
+        AND id NOT IN (
+          SELECT DISTINCT ON (user_id) id FROM push_subscriptions
+           WHERE is_active ORDER BY user_id, updated_at DESC, id
+        )`,
     [Math.floor(days)],
   );
   return rowCount ?? 0;

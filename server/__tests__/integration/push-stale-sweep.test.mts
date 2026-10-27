@@ -51,6 +51,24 @@ describe('deactivateStaleSubscriptions', () => {
     expect((await state())[0].fresh).toBe(false);
   });
 
+  // ★ 2026-10-27 小野さん判断 (承認 13): 毎日使っている人 (西村さん) の唯一の宛先を、古い版の画面が送り直さないため外していた。
+  //   その宛先には 14 日で 1,483 回送っていて失敗は無かった。置き去りの宛先を外す目的は、残りがある人だけで果たせる
+  it('★★ その人の有効な宛先が 1 本だけなら、古くても外さない', async () => {
+    await sub('https://e/only', 45);
+    expect(await deactivateStaleSubscriptions(30)).toBe(0);
+    expect((await state())[0].is_active).toBe(true);
+  });
+
+  it('★ 古い宛先が何本あっても、いちばん新しい 1 本は残す (新しいのがあれば古いのは全部外す)', async () => {
+    await sub('https://e/a-old', 60);
+    await sub('https://e/b-older', 90);
+    expect(await deactivateStaleSubscriptions(30)).toBe(1);
+    expect((await state()).map((r) => [r.endpoint, r.is_active])).toEqual([['https://e/a-old', true], ['https://e/b-older', false]]);
+    await sub('https://e/c-new', 1);
+    expect(await deactivateStaleSubscriptions(30)).toBe(1);
+    expect((await state()).find((r) => r.endpoint === 'https://e/a-old')!.is_active).toBe(false);
+  });
+
   it('日数が正の数でなければ何もしない (壊れた設定で全部外さない)', async () => {
     await sub('https://e/old', 31);
     expect(await deactivateStaleSubscriptions(0)).toBe(0);
