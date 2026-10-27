@@ -13,7 +13,7 @@ import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.
 import { rememberRoomMedia } from '../services/deletedMedia.mts';
 import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/appPass.mts';
 import { isValidAppUrls } from '../utils/webUrl.mts';
-import { imageExt, imageOnlyFilter } from '../utils/imageUpload.mts';
+import { imageExt, imageOnlyFilter, imageUploadError } from '../utils/imageUpload.mts';
 import { REQUESTER_HEADER } from '../services/requesterScope.mts';
 
 /** #607 通行証を出せないとき。★ 理由を外に言い分けない (どの条件で落ちたかは記録にだけ残す) */
@@ -670,7 +670,7 @@ router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, iconUplo
   const { id } = req.params;
 
   try {
-    if (!req.file) return res.status(400).json({ error: '画像ファイルが添付されていません' });
+    if (!req.file) return res.status(400).json({ error: imageUploadError(req) });
 
     const iconUrl = `icons/${req.file.filename}`;
     const result = await pool.query(

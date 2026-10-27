@@ -42,4 +42,22 @@ describe('本文の長さの上限', () => {
     const res = await request(app).post('/api/bot/push').set('Authorization', `Bearer ${bot.token}`).send({ room_id: roomId, content: big });
     expect(res.status).toBe(400);
   });
+
+  // ★ 改善ループ 17 回目: K の 4 経路の外に、利用者・AI が本文を書ける口が 2 つ残っていた
+  it('★ 機械のファイル・画像の説明文も同じ上限', async () => {
+    for (const [path, field, name, type] of [['/api/bot/push-file', 'file', 'a.txt', 'text/plain'], ['/api/bot/push-image', 'image', 'a.png', 'image/png']]) {
+      const res = await request(app).post(path).set('Authorization', `Bearer ${bot.token}`)
+        .field('room_id', roomId).field('content', big)
+        .attach(field, Buffer.from('x'), { filename: name, contentType: type });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/長すぎます/);
+    }
+  });
+
+  it('★ 文字起こしの手直しも同じ上限', async () => {
+    const res = await request(app).put('/api/messages/00000000-0000-4000-8000-000000000000/transcription')
+      .set('Authorization', `Bearer ${u.token}`).send({ text: big });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/長すぎます/);
+  });
 });

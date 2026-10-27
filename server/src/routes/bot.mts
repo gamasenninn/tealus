@@ -364,6 +364,17 @@ async function mediaExtras(file: Express.Multer.File): Promise<{ width: number |
 }
 
 /**
+ * 画像・ファイルの説明文も本文と同じ上限 (改善ループ 17 回目)。multipart の欄は multer の既定 (1MB) まで通っていた。
+ * 断るときは受け取ったファイルを消す (rejectOversizedUpload と同じ)
+ */
+async function rejectLongCaption(content: unknown, file: Express.Multer.File, res: Response): Promise<boolean> {
+  if (typeof content !== 'string' || content.length <= MAX_CONTENT_LENGTH) return false;
+  await fs.promises.unlink(file.path).catch(() => {});
+  res.status(400).json({ error: contentTooLongMessage(content.length) });
+  return true;
+}
+
+/**
  * POST /api/bot/push-image
  * Send an image message to a room
  */
@@ -378,6 +389,7 @@ router.post('/push-image', upload.single('image'), rejectOversizedUpload, requir
   if (!file) {
     return res.status(400).json({ error: '画像ファイルが添付されていません' });
   }
+  if (await rejectLongCaption(content, file, res)) return;
 
   const client = await pool.connect();
   try {
@@ -464,6 +476,7 @@ router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireU
   if (!file) {
     return res.status(400).json({ error: 'ファイルが添付されていません' });
   }
+  if (await rejectLongCaption(content, file, res)) return;
 
   const client = await pool.connect();
   try {

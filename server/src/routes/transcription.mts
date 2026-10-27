@@ -9,6 +9,7 @@ import { learnFromEdit } from '../services/dictionaryLearner.mts';
 import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { isGuest } from '../utils/permissions.mts';
+import { MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -39,6 +40,8 @@ router.put('/', authenticate, async (req, res) => {
   if (!text || !text.trim()) {
     return res.status(400).json({ error: 'テキストは必須です' });
   }
+  // ★ 本文と同じ上限 (改善ループ 17 回目)。手直しは台帳 (message_edits) と辞書の自己成長に流れる
+  if (typeof text === 'string' && text.length > MAX_CONTENT_LENGTH) return res.status(400).json({ error: contentTooLongMessage(text.length) });
 
   try {
     // Check message exists

@@ -35,10 +35,13 @@ router.delete('/subscribe', async (req, res) => {
   }
 
   try {
-    await pool.query(
+    const result = await pool.query(
       'DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
       [userId, endpoint]
     );
+    // ★ 登録と同じ粒度で残す (改善ループ 17 回目)。この口は req.user を立てないのでアクセスログは user=- になり、
+    //   誰の宛先が外れたかを socket の切断の時刻差から推定するしかなかった
+    logger.debug(`push: unsubscribe user=${userId} endpoint=${String(endpoint).slice(-20)} removed=${result.rowCount ?? 0}`);
     res.json({ success: true });
   } catch (err) {
     logger.error('Push unsubscribe error:', err);

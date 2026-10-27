@@ -242,6 +242,15 @@ describe('push_reach — 判定 (人ごと)', () => {
     expect(o.detail).toContain('この端末で通知を受け取る');
   });
 
+  it('★ ログアウトで外した宛先は行ごと消えて時刻が残らない。そう読めるように書く (2026-10-27 改善ループ 17 回目)', () => {
+    // 田中太郎さん: 00:00 に 1 本が 410、00:04 のログアウトでもう 1 本が消えた。便は「最後の宛先が無効になったのは 00:00」と言っていた
+    const o = judgePushReach(target, 30, now);
+    expect(o.detail).not.toContain('最後の宛先が無効になったのは');
+    expect(o.detail).toContain('ログアウト');
+    const never = judgePushReach({ ...target, total_subs: 0, last_lost_at: null }, 30, now);
+    expect(never.detail).toContain('ログアウト');
+  });
+
   it('★ 無効になった時刻が分からない (10-16 以前の行) ときは時刻を書かない', () => {
     const o = judgePushReach({ ...target, last_lost_at: null }, 30, now);
     expect(o.state).toBe('down');
