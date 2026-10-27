@@ -41,6 +41,7 @@ import type { MediaItem, Message, Reaction } from '../../types';
 import { quoteText } from '../../utils/replyQuote';
 import './MessageBubble.css';
 import { notifyFailure } from '../../stores/confirmStore';
+import { canEditTranscription } from '../../utils/permissions';
 
 // server 応答が持つが types.ts に無いフィールドの local 拡張:
 // - stamp: type='stamp' の展開済みスタンプ (file_path / label)
@@ -70,7 +71,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   // ★ 送り手が機械なら、部屋の設定によらず文字起こしを直せる (2026-10-24 小野さん判断、docs/02)
   const senderIsBot = members.some((m) => m.user_id === message.sender_id && !!m.is_bot);
   const { assistantUserId, assistantName } = useAgentStore();
-  const isGuestUser = useAuthStore((s) => s.user?.role === 'guest');   // ★ ゲストは機械の音声でも直せない (本体と同じ、L)
+  const isGuestUser = useAuthStore((s) => s.user?.role === 'guest');   // ★ ゲストは他の人の音声を直せない (設定がオンでも・機械の音声でも。本体と同じ、L と 2026-10-27)
   // ★ 「エージェントに送る」で送った音声は文字起こしを畳む (2026-10-24 小野さん判断)。真偽だけを取り出すので、ほかの便が増えても描き直さない
   const sentToAgent = useMessageStore((s) => isSentToAgent(message, s.messages, assistantName));
   // #338 Phase 1: アシスタントが当該ルームの member の時だけ「エージェントに送る」を出す
@@ -186,7 +187,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   // Context menu
   const showContextMenu = (x: number, y: number) => {
     const { items, onReaction } = buildContextMenuItems({
-      message, isOwn, roomId, currentRoom, senderIsBot,
+      message, isOwn, roomId, currentRoom, senderIsBot, isGuest: isGuestUser,
       onEdit: () => setIsEditingMessage(true),
       onShowEditHistory: async () => {
         try {
@@ -319,7 +320,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                   </>
                 );
               })()}
-              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={isOwn || currentRoom?.allow_member_transcription_edit || (senderIsBot && !isGuestUser)} sentToAgent={sentToAgent} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
+              {message.type === 'voice' && <VoiceBubble message={message} media={message.media} transcription={message.transcription} isOwn={isOwn} canEditTranscription={canEditTranscription({ isOwn, isGuest: isGuestUser, allowMemberEdit: !!currentRoom?.allow_member_transcription_edit, senderIsBot })} sentToAgent={sentToAgent} replyMessage={message.reply_to_message} searchKeyword={searchKeyword} />}
               {formSchema && (
                 <FormBubble
                   message={message}

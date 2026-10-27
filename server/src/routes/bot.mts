@@ -1623,7 +1623,9 @@ router.get('/rooms', async (req, res) => {
  * POST /api/bot/rooms/:id/join
  * Join a room
  */
-router.post('/rooms/:id/join', requireUuidId, async (req, res) => {
+// ★ 依頼した人のいる部屋にだけ入る (2026-10-27 小野さん判断、昨日の C の続き)。「部屋に入る」だけ絞りから漏れていて、
+//   入ると「参加しました」が出て、印の無い道 (同じ口座の cc ブリッジなど) からその部屋を読めるようになっていた
+router.post('/rooms/:id/join', requireUuidId, scopeByRoom('param'), async (req, res) => {
   const roomId = String(req.params.id);
   const userId = req.user!.id;
 

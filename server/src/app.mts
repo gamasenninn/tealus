@@ -262,6 +262,9 @@ const rtcProxy = createProxyMiddleware({
   target: rtcUrl(),   // ★ #556
   pathRewrite: { '^/rtc': '' },
   changeOrigin: true,
+  // ★ 取り次いだ印 (X-Forwarded-For) を付ける (2026-10-27 小野さん判断、D の続き)。rtc-server は「同じマシンから直接・見出し無し」を
+  //   古い読み上げの送りとして鍵なしで通すので、付けないと社内 LAN から本体を直接開いた接続がそれに見えていた (ws の upgrade にも効く)
+  xfwd: true,
 });
 app.use('/rtc', rtcProxy);
 

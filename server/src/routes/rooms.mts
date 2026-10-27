@@ -265,6 +265,11 @@ router.post('/direct', async (req, res) => {
   if (!canCreateRoom(req.user)) {
     return res.status(403).json({ error: 'ゲストユーザはルームを作成できません' });
   }
+  // ★ AI の道具 (機械 + 依頼した人の印) からは 1 対 1 も作らない (2026-10-27 小野さん判断、昨日の E の続き)。
+  //   E はグループを作る口だけで、こちらの口が漏れていた (依頼していない人とも作れた)。1 対 1 は必ず人を含む
+  if (req.user!.is_bot && req.get(REQUESTER_HEADER) !== undefined) {
+    return res.status(403).json({ error: 'AI の道具からは、人を入れた部屋を作れません' });
+  }
   const { partner_id } = req.body;
   const userId = req.user!.id;
 

@@ -348,6 +348,22 @@ describe('Transcription Edit API', () => {
       expect(re.status).toBe(403);
     });
 
+    // ★ 2026-10-27 小野さん判断 (昨日の L の続き): L は設定がオフの部屋だけで、オンの部屋ではゲストが誰の分でも直せた
+    it('★★ 設定がオンでも、ゲストは他の人の音声を直せない (人の音声・機械の音声とも)。メンバーは今までどおり', async () => {
+      await getTestPool().query('UPDATE rooms SET allow_member_transcription_edit = true WHERE id = $1', [roomId]);
+      await getTestPool().query("UPDATE users SET role = 'guest' WHERE id = $1", [user2.user.id]);
+      const put = () => request(app).put(`/api/messages/${messageId}/transcription`)
+        .set('Authorization', `Bearer ${user2.token}`).send({ text: 'ゲストが直そうとした' });
+      expect((await put()).status).toBe(403);
+      const re = await request(app).post(`/api/messages/${messageId}/transcription/retranscribe`)
+        .set('Authorization', `Bearer ${user2.token}`).send({});
+      expect(re.status).toBe(403);
+      await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [user1.user.id]);
+      expect((await put()).status).toBe(403);
+      await getTestPool().query("UPDATE users SET role = 'user' WHERE id = $1", [user2.user.id]);
+      expect((await put()).status).toBe(200);
+    });
+
     it('人が送った音声は、設定がオフなら今までどおり送り手だけ', async () => {
       const res = await request(app).put(`/api/messages/${messageId}/transcription`)
         .set('Authorization', `Bearer ${user2.token}`).send({ text: '他人が直そうとした' });

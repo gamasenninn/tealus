@@ -126,6 +126,21 @@ describe('buildContextMenuItems 機械の音声の文字起こし (B-12 案 2)',
     } as unknown as BuildContextMenuItemsParams);
     expect(items.find((i) => i.label === '文字起こしを編集')).toBeTruthy();
   });
+  // ★ 2026-10-27 小野さん判断 (L の続き): ゲストは他の人の音声を直せない (本体と同じ)。設定がオンでも、機械の音声でも
+  it('★ ゲストには、他の人の音声の「文字起こしを編集」を出さない', () => {
+    for (const [allow, bot] of [[true, false], [false, true], [true, true]]) {
+      const { items } = buildContextMenuItems({
+        message: { id: 'v1', type: 'voice', sender_id: 'h1', transcription: { status: 'done', formatted_text: 'x' } },
+        isOwn: false, roomId: 'r1', currentRoom: { allow_member_transcription_edit: allow }, senderIsBot: bot, isGuest: true,
+      } as unknown as BuildContextMenuItemsParams);
+      expect(items.find((i) => i.label === '文字起こしを編集')).toBeFalsy();
+    }
+    const own = buildContextMenuItems({
+      message: { id: 'v1', type: 'voice', sender_id: 'g1', transcription: { status: 'done', formatted_text: 'x' } },
+      isOwn: true, roomId: 'r1', currentRoom: { allow_member_transcription_edit: false }, isGuest: true,
+    } as unknown as BuildContextMenuItemsParams);
+    expect(own.items.find((i) => i.label === '文字起こしを編集')).toBeTruthy();
+  });
   it('人の音声で設定がオフなら出ない (今までどおり)', () => {
     const { items } = buildContextMenuItems({
       message: { id: 'v1', type: 'voice', sender_id: 'h1', transcription: { status: 'done', formatted_text: 'x' } },

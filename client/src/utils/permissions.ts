@@ -88,3 +88,12 @@ export function roleLabel(user: UserLike): string {
   if (role === 'guest') return 'ゲスト';
   return '一般';
 }
+
+/**
+ * 音声の文字起こしを直せるか (本体の routes/transcription.mts と同じ、docs/02)。
+ * 本人は直せる。メンバーは部屋の設定がオンか、送り手が機械なら直せる。★ ゲストは他の人の音声を直せない (L・2026-10-27)
+ * ★ 吹き出しのボタンとメニューが別々に書いていたのを 1 つにした (2026-10-27。片方だけゲストを見ていなかった)
+ */
+export function canEditTranscription(p: { isOwn: boolean; isGuest: boolean; allowMemberEdit: boolean; senderIsBot: boolean }): boolean {
+  return p.isOwn || (!p.isGuest && (p.allowMemberEdit || p.senderIsBot));
+}

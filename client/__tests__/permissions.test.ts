@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, canDeleteRoomTag, canSearchUsers, roleLabel } from '../src/utils/permissions';
+import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, canDeleteRoomTag, canSearchUsers, roleLabel, canEditTranscription } from '../src/utils/permissions';
 
 describe('client permissions helper (#282 Phase D)', () => {
   const admin = { role: 'admin' };
@@ -69,5 +69,20 @@ describe('canUseVoiceChat', () => {
   });
   it('招待も機械には出さない (サーバと揃える)', () => {
     expect(canInvite({ role: 'user', is_bot: true })).toBe(false);
+  });
+});
+
+// ★ 2026-10-27: 文字起こしを直せるか (本体の routes/transcription.mts と同じ)。画面の 2 か所 (吹き出しのボタン・メニュー) が別々に書いていたのを 1 つに
+describe('canEditTranscription', () => {
+  it('本人は直せる (ゲストでも自分の音声は直せる)', () => {
+    expect(canEditTranscription({ isOwn: true, isGuest: true, allowMemberEdit: false, senderIsBot: false })).toBe(true);
+  });
+  it('メンバーは、設定がオンか、機械の音声なら直せる', () => {
+    expect(canEditTranscription({ isOwn: false, isGuest: false, allowMemberEdit: true, senderIsBot: false })).toBe(true);
+    expect(canEditTranscription({ isOwn: false, isGuest: false, allowMemberEdit: false, senderIsBot: true })).toBe(true);
+    expect(canEditTranscription({ isOwn: false, isGuest: false, allowMemberEdit: false, senderIsBot: false })).toBe(false);
+  });
+  it('★ ゲストは他の人の音声を直せない (設定がオンでも・機械の音声でも)', () => {
+    expect(canEditTranscription({ isOwn: false, isGuest: true, allowMemberEdit: true, senderIsBot: true })).toBe(false);
   });
 });

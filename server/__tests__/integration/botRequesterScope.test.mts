@@ -133,6 +133,16 @@ describe('bot の書き込みも依頼した人の部屋に絞る (C)', () => {
     expect((await auth(request(app).put(`/api/rooms/${roomB}/messages/${msgB}`), u.user.id).send({ content: '書き換え' })).status).toBe(403);
     expect((await auth(request(app).put(`/api/rooms/${roomA}/messages/${msgA}`), u.user.id).send({ content: '直した' })).status).toBe(200);
   });
+
+  // ★ 2026-10-27 (承認 2、昨日の C の続き): 「部屋に入る」だけ絞りから漏れていた。入ると「参加しました」が出て、
+  //   印の無い道 (同じ口座) からはその部屋を読めるようになる
+  it('★★ 部屋に入る: 依頼した人のいない部屋は 403、いる部屋は入れる、印が無ければ今までどおり', async () => {
+    const roomC = (await request(app).post('/api/rooms').set('Authorization', `Bearer ${v.token}`).send({ name: '部屋C', member_ids: [] })).body.room.id;
+    const roomD = (await request(app).post('/api/rooms').set('Authorization', `Bearer ${u.token}`).send({ name: '部屋D', member_ids: [] })).body.room.id;
+    expect((await auth(request(app).post(`/api/bot/rooms/${roomC}/join`), u.user.id)).status).toBe(403);
+    expect((await auth(request(app).post(`/api/bot/rooms/${roomD}/join`), u.user.id)).status).toBe(200);
+    expect((await auth(request(app).post(`/api/bot/rooms/${roomC}/join`))).status).toBe(200);
+  });
 });
 
 /**
@@ -164,5 +174,14 @@ describe('AI の道具から人を入れた部屋を作らない (E)', () => {
   });
   it('印つきでも、人を入れない部屋は作れる', async () => {
     expect((await create([], u.user.id)).status).toBe(201);
+  });
+  // ★ 2026-10-27 (承認 3、昨日の E の続き): 1 対 1 を作る口は別にあって漏れていた (依頼していない人とも作れた)
+  it('★★ 印つきで 1 対 1 を作ろうとしたら 403 (印が無ければ今までどおり)', async () => {
+    const direct = (requester?: string) => {
+      const r = request(app).post('/api/rooms/direct').set('Authorization', `Bearer ${bot.token}`);
+      return (requester ? r.set(H, requester) : r).send({ partner_id: v.user.id });
+    };
+    expect((await direct(u.user.id)).status).toBe(403);
+    expect([200, 201]).toContain((await direct()).status);
   });
 });

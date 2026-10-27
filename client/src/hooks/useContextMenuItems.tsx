@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
 import { useConfirmStore, notifyFailure } from '../stores/confirmStore';
 import type { Message, Room } from '../types';
+import { canEditTranscription } from '../utils/permissions';
 
 export interface ContextMenuItem {
   icon: ReactNode;
@@ -32,6 +33,8 @@ export interface BuildContextMenuItemsParams {
   assistantInRoom?: boolean;
   /** ★ 送り手が機械 (is_bot) か。機械の音声は設定によらず文字起こしを編集できる (2026-10-24 小野さん判断) */
   senderIsBot?: boolean;
+  /** ★ 見ている人がゲストか。ゲストは他の人の音声の文字起こしを直せない (本体と同じ、2026-10-27) */
+  isGuest?: boolean;
 }
 
 export interface ContextMenuItemsResult {
@@ -46,7 +49,7 @@ export function buildContextMenuItems({
   message, isOwn, roomId, currentRoom,
   onEdit, onShowEditHistory,
   onReply, onShowTagModal, onShowTodoMenu, onForward, onSelectText,
-  onSendToAgent, assistantInRoom, senderIsBot
+  onSendToAgent, assistantInRoom, senderIsBot, isGuest
 }: BuildContextMenuItemsParams): ContextMenuItemsResult {
   const items: ContextMenuItem[] = [];
 
@@ -137,8 +140,9 @@ export function buildContextMenuItems({
   }
 
   // Voice transcription actions
-  const canEditTranscription = isOwn || currentRoom?.allow_member_transcription_edit || !!senderIsBot;
-  if (canEditTranscription && message.type === 'voice' && message.transcription?.status === 'done') {
+  // ★ 判断は utils/permissions.ts に 1 つ (ゲストは他の人の音声を直せない、本体と同じ)
+  const canEdit = canEditTranscription({ isOwn, isGuest: !!isGuest, allowMemberEdit: !!currentRoom?.allow_member_transcription_edit, senderIsBot: !!senderIsBot });
+  if (canEdit && message.type === 'voice' && message.transcription?.status === 'done') {
     items.push({
       icon: <Pencil size={16} />,
       label: '文字起こしを編集',
