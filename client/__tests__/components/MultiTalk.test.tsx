@@ -145,13 +145,13 @@ describe('MultiTalk — 元に戻す (#504)', () => {
     expect(geom()).toEqual(startGeom);
   });
 
-  it('★ 帯のダブルクリックで 最大化 ⇄ 元に戻す', () => {
+  // ★ 2026-10-27 小野さん判断: 最大化はボタンに任せ、帯のダブルクリックは読みやすい大きさ (幅 480・高さは置き場の半分) にする
+  it('★ 帯のダブルクリックで、読みやすい大きさにする (最大化しない)', () => {
     const { container } = renderOne();
     fireEvent.doubleClick(container.querySelector('.multi-panel-header')!);
-    expect(saved().maximized).toBe(true);
-    fireEvent.doubleClick(container.querySelector('.multi-panel-header')!);
     expect(saved().maximized).toBeFalsy();
-    expect(geom()).toEqual(startGeom);
+    expect(saved().minimized).toBeFalsy();
+    expect(geom().width).toBeLessThanOrEqual(480);
   });
 
   it('★ 最小化中に帯をダブルクリックすると元に戻す', () => {

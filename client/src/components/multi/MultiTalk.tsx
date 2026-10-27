@@ -193,7 +193,7 @@ function MultiTalk() {
     setPanels(prev => prev.map(p => p.id === id ? toggleMinimize(p) : p));
   };
 
-  // 帯のダブルクリック: 最小化中なら戻す、それ以外は 最大化 ⇄ 元に戻す (Windows と同じ)。
+  // 帯のダブルクリック: 最小化中なら戻す、それ以外は読みやすい大きさ (幅 480・高さは置き場の半分。2026-10-27、panelWindow.ts)。
   // ★ 1 回のクリックでは戻さない (帯はドラッグのつかみ)
   const barDoubleClick = (id: number) => {
     const area = maxArea();
@@ -297,7 +297,7 @@ function MultiTalk() {
                 {panel.minimized
                   ? <span className="multi-panel-title">{panel.roomName}</span>
                   : <GripHorizontal className="multi-panel-grip" size={14} aria-hidden="true" />}
-                {/* ★ #504 ボタンのダブルクリックを帯へ伝えない (最大化が切り替わってしまう) */}
+                {/* ★ #504 ボタンのダブルクリックを帯へ伝えない (帯のダブルクリックの動きが起きてしまう) */}
                 <div className="multi-panel-btns" onDoubleClick={(e) => e.stopPropagation()}>
                   {/* ★ #504 最小化・最大化は押し直すと「元に戻す」。「普通サイズ」ボタンは無くした */}
                   <button className="multi-panel-btn" onClick={(e) => { e.stopPropagation(); minimizePanel(panel.id); }}

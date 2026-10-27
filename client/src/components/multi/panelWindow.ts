@@ -53,7 +53,20 @@ export function toggleMaximize<T extends PanelWindowState>(p: T, area: PanelGeom
   return { ...base, beforeMax: geomOf(base), ...area, maximized: true };
 }
 
-/** 帯のダブルクリック: 最小化中なら戻す、それ以外は 最大化 ⇄ 元に戻す */
+/** 帯のダブルクリックで開く「トーク 1 つが読みやすい」幅 (高さは置き場の半分) */
+export const FIT_WIDTH = 480;
+
+/**
+ * 帯のダブルクリック: 最小化中なら戻す、それ以外は「読みやすい大きさ」(幅 480・高さは置き場の半分、位置は今の場所)。
+ * ★ 2026-10-27 小野さん判断。以前は 最大化 ⇄ 元に戻す で、最大化ボタンと役目が重なっていた。
+ *   最大化中なら最大化する前の場所を起点にする。置き場からはみ出すなら中へ寄せる
+ */
 export function onBarDoubleClick<T extends PanelWindowState>(p: T, area: PanelGeom): T {
-  return p.minimized ? toggleMinimize(p) : toggleMaximize(p, area);
+  if (p.minimized) return toggleMinimize(p);
+  const from = p.maximized && p.beforeMax ? p.beforeMax : p;
+  const width = Math.min(FIT_WIDTH, area.width);
+  const height = Math.round(area.height / 2);
+  const x = Math.max(area.x, Math.min(from.x, area.x + area.width - width));
+  const y = Math.max(area.y, Math.min(from.y, area.y + area.height - height));
+  return { ...asNormal(p), x, y, width, height };
 }
