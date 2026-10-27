@@ -8,13 +8,16 @@ import multer, { type FileFilterCallback } from 'multer';
 import { safeExt } from './safeExt.mts';
 import { logger } from './logger.mts';
 
+/**
+ * 受け付ける画像: どのブラウザでも描けるものだけ (2026-10-27 小野さん判断)。
+ * ★ HEIC・HEIF は Chrome・Android で、AVIF は古い iPhone で描けず、本人以外には壊れたアバターに見えた。
+ *   iPhone の Safari は写真を選ぶと JPEG に変えて送るので、断るのはほぼ PC で .heic を選んだときだけ
+ */
 const IMAGE_EXTS: Record<string, string> = {
   'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
-  'image/heic': '.heic', 'image/heif': '.heif', 'image/avif': '.avif',
 };
-const ALLOWED_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.avif']);
-/** 種類が分からないときに拡張子で通すもの: どのブラウザでも描けるものだけ */
-const FALLBACK_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+const ALLOWED_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+const HEIC_TYPES = new Set(['image/heic', 'image/heif']);
 
 export function isAllowedImage(mimetype: string | undefined): boolean {
   return !!mimetype && mimetype.toLowerCase() in IMAGE_EXTS;
@@ -34,11 +37,10 @@ type MarkedRequest = Request & { [REJECTED]?: string };
 /** multer の fileFilter。画像でなければ受け取らない (req.file が無くなり、各口が 400 を返す) */
 export function imageOnlyFilter(req: Request, file: Express.Multer.File, cb: FileFilterCallback): void {
   // ★ 種類が分からないとき (空・octet-stream) だけ拡張子で見る (改善ループ 17 回目)。
-  //   ★ 18 回目で絞った: どのブラウザでも描ける拡張子だけ。.heic を通すと Chrome・Android では誰にも描けないアバターになり、
-  //   断られないので本人も気づけない (HEIC の扱いは小野さん判断待ち)。
+  //   ★ 18 回目で絞った: どのブラウザでも描ける拡張子だけ (HEIC は 10-27 に種類でも断ることにした。上の IMAGE_EXTS)。
   //   中身が画像でなくても画面で動かないのは、/media を別オリジン扱い (CSP sandbox) で配っているから (utils/mediaStatic.mts)
   const unknownType = !file.mimetype || file.mimetype.toLowerCase() === 'application/octet-stream';
-  const ok = isAllowedImage(file.mimetype) || (unknownType && FALLBACK_EXTS.has(safeExt(file.originalname)));
+  const ok = isAllowedImage(file.mimetype) || (unknownType && ALLOWED_EXTS.has(safeExt(file.originalname)));
   if (!ok) {
     // ★ 断った種類を残す (改善ループ 17 回目)。正当な画像が application/octet-stream で届いて断られても、記録が無いと誰も気づけない
     (req as MarkedRequest)[REJECTED] = file.mimetype || '(種類なし)';
@@ -67,7 +69,8 @@ export function singleImage(upload: multer.Multer, field: string, limitMb: numbe
 
 /** req.file が無いときの 400 の文。★ 種類で断ったのに「添付されていません」と言わない */
 export function imageUploadError(req: Request): string {
-  return (req as MarkedRequest)[REJECTED] !== undefined
-    ? '画像 (JPEG・PNG・GIF・WebP) を選んでください'   // ★ 19 回目: HEIC・AVIF は書かない (Chrome では描けず、拡張子では通さない)
-    : '画像ファイルが添付されていません';
+  const rejected = (req as MarkedRequest)[REJECTED];
+  if (rejected === undefined) return '画像ファイルが添付されていません';
+  if (HEIC_TYPES.has(rejected.toLowerCase())) return 'HEIC の写真は使えません。JPEG・PNG で選んでください';
+  return '画像 (JPEG・PNG・GIF・WebP) を選んでください';
 }

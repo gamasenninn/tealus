@@ -86,3 +86,20 @@ describe('sendPushToUser の失敗', () => {
     expect(sql).toMatch(/updated_at\s*=\s*now\(\)/i);
   });
 });
+
+// ★ 2026-10-27 小野さん判断 (承認 10): 既定の TTL は 4 週間で、電源を切っていた端末に古い通知がまとめて届いた
+describe('通知の有効期限', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM push_subscriptions')) return { rows: [SUB] };
+      if (sql.includes('unread_count')) return { rows: [{ total: 0 }] };
+      return { rows: [] };
+    });
+  });
+  test('★★ 届かなかった通知は 1 日で捨ててもらう (TTL 86400 秒)', async () => {
+    mockSend.mockResolvedValue({});
+    await sendPushToUser('u1', { title: 't' });
+    expect(mockSend.mock.calls[0][2]).toMatchObject({ TTL: 86_400, timeout: 10_000 });
+  });
+});

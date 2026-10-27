@@ -127,7 +127,9 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
         await webpush.sendNotification(
           pushSubscription,
           JSON.stringify(enrichedPayload),
-          { timeout: 10_000 },   // ★ 改善ループ 10 回目の F: 既定は時間切れ無し (相手のサーバが固まると送り終わらない)
+          // ★ 改善ループ 10 回目の F: 既定は時間切れ無し (相手のサーバが固まると送り終わらない)
+          // ★ TTL 1 日 (2026-10-27 小野さん判断)。既定は 4 週間で、電源を切っていた端末に古い通知がまとめて届いた
+          { timeout: 10_000, TTL: 86_400 },
         );
       } catch (err) {
         const statusCode = (err as { statusCode?: number }).statusCode;

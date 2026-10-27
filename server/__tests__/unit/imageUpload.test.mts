@@ -27,6 +27,12 @@ describe('画像でないファイルを断ったときの文 (2026-10-27 改善
     imageOnlyFilter(req, { mimetype: '', originalname: 'a.html' } as Express.Multer.File, ((_e: unknown, ok?: boolean) => { accepted = ok; }) as never);
     expect(accepted).toBe(false);
   });
+  it('★ HEIC で断ったら、JPEG・PNG で選び直すよう言う', () => {
+    const req = {} as Parameters<typeof imageOnlyFilter>[0];
+    imageOnlyFilter(req, { mimetype: 'image/heic', originalname: 'IMG_1.HEIC' } as Express.Multer.File, (() => {}) as never);
+    expect(imageUploadError(req)).toMatch(/HEIC/);
+    expect(imageUploadError(req)).toMatch(/JPEG/);
+  });
   it('添付が無いときは今までどおり', () => {
     expect(imageUploadError({} as never)).toBe('画像ファイルが添付されていません');
   });
@@ -34,8 +40,10 @@ describe('画像でないファイルを断ったときの文 (2026-10-27 改善
 
 describe('アバター・アイコンは画像だけ (L)', () => {
   it('★ 画像の種類だけ通し、SVG・HTML などは通さない', () => {
-    for (const m of ['image/jpeg', 'image/png', 'image/webp', 'IMAGE/PNG', 'image/heic']) expect(isAllowedImage(m)).toBe(true);
+    for (const m of ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'IMAGE/PNG']) expect(isAllowedImage(m)).toBe(true);
     for (const m of ['image/svg+xml', 'text/html', 'application/octet-stream', '', undefined]) expect(isAllowedImage(m)).toBe(false);
+    // ★ 2026-10-27 小野さん判断 (承認 5): HEIC・HEIF・AVIF は受け付けない (Chrome・Android や古い iPhone で描けないアバターになる)
+    for (const m of ['image/heic', 'image/heif', 'image/avif']) expect(isAllowedImage(m)).toBe(false);
   });
   it('★ 保存名の拡張子は画像のものだけ (違えば種類から決める)', () => {
     expect(imageExt('me.JPG', 'image/jpeg')).toBe('.jpg');
