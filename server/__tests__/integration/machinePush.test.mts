@@ -150,4 +150,18 @@ describe('機械の投稿の通知 (ルームごとに管理者が選ぶ)', () =
       expect(mockPush).not.toHaveBeenCalled();
     });
   });
+  // ★ 2026-10-29 小野さん判断 (承認 1): 1 対 1 は push_machine_posts を誰も変えられず (管理者がいない)、
+  //   アシスタントとの 1 対 1 で AI の返事が鳴らなかった。1 対 1 の機械の投稿は相手が機械なので、既定で鳴らす
+  describe('相手が機械の 1 対 1', () => {
+    it('★★ 設定によらず鳴らす', async () => {
+      const dm = await request(app).post('/api/rooms/direct').set('Authorization', `Bearer ${member.token}`)
+        .send({ partner_id: bot.user.id });
+      expect(dm.status).toBeLessThan(300);
+      const res = await request(app).post('/api/bot/push').set('Authorization', `Bearer ${bot.token}`)
+        .send({ room_id: dm.body.room.id, content: 'AI の返事' });
+      expect(res.status).toBe(201);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush.mock.calls[0][0]).toBe(dm.body.room.id);
+    });
+  });
 });

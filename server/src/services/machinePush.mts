@@ -24,11 +24,13 @@ export interface MachinePost {
 
 export async function pushMachinePost(post: MachinePost): Promise<void> {
   try {
-    const r = await pool.query<{ push_machine_posts: boolean }>(
-      'SELECT push_machine_posts FROM rooms WHERE id = $1',
+    // ★ 1 対 1 は設定によらず鳴らす (2026-10-29 小野さん判断)。1 対 1 には管理者がいないので設定を誰も変えられず、
+    //   アシスタントとの 1 対 1 で AI の返事が鳴らなかった。1 対 1 の機械の投稿は相手が機械のときだけ起きる
+    const r = await pool.query<{ push_machine_posts: boolean; type: string }>(
+      'SELECT push_machine_posts, type FROM rooms WHERE id = $1',
       [post.roomId],
     );
-    if (!r.rows[0]?.push_machine_posts) return;
+    if (!r.rows[0]?.push_machine_posts && r.rows[0]?.type !== 'direct') return;
     sendPushToRoomMembers(post.roomId, post.senderId, {
       title: post.senderName,
       body: post.body,

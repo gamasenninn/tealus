@@ -227,6 +227,9 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+/** お知らせに公開できる種類 (client の useContextMenuItems も同じ一覧を持つ) */
+export const PUBLISHABLE_TYPES = new Set(['text', 'image', 'video', 'file', 'voice']);
+
 /**
  * PATCH /api/rooms/:id/messages/:msgId/publish
  * Toggle publish status for announcement messages
@@ -248,8 +251,8 @@ router.patch('/:msgId/publish', async (req: Request, res: Response) => {
     }
 
     // Check message exists
-    const msgResult = await pool.query<{ sender_id: string; is_deleted: boolean }>(
-      'SELECT sender_id, is_deleted FROM messages WHERE id = $1 AND room_id = $2',
+    const msgResult = await pool.query<{ sender_id: string; is_deleted: boolean; type: string }>(
+      'SELECT sender_id, is_deleted, type FROM messages WHERE id = $1 AND room_id = $2',
       [msgId, roomId]
     );
     if (msgResult.rows.length === 0) {
@@ -257,6 +260,11 @@ router.patch('/:msgId/publish', async (req: Request, res: Response) => {
     }
     if (msgResult.rows[0].is_deleted) {
       return res.status(400).json({ error: '削除済みメッセージは操作できません' });
+    }
+    // ★ 公開できるのはホームで読める種類だけ (2026-10-29 小野さん判断)。スタンプ (中身は ID)・フォーム (中身は JSON) が
+    //   ホームに生のまま並んでいた。非公開にするのは種類によらずできる (以前に公開したものを下ろせるように)
+    if (is_published && !PUBLISHABLE_TYPES.has(msgResult.rows[0].type)) {
+      return res.status(400).json({ error: 'この種類のメッセージはお知らせに公開できません' });
     }
 
     // Permission: sender or room admin

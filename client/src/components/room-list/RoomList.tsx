@@ -87,7 +87,7 @@ function RoomList() {
       const prefs = {
         soundOn: useAuthStore.getState().user?.notification_sound !== false,
         roomMuted: !!room?.push_muted,
-        machinePostsRing: !!room?.push_machine_posts,
+        machinePostsRing: !!room?.push_machine_posts || room?.type === 'direct',   // ★ 1 対 1 は鳴らす (本体の pushMachinePost と同じ、2026-10-29)
       };
       if (shouldPlayMessageSound(msg, user!.id, prefs)) {
         new Audio('/notification.wav').play().catch(() => {});

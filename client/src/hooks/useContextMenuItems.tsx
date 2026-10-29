@@ -174,7 +174,9 @@ export function buildContextMenuItems({
   }
 
   // Publish/Unpublish (announcement rooms only)
-  if (currentRoom?.is_announcement && !message.is_deleted && message.type !== 'system') {
+  // ★ 公開できるのはホームで読める種類だけ (2026-10-29 小野さん判断。本体の PUBLISHABLE_TYPES と同じ)。公開済みなら種類によらず下ろせる
+  if (currentRoom?.is_announcement && !message.is_deleted
+    && (message.is_published || ['text', 'image', 'video', 'file', 'voice'].includes(message.type))) {
     items.push({
       icon: <Megaphone size={16} />,
       label: message.is_published ? 'お知らせから非公開' : 'お知らせに公開',
