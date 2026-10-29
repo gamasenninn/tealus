@@ -21,6 +21,24 @@ const WINDOW_MS = 10 * 60 * 1000;
 const counts = new Map<string, { n: number; from: number }>();
 
 export function resetClientErrorLimits(): void { counts.clear(); }
+export function clientErrorLimitSize(): number { return counts.size; }
+
+/**
+ * 送り手ごとの回数を数える。上限を超えたら false。
+ * ★ 窓を過ぎた送り手は数え直すときに落とす (2026-10-29 改善ループ 23 回目)。以前は上書きするだけで消さず、
+ *   認証の要らない口なので、送り手 (ip) の数だけ表が増え続けた
+ */
+export function countClientError(key: string, now: number): boolean {
+  const c = counts.get(key);
+  if (!c || now - c.from > WINDOW_MS) {
+    for (const [k, v] of counts) if (now - v.from > WINDOW_MS) counts.delete(k);
+    counts.set(key, { n: 1, from: now });
+    return true;
+  }
+  if (c.n >= CLIENT_ERROR_LIMIT) return false;
+  c.n++;
+  return true;
+}
 
 // 1 行にまとめて長さを切る (改行・制御文字はログを壊すので空白に)
 function clip(v: unknown, max: number): string {
@@ -73,15 +91,9 @@ router.post('/', (req, res) => {
 
   const userId = userIdFrom(req.headers.authorization);
   const key = userId ?? `ip:${req.ip}`;
-  const now = Date.now();
-  const c = counts.get(key);
-  if (!c || now - c.from > WINDOW_MS) {
-    counts.set(key, { n: 1, from: now });
-  } else if (c.n >= CLIENT_ERROR_LIMIT) {
+  if (!countClientError(key, Date.now())) {
     res.status(429).end();
     return;
-  } else {
-    c.n++;
   }
 
   // スタックは先頭の数行 (どこで落ちたか) だけ。画面側が「部品 3 行 + 位置 3 行」で送ってくる

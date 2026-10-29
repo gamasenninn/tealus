@@ -12,6 +12,7 @@ import { isRoomMember } from '../services/roomMembership.mts';
 import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../services/postEffects.mts';
 import { MEDIA_ROOT } from '../middleware/upload.mts';
 import { generateStampPack, saveStampFiles, checkDailyLimit } from '../services/stamp/index.mts';
+import { formatLocalTime } from '../lib/localTime.mts';
 
 export const router = express.Router();
 router.use(authenticate);
@@ -285,7 +286,8 @@ router.delete('/packs/:id', async (req, res) => {
     if (fs.existsSync(srcDir)) {
       const deletedDir = path.join(MEDIA_ROOT, 'stamps', 'deleted');
       if (!fs.existsSync(deletedDir)) fs.mkdirSync(deletedDir, { recursive: true });
-      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      // ★ 日付は APP_TIMEZONE の暦で (2026-10-29 改善ループ 23 回目。UTC だと 0:00〜9:00 JST の削除に前日の日付が付いた)
+      const date = formatLocalTime(new Date()).slice(0, 10).replace(/-/g, '');
       const safeName = packName.replace(/[<>:"/\\|?*]/g, '_').slice(0, 30);
       const destDir = path.join(deletedDir, `${date}_${safeName}_${packId}`);
       fs.renameSync(srcDir, destDir);

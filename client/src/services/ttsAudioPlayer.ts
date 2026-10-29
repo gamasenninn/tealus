@@ -21,6 +21,8 @@ const getAudioContext = getSharedAudioContext;
 // #243: 同時再生される TTS は 1 つに限定。新規再生時に以前の audio を stop し、
 // store に isPlaying を反映する。stop button (TtsStopButton) はこの state を見る。
 let currentAudio: HTMLAudioElement | null = null;
+/** 今の再生の後片付け (部品を外し、listener を外し、呼び出し側の onEnded を 1 回だけ呼ぶ) */
+let releaseCurrent: (() => void) | null = null;
 
 /**
  * ★ #413 (#380 の宿題) 同時再生の規約に参加する。
@@ -44,6 +46,7 @@ export function stopCurrentTts(): void {
     } catch {}
     currentAudio = null;
   }
+  if (releaseCurrent) { const r = releaseCurrent; releaseCurrent = null; r(); }
   useTtsStore.getState().setPlaying(false);
 }
 
@@ -64,6 +67,7 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
   if (currentAudio) {
     try { currentAudio.pause(); currentAudio.currentTime = 0; } catch {}
   }
+  if (releaseCurrent) { const r = releaseCurrent; releaseCurrent = null; r(); }
   const audio = new Audio(src);
   currentAudio = audio;
   useTtsStore.getState().setPlaying(true);
@@ -79,10 +83,12 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
 
   // Web Audio API で 1.0 超の boost を適用 (audioCtx 取得できれば)
   const ctx = getAudioContext();
+  const wired: AudioNode[] = [];
   if (ctx && TTS_VOLUME_BOOST > 1.0) {
     try {
       const source = ctx.createMediaElementSource(audio);
       const gainNode = ctx.createGain();
+      wired.push(source, gainNode);
       // audio.volume × TTS_VOLUME_BOOST × 既に 1.0 cap している部分を超える分
       // base が 1.0 (= voiceVolume 100%) のとき gain = TTS_VOLUME_BOOST
       // base が 0.5 (= voiceVolume 50%) のとき gain = TTS_VOLUME_BOOST (audio.volume との積で 0.5 × BOOST)
@@ -95,6 +101,18 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
     }
   }
 
+  // ★ 後片付け (2026-10-29 改善ループ 23 回目)。以前はつないだ部品を外さず、MediaElementSource が audio 要素を掴んだまま
+  //   読み込んだ音声ごと画面を閉じるまで残った。次の読み上げ・停止で止められた方は onEnded も呼ばれず、blob URL が残った
+  let released = false;
+  const release = (cb?: () => void) => {
+    if (released) return;
+    released = true;
+    if (releaseCurrent === releaseThis) releaseCurrent = null;
+    audio.removeEventListener('ended', handleEnded);
+    audio.removeEventListener('error', handleErrorEvent);
+    for (const n of wired) { try { n.disconnect(); } catch {} }
+    if (cb) cb();
+  };
   // #243: 終了時に store の isPlaying を false に + currentAudio クリア
   const handleEnded = () => {
     if (currentAudio === audio) {
@@ -102,7 +120,7 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
       useTtsStore.getState().setPlaying(false);
       if (unsubscribeOther) { unsubscribeOther(); unsubscribeOther = null; }
     }
-    if (onEnded) onEnded();
+    release(onEnded);
   };
   const handleError = (err?: unknown) => {
     if (currentAudio === audio) {
@@ -110,10 +128,14 @@ export function playTtsSrc(src: string, { onEnded, onError }: PlayTtsOptions = {
       useTtsStore.getState().setPlaying(false);
       if (unsubscribeOther) { unsubscribeOther(); unsubscribeOther = null; }
     }
-    if (onError) onError(err);
+    release(onError ? () => onError(err) : undefined);
   };
+  const handleErrorEvent = (e: Event) => handleError(e);
+  // 止められたとき (次の読み上げ・停止ボタン) は、最後まで鳴ったときと同じ後片付け
+  const releaseThis = () => release(onEnded);
+  releaseCurrent = releaseThis;
   audio.addEventListener('ended', handleEnded);
-  audio.addEventListener('error', handleError);
+  audio.addEventListener('error', handleErrorEvent);
 
   audio.play().catch((err: unknown) => {
     console.warn('[ttsAudioPlayer] play blocked:', err instanceof Error ? err.name : String(err));

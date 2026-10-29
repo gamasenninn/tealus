@@ -21,6 +21,7 @@ class FakeAudio {
   play = vi.fn().mockResolvedValue(undefined);
   pause = vi.fn(() => { this.paused = true; });
   addEventListener = vi.fn();
+  removeEventListener = vi.fn();
   src: string;
   // ★ パラメータプロパティは erasableSyntaxOnly で使えない (Node の型剥がしに合わせた設定)
   constructor(src: string) { this.src = src; FakeAudio.last = this; }
