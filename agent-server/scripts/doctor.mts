@@ -25,10 +25,20 @@ import { checkDocsIndex } from '../src/lib/docsIndex.mts';
 import { judgeDueDates, fetchOpenIssues } from '../src/lib/doctorDueDates.mts';
 // ★ 最後に成功したバックアップ (2026-10-01)。★★ BACKUP_LOG_DIR があるときだけ、その置き場の file を読む
 import { judgeBackup, readLatestBackupLog } from '../src/lib/doctorBackup.mts';
+// ★ メディアの総量・空き・常駐のメモリ (2026-10-29)。★★ 手元の file とプロセスを読むだけ = 外を叩かない
+import { judgeCapacity, measureMedia, measureFree, measureProcs } from '../src/lib/doctorCapacity.mts';
+import fs from 'node:fs';
+import path from 'node:path';
 
 dotenv.config();
 
 const probe = process.argv.includes('--probe');
+
+// ★ メディアの置き場は本体の設定 (server/.env の MEDIA_ROOT、無ければ本体の既定 <repo>/media)。値は出さない
+const serverEnvPath = path.join(import.meta.dirname, '..', '..', 'server', '.env');
+const serverEnv = fs.existsSync(serverEnvPath) ? dotenv.parse(fs.readFileSync(serverEnvPath)) : {};
+const mediaDir = serverEnv.MEDIA_ROOT || path.join(import.meta.dirname, '..', '..', 'media');
+const now = new Date();
 
 const findings: Finding[] = [
   ...runDoctor(process.env),
@@ -38,6 +48,7 @@ const findings: Finding[] = [
   judgeDueDates(await fetchOpenIssues(), new Date()),
   await checkDocsIndex(),
   judgeBackup({ dir: process.env.BACKUP_LOG_DIR, ...(process.env.BACKUP_LOG_DIR ? await readLatestBackupLog(process.env.BACKUP_LOG_DIR) : { latest: null }) }, new Date()),
+  judgeCapacity({ media: await measureMedia(mediaDir, now), freeBytes: await measureFree(mediaDir), procs: await measureProcs(now) }),
   ...(probe ? await runProbeChecks(process.env) : []),
 ];
 
