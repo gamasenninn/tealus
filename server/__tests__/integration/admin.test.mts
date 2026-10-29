@@ -143,6 +143,36 @@ describe('Admin API', () => {
   // ============================================
   // PUT /api/admin/users/:id
   // ============================================
+  // ★ 2026-10-29 改善ループ 24 回目: 長さを確かめずに入れ、列の上限 (表示名 50・ID 20) を超えると 500「サーバーエラー」だった。
+  //   空白だけの表示名も通っていた。プロフィールの側 (#498) と同じ決まりにする
+  describe('名前と ID の長さ (管理者が作る・直す)', () => {
+    it('★ 表示名 51 文字は 400 (500 にしない)', async () => {
+      const res = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: 'EMP777', display_name: 'あ'.repeat(51), password: '1234' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/50/);
+    });
+    it('★ ID 21 文字は 400', async () => {
+      const res = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: 'E'.repeat(21), display_name: '長いID', password: '1234' });
+      expect(res.status).toBe(400);
+    });
+    it('★ 空白だけの表示名は 400、前後の空白は落として入れる', async () => {
+      const blank = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: 'EMP778', display_name: '　 ', password: '1234' });
+      expect(blank.status).toBe(400);
+      const trimmed = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
+        .send({ login_id: 'EMP779', display_name: ' 佐藤 ', password: '1234' });
+      expect(trimmed.status).toBe(201);
+      expect(trimmed.body.user.display_name).toBe('佐藤');
+    });
+    it('★ 直すときも 51 文字は 400', async () => {
+      const res = await request(app).put(`/api/admin/users/${user1.user.id}`).set('Authorization', `Bearer ${admin.token}`)
+        .send({ display_name: 'あ'.repeat(51) });
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('PUT /api/admin/users/:id', () => {
     it('should update display_name', async () => {
       const res = await request(app)

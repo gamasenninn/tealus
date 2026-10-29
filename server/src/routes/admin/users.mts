@@ -6,6 +6,7 @@ import { pool } from '../../db/pool.mts';
 import { getIo } from '../../io-registry.mts';
 
 import { SALT_ROUNDS } from '../../constants/config.mts';
+import { checkDisplayName, loginIdTooLong } from '../../utils/userFields.mts';
 
 export const router = express.Router();
 
@@ -30,13 +31,18 @@ router.get('/users', async (req, res) => {
  * Create a new user
  */
 router.post('/users', async (req, res) => {
-  const { display_name, password, role = 'user', is_bot = false } = req.body;
+  const { password, role = 'user', is_bot = false } = req.body;
   // ★ #584 前後の空白 (全角含む) を落として作る。ログインは落として照合する (#568) ので、空白つきの ID は入れなくなる
   const login_id = typeof req.body.login_id === 'string' ? req.body.login_id.trim() : req.body.login_id;
 
-  if (!login_id || !display_name || !password) {
+  if (!login_id || !req.body.display_name || !password) {
     return res.status(400).json({ error: E.AUTH_REGISTER_REQUIRED });
   }
+  const name = checkDisplayName(req.body.display_name);
+  if ('error' in name) return res.status(400).json({ error: name.error });
+  const display_name = name.value;
+  const idError = loginIdTooLong(String(login_id));
+  if (idError) return res.status(400).json({ error: idError });
 
   try {
     const existing = await pool.query(
@@ -82,8 +88,10 @@ router.put('/users/:id', async (req, res) => {
     let paramIndex = 1;
 
     if (display_name !== undefined) {
+      const name = checkDisplayName(display_name);
+      if ('error' in name) return res.status(400).json({ error: name.error });
       updates.push(`display_name = $${paramIndex++}`);
-      values.push(display_name);
+      values.push(name.value);
     }
     if (password !== undefined) {
       const password_hash = await bcrypt.hash(password, SALT_ROUNDS);

@@ -7,8 +7,10 @@ import type { Server } from 'socket.io';
 
 // ★ 時間切れはこちらで決める (改善ループ 10 回目の F)。SDK の既定は 10 分 × やり直し 2 回 = 最長 30 分で、
 //   相手が固まると音声が「文字起こし中」のまま残っていた
+// ★ 鍵の行が無くても起動する (2026-10-29 改善ループ 24 回目)。undefined だと SDK が import の時点で投げ、本体が起動しなかった。
+//   空文字なら作るだけは通り、使ったときに失敗する (= 文字起こしが止まるだけ、.env.example の約束どおり)
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY ?? '',
   timeout: 120_000,
   maxRetries: 1,
 });

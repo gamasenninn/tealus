@@ -4,7 +4,7 @@ import { api } from '../../services/api';
 import { notify } from '../../stores/confirmStore';
 import * as browserTts from '../../services/browserTts';
 import { getConfig } from '../../services/clientConfig';
-import { playTtsSrc } from '../../services/ttsAudioPlayer';
+import { playTtsSrc, stopCurrentTts as stopTtsPlayback } from '../../services/ttsAudioPlayer';
 import { unlockAudio } from '../../services/audioContext';
 
 // 個人TTS再生のシングルトン（aivis-cloud 経路: 同時再生防止、最後に押したものが優先）
@@ -65,7 +65,10 @@ function TtsButton({ text, roomId }: TtsButtonProps) {
     // 'aivis-cloud' (既存ロジック)
     // 同じボタン再タップ → トグル停止
     if (audioRef.current && audioRef.current === currentTtsAudio && !audioRef.current.paused) {
-      stopCurrentTts();
+      // ★ 読み上げの側で止める (2026-10-29 改善ループ 24 回目)。自前の stop は pause だけで、つないだ部品・blob URL・
+      //   停止ボタンが次の読み上げまで残った。後片付けで onEnded が呼ばれ、currentTtsAudio と audioRef も空になる
+      stopTtsPlayback();
+      currentTtsAudio = null;
       audioRef.current = null;
       return;
     }

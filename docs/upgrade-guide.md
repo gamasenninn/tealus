@@ -112,7 +112,7 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 |------|------|------|
 | `[migration-check] ... テーブルが見つかりません` | DB migration 忘れ | 手順 3（`npm run migrate`）を実行 |
 | `[build-check] client/dist/index.html が見つかりません` | クライアント未ビルド | 手順 4（`npm run build`）を実行 |
-| `[build-check] dashboard/dist/index.html が見つかりません` | 管理画面 (/system) 未ビルド。Bot ユーザーも webhook も作れない | `cd dashboard && npm install`（postinstall でビルド） |
+| `[build-check] dashboard/dist/index.html が見つかりません` | エージェントのダッシュボード (/system) 未ビルド。エージェントの設定・ログが見られない (★ ユーザーと webhook は本体の 管理ダッシュボード `/admin` で作るので影響しない) | `cd dashboard && npm install`（postinstall でビルド） |
 | `[migration-check] ★ 未適用 N 件: …` (v0.11.1 以降) | DB migration 忘れ | 手順 3（`npm run migrate`）を実行。★ 名前が出たものが流れていない |
 | `[media] removed_media の表がありません` | DB migration 忘れ (v0.11.0 の 040) | 手順 3（`npm run migrate`）を実行。★ そのままだと削除した部屋の添付がまだ開ける |
 | `[model-guard] ... は ChatGPT アカウント (subscription) の codex では使えません` (agent-server) | Codex のモデルが外されたもの | v0.11.0 のノートの 1. を参照 |
@@ -373,7 +373,7 @@ docker volume ls | grep redisdata
 `.env` の `REDIS_URL` はもう読まれません。消しても残しても動きは変わりません。
 
 **★ 自己登録 (`POST /api/auth/register`) を最初の 1 人だけに閉じました。**
-人の利用者が 1 人でもいれば 403 を返します。2 人目以降は、管理者がダッシュボードの「ユーザー管理」から作成してください。
+人の利用者が 1 人でもいれば 403 を返します。2 人目以降は、管理者が 管理ダッシュボード (本体の画面の プロフィール → 管理ダッシュボード、`/admin`) の「ユーザー」タブから作成してください。
 
 ### → v0.9.0（停止と寿命切断を必ず予告する / フォームの表示）
 

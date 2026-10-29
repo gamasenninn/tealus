@@ -54,12 +54,13 @@ agent-server は **Bot ユーザー** として Tealus にログインしてチ�
 ### 2-1. admin ダッシュボードを開く
 
 1. ブラウザで `http://localhost:5173` を開いて **admin ユーザーで login** (Step 5 で作成した最初のユーザー、role が自動で admin になっています)
-2. 画面右上のメニュー → **「システム管理」** をクリック (または直接 `http://localhost:3000/system` にアクセス)
-3. ダッシュボード画面 → 左サイドバーの **「ユーザー管理」** をクリック
+2. 下の **「プロフィール」** → **「管理ダッシュボード」** をクリック (または直接 `http://localhost:3000/admin` にアクセス)
+3. **「ユーザー」** タブを開く
+   (★ `/system` はエージェントのダッシュボードで、ユーザーは作れない。2026-10-29 に道順を実物に合わせた)
 
 ### 2-2. Bot ユーザーを新規作成
 
-1. **「+ 新規ユーザー」** ボタンをクリック
+1. **「+ ユーザー追加」** ボタンをクリック
 2. フォームを以下のように入力:
 
    | 項目 | 値 (例) | 備考 |
@@ -68,7 +69,7 @@ agent-server は **Bot ユーザー** として Tealus にログインしてチ�
    | display_name | `AI アシスタント` | チャットでの表示名、好きなものに |
    | password | `<強固なパスワード>` | 12 文字以上推奨、英数記号混在 |
    | role | `user` | (admin にしない、Bot は user 権限で十分) |
-   | **Bot ユーザー** | ✅ **ON** | **重要** — このフラグを ON にしないと普通の人間ユーザー扱いになる |
+   | **AIエージェント** | ✅ **ON** | **重要** — このフラグを ON にしないと普通の人間ユーザー扱いになる |
 
 3. **「作成」** をクリック → 一覧に追加されたことを確認
 
@@ -145,8 +146,8 @@ agent-server は server から **Webhook イベント** (POST `/webhook/tealus`)
 
 ### 4-1. admin ダッシュボードで Webhook を登録
 
-1. `http://localhost:5173` で admin login → 「システム管理」 → 左サイドバーの **「Webhook 管理」**
-2. **「+ 新規 Webhook」** をクリック
+1. admin でログイン → プロフィール → 管理ダッシュボード (`/admin`) → **「Webhook」** タブ
+2. **「+ Webhook追加」** をクリック
 3. フォームを以下のように入力:
 
    | 項目 | 値 | 備考 |
@@ -438,7 +439,7 @@ sample skeleton: `agent-server/src/agents/lightCustomExample.mts`
 
 頻度順に確認:
 
-1. **Webhook が登録されていない** (← 一番多い原因) → admin ダッシュボード → Webhook 管理 で `http://localhost:4000/webhook/tealus` の行が **is_active=ON** で存在するか確認。無ければステップ 4 を実施
+1. **Webhook が登録されていない** (← 一番多い原因) → 管理ダッシュボード (`/admin`) → Webhook タブ で `http://localhost:4000/webhook/tealus` の行が **is_active=ON** で存在するか確認。無ければステップ 4 を実施
 2. **Webhook の URL が間違っている** → 「テスト送信」で 200 が返るか確認 (502 や接続エラーなら URL or agent-server 起動状態を見直す)
 3. **Bot がそのルームに参加していない** → ルーム設定 → メンバー一覧で確認
 4. **グループルームで mention していない** → `@AI アシスタント` のように `@` でメンションする (DM では mention 不要)
@@ -447,7 +448,7 @@ sample skeleton: `agent-server/src/agents/lightCustomExample.mts`
 
 ### Q. 「Bot ユーザー」フラグを ON にし忘れた
 
-→ ダッシュボード → ユーザー管理 → 該当ユーザー → 編集 で **「Bot ユーザー」を ON** に変更 → 保存。
+→ 管理ダッシュボード (`/admin`) → 「ユーザー」タブ → 該当ユーザーの「編集」で **「AIエージェント」に印** → 保存。
 
 ### Q. `/light2` を投げると「no final agent message captured」になる
 

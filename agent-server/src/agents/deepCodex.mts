@@ -613,12 +613,12 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
         const authResult = detectCodexAuthError(stderr);
         if (authResult.isAuth || authResult.kind) {
           logger.error(`[DeepCodex] 起動に失敗 (${authResult.kind}): ${stderr.slice(0, 500)}`);
-          await postTarget(buildCodexErrorUserMessage(authResult));
+          await postTarget(buildCodexErrorUserMessage(authResult)).catch((err) => logger.error(`[DeepCodex] auth error notice NOT delivered to room ${roomId}: ${err instanceof Error ? err.message : String(err)}`));
           resolve(null);
           return;
         }
         logger.error(`Deep Codex Agent failed (code ${code}): ${stderr.slice(0, 200)}`);
-        await postTarget(`❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`);
+        await postTarget(`❌ エラーが発生しました: ${stderr.slice(0, 200) || 'Unknown error'}`).catch((err) => logger.error(`[DeepCodex] error notice NOT delivered to room ${roomId}: ${err instanceof Error ? err.message : String(err)}`));
         resolve(null);
         return;
       }
@@ -651,7 +651,7 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
         }
       } else {
         logger.warn(`Deep Codex Agent close without agent_message (code ${code}), stderr: ${stderr.slice(0, 200)}`);
-        await postTarget('応答が取得できませんでした。');
+        await postTarget('応答が取得できませんでした。').catch((err) => logger.error(`[DeepCodex] empty-response notice NOT delivered to room ${roomId}: ${err instanceof Error ? err.message : String(err)}`));
       }
       resolve(lastAgentMessage || null);
     });
@@ -664,12 +664,12 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
       const authResult = detectCodexAuthError(err.message);
       if (authResult.isAuth || authResult.kind) {
         logger.error(`[DeepCodex] spawn 失敗 (${authResult.kind}): ${err.message}`);
-        await postTarget(buildCodexErrorUserMessage(authResult));
+        await postTarget(buildCodexErrorUserMessage(authResult)).catch((err) => logger.error(`[DeepCodex] auth error notice NOT delivered to room ${roomId}: ${err instanceof Error ? err.message : String(err)}`));
         resolve(null);
         return;
       }
       logger.error(`Deep Codex Agent spawn error: ${err.message}`);
-      await postTarget(`❌ Deep Codex Agent の起動に失敗しました: ${err.message}`);
+      await postTarget(`❌ Deep Codex Agent の起動に失敗しました: ${err.message}`).catch((e) => logger.error(`[DeepCodex] spawn error notice NOT delivered to room ${roomId}: ${e instanceof Error ? e.message : String(e)}`));
       resolve(null);
     });
   });

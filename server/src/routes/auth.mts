@@ -41,6 +41,7 @@ export const router = express.Router();
 
 import { SALT_ROUNDS } from '../constants/config.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
+import { checkDisplayName, loginIdTooLong } from '../utils/userFields.mts';
 
 /** login クエリで password_hash も一緒に取得する行 (レスポンス前に削除する) */
 interface UserWithPasswordRow extends AuthUser {
@@ -52,14 +53,20 @@ interface UserWithPasswordRow extends AuthUser {
  * Register a new user
  */
 router.post('/register', async (req, res) => {
-  const { display_name, password } = req.body;
+  const { password } = req.body;
   // ★ #584 前後の空白 (全角含む) を落として作る。ログインは落として照合する (#568) ので、空白つきの ID は入れなくなる
   const login_id = typeof req.body.login_id === 'string' ? req.body.login_id.trim() : req.body.login_id;
 
   // Validation
-  if (!login_id || !display_name || !password) {
+  if (!login_id || !req.body.display_name || !password) {
     return res.status(400).json({ error: E.AUTH_REGISTER_REQUIRED });
   }
+  // ★ 列の上限と空白だけの名前 (2026-10-29 改善ループ 24 回目、管理者が作る口と同じ決まり)
+  const name = checkDisplayName(req.body.display_name);
+  if ('error' in name) return res.status(400).json({ error: name.error });
+  const display_name = name.value;
+  const idError = loginIdTooLong(String(login_id));
+  if (idError) return res.status(400).json({ error: idError });
 
   try {
     // ★ 自己登録は「人の利用者が 0 人 = 最初の管理者づくり」のときだけ開く (2026-09-28)。
