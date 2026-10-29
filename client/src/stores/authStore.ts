@@ -43,7 +43,8 @@ interface AuthState {
   offline: boolean;
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
-  logout: () => Promise<void>;
+  /** expired: 鍵が切れたあと (本体への宛先の取り外しを頼まない) */
+  logout: (opts?: { expired?: boolean }) => Promise<void>;
   /** プロフィールの保存の応答の user をそのまま入れる (initialize で取り直さない、2026-10-29) */
   setUser: (user: User) => void;
   /** 通知音 (アカウントごと、2026-10-08)。切るとメッセージのプッシュも音なしになる */
@@ -132,10 +133,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     return data;
   },
 
-  logout: async () => {
-    // ★ #508 トークンを消す前に通知の購読を外す (後だとサーバーへの取り消しが認証で弾かれる)
+  logout: async (opts) => {
+    // ★ #508 トークンを消す前に通知の購読を外す (後だとサーバーへの取り消しが認証で弾かれる)。
+    //   ★ 鍵が切れたあとは本体に頼まない (2026-10-29。切れた鍵では 401 になるだけ)
     await Promise.race([
-      unregisterPushNotification(),
+      unregisterPushNotification({ server: !opts?.expired }),
       new Promise<void>((resolve) => setTimeout(resolve, UNSUBSCRIBE_WAIT_MS)),
     ]);
     api.setToken(null);
@@ -160,7 +162,7 @@ let handlingExpiry = false;
 api.setOnUnauthorized?.(() => {   // ?. は api を一部だけ差し替えたテストのため (本番では必ずある)
   if (handlingExpiry) return;
   handlingExpiry = true;
-  void useAuthStore.getState().logout().finally(() => {
+  void useAuthStore.getState().logout({ expired: true }).finally(() => {
     handlingExpiry = false;
     window.location.assign('/login');
   });

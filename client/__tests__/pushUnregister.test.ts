@@ -42,6 +42,14 @@ describe('unregisterPushNotification — 購読を外す (#508)', () => {
     expect(sub!.unsubscribe).toHaveBeenCalled();
   });
 
+  // ★ 2026-10-29: 鍵が切れたあとのログアウトでは、切れた鍵で本体に頼んでも 401 になるだけ (14 日で 8 回)。
+  //   本体の死んだ宛先は送ったときの 410 か 30 日の掃除で片づく
+  it('★ server: false なら本体には頼まず、ブラウザ側だけ外す', async () => {
+    await unregisterPushNotification({ server: false });
+    expect(unsubscribePush).not.toHaveBeenCalled();
+    expect(sub!.unsubscribe).toHaveBeenCalled();
+  });
+
   it('購読が無ければ何もしない', async () => {
     sub = null;
     await unregisterPushNotification();

@@ -4,12 +4,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const unregister = vi.fn(() => Promise.resolve());
+const unregister = vi.fn((_opts?: unknown) => Promise.resolve());
 const register = vi.fn();
 const permission = vi.fn(() => 'granted');
 vi.mock('../src/services/pushNotification', () => ({
   registerPushNotification: () => register(), pushPermission: () => permission(),
-  startPushResumeRefresh: vi.fn(), unregisterPushNotification: () => unregister(),
+  startPushResumeRefresh: vi.fn(), unregisterPushNotification: (opts?: unknown) => unregister(opts),
 }));
 vi.mock('../src/services/socket', () => ({ connectSocket: vi.fn(), disconnectSocket: vi.fn() }));
 
@@ -31,6 +31,13 @@ describe('認証が切れたとき (#539)', () => {
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('/login'));
     expect(useAuthStore.getState().token).toBeNull();
     expect(api.token).toBeNull();
+  });
+
+  // ★ 2026-10-29: 切れた鍵で本体に宛先の取り外しを頼んでも 401 になるだけ (14 日で 8 回)。ブラウザ側だけ外す
+  it('★ 鍵切れのログアウトでは、本体に宛先の取り外しを頼まない', async () => {
+    api.notifyUnauthorized();
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('/login'));
+    expect(unregister).toHaveBeenCalledWith({ server: false });
   });
 
   it('★ 続けて何度知らせが来ても、ログアウトは 1 回だけ', async () => {

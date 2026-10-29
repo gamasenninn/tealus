@@ -297,7 +297,7 @@ function Profile() {
             <span>管理ダッシュボード</span>
           </button>
         )}
-        <button className="profile-logout-btn" onClick={logout}>
+        <button className="profile-logout-btn" onClick={() => { void logout(); }}>
           <LogOut size={18} />
           <span>ログアウト</span>
         </button>

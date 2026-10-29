@@ -118,7 +118,7 @@ export async function dispatchWithRetry(webhook: WebhookTarget, body: string, op
 
       // 5xx はリトライ対象
       if (attempt < maxRetries) {
-        const delay = baseDelay * Math.pow(3, attempt - 1); // 5s → 15s → 45s
+        const delay = baseDelay * Math.pow(3, attempt - 1); // 5s → 15s (3 回なので 45s の待ちは来ない。1 回 10 秒で打ち切り = 最長約 50 秒)
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
         return { ok: false, status: response.status, attempts: attempt };

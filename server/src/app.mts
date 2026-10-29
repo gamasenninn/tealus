@@ -290,8 +290,13 @@ app.get('*', (req, res, next) => {
   // Dev mode では client 未ビルドなので分かりやすいメッセージを返す（通常は Vite dev server 経由でアクセス）
   if (!fs.existsSync(clientIndexPath)) {
     return res.status(503).type('html').send(
-      '<html><body style="font-family:sans-serif;padding:2em;max-width:640px">'
-      + '<h1>Tealus server is running, but the client is not built</h1>'
+      // ★ 日本語を先に (2026-10-29。初めて立てる人が最初に見る画面が英語だけだった)。英語は残す (OSS の利用者向け)
+      '<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:2em;max-width:640px">'
+      + '<h1>Tealus の本体は動いていますが、画面がまだビルドされていません</h1>'
+      + '<p>本番で使うときは、先に画面をビルドしてください: <code>cd client &amp;&amp; npm install</code> (ビルドも走ります)</p>'
+      + '<p>開発中は Vite の開発サーバーを開いてください: <a href="http://localhost:5173">http://localhost:5173</a></p>'
+      + '<hr>'
+      + '<h2>Tealus server is running, but the client is not built</h2>'
       + '<p>Access the Vite dev server for development: <a href="http://localhost:5173">http://localhost:5173</a></p>'
       + '<p>For production, build the client first: <code>cd client &amp;&amp; npm run build</code></p>'
       + '</body></html>'

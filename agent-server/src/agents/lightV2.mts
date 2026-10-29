@@ -377,6 +377,7 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     // turn completed 後に MCP child process cleanup 等で発生する parse error は
     // 応答自体に影響しないため、turn 完了フラグで判定して warn に格下げする
     let turnCompleted = false;
+    let turnFailedMessage: string | null = null;
     try {
       for await (const event of events as AsyncGenerator<ThreadEvent>) {
         // 中断されていたら以降の event を捨てる。tool 実行の合間に必ず通るので、
@@ -448,7 +449,10 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
             turnCompleted = true;
             { const u = lightV2UsageLine(event.usage); logger[u.level](u.line); }
           } else if (event.type === 'turn.failed') {
-            logger.error(`[LightV2] turn failed: ${event.error?.message || 'unknown'}`);
+            turnFailedMessage = event.error?.message || 'unknown';
+            logger.error(`[LightV2] turn failed: ${turnFailedMessage}`);
+            const failCause = detectCodexAuthError(turnFailedMessage);
+            if (failCause.kind && !streamCause) streamCause = failCause;
           } else if (event.type === 'error') {
             // pre-α (#292 follow-up): ChatGPT subscription auth 切れを検出し user に案内
             const authResult = detectCodexAuthError(event.message);
@@ -487,6 +491,9 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
       logger.info(`[LightV2] cancelled room=${roomId}: 応答を破棄 (${lastAgentMessage?.length || 0} chars)`);
       return null;
     }
+    // ★ turn.failed は SDK が投げないので、ここで失敗として投げる (下の catch の案内に乗せる)。途中の独り言を答えにしない
+    const failure = turnFailureError(turnCompleted, turnFailedMessage);
+    if (failure) throw failure;
 
     // 最終 response 送信
     if (lastAgentMessage) {
@@ -564,6 +571,16 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
     // ★ 会話の記録 (本文・画像入り) を、利用者のホームの .codex から部屋の置き場 (`_codex-homes`) へ移す (2026-10-27 小野さん判断)
     if (lightThread?.id && workspacePath) moveCodexRollout(lightThread.id, codexHomePath(workspacePath));
   }
+}
+
+/**
+ * turn.failed を失敗として投げる中身 (2026-10-29)。turn が終わる前に turn.failed が来ていたら Error、ほかは null。
+ * ★ codex-sdk の runStreamed は turn.failed を流すだけで投げない。以前はログだけで先へ進み、途中の独り言があれば
+ *   それが答えとして投稿された。案内が出たのは、たまたま Windows の taskkill の出力で SDK が投げたときだけだった
+ */
+export function turnFailureError(turnCompleted: boolean, failedMessage: string | null): Error | null {
+  if (turnCompleted || !failedMessage) return null;
+  return new Error(`Codex turn failed: ${failedMessage}`);
 }
 
 /**

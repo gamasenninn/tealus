@@ -20,15 +20,19 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
  * ★ 外さないと、ログアウトした端末にもその人宛ての通知 (本文の先頭つき) が届き続けていた。
  * ★ サーバーへの取り消しは認証が要るので、トークンを消す前に呼ぶこと。失敗しても例外は外へ出さない
  */
-export async function unregisterPushNotification(): Promise<void> {
+export async function unregisterPushNotification({ server = true }: { server?: boolean } = {}): Promise<void> {
   try {
     const registration = await navigator.serviceWorker?.getRegistration?.();
     const subscription = await registration?.pushManager?.getSubscription();
     if (!subscription) return;
-    try {
-      await api.unsubscribePush(subscription.endpoint);
-    } catch (err) {
-      console.warn('[push] server unsubscribe failed:', err);
+    // ★ server: false = 鍵が切れたあと (2026-10-29)。切れた鍵で頼んでも 401 になるだけ (14 日で 8 回)。
+    //   本体の死んだ宛先は、送ったときの 410 か 30 日の掃除で片づく
+    if (server) {
+      try {
+        await api.unsubscribePush(subscription.endpoint);
+      } catch (err) {
+        console.warn('[push] server unsubscribe failed:', err);
+      }
     }
     await subscription.unsubscribe();
   } catch (err) {
@@ -91,6 +95,8 @@ export type PushState = 'subscribed' | 'none' | 'unsupported';
 export async function getPushState(): Promise<PushState> {
   if (isEmbeddedInSameApp()) return 'unsupported';
   if (!('serviceWorker' in navigator) || !navigator.serviceWorker || !('PushManager' in window)) return 'unsupported';
+  // ★ 鍵の無い Tealus (採用者) では出さない (2026-10-29)。押すたびに「もう一度押して」と出て、待っても直らなかった
+  if (!getConfig().vapid_public_key) return 'unsupported';
   try {
     const registration = await navigator.serviceWorker.getRegistration();
     const subscription = await registration?.pushManager?.getSubscription();
