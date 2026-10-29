@@ -91,6 +91,14 @@ body {
 .offline-screen { flex-direction: column; gap: 12px; padding: 0 16px; text-align: center; }
 .offline-screen p { margin: 0; }
 .offline-screen-sub { font-size: 13px; }
+/* 2026-10-29 初回のパスワードの変更 */
+.force-pw { padding: 0 16px; }
+.force-pw-form { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; text-align: left; }
+.force-pw-title { margin: 0; font-size: 17px; font-weight: bold; text-align: center; }
+.force-pw-sub { margin: 0 0 8px; font-size: 13px; text-align: center; }
+.force-pw-form input { font-size: 16px; padding: 8px; }
+.force-pw-error { margin: 0; color: var(--danger, #d33); font-size: 13px; }
+.force-pw-logout { background: transparent; border: none; color: inherit; text-decoration: underline; }
 .offline-screen button { font-size: 16px; padding: 10px 20px; border-radius: 8px; border: none; background: var(--primary); color: #fff; }
 .offline-screen .offline-screen-logout { background: none; color: #888; font-size: 13px; text-decoration: underline; }
 

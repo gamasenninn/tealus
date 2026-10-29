@@ -28,7 +28,7 @@ describe('Admin guest role (#282 Phase E)', () => {
     const res = await request(app)
       .post('/api/admin/users')
       .set('Authorization', `Bearer ${admin.token}`)
-      .send({ login_id: 'GUEST001', display_name: 'ゲスト太郎', password: '1234', role: 'guest' });
+      .send({ login_id: 'GUEST001', display_name: 'ゲスト太郎', password: 'pass1234', role: 'guest' });
 
     expect(res.status).toBe(201);
     expect(res.body.user.role).toBe('guest');

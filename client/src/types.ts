@@ -19,6 +19,8 @@ export interface User {
   is_bot?: boolean;
   /** メッセージの通知で音を鳴らす (アカウントごと、2026-10-08) */
   notification_sound?: boolean;
+  /** 次のログインでパスワードの変更を求める (2026-10-29、docs/02)。立っている間は ForcePasswordChange だけを出す */
+  must_change_password?: boolean;
   created_at?: string;
 }
 

@@ -21,6 +21,7 @@ import CallBanner from './components/call/CallBanner';
 import ConfirmModal from './components/common/ConfirmModal';
 import UpdateBanner from './components/common/UpdateBanner';
 import PushOnboardingBanner from './components/common/PushOnboardingBanner';
+import ForcePasswordChange from './components/auth/ForcePasswordChange';
 import TtsStopButton from './components/common/TtsStopButton';
 import DesktopShell from './components/layout/DesktopShell';
 import './index.css';
@@ -73,6 +74,10 @@ function App() {
   }
   if (offline && !user) {
     return <OfflineScreen onRetry={initialize} onLogout={logout} />;
+  }
+  // ★ 管理者が決めたパスワードのままなら、変えるまでこの画面だけ (2026-10-29 小野さん判断 7)
+  if (user?.must_change_password) {
+    return <ForcePasswordChange />;
   }
 
   const callUrl = getCallUrl();

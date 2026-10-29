@@ -6,6 +6,12 @@
  */
 export const DISPLAY_NAME_MAX = 50;
 export const LOGIN_ID_MAX = 20;
+/** パスワードの最低の長さ (2026-10-29 利用者判断。それまでは 1 文字でも通った。今のパスワードは変えさせない) */
+export const PASSWORD_MIN = 8;
+
+export function passwordTooShort(password: unknown): string | null {
+  return typeof password !== 'string' || [...password].length < PASSWORD_MIN ? `パスワードは ${PASSWORD_MIN} 文字以上にしてください` : null;
+}
 
 /** 前後の空白を落とした表示名。決まりに合わなければ error */
 export function checkDisplayName(v: unknown): { value: string } | { error: string } {

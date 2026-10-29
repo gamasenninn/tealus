@@ -41,7 +41,7 @@ export const router = express.Router();
 
 import { SALT_ROUNDS } from '../constants/config.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
-import { checkDisplayName, loginIdTooLong } from '../utils/userFields.mts';
+import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../utils/userFields.mts';
 
 /** login クエリで password_hash も一緒に取得する行 (レスポンス前に削除する) */
 interface UserWithPasswordRow extends AuthUser {
@@ -67,6 +67,8 @@ router.post('/register', async (req, res) => {
   const display_name = name.value;
   const idError = loginIdTooLong(String(login_id));
   if (idError) return res.status(400).json({ error: idError });
+  const pwError = passwordTooShort(password);
+  if (pwError) return res.status(400).json({ error: pwError });
 
   try {
     // ★ 自己登録は「人の利用者が 0 人 = 最初の管理者づくり」のときだけ開く (2026-09-28)。
@@ -132,7 +134,7 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
     // Find user
     const result = await pool.query<UserWithPasswordRow>(
       // ★ #532 notification_sound も返す (無いと、ログインし直した直後の画面が「鳴らす」と見なした)
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, password_hash, created_at FROM users WHERE login_id = $1 AND is_active = true',
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, must_change_password, password_hash, created_at FROM users WHERE login_id = $1 AND is_active = true',
       [login_id]
     );
 
@@ -306,6 +308,8 @@ router.put('/password', authenticate, async (req, res) => {
   if (!current_password || !new_password) {
     return res.status(400).json({ error: '現在のパスワードと新しいパスワードは必須です' });
   }
+  const pwError = passwordTooShort(new_password);
+  if (pwError) return res.status(400).json({ error: pwError });
 
   try {
     const result = await pool.query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [req.user!.id]);
@@ -316,7 +320,8 @@ router.put('/password', authenticate, async (req, res) => {
     }
 
     const newHash = await bcrypt.hash(new_password, SALT_ROUNDS);
-    await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [newHash, req.user!.id]);
+    // ★ 本人が変えたら「変更が要る」を落とす (042、2026-10-29)
+    await pool.query('UPDATE users SET password_hash = $1, must_change_password = false, updated_at = now() WHERE id = $2', [newHash, req.user!.id]);
 
     res.json({ message: 'パスワードを変更しました' });
   } catch (err) {

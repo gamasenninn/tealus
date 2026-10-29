@@ -22,5 +22,7 @@ export interface AuthUser {
   is_bot?: boolean;
   /** メッセージの通知で音を鳴らす (アカウントごと、2026-10-08)。切るとプッシュは silent で送る */
   notification_sound?: boolean;
+  /** 次のログインでパスワードの変更を求める (042、2026-10-29 docs/02)。画面が変更の画面だけを出す */
+  must_change_password?: boolean;
   created_at: Date;
 }

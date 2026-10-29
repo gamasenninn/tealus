@@ -6,7 +6,7 @@ import { pool } from '../../db/pool.mts';
 import { getIo } from '../../io-registry.mts';
 
 import { SALT_ROUNDS } from '../../constants/config.mts';
-import { checkDisplayName, loginIdTooLong } from '../../utils/userFields.mts';
+import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../../utils/userFields.mts';
 
 export const router = express.Router();
 
@@ -43,6 +43,8 @@ router.post('/users', async (req, res) => {
   const display_name = name.value;
   const idError = loginIdTooLong(String(login_id));
   if (idError) return res.status(400).json({ error: idError });
+  const pwError = passwordTooShort(password);
+  if (pwError) return res.status(400).json({ error: pwError });
 
   try {
     const existing = await pool.query(
@@ -55,10 +57,11 @@ router.post('/users', async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = await pool.query(
-      `INSERT INTO users (login_id, display_name, password_hash, role, is_bot)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_bot, is_active, created_at`,
-      [login_id, display_name, password_hash, role, is_bot]
+      // ★ 管理者が決めたパスワードのまま使い続けない: 人の利用者には次のログインで変更を求める (042、2026-10-29)。機械には立てない
+      `INSERT INTO users (login_id, display_name, password_hash, role, is_bot, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_bot, is_active, must_change_password, created_at`,
+      [login_id, display_name, password_hash, role, is_bot, !is_bot]
     );
 
     res.status(201).json({ user: result.rows[0] });
@@ -78,7 +81,7 @@ router.put('/users/:id', async (req, res) => {
 
   try {
     // Check user exists
-    const existing = await pool.query<{ id: string; role: string }>('SELECT id, role FROM users WHERE id = $1', [id]);
+    const existing = await pool.query<{ id: string; role: string; is_bot: boolean }>('SELECT id, role, is_bot FROM users WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'ユーザーが見つかりません' });
     }
@@ -94,9 +97,14 @@ router.put('/users/:id', async (req, res) => {
       values.push(name.value);
     }
     if (password !== undefined) {
+      const pwError = passwordTooShort(password);
+      if (pwError) return res.status(400).json({ error: pwError });
       const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
       updates.push(`password_hash = $${paramIndex++}`);
       values.push(password_hash);
+      // ★ 管理者が入れ直したパスワードも、本人に変えてもらう (機械は除く、042)
+      updates.push(`must_change_password = $${paramIndex++}`);
+      values.push(!(is_bot ?? existing.rows[0].is_bot));
     }
     if (role !== undefined) {
       updates.push(`role = $${paramIndex++}`);

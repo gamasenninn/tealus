@@ -75,7 +75,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'EMP099', display_name: '新規ユーザー', password: '1234' });
+        .send({ login_id: 'EMP099', display_name: '新規ユーザー', password: 'pass1234' });
 
       expect(res.status).toBe(201);
       expect(res.body.user.login_id).toBe('EMP099');
@@ -87,7 +87,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'EMP001', display_name: '重複', password: '1234' });
+        .send({ login_id: 'EMP001', display_name: '重複', password: 'pass1234' });
 
       expect(res.status).toBe(409);
     });
@@ -97,10 +97,10 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: ' EMP200　', display_name: '空白', password: '1234' });
+        .send({ login_id: ' EMP200　', display_name: '空白', password: 'pass1234' });
       expect(res.status).toBe(201);
       expect(res.body.user.login_id).toBe('EMP200');
-      const login = await request(app).post('/api/auth/login').send({ login_id: 'EMP200', password: '1234' });
+      const login = await request(app).post('/api/auth/login').send({ login_id: 'EMP200', password: 'pass1234' });
       expect(login.status).toBe(200);
     });
 
@@ -108,7 +108,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'EMP001 ', display_name: '重複', password: '1234' });
+        .send({ login_id: 'EMP001 ', display_name: '重複', password: 'pass1234' });
       expect(res.status).toBe(409);
     });
 
@@ -116,7 +116,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: ' 　', display_name: '空白だけ', password: '1234' });
+        .send({ login_id: ' 　', display_name: '空白だけ', password: 'pass1234' });
       expect(res.status).toBe(400);
     });
 
@@ -133,7 +133,7 @@ describe('Admin API', () => {
       const res = await request(app)
         .post('/api/admin/users')
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'ADMIN002', display_name: '管理者2', password: '1234', role: 'admin' });
+        .send({ login_id: 'ADMIN002', display_name: '管理者2', password: 'pass1234', role: 'admin' });
 
       expect(res.status).toBe(201);
       expect(res.body.user.role).toBe('admin');
@@ -148,21 +148,21 @@ describe('Admin API', () => {
   describe('名前と ID の長さ (管理者が作る・直す)', () => {
     it('★ 表示名 51 文字は 400 (500 にしない)', async () => {
       const res = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'EMP777', display_name: 'あ'.repeat(51), password: '1234' });
+        .send({ login_id: 'EMP777', display_name: 'あ'.repeat(51), password: 'pass1234' });
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/50/);
     });
     it('★ ID 21 文字は 400', async () => {
       const res = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'E'.repeat(21), display_name: '長いID', password: '1234' });
+        .send({ login_id: 'E'.repeat(21), display_name: '長いID', password: 'pass1234' });
       expect(res.status).toBe(400);
     });
     it('★ 空白だけの表示名は 400、前後の空白は落として入れる', async () => {
       const blank = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'EMP778', display_name: '　 ', password: '1234' });
+        .send({ login_id: 'EMP778', display_name: '　 ', password: 'pass1234' });
       expect(blank.status).toBe(400);
       const trimmed = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${admin.token}`)
-        .send({ login_id: 'EMP779', display_name: ' 佐藤 ', password: '1234' });
+        .send({ login_id: 'EMP779', display_name: ' 佐藤 ', password: 'pass1234' });
       expect(trimmed.status).toBe(201);
       expect(trimmed.body.user.display_name).toBe('佐藤');
     });
@@ -188,14 +188,14 @@ describe('Admin API', () => {
       const res = await request(app)
         .put(`/api/admin/users/${user1.user.id}`)
         .set('Authorization', `Bearer ${admin.token}`)
-        .send({ password: 'newpass' });
+        .send({ password: 'newpass1' });
 
       expect(res.status).toBe(200);
 
       // Verify new password works
       const loginRes = await request(app)
         .post('/api/auth/login')
-        .send({ login_id: 'EMP001', password: 'newpass' });
+        .send({ login_id: 'EMP001', password: 'newpass1' });
       expect(loginRes.status).toBe(200);
     });
 
