@@ -1,0 +1,40 @@
+/* 2026-10-29 初めての人への通知の案内。下の帯 (BottomNav) の上に出し、操作を塞がない */
+.push-onboarding {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  z-index: 900;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: white;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.push-onboarding-text {
+  flex: 1 1 200px;
+  line-height: 1.4;
+}
+
+.push-onboarding-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  /* iOS の auto-zoom を避けるため 16px */
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.push-onboarding-btn.secondary {
+  background: transparent;
+}

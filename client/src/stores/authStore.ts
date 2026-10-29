@@ -2,7 +2,16 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import type { AuthResponse } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import { registerPushNotification, startPushResumeRefresh, unregisterPushNotification } from '../services/pushNotification';
+import { pushPermission, registerPushNotification, startPushResumeRefresh, unregisterPushNotification } from '../services/pushNotification';
+
+/**
+ * 許可済みの端末だけ、黙って宛先を登録し直す (2026-10-29 小野さん判断 6)。
+ * ★ 以前はログインと起動のたびに無条件に登録し、まだ聞いていない端末では説明なしで許可の問いが出た。
+ *   まだ聞いていない端末は PushOnboardingBanner が説明してから聞く
+ */
+function registerPushIfAllowed(): void {
+  if (pushPermission() === 'granted') void registerPushNotification();
+}
 import { clearRoomViewCache } from './roomViewCache';
 import { useRoomStore } from './roomStore';
 
@@ -84,7 +93,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         if (localStorage.getItem('token') !== token) { tokenChanged = true; return; }
         connectSocket(token);
         set({ user: data.user, token, isLoading: false, offline: false });
-        registerPushNotification();
+        registerPushIfAllowed();
         startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
         void moveLegacySoundOff(data.user, set);
       } catch (err) {
@@ -117,7 +126,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     api.setToken(data.token);
     connectSocket(data.token);
     set({ user: data.user, token: data.token, offline: false });
-    registerPushNotification();
+    registerPushIfAllowed();
     startPushResumeRefresh();
     void moveLegacySoundOff(data.user, set);
     return data;

@@ -5,7 +5,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const unregister = vi.fn(() => Promise.resolve());
-vi.mock('../src/services/pushNotification', () => ({ registerPushNotification: vi.fn(), startPushResumeRefresh: vi.fn(), unregisterPushNotification: () => unregister() }));
+const register = vi.fn();
+const permission = vi.fn(() => 'granted');
+vi.mock('../src/services/pushNotification', () => ({
+  registerPushNotification: () => register(), pushPermission: () => permission(),
+  startPushResumeRefresh: vi.fn(), unregisterPushNotification: () => unregister(),
+}));
 vi.mock('../src/services/socket', () => ({ connectSocket: vi.fn(), disconnectSocket: vi.fn() }));
 
 const assign = vi.fn();
@@ -184,6 +189,19 @@ describe('ログアウトで前の人の検索を捨てる (改善ループ 18 �
     await useAuthStore.getState().logout();
     expect(sessionStorage.getItem('searchCache')).toBeNull();
     expect(sessionStorage.getItem('searchScroll')).toBeNull();
+  });
+});
+
+// ★ 2026-10-29 小野さん判断 6: ログインの瞬間に説明なしで許可の問いが出ていた。まだ聞いていない端末は案内の帯から聞く
+describe('ログインのときの通知の登録', () => {
+  it('★★ まだ聞いていない端末では登録しない (許可の問いを出さない)。許可済みなら登録し直す', async () => {
+    vi.spyOn(api, 'login').mockResolvedValue({ token: 't9', user: { id: 'u9' } } as never);
+    register.mockClear(); permission.mockReturnValue('default');
+    await useAuthStore.getState().login('a', 'x');
+    expect(register).not.toHaveBeenCalled();
+    permission.mockReturnValue('granted');
+    await useAuthStore.getState().login('a', 'x');
+    expect(register).toHaveBeenCalledTimes(1);
   });
 });
 

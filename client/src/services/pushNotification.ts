@@ -63,6 +63,27 @@ async function forgetPreviousEndpoint(current: string): Promise<void> {
   try { localStorage.removeItem(PREV_ENDPOINT_KEY); } catch { /* 次の登録で片づける */ }
 }
 
+/**
+ * この端末の通知の許可 (2026-10-29)。'default' = まだ聞いていない。通知を使えない・パネルの中・鍵が無いなら 'unsupported'
+ * ★ ログインや起動で黙って登録してよいのは 'granted' のときだけ。'default' は案内 (PushOnboardingBanner) を出して、押したときに聞く
+ */
+export function pushPermission(): NotificationPermission | 'unsupported' {
+  if (isEmbeddedInSameApp()) return 'unsupported';
+  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';
+  if (!getConfig().vapid_public_key) return 'unsupported';   // ★ 鍵の無い Tealus (採用者) では聞かない
+  return Notification.permission;
+}
+
+/** iPhone / iPad の Safari で、ホーム画面から開いていない (= 通知が届かない) */
+export function isIosBrowserTab(): boolean {
+  if (isEmbeddedInSameApp()) return false;
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (!ios) return false;
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return !standalone;
+}
+
 export type PushRegisterResult = 'ok' | 'denied' | 'unsupported' | 'failed';
 export type PushState = 'subscribed' | 'none' | 'unsupported';
 

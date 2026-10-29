@@ -53,7 +53,7 @@ function ChatRoom() {
   const location = useLocation();
   const { user } = useAuthStore();
   const { currentRoom, members, lastReadMessageId, error: roomError } = useRoomStore();
-  const { messages, error: messageError } = useMessageStore();
+  const { messages, error: messageError, isLoading: messagesLoading, roomId: messagesRoomId } = useMessageStore();
   const [showMembers, setShowMembers] = useState(false);
   const [showCallConfirm, setShowCallConfirm] = useState(false);
   // #405 Realtime 音声会話 (docs/08 §12)。専用画面なので、開いている間はトーク画面を覆う
@@ -223,6 +223,10 @@ function ChatRoom() {
         style={showAppPanel && appUrls.length > 0 ? { flex: 100 - (appUrls[activeAppIndex]?.ratio || 50) } : undefined}
       >
           <div ref={loadMoreSentinelRef} style={{ height: 1 }} />
+        {/* ★ 便が 0 件の部屋 (作った直後など) は真っ白だった (2026-10-29 小野さん判断 6)。読み込みが終わってから出す */}
+        {messages.length === 0 && messagesRoomId === roomId && !messagesLoading && !messageError && (
+          <div className="chat-empty">まだメッセージはありません</div>
+        )}
         {/* #476 日ごとのまとまりに入れ、先頭の札を上に貼り付ける (押すとカレンダー) */}
         {groupByDay(messages).map((g, gi, all) => (
           // ★ key は日付 (+ 同じ日が離れて 2 回出たときの番号)。先頭の投稿の id を入れると、古い投稿を

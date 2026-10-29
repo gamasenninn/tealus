@@ -20,6 +20,7 @@ import CallWindow from './components/call/CallWindow';
 import CallBanner from './components/call/CallBanner';
 import ConfirmModal from './components/common/ConfirmModal';
 import UpdateBanner from './components/common/UpdateBanner';
+import PushOnboardingBanner from './components/common/PushOnboardingBanner';
 import TtsStopButton from './components/common/TtsStopButton';
 import DesktopShell from './components/layout/DesktopShell';
 import './index.css';
@@ -82,6 +83,8 @@ function App() {
       <UpdateBanner />
       <ConfirmModal />
       {user && <TtsStopButton />}
+      {/* ★ 2026-10-29 初めての人への通知の案内 (許可の問いの前に説明する・iPhone の Safari ではホーム画面に追加) */}
+      {user && <PushOnboardingBanner />}
       {user && realtimeVoiceAvailable && incomingCall && (
         <IncomingCallModal
           callerName={incomingCall.callerName}

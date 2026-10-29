@@ -263,3 +263,11 @@
   flex-direction: column;
   gap: 4px;
 }
+
+/* 2026-10-29 便が 0 件の部屋 (作った直後など) の文。以前は真っ白だった */
+.chat-empty {
+  margin: 48px auto;
+  text-align: center;
+  color: var(--text-secondary, #888);
+  font-size: 14px;
+}
