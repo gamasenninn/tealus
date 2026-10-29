@@ -26,8 +26,16 @@ function RoomSettings() {
   const [hasMcp, setHasMcp] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  // ★ 読み込みに失敗した設定 (2026-10-29 改善ループ 21 回目)。以前は失敗を握りつぶして既定値・空を「正常な見た目」で出し、
+  //   そのまま保存すると本物の設定 (CLAUDE.md・Light プロンプト・応答モード) を空や既定値で上書きした。失敗したものは保存させない
+  const [loadFailed, setLoadFailed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    setLoadFailed(new Set());
+    const failed = (key: string) => () => {
+      setLoadFailed(prev => new Set(prev).add(key));
+      setError('一部の設定を読み込めませんでした。開き直してください (読み込めなかった設定は保存できません)');
+    };
     // ルーム情報取得
     api.getRooms().then(d => {
       const found = d.rooms.find(r => r.id === roomId);
@@ -35,22 +43,29 @@ function RoomSettings() {
     }).catch(() => {});
 
     // Agent Server からルーム設定を取得
-    agentApi.getRoomSettings(roomId).then(d => setSettings(d.settings)).catch(() => {});
+    agentApi.getRoomSettings(roomId).then(d => setSettings(d.settings)).catch(failed('settings'));
     agentApi.getTtsOptions().then(setTtsOptions).catch(() => {});
-    agentApi.getRoomClaudeMd(roomId).then(d => setClaudeMd(d.content)).catch(() => {});
-    agentApi.getRoomLightPrompt(roomId).then(d => setLightPrompt(d.content)).catch(() => {});
+    agentApi.getRoomClaudeMd(roomId).then(d => setClaudeMd(d.content)).catch(failed('claudeMd'));
+    agentApi.getRoomLightPrompt(roomId).then(d => setLightPrompt(d.content)).catch(failed('lightPrompt'));
     agentApi.getRoomMcp(roomId).then(d => {
       if (d.mcpConfig) {
         setMcpText(JSON.stringify(d.mcpConfig, null, 2));
         setHasMcp(true);
       }
-    }).catch(() => {});
+    }).catch(failed('mcp'));
   }, [roomId]);
 
   const showMessage = (msg: string) => { setMessage(msg); setError(''); setTimeout(() => setMessage(''), 3000); };
   const showError = (msg: string) => { setError(msg); setMessage(''); };
+  /** 読み込めなかった設定は保存しない (空や既定値で上書きしない) */
+  const refuseIfNotLoaded = (key: string): boolean => {
+    if (!loadFailed.has(key)) return false;
+    showError('この設定は読み込めていないので保存できません。画面を開き直してください');
+    return true;
+  };
 
   const handleSettingsSave = async () => {
+    if (refuseIfNotLoaded('settings')) return;
     try {
       await agentApi.updateRoomSettings(roomId, settings);
       showMessage('ルーム設定を保存しました。次の投稿から反映されます。');   // ★ #590 dispatcher・読み上げが投稿ごとに読む
@@ -58,6 +73,7 @@ function RoomSettings() {
   };
 
   const handleLightPromptSave = async () => {
+    if (refuseIfNotLoaded('lightPrompt')) return;
     try {
       await agentApi.updateRoomLightPrompt(roomId, lightPrompt);
       showMessage('Light プロンプトを保存しました。');
@@ -65,6 +81,7 @@ function RoomSettings() {
   };
 
   const handleClaudeMdSave = async () => {
+    if (refuseIfNotLoaded('claudeMd')) return;
     try {
       await agentApi.updateRoomClaudeMd(roomId, claudeMd);
       showMessage('プロンプトを保存しました。');
@@ -72,6 +89,7 @@ function RoomSettings() {
   };
 
   const handleMcpSave = async () => {
+    if (refuseIfNotLoaded('mcp')) return;
     try {
       const parsed = JSON.parse(mcpText);
       await agentApi.updateRoomMcp(roomId, parsed);

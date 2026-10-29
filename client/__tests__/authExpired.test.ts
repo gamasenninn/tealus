@@ -132,6 +132,32 @@ describe('initialize を重ねて呼んだとき', () => {
   });
 });
 
+// ★ 2026-10-29 改善ループ 21 回目: 遅れて終わった古い試行が、入れ替わった次の人の状態を前の人で上書きし、
+//   socket を前の人の鍵で張り直していた (保存中にログアウト → 別の人がログイン)
+describe('鍵が替わったあとに古い initialize が終わったとき', () => {
+  it('★★ 前の人の user を入れない', async () => {
+    localStorage.setItem('token', 'old');
+    useAuthStore.setState({ user: null, token: null, isLoading: false, offline: false });
+    let release: (v: unknown) => void = () => {};
+    const spy = vi.spyOn(api, 'getMe').mockImplementation(() => new Promise((r) => { release = r; }) as never);
+    const p = useAuthStore.getState().initialize();
+    localStorage.setItem('token', 'new');   // その間に別の人がログインした
+    useAuthStore.setState({ user: { id: 'new-user' } as never, token: 'new' });
+    release({ user: { id: 'old-user' } });
+    await p;
+    expect(useAuthStore.getState().user).toEqual({ id: 'new-user' });
+    spy.mockRestore();
+  });
+});
+
+describe('setUser (プロフィールの保存の応答をそのまま入れる)', () => {
+  it('★ 保存の応答の user を入れる (initialize で取り直さない)', () => {
+    useAuthStore.setState({ user: { id: 'u1', display_name: '旧' } as never });
+    useAuthStore.getState().setUser({ id: 'u1', display_name: '新' } as never);
+    expect(useAuthStore.getState().user).toEqual({ id: 'u1', display_name: '新' });
+  });
+});
+
 describe('ログアウトで前の人の検索を捨てる (改善ループ 18 回目)', () => {
   it('★ 検索の結果 (本文入り) とスクロール位置を消す', async () => {
     sessionStorage.setItem('searchCache', '{"q":"x"}');

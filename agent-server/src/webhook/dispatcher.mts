@@ -29,6 +29,13 @@ import { readRoomConfigJson } from '../lib/roomConfigPaths.mts';
 const roomQueues = new Map<string, Promise<void>>();
 
 /**
+ * 委譲先・統合の agent に「自分で投稿しない」を伝える前置き (投稿は委譲元が行う)。
+ * ★ 委譲先 (runAgent) と統合 (synthesize) の両方に付ける (2026-10-29 改善ループ 21 回目。統合は #295 で作ったときから付いておらず、
+ *   agent が自分で send_message すると委譲元の投稿と二重になった)。配線は __tests__/unit/delegationNoPostGuard.test.mts が見張る
+ */
+const DELEGATION_NO_POST = '**重要**: あなたは別のルームからの委譲依頼に回答しています。回答は本文として述べるだけにし、send_message ツールでこのルームに投稿しないでください（投稿は委譲元が行います）。\n\n';
+
+/**
  * 1 つのキュータスクを外側タイムアウト付きで実行する (#270)。
  * fn が timeoutMs 以内に完了 (resolve / reject) しなければ、強制的に resolve して
  * キューを unblock する。これにより Light v1/v2 path が SDK 内部でハングして Promise が
@@ -342,7 +349,6 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
         const r = await route(task);
         const userPrompt = r.prompt || task;
         const useDeepCodex = r.tier === 'deep' && config.DEEP_AGENT_PROVIDER === 'codex';
-        const noPostPrefix = '**重要**: あなたは別のルームからの委譲依頼に回答しています。回答は本文として述べるだけにし、send_message ツールでこのルームに投稿しないでください（投稿は委譲元が行います）。\n\n';
         let out: string | null | undefined = null;
         // ★ #545 相手がたどってこちらの答えを待っているなら、並ばずに断る (互いに待ち合って 9 分止まっていた)
         if (!beginWait(roomId, targetRoomId)) {
@@ -354,9 +360,9 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
           // ★ #564 委譲先の待ち行列でも、委譲を頼んだ人を持たせる (積んだ処理は別の流れから呼ばれる)
           await enqueueForRoom(targetRoomId, withCurrentRequester(async () => {
             if (useDeepCodex) {
-              out = await processDeepCodex({ roomId: targetRoomId, preamble: noPostPrefix, prompt: buildDeepPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, agentId, sessionId: tctx.session_id, suppressAutoPost: true });   // ★ 委譲の決まりは部屋の指示より前 (2026-10-29)
+              out = await processDeepCodex({ roomId: targetRoomId, preamble: DELEGATION_NO_POST, prompt: buildDeepPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, agentId, sessionId: tctx.session_id, suppressAutoPost: true });   // ★ 委譲の決まりは部屋の指示より前 (2026-10-29)
             } else {
-              out = await processLightV2({ roomId: targetRoomId, prompt: noPostPrefix + buildLightPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, suppressAutoPost: true });
+              out = await processLightV2({ roomId: targetRoomId, prompt: DELEGATION_NO_POST + buildLightPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, suppressAutoPost: true });
             }
           }));
         } finally {
@@ -378,9 +384,9 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
           // ★ #439 Step 2: ここだけ buildDeepPrompt を通らず素の prompt で走っていた
           //   (2026-06-15 に synthesize を新設したときの取り残し。判定 = 忘れ)。
           //   ★★ Light v2 分岐は agent が自分で読むので付けない (付けると二重になる)。
-          return processDeepCodex({ roomId, prompt: synthPrompt + knowledgeSuffix('synthesize'), workspacePath: octx.workspace_path, agentId, sessionId: octx.session_id, suppressAutoPost: true });
+          return processDeepCodex({ roomId, preamble: DELEGATION_NO_POST, prompt: synthPrompt + knowledgeSuffix('synthesize'), workspacePath: octx.workspace_path, agentId, sessionId: octx.session_id, suppressAutoPost: true });
         }
-        return processLightV2({ roomId, prompt: synthPrompt, workspacePath: octx.workspace_path, suppressAutoPost: true });
+        return processLightV2({ roomId, prompt: DELEGATION_NO_POST + synthPrompt, workspacePath: octx.workspace_path, suppressAutoPost: true });
       };
 
       const deps = { runAgent, synthesize, postToRoom: async (rid: string, text: string): Promise<void> => { await botApi.pushMessage(rid, text); } };

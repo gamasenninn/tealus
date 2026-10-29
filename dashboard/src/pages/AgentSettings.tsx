@@ -18,25 +18,38 @@ function AgentSettings() {
   const [isCustomPrompt, setIsCustomPrompt] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  // ★ 読み込みに失敗した設定は保存させない (2026-10-29 改善ループ 21 回目、RoomSettings と同じ)。以前は失敗しても既定値・空のまま
+  //   保存でき、カスタムのシステムプロンプトを空で消す・全体の設定を既定値で上書きする道があった
+  const [loadFailed, setLoadFailed] = useState<Set<string>>(new Set());
+  const failed = (key: string) => (e: unknown) => {
+    setLoadFailed(prev => new Set(prev).add(key));
+    setError(e instanceof Error ? e.message : '一部の設定を読み込めませんでした。開き直してください (読み込めなかった設定は保存できません)');
+  };
+  const refuseIfNotLoaded = (key: string): boolean => {
+    if (!loadFailed.has(key)) return false;
+    setError('この設定は読み込めていないので保存できません。画面を開き直してください');
+    return true;
+  };
 
   useEffect(() => {
-    agentApi.getSettings().then(d => { setSettings(d.settings); setInactive(d.inactive ?? {}); }).catch(e => setError(e.message));
+    agentApi.getSettings().then(d => { setSettings(d.settings); setInactive(d.inactive ?? {}); }).catch(failed('settings'));
     agentApi.getMcpConfig().then(d => {
       setMcpConfig(d.mcpConfig);
       setMcpText(JSON.stringify(d.mcpConfig, null, 2));
-    }).catch(() => {});
+    }).catch(failed('mcp'));
     agentApi.getEnv().then(d => setEnv(d.env)).catch(() => {});
     agentApi.getSystemPrompt().then(d => {
       setPromptCustom(d.custom);
       setPromptDefault(d.default);
       setIsCustomPrompt(d.isCustom);
-    }).catch(() => {});
+    }).catch(failed('prompt'));
   }, []);
 
   const showMessage = (msg: string) => { setMessage(msg); setError(''); setTimeout(() => setMessage(''), 3000); };
   const showError = (msg: string) => { setError(msg); setMessage(''); };
 
   const handleSettingsSave = async () => {
+    if (refuseIfNotLoaded('settings')) return;
     try {
       await agentApi.updateSettings(settings);
       showMessage('設定を保存しました。すぐに反映されます。');   // ★ #590 saveSettings はメモリも書き換える (再起動は要らない)
@@ -44,6 +57,7 @@ function AgentSettings() {
   };
 
   const handlePromptSave = async () => {
+    if (refuseIfNotLoaded('prompt')) return;
     try {
       await agentApi.updateSystemPrompt(promptCustom);
       setIsCustomPrompt(!!promptCustom.trim());
@@ -66,6 +80,7 @@ function AgentSettings() {
   };
 
   const handleMcpSave = async () => {
+    if (refuseIfNotLoaded('mcp')) return;
     try {
       const parsed = JSON.parse(mcpText);
       await agentApi.updateMcpConfig(parsed);

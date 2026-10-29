@@ -35,6 +35,8 @@ interface AuthState {
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
   logout: () => Promise<void>;
+  /** プロフィールの保存の応答の user をそのまま入れる (initialize で取り直さない、2026-10-29) */
+  setUser: (user: User) => void;
   /** 通知音 (アカウントごと、2026-10-08)。切るとメッセージのプッシュも音なしになる */
   setNotificationSound: (on: boolean) => Promise<void>;
 }
@@ -75,6 +77,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       try {
         api.setToken(token);
         const data = await api.getMe();
+        // ★ 待っている間に鍵が替わった (ログアウト → 別の人がログイン) なら何もしない (2026-10-29 改善ループ 21 回目)。
+        //   遅れて終わった古い試行が、次の人の状態を前の人で上書きし、socket を前の人の鍵で張り直していた
+        if (localStorage.getItem('token') !== token) return;
         connectSocket(token);
         set({ user: data.user, token, isLoading: false, offline: false });
         registerPushNotification();
@@ -127,6 +132,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     forgetPreviousUser();
     set({ user: null, token: null, offline: false });
   },
+
+  setUser: (user) => set({ user }),
 
   setNotificationSound: async (on) => {
     const data = await api.updateProfile({ notification_sound: on });

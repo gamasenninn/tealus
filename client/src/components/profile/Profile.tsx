@@ -11,7 +11,7 @@ import PushSubscribeButton from './PushSubscribeButton';
 import './Profile.css';
 
 function Profile() {
-  const { user, initialize, logout, setNotificationSound } = useAuthStore();
+  const { user, initialize, logout, setNotificationSound, setUser } = useAuthStore();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -42,8 +42,10 @@ function Profile() {
   const handleProfileSave = async () => {
     setSaving(true);
     try {
-      await api.updateProfile({ display_name: displayName, status_message: statusMessage });
-      await initialize();
+      // ★ 応答の user をそのまま入れる (2026-10-29 改善ループ 21 回目)。initialize で取り直すと、走っている古い試行
+      //   (保存の前に始まったもの) の結果を受け取って、保存したのに古い名前のままになることがあった
+      const data = await api.updateProfile({ display_name: displayName, status_message: statusMessage });
+      setUser(data.user);
       showMessage('プロフィールを更新しました');
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
@@ -61,8 +63,8 @@ function Profile() {
     if (!file) return;
 
     try {
-      await api.uploadAvatar(file);
-      await initialize();
+      const data = await api.uploadAvatar(file);
+      if (data.user) setUser(data.user); else await initialize();   // ★ 保存と同じく応答の user を入れる
       showMessage('プロフィール画像を更新しました');
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
