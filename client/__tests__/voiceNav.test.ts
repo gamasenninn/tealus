@@ -163,3 +163,16 @@ describe('editableVoiceMessages — 機械の音声', () => {
     expect(list.map((m: { id: string }) => m.id)).toEqual(['a']);
   });
 });
+
+// ★ 2026-10-29 改善ループ 20 回目: 「前へ・次へ」だけゲストを見ておらず、ゲストが他の人の音声へ移れて保存で 403 になった
+describe('editableVoiceMessages — ゲスト', () => {
+  const v = (id: string, sender: string) => ({ id, sender_id: sender, type: 'voice', is_deleted: false, transcription: { status: 'done' } }) as never;
+  it('★ ゲストは、設定がオンでも機械の音声でも、自分の音声だけが一覧に入る', () => {
+    const list = editable2([v('a', 'bot1'), v('b', 'human2'), v('c', 'me')], 'me', true, new Set(['bot1']), true);
+    expect(list.map((m: { id: string }) => m.id)).toEqual(['c']);
+  });
+  it('ゲストでなければ今までどおり', () => {
+    const list = editable2([v('a', 'bot1'), v('b', 'human2'), v('c', 'me')], 'me', true, new Set(['bot1']), false);
+    expect(list.map((m: { id: string }) => m.id)).toEqual(['a', 'b', 'c']);
+  });
+});

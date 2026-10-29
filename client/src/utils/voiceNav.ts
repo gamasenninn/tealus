@@ -5,6 +5,7 @@
  * 現在の対象を中心に 前/次 の messageId を返す。store / React に依存しないので Vitest 可能。
  */
 import type { Message } from '../types';
+import { canEditTranscription } from './permissions';
 
 export interface VoiceNavInfo {
   list: Message[];
@@ -17,7 +18,9 @@ export interface VoiceNavInfo {
 
 /** その user が編集可能な、文字起こし完了済みの音声メッセージを順序付きで返す。 */
 /** ★ botIds: 部屋のメンバーのうち機械 (is_bot) の id。機械が送った音声は設定によらず編集できる (2026-10-24 小野さん判断、docs/02) */
-export function editableVoiceMessages(messages: Message[] | null | undefined, userId: string, allowMemberEdit: boolean, botIds?: Set<string>): Message[] {
+/** ★ isGuest: ゲストは他の人の音声を直せない。判断は utils/permissions.ts の canEditTranscription に 1 つ (2026-10-29 改善ループ 20 回目。
+ *   ここだけゲストを見ておらず、「前へ・次へ」で他の人の音声へ移れて保存で 403 になった) */
+export function editableVoiceMessages(messages: Message[] | null | undefined, userId: string, allowMemberEdit: boolean, botIds?: Set<string>, isGuest = false): Message[] {
   if (!Array.isArray(messages)) return [];
   return messages.filter(
     (m) =>
@@ -25,7 +28,7 @@ export function editableVoiceMessages(messages: Message[] | null | undefined, us
       m.type === 'voice' &&
       !m.is_deleted &&
       m.transcription?.status === 'done' &&
-      (allowMemberEdit || m.sender_id === userId || !!botIds?.has(m.sender_id))
+      canEditTranscription({ isOwn: m.sender_id === userId, isGuest, allowMemberEdit, senderIsBot: !!botIds?.has(m.sender_id) })
   );
 }
 
@@ -70,8 +73,8 @@ export function navFor(list: Message[], currentId: string): VoiceNavInfo {
 }
 
 /** currentId を中心としたナビ情報 (list / index / total / prevId / nextId / current)。 */
-export function voiceNav(messages: Message[] | null | undefined, currentId: string, userId: string, allowMemberEdit: boolean, botIds?: Set<string>): VoiceNavInfo {
-  return navFor(editableVoiceMessages(messages, userId, allowMemberEdit, botIds), currentId);
+export function voiceNav(messages: Message[] | null | undefined, currentId: string, userId: string, allowMemberEdit: boolean, botIds?: Set<string>, isGuest = false): VoiceNavInfo {
+  return navFor(editableVoiceMessages(messages, userId, allowMemberEdit, botIds, isGuest), currentId);
 }
 
 /** メッセージの文字起こし表示テキスト (整形済み優先、無ければ生テキスト)。 */

@@ -494,3 +494,27 @@ describe('buildDeepCodexPrompt — 部屋の Deep の指示を codex にも渡�
     expect(buildDeepCodexPrompt(ws, '依頼')).toBe('依頼');
   });
 });
+
+// ★ 2026-10-29 改善ループ 20 回目: 委譲の「このルームに投稿しないで」(dispatcher の noPostPrefix) は依頼文の先頭に置いていたが、
+//   部屋の Deep の指示を付けるようになってその後ろに回り、埋もれた。前置きは部屋の指示より前に置く
+describe('buildDeepCodexPrompt — 前置き (委譲の決まり)', () => {
+  let root: string;
+  let ws: string;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'deep-codex-preamble-'));
+    ws = path.join(root, 'agent-1', 'room-1');
+    fs.mkdirSync(ws, { recursive: true });
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  test('★ 前置き → 部屋の指示 → 依頼 の順', () => {
+    writeRoomConfig(ws, 'CLAUDE.md', '部屋の指示');
+    const out = buildDeepCodexPrompt(ws, '依頼', '**重要**: 投稿しない\n\n');
+    expect(out.indexOf('投稿しない')).toBeLessThan(out.indexOf('部屋の指示'));
+    expect(out.indexOf('部屋の指示')).toBeLessThan(out.indexOf('依頼'));
+  });
+
+  test('部屋の指示が無ければ 前置き + 依頼', () => {
+    expect(buildDeepCodexPrompt(ws, '依頼', '前置き\n\n')).toBe('前置き\n\n依頼');
+  });
+});

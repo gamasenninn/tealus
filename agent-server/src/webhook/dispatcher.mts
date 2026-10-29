@@ -354,7 +354,7 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
           // ★ #564 委譲先の待ち行列でも、委譲を頼んだ人を持たせる (積んだ処理は別の流れから呼ばれる)
           await enqueueForRoom(targetRoomId, withCurrentRequester(async () => {
             if (useDeepCodex) {
-              out = await processDeepCodex({ roomId: targetRoomId, prompt: noPostPrefix + buildDeepPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, agentId, sessionId: tctx.session_id, suppressAutoPost: true });
+              out = await processDeepCodex({ roomId: targetRoomId, preamble: noPostPrefix, prompt: buildDeepPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, agentId, sessionId: tctx.session_id, suppressAutoPost: true });   // ★ 委譲の決まりは部屋の指示より前 (2026-10-29)
             } else {
               out = await processLightV2({ roomId: targetRoomId, prompt: noPostPrefix + buildLightPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, suppressAutoPost: true });
             }

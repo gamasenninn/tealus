@@ -9,6 +9,9 @@ import { useRoomStore } from './roomStore';
 /** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
 const UNSUBSCRIBE_WAIT_MS = 3000;
 
+/** 走っている initialize (重ねて呼ばれたら同じものを返す) */
+let initializing: Promise<void> | null = null;
+
 /**
  * 同じ画面で次の人に、前の人が覚えたものを出さない。ログアウトと、ログアウトせずに /login から入る道の両方から呼ぶ
  * (改善ループ 19 回目に 1 つにまとめた。logout にだけ足していて、login の道に残っていた)
@@ -59,39 +62,45 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   isLoading: true,
   offline: false,
 
-  initialize: async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      set({ isLoading: false });
-      return;
-    }
-    try {
-      api.setToken(token);
-      const data = await api.getMe();
-      connectSocket(token);
-      set({ user: data.user, token, isLoading: false, offline: false });
-      registerPushNotification();
-      startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
-      void moveLegacySoundOff(data.user, set);
-    } catch (err) {
-      // ★ 401 は api が知らせ、ログアウト (下の setOnUnauthorized) が鍵を消す。ここで先に消すと、ログアウトの宛先の取り外しが
-      //   鍵なしで飛んで 401 になり、本体に死んだ宛先が残っていた (改善ループ 18 回目、14 日で 10 回)
-      const status = (err as { status?: number } | null)?.status;
-      if (status === 401) {
+  initialize: () => {
+    // ★ 走っている最中なら同じ試行を返す (2026-10-29 改善ループ 20 回目)。「つながっていません」の 10 秒ごとの再試行と
+    //   電波が戻ったときの再試行が、前の試行 (最長 31 秒) を待たずに重なり、戻った瞬間に socket と通知の登録が複数走った
+    if (initializing) return initializing;
+    initializing = (async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        set({ isLoading: false });
+        return;
+      }
+      try {
+        api.setToken(token);
+        const data = await api.getMe();
+        connectSocket(token);
+        set({ user: data.user, token, isLoading: false, offline: false });
+        registerPushNotification();
+        startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
+        void moveLegacySoundOff(data.user, set);
+      } catch (err) {
+        // ★ 401 は api が知らせ、ログアウト (下の setOnUnauthorized) が鍵を消す。ここで先に消すと、ログアウトの宛先の取り外しが
+        //   鍵なしで飛んで 401 になり、本体に死んだ宛先が残っていた (改善ループ 18 回目、14 日で 10 回)
+        const status = (err as { status?: number } | null)?.status;
+        if (status === 401) {
+          set({ user: null, token: null, isLoading: false });
+          return;
+        }
+        // ★ つながらない (圏外・時間切れ・本体の 5xx) なら鍵を残す (2026-10-27 小野さん判断)。以前は鍵を消してログイン画面に落とし、
+        //   電波が戻ってもパスワードの入れ直しになっていた。ログイン中の読み直し (プロフィールの保存の後など) なら今の画面のまま
+        if (status === undefined || status >= 500 || status === 408 || status === 429) {
+          if (get().user) { set({ isLoading: false }); return; }
+          set({ isLoading: false, offline: true });
+          return;
+        }
+        localStorage.removeItem('token');
+        api.setToken(null);
         set({ user: null, token: null, isLoading: false });
-        return;
       }
-      // ★ つながらない (圏外・時間切れ・本体の 5xx) なら鍵を残す (2026-10-27 小野さん判断)。以前は鍵を消してログイン画面に落とし、
-      //   電波が戻ってもパスワードの入れ直しになっていた。ログイン中の読み直し (プロフィールの保存の後など) なら今の画面のまま
-      if (status === undefined || status >= 500 || status === 408 || status === 429) {
-        if (get().user) { set({ isLoading: false }); return; }
-        set({ isLoading: false, offline: true });
-        return;
-      }
-      localStorage.removeItem('token');
-      api.setToken(null);
-      set({ user: null, token: null, isLoading: false });
-    }
+    })().finally(() => { initializing = null; });
+    return initializing;
   },
 
   login: async (login_id, password) => {

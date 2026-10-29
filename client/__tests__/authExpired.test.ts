@@ -114,6 +114,24 @@ describe('つながらないまま開いたとき', () => {
   });
 });
 
+// ★ 2026-10-29 改善ループ 20 回目: 「つながっていません」の 10 秒ごとの再試行と電波が戻ったときの再試行が、前の試行
+//   (最長 31 秒) の終わりを待たずに重なり、戻った瞬間に socket と通知の登録が複数走った
+describe('initialize を重ねて呼んだとき', () => {
+  it('★ 走っている最中なら、同じ試行を待つ (本体に 2 回聞かない)', async () => {
+    localStorage.setItem('token', 'good');
+    useAuthStore.setState({ user: null, token: null, isLoading: true, offline: true });
+    let release: (v: unknown) => void = () => {};
+    const spy = vi.spyOn(api, 'getMe').mockImplementation(() => new Promise((r) => { release = r; }) as never);
+    const a = useAuthStore.getState().initialize();
+    const b = useAuthStore.getState().initialize();
+    release({ user: { id: 'u1' } });
+    await Promise.all([a, b]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().user).toEqual({ id: 'u1' });
+    spy.mockRestore();
+  });
+});
+
 describe('ログアウトで前の人の検索を捨てる (改善ループ 18 回目)', () => {
   it('★ 検索の結果 (本文入り) とスクロール位置を消す', async () => {
     sessionStorage.setItem('searchCache', '{"q":"x"}');

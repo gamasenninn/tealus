@@ -8,6 +8,8 @@ import { api } from './api';
 const SOCKET_AUTH_ERRORS = new Set(['認証トークンがありません', 'ユーザーが見つかりません', 'トークンが無効です']);
 
 let socket: Socket | null = null;
+/** いまの socket を張った鍵 (鍵ごとに 1 本、2026-10-29) */
+let socketToken: string | null = null;
 
 /**
  * #505 部屋に「誰が何人入っているか」を数える (一覧 RoomList と部屋の画面 useSocketSync が同じ socket を使う)。
@@ -32,8 +34,12 @@ export function leaveRoom(roomId: string): void {
 }
 
 export function connectSocket(token: string): Socket {
-  if (socket?.connected) return socket;
-
+  // ★ 同じ鍵なら、つなぎかけ (未接続) でも使い回す (2026-10-29 改善ループ 20 回目)。以前は接続済みのときだけ使い回し、
+  //   再試行が重なると io() を作り直して 1 本目が窓口から外れたまま残った (ログアウトでも切れない)
+  if (socket && socketToken === token) return socket;
+  // ★ 鍵が違えば前の socket を切る (ログアウトせずに /login から別の人が入ると、前の人の鍵の socket が使い回されていた)
+  if (socket) { socket.disconnect(); roomRefs.clear(); }
+  socketToken = token;
   socket = io('/', {
     auth: { token },
     transports: ['websocket', 'polling'],
@@ -95,5 +101,6 @@ export function disconnectSocket(): void {
     socket.disconnect();
     socket = null;
   }
+  socketToken = null;
   roomRefs.clear();   // #505 新しい接続では入り直しから数える
 }

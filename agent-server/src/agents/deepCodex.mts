@@ -230,10 +230,12 @@ export function writeBackCodexAuth(codexHomePath: string, codexHomeSrcDir: strin
  * ★ 2026-10-27 小野さん判断。以前は claude の Deep (--append-system-prompt-file) にしか渡っておらず、codex は cwd の AGENTS.md しか
  *   読まないので、本番の Deep (codex) では書いた指示が効いていなかった。★ workspace の中の CLAUDE.md (AI が書ける場所) は読まない (G-1)
  */
-export function buildDeepCodexPrompt(workspacePath: string, prompt: string): string {
+export function buildDeepCodexPrompt(workspacePath: string, prompt: string, preamble = ''): string {
+  // ★ preamble (委譲の「このルームに投稿しないで」など) は部屋の指示より前に置く (2026-10-29 改善ループ 20 回目。
+  //   依頼文の先頭に置いていたものが、部屋の指示を付けるようになってその後ろに回り、埋もれた)
   const roomInstructions = readRoomConfig(workspacePath, 'CLAUDE.md')?.trim();
-  if (!roomInstructions) return prompt;
-  return `# この部屋の Deep の指示 (管理者が設定)\n\n${roomInstructions}\n\n---\n\n${prompt}`;
+  if (!roomInstructions) return `${preamble}${prompt}`;
+  return `${preamble}# この部屋の Deep の指示 (管理者が設定)\n\n${roomInstructions}\n\n---\n\n${prompt}`;
 }
 
 /**
@@ -445,6 +447,8 @@ export interface ProcessDeepCodexParams {
   sessionId?: string | null;
   mcpServers?: McpServersConfig;
   suppressAutoPost?: boolean;
+  /** 部屋の Deep の指示より前に置く前置き (委譲の決まりなど) */
+  preamble?: string;
 }
 
 /**
@@ -453,7 +457,7 @@ export interface ProcessDeepCodexParams {
  * 返り値: 最終 agent message 本文 (無ければ null。timeout / cancel / safety net 経路は
  * 旧実装同様 undefined で resolve — 呼び出し側は falsy 判定のみに依存すること)
  */
-export async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessionId, mcpServers, suppressAutoPost = false }: ProcessDeepCodexParams): Promise<string | null | undefined> {
+export async function processDeepCodex({ roomId, prompt, workspacePath, agentId, sessionId, mcpServers, suppressAutoPost = false, preamble = '' }: ProcessDeepCodexParams): Promise<string | null | undefined> {
   return new Promise<string | null | undefined>((resolve) => {
     // #295: 委譲 (runAgent) 経由は suppressAutoPost=true。自室へ投稿/エラー通知せず本文を
     //       resolve で返し、デリゲーターが委譲元へ機械配送する (委譲先に残さない)。
@@ -475,7 +479,7 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
     });
 
     logger.info(`Deep Codex Agent starting: codex ${args.slice(0, 6).join(' ')}... auth=${useSubscription ? 'subscription' : 'api-key'} model=${model}`);
-    const fullPrompt = buildDeepCodexPrompt(workspacePath, prompt);
+    const fullPrompt = buildDeepCodexPrompt(workspacePath, prompt, preamble);
     logger.debug(`Deep Codex Agent full prompt:\n${fullPrompt}`);
 
     botApi.pushStatus(roomId, 'analyzing', '高度な分析中...').catch(() => {});

@@ -55,6 +55,7 @@ function VoiceEditModal({
   const messages = useMessageStore((s) => s.messages);
   const currentRoom = useRoomStore((s) => s.currentRoom);
   const userId = useAuthStore((s) => s.user?.id);
+  const isGuest = useAuthStore((s) => s.user?.role === 'guest');   // ★ ゲストは他の人の音声へ移らない (本体と同じ、2026-10-29)
   const allowMemberEdit = !!currentRoom?.allow_member_transcription_edit;
   // ★ 機械が送った音声は設定によらず直せる (2026-10-24、前/次の行き先にも入れる)
   const members = useRoomStore((s) => s.members) ?? NO_MEMBERS;
@@ -96,7 +97,7 @@ function VoiceEditModal({
 
   const nav = selectItems
     ? navFor(selectItems(messages, userId as string, currentRoom ?? null), currentId)
-    : voiceNav(messages, currentId, userId as string, allowMemberEdit, botIds);
+    : voiceNav(messages, currentId, userId as string, allowMemberEdit, botIds, isGuest);
   const current = nav.current;
   const originalText = (textOf ?? transcriptionText)(current);
   const filePath = current?.media?.[0]?.file_path;
