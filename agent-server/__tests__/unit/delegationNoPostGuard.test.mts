@@ -19,5 +19,8 @@ describe('委譲の「投稿しないで」の配線', () => {
     const calls = src.match(/process(?:DeepCodex|LightV2)\(\{[^}]*suppressAutoPost: true[^}]*\}\)/g) ?? [];
     expect(calls.length).toBeGreaterThanOrEqual(4);   // 委譲先 2 + 統合 2
     for (const c of calls) expect(c).toMatch(/DELEGATION_NO_POST/);
+    // ★ 引数に `}` (テンプレート文字列 ${...}) を含む呼び出しは上の正規表現をすり抜ける (改善ループ 22 回目に変異で確認)。
+    //   suppressAutoPost: true の数と突き合わせ、すり抜けた呼び出しがあれば落とす
+    expect(calls).toHaveLength((src.match(/suppressAutoPost: true/g) ?? []).length);
   });
 });

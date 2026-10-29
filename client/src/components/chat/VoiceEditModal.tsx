@@ -158,7 +158,8 @@ function VoiceEditModal({
     } else {
       notifyAudioStarted(currentId);
       audio.volume = (parseInt(localStorage.getItem('voiceVolume') || '80', 10)) / 100;
-      audio.play();
+      // ★ 断られたら再生中の見た目を戻す (2026-10-29 改善ループ 22 回目、吹き出しと同じ)
+      audio.play()?.catch(() => { setIsPlaying(false); notifyAudioStopped(); });
     }
     setIsPlaying(!isPlaying);
   };

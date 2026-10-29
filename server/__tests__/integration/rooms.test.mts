@@ -323,12 +323,14 @@ describe('Rooms API', () => {
       expect(res.status).toBe(403);
     });
 
-    it('should return 404 for non-existent room', async () => {
+    // ★ 2026-10-29 改善ループ 22 回目: メンバーの検査を種類の検査より先にした。無い部屋もメンバーでない部屋と同じ 403
+    //   (以前は 404 で、部屋があるかどうかがメンバーでない人にも分かった)
+    it('should return 403 for non-existent room (does not reveal existence)', async () => {
       const res = await request(app)
         .delete('/api/rooms/00000000-0000-0000-0000-000000000000')
         .set('Authorization', `Bearer ${user1.token}`);
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
 
     it('should reject deletion of direct room (group only)', async () => {

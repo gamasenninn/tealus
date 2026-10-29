@@ -139,13 +139,32 @@ describe('鍵が替わったあとに古い initialize が終わったとき', (
     localStorage.setItem('token', 'old');
     useAuthStore.setState({ user: null, token: null, isLoading: false, offline: false });
     let release: (v: unknown) => void = () => {};
-    const spy = vi.spyOn(api, 'getMe').mockImplementation(() => new Promise((r) => { release = r; }) as never);
+    const spy = vi.spyOn(api, 'getMe')
+      .mockImplementationOnce(() => new Promise((r) => { release = r; }) as never)
+      .mockResolvedValueOnce({ user: { id: 'new-user' } } as never);   // 新しい鍵での取り直し
     const p = useAuthStore.getState().initialize();
     localStorage.setItem('token', 'new');   // その間に別の人がログインした
     useAuthStore.setState({ user: { id: 'new-user' } as never, token: 'new' });
     release({ user: { id: 'old-user' } });
     await p;
     expect(useAuthStore.getState().user).toEqual({ id: 'new-user' });
+    spy.mockRestore();
+  });
+
+  // ★ 改善ループ 22 回目: 起動中 (読み込み中...) に別のタブで鍵が替わると、何もせず返って読み込み中のまま止まった
+  it('★★ 起動中に鍵が替わったら、新しい鍵で取り直す (読み込み中のまま止まらない)', async () => {
+    localStorage.setItem('token', 'old');
+    useAuthStore.setState({ user: null, token: null, isLoading: true, offline: false });
+    const releases: Array<(v: unknown) => void> = [];
+    const spy = vi.spyOn(api, 'getMe').mockImplementation(() => new Promise((r) => { releases.push(r); }) as never);
+    const p = useAuthStore.getState().initialize();
+    localStorage.setItem('token', 'new');   // 別のタブで別の人がログインした
+    releases[0]({ user: { id: 'old-user' } });
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    releases[1]({ user: { id: 'new-user' } });
+    await p;
+    expect(useAuthStore.getState().user).toEqual({ id: 'new-user' });
+    expect(useAuthStore.getState().isLoading).toBe(false);
     spy.mockRestore();
   });
 });

@@ -47,6 +47,22 @@ describe('Room Edit API', () => {
     groupId = res.body.room.id;
   });
 
+  // ★ 2026-10-29 改善ループ 22 回目: 種類の検査 (requireGroup) がメンバーの検査より先で、メンバーでない人にも
+  //   「その部屋があるか (404)」「1 対 1 か (400)」が分かった。メンバーでなければ種類によらず 403
+  describe('メンバーでない人には、部屋の種類を明かさない', () => {
+    it('★ 1 対 1 の部屋でも、無い部屋でも 403', async () => {
+      const outsider = await createTestUser({ login_id: 'EMP999', display_name: '部外者' });
+      const dm = await request(app).post('/api/rooms/direct').set('Authorization', `Bearer ${admin.token}`).send({ partner_id: user1.user.id });
+      const directId = dm.body.room.id;
+      for (const id of [directId, '00000000-0000-4000-8000-000000000000']) {
+        const put = await request(app).put(`/api/rooms/${id}`).set('Authorization', `Bearer ${outsider.token}`).send({ name: 'x' });
+        expect(put.status).toBe(403);
+        const add = await request(app).post(`/api/rooms/${id}/members`).set('Authorization', `Bearer ${outsider.token}`).send({ user_ids: [outsider.user.id] });
+        expect(add.status).toBe(403);
+      }
+    });
+  });
+
   describe('PUT /api/rooms/:id', () => {
     it('should update group name (admin only)', async () => {
       const res = await request(app)

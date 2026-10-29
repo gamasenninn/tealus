@@ -21,7 +21,7 @@ export const router = express.Router({ mergeParams: true });
  * POST /api/rooms/:id/members
  * Add a member to the group (any member can invite)
  */
-router.post('/', authenticate, requireGroup, requireMember, async (req: Request, res: Response) => {
+router.post('/', authenticate, requireMember, requireGroup, async (req: Request, res: Response) => {
   // #282: guest は member であっても他 user を招待できない (fail-closed)。
   // client は招待ボタンを隠すが、API 直叩きもサーバーで弾く。
   if (!canInviteToRoom(req.user)) {
@@ -92,7 +92,7 @@ router.post('/', authenticate, requireGroup, requireMember, async (req: Request,
  * DELETE /api/rooms/:id/members/me
  * Leave the group
  */
-router.delete('/me', authenticate, requireGroup, requireMember, async (req: Request, res: Response) => {
+router.delete('/me', authenticate, requireMember, requireGroup, async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const userId = req.user!.id;
 
@@ -245,7 +245,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
  * PUT /api/rooms/:id/members/:userId/role
  * Change member role (group admin only)
  */
-router.put('/:userId/role', authenticate, requireGroup, requireMember, async (req: Request, res: Response) => {
+router.put('/:userId/role', authenticate, requireMember, requireGroup, async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const targetUserId = (req.params as { userId: string }).userId;
   const { role } = req.body;

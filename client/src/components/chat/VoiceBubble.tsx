@@ -53,7 +53,7 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
     const playHandler = (e: Event) => {
       if ((e as CustomEvent<{ messageId: string }>).detail.messageId === message.id) {
         const audio = audioRef.current;
-        if (audio) { audio.play(); setIsPlaying(true); }
+        if (audio) { audio.play()?.catch(() => setIsPlaying(false)); setIsPlaying(true); }
       }
     };
     window.addEventListener('voice:edit', editHandler);
@@ -96,7 +96,8 @@ function VoiceBubble({ message, media, transcription, isOwn, canEditTranscriptio
       // 他の再生を止めてから自分を再生
       window.dispatchEvent(new CustomEvent('voice:started', { detail: { messageId: message.id } }));
       audio.volume = (parseInt(localStorage.getItem('voiceVolume') || '80')) / 100;
-      audio.play();
+      // ★ 断られたら (iPhone の自動再生の制限など) 再生中の見た目を戻す (2026-10-29 改善ループ 22 回目。以前は鳴らないまま「再生中」)
+      audio.play()?.catch(() => setIsPlaying(false));
     }
     setIsPlaying(!isPlaying);
   };

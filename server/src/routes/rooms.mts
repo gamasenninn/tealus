@@ -583,7 +583,7 @@ router.put('/:id/notification', requireMember, async (req, res) => {
  * PUT /api/rooms/:id
  * Update group name (group admin only)
  */
-router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, res) => {
+router.put('/:id', requireMember, requireGroup, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled, voice_conversation_tools, voice_conversation_denied_tools, push_machine_posts } = req.body;
 
@@ -655,7 +655,7 @@ router.put('/:id', requireGroup, requireMember, requireRoomAdmin, async (req, re
  * ★ 別の部屋へ転送した写しは残る (forwarded_from に参照の縛りが無い、migration 038)。
  *   縛りがあった頃は、写しが 1 つでもあると削除全体が 500 で失敗していた
  */
-router.delete('/:id', requireGroup, requireMember, requireCreator, requireSoloMember, async (req, res) => {
+router.delete('/:id', requireMember, requireGroup, requireCreator, requireSoloMember, async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
   try {
@@ -683,7 +683,7 @@ router.delete('/:id', requireGroup, requireMember, requireCreator, requireSoloMe
  * POST /api/rooms/:id/icon
  * Upload group icon (group admin only)
  */
-router.post('/:id/icon', requireGroup, requireMember, requireRoomAdmin, singleImage(iconUpload, 'icon', 5), async (req, res) => {
+router.post('/:id/icon', requireMember, requireGroup, requireRoomAdmin, singleImage(iconUpload, 'icon', 5), async (req, res) => {
   const { id } = req.params;
 
   try {

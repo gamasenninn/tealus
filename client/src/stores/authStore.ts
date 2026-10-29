@@ -68,6 +68,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // ★ 走っている最中なら同じ試行を返す (2026-10-29 改善ループ 20 回目)。「つながっていません」の 10 秒ごとの再試行と
     //   電波が戻ったときの再試行が、前の試行 (最長 31 秒) を待たずに重なり、戻った瞬間に socket と通知の登録が複数走った
     if (initializing) return initializing;
+    let tokenChanged = false;
     initializing = (async () => {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -78,8 +79,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         api.setToken(token);
         const data = await api.getMe();
         // ★ 待っている間に鍵が替わった (ログアウト → 別の人がログイン) なら何もしない (2026-10-29 改善ループ 21 回目)。
-        //   遅れて終わった古い試行が、次の人の状態を前の人で上書きし、socket を前の人の鍵で張り直していた
-        if (localStorage.getItem('token') !== token) return;
+        //   遅れて終わった古い試行が、次の人の状態を前の人で上書きし、socket を前の人の鍵で張り直していた。
+        //   ★ 新しい鍵で取り直す (改善ループ 22 回目)。何もせず返すと、起動中に別のタブで鍵が替わったとき「読み込み中...」のまま止まった
+        if (localStorage.getItem('token') !== token) { tokenChanged = true; return; }
         connectSocket(token);
         set({ user: data.user, token, isLoading: false, offline: false });
         registerPushNotification();
@@ -104,7 +106,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         api.setToken(null);
         set({ user: null, token: null, isLoading: false });
       }
-    })().finally(() => { initializing = null; });
+    })().finally(() => { initializing = null; }).then(() => (tokenChanged ? get().initialize() : undefined));
     return initializing;
   },
 
