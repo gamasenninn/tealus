@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from '../lib/logger.mts';
+import { keepPrevious } from '../lib/keepPrevious.mts';
 
 // AGENT_CONFIG_DIR env で override 可能 (test isolation 用、production では unset で default)
 const CONFIG_DIR = process.env.AGENT_CONFIG_DIR || path.join(import.meta.dirname, '..', '..', 'config');
@@ -58,6 +59,8 @@ export function saveSettings(newSettings: AgentSettings): void {
   settings = { ...newSettings };
   const dir = path.dirname(SETTINGS_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n');
+  const next = JSON.stringify(settings, null, 2) + '\n';
+  keepPrevious(SETTINGS_PATH, next);   // ★ 前の版を 1 つ残す (2026-10-30 小野さん判断 1)
+  fs.writeFileSync(SETTINGS_PATH, next);
   logger.info('Settings saved');
 }

@@ -23,6 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from './logger.mts';
+import { keepPrevious } from './keepPrevious.mts';
 
 export const ROOM_CONFIG_DIR_NAME = '_room-configs';
 
@@ -117,5 +118,6 @@ export function readRoomConfigJson<T = unknown>(workspacePath: string, file: Roo
 export function writeRoomConfig(workspacePath: string, file: RoomConfigFile, content: string): void {
   const p = roomConfigPath(workspacePath, file);
   fs.mkdirSync(path.dirname(p), { recursive: true });
+  keepPrevious(p, content);   // ★ 前の版を 1 つ残す (2026-10-30 小野さん判断 1)
   fs.writeFileSync(p, content);
 }

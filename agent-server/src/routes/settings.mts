@@ -14,6 +14,7 @@ import { TTS_ENGINES, TTS_VOICES, resolveRoomTts } from '../lib/ttsRoom.mts';
 import { inactiveAgentSettings } from '../context/settingsEffect.mts';
 import { sendServerError } from '../lib/serverError.mts';
 import { readRoomConfig, readRoomConfigJson, writeRoomConfig } from '../lib/roomConfigPaths.mts';
+import { keepPrevious } from '../lib/keepPrevious.mts';
 
 export const router = express.Router();
 
@@ -79,7 +80,9 @@ router.put('/mcp', (req, res) => {
     return res.status(400).json({ error: 'mcpConfig オブジェクトが必要です' });
   }
   try {
-    fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(mcpConfig, null, 2) + '\n');
+    const next = JSON.stringify(mcpConfig, null, 2) + '\n';
+    keepPrevious(MCP_CONFIG_PATH, next);   // ★ 前の版を 1 つ残す (2026-10-30 小野さん判断 1)
+    fs.writeFileSync(MCP_CONFIG_PATH, next);
     res.json({ success: true });
   } catch (err) {
     sendServerError(req, res, err);
@@ -156,8 +159,10 @@ router.put('/system-prompt', (req, res) => {
   try {
     if (!content.trim()) {
       // 空 → カスタムファイル削除（デフォルトに戻す）
+      keepPrevious(customPath, null);   // ★ 消す前にも残す (空で保存 = 消す、なので誤って空にしても戻せる)
       if (fs.existsSync(customPath)) fs.unlinkSync(customPath);
     } else {
+      keepPrevious(customPath, content);
       fs.writeFileSync(customPath, content);
     }
     res.json({ success: true });

@@ -96,3 +96,6 @@ report/
 
 # TTS 実行時の一時生成 wav (rtc-server / agent-server が Date.now() で作る)
 .tts-tmp-*.wav
+
+# 設定を書き換える前の 1 つ前の版 (agent-server/src/lib/keepPrevious.mts、2026-10-30)
+*.prev

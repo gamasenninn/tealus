@@ -129,3 +129,22 @@ describe('★★★ 旧 (workspace 内) からの移行は起動のときに 1 �
     expect(readRoomConfig(missing, 'CLAUDE.md')).toBeNull();
   });
 });
+
+describe('前の版を 1 つ残す (2026-10-30 小野さん判断 1)', () => {
+  // ★ 保存は上書きで、空で保存・誤った保存をすると戻せなかった (バックアップにも入っていなかった)
+  test('★★ 書き換える前の中身を <file>.prev に残す。もう一度書けば .prev はその前の版になる', () => {
+    writeRoomConfig(ws, 'CLAUDE.md', 'v1');
+    expect(fs.existsSync(roomConfigPath(ws, 'CLAUDE.md') + '.prev')).toBe(false);
+    writeRoomConfig(ws, 'CLAUDE.md', 'v2');
+    expect(fs.readFileSync(roomConfigPath(ws, 'CLAUDE.md') + '.prev', 'utf8')).toBe('v1');
+    writeRoomConfig(ws, 'CLAUDE.md', 'v3');
+    expect(fs.readFileSync(roomConfigPath(ws, 'CLAUDE.md') + '.prev', 'utf8')).toBe('v2');
+  });
+
+  test('同じ中身なら .prev を上書きしない (保存ボタンを 2 回押しても前の版が消えない)', () => {
+    writeRoomConfig(ws, 'light_prompt.md', 'v1');
+    writeRoomConfig(ws, 'light_prompt.md', 'v2');
+    writeRoomConfig(ws, 'light_prompt.md', 'v2');
+    expect(fs.readFileSync(roomConfigPath(ws, 'light_prompt.md') + '.prev', 'utf8')).toBe('v1');
+  });
+});

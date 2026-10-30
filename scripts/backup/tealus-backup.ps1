@@ -77,7 +77,7 @@ try {
 # ---- 3. 鍵と設定 ------------------------------------------------------------------
 try {
   $Secrets = @(
-    'server\.env', 'agent-server\.env', 'agent-server\mcp_config.json', 'agent-server\config\system_prompt.md',
+    'server\.env', 'agent-server\.env', 'agent-server\mcp_config.json', 'agent-server\config\system_prompt.md', 'agent-server\config\settings.json',
     'server\config\room-triggers.json', 'server\config\watchdogs.json',
     'server\config\line-groups.json', 'server\config\line-group-mappings.json',
     'server\config\line-members.json', 'server\config\mining_report.json', 'server\config\dictionary.local.ttl'
@@ -96,6 +96,20 @@ try {
   }
   if ($copied -eq 0) { throw "写せたファイルが 0 本" }
   Write-Log ("鍵と設定 ok: {0} 本 → secrets\{1}{2}" -f $copied, $Stamp, $(if ($missing.Count) { " (無いので飛ばした: $($missing -join ', '))" } else { '' }))
+
+  # ★ 部屋ごとの AI の設定 (プロンプト・CLAUDE.md・声・道具) を丸ごと写す (2026-10-30 小野さん判断 1)。
+  #   置き場は repo の外 (<AGENT_WORKSPACE_ROOT>\_room-configs) で、以前はどこにも写していなかった。
+  #   ★ 道具の設定に資格情報が入りうるので secrets と同じ世代に置く
+  $agentEnv = Join-Path $Repo 'agent-server\.env'
+  $wsLine = Select-String -Path $agentEnv -Pattern '^AGENT_WORKSPACE_ROOT=' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($wsLine) {
+    $roomCfg = Join-Path (($wsLine.Line -split '=', 2)[1].Trim().Trim('"')) '_room-configs'
+    if (Test-Path $roomCfg) {
+      Copy-Item $roomCfg (Join-Path $sdir '_room-configs') -Recurse -Force
+      $n = (Get-ChildItem (Join-Path $sdir '_room-configs') -Recurse -File).Count
+      Write-Log ("部屋の AI 設定 ok: {0} 本 → secrets\{1}\_room-configs" -f $n, $Stamp)
+    } else { Write-Log "部屋の AI 設定: 置き場が無いので飛ばした ($roomCfg)" }
+  } else { Write-Log "部屋の AI 設定: agent-server\.env に AGENT_WORKSPACE_ROOT が無いので飛ばした" }
   $oldS = Get-ChildItem (Join-Path $Dest 'secrets') -Directory | Sort-Object Name -Descending | Select-Object -Skip $Keep
   foreach ($d in $oldS) { Remove-Item $d.FullName -Recurse -Force; Write-Log "鍵と設定 古いものを消した: $($d.Name)" }
 } catch {
