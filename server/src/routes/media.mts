@@ -5,7 +5,7 @@ import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
 import fs from 'node:fs';
-import { upload, getMessageType, getSubdir, decodeFileName, findOversizedFile } from '../middleware/upload.mts';
+import { upload, getMessageType, getSubdir, decodeFileName, findOversizedFile, sizeLimitMessage } from '../middleware/upload.mts';
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { MAX_UPLOAD_FILES } from '../constants/config.mts';
 import { attachMedia, attachForwards } from '../services/messageAttachments.mts';
@@ -52,8 +52,8 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
   upload.array('files', MAX_UPLOAD_FILES)(req, res, async (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        // ★ #497 ここに来るのは 1GB を超えたときだけ (種類ごとの上限は下で確かめる)
-        return res.status(413).json({ error: 'ファイルサイズが上限を超えています（画像 10MB・動画 1GB・その他 100MB）' });
+        // ★ 種類ごとの上限は受け取りながら数えて、超えた時点でここに来る (2026-10-30 判断 M、limitedDiskStorage)
+        return res.status(413).json({ error: sizeLimitMessage(err) ?? 'ファイルサイズが上限を超えています（画像 10MB・動画 1GB・その他 100MB）' });
       }
       return res.status(400).json({ error: err.message });
     }

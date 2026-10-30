@@ -73,18 +73,60 @@ export function getMessageType(mimetype: string): string {
   return 'file';
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const subdir = getSubdir(file.mimetype);
-    cb(null, path.join(MEDIA_ROOT, subdir));
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename: timestamp-random.ext
-    const ext = safeExt(file.originalname);   // ★ #561 英数字だけ (元の名前の拡張子をそのまま付けない)
-    const name = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
-    cb(null, name);
-  },
-});
+type SizeLimitError = Error & { code: 'LIMIT_FILE_SIZE'; field: string; limitMb: number; fileName: string };
+
+/**
+ * 受け取りながら種類ごとの上限を数え、超えた時点で断る保存先 (2026-10-30 小野さん判断 M、#529 の K の残り)。
+ *
+ * ★ 以前は multer に 1 つの上限 (いちばん大きい 1GB) しか渡せず、全部を受け取って保存してから種類ごとの上限を
+ *   確かめていた (findOversizedFile)。超えた時点で書き込みをやめ、途中のファイルを消して LIMIT_FILE_SIZE を返す。
+ *   multer はこの失敗を受けると、受け取りを打ち切ってすぐ応答する (残りは読み捨て)
+ * ★ 投げる失敗には何 MB までか (limitMb) とファイル名を載せる (断る文に使う)
+ */
+export function limitedDiskStorage(destinationFor: (mimetype: string) => string): multer.StorageEngine {
+  return {
+    _handleFile(_req, file, cb) {
+      const dir = destinationFor(file.mimetype);
+      // Generate unique filename: timestamp-random.ext
+      const ext = safeExt(file.originalname);   // ★ #561 英数字だけ (元の名前の拡張子をそのまま付けない)
+      const filename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+      const filePath = path.join(dir, filename);
+      const limit = sizeLimitFor(file.mimetype);
+      let size = 0;
+      let done = false;
+      const finish = (err: Error | null, info?: Partial<Express.Multer.File>) => { if (!done) { done = true; cb(err, info); } };
+      const out = fs.createWriteStream(filePath);
+      file.stream.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size <= limit || done) return;
+        file.stream.unpipe(out);
+        out.destroy();
+        fs.unlink(filePath, () => {});
+        const err = Object.assign(new Error('LIMIT_FILE_SIZE'), {
+          code: 'LIMIT_FILE_SIZE' as const, field: file.fieldname,
+          limitMb: Math.round(limit / (1024 * 1024)), fileName: decodeFileName(file.originalname),
+        }) satisfies SizeLimitError;
+        finish(err);
+        file.stream.resume();   // 残りは読み捨てる (止めたままだと multer の後片付けが進まない)
+      });
+      out.on('error', (err) => finish(err));
+      out.on('finish', () => finish(null, { destination: dir, filename, path: filePath, size }));
+      file.stream.pipe(out);
+    },
+    _removeFile(_req, file, cb) {
+      fs.unlink(file.path, (err) => cb(err && (err as NodeJS.ErrnoException).code !== 'ENOENT' ? err : null));
+    },
+  };
+}
+
+/** 種類ごとの上限で断ったときの文 (limitedDiskStorage の失敗から作る)。上限を載せていない失敗 (multer 自身の 1GB) は null */
+export function sizeLimitMessage(err: unknown): string | null {
+  const e = err as Partial<SizeLimitError> | null;
+  if (e?.code !== 'LIMIT_FILE_SIZE' || e.limitMb === undefined) return null;
+  return `${e.fileName} のサイズが上限（${e.limitMb}MB）を超えています`;
+}
+
+const storage = limitedDiskStorage((mimetype) => path.join(MEDIA_ROOT, getSubdir(mimetype)));
 
 export const upload = multer({
   storage,
@@ -92,3 +134,17 @@ export const upload = multer({
     fileSize: SIZE_LIMITS.video, // Use largest limit; fine-tune per type if needed
   },
 });
+
+/**
+ * ★ upload.single(...) の直後に置く失敗の受け口 (2026-10-30)。受け取りの途中で種類ごとの上限を超えたら 413 と理由を返す。
+ *   置かないと、上限で断った失敗が Express の既定の 500 になる (ボットの口 /push-image・/push-file)
+ */
+export function uploadSizeError(err: unknown, _req: Request, res: Response, next: NextFunction): void {
+  const msg = sizeLimitMessage(err);
+  if (msg) { res.status(413).json({ error: msg }); return; }
+  if ((err as { code?: string } | null)?.code === 'LIMIT_FILE_SIZE') {
+    res.status(413).json({ error: 'ファイルサイズが上限を超えています（画像 10MB・動画 1GB・その他 100MB）' });
+    return;
+  }
+  next(err);
+}

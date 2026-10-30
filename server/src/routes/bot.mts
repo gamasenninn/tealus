@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName, rejectOversizedUpload } from '../middleware/upload.mts';
+import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName, rejectOversizedUpload, uploadSizeError } from '../middleware/upload.mts';
 import sharp from 'sharp';
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
@@ -378,7 +378,7 @@ async function rejectLongCaption(content: unknown, file: Express.Multer.File, re
  * POST /api/bot/push-image
  * Send an image message to a room
  */
-router.post('/push-image', upload.single('image'), rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req, res) => {
+router.post('/push-image', upload.single('image'), uploadSizeError, rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req: Request, res: Response) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
@@ -465,7 +465,7 @@ router.post('/push-image', upload.single('image'), rejectOversizedUpload, requir
  * Image / video は existing /push-image, /media path に lateral OK だが、
  * text / pdf 等の attached file は本 endpoint で。
  */
-router.post('/push-file', upload.single('file'), rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req, res) => {
+router.post('/push-file', upload.single('file'), uploadSizeError, rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req: Request, res: Response) => {
   const { room_id, content } = req.body as { room_id?: string; content?: string };
   const userId = req.user!.id;
   const file = req.file;
