@@ -69,10 +69,14 @@ export function clearRoomViewCache(): void {
   goneRooms.clear();
 }
 
-/** 本体が「その部屋に入れない」と答えたか (外された 403 / 消された 404)。圏外などでは捨てない */
+/**
+ * 本体が「その部屋に入れない」と答えたか。圏外などでは捨てない。
+ * ★ 403 だけ (2026-10-30)。本体は外された部屋も消された部屋も 403 で返す (requireMember)。404 は前段 (Cloudflare・nginx) の
+ *   一時的な応答でありうるので、それで覚えていた中身を捨てない
+ */
 export function isGoneFromRoom(err: unknown): boolean {
   const status = (err as { status?: unknown } | null)?.status;
-  return status === 403 || status === 404;
+  return status === 403;
 }
 
 // 部屋から外れた知らせ (services/socket.ts が room:removed を変えて流す)。開いていない部屋でも捨てる

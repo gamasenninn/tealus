@@ -151,6 +151,17 @@ router.post('/all', requireMember, async (req: Request, res: Response) => {
     }
 
     const count = unreadRes.rows[0].count;
+    // ★ 「すべて既読」でも部屋を開いている人の「既読 N」へ配る (2026-10-30。以前は次の誰かの既読まで動かなかった)。
+    //   今読んだ分のうち新しい 50 件まで
+    if (count > 0) {
+      const readNow = await pool.query<{ id: string }>(
+        `SELECT id FROM messages WHERE room_id = $1 AND sender_id != $2 AND is_deleted = false AND created_at > $3
+          ORDER BY created_at DESC LIMIT 50`,
+        [roomId, userId, since]
+      );
+      const counts = await countReads(String(roomId), readNow.rows.map((r) => r.id));
+      getIo().to(String(roomId)).emit('message:read', { room_id: String(roomId), read_counts: counts });
+    }
     logger.info(`Mark all read: ${userId} in room ${roomId} (${count} messages)`);
     announceUnreadChanged(userId, String(roomId));   // ★ #532
     res.json({ success: true, count });

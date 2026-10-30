@@ -92,4 +92,12 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     await until(() => got.length > 0);
     expect(got).toEqual([{ room_id: roomId, read_counts: { [msgId]: 1 } }]);
   });
+
+  it('★ 「すべて既読」でも、投稿した人の開いている画面に「既読 N」が届く (2026-10-30)', async () => {
+    const theirs = await connect(other.token);
+    const got: unknown[] = []; theirs.on('message:read', (d: unknown) => got.push(d));
+    await request(app).post(`/api/rooms/${roomId}/read/all`).set('Authorization', `Bearer ${me.token}`);
+    await until(() => got.length > 0);
+    expect(got).toEqual([{ room_id: roomId, read_counts: { [msgId]: 1 } }]);
+  });
 });

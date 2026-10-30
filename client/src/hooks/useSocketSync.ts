@@ -112,8 +112,9 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     //   以前は開いたままの端末が裏でも既読にしていた (既読は人ごとに 1 つなので、他の端末に未読の数が出ない)
     let pendingReadIds: string[] = [];
     const markRead = (ids: string[]) => {
+      // ★ REST だけで送る (2026-10-30)。REST の既読も「既読 N」を部屋へ配るようになったので (1061539)、socket でも送ると
+      //   本体が数え直しと配信を 2 回ずつしていた
       api.markRead(roomId, ids).catch(() => {});
-      getSocket()?.emit('message:read', { room_id: roomId, message_ids: ids });
     };
 
     // #475 部屋を開いていて画面が見えている間だけ「見ている」を知らせる。

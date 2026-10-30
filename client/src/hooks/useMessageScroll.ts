@@ -180,10 +180,7 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         // mark-read 後に room list を再 fetch → App Badge を即更新 (badge spike、5/12)
         useRoomStore.getState().fetchRooms();
       }).catch(() => {});
-      const socket = getSocket();
-      if (socket) {
-        socket.emit('message:read', { room_id: roomId, message_ids: unreadIds });
-      }
+      // ★ socket では送らない (REST の既読が「既読 N」を配る。2 回配っていた、2026-10-30)
     }
   }, [messages, roomId, user]);
 

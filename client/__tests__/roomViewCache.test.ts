@@ -111,8 +111,9 @@ describe('messageStore: 前に開いたときの中身を先に出す (#600)', (
     expect(ids().at(-1)).toBe('r1-m20');
   });
 
-  it('★★ 取り直しが 403 (外された)・404 (消された) なら、覚えた分を捨てて画面からも消す', async () => {
-    for (const status of [403, 404]) {
+  // ★ 本体は外された部屋も消された部屋も 403 で返す。404 は前段の一時的な応答でありうるので捨てない (2026-10-30)
+  it('★★ 取り直しが 403 (外された・消された) なら、覚えた分を捨てて画面からも消す', async () => {
+    for (const status of [403]) {
       await visit('r1', 1, 20);
       vi.mocked(api.getMessages).mockRejectedValueOnce(httpError(status));
       await useMessageStore.getState().openRoom('r1');
@@ -124,6 +125,13 @@ describe('messageStore: 前に開いたときの中身を先に出す (#600)', (
       expect(ids()).toEqual([]);
       useMessageStore.getState().clearMessages();
     }
+  });
+
+  it('★ 404 (前段の一時的な応答でありうる) では捨てない', async () => {
+    await visit('r1', 1, 20);
+    vi.mocked(api.getMessages).mockRejectedValueOnce(httpError(404));
+    await useMessageStore.getState().openRoom('r1');
+    expect(ids()).toHaveLength(20);
   });
 
   it('★ 圏外などで取り直せないときは、前の中身を出したまま理由を添える (捨てない)', async () => {
@@ -201,7 +209,7 @@ describe('roomStore: 見出し・メンバーも前の分を先に出す (#600)'
     expect(useRoomStore.getState().lastReadMessageId).toBe('x');
   });
 
-  it('★★ 取り直しが 403 / 404 なら、覚えた見出しを捨てて画面からも消す', async () => {
+  it('★★ 取り直しが 403 なら、覚えた見出しを捨てて画面からも消す', async () => {
     vi.mocked(api.getRoom).mockResolvedValueOnce({ room: room('r1', '業務メモ'), members, last_read_message_id: null } as never);
     await useRoomStore.getState().selectRoom('r1');
     useRoomStore.getState().clearCurrentRoom();

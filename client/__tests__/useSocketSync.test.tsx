@@ -164,7 +164,7 @@ describe('useSocketSync — 画面が見えているときだけ既読にする 
     renderHook(() => useSocketSync('room1'));
     act(() => newMessage('m1'));
     expect(markRead()).toHaveBeenCalledWith('room1', ['m1']);
-    expect(readEmits()).toEqual([['message:read', { room_id: 'room1', message_ids: ['m1'] }]]);
+    expect(readEmits()).toEqual([]);   // ★ 2026-10-30 socket では送らない (REST が「既読 N」を配る)
   });
 
   it('★★ 裏にある間に届いた投稿は、既読にしない', () => {
@@ -182,7 +182,7 @@ describe('useSocketSync — 画面が見えているときだけ既読にする 
     act(() => setVisibility('visible'));
     expect(markRead()).toHaveBeenCalledTimes(1);
     expect(markRead()).toHaveBeenCalledWith('room1', ['m1', 'm2']);
-    expect(readEmits()).toEqual([['message:read', { room_id: 'room1', message_ids: ['m1', 'm2'] }]]);
+    expect(readEmits()).toEqual([]);   // ★ 2026-10-30 socket では送らない (REST が「既読 N」を配る)
   });
 
   it('★ 戻ったあとにもう一度裏→表にしても、同じ分を二重に既読にしない', () => {
