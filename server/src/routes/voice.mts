@@ -87,6 +87,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
   }
 
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query('BEGIN');
 
@@ -118,6 +119,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
     );
 
     await client.query('COMMIT');
+    committed = true;
 
     // Broadcast via Socket.IO
     const io = getIo();
@@ -129,29 +131,35 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
       reply_to_message: null,
     };
 
-    // Attach reply_to message info
-    if (replyTo) {
-      fullMessage.reply_to_message = await fetchReplyMessage(replyTo);
-    }
+    // ★ ここから先 (保存のあと) の失敗で 500 を返さない (改善ループ 28 回目)。便は保存済みなので、500 だと画面・無線の送り込みが
+    //   送り直して二重の便になり、最初の便は文字起こしが始まらず「処理中」のまま次の再起動まで残る。記録して 201 と文字起こしへ進む
+    try {
+      // Attach reply_to message info
+      if (replyTo) {
+        fullMessage.reply_to_message = await fetchReplyMessage(replyTo);
+      }
 
-    // ★ 付随処理は announcePost から (docs/07 §5.1、#8)
-    // ★★ 移したことで順番だけ変わった: 以前は「AI 通知 → 通知」、今は入口の順の「通知 → AI 通知」(2026-10-01 利用者判断)。
-    //   人は通知を待たないので差は無い。機械は通知 (部屋の設定を DB に聞く) を待ってから AI 通知を投げる分、数 ms 遅れる
-    await announcePost({
-      roomId,
-      emit: fullMessage,
-      // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。
-      // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
-      //   —— トランシーバーは 1 日 57 件・12 人。既定で鳴らすと、止めたい人が各自でオフにするまで鳴り続ける
-      push: req.user!.is_bot
-        ? { kind: 'machine', post: { roomId, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: '🎤 音声メッセージ' } }
-        : { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: '🎤 音声メッセージ', data: { roomId, messageId: message.id } } },
-      webhook: { kind: 'on', payload: {
-        room: { id: roomId },
-        message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
-      } },
-      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。音声は本文を持たない (文字起こしは後から入る)' },
-    });
+      // ★ 付随処理は announcePost から (docs/07 §5.1、#8)
+      // ★★ 移したことで順番だけ変わった: 以前は「AI 通知 → 通知」、今は入口の順の「通知 → AI 通知」(2026-10-01 利用者判断)。
+      //   人は通知を待たないので差は無い。機械は通知 (部屋の設定を DB に聞く) を待ってから AI 通知を投げる分、数 ms 遅れる
+      await announcePost({
+        roomId,
+        emit: fullMessage,
+        // ★ 2026-09-27 (#383): 人が送った音声にも通知を鳴らす。
+        // ★ 2026-09-28 (#463): 機械 (is_bot) の分は、ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす
+        //   —— トランシーバーは 1 日 57 件・12 人。既定で鳴らすと、止めたい人が各自でオフにするまで鳴り続ける
+        push: req.user!.is_bot
+          ? { kind: 'machine', post: { roomId, senderId: userId, senderName: req.user!.display_name, messageId: message.id, body: '🎤 音声メッセージ' } }
+          : { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: '🎤 音声メッセージ', data: { roomId, messageId: message.id } } },
+        webhook: { kind: 'on', payload: {
+          room: { id: roomId },
+          message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
+        } },
+        preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。音声は本文を持たない (文字起こしは後から入る)' },
+      });
+    } catch (err) {
+      logger.error('Voice upload: 保存のあとの付随処理に失敗 (便は保存済み・文字起こしは続ける):', err);
+    }
 
     res.status(201).json({
       message,
@@ -163,7 +171,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
       logger.error('Background transcription error:', err);
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) await client.query('ROLLBACK');
     logger.error('Voice upload error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   } finally {

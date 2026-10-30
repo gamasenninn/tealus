@@ -84,6 +84,11 @@ let BOT_PASS = process.env.TEALUS_BOT_PASS;
 
 // --- HTTP helpers ---
 
+// ★ 時間切れ (2026-10-30 改善ループ 28 回目)。以前は無く、本体が接続を受けて応答しない状態 (migrate 中など) に当たると
+//   送信の列が永久に止まり、見張りが 15 分後に知らせても自分では戻らなかった。投げれば送り直しの道 (sendWithRetry) に乗る
+const REQUEST_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
+
 function request<T>(method: string, urlPath: string, body?: unknown, token?: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
@@ -102,6 +107,7 @@ function request<T>(method: string, urlPath: string, body?: unknown, token?: str
       res.on('end', () => { try { resolve(JSON.parse(d) as T); } catch { resolve({ raw: d } as T); } });
     });
     req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`本体が ${REQUEST_TIMEOUT_MS / 1000} 秒応答しません`)));
     if (data) req.write(data);
     req.end();
   });
@@ -143,6 +149,7 @@ function uploadFile(token: string, endpoint: string, fieldName: string, filePath
       res.on('end', () => { try { resolve(JSON.parse(d) as SendResult); } catch { resolve({ raw: d } as SendResult); } });
     });
     req.on('error', reject);
+    req.setTimeout(UPLOAD_TIMEOUT_MS, () => req.destroy(new Error(`本体が ${UPLOAD_TIMEOUT_MS / 1000} 秒応答しません`)));
     req.write(body);
     req.end();
   });
