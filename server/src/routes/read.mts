@@ -9,6 +9,8 @@ import { isGuest } from '../utils/permissions.mts';
 import { badIdMessage } from '../utils/uuid.mts';
 import { isUuid } from '../utils/uuid.mts';
 import { announceUnreadChanged } from '../services/unreadChanged.mts';
+import { countReads } from '../services/readCounts.mts';
+import { getIo } from '../io-registry.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -75,6 +77,9 @@ router.post('/', requireMemberOrAnnouncementReader, async (req: Request, res: Re
            last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
         [roomId, userId, latestMsg.rows[0].id, latestMsg.rows[0].created_at]
       );
+      // ★ 部屋を開いている人の「既読 N」へ (socket の message:read と同じ。ホームで読んだお知らせが投稿者の画面で動かなかった)
+      const counts = await countReads(String(roomId), message_ids);
+      getIo().to(String(roomId)).emit('message:read', { room_id: String(roomId), read_counts: counts });
     }
 
     announceUnreadChanged(userId, String(roomId));   // ★ #532

@@ -55,6 +55,7 @@ interface AnnouncementRoomRow {
 /** お知らせメッセージ行 (m.* + sender 列。attach 系に渡すので AttachableMessage を拡張) */
 interface AnnouncementMessageRow extends AttachableMessage {
   room_id: string;
+  sender_id: string;
   created_at: Date;
   room_name?: string;
   is_unread?: boolean;
@@ -155,7 +156,8 @@ router.get('/announcements', async (req, res) => {
 
     messages.forEach(m => {
       const lastRead = cursors[m.room_id];
-      m.is_unread = !lastRead || new Date(m.created_at) > new Date(lastRead);
+      // ★ 自分の投稿は未読にしない (部屋一覧の未読と同じ。改善ループ 26 回目)
+      m.is_unread = m.sender_id !== req.user!.id && (!lastRead || new Date(m.created_at) > new Date(lastRead));
     });
 
     res.json({ messages });

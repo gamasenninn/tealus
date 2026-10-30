@@ -19,6 +19,7 @@ import DateSeparator from './DateSeparator';
 import DateJumpCalendar from './DateJumpCalendar';
 import { groupByDay, jumpToDate } from '../../utils/dateJump';
 import { scrollIntoContainer } from '../../utils/scrollWithin';
+import { findUnreadStartId } from '../../utils/unreadLine';
 import { showComposer } from '../../utils/roomComposer';
 import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic } from 'lucide-react';
@@ -142,16 +143,12 @@ function ChatRoom() {
 
   const getMemberCount = () => {
     if (!currentRoom || currentRoom.type !== 'group') return null;
-    return members.length;
+    // ★ 利用停止の人は数えない (部屋一覧の「（N）」・メンバー一覧と同じ。改善ループ 26 回目)
+    return members.filter((m) => m.is_active !== false).length;
   };
 
-  // 「ここから未読」の線を出す投稿 (既読の最後の次で、自分以外の投稿)。日ごとのまとまりをまたいで決める
-  const unreadStartId = (() => {
-    if (!lastReadMessageId) return null;
-    const i = messages.findIndex((m) => m.id === lastReadMessageId);
-    const next = i >= 0 ? messages[i + 1] : undefined;
-    return next && next.sender_id !== user!.id ? next.id : null;
-  })();
+  // 「ここから未読」の線を出す投稿 (既読の最後より後の、自分以外の最初の投稿)。日ごとのまとまりをまたいで決める
+  const unreadStartId = findUnreadStartId(messages, lastReadMessageId, user!.id);
 
   const getPartnerOnline = () => {
     if (!currentRoom || currentRoom.type !== 'direct') return false;

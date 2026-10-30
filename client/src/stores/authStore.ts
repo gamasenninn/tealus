@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import type { AuthResponse } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import { loadConfig } from '../services/clientConfig';
+import { useCapabilityStore } from './capabilityStore';
 import { pushPermission, registerPushNotification, startPushResumeRefresh, unregisterPushNotification } from '../services/pushNotification';
 
 /**
@@ -10,6 +11,14 @@ import { pushPermission, registerPushNotification, startPushResumeRefresh, unreg
  * ★ 以前はログインと起動のたびに無条件に登録し、まだ聞いていない端末では説明なしで許可の問いが出た。
  *   まだ聞いていない端末は PushOnboardingBanner が説明してから聞く
  */
+/**
+ * 起動時に設定を取れなかった (圏外で開いた) 端末は、ログインが通ったところで取り直す (2026-10-30)。
+ * ★ 通知の鍵が空のままだと帯も登録も出ない。通話・トランシーバーの表示 (capability) にも入れ直す
+ */
+async function refreshConfig(): Promise<void> {
+  useCapabilityStore.getState().hydrateFromConfig(await loadConfig());
+}
+
 function registerPushIfAllowed(): void {
   if (pushPermission() === 'granted') void registerPushNotification();
 }
@@ -94,8 +103,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         //   ★ 新しい鍵で取り直す (改善ループ 22 回目)。何もせず返すと、起動中に別のタブで鍵が替わったとき「読み込み中...」のまま止まった
         if (localStorage.getItem('token') !== token) { tokenChanged = true; return; }
         connectSocket(token);
-        // ★ 起動時に設定を取れなかった (圏外で開いた) なら、ここで取り直す。通知の鍵が空のままだと帯も登録も出ない
-        await loadConfig();
+        await refreshConfig();
         set({ user: data.user, token, isLoading: false, offline: false });
         registerPushIfAllowed();
         startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
@@ -129,6 +137,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     forgetPreviousUser();
     api.setToken(data.token);
     connectSocket(data.token);
+    await refreshConfig();
     set({ user: data.user, token: data.token, offline: false });
     registerPushIfAllowed();
     startPushResumeRefresh();

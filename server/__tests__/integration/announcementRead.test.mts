@@ -45,6 +45,10 @@ describe('お知らせの既読 (#551)', () => {
     expect(await unread(outsider)).toBe(false);
   });
 
+  test('★ 自分が投稿したお知らせには未読の点を付けない (部屋一覧の未読と同じ、改善ループ 26 回目)', async () => {
+    expect(await unread(owner)).toBe(false);
+  });
+
   test('★ 利用者の判断どおり、部屋の「既読 N」に数える', async () => {
     await request(app).post(`/api/rooms/${roomId}/read`).set('Authorization', `Bearer ${outsider.token}`).send({ message_ids: [msgId] });
     const res = await request(app).get(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${owner.token}`);

@@ -16,6 +16,8 @@ export interface RuntimeConfig extends ClientConfig {
 
 const FALLBACK: RuntimeConfig = Object.freeze({ tts_provider: 'browser', vapid_public_key: '' });
 
+const CONFIG_TIMEOUT_MS = 8000;
+
 let cached: RuntimeConfig | null = null;
 let inflight: Promise<RuntimeConfig> | null = null;
 
@@ -24,7 +26,8 @@ export function loadConfig(): Promise<RuntimeConfig> {
   if (inflight) return inflight;
   // ★ 取れなかったときの FALLBACK は覚えない (次の loadConfig で取り直す)。覚えると、圏外で開いた端末は
   //   電波が戻っても起動し直すまで通知の鍵が空のままで、帯も登録も出なかった (2026-10-30)
-  inflight = fetch('/api/config')
+  // ★ 時間切れを付ける。ログインの確かめのあとで待つので、届かない道 (#322) で「読み込み中」のまま止めない
+  inflight = fetch('/api/config', { signal: AbortSignal.timeout(CONFIG_TIMEOUT_MS) })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
     .then((c: RuntimeConfig | null) => {

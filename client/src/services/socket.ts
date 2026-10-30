@@ -7,6 +7,9 @@ import { api } from './api';
 /** #539 本体の socket の認証で断られたときの文言 (server/src/socket/index.mts の next(new Error(...)) と同じ) */
 const SOCKET_AUTH_ERRORS = new Set(['認証トークンがありません', 'ユーザーが見つかりません', 'トークンが無効です']);
 
+/** 本体に断られた socket を自分でつなぎ直すまでの待ち */
+const SOCKET_RETRY_MS = 5000;
+
 let socket: Socket | null = null;
 /** いまの socket を張った鍵 (鍵ごとに 1 本、2026-10-29) */
 let socketToken: string | null = null;
@@ -45,11 +48,17 @@ export function connectSocket(token: string): Socket {
     transports: ['websocket', 'polling'],
   });
 
-  socket.on('connect_error', (err) => {
+  const s0 = socket;
+  s0.on('connect_error', (err) => {
     console.error('Socket connection error:', err.message);
     // ★ #539 認証で断られた (期限切れ・無効) なら、認証が切れたと知らせてログイン画面へ。
     //   以前は console に出すだけで、切れたトークンのまま再試行を続けた。文言は server/src/socket/index.mts と同じ
-    if (SOCKET_AUTH_ERRORS.has(err.message)) api.notifyUnauthorized();
+    if (SOCKET_AUTH_ERRORS.has(err.message)) { api.notifyUnauthorized(); return; }
+    // ★ 本体のミドルウェアに断られた (DB の一時的な失敗など) socket は、socket.io が自動で再接続しない (active が false)。
+    //   放っておくとログインしたまま新着が届かず、読み込み直すまで戻らない (2026-10-30 改善ループ 26 回目)。少し待って自分でつなぐ
+    if (!s0.active) {
+      setTimeout(() => { if (socket === s0 && !s0.connected) s0.connect(); }, SOCKET_RETRY_MS);
+    }
   });
 
   // server の capabilityWatcher が状態変化時に emit する。

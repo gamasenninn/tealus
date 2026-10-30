@@ -84,4 +84,12 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     await settle();
     expect(got).toEqual([]);
   });
+
+  it('★ REST で既読にしても、投稿した人の開いている画面に「既読 N」が届く (ホームで読んだお知らせ、改善ループ 26 回目)', async () => {
+    const theirs = await connect(other.token);
+    const got: unknown[] = []; theirs.on('message:read', (d: unknown) => got.push(d));
+    await request(app).post(`/api/rooms/${roomId}/read`).set('Authorization', `Bearer ${me.token}`).send({ message_ids: [msgId] });
+    await until(() => got.length > 0);
+    expect(got).toEqual([{ room_id: roomId, read_counts: { [msgId]: 1 } }]);
+  });
 });

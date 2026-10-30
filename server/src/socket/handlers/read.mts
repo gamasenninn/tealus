@@ -4,6 +4,7 @@ import { pool } from '../../db/pool.mts';
 import { isRoomMember } from '../../services/roomMembership.mts';
 import { isUuid } from '../../utils/uuid.mts';
 import { announceUnreadChanged } from '../../services/unreadChanged.mts';
+import { countReads } from '../../services/readCounts.mts';
 
 interface ReadPayload {
   room_id?: string;
@@ -50,19 +51,7 @@ export function registerReadHandler(socket: Socket): void {
         );
       }
 
-      // Calculate read counts for the affected messages using cursor
-      const readCounts = await pool.query<{ message_id: string; read_count: number }>(
-        `SELECT m.id AS message_id,
-                (SELECT COUNT(*)::int FROM room_read_cursors rrc
-                 WHERE rrc.room_id = $2 AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
-                ) AS read_count
-         FROM messages m
-         WHERE m.id = ANY($1::uuid[]) AND m.room_id = $2`,
-        // ★ #483 部屋に流す既読数も、この部屋のメッセージだけ (以前は別の部屋の ID も数えて流していた)
-        [message_ids.filter(isUuid), room_id]
-      );
-      const counts: Record<string, number> = {};
-      readCounts.rows.forEach(r => { counts[r.message_id] = r.read_count; });
+      const counts = await countReads(room_id, message_ids);
 
       socket.to(room_id).emit('message:read', {
         room_id,
