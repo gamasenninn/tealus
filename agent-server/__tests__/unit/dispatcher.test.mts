@@ -66,6 +66,12 @@ jest.mock('../../src/context/sessionManager.mts', () => ({
   updateStatus: jest.fn(),
 }));
 
+// 部屋の設定 (room_settings.json) を差し替えられるように。既定は「無い」= 実物と同じ既定値
+jest.mock('../../src/lib/roomConfigPaths.mts', () => {
+  const actual = jest.requireActual('../../src/lib/roomConfigPaths.mts');
+  return { ...actual, readRoomConfigJson: jest.fn(() => null) };
+});
+
 jest.mock('../../src/lib/logger.mts', () => ({ logger: {
   info: jest.fn(),
   warn: jest.fn(),
@@ -84,6 +90,8 @@ const { route } = require('../../src/router/index');
 const { processLight } = require('../../src/agents/light');
 const botApi = require('../../src/lib/botApi');
 const sessionManager = require('../../src/context/sessionManager');
+const roomConfigPaths = require('../../src/lib/roomConfigPaths');
+const { _resetDisabledNotice } = require('../../src/webhook/dispatcher');
 
 describe('Dispatcher', () => {
 
@@ -842,5 +850,42 @@ describe('Dispatcher', () => {
       // /light2 path は loader 経由しない (= config と独立、router 直接 dispatch)
       expect(loadLightBackend).not.toHaveBeenCalled();
     });
+  });
+});
+
+/**
+ * ★ AI を止めた部屋で AI に宛てて書いたら、部屋に 1 行返す (2026-10-30 小野さん判断 C)。以前は無言で、返事を待ち続けた
+ */
+describe('AI を止めた部屋での 1 行', () => {
+  const pushed = () => (botApi.pushMessage as jest.Mock).mock.calls.map((c: unknown[]) => String(c[1]));
+  const HUMAN = { id: 'u1', display_name: '田中', role: 'user' };
+  beforeEach(() => {
+    (botApi.pushMessage as jest.Mock).mockClear();
+    (route as jest.Mock).mockClear();
+    _resetDisabledNotice();
+    (roomConfigPaths.readRoomConfigJson as jest.Mock).mockReturnValue({ response_mode: 'auto', enabled: false });
+  });
+  afterEach(() => (roomConfigPaths.readRoomConfigJson as jest.Mock).mockReturnValue(null));
+
+  test('★★ グループで名指しされたら「この部屋では AI は止まっています」を返し、AI は動かさない', async () => {
+    await dispatch({ message: { id: 'd1', content: '@アシスタント 予定は?', sender: HUMAN },
+      room: { id: 'roomOff', name: '止めた部屋', member_count: 3 }, agentId: 'agent1', agentName: 'アシスタント' });
+    expect(route).not.toHaveBeenCalled();
+    expect(pushed()).toHaveLength(1);
+    expect(pushed()[0]).toMatch(/止まっています/);
+  });
+
+  test('★ 名指ししていないグループの発言には何も返さない', async () => {
+    await dispatch({ message: { id: 'd2', content: 'おつかれさま', sender: HUMAN },
+      room: { id: 'roomOff', name: '止めた部屋', member_count: 3 }, agentId: 'agent1', agentName: 'アシスタント' });
+    expect(pushed()).toEqual([]);
+  });
+
+  test('★ 同じ部屋には 10 分に 1 回まで', async () => {
+    const msg = (id: string) => ({ message: { id, content: '@アシスタント ねえ', sender: HUMAN },
+      room: { id: 'roomOff', name: '止めた部屋', member_count: 3 }, agentId: 'agent1', agentName: 'アシスタント' });
+    await dispatch(msg('d3'));
+    await dispatch(msg('d4'));
+    expect(pushed()).toHaveLength(1);
   });
 });

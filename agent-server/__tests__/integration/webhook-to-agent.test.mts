@@ -243,7 +243,8 @@ describe('Webhook → Agent 統合テスト', () => {
   });
 
   // --- 10. response_mode=off → スキップ ---
-  test('10. response_mode=off → スキップ', async () => {
+  // ★ 2026-10-30 小野さん判断 C: AI を止めた部屋でも、1 対 1 (AI に宛てた便) なら「止まっています」を 1 行返す (以前は無言)
+  test('10. response_mode=off → AI は動かさず、1 対 1 なら「止まっています」を 1 行', async () => {
     mockRoomSettings = { response_mode: 'off', enabled: true };
     await handleWebhook({
       event: 'message.created',
@@ -251,7 +252,8 @@ describe('Webhook → Agent 統合テスト', () => {
       room: { id: BOT_ROOM, name: null, member_count: 2 },
     });
     expect(processLight).not.toHaveBeenCalled();
-    expect(botApi.pushMessage).not.toHaveBeenCalled();
+    expect(botApi.pushMessage).toHaveBeenCalledTimes(1);
+    expect(String((botApi.pushMessage as jest.Mock).mock.calls[0][1])).toMatch(/止まっています/);
   });
 
   // --- 11. response_mode=mention → DM メンションなし → スキップ ---

@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
+import { noticeAiUnreachable } from './aiUnreachableNotice.mts';
 
 /** 送信先 Webhook (webhooksテーブルの行のうち送信に使うフィールド) */
 interface WebhookTarget {
@@ -200,6 +201,8 @@ export async function fireWebhooks(eventType: string, roomId: string | null, pay
       dispatchWithRetry(webhook, body).then(result => {
         if (!result.ok) {
           logger.error(`Webhook failed: ${webhook.url} (status: ${result.status}, attempts: ${result.attempts})`);
+          // ★ AI に宛てた便なら部屋に 1 行返す (2026-10-30 小野さん判断 C)。4xx (断られた) は届いているので出さない
+          if (result.status === 0 || result.status >= 500) void noticeAiUnreachable(eventType, roomId, payload as Parameters<typeof noticeAiUnreachable>[2]);
         } else if (result.attempts > 1) {
           logger.info(`Webhook succeeded after retry: ${webhook.url} (attempts: ${result.attempts})`);
         }

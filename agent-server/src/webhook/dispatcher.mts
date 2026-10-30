@@ -229,6 +229,13 @@ export async function dispatch({ message, room, agentId, agentName }: DispatchPa
 /** #492 ゲストの便に返すお知らせ (応答の代わり) */
 export const GUEST_NOT_SUPPORTED_NOTICE = 'ゲストの方には、まだアシスタントを使っていただけません。';
 
+/** AI を止めた部屋で AI に宛てて書かれたときの 1 行 (2026-10-30 小野さん判断 C) */
+export const AGENT_DISABLED_NOTICE = 'この部屋では AI は止まっています (部屋の設定で止めてあります)。';
+const DISABLED_NOTICE_QUIET_MS = 10 * 60_000;
+const disabledNoticeAt = new Map<string, number>();
+/** テスト用 */
+export function _resetDisabledNotice(): void { disabledNoticeAt.clear(); }
+
 async function _dispatch({ message, room, agentId, agentName }: DispatchParams): Promise<void> {
   const roomId = room.id;
   const memberCount = room.member_count || 2;
@@ -267,6 +274,14 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
   // エージェント無効
   if (!roomSettings.enabled || roomSettings.response_mode === 'off') {
     logger.debug(`Skipped: agent disabled in room ${room.name || roomId}`);
+    // ★ AI に宛てた便 (名指し・1 対 1) なら 1 行返す (2026-10-30 小野さん判断 C)。以前は無言で、返事を待ち続けた。
+    //   同じ部屋には 10 分に 1 回まで
+    const addressed = !(memberCount > 2) || isMentioned(prompt, agentName);
+    const now = Date.now();
+    if (addressed && now - (disabledNoticeAt.get(roomId) ?? 0) >= DISABLED_NOTICE_QUIET_MS) {
+      disabledNoticeAt.set(roomId, now);
+      await botApi.pushMessage(roomId, AGENT_DISABLED_NOTICE).catch(() => {});
+    }
     return;
   }
 
