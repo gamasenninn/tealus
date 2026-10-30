@@ -3,6 +3,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { api } from '../../services/api';
+import { getSocket } from '../../services/socket';
 import BottomNav from '../common/BottomNav';
 import type { Message, MediaItem, PortalLink } from '../../types';
 import { usePortalPassUrl } from '../../hooks/useAppPassUrl';
@@ -34,6 +35,8 @@ function HomePage() {
   // 不十分。常時表示の「新タブで開く」 button と組み合わせて user の動線確保。
   const [iframeState, setIframeState] = useState<'loading' | 'loaded' | 'timeout'>('loading');
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  /** お知らせの出ている部屋 (新着で取り直すかの判定) */
+  const announcementRoomIds = useRef<Set<string>>(new Set());
   const iframeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // #607 「通行証を添える」が付いたタブは、通行証つきの入口 URL で開く (docs/11 §5.4)
   const activePortal = portalLinks.find((p) => `portal-${p.id}` === activeTab);
@@ -42,6 +45,32 @@ function HomePage() {
   useEffect(() => {
     loadAnnouncements();
     loadPortalLinks();
+  }, []);
+
+  // ★ 開いたままでも取り直す (2026-10-30 小野さん判断 11)。以前は開いたときの 1 回だけで、開いている間・
+  //   通信が戻ったあとに来たお知らせは、開き直すまで出なかった。続けて来た知らせは 1 回にまとめる
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { timer = null; loadAnnouncements(); }, 500);
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const socket = getSocket();
+    socket?.on('connect', refresh);
+    socket?.on('message:published', refresh);
+    // ★ 新着はお知らせの部屋のものだけ (どの部屋の新着でも取りに行くと、無線などの便のたびに引くことになる)
+    const onNew = (m: { room_id?: string } | null) => { if (m?.room_id && announcementRoomIds.current.has(m.room_id)) refresh(); };
+    socket?.on('message:new', onNew);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      socket?.off('connect', refresh);
+      socket?.off('message:published', refresh);
+      socket?.off('message:new', onNew);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // activeTab が portal-* に切り替わった時、iframe load の watch を仕掛ける
@@ -90,6 +119,7 @@ function HomePage() {
       setLoadError(null);
       const data = await api.getAnnouncements();
       setAnnouncements((data.messages || []) as AnnouncementMessage[]);
+      announcementRoomIds.current = new Set(((data.messages || []) as AnnouncementMessage[]).map((m) => m.room_id));
 
       // 未読メッセージを既読にする
       const unreadMsgs = ((data.messages || []) as AnnouncementMessage[]).filter(m => m.is_unread);
