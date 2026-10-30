@@ -125,6 +125,14 @@ describe('POST /voice-chat/session', () => {
     expect(res.status).toBe(403);
   });
 
+  test('★ 本体の一時的な失敗 (500) → 502 で「この部屋では使えない」とは言わない (改善ループ 26 回目)', async () => {
+    stubFetch({ roomStatus: 500 });
+    const res = await request(app).post('/voice-chat/session')
+      .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });
+    expect(res.status).toBe(502);
+    expect(res.body.error).not.toMatch(/使えません/);
+  });
+
   test('★ 開けたルーム → 使い捨てトークンを返す', async () => {
     const res = await request(app).post('/voice-chat/session')
       .set('Authorization', `Bearer ${token()}`).send({ room_id: 'r1' });

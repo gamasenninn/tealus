@@ -190,6 +190,9 @@ function callerId(req: Request): string | null {
  * ★ これ 1 回で **参加しているか (requireMember が 403 を返す) と、開けてよいルームか (列)** の
  *   両方が分かる。認可を本体に委ねるのは ccQueue の前例と同じ (agent-server は DB を引かない)。
  */
+/** 本体に部屋を聞けなかったとき (5xx・形の違う応答) の文 */
+const UPSTREAM_DOWN = '本体につながりませんでした。少し待ってやり直してください';
+
 async function resolveRoom(req: Request, roomId: string): Promise<{ ok: true; room: Record<string, unknown> } | { ok: false; status: number }> {
   const auth = req.headers.authorization as string;
   const res = await fetch(`${config.TEALUS_API_URL}/api/rooms/${roomId}`, {
@@ -357,7 +360,8 @@ router.post('/session', async (req, res) => {
   try {
     const resolved = await resolveRoom(req, roomId);
     if (!resolved.ok) {
-      return res.status(resolved.status).json({ error: 'このルームでは会話モードを使えません' });
+      // ★ 本体の一時的な失敗 (502) は「使えない」と書かない (利用者が諦める)。改善ループ 26 回目
+      return res.status(resolved.status).json({ error: resolved.status === 502 ? UPSTREAM_DOWN : 'このルームでは会話モードを使えません' });
     }
     // ★ 既定 false。開けていないルームは、参加していても開けない (docs/08 §4.1 の理由②)
     if (!resolved.room.voice_conversation_enabled) {
@@ -470,7 +474,7 @@ router.get('/tools', async (req, res) => {
   try {
     const resolved = await resolveRoom(req, roomId);
     if (!resolved.ok) {
-      return res.status(resolved.status).json({ error: 'このルームの道具は見られません' });
+      return res.status(resolved.status).json({ error: resolved.status === 502 ? UPSTREAM_DOWN : 'このルームの道具は見られません' });
     }
     // ★ 開けていないルームのために MCP を温めない (/session と同じ判定)
     if (!resolved.room.voice_conversation_enabled) {

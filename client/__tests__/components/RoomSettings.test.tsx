@@ -533,3 +533,22 @@ describe('RoomSettings — 個人設定だけ (personalOnly、DM 用)', () => {
     expect(api.getRoomAgentSettings).not.toHaveBeenCalled();
   });
 });
+
+describe('RoomSettings — 読み込みに失敗したら保存しない (改善ループ 26 回目)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const dm = { ...baseProps, currentRoom: { type: 'direct' } as Room, isAdmin: false, isSysAdmin: false };
+
+  // ★ 既定値のまま保存すると、agent-server は丸ごと置き換えるので部屋の声 (tts_*) が消え、プロンプトは空で上書きされる
+  it('★★ AI の設定を読めなかったときは、応答モード・プロンプトを保存しない', async () => {
+    vi.mocked(api.getRoomAgentSettings).mockRejectedValueOnce(new Error('時間切れ'));
+    render(<RoomSettings {...dm} />);
+    await screen.findByText(/時間切れ/);
+    fireEvent.change(screen.getByLabelText('応答モード'), { target: { value: 'mention' } });
+    fireEvent.blur(screen.getByLabelText('Light Agent プロンプト'));
+    fireEvent.blur(screen.getByLabelText('Deep Agent プロンプト'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.updateRoomAgentSettings).not.toHaveBeenCalled();
+    expect(api.updateRoomLightPrompt).not.toHaveBeenCalled();
+    expect(api.updateRoomClaudeMd).not.toHaveBeenCalled();
+  });
+});

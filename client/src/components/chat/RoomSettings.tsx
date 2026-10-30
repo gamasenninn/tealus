@@ -63,11 +63,16 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
   const responseMode = agentSettings.response_mode || 'auto';
   const [lightPrompt, setLightPrompt] = useState('');
   const [claudeMd, setClaudeMd] = useState('');
+  // ★ AI の設定を読めたか。読めていないまま保存すると、agent-server は丸ごと置き換えるので部屋の声 (tts_*) が消え、
+  //   プロンプトは空で上書きされる (改善ループ 26 回目。管理画面は 21 回目に同じ形で止めた)
+  const [agentLoaded, setAgentLoaded] = useState(false);
+  const notLoaded = () => { showError('AI の設定を読み込めていないため保存できません。開き直してください'); return true; };
 
   const showError = (msg: string) => setError(msg);
 
   useEffect(() => {
     if (!canEditAgent || !roomId) return;
+    setAgentLoaded(false);   // ★ 部屋を替えたら、新しい部屋の設定を読み終えるまで保存しない
     let cancelled = false;
     (async () => {
       try {
@@ -81,6 +86,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
         setAgentSettings({ response_mode: 'auto', enabled: true, ...(settings || {}) });
         setLightPrompt(lp?.content || '');
         setClaudeMd(cm?.content || '');
+        setAgentLoaded(true);
       } catch (err) {
         if (!cancelled) showError(err instanceof Error ? err.message : String(err));
       }
@@ -92,6 +98,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
 
   /** ★ 変えた項目だけ差し替えて保存する。undefined にした項目は消す (= 全体の設定に戻す) */
   const saveAgentSettings = async (patch: Partial<AgentSettings>) => {
+    if (!agentLoaded && notLoaded()) return;
     const next: AgentSettings = { ...agentSettings, ...patch };
     for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
     setAgentSettings(next);
@@ -103,12 +110,14 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
   const handleResponseModeChange = (value: string) => saveAgentSettings({ response_mode: value });
 
   const handleLightPromptBlur = async () => {
+    if (!agentLoaded && notLoaded()) return;
     try {
       await api.updateRoomLightPrompt(roomId, lightPrompt);
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
   };
 
   const handleClaudeMdBlur = async () => {
+    if (!agentLoaded && notLoaded()) return;
     try {
       await api.updateRoomClaudeMd(roomId, claudeMd);
     } catch (err) { showError(err instanceof Error ? err.message : String(err)); }

@@ -23,6 +23,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     if (get().fetched) return;
     set({ fetched: true });
     const id = await api.getAgentIdentity();
-    set({ assistantUserId: id.user_id, assistantName: id.display_name });
+    // ★ 取れなかった (agent-server の再起動中・時間切れ) なら印を戻し、次に部屋を開いたとき取り直す (改善ループ 26 回目)。
+    //   戻さないと 🤖 ボタンと @アシスタント の候補が、読み込み直すまで出なかった
+    set({ assistantUserId: id.user_id, assistantName: id.display_name, fetched: id.user_id != null });
   },
 }));
