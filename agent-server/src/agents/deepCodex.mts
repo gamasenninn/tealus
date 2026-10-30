@@ -391,6 +391,16 @@ export function isAgentMessageEvent(event: CodexJsonlEvent | null | undefined): 
   return false;
 }
 
+/**
+ * 異常終了 (終了コードが 0 でない・取れない) のときは、答えの後ろに一言添える (2026-10-30 小野さん判断 H)。
+ * ★ 最後の答えが途中の独り言のことがある。ただ正常終了の終わり方を確かめられたのが 1 件だけなので、
+ *   捨てると正しい答えまで消すおそれがある → 捨てずに「怪しい」と分かるようにする
+ */
+export function withExitNote(text: string, code: number | null): string {
+  if (code === 0) return text;
+  return `${text}\n\n⚠️ 途中で終わった可能性があります (終了コード ${code ?? '不明'})。答えが途中までなら、もう一度頼んでください`;
+}
+
 export function extractAgentMessageText(event: CodexJsonlEvent | null | undefined): string {
   if (event && event.item && typeof event.item.text === 'string') {
     return event.item.text;
@@ -622,6 +632,9 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
         resolve(null);
         return;
       }
+
+      // ★ 異常終了でも答えがあれば捨てずに、途中で終わった可能性を添える (2026-10-30 小野さん判断 H)
+      if (lastAgentMessage) lastAgentMessage = withExitNote(lastAgentMessage, code);
 
       if (lastAgentMessage) {
         // #295: 委譲経由は自室投稿せず本文を return (デリゲーターが委譲元へ配送)

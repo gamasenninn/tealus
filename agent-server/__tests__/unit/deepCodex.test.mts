@@ -39,6 +39,7 @@ import {
   JsonlLineBuffer,
   isAgentMessageEvent,
   extractAgentMessageText,
+  withExitNote,
 } from '../../src/agents/deepCodex.mts';
 import { writeRoomConfig } from '../../src/lib/roomConfigPaths.mts';
 
@@ -516,5 +517,23 @@ describe('buildDeepCodexPrompt — 前置き (委譲の決まり)', () => {
 
   test('部屋の指示が無ければ 前置き + 依頼', () => {
     expect(buildDeepCodexPrompt(ws, '依頼', '前置き\n\n')).toBe('前置き\n\n依頼');
+  });
+});
+
+/**
+ * ★ 異常終了 (終了コードが 0 でない) でも最後の答えがあれば投稿は続け、途中で終わった可能性を添える (2026-10-30 小野さん判断 H)。
+ *   正常終了の終わり方を確かめられたのが 1 件だけなので、捨てると正しい答えまで消すおそれがある
+ */
+describe('withExitNote', () => {
+  test('★★ 終了コードが 0 でなければ、答えの後ろに一言添える', () => {
+    const out = withExitNote('答えです', 1);
+    expect(out.startsWith('答えです')).toBe(true);
+    expect(out).toMatch(/途中で終わった可能性があります/);
+  });
+  test('正常終了 (0) ならそのまま', () => {
+    expect(withExitNote('答えです', 0)).toBe('答えです');
+  });
+  test('終了コードが取れない (null = 外から止められた) も添える', () => {
+    expect(withExitNote('答えです', null)).toMatch(/途中で終わった/);
   });
 });
