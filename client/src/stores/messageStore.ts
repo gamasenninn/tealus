@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { patchMessage, patchQuotes } from './patchMessage';
 import { getCachedMessages, cacheMessages, evictRoomView, isGoneFromRoom, markRoomReachable } from './roomViewCache';
+import { useRoomStore } from './roomStore';
 import type { Message, MessageTag, Reaction, LinkPreview, Transcription } from '../types';
 
 // types.ts の Message には link_preview (単数、socket 'link:preview' で注入) が無いため local 拡張。
@@ -169,6 +170,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     //   (2026-10-30 改善ループ 27 回目)。catchUp は新しい投稿しか取らず、部屋を開き直すまで古いままだった。
     //   ★ 置き換えずに差し替える (置き換えると読んでいた位置が飛ぶ、#538)
     const { messages, hasNewer, isLoading } = get();
+    if (get().roomId !== roomId) return;   // ★ 追いついている間に別の部屋へ移った (前の部屋への要求を飛ばさない)
     if (hasNewer || isLoading || messages.length === 0) return;
     const v0 = version;
     try {
@@ -179,8 +181,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     } catch (err) {
       if (v0 !== version) return;
       // ★ 切れていた間に外された・消された部屋 (room:removed を取りこぼした)。既存の「外された」の道 (#533) に乗せる
-      if (isGoneFromRoom(err)) {
+      //   ★ 403 だけ (本体は外された・消されたを 403 で返す。404 は前段の一時的な応答でありうるので閉じない)
+      if ((err as { status?: number } | null)?.status === 403) {
         evictRoomView(roomId);
+        useRoomStore.getState().fetchRooms();   // socket の room:removed と同じく一覧からも外す
         window.dispatchEvent(new CustomEvent('tealus:room-removed', { detail: { room_id: roomId } }));
       }
       // それ以外 (圏外など) は投げない (次の機会に取り直す)

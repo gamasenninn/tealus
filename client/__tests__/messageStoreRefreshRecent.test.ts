@@ -16,6 +16,9 @@ vi.mock('../src/stores/roomViewCache', () => ({
   isGoneFromRoom: (err: { status?: number }) => err?.status === 403 || err?.status === 404, markRoomReachable: vi.fn(),
 }));
 
+const fetchRooms = vi.fn();
+vi.mock('../src/stores/roomStore', () => ({ useRoomStore: { getState: () => ({ fetchRooms }) } }));
+
 import { useMessageStore } from '../src/stores/messageStore';
 import { api } from '../src/services/api';
 
@@ -39,7 +42,7 @@ describe('messageStore.refreshRecent', () => {
     expect(msgs.find((x) => x.id === 'm29')).toMatchObject({ is_deleted: true, read_count: 3 });
   });
 
-  it('★ 外された・消された部屋 (403/404) なら、覚えた分を捨てて「外された」を流す', async () => {
+  it('★ 外された・消された部屋 (403) なら、覚えた分を捨てて「外された」を流す', async () => {
     vi.mocked(api.getMessages).mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 }));
     const got: string[] = [];
     const on = (e: Event) => got.push((e as CustomEvent).detail.room_id);
@@ -47,7 +50,20 @@ describe('messageStore.refreshRecent', () => {
     await useMessageStore.getState().refreshRecent('r1');
     window.removeEventListener('tealus:room-removed', on);
     expect(evictRoomView).toHaveBeenCalledWith('r1');
+    expect(fetchRooms).toHaveBeenCalled();   // 一覧からも外す (socket の room:removed と同じ)
     expect(got).toEqual(['r1']);
+  });
+
+  it('★ 404 (前段の一時的な応答でありうる) では部屋を閉じない', async () => {
+    vi.mocked(api.getMessages).mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }));
+    await useMessageStore.getState().refreshRecent('r1');
+    expect(evictRoomView).not.toHaveBeenCalled();
+  });
+
+  it('★ 別の部屋へ移っていたら取りに行かない', async () => {
+    useMessageStore.setState({ roomId: 'r2' } as never);
+    await useMessageStore.getState().refreshRecent('r1');
+    expect(api.getMessages).not.toHaveBeenCalled();
   });
 
   it('過去の位置を見ている最中 (hasNewer) は取りに行かない', async () => {

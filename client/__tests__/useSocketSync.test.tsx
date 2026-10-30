@@ -368,9 +368,17 @@ describe('useSocketSync — 追いつく (#538)', () => {
   it('★★ つなぎ直したら、表示中の投稿の中身・部屋の情報・通話の状態も取り直す', async () => {
     renderHook(() => useSocketSync('room1'));
     store.refreshRecent.mockClear(); refreshRoom.mockClear(); fakeSocket.emitted = [];
-    await act(async () => { fakeSocket.trigger('connect'); await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { fakeSocket.trigger('disconnect'); fakeSocket.trigger('connect'); await Promise.resolve(); await Promise.resolve(); });
     expect(store.refreshRecent).toHaveBeenCalledWith('room1');
     expect(refreshRoom).toHaveBeenCalledWith('room1');
     expect(fakeSocket.emitted).toContainEqual(['call:getStatus', { roomId: 'room1' }]);
+  });
+
+  it('★ 起動直後の最初の接続では取り直さない (開いたときの読み込みと 2 重になる)', async () => {
+    renderHook(() => useSocketSync('room1'));
+    store.refreshRecent.mockClear(); refreshRoom.mockClear();
+    await act(async () => { fakeSocket.trigger('connect'); await Promise.resolve(); });
+    expect(store.refreshRecent).not.toHaveBeenCalled();
+    expect(refreshRoom).not.toHaveBeenCalled();
   });
 });

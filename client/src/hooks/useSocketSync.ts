@@ -156,10 +156,16 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       // ★ #538 切れていた間の投稿に追いつく (以前は取り直さず、抜けたまま新着だけ足された)。
       //   ★ 既にある投稿の変化 (編集・削除・既読 N・スタンプ・文字起こしの完了)・部屋の情報・通話の状態も取り直す
       //   (改善ループ 27 回目。部屋を開き直すまで古いままで、iPhone では「開く = つなぎ直す」なので毎日起きる形だった)
+      //   ★ 一度切れてからつながったときだけ (起動直後の最初の接続は、部屋を開いたときの読み込みと同じものを 2 重に取りに行く)
+      const reconnecting = wasDisconnected;
+      wasDisconnected = false;
+      if (!reconnecting) { catchUp(roomId); return; }
       void Promise.resolve(catchUp(roomId)).then(() => refreshRecent(roomId));
       void useRoomStore.getState().refreshRoom(roomId);
       socket!.emit('call:getStatus', { roomId });
     };
+    let wasDisconnected = false;
+    const handleDisconnect = () => { wasDisconnected = true; };
 
     const handleMessageNew = (msg: Message) => {
       if (msg.room_id !== roomId) return; // 自分のルームのメッセージのみ処理
@@ -296,6 +302,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     if (socket) {
       joinRoom(roomId);   // ★ #505 出入りは窓口で数える (一覧も同じ部屋に入っている)
       socket.on('connect', handleConnect);
+      socket.on('disconnect', handleDisconnect);
       socket.on('message:new', handleMessageNew);
       socket.on('message:read', handleMessageRead);
       socket.on('voice:status', handleVoiceStatus);
@@ -325,6 +332,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
         leaveRoom(roomId);
         // #239: handler reference を passed して specific 削除 (他 listener 影響なし)
         socket.off('connect', handleConnect);
+        socket.off('disconnect', handleDisconnect);
         socket.off('message:new', handleMessageNew);
         socket.off('message:read', handleMessageRead);
         socket.off('voice:status', handleVoiceStatus);
