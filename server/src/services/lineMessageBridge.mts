@@ -353,14 +353,19 @@ export async function postVoiceToTealus(
 
     // ★ 付随処理は announcePost から (#383 段階 1、docs/07 §5.1)。中身は __tests__/socket/linePostPayload で固定
     // #463 ルームの管理者が「機械の投稿も鳴らす」を選んだルームだけ鳴らす (連投もまとめない、利用者判断)
-    await announcePost({
-      roomId,
-      io: io ?? null,
-      emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null, media: [mediaResult.rows[0]] },
-      push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎤 音声メッセージ', content) } },
-      webhook: LINE_NO_WEBHOOK,
-      preview: LINE_MEDIA_NO_PREVIEW,
-    });
+    // ★ 保存のあとの失敗で文字起こしを始めないままにしない (改善ループ 29 回目、本体の音声の口 voice.mts と同じ形)
+    try {
+      await announcePost({
+        roomId,
+        io: io ?? null,
+        emit: { ...message, sender_display_name: sender.display_name, sender_avatar_url: sender.avatar_url, reply_to_message: replyTo ? await fetchReplyMessage(replyTo) : null, media: [mediaResult.rows[0]] },
+        push: { kind: 'machine', post: { roomId, senderId: sender.id, senderName: sender.display_name, messageId: message.id, body: mediaPushBody('🎤 音声メッセージ', content) } },
+        webhook: LINE_NO_WEBHOOK,
+        preview: LINE_MEDIA_NO_PREVIEW,
+      });
+    } catch (err) {
+      logger.error(`[lineMessageBridge] 音声の保存のあとの付随処理に失敗 (便は保存済み・文字起こしは続ける): ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     // ★ ★ ★ Background transcription trigger (= voice.js line 116-118 同型)
     // ★ #383 で announcePost の後に置いた (#8 と同じ並び)。以前は配信と通知の間で、機械の通知を待つ分 (DB 1 回) だけ早かった

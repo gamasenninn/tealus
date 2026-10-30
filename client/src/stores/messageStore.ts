@@ -64,6 +64,9 @@ interface MessageState {
   clearMessages: () => void;
 }
 
+/** 本体が「部屋のメンバーでない」(外された・消された) ときの 403 の文言 (server/src/constants/errors.mts と同じ) */
+const ROOM_ACCESS_DENIED = 'このルームにアクセスする権限がありません';
+
 export const useMessageStore = create<MessageState>()((set, get) => ({
   messages: [],
   roomId: null,
@@ -181,8 +184,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     } catch (err) {
       if (v0 !== version) return;
       // ★ 切れていた間に外された・消された部屋 (room:removed を取りこぼした)。既存の「外された」の道 (#533) に乗せる
-      //   ★ 403 だけ (本体は外された・消されたを 403 で返す。404 は前段の一時的な応答でありうるので閉じない)
-      if ((err as { status?: number } | null)?.status === 403) {
+      //   ★ 本体の「メンバーでない」の 403 だけ (本体は外された・消されたをこの文言の 403 で返す)。404 や前段 (Cloudflare・nginx) の
+      //   HTML の 403 は一時的な応答でありうるので閉じない (改善ループ 29 回目)。文言は server/src/constants/errors.mts の ROOM_ACCESS_DENIED
+      const e = err as { status?: number; message?: string } | null;
+      if (e?.status === 403 && e.message === ROOM_ACCESS_DENIED) {
         evictRoomView(roomId);
         useRoomStore.getState().fetchRooms();   // socket の room:removed と同じく一覧からも外す
         window.dispatchEvent(new CustomEvent('tealus:room-removed', { detail: { room_id: roomId } }));

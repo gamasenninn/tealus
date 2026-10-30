@@ -12,6 +12,8 @@ const SOCKET_RETRY_MS = 5000;
 const SOCKET_RETRY_MAX_MS = 60_000;
 
 let socket: Socket | null = null;
+/** いまの socket が一度でもつながったか (切れている最中に開いた部屋が、つながったとき取り直すかを決める) */
+let everConnected = false;
 /** いまの socket を張った鍵 (鍵ごとに 1 本、2026-10-29) */
 let socketToken: string | null = null;
 
@@ -44,6 +46,7 @@ export function connectSocket(token: string): Socket {
   // ★ 鍵が違えば前の socket を切る (ログアウトせずに /login から別の人が入ると、前の人の鍵の socket が使い回されていた)
   if (socket) { socket.disconnect(); roomRefs.clear(); }
   socketToken = token;
+  everConnected = false;
   socket = io('/', {
     auth: { token },
     transports: ['websocket', 'polling'],
@@ -51,7 +54,7 @@ export function connectSocket(token: string): Socket {
 
   const s0 = socket;
   let retryMs = SOCKET_RETRY_MS;
-  s0.on('connect', () => { retryMs = SOCKET_RETRY_MS; });
+  s0.on('connect', () => { retryMs = SOCKET_RETRY_MS; everConnected = true; });
   s0.on('connect_error', (err) => {
     console.error('Socket connection error:', err.message);
     // ★ #539 認証で断られた (期限切れ・無効) なら、認証が切れたと知らせてログイン画面へ。
@@ -103,6 +106,11 @@ export function connectSocket(token: string): Socket {
   });
 
   return socket;
+}
+
+/** いまの socket が一度つながってから切れているか */
+export function isSocketDisconnectedAfterConnect(): boolean {
+  return everConnected && !!socket && !socket.connected;
 }
 
 export function getSocket(): Socket | null {

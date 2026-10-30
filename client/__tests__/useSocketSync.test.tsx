@@ -41,8 +41,9 @@ const fakeSocket = {
   emit(...args: unknown[]) { this.emitted.push(args); },
   trigger(e: string, data?: unknown) { this.handlers[e]?.(data); },
 };
+const disconnectedAtMount = vi.hoisted(() => ({ value: false }));
 const roomRefs = vi.hoisted(() => ({ joinRoom: vi.fn(), leaveRoom: vi.fn() }));
-vi.mock('../src/services/socket', () => ({ getSocket: () => fakeSocket, ...roomRefs }));
+vi.mock('../src/services/socket', () => ({ getSocket: () => fakeSocket, isSocketDisconnectedAfterConnect: () => disconnectedAtMount.value, ...roomRefs }));
 
 import { useSocketSync } from '../src/hooks/useSocketSync';
 import { playTtsSrc } from '../src/services/ttsAudioPlayer';
@@ -380,5 +381,16 @@ describe('useSocketSync — 追いつく (#538)', () => {
     await act(async () => { fakeSocket.trigger('connect'); await Promise.resolve(); });
     expect(store.refreshRecent).not.toHaveBeenCalled();
     expect(refreshRoom).not.toHaveBeenCalled();
+  });
+
+  it('★ 切れている最中に開いた部屋は、つながったとき取り直す (開いたときの読み込みは失敗しているかもしれない)', async () => {
+    disconnectedAtMount.value = true;
+    try {
+      renderHook(() => useSocketSync('room1'));
+      store.refreshRecent.mockClear(); refreshRoom.mockClear();
+      await act(async () => { fakeSocket.trigger('connect'); await Promise.resolve(); await Promise.resolve(); });
+      expect(store.refreshRecent).toHaveBeenCalledWith('room1');
+      expect(refreshRoom).toHaveBeenCalledWith('room1');
+    } finally { disconnectedAtMount.value = false; }
   });
 });

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useRoomStore } from '../stores/roomStore';
 import { useMessageStore } from '../stores/messageStore';
-import { getSocket, joinRoom, leaveRoom } from '../services/socket';
+import { getSocket, joinRoom, leaveRoom, isSocketDisconnectedAfterConnect } from '../services/socket';
 import { api } from '../services/api';
 import { speakAuto } from '../services/browserTts';
 import { playTtsSrc } from '../services/ttsAudioPlayer';
@@ -164,7 +164,8 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       void useRoomStore.getState().refreshRoom(roomId);
       socket!.emit('call:getStatus', { roomId });
     };
-    let wasDisconnected = false;
+    // ★ 切れている最中に開いた部屋は、つながったとき取り直す (開いたときの読み込みは失敗して覚えた中身を出しているかもしれない)
+    let wasDisconnected = isSocketDisconnectedAfterConnect();
     const handleDisconnect = () => { wasDisconnected = true; };
 
     const handleMessageNew = (msg: Message) => {

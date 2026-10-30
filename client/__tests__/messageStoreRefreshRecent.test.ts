@@ -43,7 +43,7 @@ describe('messageStore.refreshRecent', () => {
   });
 
   it('★ 外された・消された部屋 (403) なら、覚えた分を捨てて「外された」を流す', async () => {
-    vi.mocked(api.getMessages).mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 }));
+    vi.mocked(api.getMessages).mockRejectedValue(Object.assign(new Error('このルームにアクセスする権限がありません'), { status: 403 }));
     const got: string[] = [];
     const on = (e: Event) => got.push((e as CustomEvent).detail.room_id);
     window.addEventListener('tealus:room-removed', on);
@@ -56,6 +56,12 @@ describe('messageStore.refreshRecent', () => {
 
   it('★ 404 (前段の一時的な応答でありうる) では部屋を閉じない', async () => {
     vi.mocked(api.getMessages).mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }));
+    await useMessageStore.getState().refreshRecent('r1');
+    expect(evictRoomView).not.toHaveBeenCalled();
+  });
+
+  it('★ 前段 (Cloudflare・nginx) の HTML の 403 では閉じない (本体の文言のときだけ)', async () => {
+    vi.mocked(api.getMessages).mockRejectedValue(Object.assign(new Error('リクエストに失敗しました (403)'), { status: 403 }));
     await useMessageStore.getState().refreshRecent('r1');
     expect(evictRoomView).not.toHaveBeenCalled();
   });
