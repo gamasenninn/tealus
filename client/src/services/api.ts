@@ -168,10 +168,13 @@ class ApiClient {
   notifyUnauthorized(): void { this.onUnauthorized?.(); }
 
   setToken(token: string | null): void {
+    const prev = this.token;
     this.token = token;
     if (token) {
       localStorage.setItem('token', token);
-    } else {
+    } else if (localStorage.getItem('token') === prev) {
+      // ★ 自分の鍵のときだけ消す (2026-10-30 小野さん判断 D)。鍵はタブで共有なので、鍵の切れた古いタブが
+      //   別のタブで入り直した新しい鍵まで消し、そちらも次の起動でログアウトされていた
       localStorage.removeItem('token');
     }
   }

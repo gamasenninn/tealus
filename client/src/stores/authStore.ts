@@ -123,8 +123,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           set({ isLoading: false, offline: true });
           return;
         }
-        localStorage.removeItem('token');
-        api.setToken(null);
+        api.setToken(null);   // ★ 自分の鍵のときだけ消す (別のタブで入り直した鍵は残す。2026-10-30 判断 D)
         set({ user: null, token: null, isLoading: false });
       }
     })().finally(() => { initializing = null; }).then(() => (tokenChanged ? get().initialize() : undefined));
