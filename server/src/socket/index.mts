@@ -44,8 +44,14 @@ export function setupSocketHandlers(io: Server): void {
       return next(new Error('認証トークンがありません'));
     }
 
+    let decoded: { id: string };
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+      decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+    } catch {
+      return next(new Error('トークンが無効です'));
+    }
+    // ★ DB の失敗は「トークンが無効」にしない。画面はその文言でログイン画面へ落とす (HTTP の authenticate と同じ)
+    try {
       const result = await pool.query<SocketUser>(
         'SELECT id, login_id, display_name, avatar_url, role FROM users WHERE id = $1 AND is_active = true',
         [decoded.id]
@@ -55,8 +61,9 @@ export function setupSocketHandlers(io: Server): void {
       }
       socket.user = result.rows[0];
       next();
-    } catch {
-      next(new Error('トークンが無効です'));
+    } catch (err) {
+      logger.error('[socket] ユーザーの読み込みに失敗:', err instanceof Error ? err.message : err);
+      next(new Error('サーバーエラーが発生しました'));
     }
   });
 

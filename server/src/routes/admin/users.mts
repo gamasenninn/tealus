@@ -102,9 +102,9 @@ router.put('/users/:id', async (req, res) => {
       const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
       updates.push(`password_hash = $${paramIndex++}`);
       values.push(password_hash);
-      // ★ 管理者が入れ直したパスワードも、本人に変えてもらう (機械は除く、042)
+      // ★ 管理者が入れ直したパスワードも、本人に変えてもらう (機械と、管理者が自分のを入れ直したときは除く、042)
       updates.push(`must_change_password = $${paramIndex++}`);
-      values.push(!(is_bot ?? existing.rows[0].is_bot));
+      values.push(!(is_bot ?? existing.rows[0].is_bot) && id !== req.user!.id);
     }
     if (role !== undefined) {
       updates.push(`role = $${paramIndex++}`);

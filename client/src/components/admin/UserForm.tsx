@@ -96,7 +96,7 @@ function UserForm({ user, onSubmit, onCancel }: UserFormProps) {
           value={formData.password}
           onChange={handleChange}
           required={!isEdit}
-          placeholder={isEdit ? '未入力なら変更なし' : 'パスワード'}
+          placeholder={isEdit ? '未入力なら変更なし (変えるなら 8 文字以上)' : '8 文字以上'}
           autoComplete="new-password"
         />
       </div>

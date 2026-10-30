@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { isIosBrowserTab, pushPermission, registerPushNotification } from '../../services/pushNotification';
+import { getConfig } from '../../services/clientConfig';
 import './PushOnboardingBanner.css';
 
 const DISMISS_KEY = 'pushOnboardingDismissed';
@@ -19,6 +20,8 @@ function dismissedThisSession(): boolean {
 function PushOnboardingBanner() {
   const [hidden, setHidden] = useState(dismissedThisSession);
   if (hidden) return null;
+  // ★ 通知の鍵 (VAPID) の無い Tealus では何も出さない。iPhone の案内どおりにしても届かない (0c7fbd8 のボタンと同じ判断)
+  if (!getConfig().vapid_public_key) return null;
 
   const close = () => {
     try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* 閉じるだけはする */ }

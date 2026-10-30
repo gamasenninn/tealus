@@ -99,7 +99,7 @@ router.post('/register', async (req, res) => {
     const result = await pool.query<AuthUser>(
       `INSERT INTO users (login_id, display_name, password_hash, role)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, must_change_password, created_at`,
       [login_id, display_name, password_hash, role]
     );
 
@@ -258,7 +258,7 @@ router.put('/profile', authenticate, async (req, res) => {
   try {
     const result = await pool.query<AuthUser>(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, must_change_password, created_at`,
       values
     );
     // ★ #498 つながっている socket の名前も書き換える (古い名前で投稿が配られないように)
@@ -286,7 +286,7 @@ router.post('/avatar', authenticate, singleImage(avatarUpload, 'avatar', 5), asy
   try {
     const result = await pool.query<AuthUser>(
       `UPDATE users SET avatar_url = $1, updated_at = now() WHERE id = $2
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, created_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, must_change_password, created_at`,
       [avatarUrl, req.user!.id]
     );
     refreshConnectedUser(req.user!.id, { avatar_url: result.rows[0].avatar_url });   // ★ #498

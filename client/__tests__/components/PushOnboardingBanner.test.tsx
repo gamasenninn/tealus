@@ -17,11 +17,15 @@ vi.mock('../../src/services/pushNotification', () => ({
   isIosBrowserTab: () => isIosBrowserTab(),
 }));
 
+const getConfig = vi.fn(() => ({ vapid_public_key: 'k' }));
+vi.mock('../../src/services/clientConfig', () => ({ getConfig: () => getConfig() }));
+
 import PushOnboardingBanner from '../../src/components/common/PushOnboardingBanner';
 
 describe('PushOnboardingBanner', () => {
   beforeEach(() => {
     registerPushNotification.mockClear(); pushPermission.mockReturnValue('default'); isIosBrowserTab.mockReturnValue(false);
+    getConfig.mockReturnValue({ vapid_public_key: 'k' });
     sessionStorage.clear();
   });
 
@@ -57,5 +61,12 @@ describe('PushOnboardingBanner', () => {
     render(<PushOnboardingBanner />);
     expect(screen.getByText(/ホーム画面に追加/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '通知を受け取る' })).toBeNull();
+  });
+
+  it('★ 通知の鍵 (VAPID) の無い Tealus では、iPhone の案内も出さない (案内どおりにしても届かない)', () => {
+    getConfig.mockReturnValue({ vapid_public_key: '' });
+    isIosBrowserTab.mockReturnValue(true);
+    const { container } = render(<PushOnboardingBanner />);
+    expect(container.textContent).toBe('');
   });
 });

@@ -78,7 +78,7 @@ function loadEnvFile(filePath: string): void {
 // デフォルトの .env を読み込み
 loadEnvFile(path.join(import.meta.dirname, '.env'));
 
-const SERVER = process.env.TEALUS_SERVER || 'http://localhost:3000';
+let SERVER = process.env.TEALUS_SERVER || 'http://localhost:3000';
 let BOT_ID = process.env.TEALUS_BOT_ID;
 let BOT_PASS = process.env.TEALUS_BOT_PASS;
 
@@ -168,7 +168,10 @@ async function login(): Promise<string> {
       password_length: credentials.password ? credentials.password.length : 0,
       server_response: data,
     }));
-    process.exit(1);
+    // ★ 終了せず投げる。監視中の取り直しで終了すると、本体が一時的に 500 を返しただけで送り込みが止まったまま戻らない
+    //   (2026-10-29 19:45、本体の再起動の 25 秒で止まり 16 分気づかなかった)。
+    //   鼓動・送信はそれぞれ catch して次で取り直す。単発のコマンドは末尾の .catch で今までどおり終了する
+    throw new Error(`ログイン失敗: ${data.error || 'Unknown error'}`);
   }
   return data.token;
 }
@@ -454,6 +457,8 @@ if (globalParsed.envFile) {
     process.exit(1);
   }
   loadEnvFile(envFilePath);
+  // ★ 宛先も読み直す (以前は --env の TEALUS_SERVER が効かず、既定の .env の宛先へ送っていた)
+  SERVER = process.env.TEALUS_SERVER || SERVER;
   BOT_ID = process.env.TEALUS_BOT_ID;
   BOT_PASS = process.env.TEALUS_BOT_PASS;
 }

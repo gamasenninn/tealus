@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { pool } from '../db/pool.mts';
 import { isAdmin } from '../utils/permissions.mts';
 import type { AuthUser } from '../types.mts';
+import { SERVER_ERROR } from '../constants/errors.mts';
 
 export const JWT_SECRET = (() => {
   const secret = process.env.JWT_SECRET;
@@ -37,22 +38,32 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
   const token = authHeader.split(' ')[1];
 
+  let decoded: { id: string };
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-    const result = await pool.query<AuthUser>(
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, notification_sound, must_change_password, created_at FROM users WHERE id = $1 AND is_active = true',
-      [decoded.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'ユーザーが見つかりません' });
-    }
-
-    req.user = result.rows[0];
-    next();
+    decoded = jwt.verify(token, JWT_SECRET) as { id: string };
   } catch {
     return res.status(401).json({ error: 'トークンが無効です' });
   }
+
+  // ★ DB の失敗は 500 (401 にしない)。401 だと画面は鍵が切れたと見てログイン画面へ落とす
+  //   (2026-10-29 19:45、migrate 前の起動で SELECT が 25 秒失敗し、利用者がログイン画面へ落ちた)
+  let result;
+  try {
+    result = await pool.query<AuthUser>(
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, notification_sound, must_change_password, created_at FROM users WHERE id = $1 AND is_active = true',
+      [decoded.id]
+    );
+  } catch (err) {
+    console.error('[auth] ユーザーの読み込みに失敗:', err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: SERVER_ERROR });
+  }
+
+  if (result.rows.length === 0) {
+    return res.status(401).json({ error: 'ユーザーが見つかりません' });
+  }
+
+  req.user = result.rows[0];
+  next();
 }
 
 /**
