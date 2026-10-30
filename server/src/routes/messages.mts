@@ -571,9 +571,17 @@ router.delete('/:msgId', async (req: Request, res: Response) => {
       return res.status(403).json({ error: '自分のメッセージのみ削除できます' });
     }
 
+    // ★ 消す直前の本文と「誰が・いつ」を退避してから消す (2026-10-30 利用者判断 3、docs/02 deleted_message_contents)。
+    //   messages.content は今までどおり null (本文を読む口は変えない)。見る・戻すのは全体の管理者だけ
+    //   ★ 1 つの文で行う (退避だけ残って消えない・消えて退避が無い、を作らない)
     await pool.query(
-      'UPDATE messages SET is_deleted = true, content = null, updated_at = now() WHERE id = $1',
-      [msgId]
+      `WITH saved AS (
+         INSERT INTO deleted_message_contents (message_id, content, deleted_by)
+         SELECT id, content, $2 FROM messages WHERE id = $1 AND is_deleted = false
+         ON CONFLICT (message_id) DO NOTHING
+       )
+       UPDATE messages SET is_deleted = true, content = null, updated_at = now() WHERE id = $1`,
+      [msgId, userId]
     );
 
     const io = getIo();

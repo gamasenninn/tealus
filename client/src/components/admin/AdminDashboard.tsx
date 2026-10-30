@@ -7,6 +7,7 @@ import WebhookManager from './WebhookManager';
 import PortalManager from './PortalManager';
 import AccessLog from './AccessLog';
 import DictionaryCultivation from './DictionaryCultivation';
+import DeletedMessages from './DeletedMessages';
 import { roleLabel } from '../../utils/permissions';
 import ContextMenu from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
@@ -80,6 +81,8 @@ function AdminDashboard() {
   };
 
   const handleToggleActive = async (targetUser: User) => {
+    // ★ 止めるときだけ確かめる (押すとすぐ止まり、本人の端末も切れる。2026-10-30 利用者判断 5)。戻すときは確かめない
+    if (targetUser.is_active && !window.confirm(`${targetUser.display_name} さんを無効化しますか? すぐにログインできなくなり、開いている端末も切れます`)) return;
     try {
       await api.updateAdminUserStatus(targetUser.id, !targetUser.is_active);
       await loadUsers();
@@ -104,6 +107,7 @@ function AdminDashboard() {
         <button className={`admin-tab ${activeTab === 'portal' ? 'active' : ''}`} onClick={() => setActiveTab('portal')}>ポータル</button>
         <button className={`admin-tab ${activeTab === 'access-log' ? 'active' : ''}`} onClick={() => setActiveTab('access-log')}>アクセスログ</button>
         <button className={`admin-tab ${activeTab === 'dictionary' ? 'active' : ''}`} onClick={() => setActiveTab('dictionary')}>辞書育成</button>
+        <button className={`admin-tab ${activeTab === 'deleted' ? 'active' : ''}`} onClick={() => setActiveTab('deleted')}>削除された投稿</button>
       </div>
 
       {activeTab === 'webhooks' ? (
@@ -114,6 +118,8 @@ function AdminDashboard() {
         <AccessLog />
       ) : activeTab === 'dictionary' ? (
         <DictionaryCultivation />
+      ) : activeTab === 'deleted' ? (
+        <DeletedMessages />
       ) : (
       <>
       <div className="admin-section-header">

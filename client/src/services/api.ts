@@ -45,6 +45,11 @@ type Json = Record<string, unknown>;
 
 // --- API 応答形 (client が消費するフィールドのみ。詳細は ../types) ---
 export interface AuthResponse { token: string; user: User; error?: string }
+/** 削除された投稿の退避 (管理者だけ、docs/02 deleted_message_contents) */
+export interface DeletedMessageEntry {
+  message_id: string; content: string | null; deleted_at: string; type: string; room_id: string; created_at: string;
+  room_name: string | null; sender_display_name: string; deleted_by_display_name: string | null;
+}
 export interface MeResponse { user: User }
 export interface RoomsResponse { rooms: Room[] }
 export interface RoomResponse { room: Room; members: RoomMember[]; last_read_message_id?: string | null }
@@ -754,6 +759,15 @@ class ApiClient {
       users: Array<User & { last_post_at?: string | null; last_view_at?: string | null }>;
       matrix: Array<{ user_id: string; room_id: string; room_name: string; last_post_at?: string | null; last_view_at?: string | null }>;
     }>('GET', '/admin/access-log');
+  }
+
+  // 削除された投稿 (admin、2026-10-30 利用者判断 3)
+  getAdminDeletedMessages() {
+    return this.request<{ messages: DeletedMessageEntry[] }>('GET', '/admin/deleted-messages');
+  }
+
+  restoreAdminDeletedMessage(messageId: string) {
+    return this.request<{ success: boolean }>('POST', `/admin/deleted-messages/${messageId}/restore`);
   }
 
   // Portal Links (admin)
