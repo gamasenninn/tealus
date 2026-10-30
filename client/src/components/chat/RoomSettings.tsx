@@ -55,7 +55,11 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
   const [error, setError] = useState('');
 
   // --- エージェント設定 (#156) ---
-  const canEditAgent = !personalOnly && (currentRoom?.type === 'direct' || isAdmin);
+  // ★ 1 対 1 で相手が機械 (AI) なら、本人にも応答モード・声を出す (2026-10-30 小野さん判断 A。本体は本人に許していた)。
+  //   プロンプト (Light・Deep の指示) は管理者向けのまま (personalOnly では出さない)
+  const dmWithBot = useRoomStore((s) => currentRoom?.type === 'direct' && s.members.some((m) => m.is_bot));
+  const canEditAgent = personalOnly ? dmWithBot : (currentRoom?.type === 'direct' || isAdmin);
+  const canEditPrompts = canEditAgent && !personalOnly;
   // ★ 2026-09-26: 読み込んだ設定を丸ごと持つ。保存は「変えた項目だけ差し替え」
   //   (以前は 3 項目だけで上書きしていて、ダッシュボードで決めた tts_engine / tts_voice が消えた)
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({ response_mode: 'auto', enabled: true });
@@ -557,6 +561,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
               </>
             );
           })()}
+          {canEditPrompts && (<>
           <PromptField
             id="agent-light-prompt"
             label="Light Agent プロンプト"
@@ -573,6 +578,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
             onBlur={handleClaudeMdBlur}
             placeholder="このルームでの Deep Agent の振る舞いを記述 (空欄でデフォルト)"
           />
+          </>)}
         </div>
       )}
     </>

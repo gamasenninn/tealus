@@ -11,6 +11,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import RoomSettings from '../../src/components/chat/RoomSettings';
+import { useRoomStore } from '../../src/stores/roomStore';
 import type { Room } from '../../src/types';
 
 vi.mock('../../src/services/api', () => ({
@@ -550,5 +551,30 @@ describe('RoomSettings — 読み込みに失敗したら保存しない (改善
     expect(api.updateRoomAgentSettings).not.toHaveBeenCalled();
     expect(api.updateRoomLightPrompt).not.toHaveBeenCalled();
     expect(api.updateRoomClaudeMd).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ 1 対 1 で AI と話す部屋では、本人の画面にも応答モード・読み上げの声を出す (2026-10-30 小野さん判断 A)。
+ *   本体は本人が変えてよいことになっていた (configAuthz) のに、画面 (personalOnly) は出していなかった。
+ *   プロンプト (Light・Deep の指示) は今までどおり管理者向け
+ */
+describe('RoomSettings — 1 対 1 の AI の設定を本人に (判断 A)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const dm = { ...baseProps, currentRoom: { type: 'direct' } as Room, isAdmin: false, isSysAdmin: false, personalOnly: true };
+
+  it('★★ 相手が機械なら、応答モードと声を出す (プロンプトは出さない)', async () => {
+    useRoomStore.setState({ members: [{ user_id: 'me', is_bot: false }, { user_id: 'ai', is_bot: true }] } as never);
+    render(<RoomSettings {...dm} />);
+    expect(await screen.findByLabelText('応答モード')).toBeTruthy();
+    expect(screen.getByLabelText('読み上げエンジン')).toBeTruthy();
+    expect(screen.queryByLabelText('Light Agent プロンプト')).toBeNull();
+    expect(screen.queryByLabelText('Deep Agent プロンプト')).toBeNull();
+  });
+
+  it('相手が人なら出さない (AI のいない 1 対 1)', () => {
+    useRoomStore.setState({ members: [{ user_id: 'me', is_bot: false }, { user_id: 'you', is_bot: false }] } as never);
+    render(<RoomSettings {...dm} />);
+    expect(screen.queryByLabelText('応答モード')).toBeNull();
   });
 });
