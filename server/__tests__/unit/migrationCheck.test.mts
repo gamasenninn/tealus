@@ -2,7 +2,7 @@
  * #334 未適用 migration の起動時 warn (採用者保護、checkBuildArtifacts と同型)。
  * DB 非依存: query / warn を注入して pool に触れない。
  */
-import { checkMigrations } from '../../src/services/migrationCheck.mts';
+import { checkMigrations, findPendingMigrations } from '../../src/services/migrationCheck.mts';
 
 // テーブル不在時に pg が投げる undefined_table (42P01) を模した error
 function undefinedTableError(): Error & { code: string } {
@@ -104,5 +104,30 @@ describe('checkMigrations — 台帳とファイルの突き合わせ', () => {
     });
     expect(ok).toBe(true);
     expect(warns).toHaveLength(0);
+  });
+});
+
+
+/**
+ * ★ 未適用があれば本体を起動しない (2026-10-30 小野さん判断 2)。
+ *   10-29 19:45 に migrate より先に起動し、新しい列を読むログインが 25 秒すべて 500 になった。warn は誰も見ていなかった
+ */
+describe('findPendingMigrations (起動を止める判定)', () => {
+  const files = () => ['041_a.sql', '042_b.sql'];
+  test('★★ 台帳に無いファイルを返す', async () => {
+    const query = async () => ({ rows: [{ filename: '041_a.sql' }] });
+    expect(await findPendingMigrations({ query, listFiles: files })).toEqual(['042_b.sql']);
+  });
+  test('全部流してあれば空', async () => {
+    const query = async () => ({ rows: [{ filename: '041_a.sql' }, { filename: '042_b.sql' }] });
+    expect(await findPendingMigrations({ query, listFiles: files })).toEqual([]);
+  });
+  test('★ 台帳が無い DB (v0.9.0 以前・作りたて) は判定しない (null)。runner が案内する', async () => {
+    const query = async () => { throw Object.assign(new Error('no table'), { code: '42P01' }); };
+    expect(await findPendingMigrations({ query, listFiles: files })).toBeNull();
+  });
+  test('★ DB に届かないときも判定しない (null)。止めるのは「未適用が確かなとき」だけ', async () => {
+    const query = async () => { throw new Error('ECONNREFUSED'); };
+    expect(await findPendingMigrations({ query, listFiles: files })).toBeNull();
   });
 });

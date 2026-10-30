@@ -114,6 +114,7 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 | `[build-check] client/dist/index.html が見つかりません` | クライアント未ビルド | 手順 4（`npm run build`）を実行 |
 | `[build-check] dashboard/dist/index.html が見つかりません` | エージェントのダッシュボード (/system) 未ビルド。エージェントの設定・ログが見られない (★ ユーザーと webhook は本体の 管理ダッシュボード `/admin` で作るので影響しない) | `cd dashboard && npm install`（postinstall でビルド） |
 | `[migration-check] ★ 未適用 N 件: …` (v0.11.1 以降) | DB migration 忘れ | 手順 3（`npm run migrate`）を実行。★ 名前が出たものが流れていない |
+| `[migration-check] ★ 未適用の migration が N 件あるので起動しません: …` (2026-10-30 以降) | DB migration 忘れ。★ **本体は起動せずに終わる** (流す前に起動すると、新しい列を読む口が全部 500 になるため) | 手順 3（`npm run migrate`）を実行してから、もう一度起動 |
 | `[media] removed_media の表がありません` | DB migration 忘れ (v0.11.0 の 040) | 手順 3（`npm run migrate`）を実行。★ そのままだと削除した部屋の添付がまだ開ける |
 | `[model-guard] ... は ChatGPT アカウント (subscription) の codex では使えません` (agent-server) | Codex のモデルが外されたもの | v0.11.0 のノートの 1. を参照 |
 

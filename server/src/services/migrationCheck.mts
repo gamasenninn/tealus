@@ -74,3 +74,20 @@ async function checkLedger(
   warn('[migration-check]   ★ 流すまで、新しい列・表を読む機能が失敗します (例: v0.11.0 の 034 が無いとログインできない)');
   return false;
 }
+
+/**
+ * ★ 起動を止める判定 (2026-10-30 小野さん判断 2)。未適用の migration の名前を返す。
+ *   10-29 19:45 に migrate より先に起動し、新しい列を読むログインが 25 秒すべて 500 になった (warn は誰も見ていない)。
+ * ★ 判定できないとき (台帳が無い DB = v0.9.0 以前・作りたて / DB に届かない) は null を返し、起動は止めない。
+ *   止めるのは「未適用が確か」なときだけ。止める・案内するのは呼び手 (app.mts)
+ */
+export async function findPendingMigrations(
+  { query, listFiles }: Pick<MigrationCheckDeps, 'query'> & { listFiles: () => string[] },
+): Promise<string[] | null> {
+  try {
+    const { rows } = await query('SELECT filename FROM schema_migrations') as { rows: { filename: string }[] };
+    return planMigrations(listFiles(), new Set(rows.map((r) => r.filename)));
+  } catch {
+    return null;
+  }
+}

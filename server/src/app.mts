@@ -12,7 +12,7 @@ import { createProxyMiddleware, errorResponsePlugin } from 'http-proxy-middlewar
 
 import { logger } from './utils/logger.mts';
 import { pool } from './db/pool.mts';
-import { checkMigrations } from './services/migrationCheck.mts';
+import { checkMigrations, findPendingMigrations } from './services/migrationCheck.mts';
 import { ensureMediaDirs } from './utils/mediaSetup.mts';
 import { MEDIA_ROOT } from './middleware/upload.mts';
 import { runStartupEnvCheck } from './utils/envCheck.mts';
@@ -359,7 +359,7 @@ if (import.meta.main) {
 
   // ★ #585 起動時の拾い直しは、受付を始める前に作られた行だけを拾う (その後に届いた投稿は自分で文字起こしを始めるので、拾うと二重になる)
   const recoverBefore = new Date();
-  server.listen(PORT, () => {
+  const startListening = () => server.listen(PORT, () => {
     logger.info(`Tealus server running on port ${PORT}`);
     // #334: 未適用 migration の loud warn (採用者保護)。辞書テーブル不在を起動時に可視化
     // (silent degrade 防止)。稼働は止めない — warn のみ。
@@ -402,6 +402,23 @@ if (import.meta.main) {
     //   窓を過ぎた鍵を定期的に落とす (上限での追い出しもあるが、平時はこちらで減る)。
     loginThrottlePruneTimer = setInterval(() => loginThrottle.prune(), LOGIN_THROTTLE_WINDOW_MS);
     loginThrottlePruneTimer.unref();  // ★ 停止を妨げない (#368 graceful shutdown)
+  });
+
+  // ★ 未適用の migration があれば起動しない (2026-10-30 小野さん判断 2)。10-29 19:45 に migrate より先に起動し、
+  //   新しい列を読むログインが 25 秒すべて 500 になった (起動後の warn は誰も見ていなかった)。
+  //   ★ 判定できない (台帳が無い・DB に届かない) ときは止めない。止めるのは未適用が確かなときだけ
+  const migrationsDir = path.join(import.meta.dirname, 'db/migrations');
+  void findPendingMigrations({
+    query: (sql) => pool.query(sql),
+    listFiles: () => fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort(),
+  }).then((pending) => {
+    if (pending && pending.length > 0) {
+      logger.error(`[migration-check] ★ 未適用の migration が ${pending.length} 件あるので起動しません: ${pending.join(', ')}`);
+      logger.error('[migration-check]   cd server && npm run migrate を実行してから、もう一度起動してください');
+      setTimeout(() => process.exit(1), 500);   // ★ 記録をファイルへ書き切ってから終える
+      return;
+    }
+    startListening();
   });
 
   // ★ #368 graceful shutdown。これが無いと停止時にハンドラを通らずプロセスが死に、
