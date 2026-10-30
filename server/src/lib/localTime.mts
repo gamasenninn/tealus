@@ -29,3 +29,12 @@ export function formatLocalTime(value: Date | string): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')} (${tz})`;
 }
+
+/**
+ * 日時の文字列に時間帯 (`Z` / `+09:00` / `-0500`) が書いてあるか (2026-10-30 小野さん判断 8)。
+ * ★ 書いていない値 (`2026-10-01`・`2026-10-01T00:00:00`) は、SQL で APP_TIMEZONE の時刻として読む。
+ *   DB の時間帯 (UTC) で読むと、日本時間の 0〜9 時が前の日・前の月に入った
+ */
+export function hasExplicitZone(value: string): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim());
+}

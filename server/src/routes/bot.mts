@@ -23,7 +23,7 @@ import { BOT_POST_TYPES, typeNotAllowedMessage, MAX_CONTENT_LENGTH, contentTooLo
 import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
-import { formatLocalTime } from '../lib/localTime.mts';
+import { formatLocalTime, hasExplicitZone, resolveTimeZone } from '../lib/localTime.mts';
 import { announceRoomJoined } from '../services/roomJoined.mts';
 import { recordHeartbeat, validateHeartbeatBody } from '../services/heartbeats.mts';
 import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
@@ -1172,14 +1172,17 @@ router.get('/search', async (req, res) => {
       params.push(type);
       filtersSQL.push(`m.type = $${paramIdx++}`);
     }
-    if (since) {
-      params.push(since);
-      filtersSQL.push(`m.created_at >= $${paramIdx++}`);
-    }
-    if (until) {
-      params.push(until);
-      filtersSQL.push(`m.created_at <= $${paramIdx++}`);
-    }
+    // ★ 時間帯の無い日付はサーバーの時間帯で読む (2026-10-30 小野さん判断 8)。DB (UTC) で読むと、
+    //   「10 月の〜」で 10-01 の 0〜9 時 (日本時間) が抜け、11-01 の 0〜9 時が混ざった。明示された値は書いてあるとおり
+    const atLocal = (value: string) => {
+      params.push(value);
+      const p = paramIdx++;
+      if (hasExplicitZone(value)) return `$${p}::timestamptz`;
+      params.push(resolveTimeZone());
+      return `($${p}::timestamp AT TIME ZONE $${paramIdx++})`;
+    };
+    if (since) filtersSQL.push(`m.created_at >= ${atLocal(String(since))}`);
+    if (until) filtersSQL.push(`m.created_at <= ${atLocal(String(until))}`);
     // #325: リアクション有無で SQL フィルタ（agent が大量 message をスキャンせず
     // 「✅(完了)が付いていないもの」等を決定論的に絞れる）。param 不要の EXISTS 述語。
     if (has_reaction !== undefined && has_reaction !== '') {
