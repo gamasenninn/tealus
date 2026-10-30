@@ -7,8 +7,9 @@ import { api } from './api';
 /** #539 本体の socket の認証で断られたときの文言 (server/src/socket/index.mts の next(new Error(...)) と同じ) */
 const SOCKET_AUTH_ERRORS = new Set(['認証トークンがありません', 'ユーザーが見つかりません', 'トークンが無効です']);
 
-/** 本体に断られた socket を自分でつなぎ直すまでの待ち */
+/** 本体に断られた socket を自分でつなぎ直すまでの待ち。断られ続けたら倍にしていく (DB の障害中に全端末が 5 秒ごとに叩かない) */
 const SOCKET_RETRY_MS = 5000;
+const SOCKET_RETRY_MAX_MS = 60_000;
 
 let socket: Socket | null = null;
 /** いまの socket を張った鍵 (鍵ごとに 1 本、2026-10-29) */
@@ -49,6 +50,8 @@ export function connectSocket(token: string): Socket {
   });
 
   const s0 = socket;
+  let retryMs = SOCKET_RETRY_MS;
+  s0.on('connect', () => { retryMs = SOCKET_RETRY_MS; });
   s0.on('connect_error', (err) => {
     console.error('Socket connection error:', err.message);
     // ★ #539 認証で断られた (期限切れ・無効) なら、認証が切れたと知らせてログイン画面へ。
@@ -57,7 +60,8 @@ export function connectSocket(token: string): Socket {
     // ★ 本体のミドルウェアに断られた (DB の一時的な失敗など) socket は、socket.io が自動で再接続しない (active が false)。
     //   放っておくとログインしたまま新着が届かず、読み込み直すまで戻らない (2026-10-30 改善ループ 26 回目)。少し待って自分でつなぐ
     if (!s0.active) {
-      setTimeout(() => { if (socket === s0 && !s0.connected) s0.connect(); }, SOCKET_RETRY_MS);
+      setTimeout(() => { if (socket === s0 && !s0.connected) s0.connect(); }, retryMs);
+      retryMs = Math.min(retryMs * 2, SOCKET_RETRY_MAX_MS);
     }
   });
 

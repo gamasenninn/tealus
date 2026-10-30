@@ -29,3 +29,18 @@ describe('clientConfig', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('clientConfig — 古いブラウザ', () => {
+  beforeEach(() => { vi.resetModules(); vi.unstubAllGlobals(); });
+
+  // ★ AbortSignal.timeout は iOS 15 以前・Chrome 102 以前に無い。使うと fetch の前に同期で投げ、main.tsx の描画まで届かない (真っ白)
+  it('★★ AbortSignal.timeout が無くても取れる', async () => {
+    const orig = AbortSignal.timeout;
+    (AbortSignal as unknown as { timeout?: unknown }).timeout = undefined;
+    try {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ vapid_public_key: 'K' }) }));
+      const { loadConfig } = await import('../src/services/clientConfig');
+      expect((await loadConfig()).vapid_public_key).toBe('K');
+    } finally { (AbortSignal as unknown as { timeout: unknown }).timeout = orig; }
+  });
+});

@@ -94,7 +94,7 @@ export interface UseSocketSyncResult {
 export function useSocketSync(roomId: string, targetMsgId: string | null = null): UseSocketSyncResult {
   const { user } = useAuthStore();
   const { selectRoom, clearCurrentRoom } = useRoomStore();
-  const { addMessage, openRoom, catchUp, clearMessages, updateMessageContent } = useMessageStore();
+  const { addMessage, openRoom, catchUp, refreshRecent, clearMessages, updateMessageContent } = useMessageStore();
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [agentStatus, setAgentStatus] = useState<AgentStatusPayload | null>(null);
 
@@ -153,8 +153,12 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       // スマホのスリープ復帰後に消えず残り続ける（議事録完成後も「考え中」のまま）。
       setAgentStatus(null);
       setTypingUsers({});
-      // ★ #538 切れていた間の投稿に追いつく (以前は取り直さず、抜けたまま新着だけ足された)
-      catchUp(roomId);
+      // ★ #538 切れていた間の投稿に追いつく (以前は取り直さず、抜けたまま新着だけ足された)。
+      //   ★ 既にある投稿の変化 (編集・削除・既読 N・スタンプ・文字起こしの完了)・部屋の情報・通話の状態も取り直す
+      //   (改善ループ 27 回目。部屋を開き直すまで古いままで、iPhone では「開く = つなぎ直す」なので毎日起きる形だった)
+      void Promise.resolve(catchUp(roomId)).then(() => refreshRecent(roomId));
+      void useRoomStore.getState().refreshRoom(roomId);
+      socket!.emit('call:getStatus', { roomId });
     };
 
     const handleMessageNew = (msg: Message) => {

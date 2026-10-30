@@ -59,4 +59,23 @@ describe('socket の認証エラー (#539)', () => {
       expect(fakeSocket.connect).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
   });
+
+  it('★ 断られ続けたら待ちを倍にしていく (5 → 10 秒)。つながったら戻す', () => {
+    vi.useFakeTimers();
+    try {
+      connectSocket('t');
+      fakeSocket.active = false;
+      fakeSocket.connect.mockClear();
+      const fail = () => handlers['connect_error'][0](new Error('サーバーエラーが発生しました'));
+      fail(); vi.advanceTimersByTime(5_000);
+      expect(fakeSocket.connect).toHaveBeenCalledTimes(1);
+      fail(); vi.advanceTimersByTime(5_000);
+      expect(fakeSocket.connect).toHaveBeenCalledTimes(1);   // 2 回目は 10 秒待つ
+      vi.advanceTimersByTime(5_000);
+      expect(fakeSocket.connect).toHaveBeenCalledTimes(2);
+      handlers['connect'][0]();
+      fail(); vi.advanceTimersByTime(5_000);
+      expect(fakeSocket.connect).toHaveBeenCalledTimes(3);   // つながったら 5 秒に戻る
+    } finally { fakeSocket.active = true; vi.useRealTimers(); }
+  });
 });

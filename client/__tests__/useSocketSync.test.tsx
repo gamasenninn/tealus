@@ -10,7 +10,7 @@ import { renderHook, act } from '@testing-library/react';
 
 // --- 依存 mock（hook のロジックだけを検証するため最小化） ---
 const store = {
-  addMessage: vi.fn(), fetchMessages: vi.fn(), openRoom: vi.fn(), catchUp: vi.fn(), clearMessages: vi.fn(),
+  addMessage: vi.fn(), fetchMessages: vi.fn(), openRoom: vi.fn(), catchUp: vi.fn(() => Promise.resolve()), refreshRecent: vi.fn(() => Promise.resolve()), clearMessages: vi.fn(),
   updateMessageContent: vi.fn(), updateReadCount: vi.fn(), updateTranscription: vi.fn(),
   updateReactions: vi.fn(), updateLinkPreview: vi.fn(), markDeleted: vi.fn(),
   updatePublishStatus: vi.fn(), updateTags: vi.fn(), removeTag: vi.fn(),
@@ -21,7 +21,12 @@ vi.mock('../src/stores/messageStore', () => {
   return { useMessageStore };
 });
 vi.mock('../src/stores/authStore', () => ({ useAuthStore: () => ({ user: { id: 'u1' } }) }));
-vi.mock('../src/stores/roomStore', () => ({ useRoomStore: () => ({ selectRoom: vi.fn(), clearCurrentRoom: vi.fn() }) }));
+const refreshRoom = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock('../src/stores/roomStore', () => {
+  const useRoomStore = () => ({ selectRoom: vi.fn(), clearCurrentRoom: vi.fn() });
+  (useRoomStore as unknown as { getState: () => unknown }).getState = () => ({ refreshRoom });
+  return { useRoomStore };
+});
 vi.mock('../src/services/api', () => ({ api: { markRead: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock('../src/services/browserTts', () => ({ speakAuto: vi.fn() }));
 vi.mock('../src/services/ttsAudioPlayer', () => ({ playTtsSrc: vi.fn() }));
@@ -32,7 +37,8 @@ const fakeSocket = {
   handlers: {} as Record<string, Handler>,
   on(e: string, h: Handler) { this.handlers[e] = h; },
   off(e: string) { delete this.handlers[e]; },
-  emit() { /* noop */ },
+  emitted: [] as unknown[][],
+  emit(...args: unknown[]) { this.emitted.push(args); },
   trigger(e: string, data?: unknown) { this.handlers[e]?.(data); },
 };
 const roomRefs = vi.hoisted(() => ({ joinRoom: vi.fn(), leaveRoom: vi.fn() }));
@@ -356,5 +362,15 @@ describe('useSocketSync — 追いつく (#538)', () => {
     act(() => { document.dispatchEvent(new Event('visibilitychange')); });
     expect(store.catchUp).toHaveBeenCalledWith('room1');
     expect(store.fetchMessages).not.toHaveBeenCalled();
+  });
+
+  // ★ 改善ループ 27 回目: 切れていた間に既にある投稿・部屋・通話に起きた変化も取り直す (部屋を開き直すまで古いままだった)
+  it('★★ つなぎ直したら、表示中の投稿の中身・部屋の情報・通話の状態も取り直す', async () => {
+    renderHook(() => useSocketSync('room1'));
+    store.refreshRecent.mockClear(); refreshRoom.mockClear(); fakeSocket.emitted = [];
+    await act(async () => { fakeSocket.trigger('connect'); await Promise.resolve(); await Promise.resolve(); });
+    expect(store.refreshRecent).toHaveBeenCalledWith('room1');
+    expect(refreshRoom).toHaveBeenCalledWith('room1');
+    expect(fakeSocket.emitted).toContainEqual(['call:getStatus', { roomId: 'room1' }]);
   });
 });

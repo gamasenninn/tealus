@@ -38,6 +38,8 @@ interface MessageState {
   loadNewer: (roomId: string) => Promise<void>;
   /** #538 つなぎ直し・表に戻ったときに、手元の最後より新しい分を足す (置き換えない) */
   catchUp: (roomId: string) => Promise<void>;
+  /** つなぎ直したとき、表示中の最新 20 件の中身を取り直して差し替える (並びは変えない) */
+  refreshRecent: (roomId: string) => Promise<void>;
   addMessage: (message: Message) => void;
   updateReadCount: (messageId: string, readCount: number) => void;
   updateReactions: (messageId: string, reactions: Reaction[]) => void;
@@ -159,6 +161,29 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       await get().fetchMessages(roomId);   // 抜けが多すぎる: 最新に置き換える
     } catch {
       // 取れなくても投げない (次の機会に追いつく)
+    }
+  },
+
+  refreshRecent: async (roomId) => {
+    // ★ 切れていた間に、既にある投稿へ起きた変化 (編集・削除・既読 N・スタンプ・文字起こしの完了) を取り直す
+    //   (2026-10-30 改善ループ 27 回目)。catchUp は新しい投稿しか取らず、部屋を開き直すまで古いままだった。
+    //   ★ 置き換えずに差し替える (置き換えると読んでいた位置が飛ぶ、#538)
+    const { messages, hasNewer, isLoading } = get();
+    if (hasNewer || isLoading || messages.length === 0) return;
+    const v0 = version;
+    try {
+      const data = await api.getMessages(roomId, null, 20);
+      if (v0 !== version) return;
+      const fresh = new Map(data.messages.map((x) => [x.id, x]));
+      set((state) => ({ messages: state.messages.map((x) => fresh.get(x.id) ?? x) }));
+    } catch (err) {
+      if (v0 !== version) return;
+      // ★ 切れていた間に外された・消された部屋 (room:removed を取りこぼした)。既存の「外された」の道 (#533) に乗せる
+      if (isGoneFromRoom(err)) {
+        evictRoomView(roomId);
+        window.dispatchEvent(new CustomEvent('tealus:room-removed', { detail: { room_id: roomId } }));
+      }
+      // それ以外 (圏外など) は投げない (次の機会に取り直す)
     }
   },
 

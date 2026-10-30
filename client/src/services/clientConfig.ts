@@ -26,11 +26,15 @@ export function loadConfig(): Promise<RuntimeConfig> {
   if (inflight) return inflight;
   // ★ 取れなかったときの FALLBACK は覚えない (次の loadConfig で取り直す)。覚えると、圏外で開いた端末は
   //   電波が戻っても起動し直すまで通知の鍵が空のままで、帯も登録も出なかった (2026-10-30)
-  // ★ 時間切れを付ける。ログインの確かめのあとで待つので、届かない道 (#322) で「読み込み中」のまま止めない
-  inflight = fetch('/api/config', { signal: AbortSignal.timeout(CONFIG_TIMEOUT_MS) })
+  // ★ 時間切れを付ける。ログインの確かめのあとで待つので、届かない道 (#322) で「読み込み中」のまま止めない。
+  //   ★ AbortSignal.timeout は使わない (iOS 15 以前・Chrome 102 以前に無く、fetch の前に同期で投げて起動ごと止まる)。api.ts と同じ形
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CONFIG_TIMEOUT_MS);
+  inflight = fetch('/api/config', { signal: ctrl.signal })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
     .then((c: RuntimeConfig | null) => {
+      clearTimeout(timer);
       if (c) cached = c;
       inflight = null;
       return c || FALLBACK;

@@ -16,14 +16,22 @@ import { NO_STORE } from '../utils/staticCache.mts';
  */
 export const router = express.Router();
 
-const versionFilePath = path.join(import.meta.dirname, '../../../client/dist/version.json');
+const defaultVersionFilePath = path.join(import.meta.dirname, '../../../client/dist/version.json');
+
+/**
+ * ★ テストは CLIENT_VERSION_FILE で一時ファイルを指す。以前はテストが本番の client/dist/version.json を書き換えて戻しており、
+ *   その間に版を確かめた端末に「新しいバージョンがあります」が出うる・途中で止めると戻らない (2026-10-30 改善ループ 27 回目)
+ */
+function versionFilePath(): string {
+  return process.env.CLIENT_VERSION_FILE || defaultVersionFilePath;
+}
 
 router.get('/', (req, res) => {
   // 起動時に読んで固定すると、サーバ稼働中にクライアントを再ビルドしたとき古い ID を
   // 返し続け「いつまでも更新あり」になる。毎回読む (数十バイトなので実害なし)。
   let buildId: string | null = null;
   try {
-    const raw = fs.readFileSync(versionFilePath, 'utf8');
+    const raw = fs.readFileSync(versionFilePath(), 'utf8');
     const parsed = JSON.parse(raw) as { build_id?: unknown };
     if (typeof parsed.build_id === 'string') buildId = parsed.build_id;
   } catch {
