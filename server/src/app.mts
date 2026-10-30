@@ -13,6 +13,8 @@ import { createProxyMiddleware, errorResponsePlugin } from 'http-proxy-middlewar
 import { logger } from './utils/logger.mts';
 import { pool } from './db/pool.mts';
 import { checkMigrations, findPendingMigrations } from './services/migrationCheck.mts';
+import { setWebhookUndeliveredHandler } from './services/webhook.mts';
+import { noticeAiUnreachable } from './services/aiUnreachableNotice.mts';
 import { ensureMediaDirs } from './utils/mediaSetup.mts';
 import { MEDIA_ROOT } from './middleware/upload.mts';
 import { runStartupEnvCheck } from './utils/envCheck.mts';
@@ -346,6 +348,10 @@ function checkBuildArtifacts(): void {
 // Start server (only when run directly, not in tests)
 if (import.meta.main) {
   const PORT = process.env.PORT || 3000;
+  // ★ AI に届かなかった便に部屋へ 1 行返す (2026-10-30 小野さん判断 C)。webhook から直接 import すると輪になるので、ここで差し込む
+  setWebhookUndeliveredHandler((eventType, roomId, payload) => {
+    void noticeAiUnreachable(eventType, roomId, payload as Parameters<typeof noticeAiUnreachable>[2]);
+  });
   checkBuildArtifacts();
 
   // #368 停止時に止める watcher。起動時に読み込んだ module をそのまま覚えておく

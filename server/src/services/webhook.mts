@@ -5,7 +5,6 @@
 import crypto from 'node:crypto';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
-import { noticeAiUnreachable } from './aiUnreachableNotice.mts';
 
 /** 送信先 Webhook (webhooksテーブルの行のうち送信に使うフィールド) */
 interface WebhookTarget {
@@ -145,6 +144,15 @@ export async function dispatchWithRetry(webhook: WebhookTarget, body: string, op
  * @param roomId - ルームID（ルーム限定Webhook用）
  * @param payload - ペイロードオブジェクト
  */
+/**
+ * 届かなかったときに呼ぶもの (AI に届かなかった便への 1 行、aiUnreachableNotice)。app.mts が起動時に差し込む。
+ * ★ ここで直接 import すると webhook → 知らせ → systemMessage → postEffects → webhook の輪になり、
+ *   読み込みの順番しだいで初期化前の値を読む (2026-10-30 の CI で voicePostCommitFailure が落ちた)
+ */
+type WebhookFailureHandler = (eventType: string, roomId: string | null, payload: WebhookPayload) => void;
+let onUndelivered: WebhookFailureHandler | null = null;
+export function setWebhookUndeliveredHandler(fn: WebhookFailureHandler | null): void { onUndelivered = fn; }
+
 export async function fireWebhooks(eventType: string, roomId: string | null, payload: WebhookPayload): Promise<void> {
   try {
     const result = await pool.query<WebhookRow>(
@@ -202,7 +210,7 @@ export async function fireWebhooks(eventType: string, roomId: string | null, pay
         if (!result.ok) {
           logger.error(`Webhook failed: ${webhook.url} (status: ${result.status}, attempts: ${result.attempts})`);
           // ★ AI に宛てた便なら部屋に 1 行返す (2026-10-30 小野さん判断 C)。4xx (断られた) は届いているので出さない
-          if (result.status === 0 || result.status >= 500) void noticeAiUnreachable(eventType, roomId, payload as Parameters<typeof noticeAiUnreachable>[2]);
+          if (result.status === 0 || result.status >= 500) onUndelivered?.(eventType, roomId, payload);
         } else if (result.attempts > 1) {
           logger.info(`Webhook succeeded after retry: ${webhook.url} (attempts: ${result.attempts})`);
         }
