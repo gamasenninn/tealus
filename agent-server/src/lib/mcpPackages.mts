@@ -14,4 +14,4 @@ export const FILESYSTEM_MCP_PACKAGE = '@modelcontextprotocol/server-filesystem@2
  *   エージェントから見えなかった (docs は「18 個」と書いていたが、本体では一度も成り立っていなかった)
  * ★ 上げるときは tealus-mcp の CHANGELOG を読み、先に手で 1 回 `npx -y <これ> ` を流してキャッシュに入れる (上と同じ理由)
  */
-export const TEALUS_MCP_PACKAGE = 'github:gamasenninn/tealus-mcp#v0.16.0';
+export const TEALUS_MCP_PACKAGE = 'github:gamasenninn/tealus-mcp#v0.16.1';
