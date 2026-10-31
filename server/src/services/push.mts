@@ -216,16 +216,39 @@ export async function deactivateStaleSubscriptions(days: number): Promise<number
   return rowCount ?? 0;
 }
 
+/**
+ * 無効になってから長い宛先を消す (2026-10-31 小野さん判断 3)。
+ * ★ 無効の宛先は消さずに残していたので、10-31 に 554 本中 532 本が無効だった。
+ *   無効の宛先は送らないので害は無いが、見張り (push_reach) と数えるたびに混ざる。
+ * ★ 無効にした時刻は updated_at (外すときに進める)。消しても、その端末で開き直せば送り直しで新しく入る
+ * @returns 消した数
+ */
+export async function deleteOldInactiveSubscriptions(days: number): Promise<number> {
+  if (!Number.isFinite(days) || days <= 0) return 0;   // ★ 壊れた設定で全部消さない
+  const { rowCount } = await pool.query(
+    'DELETE FROM push_subscriptions WHERE NOT is_active AND updated_at < now() - make_interval(days => $1)',
+    [Math.floor(days)],
+  );
+  return rowCount ?? 0;
+}
+
 let staleSweepTimer: NodeJS.Timeout | null = null;
 
-/** 起動時に 1 回 + 1 日ごとに掃除する。日数は PUSH_STALE_DAYS (既定 30) */
+/**
+ * 起動時に 1 回 + 1 日ごとに掃除する。日数は PUSH_STALE_DAYS (既定 30)。
+ * 無効になってから PUSH_INACTIVE_DELETE_DAYS (既定 90) 日たった宛先は消す
+ */
 export function startPushStaleSweep(): void {
   if (staleSweepTimer) return;
   const days = Number(process.env.PUSH_STALE_DAYS || 30);
+  const deleteDays = Number(process.env.PUSH_INACTIVE_DELETE_DAYS || 90);
   const run = () => {
     deactivateStaleSubscriptions(days)
       .then((n) => { if (n > 0) logger.info(`[push] ${days} 日送り直されていない宛先を ${n} 本外しました`); })
       .catch((err) => logger.warn(`[push] 古い宛先の掃除に失敗: ${err instanceof Error ? err.message : String(err)}`));
+    deleteOldInactiveSubscriptions(deleteDays)
+      .then((n) => { if (n > 0) logger.info(`[push] 無効になってから ${deleteDays} 日たった宛先を ${n} 本消しました`); })
+      .catch((err) => logger.warn(`[push] 無効の宛先の削除に失敗: ${err instanceof Error ? err.message : String(err)}`));
   };
   run();
   staleSweepTimer = setInterval(run, 24 * 3_600_000);

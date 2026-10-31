@@ -1,6 +1,6 @@
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
-import { deactivateStaleSubscriptions } from '../../src/services/push.mts';
+import { deactivateStaleSubscriptions, deleteOldInactiveSubscriptions } from '../../src/services/push.mts';
 
 /**
  * 30 日送り直されない通知の宛先を外す (2026-10-16、改善ループ 7 回目の 3)
@@ -74,5 +74,36 @@ describe('deactivateStaleSubscriptions', () => {
     expect(await deactivateStaleSubscriptions(0)).toBe(0);
     expect(await deactivateStaleSubscriptions(Number.NaN)).toBe(0);
     expect((await state())[0].is_active).toBe(true);
+  });
+});
+
+describe('deleteOldInactiveSubscriptions — 古い無効の宛先を消す (2026-10-31 小野さん判断 3)', () => {
+  let user: Awaited<ReturnType<typeof createTestUser>>;
+  beforeAll(async () => { await setupTestDb(); });
+  afterAll(async () => { await closeTestDb(); });
+  beforeEach(async () => {
+    await cleanTestDb();
+    user = await createTestUser({ login_id: 'EMP001', display_name: '田中太郎' });
+  });
+  const sub = (endpoint: string, daysAgo: number, active: boolean) => getTestPool().query(
+    `INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key, is_active, created_at, updated_at)
+     VALUES ($1, $2, 'p', 'a', $3, now() - make_interval(days => $4), now() - make_interval(days => $4))`,
+    [user.user.id, endpoint, active, daysAgo],
+  );
+  const left = async () => (await getTestPool().query<{ endpoint: string }>('SELECT endpoint FROM push_subscriptions ORDER BY endpoint')).rows.map((r) => r.endpoint);
+
+  it('★★ 90 日より前に無効になった宛先だけ消す。有効なもの・最近無効になったものは残す', async () => {
+    await sub('https://e/a-old-inactive', 91, false);
+    await sub('https://e/b-recent-inactive', 89, false);
+    await sub('https://e/c-old-active', 200, true);
+    expect(await deleteOldInactiveSubscriptions(90)).toBe(1);
+    expect(await left()).toEqual(['https://e/b-recent-inactive', 'https://e/c-old-active']);
+  });
+
+  it('壊れた日数では何も消さない', async () => {
+    await sub('https://e/old', 400, false);
+    expect(await deleteOldInactiveSubscriptions(0)).toBe(0);
+    expect(await deleteOldInactiveSubscriptions(Number.NaN)).toBe(0);
+    expect(await left()).toHaveLength(1);
   });
 });
