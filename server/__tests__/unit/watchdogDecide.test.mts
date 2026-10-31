@@ -5,7 +5,7 @@
  *   正常 → 異常 で 1 回、異常 → 正常 で 1 回。異常が続いても鳴らさない。
  */
 import { loadWatchdogsFrom, markFor, type Watch, type RoomQuietWatch, type HeartbeatWatch } from '../../src/services/watchdogs.mts';
-import { judgeRoomQuiet, judgeHeartbeat, judgeBackupLog, judgePushReach, decideNotice } from '../../src/services/watchdogDecide.mts';
+import { judgeRoomQuiet, judgeHeartbeat, judgeBackupLog, judgePushReach, judgeDiskFree, decideNotice } from '../../src/services/watchdogDecide.mts';
 
 const ROOM = '00000000-0000-0000-0000-000000000002';
 const USER = '00000000-0000-0000-0000-000000000001';
@@ -267,5 +267,41 @@ describe('push_reach — 判定 (人ごと)', () => {
   it('★ 直近の日数に何も読んでいない人は判定しない (知らせても本人が見ない)', () => {
     expect(judgePushReach({ ...target, last_read_at: jst('2026-09-10T09:00:00') }, 30, now).state).toBe('skip');
     expect(judgePushReach({ ...target, last_read_at: null }, 30, now).state).toBe('skip');
+  });
+});
+
+describe('disk_free — メディアの置き場の空き (2026-10-31 小野さん判断 2、docs/09 §3.7)', () => {
+  const disk = { id: 'media-disk', name: 'メディアの置き場の空き容量', kind: 'disk_free', path: 'C:/app/tealus-media', min_free_gb: 100, enabled: true };
+  const GB = 1024 ** 3;
+
+  it('設定を読める。path と正の min_free_gb が要る', () => {
+    expect(one(disk).kind).toBe('disk_free');
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...disk, path: '' }] }).warnings).toHaveLength(1);
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...disk, min_free_gb: 0 }] }).warnings).toHaveLength(1);
+  });
+
+  it('★★ 空きが下限以上なら正常、下限を切ったら異常 (今の空きと下限を添える)', () => {
+    const w = one(disk) as Parameters<typeof judgeDiskFree>[0];
+    expect(judgeDiskFree(w, { freeBytes: 207 * GB }).state).toBe('ok');
+    const down = judgeDiskFree(w, { freeBytes: 99.4 * GB });
+    expect(down.state).toBe('down');
+    expect(down.detail).toContain('99.4 GB');
+    expect(down.detail).toContain('100 GB');
+  });
+
+  it('★ 置き場を読めないときは異常 (読めないことを添える)', () => {
+    const w = one(disk) as Parameters<typeof judgeDiskFree>[0];
+    const r = judgeDiskFree(w, { error: 'ENOENT' });
+    expect(r.state).toBe('down');
+    expect(r.detail).toContain('ENOENT');
+  });
+
+  it('★ 文は「止まっているようです」ではなく「少なくなっています」', () => {
+    const w = one(disk);
+    const alert = decideNotice(w, { state: 'down', detail: 'x' }, null, jst('2026-10-31T12:00:00'));
+    expect(alert.body).toContain('⚠ メディアの置き場の空き容量 が少なくなっています');
+    const back = decideNotice(w, { state: 'ok', detail: 'x' }, { kind: 'alert', at: jst('2026-10-31T11:00:00') }, jst('2026-10-31T12:00:00'));
+    expect(back.body).toContain('✅ メディアの置き場の空き容量 が戻りました');
+    expect(back.body).not.toContain('止まっていました');
   });
 });

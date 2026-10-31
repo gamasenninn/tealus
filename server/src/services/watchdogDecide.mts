@@ -6,7 +6,7 @@
  */
 import type { BackupAssessment } from './backupLog.mts';
 import type { Heartbeat } from './heartbeats.mts';
-import { markFor, type HeartbeatWatch, type RoomQuietWatch, type Watch } from './watchdogs.mts';
+import { markFor, type DiskFreeWatch, type HeartbeatWatch, type RoomQuietWatch, type Watch } from './watchdogs.mts';
 
 export type Observation =
   | { state: 'ok'; detail: string }
@@ -148,16 +148,35 @@ export function judgeBackupLog(a: BackupAssessment): Observation {
   }
 }
 
+/** 置き場の空き。読めなければ error */
+export type DiskRead = { freeBytes: number } | { error: string };
+
+const GB = 1024 ** 3;
+
+/** メディアの置き場の空き (docs/09 §3.7)。★ 下限は人が決めて設定に書く (§6 閾値の自動学習はしない) */
+export function judgeDiskFree(w: Pick<DiskFreeWatch, 'path' | 'min_free_gb'>, d: DiskRead): Observation {
+  if ('error' in d) return { state: 'down', detail: `${w.path} の空きを読めません (${d.error})` };
+  const free = `${(Math.floor((d.freeBytes / GB) * 10) / 10).toFixed(1)} GB`;
+  return d.freeBytes >= w.min_free_gb * GB
+    ? { state: 'ok', detail: `${w.path} の空き: ${free} (下限 ${w.min_free_gb} GB)` }
+    : { state: 'down', detail: `${w.path} の空き: ${free} (下限 ${w.min_free_gb} GB を切りました)` };
+}
+
 /** 投稿するか、するなら本文。★ 2 行目に印 (docs/09 §5、ルームトリガー §10 と同じ理由) */
 export function decideNotice(
-  w: Pick<Watch, 'id' | 'name'>,
+  w: Pick<Watch, 'id' | 'name'> & { kind?: Watch['kind'] },
   obs: Observation,
   last: LastNotice | null,
   now: Date,
 ): { kind: 'alert' | 'recover' | null; body: string | null } {
   const wasDown = last?.kind === 'alert';
+  // ★ 空き容量は止まったのではないので「少なくなっています」(docs/09 §3.7)
+  const amount = w.kind === 'disk_free';
   if (obs.state === 'down' && !wasDown) {
-    return { kind: 'alert', body: `⚠ ${w.name} が止まっているようです\n${markFor(w.id)}\n${obs.detail}` };
+    return { kind: 'alert', body: `⚠ ${w.name} が${amount ? '少なくなっています' : '止まっているようです'}\n${markFor(w.id)}\n${obs.detail}` };
+  }
+  if (obs.state === 'ok' && wasDown && amount) {
+    return { kind: 'recover', body: `✅ ${w.name} が戻りました\n${markFor(w.id)}\n${obs.detail}` };
   }
   if (obs.state === 'ok' && wasDown) {
     const minutes = Math.max(0, Math.round((now.getTime() - last.at.getTime()) / 60_000));

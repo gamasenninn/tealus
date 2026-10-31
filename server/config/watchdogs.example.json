@@ -45,6 +45,15 @@
         "00000000-0000-0000-0000-000000000000"
       ],
       "enabled": false
+    },
+    {
+      "id": "media-disk",
+      "name": "メディアの置き場の空き容量",
+      "kind": "disk_free",
+      "path": "<MEDIA_ROOT (例 C:/app/tealus-media)>",
+      "min_free_gb": 100,
+      "_comment": "空きが 100 GB を切ったら知らせる (2026-10-31 小野さん判断 2、docs/09 §3.7)",
+      "enabled": true
     }
   ]
 }

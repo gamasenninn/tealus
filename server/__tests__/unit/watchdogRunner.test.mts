@@ -35,6 +35,7 @@ function deps(over: Partial<RunDeps> = {}): RunDeps & { posts: { roomId: string;
     heartbeatOf: async () => ({ last_seen: jst('2026-10-13T11:59:00'), info: {} }),
     readBackup: async () => ({ latest: OK_LOG }),
     pushTargets: async () => [],
+    diskFree: async () => ({ freeBytes: 500 * 1024 ** 3 }),
     resolveSender: async () => ({ id: USER, display_name: 'Claude', avatar_url: null }),
     post: async (input) => { posts.push({ roomId: input.roomId, content: input.content }); return { ok: true, messageId: 'm' } as never; },
     ...over,
@@ -194,5 +195,21 @@ describe('watchdogLogLine', () => {
   });
   it('ok は info', () => {
     expect(watchdogLogLine({ id: 'backup', state: 'ok', detail: '成功', posted: null }).level).toBe('info');
+  });
+});
+
+describe('runOnce — disk_free', () => {
+  const diskConfig = loadWatchdogsFrom({
+    notify: { room_id: NOTIFY_ROOM, room: '業務メモ', as_user_id: USER },
+    watches: [{ id: 'media-disk', name: 'メディアの置き場の空き容量', kind: 'disk_free', path: 'C:/m', min_free_gb: 100, enabled: true }],
+  }).config!;
+
+  it('★★ 置き場の空きを渡し、下限を切ったら業務メモへ ⚠', async () => {
+    const asked: string[] = [];
+    const d = deps({ diskFree: async (p) => { asked.push(p); return { freeBytes: 80 * 1024 ** 3 }; } });
+    await runOnce(diskConfig, d);
+    expect(asked).toEqual(['C:/m']);
+    expect(d.posts).toHaveLength(1);
+    expect(d.posts[0].content).toContain('少なくなっています');
   });
 });

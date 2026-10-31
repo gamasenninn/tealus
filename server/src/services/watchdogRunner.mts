@@ -9,13 +9,14 @@
  *   本体を再起動しても、止まったままなら 2 度は鳴らない。
  * ★★ 見張りが見張られる側と一緒に死なないよう、本体に置く (§4)。
  */
+import fs from 'node:fs';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { assessBackup, readLatestBackupLog, type BackupRead } from './backupLog.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
 import {
-  decideNotice, judgeBackupLog, judgeHeartbeat, judgePushReach, judgeRoomQuiet,
-  type LastNotice, type Observation, type PushTarget,
+  decideNotice, judgeBackupLog, judgeDiskFree, judgeHeartbeat, judgePushReach, judgeRoomQuiet,
+  type DiskRead, type LastNotice, type Observation, type PushTarget,
 } from './watchdogDecide.mts';
 import { getHeartbeat, type Heartbeat } from './heartbeats.mts';
 import {
@@ -40,6 +41,7 @@ export interface RunDeps {
   heartbeatOf: (w: HeartbeatWatch) => Promise<Heartbeat | null>;
   readBackup: (dir: string) => Promise<BackupRead>;
   pushTargets: (w: PushReachWatch) => Promise<PushTarget[]>;
+  diskFree: (path: string) => Promise<DiskRead>;
   resolveSender: (userId: string) => Promise<SenderContext | null>;
   post: (input: { roomId: string; sender: SenderContext; content: string }) => Promise<PostAsUserResult>;
 }
@@ -54,13 +56,14 @@ export interface RunResult {
 }
 
 /** 知らせの単位。ふつうは設定の 1 行、push_reach は 1 人 (id は `<行の id>:<user_id>`) */
-interface Unit { id: string; name: string; observe: () => Promise<Observation> }
+interface Unit { id: string; name: string; kind?: Watch['kind']; observe: () => Promise<Observation> }
 
 async function unitsOf(w: Watch, deps: RunDeps): Promise<Unit[]> {
   switch (w.kind) {
     case 'backup_log': return [{ id: w.id, name: w.name, observe: async () => judgeBackupLog(assessBackup(await deps.readBackup(w.dir), deps.now)) }];
     case 'room_quiet': return [{ id: w.id, name: w.name, observe: async () => judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now) }];
     case 'heartbeat': return [{ id: w.id, name: w.name, observe: async () => judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now) }];
+    case 'disk_free': return [{ id: w.id, name: w.name, kind: w.kind, observe: async () => judgeDiskFree(w, await deps.diskFree(w.path)) }];
     case 'push_reach': {
       // ★ 人ごとに開く。状態も人ごとの印から引くので、A が ⚠ のままでも B の ⚠ は出る (docs/09 §3.6)
       const exclude = new Set(w.exclude_user_ids);
@@ -169,6 +172,15 @@ async function pushTargetsFromDb(): Promise<PushTarget[]> {
   return rows;
 }
 
+async function diskFreeOf(p: string): Promise<DiskRead> {
+  try {
+    const st = await fs.promises.statfs(p);
+    return { freeBytes: st.bavail * st.bsize };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 async function resolveSenderFromDb(userId: string): Promise<SenderContext | null> {
   const { rows } = await pool.query<SenderContext>('SELECT id, display_name, avatar_url FROM users WHERE id = $1', [userId]);
   return rows[0] ?? null;
@@ -204,6 +216,7 @@ async function tick(configPath: string, warned: { signature: string }): Promise<
     heartbeatOf: heartbeatOfWatch,
     readBackup: readLatestBackupLog,
     pushTargets: pushTargetsFromDb,
+    diskFree: diskFreeOf,
     resolveSender: resolveSenderFromDb,
     post: postAsUser,
   });

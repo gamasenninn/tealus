@@ -72,7 +72,14 @@ export interface PushReachWatch extends WatchBase {
   exclude_user_ids: string[];
 }
 
-export type Watch = BackupLogWatch | RoomQuietWatch | HeartbeatWatch | PushReachWatch;
+/** メディアの置き場の空き (docs/09 §3.7、2026-10-31)。★ 見るのはその場所の空きだけ */
+export interface DiskFreeWatch extends WatchBase {
+  kind: 'disk_free';
+  path: string;
+  min_free_gb: number;
+}
+
+export type Watch = BackupLogWatch | RoomQuietWatch | HeartbeatWatch | PushReachWatch | DiskFreeWatch;
 
 export interface WatchdogConfig {
   notify: Notify;
@@ -175,11 +182,16 @@ function validate(raw: unknown, i: number): Watch | string {
       };
     }
 
+    case 'disk_free':
+      if (!isNonEmptyString(r.path)) return `${label}: path (空きを見る置き場) がありません`;
+      if (typeof r.min_free_gb !== 'number' || !(r.min_free_gb > 0)) return `${label}: min_free_gb が正の数ではありません`;
+      return { ...base, kind: 'disk_free', path: r.path, min_free_gb: r.min_free_gb };
+
     case 'http_health':
       return `${label}: kind "http_health" は使えなくなりました。相手の生存の口を本体が読む形はやめ、部品から鼓動 (heartbeat) を送ってもらいます (docs/09 §0)`;
 
     default:
-      return `${label}: kind "${String(r.kind)}" は backup_log / room_quiet / heartbeat / push_reach のどれでもありません`;
+      return `${label}: kind "${String(r.kind)}" は backup_log / room_quiet / heartbeat / push_reach / disk_free のどれでもありません`;
   }
 }
 
