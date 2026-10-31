@@ -6,7 +6,7 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { requireMember, requireGroup } from '../middleware/roomAccess.mts';
+import { requireMember, requireMemberOrSystemAdmin, requireGroup, isRoomAdmin } from '../middleware/roomAccess.mts';
 import { canInviteToRoom } from '../utils/permissions.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
@@ -21,7 +21,7 @@ export const router = express.Router({ mergeParams: true });
  * POST /api/rooms/:id/members
  * Add a member to the group (any member can invite)
  */
-router.post('/', authenticate, requireMember, requireGroup, async (req: Request, res: Response) => {
+router.post('/', authenticate, requireMemberOrSystemAdmin, requireGroup, async (req: Request, res: Response) => {
   // #282: guest は member であっても他 user を招待できない (fail-closed)。
   // client は招待ボタンを隠すが、API 直叩きもサーバーで弾く。
   if (!canInviteToRoom(req.user)) {
@@ -163,7 +163,7 @@ router.delete('/me', authenticate, requireMember, requireGroup, async (req: Requ
  *     - 本来の 2 人は外せない (= 2 人を下回らない)
  *   3 人全員の joined_at が同一という異常な状態では誰も外せない = 安全側に倒れる。
  */
-router.delete('/:userId', authenticate, requireMember, async (req: Request, res: Response) => {
+router.delete('/:userId', authenticate, requireMemberOrSystemAdmin, async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const targetUserId = (req.params as { userId: string }).userId;
 
@@ -179,7 +179,7 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
     }
 
     if (roomType.rows[0].type === 'group') {
-      if (req.memberRole !== 'admin') {
+      if (!isRoomAdmin(req)) {
         return res.status(403).json({ error: 'グループ管理者だけがメンバーを退会させられます' });
       }
     } else {
@@ -245,12 +245,12 @@ router.delete('/:userId', authenticate, requireMember, async (req: Request, res:
  * PUT /api/rooms/:id/members/:userId/role
  * Change member role (group admin only)
  */
-router.put('/:userId/role', authenticate, requireMember, requireGroup, async (req: Request, res: Response) => {
+router.put('/:userId/role', authenticate, requireMemberOrSystemAdmin, requireGroup, async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const targetUserId = (req.params as { userId: string }).userId;
   const { role } = req.body;
 
-  if (req.memberRole !== 'admin') {
+  if (!isRoomAdmin(req)) {
     return res.status(403).json({ error: 'グループ管理者のみが権限を変更できます' });
   }
 

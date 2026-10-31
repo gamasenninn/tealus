@@ -35,8 +35,9 @@ function MemberList({ roomId, onClose }: MemberListProps) {
   const [error, setError] = useState('');
 
   const myRole = memberList.find(m => m.user_id === user!.id)?.role;
-  const isAdmin = myRole === 'admin';
   const isSysAdmin = user?.role === 'admin';
+  // ★ システム管理者は、どのグループ部屋でも部屋の管理者と同じ操作ができる (2026-10-31 小野さん判断 5、docs/02)
+  const isAdmin = myRole === 'admin' || isSysAdmin;
 
   const handleSaveName = async () => {
     if (!groupName.trim()) return;

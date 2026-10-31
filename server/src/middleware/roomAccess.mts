@@ -31,11 +31,38 @@ export async function requireMember(req: Request, res: Response, next: NextFunct
 }
 
 /**
+ * 部屋の管理者の口だけに使う入口 (2026-10-31 小野さん判断 5)。
+ * メンバーなら requireMember と同じ。メンバーでなくても、システム管理者なら通す (req.memberRole は空のまま)。
+ * ★ 中身を読む口には使わないこと (システム管理者でも、メンバーでない部屋の中身は読まない。docs/02 room_members)
+ */
+export async function requireMemberOrSystemAdmin(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+  if (req.user?.role !== 'admin') return requireMember(req, res, next);
+  const roomId = req.params.id;
+  if (!isUuid(roomId)) return res.status(400).json({ error: badIdMessage(String(roomId)) });
+  try {
+    const result = await pool.query<{ role: string }>(
+      'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [roomId, req.user.id]
+    );
+    req.memberRole = result.rows[0]?.role;
+    next();
+  } catch (err) {
+    logger.error('Room access check error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+}
+
+/** 部屋の管理者として扱うか。★ システム管理者は、どのグループ部屋でも部屋の管理者と同じ (2026-10-31 小野さん判断 5) */
+export function isRoomAdmin(req: Request): boolean {
+  return req.memberRole === 'admin' || req.user?.role === 'admin';
+}
+
+/**
  * Middleware: Require room admin role
- * Must be used after requireMember
+ * Must be used after requireMember (or requireMemberOrSystemAdmin)
  */
 export function requireRoomAdmin(req: Request, res: Response, next: NextFunction): Response | void {
-  if (req.memberRole !== 'admin') {
+  if (!isRoomAdmin(req)) {
     return res.status(403).json({ error: E.GROUP_ADMIN_REQUIRED });
   }
   next();

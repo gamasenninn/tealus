@@ -5,7 +5,7 @@ import path from 'node:path';
 import multer from 'multer';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { requireMember, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } from '../middleware/roomAccess.mts';
+import { requireMember, requireMemberOrSystemAdmin, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } from '../middleware/roomAccess.mts';
 import { canCreateRoom, isGuest, canSearchUsers } from '../utils/permissions.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
@@ -587,7 +587,7 @@ router.put('/:id/notification', requireMember, async (req, res) => {
  * PUT /api/rooms/:id
  * Update group name (group admin only)
  */
-router.put('/:id', requireMember, requireGroup, requireRoomAdmin, async (req, res) => {
+router.put('/:id', requireMemberOrSystemAdmin, requireGroup, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled, voice_conversation_tools, voice_conversation_denied_tools, push_machine_posts } = req.body;
 
@@ -687,7 +687,7 @@ router.delete('/:id', requireMember, requireGroup, requireCreator, requireSoloMe
  * POST /api/rooms/:id/icon
  * Upload group icon (group admin only)
  */
-router.post('/:id/icon', requireMember, requireGroup, requireRoomAdmin, singleImage(iconUpload, 'icon', 5), async (req, res) => {
+router.post('/:id/icon', requireMemberOrSystemAdmin, requireGroup, requireRoomAdmin, singleImage(iconUpload, 'icon', 5), async (req, res) => {
   const { id } = req.params;
 
   try {
