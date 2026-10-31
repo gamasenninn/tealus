@@ -7,7 +7,7 @@
 import type { AddressInfo } from 'node:net';
 import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import request from 'supertest';
-import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
+import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 import { app, server as appServer } from '../../src/app.mts';
 
@@ -76,5 +76,42 @@ describe('#534 プロフィールの変更を同じ部屋の人へ', () => {
     await request(app).put('/api/auth/profile').set('Authorization', `Bearer ${me.token}`).send({ status_message: 'こんにちは', notification_sound: false });
     await settle();
     expect(got).toEqual([]);
+  });
+
+  describe('★ 管理者が名前を変えたときも同じ (改善ループ 30。本人が変える道だけ直っていた)', () => {
+    let admin: { id: string; token: string };
+    beforeEach(async () => {
+      const x = await createTestUser({ login_id: 'ADM001', display_name: '管理者' });
+      await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [x.user.id]);
+      admin = { id: x.user.id, token: x.token };
+    });
+
+    it('★★ 同じ部屋の人に新しい名前が届く', async () => {
+      const m = await connect(mate.token, roomId);
+      const got = events(m);
+      const res = await request(app).put(`/api/admin/users/${me.id}`).set('Authorization', `Bearer ${admin.token}`).send({ display_name: '田中 (営業)' });
+      expect(res.status).toBe(200);
+      await settle();
+      expect(got).toEqual([{ user_id: me.id, display_name: '田中 (営業)', avatar_url: null }]);
+    });
+
+    it('★★ つながったままの本人の次の投稿は、新しい名前で配られる', async () => {
+      const mine = await connect(me.token, roomId);
+      const m = await connect(mate.token, roomId);
+      const got: { sender_display_name?: string }[] = [];
+      m.on('message:new', (d: { sender_display_name?: string }) => got.push(d));
+      await request(app).put(`/api/admin/users/${me.id}`).set('Authorization', `Bearer ${admin.token}`).send({ display_name: '田中 (営業)' });
+      mine.emit('message:send', { room_id: roomId, content: 'こんにちは' });
+      await settle(500);
+      expect(got.map((d) => d.sender_display_name)).toEqual(['田中 (営業)']);
+    });
+
+    it('名前を変えない更新 (パスワード) では送らない', async () => {
+      const m = await connect(mate.token, roomId);
+      const got = events(m);
+      await request(app).put(`/api/admin/users/${me.id}`).set('Authorization', `Bearer ${admin.token}`).send({ password: 'newpassword123' });
+      await settle();
+      expect(got).toEqual([]);
+    });
   });
 });

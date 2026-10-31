@@ -2,6 +2,7 @@ import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { getIo } from '../io-registry.mts';
 import { insertSystemMessage } from './systemMessage.mts';
+import { agentUrl } from '../lib/upstream.mts';
 
 /**
  * AI に届かなかった便に、部屋へ 1 行返す (2026-10-30 小野さん判断 C)。
@@ -38,6 +39,23 @@ export async function addressedBot(roomId: string, payload: CreatedPayload): Pro
   if (head.startsWith('@cc-')) return rows[0].id;
   if (rows[0].room_type === 'direct' && rows[0].members === 2) return rows[0].id;
   return null;
+}
+
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * 失敗した webhook が AI の受け口 (agent-server) か。
+ * ★ webhook は AI 以外 (Kairos・試験用の受け手) にも登録できる。その失敗で「AI に届きませんでした」を出すと、
+ *   AI は元気なのに部屋に誤報が出る (改善ループ 30)。宛先の origin が agentUrl() と同じものだけ数える
+ */
+export function isAgentWebhook(url: string, agent = agentUrl()): boolean {
+  try {
+    const a = new URL(url), b = new URL(agent);
+    const host = (h: string) => (LOOPBACK.has(h) ? 'localhost' : h);
+    return a.protocol === b.protocol && host(a.hostname) === host(b.hostname) && a.port === b.port;
+  } catch {
+    return false;
+  }
 }
 
 export async function noticeAiUnreachable(eventType: string, roomId: string | null, payload: CreatedPayload, now = Date.now()): Promise<boolean> {

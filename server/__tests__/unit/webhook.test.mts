@@ -174,3 +174,36 @@ describe('fireWebhooks — 送り主の権限 (#491)', () => {
     expect(sentBody().user).toEqual({ id: 'u1' });
   });
 });
+
+describe('fireWebhooks — 届かなかったときの差し込み口 (改善ループ 30)', () => {
+  const { pool } = jest.requireMock('../../src/db/pool.mts') as { pool: { query: jest.Mock } };
+  const { setWebhookUndeliveredHandler } = jest.requireActual('../../src/services/webhook.mts') as typeof import('../../src/services/webhook.mts');
+
+  beforeEach(() => {
+    pool.query.mockReset();
+    pool.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM webhooks')) return { rows: [{ id: 'w1', url: 'http://localhost:4000/webhook/tealus', secret: null }] };
+      return { rows: [] };
+    });
+  });
+  afterEach(() => { setWebhookUndeliveredHandler(null); jest.useRealTimers(); });
+
+  it('★★ つながらない (送り直しても) ときは、受け口の URL を添えて呼ぶ', async () => {
+    jest.useFakeTimers();
+    const handler = jest.fn();
+    setWebhookUndeliveredHandler(handler);
+    mockFetchResponses = [{ throw: 'ECONNREFUSED' }, { throw: 'ECONNREFUSED' }, { throw: 'ECONNREFUSED' }];
+    await fireWebhooks('message.created', 'r1', { message: { id: 'm1' } });
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(handler).toHaveBeenCalledWith('message.created', 'r1', { message: { id: 'm1' } }, 'http://localhost:4000/webhook/tealus');
+  });
+
+  it('★ 4xx (断られた = 届いている) では呼ばない', async () => {
+    const handler = jest.fn();
+    setWebhookUndeliveredHandler(handler);
+    mockFetchResponses = [{ ok: false, status: 401 }];
+    await fireWebhooks('message.created', 'r1', { message: { id: 'm1' } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(handler).not.toHaveBeenCalled();
+  });
+});

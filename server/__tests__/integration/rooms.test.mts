@@ -167,6 +167,31 @@ describe('Rooms API', () => {
       expect(res.status).toBe(200);
       expect(res.body.rooms).toHaveLength(0);
     });
+
+    it('★ 最後の投稿のプレビューは 200 字で切る (AI の長文で一覧が 100 KB を超えていた、改善ループ 30)', async () => {
+      const created = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '長文の部屋', member_ids: [user2.user.id] });
+      const short = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: '短文の部屋', member_ids: [user2.user.id] });
+      const pool = getTestPool();
+      await pool.query(
+        `INSERT INTO messages (room_id, sender_id, content, type) VALUES ($1, $2, $3, 'text'), ($4, $2, 'こんにちは', 'text')`,
+        [created.body.room.id, user2.user.id, 'あ'.repeat(5000), short.body.room.id]
+      );
+
+      const res = await request(app)
+        .get('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`);
+
+      const long = res.body.rooms.find((r: { id: string }) => r.id === created.body.room.id);
+      const shortRoom = res.body.rooms.find((r: { id: string }) => r.id === short.body.room.id);
+      expect(long.last_message_content).toBe('あ'.repeat(200));
+      expect(shortRoom.last_message_content).toBe('こんにちは');
+    });
   });
 
   // ============================================

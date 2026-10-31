@@ -4,6 +4,8 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { pool } from '../../db/pool.mts';
 import { getIo } from '../../io-registry.mts';
+import { refreshSocketUser } from '../../socket/index.mts';
+import { announceUserUpdated } from '../../services/userUpdated.mts';
 
 import { SALT_ROUNDS } from '../../constants/config.mts';
 import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../../utils/userFields.mts';
@@ -131,6 +133,17 @@ router.put('/users/:id', async (req, res) => {
     // ★ #529 役割を変えたら接続を切る。管理者は接続時に全部屋へ入るので、切らないと一般に戻した後も
     //   全部屋の配信を受け続けた。つなぎ直すと新しい役割で入り直す (昇格も同じ理由で切る)
     if (result.rows[0].role !== existing.rows[0].role) getIo().in(`user:${id}`).disconnectSockets(true);
+
+    // ★ 名前を変えたら、本人が変えたとき (#498・#534) と同じく、つながっている socket の名前を書き換えて部屋に知らせる。
+    //   以前は本人の道だけで、管理者が直した名前は、本人がつなぎ直すまで古い名前で配られた (改善ループ 30)
+    if (display_name !== undefined) {
+      try {
+        refreshSocketUser(getIo(), id, { display_name: result.rows[0].display_name });
+      } catch (err) {
+        logger.warn(`[admin] socket の利用者情報を書き換えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      await announceUserUpdated(result.rows[0]);
+    }
 
     res.json({ user: result.rows[0] });
   } catch (err) {

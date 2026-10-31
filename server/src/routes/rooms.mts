@@ -373,7 +373,9 @@ router.get('/', async (req, res) => {
     const result = await pool.query(
       `SELECT r.*,
               rm.push_muted,
-              m.content AS last_message_content,
+              -- ★ 一覧はプレビューにしか使わないので 200 字で切る。AI の長文 (1 万字超) が丸ごと載り、
+              --   新着のたびに全端末が取り直す一覧が 100 KB を超えていた (改善ループ 30)
+              LEFT(m.content, 200) AS last_message_content,
               m.created_at AS last_message_at,
               m.type AS last_message_type,
               u.display_name AS last_message_sender,

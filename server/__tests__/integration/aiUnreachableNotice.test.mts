@@ -6,7 +6,7 @@ import request from 'supertest';
 import { app } from '../../src/app.mts';
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
-import { noticeAiUnreachable, _resetAiUnreachableNotice } from '../../src/services/aiUnreachableNotice.mts';
+import { noticeAiUnreachable, _resetAiUnreachableNotice, isAgentWebhook } from '../../src/services/aiUnreachableNotice.mts';
 
 type TestUser = Awaited<ReturnType<typeof createTestUser>>;
 
@@ -56,5 +56,19 @@ describe('AI に届かなかったときの 1 行', () => {
     await noticeAiUnreachable('message.created', roomId, payload('@アシスタント 1'), t);
     expect(await noticeAiUnreachable('message.created', roomId, payload('@アシスタント 2'), t + 60_000)).toBe(false);
     expect(await noticeAiUnreachable('message.created', roomId, payload('@アシスタント 3'), t + 11 * 60_000)).toBe(true);
+  });
+});
+
+describe('isAgentWebhook — AI の受け口の失敗だけを知らせる (改善ループ 30)', () => {
+  it('★★ agent-server の宛先 (AGENT_URL / 既定 localhost:4000) と同じなら true', () => {
+    expect(isAgentWebhook('http://localhost:4000/webhook/tealus', 'http://localhost:4000')).toBe(true);
+    expect(isAgentWebhook('http://127.0.0.1:4000/webhook/tealus', 'http://localhost:4000')).toBe(true);
+  });
+  it('★ 別の受け口 (Kairos・試験用の受け手) の失敗では知らせない', () => {
+    expect(isAgentWebhook('http://localhost:9999/webhook', 'http://localhost:4000')).toBe(false);
+    expect(isAgentWebhook('https://kairos.example.com/hook', 'http://localhost:4000')).toBe(false);
+  });
+  it('壊れた URL は false (落ちない)', () => {
+    expect(isAgentWebhook('not a url', 'http://localhost:4000')).toBe(false);
   });
 });

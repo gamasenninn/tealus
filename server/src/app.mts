@@ -14,7 +14,7 @@ import { logger } from './utils/logger.mts';
 import { pool } from './db/pool.mts';
 import { checkMigrations, findPendingMigrations } from './services/migrationCheck.mts';
 import { setWebhookUndeliveredHandler } from './services/webhook.mts';
-import { noticeAiUnreachable } from './services/aiUnreachableNotice.mts';
+import { noticeAiUnreachable, isAgentWebhook } from './services/aiUnreachableNotice.mts';
 import { ensureMediaDirs } from './utils/mediaSetup.mts';
 import { MEDIA_ROOT } from './middleware/upload.mts';
 import { runStartupEnvCheck } from './utils/envCheck.mts';
@@ -349,7 +349,8 @@ function checkBuildArtifacts(): void {
 if (import.meta.main) {
   const PORT = process.env.PORT || 3000;
   // ★ AI に届かなかった便に部屋へ 1 行返す (2026-10-30 小野さん判断 C)。webhook から直接 import すると輪になるので、ここで差し込む
-  setWebhookUndeliveredHandler((eventType, roomId, payload) => {
+  setWebhookUndeliveredHandler((eventType, roomId, payload, url) => {
+    if (!isAgentWebhook(url)) return;   // ★ AI 以外の受け口の失敗では知らせない (改善ループ 30)
     void noticeAiUnreachable(eventType, roomId, payload as Parameters<typeof noticeAiUnreachable>[2]);
   });
   checkBuildArtifacts();
@@ -424,6 +425,9 @@ if (import.meta.main) {
       setTimeout(() => process.exit(1), 500);   // ★ 記録をファイルへ書き切ってから終える
       return;
     }
+    // ★ 通ったときも 1 行残す。無言だと「確かめて通った」と「確かめられずに通った」が見分けられない (改善ループ 30)
+    if (pending === null) logger.warn('[migration-check] 適用済みの台帳を読めなかったので、確かめずに起動します');
+    else logger.info('[migration-check] 未適用の migration は 0 件');
     startListening();
   });
 
