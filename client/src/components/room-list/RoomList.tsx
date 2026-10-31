@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMultiTalkStore, roomClickAction } from '../../stores/multiTalkStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useRoomStore } from '../../stores/roomStore';
+import { useRoomStore, isRoomsFetchInflight } from '../../stores/roomStore';
 import { useConfirm, notifyFailure } from '../../stores/confirmStore';
 import { getSocket, joinRoom, leaveRoom } from '../../services/socket';
 import { api } from '../../services/api';
@@ -82,8 +82,8 @@ function RoomList() {
 
     const handleNewMessage = (msg: { sender_id?: string; type?: string; room_id?: string; push_kind?: 'human' | 'machine' | 'off' }) => {
       // ★ この effect は部屋の数が変わったときしか張り直さないので、一覧と設定は届いた時点のものを読む
-      const current = useRoomStore.getState().rooms;
-      if (shouldRefreshOnNewMessage(msg.room_id, current)) fetchRooms();   // ★ 一覧に無い部屋 (管理者の見守り) では取り直さない (改善ループ 31)
+      const { rooms: current, error } = useRoomStore.getState();
+      if (shouldRefreshOnNewMessage(msg.room_id, current, { inflight: isRoomsFetchInflight(), failed: !!error })) fetchRooms();   // ★ 一覧に無い部屋 (管理者の見守り) では取り直さない (改善ループ 31)
       // ★ 自分・system メッセージ・通知音オフ・「このルームの通知」オフは鳴らさない (utils/messageSound)
       const room = current.find(r => r.id === msg.room_id);
       const prefs = {

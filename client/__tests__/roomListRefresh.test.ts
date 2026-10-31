@@ -18,4 +18,10 @@ describe('shouldRefreshOnNewMessage', () => {
   it('部屋の分からない便は今までどおり取り直す', () => {
     expect(shouldRefreshOnNewMessage(undefined, rooms)).toBe(true);
   });
+  it('★ 一覧に無い部屋でも、取り直しの最中なら取り直す (招かれた直後: room:added の取り直しが新着より先に読み終わる隙間、改善ループ 32)', () => {
+    expect(shouldRefreshOnNewMessage('r9', rooms, { inflight: true })).toBe(true);
+  });
+  it('★ 一覧に無い部屋でも、前の取り直しが失敗していたら取り直す (以前は次の新着で治っていた)', () => {
+    expect(shouldRefreshOnNewMessage('r9', rooms, { failed: true })).toBe(true);
+  });
 });

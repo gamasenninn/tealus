@@ -80,8 +80,25 @@ describe('roomMcpManager', () => {
     fs.utimesSync(p, later, later);
 
     await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
-    expect(mockClose).toHaveBeenCalled();
     expect(mockConnect.mock.calls.length).toBeGreaterThan(connects);
+    // ★ 古い接続はすぐには閉じない (会話中のセッションがまだ握っている。改善ループ 32)
+    expect(mockClose).not.toHaveBeenCalled();
+  });
+
+  test('★★ 作り直した古い接続は、掃除の時間 (MCP_CACHE_TTL) が過ぎてから閉じる', async () => {
+    writeRoomMcp(tmpDir, { mcpServers: {} });
+    const { getOrCreateRoomMcp, startSweeper, stopSweeper } = require('../../src/mcp/roomMcpManager');
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    const p = roomConfigPath(tmpDir, 'mcp_config.json');
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(p, later, later);
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    expect(mockClose).not.toHaveBeenCalled();
+
+    startSweeper();
+    await new Promise((r) => setTimeout(r, 250));   // TTL 100ms + 掃除 50ms ごと
+    stopSweeper();
+    expect(mockClose).toHaveBeenCalledTimes(2);   // 古い接続 (外したもの) と、使われなくなった新しい接続の両方
   });
 
   test('★ 部屋の mcp_config.json を消したときも作り直す', async () => {

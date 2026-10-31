@@ -43,6 +43,9 @@ let sharedGlobalServers: MCPServerStdio[] | null = null;
 let sharedGlobalPromise: Promise<MCPServerStdio[]> | null = null;
 // ★ 起こしている最中の部屋 (同じ部屋に同時に来た呼び出しは同じ起動を待つ)
 const roomMcpPending = new Map<string, Promise<MCPServerStdio[]>>();
+// ★ 作り直して外した古い接続 (改善ループ 32)。会話モードのセッションは始めたときの接続を最後まで握って道具を呼ぶので、
+//   すぐ閉じると会話の途中で道具が全部失敗する。掃除の時間 (MCP_CACHE_TTL、セッションの寿命と同じ 30 分) が過ぎてから閉じる
+const retiredEntries: Array<{ entry: RoomMcpEntry; retiredAt: number }> = [];
 let sweepTimer: NodeJS.Timeout | null = null;
 
 // MCP server connect timeout (#226 Phase C → #227 完全 fix)
@@ -158,8 +161,8 @@ export async function getOrCreateRoomMcp(agentId: string, roomId: string, worksp
   //   ここを使う会話モードだけ最後に使ってから 30 分は古い道具のままだった (改善ループ 30)
   if (cached && cached.configMtime !== roomConfigMtime(workspacePath)) {
     logger.info(`[RoomMCP] 部屋の設定が変わったので作り直します: ${key}`);
-    roomMcpCache.delete(key);   // ★ 閉じる前に外す (閉じている間に来た呼び出しが同じものを二重に閉じないように)
-    await closeEntry(cached);
+    roomMcpCache.delete(key);
+    retiredEntries.push({ entry: cached, retiredAt: Date.now() });
   }
   if (roomMcpCache.has(key)) {
     const entry = roomMcpCache.get(key)!;
@@ -290,8 +293,14 @@ export function startSweeper(): void {
     for (const [key, entry] of roomMcpCache) {
       if (now - entry.lastAccessedAt > config.MCP_CACHE_TTL) {
         logger.info(`[RoomMCP] Evicting expired: ${key}`);
+        roomMcpCache.delete(key);   // ★ 閉じる前に外す (閉じている間に来た呼び出しに閉じかけを返さない)
         await closeEntry(entry);
-        roomMcpCache.delete(key);
+      }
+    }
+    for (let i = retiredEntries.length - 1; i >= 0; i--) {
+      if (now - retiredEntries[i].retiredAt > config.MCP_CACHE_TTL) {
+        const [{ entry }] = retiredEntries.splice(i, 1);
+        await closeEntry(entry);
       }
     }
   }, config.MCP_SWEEP_INTERVAL);
@@ -314,8 +323,8 @@ export async function invalidateRoomMcp(agentId: string, roomId: string): Promis
   const key = `${agentId}:${roomId}`;
   if (roomMcpCache.has(key)) {
     const entry = roomMcpCache.get(key)!;
+    roomMcpCache.delete(key);   // ★ 閉じる前に外す (閉じている間に来た呼び出しが同じものをもう一度閉じないように)
     await closeEntry(entry);
-    roomMcpCache.delete(key);
     logger.info(`[RoomMCP] Invalidated: ${key}`);
   }
 }
@@ -330,6 +339,7 @@ export async function closeAllRoomMcp(): Promise<void> {
     await closeEntry(entry);
   }
   roomMcpCache.clear();
+  for (const { entry } of retiredEntries.splice(0)) await closeEntry(entry);
 
   // 共有グローバルサーバーを close (★ 起こしている最中なら、起き終わるのを待ってから閉じる)
   const globals = sharedGlobalServers ?? (sharedGlobalPromise ? await sharedGlobalPromise.catch(() => []) : []);

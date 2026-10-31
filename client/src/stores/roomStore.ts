@@ -26,6 +26,8 @@ interface RoomState {
 }
 
 let roomsInflight: Promise<void> | null = null;
+/** 部屋一覧の取り直しが走っているか (新着で取り直すかの判断に使う、改善ループ 32) */
+export function isRoomsFetchInflight(): boolean { return roomsInflight !== null; }
 let roomsAgain = false;
 /** reset のたびに進める。取り直しの応答は、出したときと同じ世代のときだけ入れる */
 let roomsGeneration = 0;
