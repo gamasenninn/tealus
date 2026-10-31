@@ -130,4 +130,12 @@ describe('findPendingMigrations (起動を止める判定)', () => {
     const query = async () => { throw new Error('ECONNREFUSED'); };
     expect(await findPendingMigrations({ query, listFiles: files })).toBeNull();
   });
+  test('★ 判定できなかった理由を onSkip に渡す (台帳か・DB か・フォルダかが記録 1 行で分かるように、改善ループ 31)', async () => {
+    const reasons: string[] = [];
+    const query = async () => { throw new Error('ECONNREFUSED'); };
+    await findPendingMigrations({ query, listFiles: files, onSkip: (r) => reasons.push(r) });
+    const noDir = () => { throw new Error('ENOENT: migrations'); };
+    await findPendingMigrations({ query: async () => ({ rows: [] }), listFiles: noDir, onSkip: (r) => reasons.push(r) });
+    expect(reasons).toEqual(['ECONNREFUSED', 'ENOENT: migrations']);
+  });
 });

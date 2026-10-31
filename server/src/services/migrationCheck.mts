@@ -82,12 +82,14 @@ async function checkLedger(
  *   止めるのは「未適用が確か」なときだけ。止める・案内するのは呼び手 (app.mts)
  */
 export async function findPendingMigrations(
-  { query, listFiles }: Pick<MigrationCheckDeps, 'query'> & { listFiles: () => string[] },
+  { query, listFiles, onSkip }: Pick<MigrationCheckDeps, 'query'> & { listFiles: () => string[]; onSkip?: (reason: string) => void },
 ): Promise<string[] | null> {
   try {
     const { rows } = await query('SELECT filename FROM schema_migrations') as { rows: { filename: string }[] };
     return planMigrations(listFiles(), new Set(rows.map((r) => r.filename)));
-  } catch {
+  } catch (err) {
+    // ★ 理由を渡す。台帳が無い・DB に届かない・フォルダを読めない、が記録で見分けられるように (改善ループ 31)
+    onSkip?.(err instanceof Error ? err.message : String(err));
     return null;
   }
 }

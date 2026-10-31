@@ -35,8 +35,7 @@ import SystemMessage from './SystemMessage';
 import type { MessageEditEntry } from '../../utils/editHistory';
 import { buildContextMenuItems } from '../../hooks/useContextMenuItems';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
+import { MARKDOWN_PLUGINS } from '../../utils/markdownPlugins';
 import type { MediaItem, Message, Reaction } from '../../types';
 import { quoteText } from '../../utils/replyQuote';
 import './MessageBubble.css';
@@ -303,7 +302,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                   <>
                     {mdPreview ? (
                       <div className={`bubble-text bubble-markdown ${!showFull ? 'collapsed' : ''}`}>
-                        <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={{
                           p: ({ children }) => <p>{processMentions(children)}</p>,
                           li: ({ children }) => <li>{processMentions(children)}</li>,
                         }}>{displayContent}</Markdown>

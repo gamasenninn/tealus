@@ -163,6 +163,10 @@ agent-server は server から **Webhook イベント** (POST `/webhook/tealus`)
 > ★ **`docker-compose.full.yml` で動かしている場合、URL は `http://agent-server:4000/webhook/tealus`**（[#558](https://github.com/gamasenninn/tealus/issues/558)）。
 > 本体と agent-server は別のコンテナなので、`localhost` では届きません (コンテナの名前で呼びます)。
 
+> ★ **URL のホストとポートは、本体の `AGENT_URL` (無ければ `http://localhost:4000`) と同じ書き方にしてください。**
+> 本体は、この URL が `AGENT_URL` と同じときだけ「AI に届かなかった」と判断して、部屋に「⚠️ AI に届きませんでした」を 1 行出します (2026-10-30〜)。
+> 書き方が違う (例: `AGENT_URL` は `agent-server`、webhook は `host.docker.internal`) と、届かなくても知らせが出ません (`localhost` と `127.0.0.1` は同じ扱い)。
+
 ### 4-2. テスト送信で疎通確認
 
 webhook 一覧の作成した行で **「テスト送信」** ボタンをクリック → status `200` が返れば agent-server 側で受信成功 ✅。

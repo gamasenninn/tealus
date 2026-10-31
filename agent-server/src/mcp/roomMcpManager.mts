@@ -30,6 +30,8 @@ interface RoomMcpEntry {
   servers: MCPServerStdio[];
   lastAccessedAt: number;
   workspacePath: string;
+  /** 作ったときの部屋の mcp_config.json の更新時刻 (無ければ -1) */
+  configMtime: number;
 }
 
 // ルーム固有キャッシュ: key = "${agentId}:${roomId}"
@@ -150,6 +152,15 @@ async function connectGlobalConfig(): Promise<MCPServerStdio[]> {
 export async function getOrCreateRoomMcp(agentId: string, roomId: string, workspacePath: string): Promise<MCPServerStdio[]> {
   const key = `${agentId}:${roomId}`;
 
+  const cached = roomMcpCache.get(key);
+  // ★ 部屋の mcp_config.json が作ったときから変わっていたら作り直す。以前はダッシュボードから保存したときだけ
+  //   作り直していて、ファイルを直接直すと、毎回ファイルを読む Light / Deep には効くのに、
+  //   ここを使う会話モードだけ最後に使ってから 30 分は古い道具のままだった (改善ループ 30)
+  if (cached && cached.configMtime !== roomConfigMtime(workspacePath)) {
+    logger.info(`[RoomMCP] 部屋の設定が変わったので作り直します: ${key}`);
+    roomMcpCache.delete(key);   // ★ 閉じる前に外す (閉じている間に来た呼び出しが同じものを二重に閉じないように)
+    await closeEntry(cached);
+  }
   if (roomMcpCache.has(key)) {
     const entry = roomMcpCache.get(key)!;
     entry.lastAccessedAt = Date.now();
@@ -164,8 +175,17 @@ export async function getOrCreateRoomMcp(agentId: string, roomId: string, worksp
   return created;
 }
 
+function roomConfigMtime(workspacePath: string): number {
+  try {
+    return fs.statSync(roomConfigPath(workspacePath, 'mcp_config.json')).mtimeMs;
+  } catch {
+    return -1;
+  }
+}
+
 async function createRoomMcp(key: string, roomId: string, workspacePath: string): Promise<MCPServerStdio[]> {
   logger.info(`[RoomMCP] Creating MCP connections for ${key}`);
+  const configMtime = roomConfigMtime(workspacePath);   // ★ 読む前に取る (読んでいる間に書き換わったら次で作り直す)
   // ★ 共有グローバルは部屋の filesystem と同時に起こす (以前は filesystem の後に順番に待っていた)
   const globalPromise = getOrCreateSharedGlobal();
   const servers: MCPServerStdio[] = [];
@@ -223,6 +243,7 @@ async function createRoomMcp(key: string, roomId: string, workspacePath: string)
     servers,
     lastAccessedAt: Date.now(),
     workspacePath,
+    configMtime,
   });
 
   // 3. グローバルMCP（共有）。上で起こし始めたものを待つ

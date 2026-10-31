@@ -418,6 +418,7 @@ if (import.meta.main) {
   void findPendingMigrations({
     query: (sql) => pool.query(sql),
     listFiles: () => fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort(),
+    onSkip: (reason) => logger.warn(`[migration-check] 未適用かどうかを確かめられないまま起動します: ${reason}`),
   }).then((pending) => {
     if (pending && pending.length > 0) {
       logger.error(`[migration-check] ★ 未適用の migration が ${pending.length} 件あるので起動しません: ${pending.join(', ')}`);
@@ -426,8 +427,7 @@ if (import.meta.main) {
       return;
     }
     // ★ 通ったときも 1 行残す。無言だと「確かめて通った」と「確かめられずに通った」が見分けられない (改善ループ 30)
-    if (pending === null) logger.warn('[migration-check] 適用済みの台帳を読めなかったので、確かめずに起動します');
-    else logger.info('[migration-check] 未適用の migration は 0 件');
+    if (pending !== null) logger.info('[migration-check] 未適用の migration は 0 件');
     startListening();
   });
 

@@ -69,6 +69,32 @@ describe('roomMcpManager', () => {
     expect(mockConnect.mock.calls.length).toBe(connectCount);  // 増えない
   });
 
+  test('★★ 部屋の mcp_config.json を書き換えたら、次の呼び出しで作り直す (改善ループ 30。会話モードだけ最大 30 分古い道具のままだった)', async () => {
+    writeRoomMcp(tmpDir, { mcpServers: {} });
+    const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    const connects = mockConnect.mock.calls.length;
+    const p = roomConfigPath(tmpDir, 'mcp_config.json');
+    fs.writeFileSync(p, JSON.stringify({ mcpServers: { extra: { command: 'node', args: ['x.js'] } } }));
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(p, later, later);
+
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    expect(mockClose).toHaveBeenCalled();
+    expect(mockConnect.mock.calls.length).toBeGreaterThan(connects);
+  });
+
+  test('★ 部屋の mcp_config.json を消したときも作り直す', async () => {
+    writeRoomMcp(tmpDir, { mcpServers: {} });
+    const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    const connects = mockConnect.mock.calls.length;
+    fs.rmSync(roomConfigPath(tmpDir, 'mcp_config.json'));
+
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    expect(mockConnect.mock.calls.length).toBeGreaterThan(connects);
+  });
+
   test('異なるルームは別のキャッシュエントリだがグローバルMCPは共有', async () => {
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     const servers1 = await getOrCreateRoomMcp('agent1', 'room1', tmpDir);

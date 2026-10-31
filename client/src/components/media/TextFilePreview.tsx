@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
+import { MARKDOWN_PLUGINS } from '../../utils/markdownPlugins';
 import { NETWORK_ERROR_MESSAGE } from '../../services/api';
 import './TextFilePreview.css';
 
@@ -175,7 +174,7 @@ export default function TextFilePreview({ media }: TextFilePreviewProps) {
     if (isMd) {
       return (
         <div className="text-file-preview__markdown">
-          <Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{text}</Markdown>
+          <Markdown remarkPlugins={MARKDOWN_PLUGINS}>{text}</Markdown>
         </div>
       );
     }
