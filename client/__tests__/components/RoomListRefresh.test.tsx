@@ -42,11 +42,13 @@ describe('RoomList — 取り直すきっかけ (#532)', () => {
     ['unread:changed', { room_id: 'r1' }, '別の端末で読んだ'],
     ['message:updated', { id: 'm1', room_id: 'r1', content: '直した' }, '最後の投稿を編集した'],
     ['message:deleted', { message_id: 'm1', room_id: 'r1' }, '最後の投稿を消した'],
-  ] as Array<[string, unknown, string]>)('★★ %s で一覧を取り直す (%s)', (event, payload, _why) => {
+  ] as Array<[string, unknown, string]>)('★★ %s で一覧を取り直す (%s)', async (event, payload, _why) => {
     renderList();
     const before = fetchRooms.mock.calls.length;
     expect(handlers.has(event)).toBe(true);
     act(() => handlers.get(event)!(payload));
+    // ★ 2026-11-01: 同じ知らせは全タブに届くので、少し (最大 300ms) 待ってから取りに行く (他のタブの結果が来れば取りに行かない)
+    await act(async () => { await new Promise((r) => setTimeout(r, 350)); });
     expect(fetchRooms.mock.calls.length).toBe(before + 1);
   });
 

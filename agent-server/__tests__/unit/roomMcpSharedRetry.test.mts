@@ -213,4 +213,38 @@ describe('共有グローバルの tealus の起こし直し', () => {
     await awaitTealusRetry(10_000);
     expect(constructed.filter((n) => n === 'tealus')).toHaveLength(1);
   });
+
+  // ★ 起動のあとで tealus の子プロセスが死んだ場合 (11-01 Q0 の 8)。今までは起動時の失敗だけを起こし直していた
+  test('★★ checkSharedTealusHealth: 共有の tealus が答えなければ外して、起こし直しに回す', async () => {
+    const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    const servers = await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    const tealus = servers.find((s: { name: string }) => s.name === 'tealus');
+    tealus.listTools = jest.fn(async () => { throw new Error('MCP error -32000: Connection closed'); });
+    await checkSharedTealusHealth(1000);
+    expect(sharedTealusProblem()).not.toBeNull();
+    expect(tealus.close).toHaveBeenCalled();
+    expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(0);
+    now += 61_000;
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    await settle();
+    expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
+  });
+
+  test('checkSharedTealusHealth: 答えていれば何もしない', async () => {
+    const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    await checkSharedTealusHealth(1000);
+    expect(sharedTealusProblem()).toBeNull();
+    expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
+  });
+
+  test('★ checkSharedTealusHealth: 答えが時間内に来なければ死んだとみなす', async () => {
+    const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    const servers = await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    servers.find((s: { name: string }) => s.name === 'tealus').listTools = jest.fn(() => new Promise(() => {}));
+    await checkSharedTealusHealth(20);
+    expect(sharedTealusProblem()).not.toBeNull();
+  });
 });

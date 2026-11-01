@@ -25,6 +25,59 @@ interface RoomState {
   updateRoomInList: (roomId: string, updates: Partial<Room>) => void;
 }
 
+// ★ 部屋の一覧の取り直しを、同じ人のタブどうしで分け合う (2026-11-01)。
+//   既読 1 回ごとに全タブへ unread:changed が届き、14〜22 タブがそれぞれ取り直していた (まとめは 1 タブの中だけ)。
+//   名前に利用者の ID を入れる (同じブラウザの別の人の一覧を受け取らない)。BroadcastChannel の無いブラウザでは今までどおり
+let roomsChannel: BroadcastChannel | null = null;
+/** 一覧に入れた結果の「取りに行った時刻」。これより古い結果では上書きしない */
+let roomsAppliedStartedAt = 0;
+
+interface SharedRooms { startedAt: number; rooms: Room[] }
+
+function applyRooms(rooms: Room[], startedAt: number): boolean {
+  if (startedAt < roomsAppliedStartedAt) return false;
+  roomsAppliedStartedAt = startedAt;
+  useRoomStore.setState({ rooms, error: null });
+  // PWA App Badge を foreground でも自動 sync (#badge SPIKE、5/12)
+  syncBadgeFromRooms(rooms);
+  return true;
+}
+
+/** ログインした人の一覧の共有を始める (一覧の画面が呼ぶ)。同じ人なら何度呼んでも 1 本 */
+export function bindRoomsChannel(userId: string): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  const name = `tealus-rooms:${userId}`;
+  if (roomsChannel?.name === name) return;
+  roomsChannel?.close();
+  roomsChannel = new BroadcastChannel(name);
+  roomsChannel.onmessage = (e: MessageEvent<SharedRooms>) => {
+    const d = e.data;
+    if (!d || !Array.isArray(d.rooms) || typeof d.startedAt !== 'number') return;
+    applyRooms(d.rooms, d.startedAt);
+  };
+}
+
+function unbindRoomsChannel(): void {
+  roomsChannel?.close();
+  roomsChannel = null;
+  roomsAppliedStartedAt = 0;
+}
+
+/**
+ * socket の知らせで一覧を取り直す (2026-11-01)。少しだけ (0〜maxJitterMs) 待ち、その間に
+ * 「知らせより後に取りに行った」結果が他のタブから届いていれば、自分は取りに行かない
+ */
+export function fetchRoomsFromEvent(maxJitterMs = 300): Promise<void> {
+  const eventAt = Date.now();
+  if (!roomsChannel) return useRoomStore.getState().fetchRooms();
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      if (roomsAppliedStartedAt >= eventAt) { resolve(); return; }
+      void useRoomStore.getState().fetchRooms().finally(resolve);
+    }, Math.random() * maxJitterMs);
+  });
+}
+
 let roomsInflight: Promise<void> | null = null;
 /** 部屋一覧の取り直しが走っているか (新着で取り直すかの判断に使う、改善ループ 32) */
 export function isRoomsFetchInflight(): boolean { return roomsInflight !== null; }
@@ -42,6 +95,7 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
   reset: () => {
     roomsGeneration++;
     roomsAgain = false;
+    unbindRoomsChannel();   // ★ ログアウトしたら、他のタブから配られても入れない
     set({ rooms: [], currentRoom: null, members: [], lastReadMessageId: null, error: null });
     syncBadgeFromRooms([]);
   },
@@ -55,12 +109,13 @@ export const useRoomStore = create<RoomState>()((set, get) => ({
       do {
         roomsAgain = false;
         const gen = roomsGeneration;
+        const startedAt = Date.now();
         try {
           const data = await api.getRooms();
           if (gen !== roomsGeneration) return;   // ★ 途中でログアウトした = 前の人の一覧なので捨てる
-          set({ rooms: data.rooms, error: null });
-          // PWA App Badge を foreground でも自動 sync (#badge SPIKE、5/12)
-          syncBadgeFromRooms(data.rooms);
+          if (applyRooms(data.rooms, startedAt)) {
+            roomsChannel?.postMessage({ startedAt, rooms: data.rooms } satisfies SharedRooms);   // ★ 同じ人の他のタブへ配る
+          }
         } catch {
           if (gen !== roomsGeneration) return;
           set({ error: 'ルーム一覧の取得に失敗しました' });

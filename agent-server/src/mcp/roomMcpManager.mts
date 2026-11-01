@@ -85,6 +85,31 @@ function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
 }
 
 /**
+ * 共有グローバルの tealus が今も答えるかを確かめる (掃除のたび。11-01 Q0 の 8)
+ * ★ 起動のあとで子プロセスが死ぬと、配列には残ったまま道具の呼び出しだけが失敗し続けていた
+ *   (起こし直すのは起動時の失敗だけだった)。答えなければ外して閉じ、起こし直しに回す
+ */
+export async function checkSharedTealusHealth(timeoutMs = 10_000): Promise<void> {
+  const target = sharedGlobalServers;
+  if (!target || sharedTealusMissing || tealusRetry) return;
+  const tealus = target.find((s) => s.name === 'tealus');
+  if (!tealus) return;
+  let timer: NodeJS.Timeout | undefined;
+  const alive = await Promise.race([
+    tealus.listTools().then(() => true, () => false),
+    new Promise<boolean>((r) => { timer = setTimeout(() => r(false), timeoutMs); }),
+  ]);
+  clearTimeout(timer);
+  if (alive || sharedGlobalServers !== target) return;
+  const i = target.indexOf(tealus);
+  if (i >= 0) target.splice(i, 1);
+  sharedTealusMissing = true;
+  lastTealusAttempt = 0;   // ★ すぐ起こし直してよい (前回の試みからの間隔は関係ない)
+  logger.warn('[RoomMCP] 共有グローバルの tealus が答えません。外して起こし直します');
+  try { await tealus.close(); } catch { /* ignore */ }
+}
+
+/**
  * 共有グローバルの tealus が欠けていれば、そのことを一文で返す (鼓動の info.problem に使う。docs/09 §3.2)
  */
 export function sharedTealusProblem(): string | null {
@@ -366,8 +391,8 @@ export function startSweeper(): void {
         await closeEntry(entry);
       }
     }
-    // ★ 誰も呼ばなくても、欠けた tealus を裏で起こし直しておく (会話の 1 回目を待たせない)
-    void retryTealusIfMissing().catch(() => {});
+    // ★ 起動のあとに死んでいないかを確かめ、欠けた tealus を裏で起こし直しておく (会話の 1 回目を待たせない)
+    void checkSharedTealusHealth().then(() => retryTealusIfMissing()).catch(() => {});
   }, config.MCP_SWEEP_INTERVAL);
 }
 

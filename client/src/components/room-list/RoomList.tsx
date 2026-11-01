@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMultiTalkStore, roomClickAction } from '../../stores/multiTalkStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useRoomStore, isRoomsFetchInflight } from '../../stores/roomStore';
+import { useRoomStore, isRoomsFetchInflight, bindRoomsChannel, fetchRoomsFromEvent } from '../../stores/roomStore';
 import { useConfirm, notifyFailure } from '../../stores/confirmStore';
 import { getSocket, joinRoom, leaveRoom } from '../../services/socket';
 import { api } from '../../services/api';
@@ -38,6 +38,9 @@ interface RoomContextMenuState {
 function RoomList() {
   const { user } = useAuthStore();
   const { rooms, fetchRooms, error } = useRoomStore();
+
+  // ★ 一覧の取り直しの結果を、同じ人の他のタブと分け合う (2026-11-01)
+  useEffect(() => { if (user?.id) bindRoomsChannel(user.id); }, [user?.id]);
   const confirm = useConfirm();
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
@@ -83,7 +86,7 @@ function RoomList() {
     const handleNewMessage = (msg: { sender_id?: string; type?: string; room_id?: string; push_kind?: 'human' | 'machine' | 'off' }) => {
       // ★ この effect は部屋の数が変わったときしか張り直さないので、一覧と設定は届いた時点のものを読む
       const { rooms: current, error } = useRoomStore.getState();
-      if (shouldRefreshOnNewMessage(msg.room_id, current, { inflight: isRoomsFetchInflight(), failed: !!error })) fetchRooms();   // ★ 一覧に無い部屋 (管理者の見守り) では取り直さない (改善ループ 31)
+      if (shouldRefreshOnNewMessage(msg.room_id, current, { inflight: isRoomsFetchInflight(), failed: !!error })) void fetchRoomsFromEvent();   // ★ 一覧に無い部屋 (管理者の見守り) では取り直さない (改善ループ 31)
       // ★ 自分・system メッセージ・通知音オフ・「このルームの通知」オフは鳴らさない (utils/messageSound)
       const room = current.find(r => r.id === msg.room_id);
       const prefs = {
@@ -109,7 +112,8 @@ function RoomList() {
 
     // ★ #532 一覧を取り直す (鳴らさない)。以前は新着と部屋の追加・変更だけで取り直していたので、
     //   最後の投稿を編集・削除してもプレビューが古いまま、別の端末で読んでも未読数とバッジが残った
-    const refresh = () => { fetchRooms(); };
+    // ★ 同じ知らせは同じ人の全タブに届くので、タブどうしで分け合う (roomStore の fetchRoomsFromEvent、2026-11-01)
+    const refresh = () => { void fetchRoomsFromEvent(); };
     socket.on('unread:changed', refresh);
     socket.on('message:updated', refresh);
     socket.on('message:deleted', refresh);
