@@ -73,7 +73,7 @@ export function fetchRoomsFromEvent(maxJitterMs = 300): Promise<void> {
   return new Promise<void>((resolve) => {
     setTimeout(() => {
       if (roomsAppliedStartedAt >= eventAt) { resolve(); return; }
-      void useRoomStore.getState().fetchRooms().finally(resolve);
+      void Promise.resolve(useRoomStore.getState().fetchRooms()).finally(resolve);
     }, Math.random() * maxJitterMs);
   });
 }
