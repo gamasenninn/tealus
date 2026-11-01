@@ -88,15 +88,15 @@ describe('MCP ライフサイクル統合テスト', () => {
   });
 
   // --- 4. invalidateRoomMcp ---
-  test('4. invalidateRoomMcp → 指定ルームだけ close + キャッシュ削除', async () => {
+  test('4. invalidateRoomMcp → キャッシュから外し、閉じるのは掃除の時間が過ぎてから (改善ループ 33)', async () => {
     const { getOrCreateRoomMcp, invalidateRoomMcp } = require('../../src/mcp/roomMcpManager');
     await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
     await getOrCreateRoomMcp('agent1', 'room2', tmpDir);
 
     await invalidateRoomMcp('agent1', 'room1');
 
-    // room1 の close が呼ばれた
-    expect(mockClose).toHaveBeenCalled();
+    // ★ 会話中のセッションが握っている接続をすぐには閉じない (閉じるのは掃除。unit の roomMcpManager.test で確かめる)
+    expect(mockClose).not.toHaveBeenCalled();
 
     // room1 は再度 connect が必要（キャッシュ削除済み）
     mockConnect.mockClear();
