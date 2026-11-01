@@ -39,7 +39,9 @@ const probe = process.argv.includes('--probe');
 // ★ メディアの置き場は本体の設定 (server/.env の MEDIA_ROOT、無ければ本体の既定 <repo>/media)。値は出さない
 const serverEnvPath = path.join(import.meta.dirname, '..', '..', 'server', '.env');
 const serverEnv = fs.existsSync(serverEnvPath) ? dotenv.parse(fs.readFileSync(serverEnvPath)) : {};
-const mediaDir = serverEnv.MEDIA_ROOT || path.join(import.meta.dirname, '..', '..', 'media');
+// ★ 相対の値は、本体と同じく server/ から解く (本体は server/ で起動する。agent-server/ から解くと別の場所を見て全件「欠け」になる)
+const serverDir = path.join(import.meta.dirname, '..', '..', 'server');
+const mediaDir = serverEnv.MEDIA_ROOT ? path.resolve(serverDir, serverEnv.MEDIA_ROOT) : path.join(import.meta.dirname, '..', '..', 'media');
 const now = new Date();
 const mediaRefPaths = await fetchMediaRefPaths(process.env);
 

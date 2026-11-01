@@ -26,7 +26,7 @@ import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
-import { getOrCreateRoomMcp } from '../mcp/roomMcpManager.mts';
+import { getOrCreateRoomMcp, awaitTealusRetry } from '../mcp/roomMcpManager.mts';
 import { getBotIdentity } from '../webhook/handler.mts';
 // ★ #437 Light と同じ 2 つを、会話モードにも載せる (どちらも env で opt-in)
 import { loadOrganonPolysemeForPrompt } from '../lib/organonContext.mts';
@@ -373,6 +373,8 @@ router.post('/session', async (req, res) => {
 
     // MCP を温める + 道具一覧を取る。1 つのサーバが落ちても会話は始められるようにする
     const workspacePath = path.join(config.WORKSPACE_ROOT, agentId, roomId);
+    // ★ 道具は会話の最初に決まるので、tealus を起こし直している最中なら少しだけ待つ (改善ループ 35)
+    await awaitTealusRetry(10_000);
     const servers = await getOrCreateRoomMcp(agentId, roomId, workspacePath) as unknown as McpServerLike[];
 
     // ★ そのルームで許す道具 = 全部 − 既定で外す分 − ルームが外した分 + ルームが戻した分 (#418)

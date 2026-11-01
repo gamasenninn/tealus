@@ -85,6 +85,21 @@ function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
 }
 
 /**
+ * 走っている起こし直しがあれば、済むまで (最大 maxMs) 待つ。新しくは始めない (改善ループ 35)
+ * ★ 会話モードは始めたときの道具を最後まで使うので、起こし直しの最中に始めると、その会話の間ずっと tealus が無い。
+ *   会話の開始だけはこれを呼ぶ。失敗が続くときは起こし直しが 1 分に 1 回しか走らないので、毎回は待たない
+ */
+export async function awaitTealusRetry(maxMs: number): Promise<void> {
+  if (!tealusRetry) return;
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([
+    tealusRetry.catch(() => {}),
+    new Promise<void>((r) => { timer = setTimeout(r, maxMs); }),
+  ]);
+  clearTimeout(timer);
+}
+
+/**
  * 共有グローバルに tealus が欠けていたら起こし直す (1 分に 1 回まで。同時に呼ばれたら同じ試みを待つ)
  * ★ 足す先は今の共有グローバルの配列。試している間に closeAllRoomMcp で捨てられていたら、起こした分は閉じる
  */
@@ -396,7 +411,7 @@ export async function closeAllRoomMcp(): Promise<void> {
   for (const server of globals) {
     try { await server.close(); } catch { /* ignore */ }
   }
-  if (tealusRetry) await tealusRetry.catch(() => {});
+  // ★ 起こし直しの終わりは待たない (待つと停止が最長 30 秒延びる)。済んだら「捨てられた」と見て自分で閉じる
 
   logger.info('[RoomMCP] All room MCP connections closed');
 }

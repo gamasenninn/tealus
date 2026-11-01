@@ -45,6 +45,7 @@ jest.mock('../../src/context/sessionManager.mts', () => ({
   pool: { query: (...a: unknown[]) => mockPoolQuery(...a) },
 }));
 jest.mock('../../src/mcp/roomMcpManager.mts', () => ({
+  awaitTealusRetry: jest.fn(async () => {}),
   getOrCreateRoomMcp: jest.fn(async () => [{
     listTools: mockListTools,
     callTool: mockCallTool,

@@ -168,4 +168,49 @@ describe('共有グローバルの tealus の起こし直し', () => {
     await settle();
     expect(closed).toHaveBeenCalled();
   });
+
+  // ★ 改善ループ 35: 待たなくしたので、起こし直しの最中に始めた会話は、その会話の間ずっと tealus 無しになる
+  //   (会話モードは始めたときの道具を最後まで使う)。会話の開始だけは、走っている起こし直しを上限つきで待つ
+  test('★ awaitTealusRetry: 走っている起こし直しが済むまで待つ', async () => {
+    tealusFailuresLeft = 1;
+    const { warmSharedGlobal, getOrCreateRoomMcp, awaitTealusRetry } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    now += 61_000;
+    let release!: () => void;
+    const { MCPServerStdio } = require('@openai/agents');
+    (MCPServerStdio as jest.Mock).mockImplementationOnce((opts: { name: string }) => {
+      constructed.push(opts.name);
+      return { name: opts.name, connect: () => new Promise<void>((r) => { release = r; }), close: jest.fn(async () => {}), listTools: jest.fn(async () => []) };
+    });
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);   // 起こし直しが始まる
+    const waiting = awaitTealusRetry(10_000);
+    release();
+    await waiting;
+    expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
+  });
+
+  test('★ awaitTealusRetry: 上限を過ぎたら待つのをやめる', async () => {
+    tealusFailuresLeft = 1;
+    const { warmSharedGlobal, getOrCreateRoomMcp, awaitTealusRetry } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    now += 61_000;
+    const { MCPServerStdio } = require('@openai/agents');
+    (MCPServerStdio as jest.Mock).mockImplementationOnce((opts: { name: string }) => {
+      constructed.push(opts.name);
+      return { name: opts.name, connect: () => new Promise<void>(() => {}), close: jest.fn(async () => {}), listTools: jest.fn(async () => []) };
+    });
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    const started = performance.now();
+    await awaitTealusRetry(50);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('awaitTealusRetry: 起こし直しが走っていなければすぐ返る (新しくは始めない)', async () => {
+    tealusFailuresLeft = 1;
+    const { warmSharedGlobal, awaitTealusRetry } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    now += 61_000;
+    await awaitTealusRetry(10_000);
+    expect(constructed.filter((n) => n === 'tealus')).toHaveLength(1);
+  });
 });
