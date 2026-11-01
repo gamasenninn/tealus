@@ -85,6 +85,13 @@ function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
 }
 
 /**
+ * 共有グローバルの tealus が欠けていれば、そのことを一文で返す (鼓動の info.problem に使う。docs/09 §3.2)
+ */
+export function sharedTealusProblem(): string | null {
+  return sharedGlobalServers && sharedTealusMissing ? '会話モードの tealus の道具がつながっていません' : null;
+}
+
+/**
  * 走っている起こし直しがあれば、済むまで (最大 maxMs) 待つ。新しくは始めない (改善ループ 35)
  * ★ 会話モードは始めたときの道具を最後まで使うので、起こし直しの最中に始めると、その会話の間ずっと tealus が無い。
  *   会話の開始だけはこれを呼ぶ。失敗が続くときは起こし直しが 1 分に 1 回しか走らないので、毎回は待たない

@@ -9,6 +9,7 @@ import { logger } from '../lib/logger.mts';
 import * as botApi from '../lib/botApi.mts';
 import { registerBotUserId } from '../webhook/handler.mts';
 import { startSweeper, warmSharedGlobal } from '../mcp/roomMcpManager.mts';
+import { startAgentHeartbeat } from './agentHeartbeat.mts';
 import { loadSettings } from '../context/settingsManager.mts';
 import { markAgentReady, sleepUnlessKicked, setInitInProgress } from '../lib/initGate.mts';
 
@@ -57,6 +58,9 @@ export async function initializeAgent(
     void warmSharedGlobal().catch((err: unknown) => {
       logger.warn(`[RoomMCP] 共有グローバルを先に起こせませんでした: ${err instanceof Error ? err.message : String(err)}`);
     });
+
+    // ★ 1 分ごとの鼓動 (docs/09 §3.2、2026-11-01)。止まる・道具が欠ける を本体の見張りが拾う
+    startAgentHeartbeat(botApi.pushHeartbeat);
 
     return { ok: true, rooms };
   } catch (err) {

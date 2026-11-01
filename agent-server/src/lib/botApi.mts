@@ -150,6 +150,13 @@ export async function pushMessage(roomId: string, content: string): Promise<unkn
 }
 
 /**
+ * 鼓動を送る (docs/09 §3.2)。本体は送った人と名前の組ごとに最後の時刻と info を覚える
+ */
+export async function pushHeartbeat(name: string, info: Record<string, unknown>): Promise<unknown> {
+  return request('POST', '/bot/heartbeat', { name, info });
+}
+
+/**
  * ルームにステータスを通知（typing-indicator風の一時表示）
  */
 export async function pushStatus(roomId: string, status: string, message: string = ''): Promise<unknown> {

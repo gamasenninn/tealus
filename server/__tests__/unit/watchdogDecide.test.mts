@@ -149,6 +149,25 @@ describe('heartbeat', () => {
     expect(judgeHeartbeat(w, hb(fresh, { latest_file_at: 'x', last_sent_at: null }), now).state).toBe('ok');
   });
 
+  // ★ 2026-11-01 (docs/09 §3.2): 部品が自分で「働けない」と分かるときは info.problem に一文を入れる
+  it('★ 鼓動は来ていても、info.problem があれば down。文をそのまま添える', () => {
+    const o = judgeHeartbeat(w, hb('2026-10-13T11:59:00', { problem: '会話モードの tealus の道具がつながっていません' }), now);
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('動いてはいますが');
+    expect(o.detail).toContain('会話モードの tealus の道具がつながっていません');
+  });
+
+  it('info.problem が空・文字列でないときは問題として扱わない', () => {
+    expect(judgeHeartbeat(w, hb('2026-10-13T11:59:00', { problem: '' }), now).state).toBe('ok');
+    expect(judgeHeartbeat(w, hb('2026-10-13T11:59:00', { problem: null }), now).state).toBe('ok');
+    expect(judgeHeartbeat(w, hb('2026-10-13T11:59:00', { problem: 1 }), now).state).toBe('ok');
+  });
+
+  it('★ 鼓動が止まっていれば、problem より「来ていない」を先に言う', () => {
+    const o = judgeHeartbeat(w, hb('2026-10-13T11:49:00', { problem: 'x' }), now);
+    expect(o.detail).toContain('来ていません');
+  });
+
   it('遅れの閾値を書いていなければ、遅れは見ない', () => {
     const { max_send_lag_minutes: _drop, ...noLag } = radio;
     const w2 = one(noLag) as HeartbeatWatch;

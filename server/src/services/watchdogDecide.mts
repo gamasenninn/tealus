@@ -85,6 +85,11 @@ export function judgeHeartbeat(w: HeartbeatWatch, hb: Heartbeat | null, now: Dat
   if (silent > w.max_silence_minutes) {
     return { state: 'down', detail: `鼓動が ${w.max_silence_minutes} 分を超えて来ていません (最後の鼓動: ${last})` };
   }
+  // ★ 部品が自分で「働けない」と分かるときに入れる一文 (docs/09 §3.2、2026-11-01)。本体は解釈せず、そのまま添える
+  const problem = hb.info.problem;
+  if (typeof problem === 'string' && problem.trim() !== '') {
+    return { state: 'down', detail: `動いてはいますが、${problem.trim()} (最後の鼓動: ${last})` };
+  }
   if (w.max_send_lag_minutes !== undefined) {
     const latest = parseTime(hb.info.latest_file_at);
     const sent = parseTime(hb.info.last_sent_at);

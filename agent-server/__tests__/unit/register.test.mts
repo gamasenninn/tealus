@@ -7,6 +7,10 @@ jest.mock('../../src/lib/botApi.mts', () => ({
   getRooms: jest.fn().mockResolvedValue({ rooms: [{ id: 'room1', name: 'Web部' }] }),
 }));
 
+// ★ 鼓動 (2026-11-01) は本物を回さない (1 分ごとの setInterval を残さない)
+const mockStartHeartbeat = jest.fn();
+jest.mock('../../src/setup/agentHeartbeat.mts', () => ({ startAgentHeartbeat: (...a: unknown[]) => mockStartHeartbeat(...a) }));
+
 jest.mock('../../src/webhook/handler.mts', () => ({
   registerBotUserId: jest.fn(),
 }));
@@ -23,6 +27,7 @@ const mockWarm = jest.fn(() => new Promise<void>(() => {})); // ★ 終わらな
 jest.mock('../../src/mcp/roomMcpManager.mts', () => ({
   startSweeper: jest.fn(),
   warmSharedGlobal: () => mockWarm(),
+  sharedTealusProblem: () => null,
 }));
 
 jest.mock('../../src/config.mts', () => ({
@@ -62,6 +67,12 @@ describe('Agent Registration', () => {
     const result = await initializeAgent(); // ★ mockWarm は終わらないので、待っていればここで止まる
     expect(mockWarm).toHaveBeenCalledTimes(1);
     expect(result.rooms).toHaveLength(1);
+  });
+
+  test('★ ログインできたら鼓動を始める (2026-11-01、docs/09 §3.2)', async () => {
+    mockStartHeartbeat.mockClear();
+    await initializeAgent();
+    expect(mockStartHeartbeat).toHaveBeenCalledTimes(1);
   });
 
   test('ログイン失敗時はエラーをログに記録', async () => {
