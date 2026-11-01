@@ -5,9 +5,11 @@
  *   共有グローバルは最初の結果を一生返すので、キャッシュを直したあとも会話モードと Light v1 は
  *   tealus の道具が無いまま動き続けた (「Shared global: 1 servers」、再起動するまで直らない)
  * ここで固定する:
- *   1. 起動時に tealus が起きなかったら、1 分たってからの呼び出しで起こし直す
+ *   1. 起動時に tealus が起きなかったら、1 分たってからの呼び出しで起こし直す (★ 呼び出し側は待たない。
+ *      待たせると、失敗が続く間は会話モードの開始が最大 30 秒止まる。入るのは起こし直しが済んだ次の呼び出しから)
  *   2. 1 分以内は起こし直さない (失敗が続くとき、呼ぶたびに 30 秒待たせない)
  *   3. 起こし直しても tealus は 1 本だけ (二重に起こさない)
+ *   4. 起こし直しの最中に止めても、起こしたての tealus を閉じ忘れない
  */
 const constructed: string[] = [];
 let tealusFailuresLeft = 0;
@@ -63,16 +65,35 @@ afterEach(() => {
 
 const names = (servers: { name: string }[]) => servers.map((s) => s.name);
 const tealusIn = (servers: { name: string }[]) => names(servers).filter((n) => n === 'tealus').length;
+const settle = () => new Promise((r) => setImmediate(r));
 
 describe('共有グローバルの tealus の起こし直し', () => {
-  test('★★ 起動時に失敗しても、1 分たてば次の呼び出しで tealus が入る', async () => {
+  test('★★ 起動時に失敗しても、1 分たてば起こし直し、済んだあとの呼び出しで tealus が入る', async () => {
     tealusFailuresLeft = 1;
     const { warmSharedGlobal, getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     await warmSharedGlobal();
     expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(0);
 
     now += 61_000;
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);   // ★ 待たない (起こし直しを始めるだけ)
+    await settle();
     expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
+  });
+
+  test('★★ 起こし直しを呼び出し側は待たない', async () => {
+    tealusFailuresLeft = 1;
+    const { warmSharedGlobal, getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    now += 61_000;
+    let release!: () => void;
+    const { MCPServerStdio } = require('@openai/agents');
+    (MCPServerStdio as jest.Mock).mockImplementationOnce((opts: { name: string }) => {
+      constructed.push(opts.name);
+      return { name: opts.name, connect: () => new Promise<void>((r) => { release = r; }), close: jest.fn(async () => {}), listTools: jest.fn(async () => []) };
+    });
+    const servers = await getOrCreateRoomMcp('agent', 'room1', tmpDir);   // 起こし直しが終わらなくても返る
+    expect(tealusIn(servers)).toBe(0);
+    release();
   });
 
   test('★ 1 分以内は起こし直さない', async () => {
@@ -89,11 +110,15 @@ describe('共有グローバルの tealus の起こし直し', () => {
     const { warmSharedGlobal, getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     await warmSharedGlobal();
     now += 61_000;
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    await settle();
     expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(0);
     now += 30_000;
     await getOrCreateRoomMcp('agent', 'room1', tmpDir);
     expect(constructed.filter((n) => n === 'tealus')).toHaveLength(2);
     now += 31_000;
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    await settle();
     expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
   });
 
@@ -102,6 +127,11 @@ describe('共有グローバルの tealus の起こし直し', () => {
     const { warmSharedGlobal, getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');
     await warmSharedGlobal();
     now += 61_000;
+    await Promise.all([
+      getOrCreateRoomMcp('agent', 'room1', tmpDir),
+      getOrCreateRoomMcp('agent', 'room2', tmpDir),
+    ]);
+    await settle();
     const [a, b] = await Promise.all([
       getOrCreateRoomMcp('agent', 'room1', tmpDir),
       getOrCreateRoomMcp('agent', 'room2', tmpDir),
@@ -117,5 +147,25 @@ describe('共有グローバルの tealus の起こし直し', () => {
     now += 61_000;
     await getOrCreateRoomMcp('agent', 'room1', tmpDir);
     expect(constructed.filter((n) => n === 'tealus')).toHaveLength(1);
+  });
+
+  test('★ 起こし直しの最中に止めても、起こしたての tealus を閉じる', async () => {
+    tealusFailuresLeft = 1;
+    const { warmSharedGlobal, getOrCreateRoomMcp, closeAllRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    now += 61_000;
+    let release!: () => void;
+    const closed = jest.fn(async () => {});
+    const { MCPServerStdio } = require('@openai/agents');
+    (MCPServerStdio as jest.Mock).mockImplementationOnce((opts: { name: string }) => {
+      constructed.push(opts.name);
+      return { name: opts.name, connect: () => new Promise<void>((r) => { release = r; }), close: closed, listTools: jest.fn(async () => []) };
+    });
+    await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    const stopping = closeAllRoomMcp();
+    release();
+    await stopping;
+    await settle();
+    expect(closed).toHaveBeenCalled();
   });
 });

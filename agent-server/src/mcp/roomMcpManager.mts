@@ -74,8 +74,9 @@ const MCP_CONNECT_TIMEOUT_SECONDS = 30;     // connect/initialize timeout (秒)
  */
 function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
   if (sharedGlobalServers) {
-    const servers = sharedGlobalServers;
-    return retryTealusIfMissing().then(() => [...servers]);
+    // ★ 起こし直しは待たない。待たせると、失敗が続く間は会話モードの開始が最大 30 秒 (接続の時間切れ) 止まる
+    void retryTealusIfMissing().catch(() => {});
+    return Promise.resolve([...sharedGlobalServers]);
   }
   if (!sharedGlobalPromise) {
     sharedGlobalPromise = connectSharedGlobal().then((servers) => { sharedGlobalServers = servers; return servers; });
@@ -126,7 +127,7 @@ async function connectSharedGlobal(): Promise<MCPServerStdio[]> {
   lastTealusAttempt = Date.now();
   sharedTealusMissing = Boolean(config.TEALUS_BOT_ID && config.TEALUS_BOT_PASS) && tealus.length === 0;
   if (sharedTealusMissing) {
-    logger.warn(`[RoomMCP] 会話モードと Light v1 は tealus の道具なしで動いています (${TEALUS_RETRY_MS / 1000} 秒ごとに起こし直します)`);
+    logger.warn(`[RoomMCP] 会話モードと Light v1 は tealus の道具なしで動いています (使われたときと掃除のたびに起こし直します。間隔は ${TEALUS_RETRY_MS / 1000} 秒以上)`);
   }
   return servers;
 }
@@ -386,13 +387,16 @@ export async function closeAllRoomMcp(): Promise<void> {
   for (const { entry } of retiredEntries.splice(0)) await closeEntry(entry);
 
   // 共有グローバルサーバーを close (★ 起こしている最中なら、起き終わるのを待ってから閉じる)
+  // ★ 先に外してから閉じる。閉じている最中に起こし直しが済むと、外していない配列に足されて閉じ忘れていた
+  //   (外してあれば、起こし直しの側が「捨てられた」と見て自分で閉じる)
   const globals = sharedGlobalServers ?? (sharedGlobalPromise ? await sharedGlobalPromise.catch(() => []) : []);
-  for (const server of globals) {
-    try { await server.close(); } catch { /* ignore */ }
-  }
   sharedGlobalServers = null;
   sharedGlobalPromise = null;
   sharedTealusMissing = false;
+  for (const server of globals) {
+    try { await server.close(); } catch { /* ignore */ }
+  }
+  if (tealusRetry) await tealusRetry.catch(() => {});
 
   logger.info('[RoomMCP] All room MCP connections closed');
 }
