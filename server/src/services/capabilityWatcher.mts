@@ -66,7 +66,11 @@ export async function checkAndEmit(): Promise<void> {
  */
 export function start(io: EmitTarget): void {
   _io = io;
-  checkAndEmit();
+  // ★ 起動の時点で届かないと状態が false のまま変わらず、1 行も出ていなかった (改善ループ 33)。
+  //   通話を使わない構成もあるので info にとどめる
+  void checkAndEmit().then(() => {
+    if (!_state) logger.info('Realtime voice: unavailable (起動時に rtc-server に届きません。通話・トランシーバーは出ません)');
+  });
   const interval = parseInt(process.env.RTC_HEALTH_INTERVAL || String(DEFAULT_INTERVAL_MS), 10);
   _timer = setInterval(checkAndEmit, interval);
 }

@@ -101,6 +101,19 @@ describe('roomMcpManager', () => {
     expect(mockClose).toHaveBeenCalledTimes(2);   // 古い接続 (外したもの) と、使われなくなった新しい接続の両方
   });
 
+  test('★★ ダッシュボードの保存 (invalidateRoomMcp) でも、会話中の接続はすぐ閉じない (改善ループ 33)', async () => {
+    writeRoomMcp(tmpDir, { mcpServers: {} });
+    const { getOrCreateRoomMcp, invalidateRoomMcp, startSweeper, stopSweeper } = require('../../src/mcp/roomMcpManager');
+    await getOrCreateRoomMcp('agent1', 'room1', tmpDir);
+    await invalidateRoomMcp('agent1', 'room1');
+    expect(mockClose).not.toHaveBeenCalled();
+
+    startSweeper();
+    await new Promise((r) => setTimeout(r, 250));
+    stopSweeper();
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
   test('★ 部屋の mcp_config.json を消したときも作り直す', async () => {
     writeRoomMcp(tmpDir, { mcpServers: {} });
     const { getOrCreateRoomMcp } = require('../../src/mcp/roomMcpManager');

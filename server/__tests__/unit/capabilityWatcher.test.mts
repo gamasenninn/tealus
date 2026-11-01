@@ -135,4 +135,16 @@ describe('capabilityWatcher', () => {
     expect(call[0]).toBe('capability:changed');
     expect(call[1].changed_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   });
+
+  // ★ 改善ループ 33: 起動の時点で rtc-server に届かないと、状態が false のまま変わらないので 1 行も出ていなかった
+  test('★ 起動時に届かなければ、そのことを 1 行出す', async () => {
+    const { logger } = require('../../src/utils/logger.mts');
+    (logger.info as jest.Mock).mockClear();
+    mockFail();
+    start(mockIo);
+    await new Promise((r) => setTimeout(r, 20));
+    expect((logger.info as jest.Mock).mock.calls.map((c) => c[0])).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^Realtime voice: unavailable/)]),
+    );
+  });
 });

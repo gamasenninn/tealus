@@ -304,4 +304,12 @@ describe('disk_free — メディアの置き場の空き (2026-10-31 小野さ�
     expect(back.body).toContain('✅ メディアの置き場の空き容量 が戻りました');
     expect(back.body).not.toContain('止まっていました');
   });
+
+  it('★ 置き場を読めないときは「少なくなっています」と言わない (改善ループ 33)', () => {
+    const w = one(disk);
+    const obs = judgeDiskFree(w as Parameters<typeof judgeDiskFree>[0], { error: 'ENOENT' });
+    const alert = decideNotice(w, obs, null, jst('2026-10-31T12:00:00'));
+    expect(alert.body).toContain('⚠ メディアの置き場の空き容量 を読めません');
+    expect(alert.body).not.toContain('少なくなっています');
+  });
 });

@@ -10,7 +10,8 @@ import { markFor, type DiskFreeWatch, type HeartbeatWatch, type RoomQuietWatch, 
 
 export type Observation =
   | { state: 'ok'; detail: string }
-  | { state: 'down'; detail: string }
+  /** ★ unreadable: 測れなかった (量が足りないのとは別。disk_free の文を分けるため、改善ループ 33) */
+  | { state: 'down'; detail: string; unreadable?: true }
   /** 判定しない (稼働時間の外など)。★ 状態を変えない = ⚠ のまま夜を越す */
   | { state: 'skip'; detail: string };
 
@@ -155,7 +156,7 @@ const GB = 1024 ** 3;
 
 /** メディアの置き場の空き (docs/09 §3.7)。★ 下限は人が決めて設定に書く (§6 閾値の自動学習はしない) */
 export function judgeDiskFree(w: Pick<DiskFreeWatch, 'path' | 'min_free_gb'>, d: DiskRead): Observation {
-  if ('error' in d) return { state: 'down', detail: `${w.path} の空きを読めません (${d.error})` };
+  if ('error' in d) return { state: 'down', detail: `${w.path} の空きを読めません (${d.error})`, unreadable: true };
   const free = `${(Math.floor((d.freeBytes / GB) * 10) / 10).toFixed(1)} GB`;
   return d.freeBytes >= w.min_free_gb * GB
     ? { state: 'ok', detail: `${w.path} の空き: ${free} (下限 ${w.min_free_gb} GB)` }
@@ -173,7 +174,8 @@ export function decideNotice(
   // ★ 空き容量は止まったのではないので「少なくなっています」(docs/09 §3.7)
   const amount = w.kind === 'disk_free';
   if (obs.state === 'down' && !wasDown) {
-    return { kind: 'alert', body: `⚠ ${w.name} が${amount ? '少なくなっています' : '止まっているようです'}\n${markFor(w.id)}\n${obs.detail}` };
+    const what = !amount ? 'が止まっているようです' : obs.unreadable ? 'を読めません' : 'が少なくなっています';
+    return { kind: 'alert', body: `⚠ ${w.name} ${what}\n${markFor(w.id)}\n${obs.detail}` };
   }
   if (obs.state === 'ok' && wasDown && amount) {
     return { kind: 'recover', body: `✅ ${w.name} が戻りました\n${markFor(w.id)}\n${obs.detail}` };

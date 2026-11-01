@@ -41,6 +41,13 @@ let sharedGlobalServers: MCPServerStdio[] | null = null;
 // ★ 起こしている最中の共有グローバル (2026-10-02)。同時に呼ばれたら同じ起動を待たせる。
 //   以前は「まだ無い」と判断した呼び出しがそれぞれ起こし、先に作った方は閉じられずに残っていた
 let sharedGlobalPromise: Promise<MCPServerStdio[]> | null = null;
+// ★ 共有グローバルの tealus が起きなかったときの起こし直し (改善ループ 33)。
+//   起動時の失敗をそのまま一生返していたので、2026-10-31 は npx のキャッシュを直したあとも
+//   会話モードと Light v1 が tealus の道具なしで動き続けた (再起動するまで直らない)
+const TEALUS_RETRY_MS = 60_000;
+let sharedTealusMissing = false;
+let lastTealusAttempt = 0;
+let tealusRetry: Promise<void> | null = null;
 // ★ 起こしている最中の部屋 (同じ部屋に同時に来た呼び出しは同じ起動を待つ)
 const roomMcpPending = new Map<string, Promise<MCPServerStdio[]>>();
 // ★ 作り直して外した古い接続 (改善ループ 32)。会話モードのセッションは始めたときの接続を最後まで握って道具を呼ぶので、
@@ -66,11 +73,39 @@ const MCP_CONNECT_TIMEOUT_SECONDS = 30;     // connect/initialize timeout (秒)
  * 2. agent-server/mcp_config.json: user カスタム MCP 用 (filesystem は除外)
  */
 function getOrCreateSharedGlobal(): Promise<MCPServerStdio[]> {
-  if (sharedGlobalServers) return Promise.resolve(sharedGlobalServers);
+  if (sharedGlobalServers) {
+    const servers = sharedGlobalServers;
+    return retryTealusIfMissing().then(() => [...servers]);
+  }
   if (!sharedGlobalPromise) {
     sharedGlobalPromise = connectSharedGlobal().then((servers) => { sharedGlobalServers = servers; return servers; });
   }
-  return sharedGlobalPromise;
+  return sharedGlobalPromise.then((servers) => [...servers]);
+}
+
+/**
+ * 共有グローバルに tealus が欠けていたら起こし直す (1 分に 1 回まで。同時に呼ばれたら同じ試みを待つ)
+ * ★ 足す先は今の共有グローバルの配列。試している間に closeAllRoomMcp で捨てられていたら、起こした分は閉じる
+ */
+function retryTealusIfMissing(): Promise<void> {
+  if (!sharedGlobalServers || !sharedTealusMissing) return Promise.resolve();
+  if (tealusRetry) return tealusRetry;
+  if (Date.now() - lastTealusAttempt < TEALUS_RETRY_MS) return Promise.resolve();
+  lastTealusAttempt = Date.now();
+  const target = sharedGlobalServers;
+  tealusRetry = connectTealusMcp()
+    .then(async (servers) => {
+      if (servers.length === 0) return;
+      if (sharedGlobalServers !== target) {
+        for (const server of servers) { try { await server.close(); } catch { /* ignore */ } }
+        return;
+      }
+      target.unshift(...servers);
+      sharedTealusMissing = false;
+      logger.info('[RoomMCP] 共有グローバルの tealus を起こし直しました');
+    })
+    .finally(() => { tealusRetry = null; });
+  return tealusRetry;
 }
 
 /**
@@ -88,6 +123,11 @@ async function connectSharedGlobal(): Promise<MCPServerStdio[]> {
   const [tealus, user] = await Promise.all([connectTealusMcp(), connectGlobalConfig()]);
   const servers = [...tealus, ...user];
   logger.info(`[RoomMCP] Shared global: ${servers.length} servers connected`);
+  lastTealusAttempt = Date.now();
+  sharedTealusMissing = Boolean(config.TEALUS_BOT_ID && config.TEALUS_BOT_PASS) && tealus.length === 0;
+  if (sharedTealusMissing) {
+    logger.warn(`[RoomMCP] 会話モードと Light v1 は tealus の道具なしで動いています (${TEALUS_RETRY_MS / 1000} 秒ごとに起こし直します)`);
+  }
   return servers;
 }
 
@@ -303,6 +343,8 @@ export function startSweeper(): void {
         await closeEntry(entry);
       }
     }
+    // ★ 誰も呼ばなくても、欠けた tealus を裏で起こし直しておく (会話の 1 回目を待たせない)
+    void retryTealusIfMissing().catch(() => {});
   }, config.MCP_SWEEP_INTERVAL);
 }
 
@@ -323,8 +365,10 @@ export async function invalidateRoomMcp(agentId: string, roomId: string): Promis
   const key = `${agentId}:${roomId}`;
   if (roomMcpCache.has(key)) {
     const entry = roomMcpCache.get(key)!;
-    roomMcpCache.delete(key);   // ★ 閉じる前に外す (閉じている間に来た呼び出しが同じものをもう一度閉じないように)
-    await closeEntry(entry);
+    roomMcpCache.delete(key);
+    // ★ すぐ閉じず、掃除の時間が過ぎてから閉じる (改善ループ 33)。mtime で作り直す道 (改善ループ 32) と同じ理由で、
+    //   会話中のセッションは始めたときの接続を握っている。ここだけ即閉じのまま残っていた
+    retiredEntries.push({ entry, retiredAt: Date.now() });
     logger.info(`[RoomMCP] Invalidated: ${key}`);
   }
 }
@@ -348,6 +392,7 @@ export async function closeAllRoomMcp(): Promise<void> {
   }
   sharedGlobalServers = null;
   sharedGlobalPromise = null;
+  sharedTealusMissing = false;
 
   logger.info('[RoomMCP] All room MCP connections closed');
 }
