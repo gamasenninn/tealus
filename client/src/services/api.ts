@@ -79,8 +79,10 @@ export interface PromptHistoryItem {
   message_id: string; target: string; body: string; content: string;
   holes: Array<{ start: number; end: number }>;
   created_at: string;
+  /** ☆ で固定したもの (2026-11-01)。message_id は pin:<id> */
+  pinned?: boolean;
 }
-export interface PromptHistoryResponse { items: PromptHistoryItem[]; target_counts: Record<string, number> }
+export interface PromptHistoryResponse { items: PromptHistoryItem[]; pinned?: PromptHistoryItem[]; target_counts: Record<string, number> }
 /** 宛名の候補 (音声の編集画面)。部屋で人が直した版の冒頭の呼びかけを多い順に */
 export interface VoiceAddressCandidatesResponse { candidates: { text: string; count: number }[] }
 export interface AgentIdentityResponse { user_id: string | null; display_name: string | null }
@@ -320,6 +322,15 @@ class ApiClient {
    * #354 このルームで自分が送った「@宛先 + 本文」形式の過去メッセージを新しい順に取得。
    * cc project 一覧は agent-server 側にあり本体 server は知らないため、宛先は client から渡す。
    */
+  /** ☆ で指示を固定する / 外す (2026-11-01、docs/02 prompt_pins) */
+  pinPrompt(roomId: string, content: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>('POST', `/rooms/${roomId}/prompts/pins`, { content });
+  }
+
+  unpinPrompt(roomId: string, content: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>('DELETE', `/rooms/${roomId}/prompts/pins`, { content });
+  }
+
   getPromptHistory(roomId: string, targets: string[], limit = 30): Promise<PromptHistoryResponse> {
     const q = new URLSearchParams({ targets: targets.join(','), limit: String(limit) });
     return this.request<PromptHistoryResponse>('GET', `/rooms/${roomId}/prompts/history?${q}`);

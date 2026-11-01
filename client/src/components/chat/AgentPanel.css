@@ -117,6 +117,41 @@
   border-radius: 3px;
 }
 
+/* ★ 1 行 = 指示のボタン + ☆ のボタン (2026-11-01)。区切り線は行に付ける */
+.agent-panel-row {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--border-light);
+}
+
+.agent-panel-row:first-child {
+  border-top: none;
+}
+
+.agent-panel-pin {
+  flex-shrink: 0;
+  min-width: 44px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+.agent-panel-pin.on {
+  color: #e0a800;
+}
+
+.agent-panel-pin:hover {
+  background: var(--bg-hover);
+}
+
+/* 固定した指示の段は高くしすぎない (最近の指示が見えなくならないように) */
+.agent-panel-pinned {
+  flex: none;
+  max-height: 132px;
+}
+
 .agent-panel-item {
   display: flex;
   align-items: flex-start;
@@ -126,16 +161,11 @@
   min-height: 44px;
   padding: 8px 12px;
   border: none;
-  border-top: 1px solid var(--border-light);
   background: none;
   cursor: pointer;
   text-align: left;
   font-size: 14px;
   color: var(--text-primary);
-}
-
-.agent-panel-item:first-child {
-  border-top: none;
 }
 
 .agent-panel-item:hover,

@@ -223,11 +223,92 @@ router.get('/history', async (req, res) => {
       });
     }
 
-    logger.debug(`prompt history: room=${roomId} scanned=${result.rows.length} items=${items.length}`);
+    // ★ ☆ で固定した指示 (2026-11-01、docs/02 prompt_pins)。今の宛先で始まるものだけを古い順に出す。
+    //   固定したものは「最近の指示」から除く (同じ骨格のものを二重に出さない)。穴は、同じ骨格が最近の指示にあればそれを使う
+    const pinRows = await pool.query<{ id: string; content: string; created_at: Date }>(
+      'SELECT id, content, created_at FROM prompt_pins WHERE user_id = $1 AND room_id = $2 ORDER BY created_at',
+      [userId, roomId]
+    );
+    const pinnedKeys = new Set<string>();
+    const pinned: Array<HistoryItem & { pinned: true }> = [];
+    for (const p of pinRows.rows) {
+      const target = byLengthDesc.find(t => p.content.startsWith(`@${t} `));
+      if (!target) continue;
+      const rawAfter = p.content.slice(target.length + 2);
+      const body = rawAfter.trim();
+      if (!body) continue;
+      const key = dedupeKey(target, body);
+      pinnedKeys.add(key);
+      const g = groups.get(key);
+      const holes = g
+        ? digitRanges(p.content, target.length + 2 + (rawAfter.length - rawAfter.trimStart().length))
+            .filter((_, i) => (g.numberSets[i]?.size ?? 0) > 1)
+        : [];
+      pinned.push({ message_id: `pin:${p.id}`, target, body, content: p.content, holes, created_at: p.created_at, pinned: true });
+    }
+    const recent = items.filter(i => !pinnedKeys.has(dedupeKey(i.target, i.body)));
 
-    res.json({ items: items.slice(0, parsedLimit), target_counts: targetCounts });
+    logger.debug(`prompt history: room=${roomId} scanned=${result.rows.length} items=${recent.length} pinned=${pinned.length}`);
+
+    res.json({ items: recent.slice(0, parsedLimit), pinned, target_counts: targetCounts });
   } catch (err) {
     logger.error('Prompt history error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/** ☆ の上限 (1 人 1 部屋)。履歴の画面で見渡せる量にとどめる */
+const PIN_LIMIT = 50;
+const PIN_CONTENT_MAX = 4000;
+
+/** ☆ の本文の検査。宛先 (@…) で始まり、本文があること。断る理由の文を返す */
+function pinContentError(content: unknown): string | null {
+  if (typeof content !== 'string' || !/^@\S+ +\S/.test(content)) return '宛先 (@…) と本文のある指示だけ固定できます';
+  if (content.length > PIN_CONTENT_MAX) return `指示が長すぎます (${PIN_CONTENT_MAX} 字まで)`;
+  return null;
+}
+
+/**
+ * POST /api/rooms/:id/prompts/pins  { content }
+ * ☆ で指示を固定する (2026-11-01、docs/02 prompt_pins)。同じ本文は 1 本 (付け直しても増えない)
+ */
+router.post('/pins', async (req, res) => {
+  const roomId = (req.params as { id: string }).id;
+  const userId = req.user!.id;
+  const { content } = (req.body ?? {}) as { content?: unknown };
+  const invalid = pinContentError(content);
+  if (invalid) return res.status(400).json({ error: invalid });
+  try {
+    const { rows } = await pool.query<{ n: number; exists: boolean }>(
+      `SELECT count(*)::int AS n, bool_or(content = $3) AS exists FROM prompt_pins WHERE user_id = $1 AND room_id = $2`,
+      [userId, roomId, content]
+    );
+    if (!rows[0].exists && rows[0].n >= PIN_LIMIT) {
+      return res.status(400).json({ error: `固定できるのは 1 部屋 ${PIN_LIMIT} 本までです` });
+    }
+    await pool.query(
+      `INSERT INTO prompt_pins (user_id, room_id, content) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, room_id, content) DO NOTHING`,
+      [userId, roomId, content]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Prompt pin error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/** DELETE /api/rooms/:id/prompts/pins  { content }  ☆ を外す (無ければ何もしない) */
+router.delete('/pins', async (req, res) => {
+  const roomId = (req.params as { id: string }).id;
+  const userId = req.user!.id;
+  const { content } = (req.body ?? {}) as { content?: unknown };
+  if (typeof content !== 'string' || content === '') return res.status(400).json({ error: '外す指示の本文がありません' });
+  try {
+    await pool.query('DELETE FROM prompt_pins WHERE user_id = $1 AND room_id = $2 AND content = $3', [userId, roomId, content]);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Prompt unpin error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

@@ -34,6 +34,10 @@ interface AgentPanelProps {
   /** 押すたびに、足した / 外した後の並びを渡す。親はその場で入力欄の先頭を差し替える (「決定」なし) */
   onChangeTargets: (names: string[]) => void;
   onSelectHistory: (content: string, holes: Hole[]) => void;
+  /** ☆ で固定した指示 (2026-11-01)。古い順。「固定した指示」の段に出す */
+  pinned?: PromptHistoryItem[];
+  /** ☆ / ★ を押した (pin = true で固定、false で外す) */
+  onTogglePin?: (item: PromptHistoryItem, pin: boolean) => void;
   onClose: () => void;
 }
 
@@ -62,9 +66,10 @@ function renderBody(item: PromptHistoryItem, bodyStart: number) {
 }
 
 function AgentPanel({
-  targets, history, targetCounts, mode, query, selected, onChangeTargets, onSelectHistory, onClose,
+  targets, history, targetCounts, mode, query, selected, onChangeTargets, onSelectHistory, pinned = [], onTogglePin, onClose,
 }: AgentPanelProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   // ★ 押すたびに足す / 外す。複数の班に同時に送ることが多い (2026-10-24 小野さん判断)
   const toggleTarget = (name: string) =>
     onChangeTargets(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);
@@ -89,11 +94,19 @@ function AgentPanel({
     return [...matched].reverse();
   }, [history, mode, q]);
 
-  const listKey = shown.map(h => h.message_id).join(',');
-  const [index, setIndex] = useState(shown.length - 1);
+  // ★ ☆ で固定した指示 (2026-11-01)。最近の指示の上の段に、古い順で出す。絞り込みはここにも効く
+  const pinnedShown = useMemo(
+    () => (mode === 'compose' ? pinned.filter(h => h.content.toLowerCase().includes(q)) : []),
+    [pinned, mode, q]
+  );
+  // ↑↓ で行き来する並び = 固定 → 最近 (古い → 新しい)。選択の初期位置は末尾 (最新)
+  const all = useMemo(() => [...pinnedShown, ...shown], [pinnedShown, shown]);
+
+  const listKey = all.map(h => h.message_id).join(',');
+  const [index, setIndex] = useState(all.length - 1);
 
   // 絞り込みで候補が変わったら選択を末尾 (最新) に戻す
-  useEffect(() => { setIndex(shown.length - 1); }, [listKey, shown.length]);
+  useEffect(() => { setIndex(all.length - 1); }, [listKey, all.length]);
 
   // 開いた時点で下端が見えている状態にする (チャット画面と同じ「最新が下」)
   useEffect(() => {
@@ -103,7 +116,7 @@ function AgentPanel({
 
   // 選択行を常に可視領域に入れる
   useEffect(() => {
-    const el = listRef.current?.children[index] as HTMLElement | undefined;
+    const el = panelRef.current?.querySelector(`[data-index="${index}"]`) as HTMLElement | null;
     el?.scrollIntoView?.({ block: 'nearest' });
   }, [index]);
 
@@ -117,15 +130,15 @@ function AgentPanel({
         onClose();
         return;
       }
-      if (shown.length === 0) return; // 履歴が無いときは改行/Tab を奪わない
+      if (all.length === 0) return; // 履歴が無いときは改行/Tab を奪わない
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         setIndex(i => Math.max(0, i - 1));
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setIndex(i => Math.min(shown.length - 1, i + 1));
+        setIndex(i => Math.min(all.length - 1, i + 1));
       } else if (e.key === 'Enter' || e.key === 'Tab') {
-        const picked = shown[Math.min(Math.max(index, 0), shown.length - 1)];
+        const picked = all[Math.min(Math.max(index, 0), all.length - 1)];
         if (!picked) return;
         e.preventDefault();
         onSelectHistory(picked.content, picked.holes || []);
@@ -133,10 +146,50 @@ function AgentPanel({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [shown, index, onSelectHistory, onClose]);
+  }, [all, index, onSelectHistory, onClose]);
+
+  /** 1 行。i は ↑↓ の並び (all) での位置 */
+  const renderRow = (h: PromptHistoryItem, i: number, isPinned: boolean) => (
+    <div key={h.message_id} className="agent-panel-row">
+      <button
+        data-testid={isPinned ? 'agent-panel-pinned-item' : 'agent-panel-item'}
+        data-message-id={h.message_id}
+        data-index={i}
+        aria-selected={i === index}
+        className={`agent-panel-item${i === index ? ' selected' : ''}`}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onSelectHistory(h.content, h.holes || []);
+        }}
+      >
+        <span className="agent-panel-item-text">
+          <span className={`agent-panel-item-target${ccNames.has(h.target) ? ' cc' : ''}`}>@{h.target}</span>
+          <span className="agent-panel-item-body">
+            {/* body は content の連続部分文字列 (trim は端しか削らない) */}
+            {renderBody(h, h.content.indexOf(h.body))}
+          </span>
+        </span>
+        {!isPinned && <span className="agent-panel-item-time">{formatRelativeDay(h.created_at)}</span>}
+      </button>
+      {onTogglePin && (
+        <button
+          data-testid="agent-panel-pin"
+          className={`agent-panel-pin${isPinned ? ' on' : ''}`}
+          aria-label={isPinned ? '固定を外す' : '固定する'}
+          title={isPinned ? '固定を外す' : '固定する (古くなっても消えない)'}
+          onMouseDown={(e) => {
+            e.preventDefault(); // textarea のフォーカスを維持・行の選択にしない
+            onTogglePin(h, !isPinned);
+          }}
+        >
+          {isPinned ? '★' : '☆'}
+        </button>
+      )}
+    </div>
+  );
 
   return (
-    <div className="agent-panel">
+    <div className="agent-panel" ref={panelRef}>
       <div className="agent-panel-header">
         <span className="agent-panel-title" data-testid="agent-panel-title">
           {mode === 'compose' ? '🤖 エージェントに聞く' : '🤖 宛先を選ぶ'}
@@ -161,32 +214,20 @@ function AgentPanel({
         ))}
       </div>
 
+      {pinnedShown.length > 0 && (
+        <>
+          <div className="agent-panel-section">固定した指示</div>
+          <div className="agent-panel-list agent-panel-pinned">
+            {pinnedShown.map((h, i) => renderRow(h, i, true))}
+          </div>
+        </>
+      )}
+
       {shown.length > 0 && (
         <>
           <div className="agent-panel-section">最近の指示</div>
           <div className="agent-panel-list" ref={listRef}>
-            {shown.map((h, i) => (
-              <button
-                key={h.message_id}
-                data-testid="agent-panel-item"
-                data-message-id={h.message_id}
-                aria-selected={i === index}
-                className={`agent-panel-item${i === index ? ' selected' : ''}`}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onSelectHistory(h.content, h.holes || []);
-                }}
-              >
-                <span className="agent-panel-item-text">
-                  <span className={`agent-panel-item-target${ccNames.has(h.target) ? ' cc' : ''}`}>@{h.target}</span>
-                  <span className="agent-panel-item-body">
-                    {/* body は content の連続部分文字列 (trim は端しか削らない) */}
-                    {renderBody(h, h.content.indexOf(h.body))}
-                  </span>
-                </span>
-                <span className="agent-panel-item-time">{formatRelativeDay(h.created_at)}</span>
-              </button>
-            ))}
+            {shown.map((h, i) => renderRow(h, pinnedShown.length + i, false))}
           </div>
         </>
       )}

@@ -136,17 +136,20 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   // #354 このルームで自分が過去に送った「@宛先 + 本文」を再利用する。登録という手間を
   // 発生させないため、専用の登録先は持たず messages をそのまま読む。
   const [promptHistory, setPromptHistory] = useState<PromptHistoryItem[]>([]);
+  // ☆ で固定した指示 (2026-11-01、docs/02 prompt_pins)。古くなっても履歴から押し出されない
+  const [pinnedPrompts, setPinnedPrompts] = useState<PromptHistoryItem[]>([]);
   const [targetCounts, setTargetCounts] = useState<Record<string, number>>({});
   const targetNames = useMemo(() => agentTargets.map(t => t.display_name), [agentTargets]);
   const refreshPromptHistory = useCallback(() => {
     if (!roomId || targetNames.length === 0) return;
     api.getPromptHistory(roomId, targetNames)
-      .then(d => { setPromptHistory(d.items || []); setTargetCounts(d.target_counts || {}); })
+      .then(d => { setPromptHistory(d.items || []); setPinnedPrompts(d.pinned || []); setTargetCounts(d.target_counts || {}); })
       .catch(() => {});
   }, [roomId, targetNames]);
   // 開いた瞬間に「履歴があるか」で挙動を分けるので先読みしておく (ルーム切替時は一旦捨てる)
   useEffect(() => {
     setPromptHistory([]);
+    setPinnedPrompts([]);
     setTargetCounts({});
     refreshPromptHistory();
   }, [refreshPromptHistory]);
@@ -183,6 +186,14 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   }, [slashMode, targetNames, assistantName]);
 
   // 過去の指示を挿入。表示されていた文字列 (宛先込みの全文) がそのまま入る。送信はしない。
+  // ☆ / ★ を押した。終わったら取り直す (固定した行は「最近の指示」から外れる・外したら戻る)
+  const togglePromptPin = useCallback((item: PromptHistoryItem, pin: boolean) => {
+    if (!roomId) return;
+    (pin ? api.pinPrompt(roomId, item.content) : api.unpinPrompt(roomId, item.content))
+      .then(() => refreshPromptHistory())
+      .catch(() => {});
+  }, [roomId, refreshPromptHistory]);
+
   // #358 変動する部分 (穴) があれば、そこを選択状態にして入れる。打てば置き換わり、
   // 打たなければ前回値のまま送れる。スマホでカーソルを数字に合わせる操作が消えるのが要。
   const insertPromptHistory = useCallback((content: string, holes: Hole[]) => {
@@ -199,12 +210,12 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   // 使い込んで履歴が溜まるとパネルが現れる (初見のユーザーに選択肢を突きつけない)。
   const onAgentButtonClick = useCallback(() => {
     if (agentPanel) { closeAgentPanel(); return; }
-    if (!shouldOpenAgentPanel({ historyCount: promptHistory.length, targetCount: agentTargets.length })) {
+    if (!shouldOpenAgentPanel({ historyCount: promptHistory.length + pinnedPrompts.length, targetCount: agentTargets.length })) {
       if (assistantName) { changeAgentTargets([assistantName]); focusTextareaEnd(); }
       return;
     }
     openAgentPanel('compose');
-  }, [agentPanel, closeAgentPanel, promptHistory.length, agentTargets.length, assistantName, changeAgentTargets, focusTextareaEnd, openAgentPanel]);
+  }, [agentPanel, closeAgentPanel, promptHistory.length, pinnedPrompts.length, agentTargets.length, assistantName, changeAgentTargets, focusTextareaEnd, openAgentPanel]);
 
   // 入口B: コンテキストメニュー「エージェントに送る」が対象 message を積んだら消費する。
   // admin で宛先が複数なら本文を入力欄に入れて宛先の帯を開く (押した宛先が先頭に入る)、単一なら直 prefill。
@@ -509,6 +520,8 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
         <AgentPanel
           targets={agentTargets}
           history={promptHistory}
+          pinned={pinnedPrompts}
+          onTogglePin={togglePromptPin}
           targetCounts={targetCounts}
           mode={agentPanel}
           query={slashMode ? slashQuery : ''}
@@ -539,7 +552,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
             className="message-input-agent"
             onClick={onAgentButtonClick}
             disabled={isSending}
-            title={promptHistory.length > 0 || agentTargets.length > 1 ? 'エージェントに聞く（宛先・最近の指示）' : `${assistantName} に聞く`}
+            title={promptHistory.length + pinnedPrompts.length > 0 || agentTargets.length > 1 ? 'エージェントに聞く（宛先・最近の指示）' : `${assistantName} に聞く`}
           >
             🤖
           </button>

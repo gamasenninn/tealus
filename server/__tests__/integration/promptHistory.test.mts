@@ -508,4 +508,70 @@ describe('Prompt History API', () => {
       expect(res.body.items).toHaveLength(0);
     });
   });
+
+  // ============================================
+  // ☆ で固定 (2026-11-01 利用者判断、docs/02 prompt_pins)
+  // ★ 毎回違う文を送る部屋では、30 件より古い大事な指示が押し出されていた
+  // ============================================
+  describe('☆ で固定 (prompt_pins)', () => {
+    const pin = (token: string, room: string, content: string) =>
+      request(app).post(`/api/rooms/${room}/prompts/pins`).set('Authorization', `Bearer ${token}`).send({ content });
+    const unpin = (token: string, room: string, content: string) =>
+      request(app).delete(`/api/rooms/${room}/prompts/pins`).set('Authorization', `Bearer ${token}`).send({ content });
+
+    it('★★ 固定した指示は、30 件より古くなっても pinned に出る', async () => {
+      const old = await send(user1.token, roomId, '@アシスタント 大事な古い指示');
+      await setCreatedAt(old, '2026-01-01T00:00:00Z');
+      expect((await pin(user1.token, roomId, '@アシスタント 大事な古い指示')).status).toBe(200);
+      const kana = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも';
+      for (let i = 0; i < 35; i++) await send(user1.token, roomId, `@アシスタント 毎回違う指示 ${kana[i]}`);
+      const res = await get(user1.token, roomId);
+      expect(res.status).toBe(200);
+      expect(res.body.pinned.map((p: { content: string }) => p.content)).toEqual(['@アシスタント 大事な古い指示']);
+      expect(res.body.pinned[0]).toEqual(expect.objectContaining({ target: 'アシスタント', body: '大事な古い指示', pinned: true }));
+      expect(res.body.items.map((i: { content: string }) => i.content)).not.toContain('@アシスタント 大事な古い指示');
+    });
+
+    it('★ 固定したものは「最近の指示」に二重に出ない', async () => {
+      await send(user1.token, roomId, '@アシスタント 朝のバッチを回そう');
+      await pin(user1.token, roomId, '@アシスタント 朝のバッチを回そう');
+      const res = await get(user1.token, roomId);
+      expect(res.body.pinned).toHaveLength(1);
+      expect(res.body.items).toHaveLength(0);
+    });
+
+    it('★ 外したら pinned から消える。付け直しても 1 本', async () => {
+      await pin(user1.token, roomId, '@アシスタント A');
+      await pin(user1.token, roomId, '@アシスタント A');
+      expect((await get(user1.token, roomId)).body.pinned).toHaveLength(1);
+      expect((await unpin(user1.token, roomId, '@アシスタント A')).status).toBe(200);
+      expect((await get(user1.token, roomId)).body.pinned).toHaveLength(0);
+    });
+
+    it('★ 自分の ☆ だけ。別の人・別の部屋には出ない', async () => {
+      await pin(user1.token, roomId, '@アシスタント 私の');
+      expect((await get(user2.token, roomId)).body.pinned).toHaveLength(0);
+      expect((await get(user1.token, otherRoomId)).body.pinned).toHaveLength(0);
+    });
+
+    it('今の宛先に無いものは出さない (宛先の一覧から外れた班など)', async () => {
+      await pin(user1.token, roomId, '@cc-old 前の班への指示');
+      expect((await get(user1.token, roomId)).body.pinned).toHaveLength(0);
+    });
+
+    it('メンバーでない部屋には付けられない', async () => {
+      expect((await pin(user2.token, otherRoomId, '@アシスタント x')).status).toBe(403);
+    });
+
+    it('空・宛先で始まらない・長すぎる本文は断る', async () => {
+      expect((await pin(user1.token, roomId, '')).status).toBe(400);
+      expect((await pin(user1.token, roomId, '宛先なし')).status).toBe(400);
+      expect((await pin(user1.token, roomId, '@アシスタント ' + 'あ'.repeat(5000))).status).toBe(400);
+    });
+
+    it('★ 1 人 1 部屋 50 本まで', async () => {
+      for (let i = 0; i < 50; i++) expect((await pin(user1.token, roomId, `@アシスタント 指示${i}`)).status).toBe(200);
+      expect((await pin(user1.token, roomId, '@アシスタント 51 本目')).status).toBe(400);
+    });
+  });
 });
