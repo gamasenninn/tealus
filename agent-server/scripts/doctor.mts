@@ -15,7 +15,7 @@
 import dotenv from 'dotenv';
 import { runDoctor, runDeepChecks, formatFindings, type Finding } from '../src/lib/doctor.mts';
 // ★ DB / 外部を掴む側は別 module。★★ ここでだけ import する (起動時には載らない)。
-import { runDbChecks, runProbeChecks } from '../src/lib/doctorDeep.mts';
+import { runDbChecks, runProbeChecks, fetchMediaRefPaths } from '../src/lib/doctorDeep.mts';
 // ★ ci-status は **既定で走る唯一の「読みに行く」口**。理由は下の注記。
 import { judgeCiStatus, fetchCiRuns } from '../src/lib/doctorCi.mts';
 // ★ 索引が本文に追いついているか (#447 系)。★★ repo の file を読むだけ = 外を叩かない
@@ -27,6 +27,8 @@ import { judgeDueDates, fetchOpenIssues } from '../src/lib/doctorDueDates.mts';
 import { judgeBackup, readLatestBackupLog } from '../src/lib/doctorBackup.mts';
 // ★ メディアの総量・空き・常駐のメモリ (2026-10-29)。★★ 手元の file とプロセスを読むだけ = 外を叩かない
 import { judgeCapacity, measureMedia, measureFree, measureProcs } from '../src/lib/doctorCapacity.mts';
+// ★ DB が指すのにファイルが無い添付 (改善ループ 34)。★★ 在るかを見るだけ = 中身は開かない・外を叩かない
+import { judgeMediaRefs, findMissingMedia } from '../src/lib/doctorMediaRefs.mts';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -39,6 +41,7 @@ const serverEnvPath = path.join(import.meta.dirname, '..', '..', 'server', '.env
 const serverEnv = fs.existsSync(serverEnvPath) ? dotenv.parse(fs.readFileSync(serverEnvPath)) : {};
 const mediaDir = serverEnv.MEDIA_ROOT || path.join(import.meta.dirname, '..', '..', 'media');
 const now = new Date();
+const mediaRefPaths = await fetchMediaRefPaths(process.env);
 
 const findings: Finding[] = [
   ...runDoctor(process.env),
@@ -49,6 +52,7 @@ const findings: Finding[] = [
   await checkDocsIndex(),
   judgeBackup({ dir: process.env.BACKUP_LOG_DIR, ...(process.env.BACKUP_LOG_DIR ? await readLatestBackupLog(process.env.BACKUP_LOG_DIR) : { latest: null }) }, new Date()),
   judgeCapacity({ media: await measureMedia(mediaDir, now), freeBytes: await measureFree(mediaDir), procs: await measureProcs(now) }),
+  judgeMediaRefs(mediaRefPaths === null ? null : findMissingMedia(mediaDir, mediaRefPaths)),
   ...(probe ? await runProbeChecks(process.env) : []),
 ];
 

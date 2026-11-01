@@ -269,3 +269,17 @@ export async function runProbeChecks(env: DoctorEnv): Promise<Finding[]> {
 
   return [judgeProbe(results)];
 }
+
+/**
+ * 改善ループ 34: DB が指す添付のパス (本体と縮小画像)。★ 読むだけ。引けなければ null (判定側が「0 件」と区別する)
+ * ★ 消した投稿の添付も数える (ファイルは残す設計なので、無ければ食い違い)
+ */
+export async function fetchMediaRefPaths(env: DoctorEnv): Promise<string[] | null> {
+  return withClient(env, async (c) => {
+    const { rows } = await c.query<{ p: string }>(
+      `SELECT file_path AS p FROM message_media WHERE file_path IS NOT NULL
+       UNION SELECT thumbnail_path FROM message_media WHERE thumbnail_path IS NOT NULL`
+    );
+    return rows.map((r) => r.p);
+  });
+}

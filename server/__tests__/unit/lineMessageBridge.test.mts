@@ -400,6 +400,33 @@ describe('postVoiceToTealus', () => {
 });
 
 describe('postFileToTealus (= Phase 2.1)', () => {
+  // ★ 改善ループ 34: LINE で「ファイル」として届いた写真 (1.6〜6.4 MB の JPEG) にサムネイルが無く、
+  //   メディアの一覧が原寸を読んでいた (本番 14 件)。画像のときだけ作る
+  test('★ 画像のファイルはサムネイルを作って入れる', async () => {
+    mockGenerateThumbnail.mockReset();
+    mockGenerateThumbnail.mockResolvedValue('thumbnails/photo_thumb.jpg');
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
+    await postFileToTealus({
+      roomId: 'r',
+      sender: TEST_SENDER,
+      mediaInfo: { filePath: '/tmp/photo.jpg', relativePath: 'line-files/photo.jpg', fileName: 'photo.jpg', fileSize: 3_000_000, mimeType: 'image/jpeg' },
+    });
+    expect(mockGenerateThumbnail).toHaveBeenCalledWith('/tmp/photo.jpg', 'image/jpeg');
+    const insert = mockClient.query.mock.calls.find((c: unknown[]) => String(c[0]).includes('INSERT INTO message_media'));
+    expect(insert?.[1]).toContain('thumbnails/photo_thumb.jpg');
+  });
+
+  test('★ 画像でないファイル (PDF・動画) はサムネイルを作らない', async () => {
+    mockGenerateThumbnail.mockReset();
+    setupSqlSequence([{}, { rows: [{ id: 'm' }] }, { rows: [{ id: 'media' }] }, {}]);
+    await postFileToTealus({
+      roomId: 'r',
+      sender: TEST_SENDER,
+      mediaInfo: { filePath: '/tmp/a.pdf', relativePath: 'line-files/a.pdf', fileName: 'a.pdf', fileSize: 1, mimeType: 'application/pdf' },
+    });
+    expect(mockGenerateThumbnail).not.toHaveBeenCalled();
+  });
+
   test('SQL: messages (type=file) + media INSERT (thumbnail/width/height 全部 null) + Socket.IO emit', async () => {
     const newMsg = { id: 'msg-file', room_id: 'room-1', type: 'file' };
     const newMedia = { id: 'media-f', message_id: 'msg-file', file_path: 'line-files/doc.pdf' };

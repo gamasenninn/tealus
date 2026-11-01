@@ -391,7 +391,7 @@ export async function postVoiceToTealus(
 /**
  * file message を Tealus に post (= Phase 2.1、bot.js /push-file 同型)
  *
- * 一般 file (= 画像/動画/PDF 等の任意添付) を file type で投影。thumbnail なし、width/height なし、
+ * 一般 file (= 画像/動画/PDF 等の任意添付) を file type で投影。thumbnail は画像のときだけ (改善ループ 34)、width/height なし、
  * transcribe trigger なし。LINE webhook の type=file event 用。
  *
  * @param params.roomId
@@ -408,6 +408,17 @@ export async function postFileToTealus(
   if (!sender) throw new Error('sender is required');
   if (!mediaInfo) throw new Error('mediaInfo is required');
 
+  // ★ 「ファイル」として届いた写真にもサムネイルを作る (改善ループ 34)。無いと、メディアの一覧が原寸 (数 MB) を読む。
+  //   画像だけ (動画・PDF は作らない)。失敗しても投稿は続ける
+  let thumbnailPath: string | null = null;
+  if (mediaInfo.mimeType?.startsWith('image/')) {
+    try {
+      thumbnailPath = await generateThumbnail(mediaInfo.filePath, mediaInfo.mimeType);
+    } catch (err) {
+      logger.warn(`[lineMessageBridge] file thumbnail failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -419,9 +430,9 @@ export async function postFileToTealus(
     const message = msgResult.rows[0];
 
     const mediaResult = await client.query<MediaRow>(
-      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize]
+      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, thumbnail_path)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [message.id, mediaInfo.relativePath, mediaInfo.fileName, mediaInfo.mimeType, mediaInfo.fileSize, thumbnailPath]
     );
     await client.query('COMMIT');
 
