@@ -35,7 +35,7 @@ import { partsFor } from '../lib/promptKnowledge.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
 import { resolveRoomArg } from '../lib/voiceChatRoomArg.mts';
 import { capToolOutput } from '../lib/voiceChatToolOutput.mts';
-import { requesterRoomIds, scopeToolArgs, filterListRooms } from '../lib/voiceChatRequesterScope.mts';
+import { requesterRoomIds, scopeToolArgs, filterListRooms, describeToolForVoice } from '../lib/voiceChatRequesterScope.mts';
 import { pool } from '../context/sessionManager.mts';
 import { readRoomConfig } from '../lib/roomConfigPaths.mts';
 
@@ -210,7 +210,8 @@ async function resolveRoom(req: Request, roomId: string): Promise<{ ok: true; ro
 
 /** MCP の道具 → Realtime の関数宣言。inputSchema は JSON Schema なので変換は名前の付け替えだけ */
 function toFunctionTools(tools: McpToolLike[]): Array<Record<string, unknown>> {
-  return tools.map((t) => ({
+  // ★ 説明は会話モードでの振る舞いに合わせて差し替える (改善ループ 38。search_messages の「省略時 cross-room」)
+  return tools.map(describeToolForVoice).map((t) => ({
     type: 'function',
     name: t.name,
     description: t.description || '',

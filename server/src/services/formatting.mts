@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.mts';
 import OpenAI from 'openai';
 import { pool } from '../db/pool.mts';
-import { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams } from './transcriptionConfig.mts';
+import { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams, videoTranscriptLooksCut, VIDEO_CUT_NOTE } from './transcriptionConfig.mts';
 import { fireWebhooks } from './webhook.mts';
 import type { Server } from 'socket.io';
 
@@ -111,6 +111,12 @@ export async function formatTranscription(
     if (!formattedText && rawText) {
       logger.warn(`[format] AI returned empty string but raw_text has content → fallback to raw_text for message ${messageId}`);
       formattedText = rawText;
+    }
+    // ★ 動画の文字起こしが途中で切れていそうなら印を足す (改善ループ 38、小野さん判断 3)。
+    //   整形すると自然に締まるので、印が無いと後半が無いことに気づけない
+    if (messageType === 'video' && videoTranscriptLooksCut(rawText)) {
+      logger.warn(`[format] video transcript looks cut at ${rawText.trim().length} chars (ends mid-sentence) for message ${messageId}`);
+      formattedText += VIDEO_CUT_NOTE;
     }
 
     // Update transcription record (formatted_text + done)

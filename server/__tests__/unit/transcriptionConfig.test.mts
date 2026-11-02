@@ -654,3 +654,26 @@ describe('buildVocabularyTerms (#424: gemini backend の音響段語彙)', () =>
     expect(t).toEqual(['イセキ']);
   });
 });
+
+// ★ 改善ループ 38 (2026-11-02 小野さん判断 3「当面は切れたかもの印」): 朝礼の動画 (60〜95 MB) の文字起こしが
+//   2,880〜2,932 字で文の途中で終わっていた (3 本)。整形後は自然に締まるので、後半が無いことに気づけない
+describe('videoTranscriptLooksCut', () => {
+  const { videoTranscriptLooksCut } = require('../../src/services/transcriptionConfig');
+  const long = (end: string) => 'あ'.repeat(2600) + end;
+
+  test('★ 長く (2,500 字以上)、最後の文が途中で終わっていれば true (本番の 3 本の末尾)', () => {
+    expect(videoTranscriptLooksCut(long('購入できますので、買って'))).toBe(true);
+    expect(videoTranscriptLooksCut(long('本社4名体'))).toBe(true);
+    expect(videoTranscriptLooksCut(long('川上さんが午前'))).toBe(true);
+  });
+
+  test('文が終わっていれば false (09-25 の 2,682 字は終わりまであった)', () => {
+    expect(videoTranscriptLooksCut(long('よろしくお願いします。'))).toBe(false);
+    expect(videoTranscriptLooksCut(long('以上です！'))).toBe(false);
+    expect(videoTranscriptLooksCut(long('「頑張ろう」'))).toBe(false);
+  });
+
+  test('短ければ false (途中で終わっていても、上限に当たったのではない)', () => {
+    expect(videoTranscriptLooksCut('今日は雨なので')).toBe(false);
+  });
+});

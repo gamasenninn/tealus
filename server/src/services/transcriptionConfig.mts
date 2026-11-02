@@ -498,3 +498,18 @@ export function buildOrganonCorrectionPrompt(config: TranscriptionGuideline | nu
   if (!lines.length) return base;
   return `${base}\n\n# 組織固有名詞リスト\n${lines.join('\n')}`;
 }
+
+/**
+ * 動画の文字起こしが上限で途中で切れているように見えるか (改善ループ 38、2026-11-02 小野さん判断 3「当面は印だけ」)。
+ * ★ 朝礼の動画 (60〜95 MB) は openai で起こしていて、2,880〜2,932 字で文の途中で終わっていた (3 本)。
+ *   整形すると自然に締まるので後半が無いことに気づけない。動画の長さは取っていないので、長さと最後の文の終わり方で見る
+ *   (2,500 字以上 かつ 句点・感嘆符・閉じ括弧で終わっていない)。直すなら時間で分けて起こす (transcription.mts の「将来 chunk 分割」)
+ */
+const VIDEO_CUT_MIN_CHARS = 2500;
+export function videoTranscriptLooksCut(raw: string): boolean {
+  const t = raw.trim();
+  return t.length >= VIDEO_CUT_MIN_CHARS && !/[。．.！!？?」』）)]$/.test(t);
+}
+
+/** 整形後の本文の末尾に足す印 (videoTranscriptLooksCut のとき) */
+export const VIDEO_CUT_NOTE = '\n\n※ 動画が長いため、文字起こしが途中で切れているかもしれません (最後の文が途中で終わっていました)。後半は元の動画で確かめてください。';

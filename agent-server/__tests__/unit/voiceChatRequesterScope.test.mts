@@ -58,3 +58,27 @@ describe('filterListRooms', () => {
     expect(JSON.parse(out.content[0].text)).toEqual({ rooms: [] });
   });
 });
+
+// ★ 改善ループ 38 (2026-11-02 小野さん判断 5): MCP の説明は「room_id 省略時 cross-room」だが、会話モードでは
+//   room_id の無い検索を今の部屋に書き換える (scopeToolArgs)。説明のままだと「ほかの部屋にもありません」と答える形だった
+describe('describeToolForVoice', () => {
+  const { describeToolForVoice } = require('../../src/lib/voiceChatRequesterScope.mts');
+  const search = {
+    name: 'search_messages',
+    description: '直近の議論を検索する。',
+    inputSchema: { type: 'object', properties: { room_id: { type: 'string', description: '単一ルーム指定 (省略時 cross-room)' }, q: { type: 'string' } } },
+  };
+
+  it('★ search_messages の説明を「部屋を省くと今の部屋」に差し替える (元の道具は書き換えない)', () => {
+    const t = describeToolForVoice(search);
+    expect(t.description).toContain('今の部屋');
+    expect(t.inputSchema.properties.room_id.description).toContain('今の部屋');
+    expect(t.inputSchema.properties.room_id.description).not.toContain('cross-room');
+    expect(search.inputSchema.properties.room_id.description).toContain('cross-room');
+  });
+
+  it('他の道具はそのまま', () => {
+    const other = { name: 'get_messages', description: 'x', inputSchema: { type: 'object', properties: {} } };
+    expect(describeToolForVoice(other)).toBe(other);
+  });
+});

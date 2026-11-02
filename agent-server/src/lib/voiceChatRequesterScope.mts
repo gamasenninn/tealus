@@ -66,3 +66,34 @@ export function filterListRooms(result: unknown, known: Set<string>): unknown {
   const text = JSON.stringify(isArray ? kept : { ...(parsed as object), rooms: kept });
   return { ...(result as object), content: content!.map((c, i) => (i === idx ? { ...c, text } : c)) };
 }
+
+interface ToolLike {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+type SchemaLike = { properties?: Record<string, Record<string, unknown>> } & Record<string, unknown>;
+
+/**
+ * 会話モードで AI に見せる道具の説明を、会話モードでの振る舞いに合わせる (改善ループ 38、2026-11-02 小野さん判断 5)。
+ * ★ search_messages: MCP の説明は「room_id 省略時 cross-room」だが、会話モードは room_id の無い検索を今の部屋に書き換える
+ *   (scopeToolArgs)。説明のままだと、AI は横断したつもりで「ほかの部屋にもありません」と答えていた。元の道具は書き換えない
+ */
+export function describeToolForVoice<T extends ToolLike>(tool: T): T {
+  if (tool.name !== 'search_messages') return tool;
+  const schema = (tool.inputSchema ?? {}) as SchemaLike;
+  const props = schema.properties ?? {};
+  const roomId = props.room_id;
+  return {
+    ...tool,
+    description: `${tool.description ?? ''} ★ 会話モードでは room_id を省くと今の部屋だけを探す。ほかの部屋を探すときは、その部屋の room_id を指定する (会話している人が入っている部屋だけ)。`,
+    inputSchema: {
+      ...schema,
+      properties: {
+        ...props,
+        ...(roomId ? { room_id: { ...roomId, description: '単一ルーム指定 (★ 会話モードでは省略時 今の部屋)' } } : {}),
+      },
+    },
+  };
+}
