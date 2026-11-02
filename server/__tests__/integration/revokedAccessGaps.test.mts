@@ -108,6 +108,25 @@ describe('#529 取り消した権限・消した中身', () => {
       expect(res.status).toBe(413);
     });
 
+    // ★ 2026-11-02: アシスタントが自分で作ったロゴを send_image で送り、中身が画像の形でない 300KB が「画像」として
+    //   投稿された (先頭に PNG の印が無い。サムネイルも作れず、画面では壊れて見えた)。send_image は base64 を確かめずに変換する
+    it('★ /push-image: 中身が画像の形でなければ 400、投稿は作らずファイルも残さない', async () => {
+      const before = await getTestPool().query('SELECT count(*)::int n FROM messages WHERE room_id = $1', [roomId]);
+      const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)
+        .field('room_id', roomId).attach('image', Buffer.from('これは画像ではない'.repeat(50)), { filename: 'logo.png', contentType: 'image/png' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('画像');
+      const after = await getTestPool().query('SELECT count(*)::int n FROM messages WHERE room_id = $1', [roomId]);
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+
+    it('★ /push-image: SVG も断る (本体のオリジンで開くと中のスクリプトが動きうる。ファイルとして送る)', async () => {
+      const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>');
+      const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)
+        .field('room_id', roomId).attach('image', svg, { filename: 'logo.svg', contentType: 'image/svg+xml' });
+      expect(res.status).toBe(400);
+    });
+
     it('上限より小さければ今までどおり受ける (前提の確認)', async () => {
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
       const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)

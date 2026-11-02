@@ -375,6 +375,37 @@ async function rejectLongCaption(content: unknown, file: Express.Multer.File, re
 }
 
 /**
+ * 先頭の印で、中身が画像の形かを見る。★ SVG は入れない (本体のオリジンで開くと中のスクリプトが動きうる)
+ * (file-type は ESM 専用で Jest から動的 import できないので、受ける種類だけを自分で見る)
+ */
+export function looksLikeImage(head: Buffer): boolean {
+  const at = (i: number, ...bytes: number[]) => bytes.every((b, k) => head[i + k] === b);
+  const ascii = (i: number, str: string) => head.toString('latin1', i, i + str.length) === str;
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return true;   // PNG
+  if (at(0, 0xff, 0xd8, 0xff)) return true;                                  // JPEG
+  if (ascii(0, 'GIF87a') || ascii(0, 'GIF89a')) return true;                // GIF
+  if (ascii(0, 'RIFF') && ascii(8, 'WEBP')) return true;                    // WebP
+  if (ascii(0, 'BM')) return true;                                           // BMP
+  if (ascii(4, 'ftyp')) return ['avif', 'avis', 'heic', 'heix', 'hevc', 'mif1', 'msf1'].includes(head.toString('latin1', 8, 12));   // AVIF / HEIC
+  return false;
+}
+
+/**
+ * ★ 中身が画像の形でなければ断る (2026-11-02)。アシスタントが自分で作ったロゴを send_image で送り、
+ *   先頭に PNG の印の無い 300KB が「画像」として投稿された (サムネイルも作れず、画面で壊れて見えた)。
+ *   send_image (tealus-mcp) は base64 を確かめずに変換し、送る種類も名前によらず image/png なので、ここで見る
+ */
+async function rejectUnreadableImage(file: Express.Multer.File, res: Response): Promise<boolean> {
+  const head = Buffer.alloc(16);
+  const fh = await fs.promises.open(file.path, 'r').catch(() => null);
+  if (fh) { try { await fh.read(head, 0, 16, 0); } finally { await fh.close(); } }
+  if (fh && looksLikeImage(head)) return false;
+  await fs.promises.unlink(file.path).catch(() => {});
+  res.status(400).json({ error: '画像として読めません (中身が画像の形ではありません)。base64 なら data: の前置きを外し、SVG や文書はファイルとして送ってください' });
+  return true;
+}
+
+/**
  * POST /api/bot/push-image
  * Send an image message to a room
  */
@@ -390,6 +421,7 @@ router.post('/push-image', upload.single('image'), uploadSizeError, rejectOversi
     return res.status(400).json({ error: '画像ファイルが添付されていません' });
   }
   if (await rejectLongCaption(content, file, res)) return;
+  if (await rejectUnreadableImage(file, res)) return;
 
   const client = await pool.connect();
   try {
