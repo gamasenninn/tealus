@@ -205,11 +205,24 @@ describe('共有グローバルの tealus の起こし直し', () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test('awaitTealusRetry: 起こし直しが走っていなければすぐ返る (新しくは始めない)', async () => {
+  // ★ 改善ループ 36: 以前は「走っていなければすぐ返る (新しくは始めない)」だった。期限が来ていてまだ走っていない
+  //   (失敗が続く間の 5 分のうち約 4 分) ときに会話を始めると、起こし直しはこの後の getOrCreateRoomMcp が始めるので待たれず、
+  //   その会話は最後まで tealus 無しだった。期限が来ていれば始めてから待つ (失敗が続いても待つのは 1 分に 1 回まで)
+  test('★ awaitTealusRetry: 期限が来ていれば起こし直しを始めて、済むまで待つ', async () => {
+    tealusFailuresLeft = 1;
+    const { warmSharedGlobal, getOrCreateRoomMcp, awaitTealusRetry } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    now += 61_000;
+    await awaitTealusRetry(10_000);
+    expect(constructed.filter((n) => n === 'tealus')).toHaveLength(2);
+    expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
+  });
+
+  test('awaitTealusRetry: 期限前 (前の試みから 1 分以内) なら始めずにすぐ返る', async () => {
     tealusFailuresLeft = 1;
     const { warmSharedGlobal, awaitTealusRetry } = require('../../src/mcp/roomMcpManager');
     await warmSharedGlobal();
-    now += 61_000;
+    now += 30_000;
     await awaitTealusRetry(10_000);
     expect(constructed.filter((n) => n === 'tealus')).toHaveLength(1);
   });

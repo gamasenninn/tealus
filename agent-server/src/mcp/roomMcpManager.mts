@@ -117,11 +117,13 @@ export function sharedTealusProblem(): string | null {
 }
 
 /**
- * 走っている起こし直しがあれば、済むまで (最大 maxMs) 待つ。新しくは始めない (改善ループ 35)
+ * 起こし直しが走っていれば (期限が来ていれば始めてから)、済むまで最大 maxMs 待つ (改善ループ 35・36)
  * ★ 会話モードは始めたときの道具を最後まで使うので、起こし直しの最中に始めると、その会話の間ずっと tealus が無い。
  *   会話の開始だけはこれを呼ぶ。失敗が続くときは起こし直しが 1 分に 1 回しか走らないので、毎回は待たない
+ * ★★ 期限が来ていても走っていなければ始める。始めないと、この後の getOrCreateRoomMcp が始めた起こし直しを誰も待たない
  */
 export async function awaitTealusRetry(maxMs: number): Promise<void> {
+  void retryTealusIfMissing().catch(() => {});
   if (!tealusRetry) return;
   let timer: NodeJS.Timeout | undefined;
   await Promise.race([

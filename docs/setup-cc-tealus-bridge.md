@@ -743,7 +743,6 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 ```json
 {
   "aliases": [
-    { "mention": "Claude", "project": "tealus" },
     { "mention": "AI", "project": "tealus" },
     { "mention": "Helper", "project": "proj1" }
   ]
@@ -751,12 +750,12 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 ```
 
 各 entry:
-- `mention`: chat で使う display name (例: "Claude")。case-insensitive、word boundary で誤 match 回避
+- `mention`: chat で使う display name (例: "AI")。★ **投稿の名義 (Claude Code の表示名) と同じ語は避ける** —— `@Claude` が「Claude 名義の班」宛てなのか別名の宛て先なのか、読む人に分からない (本番の `@Claude` は 2026-11-01 に外した)。case-insensitive、word boundary で誤 match 回避
 - `project`: 書込先 cc-queue project (= jsonl ファイル名)
 
 **特徴**:
 - code 変更不要、config file 編集だけで alias 追加可能
-- agent-server 再起動で反映 (or admin 経由で reload)
+- agent-server 再起動で反映 (★ 読み直す口は無い。2026-11-02 確認)
 - 行頭 only、`@cc-{project}` と同 stance (#215 自己ループ防止と整合)
 - bot user (`is_bot=true`) を Tealus 側に作成して mention picker に表示させる必要あり (alias は単に dispatcher の routing rule、bot user 自体は別途登録)
 

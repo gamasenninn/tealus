@@ -184,6 +184,12 @@ describe('backup_log', () => {
     expect(judgeBackupLog({ kind: 'none' }).state).toBe('down');
     expect(judgeBackupLog({ kind: 'read-error', error: 'EACCES' }).detail).toContain('EACCES');
   });
+
+  it('★ 実行中は skip (状態を変えない。実行中の 1 分を ⚠ にも ✅ にもしない)', () => {
+    const o = judgeBackupLog({ kind: 'running', name: 'backup-20261101.log' });
+    expect(o.state).toBe('skip');
+    expect(o.detail).toContain('実行中');
+  });
 });
 
 describe('decideNotice — 変わったときだけ知らせる', () => {
@@ -210,6 +216,22 @@ describe('decideNotice — 変わったときだけ知らせる', () => {
     expect(d.kind).toBe('recover');
     expect(d.body!.split('\n')[0]).toBe('✅ 無線 が戻りました (約 1 時間 25 分止まっていました)');
     expect(d.body!.split('\n')[1]).toBe(markFor('radio'));
+  });
+
+  // ★ 改善ループ 36: 鼓動は来ているが働けない (info.problem・送り遅れ) とき、「止まっている」「止まっていました」と言っていた
+  it('★ 動いてはいるが働けない (degraded) ときは「働けていないようです」/ 戻ったら「働けていませんでした」', () => {
+    const degraded = { state: 'down' as const, detail: '動いてはいますが、会話モードの tealus の道具がつながっていません', degraded: true as const };
+    const a = decideNotice(w, degraded, null, now);
+    expect(a.body!.split('\n')[0]).toBe('⚠ 無線 が働けていないようです');
+    const b = decideNotice(w, ok, { kind: 'alert', at: jst('2026-10-13T11:50:00'), degraded: true }, now);
+    expect(b.body!.split('\n')[0]).toBe('✅ 無線 が戻りました (約 10 分働けていませんでした)');
+  });
+
+  it('★ info.problem と送り遅れの down には degraded が付く。鼓動が来ていない down には付かない', () => {
+    expect(judgeHeartbeat(one(radio) as HeartbeatWatch, { last_seen: jst('2026-10-13T11:59:00'), info: { problem: 'x' } } as never, now))
+      .toMatchObject({ state: 'down', degraded: true });
+    expect(judgeHeartbeat(one(radio) as HeartbeatWatch, { last_seen: jst('2026-10-13T10:00:00'), info: {} } as never, now))
+      .not.toHaveProperty('degraded');
   });
 
   it('正常が続く・前回が ✅ で正常 は何もしない', () => {

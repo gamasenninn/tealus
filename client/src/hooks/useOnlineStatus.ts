@@ -20,13 +20,17 @@ export function useOnlineStatus(): UseOnlineStatusResult {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    // ★ #575 ゲストはオンラインを引けない (サーバーが 403)。呼ばない
-    if (canSearchUsers(useAuthStore.getState().user)) {
+    const load = () => {
+      // ★ #575 ゲストはオンラインを引けない (サーバーが 403)。呼ばない
+      if (!canSearchUsers(useAuthStore.getState().user)) return;
       api.getOnlineUsers().then(data => setOnlineUsers(new Set(data.online))).catch(() => {});
-    }
+    };
+    load();
 
     const socket = getSocket();
     if (socket) {
+      // ★ つなぎ直したら取り直す (改善ループ 36)。切れている間の offline を取りこぼすと、帰った人が緑のまま残っていた
+      socket.on('connect', load);
       const handleOnline = (data: UserPresencePayload) => {
         setOnlineUsers(prev => new Set([...prev, data.user_id]));
       };
@@ -37,6 +41,7 @@ export function useOnlineStatus(): UseOnlineStatusResult {
       socket.on('user:offline', handleOffline);
 
       return () => {
+        socket.off('connect', load);
         socket.off('user:online', handleOnline);
         socket.off('user:offline', handleOffline);
       };

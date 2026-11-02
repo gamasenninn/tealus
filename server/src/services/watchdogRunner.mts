@@ -15,7 +15,7 @@ import { logger } from '../utils/logger.mts';
 import { assessBackup, readLatestBackupLog, type BackupRead } from './backupLog.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
 import {
-  decideNotice, judgeBackupLog, judgeDiskFree, judgeHeartbeat, judgePushReach, judgeRoomQuiet,
+  DEGRADED_PHRASE, decideNotice, judgeBackupLog, judgeDiskFree, judgeHeartbeat, judgePushReach, judgeRoomQuiet,
   type DiskRead, type LastNotice, type Observation, type PushTarget,
 } from './watchdogDecide.mts';
 import { getHeartbeat, type Heartbeat } from './heartbeats.mts';
@@ -131,7 +131,8 @@ async function lastNoticeFromRoom(w: Pick<Watch, 'id'>, notify: Notify): Promise
   );
   const row = rows[0];
   if (!row) return null;
-  return { kind: row.content.startsWith('⚠') ? 'alert' : 'recover', at: row.created_at };
+  const alert = row.content.startsWith('⚠');
+  return { kind: alert ? 'alert' : 'recover', at: row.created_at, degraded: alert && row.content.split('\n')[0].endsWith(DEGRADED_PHRASE) };
 }
 
 async function lastPostAtFromRoom(w: RoomQuietWatch): Promise<Date | null> {

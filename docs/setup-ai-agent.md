@@ -480,7 +480,7 @@ sample skeleton: `agent-server/src/agents/lightCustomExample.mts`
 
 - [agent-server/.env.example](../agent-server/.env.example) — env 変数の完全な list と説明
 - [README 第 6 章](../README.md#6-ai-エージェント通話機能を有効化推奨) — 概要と Tier 1/2 の説明
-- [docs/setup-cc-tealus-bridge.md](setup-cc-tealus-bridge.md) — **Claude Code を Tealus の AI member として連携**させたい場合 (本 doc の agent-server とは別経路、tealus-mcp + cc-aliases.json `@Claude` alias)
+- [docs/setup-cc-tealus-bridge.md](setup-cc-tealus-bridge.md) — **Claude Code を Tealus の AI member として連携**させたい場合 (本 doc の agent-server とは別経路、tealus-mcp + `@cc-{project}`。別名は cc-aliases.json で足せる)
 - [docs.tealus.dev](https://docs.tealus.dev) — 公式ドキュメントサイト (より深い architecture / API リファレンス)
 
 問題が解決しない場合は [Issue を立ててください](https://github.com/gamasenninn/tealus/issues/new) — 同じ問題の他のユーザーの参考になります 🌱

@@ -11,14 +11,21 @@ import { markFor, type DiskFreeWatch, type HeartbeatWatch, type RoomQuietWatch, 
 export type Observation =
   | { state: 'ok'; detail: string }
   /** ★ unreadable: 測れなかった (量が足りないのとは別。disk_free の文を分けるため、改善ループ 33) */
-  | { state: 'down'; detail: string; unreadable?: true }
+  | { state: 'down'; detail: string; unreadable?: true;
+      /** ★ degraded: 鼓動は来ているが働けない (info.problem・送り遅れ)。「止まっている」と言わないため (改善ループ 36) */
+      degraded?: true }
   /** 判定しない (稼働時間の外など)。★ 状態を変えない = ⚠ のまま夜を越す */
   | { state: 'skip'; detail: string };
 
 export interface LastNotice {
   kind: 'alert' | 'recover';
   at: Date;
+  /** 前の ⚠ が「働けていない」だったか (✅ の文を合わせる) */
+  degraded?: boolean;
 }
+
+/** ⚠ の 1 行目の言い方。★ 前回の知らせ (業務メモの投稿) から degraded を読み戻すのにも使う */
+export const DEGRADED_PHRASE = 'が働けていないようです';
 
 const JST_OFFSET_MS = 9 * 3_600_000;
 
@@ -88,7 +95,7 @@ export function judgeHeartbeat(w: HeartbeatWatch, hb: Heartbeat | null, now: Dat
   // ★ 部品が自分で「働けない」と分かるときに入れる一文 (docs/09 §3.2、2026-11-01)。本体は解釈せず、そのまま添える
   const problem = hb.info.problem;
   if (typeof problem === 'string' && problem.trim() !== '') {
-    return { state: 'down', detail: `動いてはいますが、${problem.trim()} (最後の鼓動: ${last})` };
+    return { state: 'down', detail: `動いてはいますが、${problem.trim()} (最後の鼓動: ${last})`, degraded: true };
   }
   if (w.max_send_lag_minutes !== undefined) {
     const latest = parseTime(hb.info.latest_file_at);
@@ -99,6 +106,7 @@ export function judgeHeartbeat(w: HeartbeatWatch, hb: Heartbeat | null, now: Dat
         return {
           state: 'down',
           detail: `動いてはいますが、最新のファイル (${formatJst(latest)}) を送っていません (最後に送ったのは ${formatJst(sent)})`,
+          degraded: true,
         };
       }
     }
@@ -149,6 +157,8 @@ export function judgeBackupLog(a: BackupAssessment): Observation {
   switch (a.kind) {
     case 'ok': return { state: 'ok', detail: `最後のバックアップ: ${a.name} (${a.hours} 時間前に成功)` };
     case 'bad': return { state: 'down', detail: `最後のバックアップの記録: ${a.name} (${a.hours} 時間前) — ${a.why}` };
+    // ★ 実行中は判定しない (状態を変えない)。次の周回で終わっていれば ok / bad が出る
+    case 'running': return { state: 'skip', detail: `バックアップの実行中 (${a.name})` };
     case 'none': return { state: 'down', detail: 'バックアップの記録が 1 つもありません' };
     case 'read-error': return { state: 'down', detail: `バックアップの記録の置き場を読めません (${a.error})` };
   }
@@ -179,7 +189,8 @@ export function decideNotice(
   // ★ 空き容量は止まったのではないので「少なくなっています」(docs/09 §3.7)
   const amount = w.kind === 'disk_free';
   if (obs.state === 'down' && !wasDown) {
-    const what = !amount ? 'が止まっているようです' : obs.unreadable ? 'を読めません' : 'が少なくなっています';
+    const what = amount ? (obs.unreadable ? 'を読めません' : 'が少なくなっています')
+      : obs.degraded ? DEGRADED_PHRASE : 'が止まっているようです';
     return { kind: 'alert', body: `⚠ ${w.name} ${what}\n${markFor(w.id)}\n${obs.detail}` };
   }
   if (obs.state === 'ok' && wasDown && amount) {
@@ -189,7 +200,7 @@ export function decideNotice(
     const minutes = Math.max(0, Math.round((now.getTime() - last.at.getTime()) / 60_000));
     return {
       kind: 'recover',
-      body: `✅ ${w.name} が戻りました (約 ${formatDuration(minutes)}止まっていました)\n${markFor(w.id)}\n${obs.detail}`,
+      body: `✅ ${w.name} が戻りました (約 ${formatDuration(minutes)}${last.degraded ? '働けていませんでした' : '止まっていました'})\n${markFor(w.id)}\n${obs.detail}`,
     };
   }
   return { kind: null, body: null };

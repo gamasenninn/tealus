@@ -16,7 +16,7 @@
  */
 import type { Finding } from './doctor.mts';
 import {
-  assessBackup, BACKUP_STALE_HOURS, type LatestBackupLog,
+  assessBackup, BACKUP_RUNNING_MINUTES, BACKUP_STALE_HOURS, type LatestBackupLog,
 } from '../../../server/src/services/backupLog.mts';
 
 export { readLatestBackupLog, BACKUP_STALE_HOURS, type LatestBackupLog } from '../../../server/src/services/backupLog.mts';
@@ -55,6 +55,12 @@ export function judgeBackup(input: BackupInput, now: Date): Finding {
         id, level: 'warn',
         detail: `最後のバックアップの記録: ${a.name} (${a.hours} 時間前) — ${a.why}`,
         fix: '記録の中身を見て、失敗なら手で流してください。★ タスクは「ログインしている間だけ」動く設定のことがあります',
+      };
+    case 'running':
+      return {
+        id, level: 'info',
+        detail: `バックアップの実行中: ${a.name}`,
+        fix: `★ 終わらないまま ${BACKUP_RUNNING_MINUTES} 分書き込みが無ければ warn になります`,
       };
     case 'ok':
       return {

@@ -54,6 +54,13 @@ describe('judgeBackup', () => {
     const f = judgeBackup({ dir: 'S:/x', latest: { name: 'backup-20261001.log', content: '2026-10-01 03:00:04 DB 失敗\n', mtime: at('2026-10-01T03:00:12+09:00') } }, NOW);
     expect(f.level).toBe('warn');
   });
+
+  it('★ 実行中 (開始して終わっておらず、記録が数分以内) なら info で「実行中」。★ 「成功」と言わない', () => {
+    const f = judgeBackup({ dir: 'S:/x', latest: { name: 'backup-20261001.log', content: '2026-10-01 11:59:30 === 開始 ===\n', mtime: at('2026-10-01T11:59:30+09:00') } }, NOW);
+    expect(f.level).toBe('info');
+    expect(f.detail).toContain('実行中');
+    expect(f.detail).not.toContain('成功');
+  });
 });
 
 describe('readLatestBackupLog', () => {

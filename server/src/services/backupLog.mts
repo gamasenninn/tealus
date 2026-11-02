@@ -14,8 +14,16 @@ import path from 'node:path';
 
 /** 毎日 1 回のバックアップが 1 回飛んだら異常 (24h + 実行時間の揺れ 2h) */
 export const BACKUP_STALE_HOURS = 26;
+/**
+ * 開始して終わっていない回を「実行中」とみなす、記録の最後の書き込みからの分 (改善ループ 36)。
+ * ★ 1 回は 1 分弱 (11-02 は 03:00:01〜03:00:55) で、5 分ごとの見張りが約 2 割の夜にその最中に当たる。
+ *   11-01 03:00:12 に実行中を「終了: 成功」が無いと読んで ⚠、03:05 に ✅ を出した。
+ *   これより長く書き込みが無ければ途中で固まったとみなす
+ */
+export const BACKUP_RUNNING_MINUTES = 10;
 const SUCCESS_MARK = '=== 終了: 成功 ===';
 const START_MARK = '=== 開始 ===';
+const END_MARK = '=== 終了';
 const LOG_RE = /^backup-(\d{8})\.log$/;
 
 export interface LatestBackupLog {
@@ -32,6 +40,8 @@ export interface BackupRead {
 export type BackupAssessment =
   | { kind: 'ok'; name: string; hours: number }
   | { kind: 'bad'; name: string; hours: number; why: string }
+  /** 開始して終わっておらず、記録が BACKUP_RUNNING_MINUTES 分以内に書かれている。★ 成功とも失敗とも言わない */
+  | { kind: 'running'; name: string }
   | { kind: 'none' }
   | { kind: 'read-error'; error: string };
 
@@ -110,7 +120,13 @@ export function assessBackup(read: BackupRead, now: Date): BackupAssessment {
   //   (以前はファイルのどこかに成功の印があれば成功と読み、朝の成功が昼の失敗を隠した。2026-10-13 の試走で気づいた)。
   //   途中で止まって「終了」が無い回も、成功の印が無いので失敗になる
   const lastRun = content.lastIndexOf(START_MARK);
-  const ok = content.slice(Math.max(0, lastRun)).includes(SUCCESS_MARK);
+  const run = content.slice(Math.max(0, lastRun));
+  // ★ 2 台の時計 (NAS の mtime と本体) が少しずれても実行中と読めるよう、未来側に 1 分の幅を持たせる
+  const sinceWrite = now.getTime() - mtime.getTime();
+  if (lastRun >= 0 && !run.includes(END_MARK) && sinceWrite >= -60_000 && sinceWrite <= BACKUP_RUNNING_MINUTES * 60_000) {
+    return { kind: 'running', name };
+  }
+  const ok = run.includes(SUCCESS_MARK);
   const stale = hours > BACKUP_STALE_HOURS;
   if (ok && !stale) return { kind: 'ok', name, hours };
   const why = [!ok ? '最後の記録に「終了: 成功」がありません' : '', stale ? `${BACKUP_STALE_HOURS} 時間より古い` : '']

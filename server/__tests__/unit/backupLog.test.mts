@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { assessBackup, readLatestBackupLog, BACKUP_STALE_HOURS } from '../../src/services/backupLog.mts';
+import { assessBackup, readLatestBackupLog, BACKUP_RUNNING_MINUTES, BACKUP_STALE_HOURS } from '../../src/services/backupLog.mts';
 
 const NOW = new Date('2026-10-13T12:00:00+09:00');
 const OK = '2026-10-13 03:00:02 DB ok\n2026-10-13 03:00:25 === 終了: 成功 ===\n';
@@ -35,6 +35,28 @@ describe('assessBackup', () => {
   it('★ 開始したまま終わっていない (途中で止まった) なら bad', () => {
     const cut = OK + '2026-10-13 15:47:18 === 開始 ===\n2026-10-13 15:47:20 DB ok\n';
     expect(assessBackup({ latest: log('backup-20261013.log', cut, '2026-10-13T15:47:20+09:00') }, NOW).kind).toBe('bad');
+  });
+
+  it(`★ 開始して終わっておらず、記録が ${BACKUP_RUNNING_MINUTES} 分以内に書かれていれば running (実行中を失敗と読まない、2026-11-01 03:00:12 の誤報)`, () => {
+    const at3 = new Date('2026-11-01T03:00:12+09:00');
+    const running = '2026-11-01 03:00:01 === 開始 ===\n2026-11-01 03:00:09 DB ok\n';
+    expect(assessBackup({ latest: log('backup-20261101.log', running, '2026-11-01T03:00:09+09:00') }, at3))
+      .toEqual({ kind: 'running', name: 'backup-20261101.log' });
+    // 同じ日の 2 回目の途中も
+    const second = OK + '2026-10-13 11:58:00 === 開始 ===\n';
+    expect(assessBackup({ latest: log('backup-20261013.log', second, '2026-10-13T11:58:00+09:00') }, NOW).kind).toBe('running');
+  });
+
+  it(`★ 記録が ${BACKUP_RUNNING_MINUTES} 分より前で止まっていれば running ではなく bad (途中で固まった)`, () => {
+    const at = new Date('2026-11-01T03:11:00+09:00');
+    const running = '2026-11-01 03:00:01 === 開始 ===\n2026-11-01 03:00:09 DB ok\n';
+    expect(assessBackup({ latest: log('backup-20261101.log', running, '2026-11-01T03:00:09+09:00') }, at).kind).toBe('bad');
+  });
+
+  it('★ 「終了」の行があれば、新しくても running ではない (失敗で終わった回は bad)', () => {
+    const at = new Date('2026-11-01T03:01:00+09:00');
+    const failed = '2026-11-01 03:00:01 === 開始 ===\n2026-11-01 03:00:50 === 終了: ★ 失敗あり ===\n';
+    expect(assessBackup({ latest: log('backup-20261101.log', failed, '2026-11-01T03:00:50+09:00') }, at).kind).toBe('bad');
   });
 
   it(`${BACKUP_STALE_HOURS} 時間より古ければ bad (1 回飛んだ)`, () => {
