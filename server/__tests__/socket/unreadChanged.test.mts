@@ -77,6 +77,22 @@ describe('#532 既読で、同じ人の全端末に unread:changed', () => {
     expect(got).toEqual([{ room_id: roomId }]);
   });
 
+  // ★ 改善ループ 37: 既読は束で来る (例 11-01 16:18:49.994〜50.035 の 40ms に 4 本)。1 本ごとに知らせると、
+  //   受けた全端末・全タブが 1 本ごとに一覧を取り直していた。同じ人の知らせは短くまとめて 1 回にする (画面は room_id を使わない)
+  it('★ 続けて既読にしても、同じ人への知らせは 1 回にまとまる', async () => {
+    const pc = await connect(me.token);
+    const got = events(pc);
+    const { rows } = await getTestPool().query<{ id: string }>(
+      `INSERT INTO messages (room_id, sender_id, content, type) VALUES ($1, $2, '2 本目', 'text') RETURNING id`, [roomId, other.id]);
+    await Promise.all([
+      request(app).post(`/api/rooms/${roomId}/read`).set('Authorization', `Bearer ${me.token}`).send({ message_ids: [msgId] }),
+      request(app).post(`/api/rooms/${roomId}/read`).set('Authorization', `Bearer ${me.token}`).send({ message_ids: [rows[0].id] }),
+    ]);
+    await until(() => got.length > 0);
+    await settle(500);
+    expect(got).toEqual([{ room_id: roomId }]);
+  });
+
   it('★ 他の人には届かない (自分の未読の話なので)', async () => {
     const theirs = await connect(other.token);
     const got = events(theirs);

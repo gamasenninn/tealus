@@ -373,8 +373,11 @@ router.post('/session', async (req, res) => {
 
     // MCP を温める + 道具一覧を取る。1 つのサーバが落ちても会話は始められるようにする
     const workspacePath = path.join(config.WORKSPACE_ROOT, agentId, roomId);
-    // ★ 道具は会話の最初に決まるので、tealus を起こし直している最中なら少しだけ待つ (改善ループ 35)
-    await awaitTealusRetry(10_000);
+    // ★ 道具は会話の最初に決まるので、tealus を起こし直している最中なら待つ (改善ループ 35)
+    // ★★ 接続の上限 (30 秒) まで待つ (改善ループ 37)。10 秒では足りない: tealus の接続は 10-23〜11-01 の起動 18 回のうち
+    //   9 回が 17.9〜28.3 秒で、見切った会話は最後まで道具なしだった。画面の会話開始の待ちは 60 秒 (VOICE_CHAT_START_TIMEOUT_MS)。
+    //   失敗が続いても起こし直しは 1 分に 1 回なので、毎回は待たない
+    await awaitTealusRetry(30_000);
     const servers = await getOrCreateRoomMcp(agentId, roomId, workspacePath) as unknown as McpServerLike[];
 
     // ★ そのルームで許す道具 = 全部 − 既定で外す分 − ルームが外した分 + ルームが戻した分 (#418)

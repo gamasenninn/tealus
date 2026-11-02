@@ -94,20 +94,28 @@ export function limitedDiskStorage(destinationFor: (mimetype: string) => string)
       const limit = sizeLimitFor(file.mimetype);
       let size = 0;
       let done = false;
+      let aborted = false;
       const finish = (err: Error | null, info?: Partial<Express.Multer.File>) => { if (!done) { done = true; cb(err, info); } };
       const out = fs.createWriteStream(filePath);
       file.stream.on('data', (chunk: Buffer) => {
         size += chunk.length;
-        if (size <= limit || done) return;
+        if (size <= limit || done || aborted) return;
+        aborted = true;
         file.stream.unpipe(out);
-        out.destroy();
-        fs.unlink(filePath, () => {});
         const err = Object.assign(new Error('LIMIT_FILE_SIZE'), {
           code: 'LIMIT_FILE_SIZE' as const, field: file.fieldname,
           limitMb: Math.round(limit / (1024 * 1024)), fileName: decodeFileName(file.originalname),
         }) satisfies SizeLimitError;
-        finish(err);
-        file.stream.resume();   // 残りは読み捨てる (止めたままだと multer の後片付けが進まない)
+        // ★ 閉じ終えてから消し、消し終えてから断る (改善ループ 37)。以前は destroy の直後に消していた:
+        //   Windows は開いているファイルを消せないので消し損ね (黙って捨てる) で途中のファイルが残りうる。
+        //   消す前に応答もしていたので、テストが置き場を数えると 1 本多いことがあった (3 回中 2 回落ちた)
+        //   ★ 消し終えるまで受け取りは止めておく (残りを読まない = 全部は受け取らない)
+        file.stream.pause();
+        out.once('close', () => fs.unlink(filePath, () => {
+          finish(err);
+          file.stream.resume();   // 残りは読み捨てる (止めたままだと multer の後片付けが進まない)
+        }));
+        out.destroy();
       });
       out.on('error', (err) => finish(err));
       out.on('finish', () => finish(null, { destination: dir, filename, path: filePath, size }));

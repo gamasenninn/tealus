@@ -252,12 +252,33 @@ describe('共有グローバルの tealus の起こし直し', () => {
     expect(tealusIn(await getOrCreateRoomMcp('agent', 'room1', tmpDir))).toBe(1);
   });
 
-  test('★ checkSharedTealusHealth: 答えが時間内に来なければ死んだとみなす', async () => {
+  // ★ 改善ループ 37: 時間切れは「遅いだけ」(CPU が詰まった瞬間など) とも区別できない。1 回で閉じると、生きている tealus を
+  //   自分で壊し、会話中のセッションの道具を全部失敗させる。時間切れは 2 回続いたときだけ。エラーが返ったら (接続が閉じた) 1 回で
+  test('★ checkSharedTealusHealth: 答えが時間内に来ないのが 2 回続いたら死んだとみなす (1 回では閉じない)', async () => {
     const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem } = require('../../src/mcp/roomMcpManager');
     await warmSharedGlobal();
     const servers = await getOrCreateRoomMcp('agent', 'room1', tmpDir);
-    servers.find((s: { name: string }) => s.name === 'tealus').listTools = jest.fn(() => new Promise(() => {}));
+    const tealus = servers.find((s: { name: string }) => s.name === 'tealus');
+    tealus.listTools = jest.fn(() => new Promise(() => {}));
+    await checkSharedTealusHealth(20);
+    expect(sharedTealusProblem()).toBeNull();
+    expect(tealus.close).not.toHaveBeenCalled();
     await checkSharedTealusHealth(20);
     expect(sharedTealusProblem()).not.toBeNull();
+    expect(tealus.close).toHaveBeenCalled();
+  });
+
+  test('checkSharedTealusHealth: 時間切れのあと答えれば数え直す (飛び飛びの遅れでは閉じない)', async () => {
+    const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    const servers = await getOrCreateRoomMcp('agent', 'room1', tmpDir);
+    const tealus = servers.find((s: { name: string }) => s.name === 'tealus');
+    tealus.listTools = jest.fn(() => new Promise(() => {}));
+    await checkSharedTealusHealth(20);
+    tealus.listTools = jest.fn(async () => []);
+    await checkSharedTealusHealth(20);
+    tealus.listTools = jest.fn(() => new Promise(() => {}));
+    await checkSharedTealusHealth(20);
+    expect(sharedTealusProblem()).toBeNull();
   });
 });

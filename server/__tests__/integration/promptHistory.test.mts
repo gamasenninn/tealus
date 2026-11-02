@@ -440,6 +440,44 @@ describe('Prompt History API', () => {
   });
 
   // ============================================
+  // ★ 絞り込み q (改善ループ 37)
+  // 以前は画面が「返ってきた 30 件の中」だけを文字で絞っていたので、31 本目以降・200 件より前の指示は
+  // 打って探しても無いように見えた (11-02 の業務メモ/小野さん: 286 本、200 件は 06-07 まで)
+  // ============================================
+  describe('絞り込み q', () => {
+    it('★ q を渡すと、その文字を含む指示だけを、件数の窓 (200 件) より前からも探す', async () => {
+      const old = await send(user1.token, roomId, '@アシスタント 古い棚卸しの手順');
+      await setCreatedAt(old, '2026-01-01T00:00:00Z');
+      for (let i = 0; i < 200; i++) await getTestPool().query(
+        `INSERT INTO messages (room_id, sender_id, content, type) VALUES ($1, $2, $3, 'text')`,
+        [roomId, user1.user.id, `@アシスタント 別の指示 その${'あ'.repeat(i % 7)}${String.fromCharCode(0x4e00 + i)}`],
+      );
+
+      const plain = await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&limit=100`);
+      expect(plain.body.items.some((i: { body: string }) => i.body.includes('棚卸し'))).toBe(false);
+
+      const res = await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&q=${encodeURIComponent('棚卸')}`);
+      expect(res.body.items.map((i: { body: string }) => i.body)).toEqual(['古い棚卸しの手順']);
+    });
+
+    it('q は大文字・小文字を区別しない。% や _ を wildcard として扱わない', async () => {
+      await send(user1.token, roomId, '@アシスタント PDF を要約');
+      await send(user1.token, roomId, '@アシスタント 100% にして');
+      await send(user1.token, roomId, '@アシスタント 1000 にして');
+      expect((await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&q=pdf`)).body.items).toHaveLength(1);
+      expect((await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&q=${encodeURIComponent('0%')}`)).body.items
+        .map((i: { body: string }) => i.body)).toEqual(['100% にして']);
+    });
+
+    it('★ q があっても target_counts は絞らない (打つたびに宛先チップの並びが動かない)', async () => {
+      await send(user1.token, roomId, '@アシスタント 指示1');
+      await send(user1.token, roomId, '@cc-tealus 別の話');
+      const res = await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&q=${encodeURIComponent('指示')}`);
+      expect(res.body.target_counts).toEqual({ アシスタント: 1, 'cc-tealus': 1 });
+    });
+  });
+
+  // ============================================
   // 宛先チップの並び (頻度順)
   // ============================================
   describe('target_counts', () => {

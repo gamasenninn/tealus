@@ -253,6 +253,28 @@ describe('buildWhisperPrompt', () => {
     expect(prompt).toContain('用語36');
     expect(prompt.length).toBeLessThan(2000);
   });
+
+  // ★ 改善ループ 37: 11-02 の本番は 391 語で 1,894 字 (余り 106 字)、30 日で 75 語増えている。
+  //   超えると slice で語の途中から切れ、五十音順の末尾の語が黙って落ちていた (途中で切れた語は誤った綴りを教える)
+  test('★ 上限を超えるときは語の途中で切らず、入る語までにする', () => {
+    const prompt = configModule.buildWhisperPrompt({
+      whisper_context: '',
+      vocabulary: Array.from({ length: 600 }, (_, i) => ({ term: `語${String(i).padStart(3, '0')}` })),
+    }, 'gpt-4o-mini-transcribe');
+    expect(prompt.length).toBeLessThanOrEqual(2000);
+    expect(prompt.endsWith('、')).toBe(false);
+    expect(prompt.split('、').pop()).toMatch(/^語\d{3}$/);
+  });
+
+  test('★ whisperVocabDropped: 上限で落ちる語の数 (収まれば 0、vocab を渡さない model も 0)', () => {
+    const many = Array.from({ length: 600 }, (_, i) => ({ term: `語${String(i).padStart(3, '0')}` }));
+    const dropped = configModule.whisperVocabDropped({ whisper_context: '', vocabulary: many }, 'gpt-4o-mini-transcribe');
+    const prompt = configModule.buildWhisperPrompt({ whisper_context: '', vocabulary: many }, 'gpt-4o-mini-transcribe');
+    expect(dropped).toBe(600 - prompt.split('、').length);
+    expect(dropped).toBeGreaterThan(0);
+    expect(configModule.whisperVocabDropped({ whisper_context: '', vocabulary: [{ term: '甲' }] }, 'gpt-4o-mini-transcribe')).toBe(0);
+    expect(configModule.whisperVocabDropped({ whisper_context: '', vocabulary: many }, 'whisper-1')).toBe(0);
+  });
 });
 
 describe('isWhisperPromptHallucination (#269 Bug 1 fix)', () => {

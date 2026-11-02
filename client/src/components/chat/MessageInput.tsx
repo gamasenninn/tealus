@@ -140,12 +140,31 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   const [pinnedPrompts, setPinnedPrompts] = useState<PromptHistoryItem[]>([]);
   const [targetCounts, setTargetCounts] = useState<Record<string, number>>({});
   const targetNames = useMemo(() => agentTargets.map(t => t.display_name), [agentTargets]);
+  // 本体で絞り込んだときの文字 (下の effect)
+  const searchedQueryRef = useRef('');
   const refreshPromptHistory = useCallback(() => {
     if (!roomId || targetNames.length === 0) return;
     api.getPromptHistory(roomId, targetNames)
-      .then(d => { setPromptHistory(d.items || []); setPinnedPrompts(d.pinned || []); setTargetCounts(d.target_counts || {}); })
+      .then(d => {
+        // ★ 絞り込み中は、絞っていない一覧で上書きしない (下の本体での絞り込みが出したものを残す)
+        if (!searchedQueryRef.current) setPromptHistory(d.items || []);
+        setPinnedPrompts(d.pinned || []); setTargetCounts(d.target_counts || {});
+      })
       .catch(() => {});
   }, [roomId, targetNames]);
+  // ★ `/` のあとに打った文字は本体で探す (改善ループ 37)。返ってきた 30 件の中だけを絞ると、
+  //   それより古い指示は打っても無いように見えた。打つたびに引かないよう少し待つ。宛先チップの回数は変えない
+  useEffect(() => {
+    const q = slashMode ? slashQuery.trim() : '';
+    if (!roomId || targetNames.length === 0 || q === searchedQueryRef.current) return;
+    const timer = setTimeout(() => {
+      searchedQueryRef.current = q;
+      api.getPromptHistory(roomId, targetNames, 30, q || undefined)
+        .then(d => { if (searchedQueryRef.current === q) setPromptHistory(d.items || []); })
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [slashMode, slashQuery, roomId, targetNames]);
   // 開いた瞬間に「履歴があるか」で挙動を分けるので先読みしておく (ルーム切替時は一旦捨てる)
   useEffect(() => {
     setPromptHistory([]);

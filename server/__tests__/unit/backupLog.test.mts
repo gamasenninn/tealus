@@ -48,7 +48,7 @@ describe('assessBackup', () => {
   });
 
   it(`★ 記録が ${BACKUP_RUNNING_MINUTES} 分より前で止まっていれば running ではなく bad (途中で固まった)`, () => {
-    const at = new Date('2026-11-01T03:11:00+09:00');
+    const at = new Date('2026-11-01T03:31:00+09:00');
     const running = '2026-11-01 03:00:01 === 開始 ===\n2026-11-01 03:00:09 DB ok\n';
     expect(assessBackup({ latest: log('backup-20261101.log', running, '2026-11-01T03:00:09+09:00') }, at).kind).toBe('bad');
   });

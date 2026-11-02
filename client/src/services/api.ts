@@ -331,8 +331,10 @@ class ApiClient {
     return this.request<{ success: boolean }>('DELETE', `/rooms/${roomId}/prompts/pins`, { content });
   }
 
-  getPromptHistory(roomId: string, targets: string[], limit = 30): Promise<PromptHistoryResponse> {
+  /** query: 絞り込みの文字。★ 本体で全部の指示から探す (改善ループ 37。返ってきた分の中だけを絞ると古い指示が見えない) */
+  getPromptHistory(roomId: string, targets: string[], limit = 30, query?: string): Promise<PromptHistoryResponse> {
     const q = new URLSearchParams({ targets: targets.join(','), limit: String(limit) });
+    if (query) q.set('q', query);
     return this.request<PromptHistoryResponse>('GET', `/rooms/${roomId}/prompts/history?${q}`);
   }
 

@@ -48,6 +48,8 @@ const TEALUS_RETRY_MS = 60_000;
 let sharedTealusMissing = false;
 let lastTealusAttempt = 0;
 let tealusRetry: Promise<void> | null = null;
+// ★ 共有の tealus の生存確認で、続けて時間切れになった回数 (改善ループ 37)
+let tealusHealthTimeouts = 0;
 // ★ 起こしている最中の部屋 (同じ部屋に同時に来た呼び出しは同じ起動を待つ)
 const roomMcpPending = new Map<string, Promise<MCPServerStdio[]>>();
 // ★ 作り直して外した古い接続 (改善ループ 32)。会話モードのセッションは始めたときの接続を最後まで握って道具を呼ぶので、
@@ -95,12 +97,18 @@ export async function checkSharedTealusHealth(timeoutMs = 10_000): Promise<void>
   const tealus = target.find((s) => s.name === 'tealus');
   if (!tealus) return;
   let timer: NodeJS.Timeout | undefined;
-  const alive = await Promise.race([
-    tealus.listTools().then(() => true, () => false),
-    new Promise<boolean>((r) => { timer = setTimeout(() => r(false), timeoutMs); }),
+  const result = await Promise.race([
+    tealus.listTools().then(() => 'alive' as const, () => 'error' as const),
+    new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), timeoutMs); }),
   ]);
   clearTimeout(timer);
-  if (alive || sharedGlobalServers !== target) return;
+  if (sharedGlobalServers !== target) return;
+  // ★ 時間切れは「遅いだけ」と区別できないので 2 回続いたときだけ外す (改善ループ 37)。
+  //   1 回で閉じると、CPU が詰まった瞬間に生きている tealus を自分で壊し、会話中のセッションの道具を全部失敗させる。
+  //   エラーが返ったとき (接続が閉じた) は 1 回で外す
+  if (result === 'alive') { tealusHealthTimeouts = 0; return; }
+  if (result === 'timeout' && ++tealusHealthTimeouts < 2) return;
+  tealusHealthTimeouts = 0;
   const i = target.indexOf(tealus);
   if (i >= 0) target.splice(i, 1);
   sharedTealusMissing = true;

@@ -7,7 +7,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useOnlineStatus } from '../../src/hooks/useOnlineStatus';
 
 const handlers = new Map<string, (d?: unknown) => void>();
+let disconnectedAfterConnect = false;
 vi.mock('../../src/services/socket', () => ({
+  isSocketDisconnectedAfterConnect: () => disconnectedAfterConnect,
   getSocket: () => ({
     on: (name: string, fn: (d?: unknown) => void) => handlers.set(name, fn),
     off: (name: string) => handlers.delete(name),
@@ -19,7 +21,7 @@ let role = 'user';
 vi.mock('../../src/stores/authStore', () => ({ useAuthStore: { getState: () => ({ user: { id: 'me', role } }) } }));
 
 describe('useOnlineStatus', () => {
-  beforeEach(() => { handlers.clear(); getOnlineUsers.mockReset(); role = 'user'; });
+  beforeEach(() => { handlers.clear(); getOnlineUsers.mockReset(); role = 'user'; disconnectedAfterConnect = false; });
 
   it('開いたときに一覧を取り、online / offline の差分で直す', async () => {
     getOnlineUsers.mockResolvedValue({ online: ['a'] });
@@ -35,8 +37,24 @@ describe('useOnlineStatus', () => {
     const { result } = renderHook(() => useOnlineStatus());
     await waitFor(() => expect(result.current.onlineUsers.size).toBe(2));
     getOnlineUsers.mockResolvedValueOnce({ online: ['b'] });
+    act(() => handlers.get('disconnect')!());
     act(() => handlers.get('connect')!());
     await waitFor(() => expect([...result.current.onlineUsers]).toEqual(['b']));
+  });
+
+  it('★ 起動直後の最初の connect では取り直さない (開いたときの読み込みと 2 重になる、改善ループ 37)', async () => {
+    getOnlineUsers.mockResolvedValue({ online: ['a'] });
+    renderHook(() => useOnlineStatus());
+    act(() => handlers.get('connect')!());
+    expect(getOnlineUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('★ 切れている最中に開いたら、最初の connect で取り直す', async () => {
+    disconnectedAfterConnect = true;
+    getOnlineUsers.mockResolvedValue({ online: ['a'] });
+    renderHook(() => useOnlineStatus());
+    act(() => handlers.get('connect')!());
+    expect(getOnlineUsers).toHaveBeenCalledTimes(2);
   });
 
   it('★ ゲストは取りに行かない (つなぎ直しでも。本体が 403)', async () => {

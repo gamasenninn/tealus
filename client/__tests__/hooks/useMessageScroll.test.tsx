@@ -12,14 +12,16 @@ vi.mock('../../src/stores/messageStore', () => ({
   useMessageStore: () => ({ messages, loadMore: vi.fn(), hasMore: false }),
 }));
 vi.mock('../../src/stores/authStore', () => ({ useAuthStore: () => ({ user: { id: 'u1' } }) }));
+const fetchRooms = vi.fn();
 vi.mock('../../src/stores/roomStore', () => {
   const useRoomStore = () => ({});
-  (useRoomStore as unknown as { getState: () => unknown }).getState = () => ({ fetchRooms: vi.fn() });
+  (useRoomStore as unknown as { getState: () => unknown }).getState = () => ({ fetchRooms });
   return { useRoomStore };
 });
 vi.mock('../../src/services/api', () => ({ api: { markRead: vi.fn() } }));
 const emit = vi.fn();
-vi.mock('../../src/services/socket', () => ({ getSocket: () => ({ emit }) }));
+let connected = true;
+vi.mock('../../src/services/socket', () => ({ getSocket: () => ({ emit, connected }) }));
 
 import { useMessageScroll } from '../../src/hooks/useMessageScroll';
 import { api } from '../../src/services/api';
@@ -33,6 +35,8 @@ describe('useMessageScroll — 画面が見えているときだけ、まとめ�
     visibility = 'visible';
     vi.mocked(api.markRead).mockReset().mockResolvedValue(undefined as never);
     emit.mockReset();
+    fetchRooms.mockReset();
+    connected = true;
     messages = [{ id: 'm0', sender_id: 'other' }];
   });
   afterEach(() => vi.useRealTimers());
@@ -47,6 +51,27 @@ describe('useMessageScroll — 画面が見えているときだけ、まとめ�
     emit.mockClear();
     return hook;
   };
+
+  // ★ 改善ループ 37: 既読のあと、この画面は自分で一覧を取り直し、さらに同じタブに届く unread:changed でも取り直していた (2 本)
+  it('★ 既読にしたあと、つながっていれば自分では一覧を取り直さない (unread:changed が届く)', async () => {
+    const { rerender } = openRoom();
+    fetchRooms.mockClear();
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    rerender();
+    await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); });
+    expect(api.markRead).toHaveBeenCalled();
+    expect(fetchRooms).not.toHaveBeenCalled();
+  });
+
+  it('★ 切れているときは、既読のあと自分で一覧を取り直す (知らせが届かないので)', async () => {
+    const { rerender } = openRoom();
+    fetchRooms.mockClear();
+    connected = false;
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    rerender();
+    await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); });
+    expect(fetchRooms).toHaveBeenCalled();
+  });
 
   it('見えている間は、投稿が増えたら今までどおりまとめて既読にする', () => {
     const { rerender } = openRoom();

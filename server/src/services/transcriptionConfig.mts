@@ -104,6 +104,9 @@ export async function refreshVocabFromTable(): Promise<number> {
         description: r.description || null,
       }));
       logger.info(`[dictionary] vocab overlay from table: ${tableVocab.length} terms`);
+      // ★ 文字起こしに渡す用語が上限で落ちていれば知らせる (改善ループ 37。落ちるのは五十音順の末尾から)
+      const dropped = whisperVocabDropped({ ...loadFileGuideline(), vocabulary: tableVocab }, 'gpt-4o-mini-transcribe');
+      if (dropped > 0) logger.warn(`[dictionary] 文字起こしの用語の上限 (2,000 字) で ${dropped} 語が入っていません (全 ${tableVocab.length} 語)`);
       // #348 (a): agent-server (別プロセス) が読む local.ttl を発行 (5 field)。非致命 —
       // 書き込み失敗で refresh を壊さない (overlay は既に更新済)。空/DB不達時は書かず、
       // 前回の good な local.ttl を温存する (= file fallback 最後の砦 の思想)。
@@ -132,6 +135,18 @@ export function loadGuideline(): TranscriptionGuideline {
 }
 
 export function buildWhisperPrompt(config: TranscriptionGuideline, model: string | null = null): string | null {
+  return assembleWhisperPrompt(config, model).prompt;
+}
+
+/**
+ * 上限で prompt に入らない語の数 (改善ループ 37)。辞書を読み直したときに数え、0 でなければ warn を出す。
+ * ★ 入らない語は五十音順の末尾から黙って落ちる (順は listActiveVocabulary の ORDER BY t.term)
+ */
+export function whisperVocabDropped(config: TranscriptionGuideline, model: string | null = null): number {
+  return assembleWhisperPrompt(config, model).dropped;
+}
+
+function assembleWhisperPrompt(config: TranscriptionGuideline, model: string | null): { prompt: string | null; dropped: number } {
   // Whisper の prompt parameter は style/spelling bias であって辞書ではない。
   // vocabulary を強く渡すと隣接音が歪む (例: 「ビレッジ側」→「ビレッジガン」)、
   // この特性は **model 依存** で、whisper-1 / gpt-4o-transcribe では bias 観測されたが、
@@ -155,13 +170,29 @@ export function buildWhisperPrompt(config: TranscriptionGuideline, model: string
   const shouldInjectVocab = model && VOCAB_INJECT_MODELS.includes(model)
     && Array.isArray(vocabulary) && vocabulary.length > 0;
 
+  const isLegacyModel = !model || model === 'whisper-1';
+  const MAX_CHARS = isLegacyModel ? 200 : 2000;
+
   let prompt = whisper_context || '';
+  let dropped = 0;
   if (shouldInjectVocab) {
-    const terms = vocabulary.map((v) => v.term).filter(Boolean).join('、');
-    prompt = prompt ? `${prompt} 用語: ${terms}` : `用語: ${terms}`;
+    // ★ 語の途中で切らない (改善ループ 37)。以前は全部つないでから slice していたので、超えると最後の語が途中で切れ、
+    //   誤った綴りを教える形だった。入る語までにし、入らない数を返す
+    const head = prompt ? `${prompt} 用語: ` : '用語: ';
+    const terms = vocabulary.map((v) => v.term).filter(Boolean);
+    let body = '';
+    let used = 0;
+    for (const t of terms) {
+      const next = body ? `${body}、${t}` : t;
+      if (head.length + next.length > MAX_CHARS) break;
+      body = next;
+      used++;
+    }
+    dropped = terms.length - used;
+    if (used > 0) prompt = head + body;
   }
 
-  if (!prompt) return null;
+  if (!prompt) return { prompt: null, dropped };
 
   // Model-aware truncation (#269 Phase 2 follow-up、5/12 user dogfood で判明):
   // - whisper-1: 224 token (最終 224 のみ参照、それ以前は無視されるという legacy 仕様)
@@ -173,9 +204,7 @@ export function buildWhisperPrompt(config: TranscriptionGuideline, model: string
   //
   // truncate 方向は slice(0, N) で先頭保持に変更 (旧 slice(-N) は末尾保持で whisper_context
   // 冒頭が削れる問題あり、辞書 inject 順序的に先頭 = whisper_context + 重要 term の方が自然)。
-  const isLegacyModel = !model || model === 'whisper-1';
-  const MAX_CHARS = isLegacyModel ? 200 : 2000;
-  return prompt.length > MAX_CHARS ? prompt.slice(0, MAX_CHARS) : prompt;
+  return { prompt: prompt.length > MAX_CHARS ? prompt.slice(0, MAX_CHARS) : prompt, dropped };
 }
 
 export function buildFormattingExtension(config: TranscriptionGuideline): string {

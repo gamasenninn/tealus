@@ -24,7 +24,12 @@ router.use(requireMember);
 interface HistoryQuery {
   targets?: string;
   limit?: string;
+  /** 絞り込みの文字 (改善ループ 37)。含む指示だけを本体で探す */
+  q?: string;
 }
+
+/** 絞り込みの文字の上限 */
+const Q_MAX = 100;
 
 /** messages から読む列 */
 interface PromptRow {
@@ -114,7 +119,10 @@ const FORM_ANSWER_MARKER = '【回答】';
 router.get('/history', async (req, res) => {
   const roomId = (req.params as { id: string }).id;
   const userId = req.user!.id;
-  const { targets, limit = String(DEFAULT_LIMIT) } = req.query as HistoryQuery;
+  const { targets, limit = String(DEFAULT_LIMIT), q } = req.query as HistoryQuery;
+  // ★ 絞り込みは本体で (改善ループ 37)。以前は画面が返ってきた 30 件の中だけを絞っていたので、
+  //   31 本目以降・200 件より前の指示は打って探しても無いように見えた
+  const query = typeof q === 'string' ? q.trim().slice(0, Q_MAX) : '';
 
   const targetList = (targets || '').split(',').map(s => s.trim()).filter(Boolean);
   if (targetList.length === 0) {
@@ -139,9 +147,13 @@ router.get('/history', async (req, res) => {
     params.push(FORM_ANSWER_MARKER);
     const markerIdx = params.length;
 
-    params.push(SCAN_LIMIT);
-
-    const result = await pool.query<PromptRow>(
+    // ★ strpos + lower で探す (LIKE だと % や _ が wildcard になる。宛先の starts_with と同じ理由)
+    const scan = (filter: string) => {
+      const ps = [...params];
+      let cond = '';
+      if (filter) { ps.push(filter); cond = `AND strpos(lower(m.content), lower($${ps.length})) > 0`; }
+      ps.push(SCAN_LIMIT);
+      return pool.query<PromptRow>(
       `SELECT m.id, m.content, m.created_at
          FROM messages m
         WHERE m.room_id = $1
@@ -158,10 +170,20 @@ router.get('/history', async (req, res) => {
               SELECT 1 FROM messages f WHERE f.id = m.reply_to AND f.type = 'form'
             )
           )
+          ${cond}
         ORDER BY m.created_at DESC
-        LIMIT $${params.length}`,
-      params
-    );
+        LIMIT $${ps.length}`,
+      ps
+      );
+    };
+    const result = await scan(query);
+    // ★ 宛先チップの回数は絞らない (打つたびに並びが動かない)
+    const countRows = query ? (await scan('')).rows : result.rows;
+    const targetCounts: Record<string, number> = {};
+    for (const row of countRows) {
+      const target = byLengthDesc.find(t => row.content.startsWith(`@${t} `));
+      if (target && row.content.slice(target.length + 2).trim()) targetCounts[target] = (targetCounts[target] || 0) + 1;
+    }
 
     /** 骨格ごとの束。代表は最新の1件、numberSets は各数字位置に現れた値の集合 */
     interface Group {
@@ -172,7 +194,6 @@ router.get('/history', async (req, res) => {
       numberSets: Array<Set<string>>;
     }
 
-    const targetCounts: Record<string, number> = {};
     // Map は挿入順を保つ。走査が新しい順なので、束の並びもそのまま新しい順になる
     const groups = new Map<string, Group>();
 
@@ -183,8 +204,6 @@ router.get('/history', async (req, res) => {
       const rawAfter = row.content.slice(target.length + 2);
       const body = rawAfter.trim();
       if (!body) continue; // 宛先だけの投稿は指示として再利用できない
-
-      targetCounts[target] = (targetCounts[target] || 0) + 1;
 
       const key = dedupeKey(target, body);
       const numbers = numbersOf(body);

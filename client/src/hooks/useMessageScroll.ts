@@ -178,7 +178,9 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
     if (unreadIds.length > 0) {
       api.markRead(roomId, unreadIds).then(() => {
         // mark-read 後に room list を再 fetch → App Badge を即更新 (badge spike、5/12)
-        useRoomStore.getState().fetchRooms();
+        // ★ つながっていれば取り直さない (改善ループ 37)。本体の unread:changed がこのタブにも届き、そちらで取り直す
+        //   (タブどうしでも分け合う)。ここでも取ると、既読 1 回でこのタブが 2 本取っていた
+        if (!getSocket()?.connected) useRoomStore.getState().fetchRooms();
       }).catch(() => {});
       // ★ socket では送らない (REST の既読が「既読 N」を配る。2 回配っていた、2026-10-30)
     }
