@@ -41,6 +41,23 @@ describe('limitedDiskStorage', () => {
     expect(fs.readdirSync(dir)).toHaveLength(0);
   });
 
+  // ★ CI (Linux) で、止めた書き込みの流れが ERR_STREAM_DESTROYED を出し、上限の失敗より先に届いて 500 になった
+  it('★ 止めたあとに書き込みの流れが失敗しても、返すのは上限の失敗', async () => {
+    const realCreate = fs.createWriteStream;
+    const spy = jest.spyOn(fs, 'createWriteStream').mockImplementation(((p: fs.PathLike, o?: unknown) => {
+      const s = realCreate(p, o as never);
+      const destroy = s.destroy.bind(s);
+      s.destroy = ((e?: Error) => { s.emit('error', Object.assign(new Error('destroyed'), { code: 'ERR_STREAM_DESTROYED' })); return destroy(e); }) as never;
+      return s;
+    }) as never);
+    try {
+      const r = await handle(dir, 'image/png', 50 * MB);
+      expect(r.err?.code).toBe('LIMIT_FILE_SIZE');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('上限ちょうどは通る (サイズと保存先を返す)', async () => {
     const r = await handle(dir, 'image/png', 10 * MB);
     expect(r.err).toBeNull();

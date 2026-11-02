@@ -160,6 +160,7 @@ function retryTealusIfMissing(): Promise<void> {
       }
       target.unshift(...servers);
       sharedTealusMissing = false;
+      tealusHealthTimeouts = 0;   // ★ 新しい tealus は数え直す (改善ループ 38)
       logger.info('[RoomMCP] 共有グローバルの tealus を起こし直しました');
     })
     .finally(() => { tealusRetry = null; });
@@ -450,6 +451,7 @@ export async function closeAllRoomMcp(): Promise<void> {
   sharedGlobalServers = null;
   sharedGlobalPromise = null;
   sharedTealusMissing = false;
+  tealusHealthTimeouts = 0;
   for (const server of globals) {
     try { await server.close(); } catch { /* ignore */ }
   }

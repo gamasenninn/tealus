@@ -292,7 +292,8 @@ function RoomList() {
               if (ok) {
                 try {
                   await api.request('POST', `/rooms/${roomId}/read/all`);
-                  fetchRooms();
+                  // ★ つながっていれば取り直さない。本体の unread:changed がこのタブにも届く (改善ループ 38、2 本取っていた)
+                  if (!getSocket()?.connected) fetchRooms();
                 } catch (err) {
                   console.error('Mark all read error:', err);
                   notifyFailure('既読化', err);

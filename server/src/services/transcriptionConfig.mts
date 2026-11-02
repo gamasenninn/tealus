@@ -105,7 +105,11 @@ export async function refreshVocabFromTable(): Promise<number> {
       }));
       logger.info(`[dictionary] vocab overlay from table: ${tableVocab.length} terms`);
       // ★ 文字起こしに渡す用語が上限で落ちていれば知らせる (改善ループ 37。落ちるのは五十音順の末尾から)
-      const dropped = whisperVocabDropped({ ...loadFileGuideline(), vocabulary: tableVocab }, 'gpt-4o-mini-transcribe');
+      //   ★ この上限があるのは legacy の whisper prompt だけ (organon は prompt を渡さず、gemini は custom_vocabulary に全語)。
+      //     他の構成で数えると、起きていない取りこぼしを知らせることになる (改善ループ 38)
+      const dropped = getTranscriptionMode() === 'legacy'
+        ? whisperVocabDropped({ ...loadFileGuideline(), vocabulary: tableVocab }, process.env.WHISPER_MODEL || 'gpt-4o-mini-transcribe')
+        : 0;
       if (dropped > 0) logger.warn(`[dictionary] 文字起こしの用語の上限 (2,000 字) で ${dropped} 語が入っていません (全 ${tableVocab.length} 語)`);
       // #348 (a): agent-server (別プロセス) が読む local.ttl を発行 (5 field)。非致命 —
       // 書き込み失敗で refresh を壊さない (overlay は既に更新済)。空/DB不達時は書かず、

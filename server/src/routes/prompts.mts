@@ -195,41 +195,52 @@ router.get('/history', async (req, res) => {
     }
 
     // Map は挿入順を保つ。走査が新しい順なので、束の並びもそのまま新しい順になる
-    const groups = new Map<string, Group>();
+    const groupRows = (rows: PromptRow[]): Map<string, Group> => {
+      const groups = new Map<string, Group>();
 
-    for (const row of result.rows) {
-      const target = byLengthDesc.find(t => row.content.startsWith(`@${t} `));
-      if (!target) continue;
+      for (const row of rows) {
+        const target = byLengthDesc.find(t => row.content.startsWith(`@${t} `));
+        if (!target) continue;
 
-      const rawAfter = row.content.slice(target.length + 2);
-      const body = rawAfter.trim();
-      if (!body) continue; // 宛先だけの投稿は指示として再利用できない
+        const rawAfter = row.content.slice(target.length + 2);
+        const body = rawAfter.trim();
+        if (!body) continue; // 宛先だけの投稿は指示として再利用できない
 
-      const key = dedupeKey(target, body);
-      const numbers = numbersOf(body);
+        const key = dedupeKey(target, body);
+        const numbers = numbersOf(body);
 
-      let group = groups.get(key);
-      if (!group) {
-        // 最初に出会ったもの = 最新。これを代表にするので「最後に使った値」が入る
-        group = {
-          row,
-          target,
-          body,
-          bodyStart: target.length + 2 + (rawAfter.length - rawAfter.trimStart().length),
-          numberSets: numbers.map(() => new Set<string>()),
-        };
-        groups.set(key, group);
+        let group = groups.get(key);
+        if (!group) {
+          // 最初に出会ったもの = 最新。これを代表にするので「最後に使った値」が入る
+          group = {
+            row,
+            target,
+            body,
+            bodyStart: target.length + 2 + (rawAfter.length - rawAfter.trimStart().length),
+            numberSets: numbers.map(() => new Set<string>()),
+          };
+          groups.set(key, group);
+        }
+        // 骨格が同じなら数字の個数も同じ。i 番目に現れた値を集める
+        numbers.forEach((n, i) => group!.numberSets[i]?.add(n));
       }
-      // 骨格が同じなら数字の個数も同じ。i 番目に現れた値を集める
-      numbers.forEach((n, i) => group!.numberSets[i]?.add(n));
-    }
+      return groups;
+    };
+    const groups = groupRows(result.rows);
+    // ★ 穴 (変わる数字) は絞らない履歴からも集める (改善ループ 38)。絞った結果だけで数えると、
+    //   「画像1枚で」「画像4枚で」が 1 件しか残らず穴が消えていた
+    const allGroups = query ? groupRows(countRows) : groups;
+    const sizeAt = (key: string, g: Group | undefined, i: number): number => {
+      const seen = new Set<string>([...(g?.numberSets[i] ?? []), ...(allGroups.get(key)?.numberSets[i] ?? [])]);
+      return seen.size;
+    };
 
     const items: HistoryItem[] = [];
-    for (const g of groups.values()) {
+    for (const [key, g] of groups) {
       // ★ 穴は推測しない。実際に 2 種類以上の値が現れた位置だけを穴にする。
       // これを緩めると「2026年7月」の 2026 を選択してしまい、打った瞬間に年が壊れる。
       const holes = digitRanges(g.row.content, g.bodyStart)
-        .filter((_, i) => (g.numberSets[i]?.size ?? 0) > 1);
+        .filter((_, i) => sizeAt(key, g, i) > 1);
 
       // content は加工せずそのまま返す (表示された文字列がそのまま入力欄に入る約束)
       items.push({
@@ -259,9 +270,9 @@ router.get('/history', async (req, res) => {
       const key = dedupeKey(target, body);
       pinnedKeys.add(key);
       const g = groups.get(key);
-      const holes = g
+      const holes = g || allGroups.has(key)
         ? digitRanges(p.content, target.length + 2 + (rawAfter.length - rawAfter.trimStart().length))
-            .filter((_, i) => (g.numberSets[i]?.size ?? 0) > 1)
+            .filter((_, i) => sizeAt(key, g, i) > 1)
         : [];
       pinned.push({ message_id: `pin:${p.id}`, target, body, content: p.content, holes, created_at: p.created_at, pinned: true });
     }

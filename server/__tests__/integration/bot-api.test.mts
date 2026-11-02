@@ -509,6 +509,20 @@ describe('Bot API', () => {
       expect(ids).not.toContain(plainId);
     });
 
+    // ★ 改善ループ 38: get_messages には #485-1 で添えたが、検索には無かった。AI は since/until を日本時間で指定し、
+    //   結果の UTC (…Z) をそのまま読むので「10/29 0 時台」の投稿を「10/28 15 時台」と書く形だった
+    it('★ 検索の結果にもサーバーの時間帯の時刻 created_at_local を添える', async () => {
+      const res = await request(app)
+        .get(`/api/bot/search?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.results.length).toBeGreaterThan(0);
+      for (const m of res.body.results) {
+        const jst = new Date(new Date(m.created_at).getTime() + 9 * 3600 * 1000).toISOString();
+        expect(m.created_at_local).toBe(`${jst.slice(0, 10)} ${jst.slice(11, 16)} (Asia/Tokyo)`);
+      }
+    });
+
     it('has_reaction 未指定なら両方返る（後方互換）', async () => {
       const res = await request(app)
         .get(`/api/bot/search?room_id=${roomId}`)
@@ -1502,6 +1516,7 @@ describe('Bot API', () => {
       expect(res.body.type).toBe('text');
       expect(res.body.is_edited).toBe(true);
       expect(res.body.current_content).toBe('edited text');
+      expect(res.body.created_at_local).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} \(Asia\/Tokyo\)$/);   // ★ 改善ループ 38
       expect(res.body.text_edit_history).toHaveLength(1);
       expect(res.body.text_edit_history[0].content).toBe('original text');
       expect(res.body.voice_transcription_versions).toEqual([]);

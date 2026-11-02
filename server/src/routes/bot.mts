@@ -1053,6 +1053,7 @@ router.get('/messages/:id/edit-history', scopeByMessage, requireUuidId, async (r
       sender_id: msg.sender_id,
       is_edited: msg.is_edited,
       created_at: msg.created_at,
+      created_at_local: formatLocalTime(msg.created_at),
       current_content: msg.content,
       text_edit_history: editsResult.rows,
       voice_transcription_versions: transResult.rows,
@@ -1322,6 +1323,8 @@ router.get('/search', async (req, res) => {
         sender_display_name: r.sender_display_name,
         type: r.type,
         created_at: r.created_at,
+        // ★ サーバーの時間帯の時刻も添える (get_messages の #485-1 と同じ。改善ループ 38、検索には無かった)
+        created_at_local: formatLocalTime(r.created_at),
         snippet: buildSnippet(text, q),
       };
     });

@@ -117,8 +117,10 @@ export function limitedDiskStorage(destinationFor: (mimetype: string) => string)
         }));
         out.destroy();
       });
-      out.on('error', (err) => finish(err));
-      out.on('finish', () => finish(null, { destination: dir, filename, path: filePath, size }));
+      // ★ 上限で止めたあとの失敗・完了は見ない (改善ループ 37 の取り残し)。壊した流れが書きかけの分で
+      //   ERR_STREAM_DESTROYED を出すことがあり (CI の Linux で)、上限の失敗より先に届いて 500 になった
+      out.on('error', (err) => { if (!aborted) finish(err); });
+      out.on('finish', () => { if (!aborted) finish(null, { destination: dir, filename, path: filePath, size }); });
       file.stream.pipe(out);
     },
     _removeFile(_req, file, cb) {

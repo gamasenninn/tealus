@@ -469,6 +469,14 @@ describe('Prompt History API', () => {
         .map((i: { body: string }) => i.body)).toEqual(['100% にして']);
     });
 
+    it('★ 絞り込んでも、変わる数字 (穴) は絞らない履歴から作る (改善ループ 38。絞ると 1 件だけ残り穴が消えていた)', async () => {
+      await send(user1.token, roomId, '@アシスタント 直近の画像1枚で出品票を作って');
+      await send(user1.token, roomId, '@アシスタント 直近の画像4枚で出品票を作って');
+      const res = await get(user1.token, roomId, `targets=${encodeURIComponent(TARGETS)}&q=${encodeURIComponent('4枚')}`);
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0].holes).toHaveLength(1);
+    });
+
     it('★ q があっても target_counts は絞らない (打つたびに宛先チップの並びが動かない)', async () => {
       await send(user1.token, roomId, '@アシスタント 指示1');
       await send(user1.token, roomId, '@cc-tealus 別の話');

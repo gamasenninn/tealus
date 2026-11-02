@@ -268,6 +268,20 @@ describe('共有グローバルの tealus の起こし直し', () => {
     expect(tealus.close).toHaveBeenCalled();
   });
 
+  test('★ checkSharedTealusHealth: 作り直した新しい tealus は時間切れを数え直す (前の tealus の 1 回を引き継がない、改善ループ 38)', async () => {
+    const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem, closeAllRoomMcp } = require('../../src/mcp/roomMcpManager');
+    await warmSharedGlobal();
+    const first = (await getOrCreateRoomMcp('agent', 'room1', tmpDir)).find((s: { name: string }) => s.name === 'tealus');
+    first.listTools = jest.fn(() => new Promise(() => {}));
+    await checkSharedTealusHealth(20);
+    await closeAllRoomMcp();
+    await warmSharedGlobal();
+    const second = (await getOrCreateRoomMcp('agent', 'room1', tmpDir)).find((s: { name: string }) => s.name === 'tealus');
+    second.listTools = jest.fn(() => new Promise(() => {}));
+    await checkSharedTealusHealth(20);
+    expect(sharedTealusProblem()).toBeNull();
+  });
+
   test('checkSharedTealusHealth: 時間切れのあと答えれば数え直す (飛び飛びの遅れでは閉じない)', async () => {
     const { warmSharedGlobal, getOrCreateRoomMcp, checkSharedTealusHealth, sharedTealusProblem } = require('../../src/mcp/roomMcpManager');
     await warmSharedGlobal();
