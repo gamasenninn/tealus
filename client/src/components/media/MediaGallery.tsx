@@ -271,6 +271,8 @@ function MediaGallery() {
               <a
                 href={`/media/${videoPlayer.file_path}`}
                 download={videoPlayer.file_name}
+                target="_blank"
+                rel="noopener"
                 className="gallery-download-btn"
               >ダウンロードして再生</a>
             </div>

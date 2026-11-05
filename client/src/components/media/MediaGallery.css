@@ -105,14 +105,22 @@
   align-content: start;
 }
 
+/* ★ 正方形のマスは aspect-ratio で作る (2026-11-05)。padding-bottom: 100% の作りは、iPhone の Safari のグリッドでは
+   正方形にならず (幅の 3 割ほどの高さ)、写真が上下に重なって見えた。aspect-ratio の無い古いブラウザだけ以前の作り */
 .gallery-item {
   position: relative;
   width: 100%;
-  padding-bottom: 100%;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   cursor: pointer;
   background: #f0f0f0;
   border-radius: 2px;
+}
+
+@supports not (aspect-ratio: 1 / 1) {
+  .gallery-item {
+    padding-bottom: 100%;
+  }
 }
 
 .gallery-item img {

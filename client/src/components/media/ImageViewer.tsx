@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import './ImageViewer.css';
+import { saveMediaFile } from '../../utils/saveMedia';
 
 // viewer に必要な最小形 (呼び出し側は file_path / file_name だけ渡せばよい)
 export interface ViewerImage {
@@ -38,10 +39,8 @@ function ImageViewer({ images, initialIndex, onClose }: ImageViewerProps) {
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const a = document.createElement('a');
-    a.href = `/media/${current.file_path}`;
-    a.download = current.file_name || 'image';
-    a.click();
+    // ★ iPhone の Safari で画像の画面へ移って戻れなかった (2026-11-05)。共有シート / 新しいタブで保存する
+    if (current.file_path) void saveMediaFile(current.file_path, current.file_name || 'image');
   };
 
   return (

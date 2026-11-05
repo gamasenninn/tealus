@@ -1,4 +1,5 @@
 import { Download } from 'lucide-react';
+import { saveMediaFiles } from '../../utils/saveMedia';
 import TextFilePreview, { isTextFile } from './TextFilePreview';
 import MediaAudio from './MediaAudio';
 import type { MediaItem } from '../../types';
@@ -18,14 +19,8 @@ function ImageGrid({ media, onImageClick }: ImageGridProps) {
 
   const downloadAll = (e: React.MouseEvent) => {
     e.stopPropagation();
-    images.forEach((img, i) => {
-      setTimeout(() => {
-        const a = document.createElement('a');
-        a.href = `/media/${img.file_path}`;
-        a.download = img.file_name || `image_${i + 1}`;
-        a.click();
-      }, i * 300); // 300ms 間隔で連続ダウンロード
-    });
+    // ★ iPhone の Safari で画像の画面へ移って戻れなかった (2026-11-05)。共有シートで一度に / 使えなければ新しいタブで 1 枚ずつ
+    void saveMediaFiles(images.filter((img) => img.file_path).map((img, i) => ({ path: img.file_path!, name: img.file_name || `image_${i + 1}` })));
   };
 
   const getGridClass = () => {
