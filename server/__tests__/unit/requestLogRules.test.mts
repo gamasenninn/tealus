@@ -10,6 +10,7 @@ import express from 'express';
 import request from 'supertest';
 import { requestLog } from '../../src/middleware/requestLog.mts';
 import { logger } from '../../src/utils/logger.mts';
+import { resetRequestFlood } from '../../src/middleware/requestFlood.mts';
 
 let info: jest.SpyInstance;
 let warn: jest.SpyInstance;
@@ -90,4 +91,13 @@ test.each([401, 403, 429])('断られた要求 (%i) は [http-denied] に残す'
   expect(l).toHaveLength(1);
   expect(l[0]).toContain(`${status} POST /api/auth/login`);
   expect(l[0]).not.toContain('secret');
+});
+
+// ★ 改善ループ 41: 1 分に何十回も同じ口を叩く相手を warn に出す (11-04 の 11 万回は全部 debug で埋もれた)
+test('★ 同じ相手が同じ口を 1 分に 60 回を超えて叩いたら [http-flood] を 1 行', async () => {
+  resetRequestFlood();
+  const app = appAs(HUMAN);
+  for (let i = 0; i < 62; i++) await request(app).get('/api/config');
+  await settle();
+  expect(lines(warn, '[http-flood]').length).toBe(1);
 });

@@ -138,7 +138,19 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ### → 次の版 (main を追っている場合は今すぐ)
 
-- ★ **migration 041 (`041_portal_links_pass.sql`) が増えました** (#607、10-18)。`cd server && npm run migrate` → **server の再起動**。忘れるとホーム画面のタブ (`GET /api/rooms/portal-links`) が全員 500 になります (起動ログに `[migration-check] ★ 未適用 1 件` が出ます)
+- ★ **migration が 4 本増えました (041〜044)**。`cd server && npm run migrate` → **server の再起動**。起動ログに `[migration-check] ★ 未適用 N 件` が出ていれば流し忘れです
+
+| 番号 | 中身 | 忘れると |
+|---|---|---|
+| 041 | アプリの通行証 (`portal_links`、#607、10-18) | ホーム画面のタブ (`GET /api/rooms/portal-links`) が全員 500 |
+| 042 | 初回ログインでパスワードの変更を求める印 (`users.must_change_password`、10-29) | ★★★ **ログインもその後の操作もすべて失敗する** (認証のたびにこの列を読む) |
+| 043 | 削除した投稿の本文の退避 (`deleted_message_contents`、10-30) | 投稿の削除が失敗する |
+| 044 | 指示の履歴の ☆ 固定 (`prompt_pins`、11-01) | 指示の履歴が出ない |
+
+- 2026-11-05 (改善ループ 39・40) の振る舞いの変更 (手順は増えません。client の再ビルドと server の再起動だけ):
+  - bot の画像の口 (`/api/bot/push-image`、`/api/bot/push-file` で種類が `image/*` のとき) は、HEIC・BMP と途中で切れた画像を 400 で断ります
+  - 管理 API: 自分自身・最後の有効なシステム管理者は無効にも一般にもできません。`is_active` は `true` / `false` だけ (文字列の `"false"` を送るスクリプトは 400)。役割は `admin` / `user` / `guest` だけ。部屋の最後の有効なグループ管理者は、解除も退会させることもできません
+  - `GET /api/auth/me` に `push_active_subscriptions` (有効な通知の宛先の本数) が増えました。0 本の人には画面が案内を出します
 
 ### → v0.11.1（0.11.0 の監査で見つかった穴 2 つ）
 

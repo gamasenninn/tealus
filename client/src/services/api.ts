@@ -50,8 +50,11 @@ export interface DeletedMessageEntry {
   message_id: string; content: string | null; deleted_at: string; type: string; room_id: string; created_at: string;
   room_name: string | null; sender_display_name: string; deleted_by_display_name: string | null;
 }
-/** push_active_subscriptions: 有効な通知の宛先の本数 (改善ループ 40)。数えられなかったら null、古い本体は返さない */
-export interface MeResponse { user: User; push_active_subscriptions?: number | null }
+/**
+ * push_active_subscriptions: 有効な通知の宛先の本数 (改善ループ 40) / push_total_subscriptions: 外れたものも含めた本数 (41)。
+ * 数えられなかったら null、古い本体は返さない
+ */
+export interface MeResponse { user: User; push_active_subscriptions?: number | null; push_total_subscriptions?: number | null }
 export interface RoomsResponse { rooms: Room[] }
 export interface RoomResponse { room: Room; members: RoomMember[]; last_read_message_id?: string | null }
 export interface MessagesResponse { messages: Message[]; has_more?: boolean }

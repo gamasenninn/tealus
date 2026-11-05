@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger.mts';
+import { floodKey, noteRequestForFlood } from './requestFlood.mts';
 
 /**
  * API の要求を 1 行ずつ記録する (改善ループ 9 回目の B・C で「誰が」を足した)。
@@ -7,6 +8,7 @@ import { logger } from '../utils/logger.mts';
  * - いつもの行 (debug): 方法・URL・状態・時間・利用者
  * - [http-denied] (warn): 401 / 403 / 429。誰か・どこから・どの端末か。★ 問い合わせ (?…) は残さない (鍵が乗ることがある)
  * - [change] (info): 人が何かを変えた要求 (GET 以外で成功)。誰が・どこを・どの欄を。★ 値は残さない (パスワード・本文が入る)
+ * - [http-flood] (warn): 同じ相手が同じ口を 1 分に 60 回を超えて叩いた (10 分に 1 回まで、requestFlood.mts。改善ループ 41)
  *
  * ★ 応答を返したあと (finish) に書くので、認証を通った要求なら req.user が入っている
  */
@@ -51,6 +53,8 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
     const status = res.statusCode;
     const path = url.split('?')[0];
     logger.debug(`${req.method} ${url} ${status} ${ms}ms user=${who(req)}`);
+    const flood = noteRequestForFlood(floodKey(req), `${req.method} ${path}`);
+    if (flood) logger.warn(`${flood} ua=${clip(req.headers['user-agent'], 120)}`);
 
     if (DENIED.has(status)) {
       logger.warn(`[http-denied] ${status} ${req.method} ${path} user=${who(req)} ip=${req.ip ?? '-'} ua=${clip(req.headers['user-agent'], 120)}`);

@@ -17,15 +17,24 @@ function dismissedThisSession(): boolean {
  * ★ iPhone の Safari (ホーム画面から開いていない) では通知が届かないので、ホーム画面に追加を案内する。
  * ★ 「あとで」はこの起動のあいだだけ閉じる。プロフィールの「この端末で通知を受け取る」(#546) はいつでも使える
  */
-function PushOnboardingBanner({ activeSubscriptions = null }: {
+function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = true, onRegistered }: {
   /**
    * 本体が数えた有効な通知の宛先の本数 (改善ループ 40)。★ 0 なら許可の状態に関係なく案内する。
    *   11-03 に iPhone の宛先が 410 で外れた人は許可済みのままで、「まだ聞いていない端末」だけを案内する作りでは何も出ず、
    *   2 日で 195 件の通知が届かなかった。null (分からない) は今までどおり
    */
   activeSubscriptions?: number | null;
+  /**
+   * 以前は宛先があった (外れたものを含めて 1 本以上、改善ループ 41)。★ 一度も登録していない人の「拒否」は本人が選んだもので、
+   *   「切れています」と起動のたびに出すと煩わしいだけ。拒否の案内は、以前は届いていた人にだけ出す
+   */
+  hadSubscriptions?: boolean;
+  /** 押して登録できたとき (店の本数を 1 にして、ほかの画面でも出直さないように) */
+  onRegistered?: () => void;
 }) {
   const [hidden, setHidden] = useState(dismissedThisSession);
+  // ★ 押して登録できなかった (改善ループ 41)。以前は押した瞬間に帯を消していたので、失敗しても本人には「できた」に見えた
+  const [failed, setFailed] = useState(false);
   if (hidden) return null;
   // ★ 通知の鍵 (VAPID) の無い Tealus では何も出さない。iPhone の案内どおりにしても届かない (0c7fbd8 のボタンと同じ判断)
   if (!getConfig().vapid_public_key) return null;
@@ -45,11 +54,23 @@ function PushOnboardingBanner({ activeSubscriptions = null }: {
   }
 
   const enable = () => {
-    setHidden(true);
-    void registerPushNotification();
+    void registerPushNotification().then((r) => {
+      if (r === 'ok') { onRegistered?.(); setHidden(true); return; }
+      // 拒否を選んだ (初めての問い) なら閉じる。それ以外の失敗は帯に残して伝える
+      if (r === 'denied') { setHidden(true); return; }
+      setFailed(true);
+    });
   };
 
   const permission = pushPermission();
+  if (failed) {
+    return (
+      <div className="push-onboarding" role="status">
+        <span className="push-onboarding-text">通知を受け取れるようにできませんでした。プロフィールの「この端末で通知を受け取る」からもう一度試してください</span>
+        <button className="push-onboarding-btn secondary" onClick={close}>閉じる</button>
+      </div>
+    );
+  }
   if (activeSubscriptions === 0 && permission === 'granted') {
     // ★ iPhone は宛先を捨てても許可は残る。作り直すにはタップの中で頼む必要がある (#546)
     return (
@@ -60,7 +81,7 @@ function PushOnboardingBanner({ activeSubscriptions = null }: {
       </div>
     );
   }
-  if (activeSubscriptions === 0 && permission === 'denied') {
+  if (activeSubscriptions === 0 && hadSubscriptions && permission === 'denied') {
     return (
       <div className="push-onboarding" role="status">
         <span className="push-onboarding-text">通知が切れているので、メッセージが届いても知らせが出ません。端末の設定で Tealus の通知を「許可」にしてから開き直してください</span>

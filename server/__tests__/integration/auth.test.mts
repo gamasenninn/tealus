@@ -244,6 +244,9 @@ describe('Auth API', () => {
       await pool.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key, is_active) VALUES ($1, 'https://e/2', 'p', 'a', false)`, [me.body.user.id]);
       const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
       expect(res.body.push_active_subscriptions).toBe(1);
+      // ★ 改善ループ 41: 外れた宛先も含めた本数 (一度も登録していない人と、外れた人を画面が見分ける)
+      expect(res.body.push_total_subscriptions).toBe(2);
+      expect(me.body.push_total_subscriptions).toBe(0);
     });
 
     it('should reject request without token', async () => {

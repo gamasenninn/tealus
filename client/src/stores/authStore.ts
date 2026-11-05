@@ -56,6 +56,10 @@ interface AuthState {
    *   (PushOnboardingBanner)。分からない (古い本体・ログイン直後) は null = 今までどおり
    */
   pushActiveSubscriptions: number | null;
+  /** 以前は宛先があった (外れたものを含めて 1 本以上、改善ループ 41)。拒否の案内は、以前は届いていた人にだけ出す */
+  pushHadSubscriptions: boolean;
+  /** 帯から登録できたとき (ほかの画面でも 0 本の案内を出し直さない) */
+  notePushRegistered: () => void;
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
   /** expired: 鍵が切れたあと (本体への宛先の取り外しを頼まない) */
@@ -89,6 +93,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   isLoading: true,
   offline: false,
   pushActiveSubscriptions: null,
+  pushHadSubscriptions: true,
+  notePushRegistered: () => { if (get().pushActiveSubscriptions === 0) set({ pushActiveSubscriptions: 1 }); },
 
   initialize: () => {
     // ★ 走っている最中なら同じ試行を返す (2026-10-29 改善ループ 20 回目)。「つながっていません」の 10 秒ごとの再試行と
@@ -111,9 +117,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         connectSocket(token);
         await refreshConfig();
         set({ user: data.user, token, isLoading: false, offline: false,
-          pushActiveSubscriptions: typeof data.push_active_subscriptions === 'number' ? data.push_active_subscriptions : null });
+          pushActiveSubscriptions: typeof data.push_active_subscriptions === 'number' ? data.push_active_subscriptions : null,
+          pushHadSubscriptions: typeof data.push_total_subscriptions === 'number' ? data.push_total_subscriptions > 0 : true });
         // ★ 黙って登録し直せた (Android・PC) なら 0 本の案内は要らない
-        registerPushIfAllowed(() => { if (get().pushActiveSubscriptions === 0) set({ pushActiveSubscriptions: 1 }); });
+        registerPushIfAllowed(() => get().notePushRegistered());
         startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
         void moveLegacySoundOff(data.user, set);
       } catch (err) {
@@ -145,7 +152,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     api.setToken(data.token);
     connectSocket(data.token);
     await refreshConfig();
-    set({ user: data.user, token: data.token, offline: false });
+    // ★ 本数は /login では分からない。前の人の本数を残さない (改善ループ 41。ログアウトせずに別の人が入る道)
+    set({ user: data.user, token: data.token, offline: false, pushActiveSubscriptions: null, pushHadSubscriptions: true });
     registerPushIfAllowed();
     startPushResumeRefresh();
     void moveLegacySoundOff(data.user, set);

@@ -43,4 +43,17 @@ describe('有効な通知の宛先の本数', () => {
     await useAuthStore.getState().initialize();
     expect(useAuthStore.getState().pushActiveSubscriptions).toBeNull();
   });
+
+  it('★ 一度も登録していない人 (外れたものも 0 本) は「以前は届いていた」にしない (改善ループ 41)', async () => {
+    vi.spyOn(api, 'getMe').mockResolvedValue({ user: { id: 'u1' }, push_active_subscriptions: 0, push_total_subscriptions: 0 } as never);
+    await useAuthStore.getState().initialize();
+    expect(useAuthStore.getState().pushHadSubscriptions).toBe(false);
+  });
+
+  it('★ ログインの道では前の人の本数を残さない (改善ループ 41)', async () => {
+    useAuthStore.setState({ pushActiveSubscriptions: 0 });
+    vi.spyOn(api, 'login').mockResolvedValue({ token: 't2', user: { id: 'u2' } } as never);
+    await useAuthStore.getState().login('EMP002', 'password1');
+    expect(useAuthStore.getState().pushActiveSubscriptions).toBeNull();
+  });
 });

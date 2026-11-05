@@ -123,8 +123,16 @@ router.delete('/me', authenticate, requireMember, requireGroup, async (req: Requ
     // Check if last admin (ほかにメンバーがいるのに、有効なグループ管理者が自分だけなら断る)
     if (req.memberRole === 'admin') {
       if (!(await otherActiveGroupAdminExists(roomId, userId))) {
+        // ★ ほかが全員無効なら、管理者にしても数えられない (改善ループ 41)。従っても通らない案内を出さない
+        const activeOthers = await pool.query(
+          `SELECT 1 FROM room_members rm JOIN users u ON u.id = rm.user_id
+            WHERE rm.room_id = $1 AND rm.user_id <> $2 AND u.is_active LIMIT 1`,
+          [roomId, userId]
+        );
         return res.status(400).json({
-          error: 'あなたは最後のグループ管理者です。先に他のメンバーをグループ管理者に変更してください。'
+          error: activeOthers.rows.length > 0
+            ? 'あなたは最後のグループ管理者です。先に他のメンバーをグループ管理者に変更してください。'
+            : 'ほかのメンバーは全員利用停止です。その人たちを退会させてから、部屋を削除してください。'
         });
       }
     }

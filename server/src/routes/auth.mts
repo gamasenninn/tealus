@@ -172,17 +172,22 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
  * ★ 有効な通知の宛先の本数も返す (改善ループ 40)。本体は「この人は宛先 0 本で送れなかった」を知っていたのに、
  *   本人の画面に伝える口が無かった (11-03 に iPhone の宛先が 410 で外れた人に、2 日で 195 件届かなかった)。
  *   画面は 0 本なら許可の状態に関係なく案内する。数えられなかったら null (画面は今までどおり)
+ * ★ 外れた宛先も含めた本数も返す (改善ループ 41)。一度も登録していない人 (通知を拒否と決めた人を含む) と、
+ *   宛先が外れた人を画面が見分ける (見張り push_reach と同じ区別)
  */
 router.get('/me', authenticate, async (req, res) => {
   let pushActiveSubscriptions: number | null = null;
+  let pushTotalSubscriptions: number | null = null;
   try {
-    const r = await pool.query<{ n: number }>(
-      'SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1 AND is_active', [req.user!.id]);
-    pushActiveSubscriptions = r.rows[0].n;
+    const r = await pool.query<{ active: number; total: number }>(
+      `SELECT count(*) FILTER (WHERE is_active)::int AS active, count(*)::int AS total
+         FROM push_subscriptions WHERE user_id = $1`, [req.user!.id]);
+    pushActiveSubscriptions = r.rows[0].active;
+    pushTotalSubscriptions = r.rows[0].total;
   } catch (err) {
     logger.warn(`[auth/me] 通知の宛先を数えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
   }
-  res.json({ user: req.user, push_active_subscriptions: pushActiveSubscriptions });
+  res.json({ user: req.user, push_active_subscriptions: pushActiveSubscriptions, push_total_subscriptions: pushTotalSubscriptions });
 });
 
 /**

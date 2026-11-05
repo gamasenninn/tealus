@@ -76,9 +76,34 @@ describe('PushOnboardingBanner', () => {
 
     it('★ 拒否されている端末では、端末の設定で許可する案内を出す (押しても聞けないのでボタンは出さない)', () => {
       pushPermission.mockReturnValue('denied');
-      render(<PushOnboardingBanner activeSubscriptions={0} />);
+      render(<PushOnboardingBanner activeSubscriptions={0} hadSubscriptions />);
       expect(screen.getByText(/設定/)).toBeTruthy();
       expect(screen.queryByRole('button', { name: '通知を受け取る' })).toBeNull();
+    });
+
+    // ★ 改善ループ 41: 一度も登録していない人 (通知は要らないと拒否を選んだ人) に、起動のたびに「切れています」と出ていた
+    it('★ 一度も登録していない人の拒否には何も出さない (本人が選んだ)', () => {
+      pushPermission.mockReturnValue('denied');
+      const { container } = render(<PushOnboardingBanner activeSubscriptions={0} hadSubscriptions={false} />);
+      expect(container.textContent).toBe('');
+    });
+
+    // ★ 改善ループ 41: 押して登録に失敗しても帯が消え、本人には「できた」に見えていた
+    it('★ 押して登録できなかったら、帯を消さずに「できませんでした」を出す', async () => {
+      pushPermission.mockReturnValue('granted');
+      registerPushNotification.mockResolvedValueOnce('failed');
+      render(<PushOnboardingBanner activeSubscriptions={0} />);
+      fireEvent.click(screen.getByRole('button', { name: '通知を受け取る' }));
+      expect(await screen.findByText(/できませんでした/)).toBeTruthy();
+    });
+
+    it('押して登録できたら、知らせて帯を消す', async () => {
+      pushPermission.mockReturnValue('granted');
+      const onRegistered = vi.fn();
+      const { container } = render(<PushOnboardingBanner activeSubscriptions={0} onRegistered={onRegistered} />);
+      fireEvent.click(screen.getByRole('button', { name: '通知を受け取る' }));
+      await vi.waitFor(() => expect(onRegistered).toHaveBeenCalled());
+      expect(container.textContent).toBe('');
     });
 
     it('宛先が 1 本以上あれば、許可済みの端末には何も出さない (今までどおり)', () => {

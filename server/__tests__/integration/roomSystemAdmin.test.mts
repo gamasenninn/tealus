@@ -65,6 +65,14 @@ describe('システム管理者と部屋の管理者の口', () => {
     expect(kick.status).toBe(400);
   });
 
+  // ★ 改善ループ 41: ほかが全員無効なのに「先に他のメンバーを管理者に」と案内していた (管理者にしても数えられない)
+  it('★ ほかのメンバーが全員利用停止なら、退会させてから削除するよう案内する', async () => {
+    await getTestPool().query('UPDATE users SET is_active = false WHERE id = $1', [member.user.id]);
+    const leave = await request(app).delete(`/api/rooms/${roomId}/members/me`).set(as(owner));
+    expect(leave.status).toBe(400);
+    expect(leave.body.error).toContain('退会させてから');
+  });
+
   it('★★ メンバーでないシステム管理者でも、中身 (投稿・部屋の詳細) は読めない', async () => {
     expect((await request(app).get(`/api/rooms/${roomId}/messages`).set(as(sysadmin))).status).toBe(403);
     expect((await request(app).get(`/api/rooms/${roomId}`).set(as(sysadmin))).status).toBe(403);
