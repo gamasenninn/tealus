@@ -73,6 +73,19 @@ describe('システム管理者と部屋の管理者の口', () => {
     expect(leave.body.error).toContain('退会させてから');
   });
 
+  // ★ #643 (2026-11-05 小野さん判断 4): 作った人が利用停止になった部屋を誰も消せなかった (本番 3 部屋)
+  it('★★ システム管理者は、メンバーが残っていてもグループ部屋を消せる (メンバーでなくても)', async () => {
+    const res = await request(app).delete(`/api/rooms/${roomId}`).set(as(sysadmin));
+    expect(res.status).toBe(200);
+    const left = await getTestPool().query('SELECT 1 FROM rooms WHERE id = $1', [roomId]);
+    expect(left.rows.length).toBe(0);
+  });
+
+  it('★ 部屋の管理者でも、システム管理者でなければ、メンバーが残っている部屋は消せない', async () => {
+    const res = await request(app).delete(`/api/rooms/${roomId}`).set(as(owner));
+    expect(res.status).toBe(409);
+  });
+
   it('★★ メンバーでないシステム管理者でも、中身 (投稿・部屋の詳細) は読めない', async () => {
     expect((await request(app).get(`/api/rooms/${roomId}/messages`).set(as(sysadmin))).status).toBe(403);
     expect((await request(app).get(`/api/rooms/${roomId}`).set(as(sysadmin))).status).toBe(403);

@@ -27,6 +27,17 @@ describe('Rooms API', () => {
   // POST /api/rooms (group)
   // ============================================
   describe('POST /api/rooms', () => {
+    // ★ 2026-11-05 小野さん判断 2: 同じ名前のグループは作れるが、既にあることを知らせる (11-02 に EC の部屋が 2 つできた)。
+    //   ボットの list_rooms は自分が入っている部屋しか返さないので、作る側は既存の同名の部屋に気づけなかった
+    it('★ 同じ名前のグループが既にあれば、作ったうえで数を知らせる (前後の空白・大文字小文字は同じとみなす)', async () => {
+      await request(app).post('/api/rooms').set('Authorization', `Bearer ${user1.token}`).send({ name: '飛行船ECサイト構築' });
+      const res = await request(app).post('/api/rooms').set('Authorization', `Bearer ${user2.token}`).send({ name: ' 飛行船ECサイト構築 ' });
+      expect(res.status).toBe(201);
+      expect(res.body.same_name_rooms).toBe(1);
+      const fresh = await request(app).post('/api/rooms').set('Authorization', `Bearer ${user2.token}`).send({ name: '別の名前' });
+      expect(fresh.body.same_name_rooms).toBe(0);
+    });
+
     it('should create a group room', async () => {
       const res = await request(app)
         .post('/api/rooms')
@@ -314,22 +325,31 @@ describe('Rooms API', () => {
       expect(res.body.error).toContain('他のメンバー');
     });
 
-    it('should reject deletion by non-creator (403)', async () => {
-      // user1 creates with user2 as member
+    it('作った本人でなくても、ほかのメンバーがいれば消せない (409)', async () => {
       const createRes = await request(app)
         .post('/api/rooms')
         .set('Authorization', `Bearer ${user1.token}`)
         .send({ name: 'shared', member_ids: [user2.user.id] });
-
       const roomId = createRes.body.room.id;
-
-      // user2 (member but not creator) tries to delete
       const res = await request(app)
         .delete(`/api/rooms/${roomId}`)
         .set('Authorization', `Bearer ${user2.token}`);
+      expect(res.status).toBe(409);
+    });
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toContain('作成した本人');
+    // ★ #643: 作った人がいなくなり、作っていない人が 1 人だけ残った部屋は、誰も消せなかった
+    //   (退会は「メンバーがあなただけなので退会できません。部屋を削除してください」で断られるのに、削除の口は作った人だけだった)
+    it('★ 自分しかいない部屋なら、作った本人でなくても消せる (#643)', async () => {
+      const createRes = await request(app)
+        .post('/api/rooms')
+        .set('Authorization', `Bearer ${user1.token}`)
+        .send({ name: 'left alone', member_ids: [user2.user.id] });
+      const roomId = createRes.body.room.id;
+      await getTestPool().query('DELETE FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, user1.user.id]);
+      const res = await request(app)
+        .delete(`/api/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${user2.token}`);
+      expect(res.status).toBe(200);
     });
 
     it('should reject deletion by non-member (403)', async () => {

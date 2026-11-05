@@ -277,7 +277,8 @@ class ApiClient {
   }
 
   createGroup(name: string, memberIds: string[]) {
-    return this.request<{ room: Room }>('POST', '/rooms', { name, member_ids: memberIds });
+    // same_name_rooms: 同じ名前のグループがほかにいくつあるか (2026-11-05 判断 2。古い本体は返さない)
+    return this.request<{ room: Room; same_name_rooms?: number }>('POST', '/rooms', { name, member_ids: memberIds });
   }
 
   createDirect(partnerId: string) {

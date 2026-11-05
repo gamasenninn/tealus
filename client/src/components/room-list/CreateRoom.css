@@ -129,3 +129,10 @@
   font-size: 13px;
   margin-bottom: 12px;
 }
+
+/* 同じ名前のグループがほかにあった (2026-11-05 判断 2) */
+.create-room-notice {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}

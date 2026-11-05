@@ -116,6 +116,9 @@ export async function requireCreator(req: Request, res: Response, next: NextFunc
  * Used for room deletion safety: forces "remove all other members first" workflow
  */
 export async function requireSoloMember(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+  // ★ #643 (2026-11-05 小野さん判断 4): システム管理者は、メンバーが残っていても消せる。作った人が利用停止になった部屋を
+  //   誰も消せなかった (本番 3 部屋)。画面は確認で残っている人数を見せる
+  if (req.user?.role === 'admin') { next(); return; }
   const roomId = req.params.id;
   const userId = req.user!.id;
   try {

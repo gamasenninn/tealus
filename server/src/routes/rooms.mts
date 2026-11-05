@@ -5,7 +5,7 @@ import path from 'node:path';
 import multer from 'multer';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { requireMember, requireMemberOrSystemAdmin, requireRoomAdmin, requireGroup, requireCreator, requireSoloMember } from '../middleware/roomAccess.mts';
+import { requireMember, requireMemberOrSystemAdmin, requireRoomAdmin, requireGroup, requireSoloMember } from '../middleware/roomAccess.mts';
 import { canCreateRoom, isGuest, canSearchUsers } from '../utils/permissions.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { attachMedia, attachTranscriptions, type AttachableMessage } from '../services/messageAttachments.mts';
@@ -199,6 +199,12 @@ router.post('/', async (req, res) => {
     if (ok.rows[0].n !== otherIds.length) return res.status(400).json({ error: 'メンバーに指定できないユーザーが含まれています' });
   }
 
+  // ★ 同じ名前のグループが既にいくつあるか (2026-11-05 小野さん判断 2)。作れるが知らせる。
+  //   11-02 に人とボットが同じ名前の部屋を 1 つずつ作った (ボットの list_rooms は自分が入っている部屋しか返さないので、
+  //   作る側は気づけなかった)。数だけ返す (どの部屋か・誰がいるかは、入っていない人には出さない)
+  const sameName = await pool.query<{ n: number }>(
+    "SELECT count(*)::int n FROM rooms WHERE type = 'group' AND lower(btrim(name)) = lower(btrim($1))", [name]);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -249,7 +255,7 @@ router.post('/', async (req, res) => {
 
     // ★ #486 入った全員の接続を部屋に入れ、本人に知らせる (読み込み直すまで出なかった)
     announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
-    res.status(201).json({ room, members: membersFor(req.user!, membersResult.rows) });
+    res.status(201).json({ room, members: membersFor(req.user!, membersResult.rows), same_name_rooms: sameName.rows[0].n });
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error('Create room error:', err);
@@ -647,19 +653,19 @@ router.put('/:id', requireMemberOrSystemAdmin, requireGroup, requireRoomAdmin, a
 
 /**
  * DELETE /api/rooms/:id
- * Delete a group room (creator only, must be the only remaining member)
+ * Delete a group room (自分しかいない部屋なら誰でも / システム管理者はいつでも。#643)
  *
  * Safety constraints:
  * - Group only (direct rooms use leave instead)
- * - Caller must be the room creator (rooms.created_by)
- * - No other members may exist (caller must remove all members first)
+ * - ほかのメンバーがいないこと (先に退会させる)。★ #643 作った本人でなくてよい (作った人がいなくなり、1 人残った人が
+ *   退会も削除もできなかった)。★ システム管理者は、メンバーが残っていても・メンバーでなくても消せる
  *
  * CASCADE will cleanup: room_members, messages, message_media,
  * voice_transcriptions, message_reads, room_read_cursors, tags etc.
  * ★ 別の部屋へ転送した写しは残る (forwarded_from に参照の縛りが無い、migration 038)。
  *   縛りがあった頃は、写しが 1 つでもあると削除全体が 500 で失敗していた
  */
-router.delete('/:id', requireMember, requireGroup, requireCreator, requireSoloMember, async (req, res) => {
+router.delete('/:id', requireMemberOrSystemAdmin, requireGroup, requireSoloMember, async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
   try {

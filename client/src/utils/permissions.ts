@@ -68,15 +68,18 @@ export function canCreateStamp(user: UserLike): boolean {
 
 /**
  * #485-2 部屋を画面から削除できるか。サーバーの DELETE /api/rooms/:id と同じ条件
- * (グループ・作った本人・自分しかいない)。外れた人に「押すと 403 になるボタン」を見せない。
+ * (グループ・自分しかいない)。外れた人に「押すと 403 になるボタン」を見せない。
+ * ★ #643 (2026-11-05 小野さん判断 4): 作った本人でなくてよい (作った人がいなくなり、1 人残った人が退会も削除もできなかった)。
+ *   システム管理者は、ほかのメンバーが残っていても消せる
  */
 export function canDeleteRoom(
   room: { type?: string; created_by?: string } | null | undefined,
   userId: string | undefined,
   memberIds: string[],
+  isSystemAdmin = false,
 ): boolean {
-  if (!room || !userId) return false;
-  if (room.type !== 'group' || !room.created_by || room.created_by !== userId) return false;
+  if (!room || !userId || room.type !== 'group') return false;
+  if (isSystemAdmin) return true;
   return memberIds.length === 1 && memberIds[0] === userId;
 }
 

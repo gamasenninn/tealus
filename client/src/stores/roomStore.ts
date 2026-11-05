@@ -20,7 +20,7 @@ interface RoomState {
   /** #489 開いている部屋の情報とメンバーだけを取り直す (既読の位置は動かさない)。別の部屋なら何もしない */
   refreshRoom: (roomId: string) => Promise<void>;
   clearCurrentRoom: () => void;
-  createGroup: (name: string, memberIds: string[]) => Promise<{ room: Room }>;
+  createGroup: (name: string, memberIds: string[]) => Promise<{ room: Room; same_name_rooms?: number }>;
   createDirect: (partnerId: string) => Promise<{ room: Room }>;
   updateRoomInList: (roomId: string, updates: Partial<Room>) => void;
 }

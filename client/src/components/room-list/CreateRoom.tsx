@@ -15,6 +15,8 @@ function CreateRoom({ onClose }: CreateRoomProps) {
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [error, setError] = useState('');
+  // ★ 同じ名前のグループがほかにあった (2026-11-05 小野さん判断 2)。作ったうえで、閉じずに知らせる
+  const [sameName, setSameName] = useState<{ roomId: string; count: number } | null>(null);
   const { createGroup, createDirect } = useRoomStore();
   const navigate = useNavigate();
 
@@ -39,6 +41,10 @@ function CreateRoom({ onClose }: CreateRoomProps) {
     }
     try {
       const data = await createGroup(groupName, selectedUsers);
+      if ((data.same_name_rooms ?? 0) > 0) {
+        setSameName({ roomId: data.room.id, count: data.same_name_rooms! });
+        return;
+      }
       onClose();
       navigate(`/rooms/${data.room.id}`);
     } catch (err) {
@@ -57,7 +63,18 @@ function CreateRoom({ onClose }: CreateRoomProps) {
   return (
     <div className="create-room-overlay" onClick={onClose}>
       <div className="create-room-modal" onClick={(e) => e.stopPropagation()}>
-        {mode === 'select' && (
+        {sameName && (
+          <>
+            <h2>グループを作りました</h2>
+            <p className="create-room-notice">
+              同じ名前のグループがほかに {sameName.count} つあります。同じ用途の部屋が重なっていないか確かめてください
+              (重なっていたら、使わない方を削除できます)
+            </p>
+            <button className="create-room-submit" onClick={() => { onClose(); navigate(`/rooms/${sameName.roomId}`); }}>作った部屋を開く</button>
+          </>
+        )}
+
+        {!sameName && mode === 'select' && (
           <>
             <h2>新しいトーク</h2>
             <div className="create-room-options">
@@ -68,7 +85,7 @@ function CreateRoom({ onClose }: CreateRoomProps) {
           </>
         )}
 
-        {mode === 'direct' && (
+        {!sameName && mode === 'direct' && (
           <>
             <h2>相手を選択</h2>
             {error && <div className="create-room-error">{error}</div>}
@@ -84,7 +101,7 @@ function CreateRoom({ onClose }: CreateRoomProps) {
           </>
         )}
 
-        {mode === 'group' && (
+        {!sameName && mode === 'group' && (
           <>
             <h2>グループ作成</h2>
             {error && <div className="create-room-error">{error}</div>}

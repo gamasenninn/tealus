@@ -108,11 +108,15 @@ function MemberList({ roomId, onClose }: MemberListProps) {
   };
 
   // #485-2 部屋の削除。人は退会しかできず、最後の 1 人が抜けると誰もいない部屋が残っていた
-  const canDelete = canDeleteRoom(currentRoom, user?.id, memberList.map(m => m.user_id));
+  const canDelete = canDeleteRoom(currentRoom, user?.id, memberList.map(m => m.user_id), user?.role === 'admin');
+  // ★ #643 システム管理者は人が残っていても消せるので、確認で残っている人数を見せる (消すと全員の画面から消える)
+  const othersLeft = memberList.filter(m => m.user_id !== user?.id).length;
   const handleDeleteRoom = async () => {
     const ok = await confirm({
       title: 'グループを削除',
-      body: 'このグループを削除しますか？\nメッセージもすべて消え、元に戻せません。',
+      body: othersLeft > 0
+        ? `このグループには、ほかに ${othersLeft} 人のメンバーがいます。削除すると全員の画面から消え、メッセージもすべて消えて元に戻せません。削除しますか？`
+        : 'このグループを削除しますか？\nメッセージもすべて消え、元に戻せません。',
       okLabel: '削除',
       danger: true,
     });
