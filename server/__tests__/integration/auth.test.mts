@@ -235,6 +235,17 @@ describe('Auth API', () => {
       expect(res.body.user.display_name).toBe('田中太郎');
     });
 
+    // ★ 改善ループ 40: 本体は「この人は宛先 0 本で送れなかった」を知っているのに、本人の画面に伝える口が無かった
+    it('★ 有効な通知の宛先の本数を返す (外れた宛先は数えない)', async () => {
+      const me = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
+      expect(me.body.push_active_subscriptions).toBe(0);
+      const pool = getTestPool();
+      await pool.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key) VALUES ($1, 'https://e/1', 'p', 'a')`, [me.body.user.id]);
+      await pool.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh_key, auth_key, is_active) VALUES ($1, 'https://e/2', 'p', 'a', false)`, [me.body.user.id]);
+      const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
+      expect(res.body.push_active_subscriptions).toBe(1);
+    });
+
     it('should reject request without token', async () => {
       const res = await request(app)
         .get('/api/auth/me');

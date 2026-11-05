@@ -147,6 +147,13 @@ describe('#529 取り消した権限・消した中身', () => {
       expect(res.status).toBe(400);
     });
 
+    // ★ 改善ループ 40: push-file も種類が image/* なら画像の投稿になるのに、読めるかを見ていなかった
+    it('★ /push-file: 画像の種類を名乗るなら、読めない中身は 400', async () => {
+      const res = await request(app).post('/api/bot/push-file').set('Authorization', `Bearer ${sender.token}`)
+        .field('room_id', roomId).attach('file', Buffer.from('これは画像ではない'.repeat(50)), { filename: 'logo.png', contentType: 'image/png' });
+      expect(res.status).toBe(400);
+    });
+
     it('上限より小さければ今までどおり受ける (前提の確認)', async () => {
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
       const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)

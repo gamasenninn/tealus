@@ -168,8 +168,21 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
  * GET /api/auth/me
  * Get current user info (requires authentication)
  */
-router.get('/me', authenticate, (req, res) => {
-  res.json({ user: req.user });
+/**
+ * ★ 有効な通知の宛先の本数も返す (改善ループ 40)。本体は「この人は宛先 0 本で送れなかった」を知っていたのに、
+ *   本人の画面に伝える口が無かった (11-03 に iPhone の宛先が 410 で外れた人に、2 日で 195 件届かなかった)。
+ *   画面は 0 本なら許可の状態に関係なく案内する。数えられなかったら null (画面は今までどおり)
+ */
+router.get('/me', authenticate, async (req, res) => {
+  let pushActiveSubscriptions: number | null = null;
+  try {
+    const r = await pool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1 AND is_active', [req.user!.id]);
+    pushActiveSubscriptions = r.rows[0].n;
+  } catch (err) {
+    logger.warn(`[auth/me] 通知の宛先を数えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  res.json({ user: req.user, push_active_subscriptions: pushActiveSubscriptions });
 });
 
 /**

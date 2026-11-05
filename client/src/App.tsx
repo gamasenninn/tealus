@@ -54,7 +54,7 @@ function OfflineScreen({ onRetry, onLogout }: { onRetry: () => Promise<void>; on
 }
 
 function App() {
-  const { initialize, isLoading, user, offline, logout } = useAuthStore();
+  const { initialize, isLoading, user, offline, logout, pushActiveSubscriptions } = useAuthStore();
   const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
   const { incomingCall, activeCall, acceptCall, rejectCall, endCall, getCallUrl } = useCallNotification();
 
@@ -89,7 +89,7 @@ function App() {
       <ConfirmModal />
       {user && <TtsStopButton />}
       {/* ★ 2026-10-29 初めての人への通知の案内 (許可の問いの前に説明する・iPhone の Safari ではホーム画面に追加) */}
-      {user && <PushOnboardingBanner />}
+      {user && <PushOnboardingBanner activeSubscriptions={pushActiveSubscriptions} />}
       {user && realtimeVoiceAvailable && incomingCall && (
         <IncomingCallModal
           callerName={incomingCall.callerName}

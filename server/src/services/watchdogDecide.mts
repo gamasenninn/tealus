@@ -149,7 +149,8 @@ export function judgePushReach(t: PushTarget, activeWithinDays: number, now: Dat
       : '通知の宛先が 0 本です (以前の宛先はすべて無効になっているか、ログアウトで外れました)';
   return {
     state: 'down',
-    detail: `${why}。この人には通知が 1 件も届きません。\n直し方: 本人の端末で Tealus を開き、プロフィールの「この端末で通知を受け取る」を押す`,
+    // ★ 改善ループ 40: 業務メモに本人がいないことが多いので「伝えてください」と書く。iPhone は Safari で開いたままだとボタン自体が出ない
+    detail: `${why}。この人には通知が 1 件も届きません。本人に伝えてください。\n直し方: 本人の端末で Tealus を開き、プロフィールの「この端末で通知を受け取る」を押す (iPhone は Safari でなく、ホーム画面に追加した Tealus から開く)`,
   };
 }
 

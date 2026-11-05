@@ -385,7 +385,7 @@ export function looksLikeImage(head: Buffer): boolean {
   if (at(0, 0xff, 0xd8, 0xff)) return true;                                  // JPEG
   if (ascii(0, 'GIF87a') || ascii(0, 'GIF89a')) return true;                // GIF
   if (ascii(0, 'RIFF') && ascii(8, 'WEBP')) return true;                    // WebP
-  // ★ HEIC・BMP は入れない (改善ループ 39)。画面の口 (imageUpload) と同じく、Chrome・Android で表示できない / サムネイルを作れない
+  // ★ HEIC・BMP は入れない (改善ループ 39)。Chrome・Android で表示できない / サムネイルを作れない。★ AVIF は通す (画面の口 imageUpload は断るが、チャットの添付 media.mts は通す)
   if (ascii(4, 'ftyp')) return ['avif', 'avis'].includes(head.toString('latin1', 8, 12));   // AVIF
   return false;
 }
@@ -519,6 +519,9 @@ router.post('/push-file', upload.single('file'), uploadSizeError, rejectOversize
     return res.status(400).json({ error: 'ファイルが添付されていません' });
   }
   if (await rejectLongCaption(content, file, res)) return;
+  // ★ 種類が image/* なら画像の投稿になるので、push-image と同じく読めるかを見る (改善ループ 40)。
+  //   send_text_as_file は種類を呼び手が決められるので、ここを通らないと 11-02 と同じ壊れた画像が出せた
+  if (getMessageType(file.mimetype) === 'image' && await rejectUnreadableImage(file, res)) return;
 
   const client = await pool.connect();
   try {

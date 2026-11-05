@@ -288,6 +288,17 @@ describe('Admin API', () => {
       expect(row.rows[0].is_active).toBe(true);
     });
 
+    // ★ 改善ループ 40: 守りは is_active === false のときだけ走るので、文字列の "false" は守りを抜けて無効化が通った
+    it('★ is_active は true / false だけ (文字列は 400)', async () => {
+      const res = await request(app)
+        .patch(`/api/admin/users/${admin.user.id}/status`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ is_active: 'false' });
+      expect(res.status).toBe(400);
+      const row = await getTestPool().query('SELECT is_active FROM users WHERE id = $1', [admin.user.id]);
+      expect(row.rows[0].is_active).toBe(true);
+    });
+
     it('★ 最後の有効なシステム管理者は無効にできない (別の管理者からでも)', async () => {
       const other = await createTestUser({ login_id: 'ADMIN002', display_name: '別の管理者' });
       await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [other.user.id]);

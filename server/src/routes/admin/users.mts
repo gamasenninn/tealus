@@ -176,6 +176,10 @@ router.patch('/users/:id/status', async (req, res) => {
   if (is_active === undefined) {
     return res.status(400).json({ error: 'is_active は必須です' });
   }
+  // ★ true / false だけ (改善ループ 40)。下の守りは false のときだけ走るので、文字列の "false" は守りを抜けて無効化が通った
+  if (typeof is_active !== 'boolean') {
+    return res.status(400).json({ error: 'is_active は true か false です' });
+  }
   // ★ 自分は無効にできない (改善ループ 39)。管理者が 1 人の環境では、戻す道が DB を直接触ることしか無かった
   if (is_active === false && id === req.user!.id) {
     return res.status(400).json({ error: '自分のアカウントは無効にできません' });

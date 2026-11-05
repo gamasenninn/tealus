@@ -63,6 +63,31 @@ describe('PushOnboardingBanner', () => {
     expect(screen.queryByRole('button', { name: '通知を受け取る' })).toBeNull();
   });
 
+  // ★ 改善ループ 40: 11-03 に iPhone の宛先が 410 で外れた人に、2 日間 195 件の通知が届かなかった。
+  //   許可は済んでいる (または切れている) ので、「まだ聞いていない端末」だけを案内する作りでは何も出なかった
+  describe('本体が「有効な宛先 0 本」と言うとき (許可の状態に関係なく案内する)', () => {
+    it('★★ 許可済みでも 0 本なら、押して登録し直す案内を出す', () => {
+      pushPermission.mockReturnValue('granted');
+      render(<PushOnboardingBanner activeSubscriptions={0} />);
+      expect(screen.getByText(/通知が届いていません/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: '通知を受け取る' }));
+      expect(registerPushNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('★ 拒否されている端末では、端末の設定で許可する案内を出す (押しても聞けないのでボタンは出さない)', () => {
+      pushPermission.mockReturnValue('denied');
+      render(<PushOnboardingBanner activeSubscriptions={0} />);
+      expect(screen.getByText(/設定/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: '通知を受け取る' })).toBeNull();
+    });
+
+    it('宛先が 1 本以上あれば、許可済みの端末には何も出さない (今までどおり)', () => {
+      pushPermission.mockReturnValue('granted');
+      const { container } = render(<PushOnboardingBanner activeSubscriptions={1} />);
+      expect(container.textContent).toBe('');
+    });
+  });
+
   it('★ 通知の鍵 (VAPID) の無い Tealus では、iPhone の案内も出さない (案内どおりにしても届かない)', () => {
     getConfig.mockReturnValue({ vapid_public_key: '' });
     isIosBrowserTab.mockReturnValue(true);

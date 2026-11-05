@@ -281,6 +281,9 @@ describe('push_reach — 判定 (人ごと)', () => {
     expect(o.state).toBe('down');
     expect(o.detail).toContain('10-13 15:18');
     expect(o.detail).toContain('この端末で通知を受け取る');
+    // ★ 改善ループ 40: iPhone の Safari で開いたままだとボタン自体が出ない。業務メモに本人がいないこともあるので、伝える人を書く
+    expect(o.detail).toContain('ホーム画面');
+    expect(o.detail).toContain('伝えて');
   });
 
   it('★ ログアウトで外した宛先は行ごと消えて時刻が残らない。そう読めるように書く (2026-10-27 改善ループ 17 回目)', () => {

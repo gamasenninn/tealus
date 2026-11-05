@@ -48,6 +48,23 @@ describe('システム管理者と部屋の管理者の口', () => {
     expect(kick.status).toBe(200);
   });
 
+  // ★ 改善ループ 40: ループ 39 で「解除」には守りを入れたが、「退会させる」道には無かった (管理者のいない部屋が作れた)
+  it('★ 最後のグループ管理者は、システム管理者でも退会させられない', async () => {
+    const kick = await request(app).delete(`/api/rooms/${roomId}/members/${owner.user.id}`).set(as(sysadmin));
+    expect(kick.status).toBe(400);
+    const row = await getTestPool().query('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, owner.user.id]);
+    expect(row.rows.length).toBe(1);
+  });
+
+  it('★ 無効にした人は「ほかの管理者」に数えない (解除も退会させるも断る)', async () => {
+    await request(app).put(`/api/rooms/${roomId}/members/${member.user.id}/role`).set(as(owner)).send({ role: 'admin' });
+    await getTestPool().query('UPDATE users SET is_active = false WHERE id = $1', [member.user.id]);
+    const demote = await request(app).put(`/api/rooms/${roomId}/members/${owner.user.id}/role`).set(as(sysadmin)).send({ role: 'member' });
+    expect(demote.status).toBe(400);
+    const kick = await request(app).delete(`/api/rooms/${roomId}/members/${owner.user.id}`).set(as(sysadmin));
+    expect(kick.status).toBe(400);
+  });
+
   it('★★ メンバーでないシステム管理者でも、中身 (投稿・部屋の詳細) は読めない', async () => {
     expect((await request(app).get(`/api/rooms/${roomId}/messages`).set(as(sysadmin))).status).toBe(403);
     expect((await request(app).get(`/api/rooms/${roomId}`).set(as(sysadmin))).status).toBe(403);

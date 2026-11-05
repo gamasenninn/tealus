@@ -19,8 +19,8 @@ async function refreshConfig(): Promise<void> {
   useCapabilityStore.getState().hydrateFromConfig(await loadConfig());
 }
 
-function registerPushIfAllowed(): void {
-  if (pushPermission() === 'granted') void registerPushNotification();
+function registerPushIfAllowed(onRegistered?: () => void): void {
+  if (pushPermission() === 'granted') void Promise.resolve(registerPushNotification()).then((r) => { if (r === 'ok') onRegistered?.(); });
 }
 import { clearRoomViewCache } from './roomViewCache';
 import { useRoomStore } from './roomStore';
@@ -51,6 +51,11 @@ interface AuthState {
   isLoading: boolean;
   /** ★ 本体につながらないまま開いた (鍵は残している)。画面は「つながっていません」を出し、つなぎ直す (2026-10-27) */
   offline: boolean;
+  /**
+   * ★ 本体が数えた、この人の有効な通知の宛先の本数 (改善ループ 40)。0 なら許可の状態に関係なく案内する
+   *   (PushOnboardingBanner)。分からない (古い本体・ログイン直後) は null = 今までどおり
+   */
+  pushActiveSubscriptions: number | null;
   initialize: () => Promise<void>;
   login: (login_id: string, password: string) => Promise<AuthResponse>;
   /** expired: 鍵が切れたあと (本体への宛先の取り外しを頼まない) */
@@ -83,6 +88,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   token: localStorage.getItem('token'),
   isLoading: true,
   offline: false,
+  pushActiveSubscriptions: null,
 
   initialize: () => {
     // ★ 走っている最中なら同じ試行を返す (2026-10-29 改善ループ 20 回目)。「つながっていません」の 10 秒ごとの再試行と
@@ -104,8 +110,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         if (localStorage.getItem('token') !== token) { tokenChanged = true; return; }
         connectSocket(token);
         await refreshConfig();
-        set({ user: data.user, token, isLoading: false, offline: false });
-        registerPushIfAllowed();
+        set({ user: data.user, token, isLoading: false, offline: false,
+          pushActiveSubscriptions: typeof data.push_active_subscriptions === 'number' ? data.push_active_subscriptions : null });
+        // ★ 黙って登録し直せた (Android・PC) なら 0 本の案内は要らない
+        registerPushIfAllowed(() => { if (get().pushActiveSubscriptions === 0) set({ pushActiveSubscriptions: 1 }); });
         startPushResumeRefresh();   // ★ 10-16 画面が表に出たときも送り直す (本体は 30 日送り直されない宛先を外す)
         void moveLegacySoundOff(data.user, set);
       } catch (err) {
@@ -154,7 +162,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     api.setToken(null);
     disconnectSocket();
     forgetPreviousUser();
-    set({ user: null, token: null, offline: false });
+    set({ user: null, token: null, offline: false, pushActiveSubscriptions: null });
   },
 
   setUser: (user) => set({ user }),

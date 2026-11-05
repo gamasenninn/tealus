@@ -15,6 +15,22 @@ import { isUuid, badIdMessage } from '../utils/uuid.mts';
 
 export const router = express.Router({ mergeParams: true });
 
+const LAST_GROUP_ADMIN_ERROR = '最後のグループ管理者は外せません。先に他のメンバーをグループ管理者にしてください';
+
+/**
+ * ★ この人のほかに、有効なグループ管理者がいるか (改善ループ 39・40)。退会・解除・退会させるの 3 か所で同じ判定を使う。
+ *   以前は 3 か所に別々に書かれ、退会させる道には無く、無効にした人も「ほかの管理者」に数えていた
+ *   (無効にしても room_members は残るので、管理者のいない部屋が作れた)
+ */
+async function otherActiveGroupAdminExists(roomId: string, userId: string): Promise<boolean> {
+  const r = await pool.query(
+    `SELECT 1 FROM room_members rm JOIN users u ON u.id = rm.user_id
+      WHERE rm.room_id = $1 AND rm.role = 'admin' AND rm.user_id <> $2 AND u.is_active LIMIT 1`,
+    [roomId, userId]
+  );
+  return r.rows.length > 0;
+}
+
 // Helper: Insert system message (#390 で services/systemMessage.mts へ移動。bot join と共有)
 
 /**
@@ -104,18 +120,9 @@ router.delete('/me', authenticate, requireMember, requireGroup, async (req: Requ
       return res.status(400).json({ error: 'メンバーがあなただけなので退会できません。部屋を削除してください。' });
     }
 
-    // Check if last admin
+    // Check if last admin (ほかにメンバーがいるのに、有効なグループ管理者が自分だけなら断る)
     if (req.memberRole === 'admin') {
-      const adminCount = await pool.query<{ count: number }>(
-        "SELECT COUNT(*)::int as count FROM room_members WHERE room_id = $1 AND role = 'admin'",
-        [roomId]
-      );
-      const memberCount = await pool.query<{ count: number }>(
-        'SELECT COUNT(*)::int as count FROM room_members WHERE room_id = $1',
-        [roomId]
-      );
-      // Only block if there are other members but no other admin
-      if (adminCount.rows[0].count <= 1 && memberCount.rows[0].count > 1) {
+      if (!(await otherActiveGroupAdminExists(roomId, userId))) {
         return res.status(400).json({
           error: 'あなたは最後のグループ管理者です。先に他のメンバーをグループ管理者に変更してください。'
         });
@@ -200,14 +207,18 @@ router.delete('/:userId', authenticate, requireMemberOrSystemAdmin, async (req: 
     }
 
     // Check target is a member
-    const target = await pool.query<{ user_id: string; display_name: string }>(
-      `SELECT rm.user_id, u.display_name FROM room_members rm
+    const target = await pool.query<{ user_id: string; display_name: string; role: string }>(
+      `SELECT rm.user_id, rm.role, u.display_name FROM room_members rm
        JOIN users u ON u.id = rm.user_id
        WHERE rm.room_id = $1 AND rm.user_id = $2`,
       [roomId, targetUserId]
     );
     if (target.rows.length === 0) {
       return res.status(404).json({ error: 'メンバーが見つかりません' });
+    }
+    // ★ 最後のグループ管理者は退会させられない (改善ループ 40。解除には守りがあるのに、この道には無かった)
+    if (target.rows[0].role === 'admin' && !(await otherActiveGroupAdminExists(roomId, targetUserId))) {
+      return res.status(400).json({ error: LAST_GROUP_ADMIN_ERROR });
     }
 
     // Remove member
@@ -271,14 +282,8 @@ router.put('/:userId/role', authenticate, requireMemberOrSystemAdmin, requireGro
     }
     // ★ 最後のグループ管理者は解除できない (改善ループ 39)。退会には同じ守りがあるのに降格には無く、
     //   管理者のいない部屋が作れた
-    if (target.rows[0].role === 'admin' && role === 'member') {
-      const others = await pool.query(
-        "SELECT 1 FROM room_members WHERE room_id = $1 AND role = 'admin' AND user_id <> $2 LIMIT 1",
-        [roomId, targetUserId]
-      );
-      if (others.rows.length === 0) {
-        return res.status(400).json({ error: '最後のグループ管理者は解除できません。先に他のメンバーをグループ管理者にしてください' });
-      }
+    if (target.rows[0].role === 'admin' && role === 'member' && !(await otherActiveGroupAdminExists(roomId, targetUserId))) {
+      return res.status(400).json({ error: LAST_GROUP_ADMIN_ERROR });
     }
 
     const result = await pool.query(
