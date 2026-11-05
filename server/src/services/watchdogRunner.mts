@@ -103,7 +103,7 @@ export async function runOnce(config: WatchdogConfig, deps: RunDeps): Promise<Ru
         if (sender === undefined) sender = await deps.resolveSender(config.notify.as_user_id);
         if (!sender) {
           results.push({ id: u.id, state: obs.state, detail: obs.detail, posted: null,
-            error: `投稿する人 (as_user_id ${config.notify.as_user_id}) が見つかりません` });
+            error: `投稿する人 (as_user_id ${config.notify.as_user_id}) が見つからないか、無効です` });
           continue;
         }
         const posted = await deps.post({ roomId: config.notify.room_id, sender, content: d.body });
@@ -182,8 +182,9 @@ async function diskFreeOf(p: string): Promise<DiskRead> {
   }
 }
 
-async function resolveSenderFromDb(userId: string): Promise<SenderContext | null> {
-  const { rows } = await pool.query<SenderContext>('SELECT id, display_name, avatar_url FROM users WHERE id = $1', [userId]);
+/** ★ 無効にした人の名義では投稿しない (改善ループ 39、トリガーと同じ) */
+export async function resolveWatchdogSender(userId: string): Promise<SenderContext | null> {
+  const { rows } = await pool.query<SenderContext>('SELECT id, display_name, avatar_url FROM users WHERE id = $1 AND is_active', [userId]);
   return rows[0] ?? null;
 }
 
@@ -218,7 +219,7 @@ async function tick(configPath: string, warned: { signature: string }): Promise<
     readBackup: readLatestBackupLog,
     pushTargets: pushTargetsFromDb,
     diskFree: diskFreeOf,
-    resolveSender: resolveSenderFromDb,
+    resolveSender: resolveWatchdogSender,
     post: postAsUser,
   });
   for (const r of results) {

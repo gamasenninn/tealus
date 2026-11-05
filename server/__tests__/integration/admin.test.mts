@@ -209,6 +209,33 @@ describe('Admin API', () => {
       expect(res.body.user.role).toBe('admin');
     });
 
+    it('★ 役割は admin・user・guest だけ (他の値は 400。以前は DB の制約で 500)', async () => {
+      const res = await request(app)
+        .put(`/api/admin/users/${user1.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ role: 'owner' });
+      expect(res.status).toBe(400);
+    });
+
+    it('★ 最後の有効なシステム管理者は一般に下げられない (自分でも)', async () => {
+      const res = await request(app)
+        .put(`/api/admin/users/${admin.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ role: 'user' });
+      expect(res.status).toBe(400);
+      const row = await getTestPool().query('SELECT role FROM users WHERE id = $1', [admin.user.id]);
+      expect(row.rows[0].role).toBe('admin');
+    });
+
+    it('ほかに有効な管理者がいれば下げられる (前提の確認)', async () => {
+      await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [user1.user.id]);
+      const res = await request(app)
+        .put(`/api/admin/users/${admin.user.id}`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ role: 'user' });
+      expect(res.status).toBe(200);
+    });
+
     it('should return 404 for non-existent user', async () => {
       const res = await request(app)
         .put('/api/admin/users/00000000-0000-0000-0000-000000000000')
@@ -248,6 +275,33 @@ describe('Admin API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.user.is_active).toBe(true);
+    });
+
+    // ★ 改善ループ 39: 管理者が 1 人の環境で自分を無効にすると、DB を直接触るしか戻す道が無かった
+    it('★ 自分自身は無効にできない (400)', async () => {
+      const res = await request(app)
+        .patch(`/api/admin/users/${admin.user.id}/status`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ is_active: false });
+      expect(res.status).toBe(400);
+      const row = await getTestPool().query('SELECT is_active FROM users WHERE id = $1', [admin.user.id]);
+      expect(row.rows[0].is_active).toBe(true);
+    });
+
+    it('★ 最後の有効なシステム管理者は無効にできない (別の管理者からでも)', async () => {
+      const other = await createTestUser({ login_id: 'ADMIN002', display_name: '別の管理者' });
+      await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [other.user.id]);
+      // other が admin を無効にする → 残る有効な管理者は other 1 人なので通る
+      const ok = await request(app).patch(`/api/admin/users/${admin.user.id}/status`)
+        .set('Authorization', `Bearer ${other.token}`).send({ is_active: false });
+      expect(ok.status).toBe(200);
+      // 3 人目の管理者 (無効) を作っておき、other を外そうとする → 有効な管理者が 0 人になるので断る
+      const third = await createTestUser({ login_id: 'ADMIN003', display_name: '3 人目' });
+      await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [third.user.id]);
+      await getTestPool().query('UPDATE users SET is_active = false WHERE id = $1', [third.user.id]);
+      const ng = await request(app).patch(`/api/admin/users/${other.user.id}/status`)
+        .set('Authorization', `Bearer ${other.token}`).send({ is_active: false });
+      expect(ng.status).toBe(400);
     });
 
     it('should prevent deactivated user from logging in', async () => {

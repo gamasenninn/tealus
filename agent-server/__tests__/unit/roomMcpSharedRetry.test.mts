@@ -263,6 +263,9 @@ describe('共有グローバルの tealus の起こし直し', () => {
     await checkSharedTealusHealth(20);
     expect(sharedTealusProblem()).toBeNull();
     expect(tealus.close).not.toHaveBeenCalled();
+    // ★ 改善ループ 39: 1 回目も記録に 1 行残す (外したときしか書かず、「2 回で外す」が効いているか測れなかった)
+    const { logger } = require('../../src/lib/logger.mts');
+    expect(logger.info.mock.calls.some((c: unknown[]) => String(c[0]).includes('以内に答えませんでした'))).toBe(true);
     await checkSharedTealusHealth(20);
     expect(sharedTealusProblem()).not.toBeNull();
     expect(tealus.close).toHaveBeenCalled();

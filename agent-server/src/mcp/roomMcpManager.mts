@@ -107,7 +107,11 @@ export async function checkSharedTealusHealth(timeoutMs = 10_000): Promise<void>
   //   1 回で閉じると、CPU が詰まった瞬間に生きている tealus を自分で壊し、会話中のセッションの道具を全部失敗させる。
   //   エラーが返ったとき (接続が閉じた) は 1 回で外す
   if (result === 'alive') { tealusHealthTimeouts = 0; return; }
-  if (result === 'timeout' && ++tealusHealthTimeouts < 2) return;
+  if (result === 'timeout' && ++tealusHealthTimeouts < 2) {
+    // ★ 1 回目も 1 行残す (改善ループ 39)。外したときしか書かず、「2 回で外す」が効いているか記録から測れなかった
+    logger.info(`[RoomMCP] 共有グローバルの tealus が ${timeoutMs}ms 以内に答えませんでした (1 回目。続けば外します)`);
+    return;
+  }
   tealusHealthTimeouts = 0;
   const i = target.indexOf(tealus);
   if (i >= 0) target.splice(i, 1);

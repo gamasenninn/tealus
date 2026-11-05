@@ -73,6 +73,15 @@ router.post('/users', async (req, res) => {
   }
 });
 
+const ROLES = new Set(['admin', 'user', 'guest']);
+const LAST_ADMIN_ERROR = '有効なシステム管理者が 1 人もいなくなるため変更できません。先に別の人をシステム管理者にしてください';
+
+/** ★ この人を外したあとも有効なシステム管理者が残るか (改善ループ 39)。0 人になると DB を直接触るしか戻す道が無い */
+async function otherActiveAdminExists(id: string): Promise<boolean> {
+  const r = await pool.query("SELECT 1 FROM users WHERE role = 'admin' AND is_active AND id <> $1 LIMIT 1", [id]);
+  return r.rows.length > 0;
+}
+
 /**
  * PUT /api/admin/users/:id
  * Update user (display_name, password, role)
@@ -109,6 +118,10 @@ router.put('/users/:id', async (req, res) => {
       values.push(!(is_bot ?? existing.rows[0].is_bot) && id !== req.user!.id);
     }
     if (role !== undefined) {
+      if (typeof role !== 'string' || !ROLES.has(role)) return res.status(400).json({ error: '役割は admin・user・guest のどれかです' });
+      if (existing.rows[0].role === 'admin' && role !== 'admin' && !(await otherActiveAdminExists(id))) {
+        return res.status(400).json({ error: LAST_ADMIN_ERROR });
+      }
       updates.push(`role = $${paramIndex++}`);
       values.push(role);
     }
@@ -163,8 +176,18 @@ router.patch('/users/:id/status', async (req, res) => {
   if (is_active === undefined) {
     return res.status(400).json({ error: 'is_active は必須です' });
   }
+  // ★ 自分は無効にできない (改善ループ 39)。管理者が 1 人の環境では、戻す道が DB を直接触ることしか無かった
+  if (is_active === false && id === req.user!.id) {
+    return res.status(400).json({ error: '自分のアカウントは無効にできません' });
+  }
 
   try {
+    if (is_active === false) {
+      const target = await pool.query<{ role: string }>('SELECT role FROM users WHERE id = $1', [id]);
+      if (target.rows[0]?.role === 'admin' && !(await otherActiveAdminExists(id))) {
+        return res.status(400).json({ error: LAST_ADMIN_ERROR });
+      }
+    }
     const result = await pool.query(
       `UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2
        RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,

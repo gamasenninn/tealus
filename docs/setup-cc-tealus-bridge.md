@@ -63,6 +63,10 @@ grep -E "TEALUS_(BOT_ID|BOT_PASS)" agent-server/.env
 
 agent-server bot とは別の bot ユーザを Tealus 管理画面 (`/admin`) で作成し、login_id とパスワードを記録します。**Claude Code session を独立した「メンバー」として識別したい場合**はこちら。今日 (2026-05-02) 時点では同一 bot 流用で問題なし。
 
+> ★ **作るときに「AIエージェント」の印を入れる** (`is_bot`。役割は `user` のままでよい)。印が無いと人として扱われ、
+> 投稿のたびに全員へプッシュが飛ぶ・ルームトリガーの材料に数えられる・`join_room` が断られる・見張りが「通知の宛先が 0 本の人」と誤報する。
+> 動きはするので、印の付け忘れには気づきにくい (2026-11-05 改善ループ 39)。新しい班の立ち上げ全体は [§新しい班の立ち上げと片づけ](#新しい班の立ち上げと片づけ)。
+
 ## ステップ 2A. Claude Code に tealus-mcp を登録する (~3 分)
 
 Claude Code の MCP 設定ファイル (`~/.claude.json` または同等の場所) に以下を追加:
@@ -411,11 +415,19 @@ cp .claude/cc-tealus.json.example .claude/cc-tealus.json
 
 ## ステップ 3B. Tealus に Bot をルームに参加させる (~1 分)
 
-cc routing したいルームに **agent-server の Bot ユーザー**を参加させてください。これは agent-server がそのルームの webhook を処理する条件です。
+やりとりするルームに、**2 つのアカウント**が要ります。
 
-詳細は [`docs/setup-ai-agent.md`](./setup-ai-agent.md) ステップ 6 参照。
+| アカウント | 何のために | 居ないと |
+|---|---|---|
+| **その班の bot** (ステップ 1A) | 班が返事を投稿する | 返事が 403 で断られる |
+| **agent-server の Bot** (アシスタント) | 「cc-x に届きました」の受付表示・アシスタントの返事 | 受付表示が出ない。★ **`@cc-x` の配達そのものは届く** (配達はルームの在室を見る前に走る、`agent-server/src/webhook/handler.mts`) |
 
-> 💡 Part 1 の tealus-mcp で `mcp__tealus__join_room` を Claude Code から実行することでも参加可能。
+★ **班の bot をルームに入れるのは人の仕事**です。bot は人を招待できず、`join_room` はルーム ID が要りますが、
+`list_rooms` には**自分が入っていないルームは出ません**。管理者がメンバー一覧から追加するか、ルーム ID を班に渡してください。
+
+agent-server の Bot の詳細は [`docs/setup-ai-agent.md`](./setup-ai-agent.md) ステップ 6 参照。
+
+> 💡 Part 1 の tealus-mcp で `mcp__tealus__join_room` を Claude Code から実行することでも参加可能 (ルーム ID が分かっている場合)。
 
 ---
 
@@ -630,6 +642,29 @@ PaneDeck が知れるのは「ペインに送った」までです。**処理し
 7. session が必要に応じて `mcp__tealus__create_room` で新ルーム編成、`mcp__tealus__mark_tag_done` で TODO 完了マーク等を能動的に実行
 
 これで **「Claude Code が Tealus 上の能動的なメンバー」** として動く状態が確立します。
+
+# 新しい班の立ち上げと片づけ
+
+2026-11-02 に新しい班 (EC班) を立ち上げたとき、手順に無い所で 2 回詰まった (同じ名前のルームが 2 つできた・
+作った人がいなくなったルームを誰も消せなかった #643)。立ち上げと片づけを 1 か所にまとめる (改善ループ 39)。
+
+**立ち上げ**
+
+1. **班の bot を作る** — 管理画面で「AIエージェント」の印を入れて作る (ステップ 1A の ★)
+2. **ルームを作る前に、同じ名前のルームが無いか人に聞く** — ★ bot の `list_rooms` は自分が入っているルームしか返さない。
+   人が先に作ったルームは bot からは見えない (「無いから作る」が最善手に見えてしまう)。管理者が作るか、作ったルームの ID を班に渡す
+3. **班の bot と agent-server の Bot をルームに入れる** — 班の bot は人が入れる (ステップ 3B)
+4. **班のディレクトリに受け取りの設定を置く** — `.claude/cc-tealus.json` (ステップ 2B)。MCP の登録はステップ 2A
+5. **最初の 1 通は `@cc-{project}` を手で打つ** — 投稿欄の `@` 候補に `cc-{project}` が出るのは、受け取り口
+   (`~/.tealus/cc-queue/{project}.jsonl`) が一度できたあと。候補に無いのは設定漏れではない
+
+**片づけ** (班をやめるとき)
+
+1. 班の bot を管理画面で無効にする
+2. ★ **受け取り口を退避する** — `~/.tealus/cc-queue/{project}.jsonl` と `.last_processed-{project}` を別の場所へ。
+   ★ 残すと、`@` 候補に `cc-{project}` が出続け、投げても「届きました」と表示される (受け取る人はもういない)。
+   候補はアカウントの有効・無効ではなく、受け取り口のファイル名から作っている (`agent-server/src/routes/agent.mts`)
+3. ルームを消すなら、作った人がまだ有効なうちに (作った人しか消せない、#643)
 
 # トラブルシュート
 

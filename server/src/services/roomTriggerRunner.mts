@@ -63,7 +63,7 @@ export async function runOnce(triggers: RoomTrigger[], deps: RunDeps): Promise<R
 
       const sender = await deps.resolveSender(t);
       if (!sender) {
-        results.push({ id: t.id, fired: false, reason: d.reason, error: `as_user_id ${t.as_user_id} が見つかりません` });
+        results.push({ id: t.id, fired: false, reason: d.reason, error: `as_user_id ${t.as_user_id} が見つからないか、無効です` });
         continue;
       }
 
@@ -191,9 +191,10 @@ export async function latestMatchAtFromRoom(t: RoomTrigger): Promise<Date | null
   return rows[0]?.at ?? null;
 }
 
-async function resolveSenderFromDb(t: RoomTrigger): Promise<SenderContext | null> {
+/** ★ 無効にした人の名義では投稿しない (改善ループ 39)。見つからないときと同じ道 (投稿せず記録に残す) へ */
+export async function resolveTriggerSender(t: RoomTrigger): Promise<SenderContext | null> {
   const { rows } = await pool.query<{ id: string; display_name: string; avatar_url: string | null }>(
-    'SELECT id, display_name, avatar_url FROM users WHERE id = $1',
+    'SELECT id, display_name, avatar_url FROM users WHERE id = $1 AND is_active',
     [t.as_user_id],
   );
   return rows[0] ?? null;
@@ -253,7 +254,7 @@ export function startRoomTriggers(configPath: string = CONFIG_PATH): void {
         bootstrapAt: mtime,
         lastFiredAt: lastFiredAtFromRoom,
         latestMatchAt: latestMatchAtFromRoom,
-        resolveSender: resolveSenderFromDb,
+        resolveSender: resolveTriggerSender,
         post: postAsUser,
       });
       for (const r of results) {

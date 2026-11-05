@@ -385,9 +385,19 @@ export function looksLikeImage(head: Buffer): boolean {
   if (at(0, 0xff, 0xd8, 0xff)) return true;                                  // JPEG
   if (ascii(0, 'GIF87a') || ascii(0, 'GIF89a')) return true;                // GIF
   if (ascii(0, 'RIFF') && ascii(8, 'WEBP')) return true;                    // WebP
-  if (ascii(0, 'BM')) return true;                                           // BMP
-  if (ascii(4, 'ftyp')) return ['avif', 'avis', 'heic', 'heix', 'hevc', 'mif1', 'msf1'].includes(head.toString('latin1', 8, 12));   // AVIF / HEIC
+  // ★ HEIC・BMP は入れない (改善ループ 39)。画面の口 (imageUpload) と同じく、Chrome・Android で表示できない / サムネイルを作れない
+  if (ascii(4, 'ftyp')) return ['avif', 'avis'].includes(head.toString('latin1', 8, 12));   // AVIF
   return false;
+}
+
+/** ★ 終わりまで読めるか (改善ループ 39)。11-02 17:16 の 2 枚目は印も寸法もあるのに途中で切れていた */
+async function decodesToTheEnd(filePath: string): Promise<boolean> {
+  try {
+    await sharp(filePath, { failOn: 'truncated' }).resize(16, 16, { fit: 'inside' }).toBuffer();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -399,9 +409,9 @@ async function rejectUnreadableImage(file: Express.Multer.File, res: Response): 
   const head = Buffer.alloc(16);
   const fh = await fs.promises.open(file.path, 'r').catch(() => null);
   if (fh) { try { await fh.read(head, 0, 16, 0); } finally { await fh.close(); } }
-  if (fh && looksLikeImage(head)) return false;
+  if (fh && looksLikeImage(head) && await decodesToTheEnd(file.path)) return false;
   await fs.promises.unlink(file.path).catch(() => {});
-  res.status(400).json({ error: '画像として読めません (中身が画像の形ではありません)。base64 なら data: の前置きを外し、SVG や文書はファイルとして送ってください' });
+  res.status(400).json({ error: '画像として読めません (中身が画像の形でないか、途中で切れています。使えるのは JPEG・PNG・GIF・WebP・AVIF)。base64 なら data: の前置きを外して全部を渡し、SVG や文書はファイルとして送ってください' });
   return true;
 }
 
@@ -1556,7 +1566,8 @@ router.get('/unread', scopeByRoom('query'), async (req, res) => {
       }
     }
 
-    res.json({ messages: result.rows });
+    // ★ search / edit-history / get_messages と同じく日本時間を添える (改善ループ 39、c2d3658 の取り残し)
+    res.json({ messages: result.rows.map((m) => ({ ...m, created_at_local: formatLocalTime(m.created_at) })) });
   } catch (err) {
     logger.error('Bot unread error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });

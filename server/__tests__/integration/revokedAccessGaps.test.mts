@@ -127,6 +127,26 @@ describe('#529 取り消した権限・消した中身', () => {
       expect(res.status).toBe(400);
     });
 
+    // ★ 改善ループ 39: 11-02 17:16 の 2 枚目は PNG の印も寸法もあるのに途中で切れていた (300KB で切れた base64)。
+    //   先頭の印だけでは通ってしまい、サムネイルも作れず画面で壊れて見えた
+    it('★ /push-image: 先頭の印はあるが途中で切れた画像も 400', async () => {
+      const full = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+      const cut = full.subarray(0, 40);   // 印と寸法 (IHDR) は残り、画像の中身が欠ける
+      const before = await getTestPool().query('SELECT count(*)::int n FROM messages WHERE room_id = $1', [roomId]);
+      const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)
+        .field('room_id', roomId).attach('image', cut, { filename: 'cut.png', contentType: 'image/png' });
+      expect(res.status).toBe(400);
+      const after = await getTestPool().query('SELECT count(*)::int n FROM messages WHERE room_id = $1', [roomId]);
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+
+    it('★ /push-image: HEIC は画面の口と同じく断る (Chrome・Android で表示できない)', async () => {
+      const heic = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic'), Buffer.alloc(32)]);
+      const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)
+        .field('room_id', roomId).attach('image', heic, { filename: 'photo.heic', contentType: 'image/heic' });
+      expect(res.status).toBe(400);
+    });
+
     it('上限より小さければ今までどおり受ける (前提の確認)', async () => {
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
       const res = await request(app).post('/api/bot/push-image').set('Authorization', `Bearer ${sender.token}`)

@@ -41,6 +41,18 @@ describe('MessageInput — 指示の履歴を本体で絞り込む', () => {
     await waitFor(() => expect(document.body.textContent).toContain('古い棚卸しの手順'));
   });
 
+  // ★ 改善ループ 39: 絞り込み中に部屋を移ると、移った先の一覧が空のまま残った
+  //   (部屋替えで一覧を捨てたあと、同じ文字なので「もう探した」と見なして探し直さなかった)
+  it('★ 絞り込み中に部屋を移ったら、移った先の部屋で探し直す', async () => {
+    const view = render(<MessageInput roomId="r1" />);
+    fireEvent.change(textarea(), { target: { value: '/' } });
+    fireEvent.change(textarea(), { target: { value: '/棚卸' } });
+    await waitFor(() => expect(getPromptHistory).toHaveBeenCalledWith('r1', ['アシスタント'], 30, '棚卸'));
+    view.rerender(<MessageInput roomId="r2" />);
+    await waitFor(() => expect(getPromptHistory).toHaveBeenCalledWith('r2', ['アシスタント'], 30, '棚卸'));
+    await waitFor(() => expect(document.body.textContent).toContain('古い棚卸しの手順'));
+  });
+
   it('打っていないときは q を渡さない (今までどおり)', async () => {
     render(<MessageInput roomId="r1" />);
     await waitFor(() => expect(getPromptHistory).toHaveBeenCalled());

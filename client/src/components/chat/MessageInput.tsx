@@ -154,13 +154,18 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   }, [roomId, targetNames]);
   // ★ `/` のあとに打った文字は本体で探す (改善ループ 37)。返ってきた 30 件の中だけを絞ると、
   //   それより古い指示は打っても無いように見えた。打つたびに引かないよう少し待つ。宛先チップの回数は変えない
+  // ★ どの部屋で探したかも覚える (改善ループ 39)。文字だけを覚えていると、絞り込み中に部屋を移ったとき
+  //   「もう探した」と見なして探し直さず、部屋替えで捨てた一覧が空のまま残った
+  const searchedRoomRef = useRef('');
   useEffect(() => {
     const q = slashMode ? slashQuery.trim() : '';
-    if (!roomId || targetNames.length === 0 || q === searchedQueryRef.current) return;
+    if (!roomId || targetNames.length === 0) return;
+    if (q === searchedQueryRef.current && (!q || roomId === searchedRoomRef.current)) return;
     const timer = setTimeout(() => {
       searchedQueryRef.current = q;
+      searchedRoomRef.current = roomId;
       api.getPromptHistory(roomId, targetNames, 30, q || undefined)
-        .then(d => { if (searchedQueryRef.current === q) setPromptHistory(d.items || []); })
+        .then(d => { if (searchedQueryRef.current === q && searchedRoomRef.current === roomId) setPromptHistory(d.items || []); })
         .catch(() => {});
     }, 250);
     return () => clearTimeout(timer);

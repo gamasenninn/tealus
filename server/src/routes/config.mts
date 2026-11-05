@@ -17,8 +17,15 @@ import { agentUrl } from '../lib/upstream.mts';
 
 const AGENT_FETCH_TIMEOUT_MS = 2000;
 
-router.get('/', async (req, res) => {
-  let ttsProvider = 'browser';
+/**
+ * ★ agent-server の答えは 30 秒使い回す (改善ループ 39)。2026-11-04 に 1 台の端末が 3 時間で 8.7 万回この口を叩き、
+ *   そのたびに agent-server へ取りに行っていた。取れなかったとき (fallback) は覚えない (起動直後の 1 回で 30 秒 browser に固まらない)
+ */
+const PUBLIC_CONFIG_TTL_MS = 30_000;
+let cachedTtsProvider: { value: string; at: number } | null = null;
+export function resetPublicConfigCache(): void { cachedTtsProvider = null; }
+
+async function fetchTtsProvider(): Promise<string | null> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), AGENT_FETCH_TIMEOUT_MS);
@@ -26,12 +33,24 @@ router.get('/', async (req, res) => {
     clearTimeout(timer);
     if (r.ok) {
       const body = await r.json() as { tts_provider?: unknown };
-      if (body && typeof body.tts_provider === 'string') {
-        ttsProvider = body.tts_provider;
-      }
+      if (body && typeof body.tts_provider === 'string') return body.tts_provider;
     }
   } catch {
     // agent-server 未起動 / タイムアウト → fallback で続行
+  }
+  return null;
+}
+
+router.get('/', async (req, res) => {
+  let ttsProvider = 'browser';
+  if (cachedTtsProvider && Date.now() - cachedTtsProvider.at < PUBLIC_CONFIG_TTL_MS) {
+    ttsProvider = cachedTtsProvider.value;
+  } else {
+    const fetched = await fetchTtsProvider();
+    if (fetched !== null) {
+      ttsProvider = fetched;
+      cachedTtsProvider = { value: fetched, at: Date.now() };
+    }
   }
   res.json({
     tts_provider: ttsProvider,

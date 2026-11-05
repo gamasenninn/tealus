@@ -269,6 +269,17 @@ router.put('/:userId/role', authenticate, requireMemberOrSystemAdmin, requireGro
     if (target.rows.length === 0) {
       return res.status(404).json({ error: 'メンバーが見つかりません' });
     }
+    // ★ 最後のグループ管理者は解除できない (改善ループ 39)。退会には同じ守りがあるのに降格には無く、
+    //   管理者のいない部屋が作れた
+    if (target.rows[0].role === 'admin' && role === 'member') {
+      const others = await pool.query(
+        "SELECT 1 FROM room_members WHERE room_id = $1 AND role = 'admin' AND user_id <> $2 LIMIT 1",
+        [roomId, targetUserId]
+      );
+      if (others.rows.length === 0) {
+        return res.status(400).json({ error: '最後のグループ管理者は解除できません。先に他のメンバーをグループ管理者にしてください' });
+      }
+    }
 
     const result = await pool.query(
       'UPDATE room_members SET role = $1 WHERE room_id = $2 AND user_id = $3 RETURNING room_id, user_id, role, joined_at',

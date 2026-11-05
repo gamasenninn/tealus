@@ -47,6 +47,8 @@ describe('/api/bot と スタンプ — 部屋の口はメンバーだけ', () =
       const res = await request(app).get(`/api/bot/unread?room_id=${roomId}`).set('Authorization', `Bearer ${member.token}`);
       expect(res.status).toBe(200);
       expect(res.body.messages.map((m: { content: string }) => m.content)).toEqual(['内緒の話']);
+      // ★ 改善ループ 39: search / edit-history / get_messages と同じく日本時間を添える (c2d3658 の取り残し)
+      expect(res.body.messages[0].created_at_local).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
     });
 
     it('★ メンバーでなければ 403 (中身を返さない)', async () => {

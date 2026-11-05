@@ -363,5 +363,26 @@ describe('Group Member Management', () => {
 
       expect(res.status).toBe(403);
     });
+
+    // ★ 改善ループ 39: 退会には「最後の管理者」の守りがあるのに、降格には無かった (管理者のいない部屋が作れた)
+    it('★ 最後のグループ管理者は解除できない (自分でも)', async () => {
+      const res = await request(app)
+        .put(`/api/rooms/${groupId}/members/${admin.user.id}/role`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ role: 'member' });
+      expect(res.status).toBe(400);
+      const row = await getTestPool().query('SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', [groupId, admin.user.id]);
+      expect(row.rows[0].role).toBe('admin');
+    });
+
+    it('ほかに管理者がいれば自分を解除できる (前提の確認)', async () => {
+      await request(app).put(`/api/rooms/${groupId}/members/${user1.user.id}/role`)
+        .set('Authorization', `Bearer ${admin.token}`).send({ role: 'admin' });
+      const res = await request(app)
+        .put(`/api/rooms/${groupId}/members/${admin.user.id}/role`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ role: 'member' });
+      expect(res.status).toBe(200);
+    });
   });
 });
