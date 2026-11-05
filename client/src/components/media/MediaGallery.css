@@ -94,9 +94,12 @@
   opacity: 0.7;
 }
 
+/* ★ マスは幅も高さも 130px の固定 (2026-11-05)。幅に対する割合 (padding-bottom: 100% / aspect-ratio) で正方形を作ると、
+   小野さんの iPhone の Safari では高さが幅の 3 割ほどになり写真が重なった (手元の WebKit では再現せず)。割合に頼らない */
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 130px));
+  grid-template-columns: repeat(auto-fill, 130px);
+  grid-auto-rows: 130px;
   justify-content: center;
   gap: 4px;
   padding: 4px;
@@ -105,22 +108,14 @@
   align-content: start;
 }
 
-/* ★ 正方形のマスは aspect-ratio で作る (2026-11-05)。padding-bottom: 100% の作りは、iPhone の Safari のグリッドでは
-   正方形にならず (幅の 3 割ほどの高さ)、写真が上下に重なって見えた。aspect-ratio の無い古いブラウザだけ以前の作り */
 .gallery-item {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: 100%;   /* 行の高さ (130px) いっぱい。上の注のとおり割合では作らない */
   overflow: hidden;
   cursor: pointer;
   background: #f0f0f0;
   border-radius: 2px;
-}
-
-@supports not (aspect-ratio: 1 / 1) {
-  .gallery-item {
-    padding-bottom: 100%;
-  }
 }
 
 .gallery-item img {
