@@ -65,6 +65,18 @@
   margin: 0.4em 0;
 }
 
+/* index.css の `* { padding: 0 }` で一覧の左余白が 0 になり、行頭の点が枠の外に出る
+   (吹き出しの .bubble-markdown と同じ値で戻す) */
+.text-file-preview__markdown ul,
+.text-file-preview__markdown ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+
+.text-file-preview__markdown li {
+  margin: 0.15em 0;
+}
+
 .text-file-preview__markdown code {
   background: rgba(0, 0, 0, 0.06);
   padding: 1px 4px;
