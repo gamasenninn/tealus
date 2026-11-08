@@ -27,6 +27,7 @@ import { detectCodexAuthError, buildCodexErrorUserMessage } from '../lib/codexAu
 import { agentChildEnv } from '../lib/childEnv.mts';
 import { readRoomConfig } from '../lib/roomConfigPaths.mts';
 import { codexHomePath } from '../lib/codexRollout.mts';
+import { postLeftoverImages, isImagePostToolCall } from '../lib/leftoverImages.mts';
 
 /** MCP server 定義 (deep.mts の createDeepMcpConfig 同 form) */
 export interface McpServerDef {
@@ -514,6 +515,9 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
     let lastAgentMessage: string | null = null;
     // #292 follow-up: LLM が自 room へ send_message tool で post した場合、最終 auto-post を skip (= 2 件返信防止)
     let llmSentToOwnRoom = false;
+    // ★ #645 この回で画像を部屋に出したか / 始めた時刻 (時間切れのとき、作った画像を拾うため)
+    let imagesPosted = 0;
+    const startedAt = Date.now();
     let stderr = '';
     let timedOut = false;
 
@@ -521,7 +525,16 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
       timedOut = true;
       logger.warn(`Deep Codex Agent timeout (${config.DEEP_TIMEOUT}ms)`);
       await botApi.pushStatus(roomId, 'idle').catch(() => {});
-      await postTarget(`⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`).catch(() => {});
+      // ★ #645 内蔵の画像生成で作ったが投稿前に切れた画像を出す (2026-11-05 に 9 枚できて投稿 0 枚だった)。
+      //   この回でまだ 1 枚も画像を出していないときだけ (出していれば二重になる)。自動投稿を止めている経路 (委譲) では出さない
+      let leftover = 0;
+      if (!suppressAutoPost && imagesPosted === 0) {
+        leftover = await postLeftoverImages(codexHome, startedAt, (buf, name) => botApi.pushImage(roomId, buf, name)).catch(() => 0);
+        if (leftover > 0) logger.warn(`[DeepCodex] 時間切れの前に作った画像 ${leftover} 枚を投稿しました (room=${roomId})`);
+      }
+      await postTarget(leftover > 0
+        ? `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。それまでに作れた画像 ${leftover} 枚を投稿しました (確認前のものです)。続きは「続きを作って」と頼んでください。`
+        : `⚠ タイムアウトしました（${Math.round(config.DEEP_TIMEOUT / 1000)}秒超過）。タスクが複雑すぎる可能性があります。`).catch(() => {});
       try { proc.kill('SIGTERM'); } catch {}
       if (process.platform === 'win32' && proc.pid) {
         try { spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { shell: true }); } catch {}
@@ -553,6 +566,7 @@ export async function processDeepCodex({ roomId, prompt, workspacePath, agentId,
             lastAgentMessage = text;
           }
         }
+        if (isImagePostToolCall(event)) imagesPosted++;
         // #292 follow-up: 自 room send_message tool 検出 (= 2 件返信防止 flag)
         if (!llmSentToOwnRoom && isToolCallSendMessageToOwnRoom(event, roomId)) {
           llmSentToOwnRoom = true;

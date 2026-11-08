@@ -85,7 +85,11 @@ if ($Parts -contains 'media') { try {
 if ($Parts -contains 'secrets') { try {
   $Secrets = @(
     'server\.env', 'agent-server\.env', 'agent-server\mcp_config.json', 'agent-server\config\settings.json',
-    # ★ 2026-11-08: system_prompt.md は存在しない古い名前だった (毎日「無いので飛ばした」)。cc-queue の役割別の設定を足した
+    # ★ system_prompt.md は既定 (default_system_prompt.md、git にある) を上書きする任意のファイル (lib/systemPrompt.mts)。
+    #   いまは無い (毎日「無いので飛ばした」と出るのは正しい)。作ったときに写るよう残す
+    #   (2026-11-08 に「古い名前」と取り違えて一度外した)
+    'agent-server\config\system_prompt.md',
+    # 2026-11-08: cc-queue の役割別の設定を足した
     '.claude\cc-tealus.tealus.json', '.claude\cc-tealus.support.json',
     'server\config\room-triggers.json', 'server\config\watchdogs.json',
     'server\config\line-groups.json', 'server\config\line-group-mappings.json',

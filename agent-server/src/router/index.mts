@@ -36,6 +36,11 @@ const DEEP_KEYWORDS: string[] = [
 // ★ #567 読んでまとめる依頼は light (Deep より速く、道具で部屋を読めば足りる)
 const LIGHT_SUMMARY_PATTERN = /議事録|要約|まとめて|一覧に|整理して/;
 
+// ★ #645 画像を作る依頼は light (generate_and_send_image で 1 枚ずつ投稿する)。
+//   Deep (codex) は内蔵の画像生成で全部作ってから投稿しようとし、2026-11-05 に 16 枚の依頼が 9 枚目で 8 分に切れて投稿 0 枚だった。
+//   LLM の分類は同じ種類の依頼を Deep と Light に揺れたので、規則で決める
+const LIGHT_IMAGE_GEN_PATTERN = /(画像|イラスト|スタンプ|アイコン|ロゴ|絵)[^。\n]{0,20}(作|生成|描|書いて)/;
+
 /**
  * 先頭の @mention を除去する。
  *
@@ -88,7 +93,7 @@ function classifyByRules(content: string): RouteResult | null {
 
   // ★ #567 読んでまとめる依頼 (議事録・一覧・要約・まとめ・整理) は light。Deep キーワードより先に見る
   //   以前は LLM が「部屋の履歴を読んで一覧に」「動画から議事録」を Deep に回し、利用者が /light を付けて出し直していた (Deep 4 件中 2 件)
-  if (LIGHT_SUMMARY_PATTERN.test(trimmed)) {
+  if (LIGHT_SUMMARY_PATTERN.test(trimmed) || LIGHT_IMAGE_GEN_PATTERN.test(trimmed)) {
     return { tier: 'light', prompt: trimmed };
   }
 

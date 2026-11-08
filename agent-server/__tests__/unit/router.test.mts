@@ -84,6 +84,23 @@ describe('Router', () => {
       expect(classifyByRules(text)!.tier).toBe('light');
     });
 
+    test.each([
+      'バスケットのLINEスタンプ作りたい画像作ってほしい',
+      '@アシスタント 猫のイラストを描いて',
+      'ロゴの画像を生成して',
+      'アイコンを10個作って',
+    ])('★ #645 画像を作る依頼は light (Deep の内蔵の画像生成は全部作ってから投稿し、8 分で切れて 0 枚だった): %s', (text) => {
+      expect(classifyByRules(text)!.tier).toBe('light');
+    });
+
+    test('#645 画像を作る依頼でも /deep を明示すれば Deep', () => {
+      expect(classifyByRules('/deep 画像を作って')!.tier).toBe('deep');
+    });
+
+    test('#645 画像の話でも作る依頼でなければ規則に当たらない', () => {
+      expect(classifyByRules('この画像は何ですか')).toBeNull();
+    });
+
     test('Deep キーワードだけの依頼は今までどおり Deep (light の規則に当たらない)', () => {
       expect(classifyByRules('このコードをレビューして')!.tier).toBe('deep');
     });
