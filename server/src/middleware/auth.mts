@@ -4,6 +4,8 @@ import { pool } from '../db/pool.mts';
 import { isAdmin } from '../utils/permissions.mts';
 import type { AuthUser } from '../types.mts';
 import { SERVER_ERROR } from '../constants/errors.mts';
+import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const JWT_SECRET = (() => {
   const secret = process.env.JWT_SECRET;
@@ -54,7 +56,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       [decoded.id]
     );
   } catch (err) {
-    console.error('[auth] ユーザーの読み込みに失敗:', err instanceof Error ? err.message : err);
+    logger.error(`[auth] ユーザーの読み込みに失敗: ${errorText(err)}`);   // ★ 改善ループ 42: console ではログファイルに残らなかった
     return res.status(500).json({ error: SERVER_ERROR });
   }
 

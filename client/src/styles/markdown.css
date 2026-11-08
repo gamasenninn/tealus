@@ -1,0 +1,101 @@
+/*
+ * Markdown の本文 (改善ループ 42)。描く場所 3 つ (吹き出し・ホームのお知らせ・MD ファイルのプレビュー) が共通で使う。
+ *
+ * ★ index.css の `* { margin: 0; padding: 0 }` で、場所ごとに戻していない要素が潰れていた
+ *   (2026-11-07 プレビューの箇条書きの点が枠の外 / お知らせの見出しが前の行に密着・表の罫線なし)。
+ *   場所ごとに書き足すと次の場所でまた抜けるので、ここに 1 つにまとめる。
+ * ★ :where() で包んで強さを 0 にしてある。場所ごとの違い (.announcement-body p の余白など) は
+ *   そちらの規則がそのまま勝つ。単位は em なので文字の大きさの設定に追従する
+ */
+/* 長い英数字 (URL など) が箱をはみ出さない。break-word は表の最小幅に効かないので、表は横に動かせる */
+:where(.md-body) { overflow-wrap: break-word; }
+:where(.md-body) p { margin: 0 0 0.4em; }
+:where(.md-body) p:last-child { margin-bottom: 0; }
+
+:where(.md-body) h1,
+:where(.md-body) h2,
+:where(.md-body) h3,
+:where(.md-body) h4,
+:where(.md-body) h5,
+:where(.md-body) h6 {
+  margin: 0.6em 0 0.3em;
+  font-size: 1.05em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+:where(.md-body) h1 { font-size: 1.15em; }
+:where(.md-body) h5,
+:where(.md-body) h6 { font-size: 1em; }
+:where(.md-body) > :first-child { margin-top: 0; }
+
+:where(.md-body) ul,
+:where(.md-body) ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+:where(.md-body) li { margin: 0.15em 0; }
+/* `- [ ]` は点とチェックの箱が二重に出ていた */
+:where(.md-body) li.task-list-item { list-style: none; }
+:where(.md-body) li.task-list-item > input[type='checkbox'] { margin: 0 0.4em 0 -1.2em; vertical-align: middle; }
+
+:where(.md-body) blockquote {
+  margin: 0.4em 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--primary);
+  background: rgba(0, 180, 160, 0.06);
+}
+
+:where(.md-body) code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+}
+:where(.md-body) pre {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 8px 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.4em 0;
+}
+:where(.md-body) pre code { background: none; padding: 0; }
+
+/* 表: 狭い画面では表だけを横に動かす (吹き出しの overflow-wrap: anywhere でセルが 1 文字ずつ折れていた) */
+:where(.md-body) table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.9em;
+  overflow-wrap: break-word;
+}
+:where(.md-body) th,
+:where(.md-body) td {
+  border: 1px solid var(--border-medium);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+:where(.md-body) th { background: rgba(0, 0, 0, 0.04); font-weight: 600; }
+
+:where(.md-body) hr {
+  border: none;
+  border-top: 1px solid var(--border-medium);
+  margin: 0.5em 0;
+}
+
+:where(.md-body) img { max-width: 100%; height: auto; }
+:where(.md-body) a { overflow-wrap: anywhere; }
+
+/* 脚注の見出し (英語の "Footnotes") は読み上げ用。画面には出さない */
+:where(.md-body) .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+:where(.md-body) .footnotes { margin-top: 0.6em; font-size: 0.9em; }

@@ -5,9 +5,11 @@ import { loadConfig } from './services/clientConfig';
 import { useCapabilityStore } from './stores/capabilityStore';
 import { initLaunchFiles } from './services/launchFiles';
 import { installGlobalErrorHandlers, reportClientError } from './services/errorReport';
-import { recordBoot, forgetBoots, BOOT_LOOP_LIMIT } from './services/bootGuard';
+import { checkBoot, forgetBoots, BOOT_LOOP_LIMIT } from './services/bootGuard';
+import { isEmbeddedInSameApp } from './utils/embedded';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import './index.css';
+import './styles/markdown.css';
 
 // #525 画面で起きたエラーを本体のログへ (読み込みの最初に。設定の取得で落ちても拾えるように)
 installGlobalErrorHandlers();
@@ -30,7 +32,7 @@ function storageOrNull(): Storage | null {
 //   数十ミリ秒で消されるのを 3 時間繰り返し、本体へ約 11 万回の要求を送った (原因は端末の側、推測)。
 //   本体へは超えた最初の 1 回だけ知らせる (止まっている間も毎回知らせると、それが新しい連打になる)
 const storage = storageOrNull();
-const boot = storage ? recordBoot(storage) : { looping: false, count: 0 };
+const boot = checkBoot(storage, isEmbeddedInSameApp());
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
 if (boot.looping) {

@@ -301,10 +301,10 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
                 return (
                   <>
                     {mdPreview ? (
-                      <div className={`bubble-text bubble-markdown ${!showFull ? 'collapsed' : ''}`}>
+                      <div className={`bubble-text bubble-markdown md-body ${!showFull ? 'collapsed' : ''}`}>
                         <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={{
                           p: ({ children }) => <p>{processMentions(children)}</p>,
-                          li: ({ children }) => <li>{processMentions(children)}</li>,
+                          li: ({ children, className }) => <li className={className}>{processMentions(children)}</li>,
                         }}>{displayContent}</Markdown>
                         {message.is_edited && <span className="bubble-edited"> (編集済み)</span>}
                       </div>

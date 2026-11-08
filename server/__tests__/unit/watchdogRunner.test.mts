@@ -99,6 +99,15 @@ describe('runOnce', () => {
     expect(d.posts).toHaveLength(1); // radio の ⚠ は出る
   });
 
+  it('★ 改善ループ 42: 本文が空の例外 (DB 停止の AggregateError) でも理由が空にならない', async () => {
+    const d = deps({
+      lastPostAt: async () => { throw new AggregateError([new Error('connect ECONNREFUSED 127.0.0.1:5432')], ''); },
+      heartbeatOf: async () => null,
+    });
+    const r = await runOnce(config, d);
+    expect(r.find((x) => x.id === 'call-log')!.error).toContain('ECONNREFUSED');
+  });
+
   it('投稿に失敗したら error に残す (次の周でもう一度試す = 前回の ⚠ が無いので)', async () => {
     const d = deps({
       heartbeatOf: async () => null,

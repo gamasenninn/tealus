@@ -34,3 +34,32 @@ describe('recordBoot', () => {
     expect(recordBoot(broken, T0).looping).toBe(false);
   });
 });
+
+/**
+ * 改善ループ 42: マルチトークのパネル (同じ Tealus の中の iframe) は起動に数えない。
+ * ★ パネルは同じオリジンで localStorage を分け合うので、小野さんの画面 (パネル 8 つ) は開くたびに 9 回の起動として
+ *   積まれ、30 秒以内に開き直すと全パネルに「止めました」が出る形だった。数えるのは親の画面だけ
+ */
+describe('checkBoot', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('★ 同じ Tealus のパネルの中では数えない (止めない)', async () => {
+    const { checkBoot } = await import('../src/services/bootGuard');
+    for (let i = 0; i < BOOT_LOOP_LIMIT * 2; i++) {
+      expect(checkBoot(localStorage, true, T0 + i).looping).toBe(false);
+    }
+    expect(recordBoot(localStorage, T0 + 100).count).toBe(1);
+  });
+
+  it('親の画面では今までどおり数える', async () => {
+    const { checkBoot } = await import('../src/services/bootGuard');
+    let r = checkBoot(localStorage, false, T0);
+    for (let i = 1; i <= BOOT_LOOP_LIMIT; i++) r = checkBoot(localStorage, false, T0 + i * 300);
+    expect(r.looping).toBe(true);
+  });
+
+  it('保存領域が使えなければ数えない', async () => {
+    const { checkBoot } = await import('../src/services/bootGuard');
+    expect(checkBoot(null, false, T0)).toEqual({ looping: false, count: 0 });
+  });
+});

@@ -227,7 +227,7 @@ function HomePage() {
                     )}
 
                     {body && (
-                      <div className={`announcement-body ${!isExpanded && isLong ? 'collapsed' : ''}`}>
+                      <div className={`announcement-body md-body ${!isExpanded && isLong ? 'collapsed' : ''}`}>
                         <Markdown remarkPlugins={MARKDOWN_PLUGINS}>{isExpanded || !isLong ? body : body.slice(0, 150) + '...'}</Markdown>
                       </div>
                     )}

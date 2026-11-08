@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 import { assessBackup, readLatestBackupLog, type BackupRead } from './backupLog.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
 import {
@@ -89,7 +90,7 @@ export async function runOnce(config: WatchdogConfig, deps: RunDeps): Promise<Ru
       units = await unitsOf(w, deps);
     } catch (err) {
       results.push({ id: w.id, state: 'error', detail: '対象の取得に失敗', posted: null,
-        error: err instanceof Error ? err.message : String(err) });
+        error: errorText(err) });
       continue;
     }
     for (const u of units) {
@@ -112,7 +113,7 @@ export async function runOnce(config: WatchdogConfig, deps: RunDeps): Promise<Ru
           : { id: u.id, state: obs.state, detail: obs.detail, posted: null, error: posted.reason });
       } catch (err) {
         results.push({ id: u.id, state: 'error', detail: '判定中に例外', posted: null,
-          error: err instanceof Error ? err.message : String(err) });
+          error: errorText(err) });
       }
     }
   }
@@ -178,7 +179,7 @@ async function diskFreeOf(p: string): Promise<DiskRead> {
     const st = await fs.promises.statfs(p);
     return { freeBytes: st.bavail * st.bsize };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
+    return { error: errorText(err) };
   }
 }
 
@@ -241,7 +242,7 @@ export function startWatchdogs(configPath: string = CONFIG_PATH): void {
   const warned = { signature: '' };
   const n = initial.config?.watches.filter((w) => w.enabled).length ?? 0;
   logger.info(`[watchdogs] ${n} 件を ${POLL_MS / 60_000} 分ごとに見ます${initial.config ? '' : ' (設定ファイルなし)'}`);
-  const run = () => { tick(configPath, warned).catch((err) => logger.warn(`[watchdogs] 1 周が失敗しました: ${err instanceof Error ? err.message : String(err)}`)); };
+  const run = () => { tick(configPath, warned).catch((err) => logger.warn(`[watchdogs] 1 周が失敗しました: ${errorText(err)}`)); };
   firstTimer = setTimeout(() => { firstTimer = null; run(); }, FIRST_RUN_MS);
   firstTimer.unref();
   timer = setInterval(run, POLL_MS);

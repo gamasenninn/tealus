@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { useCapabilityStore } from '../stores/capabilityStore';
-import { useRoomStore } from '../stores/roomStore';
+import { useRoomStore, fetchRoomsFromEvent } from '../stores/roomStore';
 import { applyUserUpdated } from './userProfileSync';
 import { api } from './api';
 
@@ -82,14 +82,14 @@ export function connectSocket(token: string): Socket {
   s.on('room:added', (data: { room_id?: unknown } | null) => {
     if (!data || typeof data.room_id !== 'string') return;
     s.emit('room:join', data.room_id);
-    useRoomStore.getState().fetchRooms();
+    void fetchRoomsFromEvent();
   });
 
   // ★ #533 自分が部屋から外れた (自分で退会・外された)。以前は本人に何も届かず、読み込み直すまで部屋が残った。
   //   一覧を取り直し、開いている部屋の画面へ知らせる (useRoomRemovedRedirect が受けてトーク一覧へ戻る)
   s.on('room:removed', (data: { room_id?: unknown } | null) => {
     if (!data || typeof data.room_id !== 'string') return;
-    useRoomStore.getState().fetchRooms();
+    void fetchRoomsFromEvent();   // ★ 改善ループ 42: パネルが多いと 1 つの知らせで全パネルが取りに行っていた
     window.dispatchEvent(new CustomEvent('tealus:room-removed', { detail: { room_id: data.room_id } }));
   });
 
@@ -101,7 +101,7 @@ export function connectSocket(token: string): Socket {
   s.on('room:updated', (data: { room_id?: unknown } | null) => {
     if (!data || typeof data.room_id !== 'string') return;
     const store = useRoomStore.getState();
-    store.fetchRooms();
+    void fetchRoomsFromEvent();
     return store.refreshRoom(data.room_id);
   });
 

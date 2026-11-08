@@ -65,6 +65,14 @@ describe('音声以外の振り分けは変えない', () => {
     expect(screen.getByText(/x\.pdf/).closest('a')!.getAttribute('download')).toBe('x.pdf');
   });
 
+  it('★ 改善ループ 42: 書類のリンクは新しいタブで開く (iPhone のホーム画面アプリで戻れなくならない)', () => {
+    // 11-05 に写真の保存で起きた「画面が移って戻れない」と同じ形。写真は saveMedia に替えたが 📎 が残っていた
+    render(
+      <ImageGrid media={[audio({ id: 'd2', mime_type: 'application/pdf', file_name: 'y.pdf', file_path: 'p/y.pdf' })]} onImageClick={noop} />,
+    );
+    expect(screen.getByText(/y\.pdf/).closest('a')!.getAttribute('target')).toBe('_blank');
+  });
+
   it('画像は grid に入り、file リンクにはならない', () => {
     const { container } = render(
       <ImageGrid media={[audio({ id: 'i1', mime_type: 'image/jpeg', file_name: 'x.jpg', file_path: 'p/x.jpg' })]} onImageClick={noop} />,

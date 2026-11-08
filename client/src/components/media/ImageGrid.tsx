@@ -82,6 +82,7 @@ function ImageGrid({ media, onImageClick }: ImageGridProps) {
             {isAudio && <MediaAudio media={m} />}
             <a href={`/media/${m.file_path}`}
                download={m.file_name}
+               target="_blank"
                rel="noopener noreferrer"
                className={`media-file${isAudio ? ' media-file-compact' : ''}`}
                onClick={(e) => e.stopPropagation()}>

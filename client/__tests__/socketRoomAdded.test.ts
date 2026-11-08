@@ -21,6 +21,8 @@ vi.mock('socket.io-client', () => ({ io: vi.fn(() => fakeSocket) }));
 const fetchRooms = vi.fn(() => Promise.resolve());
 vi.mock('../src/stores/roomStore', () => ({
   useRoomStore: { getState: () => ({ fetchRooms }) },
+  // 改善ループ 42: 知らせからの取り直しは分け合う道を通る (ここでは素通しで数える)
+  fetchRoomsFromEvent: () => fetchRooms(),
 }));
 
 const { connectSocket, disconnectSocket } = await import('../src/services/socket');

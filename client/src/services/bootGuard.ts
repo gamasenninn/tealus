@@ -27,3 +27,13 @@ export function recordBoot(storage: Storage, now = Date.now()): { looping: boole
 export function forgetBoots(storage: Storage): void {
   try { storage.removeItem(KEY); } catch { /* 数えないだけ */ }
 }
+
+/**
+ * 起動に数えるかを決めてから数える (改善ループ 42)。
+ * ★ マルチトークのパネル (同じ Tealus の中の iframe) は数えない。パネルは localStorage を親と分け合うので、
+ *   パネル 8 つの画面は開くたびに 9 回として積まれ、30 秒以内に開き直すと全パネルが止まる形だった
+ */
+export function checkBoot(storage: Storage | null, embedded: boolean, now = Date.now()): { looping: boolean; count: number } {
+  if (!storage || embedded) return { looping: false, count: 0 };
+  return recordBoot(storage, now);
+}

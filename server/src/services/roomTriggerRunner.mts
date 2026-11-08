@@ -14,6 +14,7 @@
  */
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 import { decide } from './roomTriggerDecide.mts';
 import { postAsUser, type PostAsUserResult, type SenderContext } from './postAsUser.mts';
 import { buildBody, CONFIG_PATH, loadTriggers, markFor, type RoomTrigger } from './roomTriggers.mts';
@@ -74,7 +75,7 @@ export async function runOnce(triggers: RoomTrigger[], deps: RunDeps): Promise<R
     } catch (err) {
       results.push({
         id: t.id, fired: false, reason: '判定中に例外',
-        error: err instanceof Error ? err.message : String(err),
+        error: errorText(err),
       });
     }
   }

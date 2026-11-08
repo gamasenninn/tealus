@@ -173,7 +173,7 @@ export default function TextFilePreview({ media }: TextFilePreviewProps) {
     const text = content as string;
     if (isMd) {
       return (
-        <div className="text-file-preview__markdown">
+        <div className="text-file-preview__markdown md-body">
           <Markdown remarkPlugins={MARKDOWN_PLUGINS}>{text}</Markdown>
         </div>
       );

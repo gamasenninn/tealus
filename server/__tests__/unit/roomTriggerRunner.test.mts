@@ -92,6 +92,15 @@ describe('runOnce', () => {
     expect(results[1].fired).toBe(true);
   });
 
+  test('★ 改善ループ 42: 本文が空の例外 (DB 停止の AggregateError) でも理由が空にならない', async () => {
+    // 2026-11-06 の DB 停止で理由が空 (= 偽) になり、warn でなく info で理由なしに記録された
+    const lastFiredAt = jest.fn(async () => {
+      throw new AggregateError([new Error('connect ECONNREFUSED 127.0.0.1:5432')], '');
+    });
+    const results = await runOnce(load([rawTrigger]), deps({ lastFiredAt }));
+    expect(results[0].error).toContain('ECONNREFUSED');
+  });
+
   test('★ 投稿に失敗しても例外にせず、理由を残す', async () => {
     const d = deps({
       post: jest.fn(async () => ({ ok: false as const, code: 'not_member', reason: 'メンバーではありません' })),

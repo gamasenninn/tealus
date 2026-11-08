@@ -14,7 +14,7 @@
  */
 import { createLogger, format } from 'winston';
 import Transport from 'winston-transport';
-import { formatLine, EXTRA_MAX_CHARS } from '../../src/utils/logFormat.mts';
+import { formatLine, EXTRA_MAX_CHARS, errorText } from '../../src/utils/logFormat.mts';
 
 class Capture extends Transport {
   lines: string[] = [];
@@ -65,5 +65,32 @@ describe('logger: 2 つ目以降の引数', () => {
     const out = emit('big:', 'x'.repeat(EXTRA_MAX_CHARS * 3));
     expect(out.length).toBeLessThan(EXTRA_MAX_CHARS + 100);
     expect(out).toContain('…(');
+  });
+});
+
+/**
+ * 改善ループ 42: 本文が空のエラー (AggregateError) の理由を残す。
+ * ★ 2026-11-06 15:54〜16:01 に DB が止まったとき、DB_HOST=localhost なので pg は ::1 と 127.0.0.1 の両方に断られ、
+ *   message が空の AggregateError を投げた。ログには本文が空の「Login error:」が 8 行残っただけで、
+ *   見張り・トリガーの記録も理由が空 (= 偽) なので warn にならず info で出ていた
+ */
+describe('本文が空のエラー', () => {
+  const refused = () => new AggregateError([
+    Object.assign(new Error('connect ECONNREFUSED ::1:5432'), { code: 'ECONNREFUSED' }),
+    Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' }),
+  ], '');
+
+  test('★ errorText は中のエラーをつないで返す (空にしない)', () => {
+    expect(errorText(refused())).toBe('AggregateError: connect ECONNREFUSED ::1:5432 / connect ECONNREFUSED 127.0.0.1:5432');
+  });
+
+  test('errorText: ふつうのエラーは message、Error でなければ文字列、空の Error は名前', () => {
+    expect(errorText(new Error('boom'))).toBe('boom');
+    expect(errorText('x')).toBe('x');
+    expect(errorText(new TypeError(''))).toBe('TypeError');
+  });
+
+  test('★ ログの 2 つ目に渡しても理由が残る', () => {
+    expect(emit('Login error:', refused())).toContain('ECONNREFUSED');
   });
 });

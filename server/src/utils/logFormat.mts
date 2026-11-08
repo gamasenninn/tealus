@@ -27,7 +27,22 @@ function extraToString(v: unknown): string {
  */
 export function formatLine(info: { timestamp?: unknown; level: string; message: unknown; [k: string | symbol]: unknown }): string {
   const splat = (info[SPLAT] as unknown[] | undefined) ?? [];
-  const extras = splat.filter((v) => !(v instanceof Error)).map(extraToString);
+  // ★ 改善ループ 42: 本文が空の Error (AggregateError) は winston が空を連結するだけなので、ここで理由を足す
+  const extras = splat.filter((v) => !(v instanceof Error) || !v.message).map((v) => (v instanceof Error ? errorText(v) : extraToString(v)));
   const tail = extras.length ? ` ${extras.join(' ')}` : '';
   return `${info.timestamp} [${info.level}] ${info.message}${tail}`;
+}
+
+/**
+ * エラーを 1 行の理由にする (改善ループ 42)。
+ * ★ 2026-11-06 の DB 停止で、pg が ::1 と 127.0.0.1 の両方に断られて message が空の AggregateError を投げ、
+ *   ログ・見張り・トリガーの記録の理由が全部空になった。空なら中のエラーをつなぎ、それも無ければ名前を返す
+ */
+export function errorText(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  if (err.message) return err.message;
+  const inner = err instanceof AggregateError ? err.errors.map((e) => (e instanceof Error ? e.message || e.name : String(e))).filter(Boolean) : [];
+  const code = (err as { code?: unknown }).code;
+  if (inner.length) return `${err.name}: ${inner.join(" / ")}`;
+  return typeof code === "string" ? `${err.name}: ${code}` : err.name;
 }
