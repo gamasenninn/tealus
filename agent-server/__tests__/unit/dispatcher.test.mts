@@ -889,3 +889,66 @@ describe('AI を止めた部屋での 1 行', () => {
     expect(pushed()).toHaveLength(1);
   });
 });
+
+/**
+ * #644 順番待ちのとき「待っています」を出す (2026-11-08 小野さん承認)
+ * ★ 前の仕事 (Deep は最大 8 分) が終わるまで次の依頼は黙って待つので、AI が反応していないように見えた
+ *   (11-05 に 1 対 1 の部屋で 8 件が並び「反応しない」と言われた)。既にある処理中の表示 (agent:status) に queued を乗せる
+ */
+describe('#644 順番待ちの表示', () => {
+  const { dispatch, enqueueForRoom, queueDepthOf } = require('../../src/webhook/dispatcher');
+  const botApi = require('../../src/lib/botApi');
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  /** 部屋をふさぐ仕事。release() を呼ぶまで終わらない */
+  function block(roomId: string) {
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    const done = enqueueForRoom(roomId, () => held, 5000);
+    return { release, done };
+  }
+
+  beforeEach(() => jest.clearAllMocks());
+
+  test('★ 前に仕事があれば、1 対 1 の依頼に「順番待ち」を出す (前の件数つき)', async () => {
+    const b = block('room-q1');
+    expect(queueDepthOf('room-q1')).toBe(1);
+    const d = dispatch({ message: { id: 'q1', content: 'これもお願い', sender: { id: 'user1' } },
+      room: { id: 'room-q1', name: null, member_count: 2 }, agentId: 'agent-1', agentName: 'アシスタント' });
+    await flush();
+    expect(botApi.pushStatus).toHaveBeenCalledWith('room-q1', 'queued', expect.stringContaining('前に 1 件'));
+    b.release(); await b.done; await d;
+    expect(queueDepthOf('room-q1')).toBe(0);
+  });
+
+  test('空いていれば出さない', async () => {
+    await dispatch({ message: { id: 'q2', content: 'こんにちは', sender: { id: 'user1' } },
+      room: { id: 'room-q2', name: null, member_count: 2 }, agentId: 'agent-1', agentName: 'アシスタント' });
+    expect(botApi.pushStatus).not.toHaveBeenCalledWith('room-q2', 'queued', expect.anything());
+  });
+
+  test('★ グループで名指しが無い便・ゲストの便には出さない', async () => {
+    const b = block('room-q3');
+    const d1 = dispatch({ message: { id: 'q3', content: 'みなさんおはよう', sender: { id: 'user1' } },
+      room: { id: 'room-q3', name: '部屋', member_count: 5 }, agentId: 'agent-1', agentName: 'アシスタント' });
+    const d2 = dispatch({ message: { id: 'q4', content: '@アシスタント 教えて', sender: { id: 'g1', role: 'guest' } },
+      room: { id: 'room-q3', name: '部屋', member_count: 5 }, agentId: 'agent-1', agentName: 'アシスタント' });
+    await flush();
+    expect(botApi.pushStatus).not.toHaveBeenCalledWith('room-q3', 'queued', expect.anything());
+    b.release(); await b.done; await d1; await d2;
+  });
+
+  test('グループでも名指しなら出す', async () => {
+    const b = block('room-q5');
+    const d = dispatch({ message: { id: 'q5', content: '@アシスタント 続きをお願い', sender: { id: 'user1' } },
+      room: { id: 'room-q5', name: '部屋', member_count: 5 }, agentId: 'agent-1', agentName: 'アシスタント' });
+    await flush();
+    expect(botApi.pushStatus).toHaveBeenCalledWith('room-q5', 'queued', expect.any(String));
+    b.release(); await b.done; await d;
+  });
+
+  test('★ 前の仕事が時間切れで打ち切られても、数は戻る', async () => {
+    await enqueueForRoom('room-q6', () => new Promise(() => {}), 30);
+    expect(queueDepthOf('room-q6')).toBe(0);
+  });
+});

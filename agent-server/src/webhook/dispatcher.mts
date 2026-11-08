@@ -68,11 +68,37 @@ function runQueuedTask(roomId: string, fn: () => unknown, timeoutMs: number): Pr
   });
 }
 
+/** #644 部屋ごとの「走っている + 待っている」仕事の数 (順番待ちの表示に使う) */
+const roomDepth = new Map<string, number>();
+export function queueDepthOf(roomId: string): number { return roomDepth.get(roomId) ?? 0; }
+
 export async function enqueueForRoom(roomId: string, fn: () => unknown, timeoutMs: number = config.QUEUE_TASK_TIMEOUT): Promise<void> {
+  roomDepth.set(roomId, queueDepthOf(roomId) + 1);
   const prev = roomQueues.get(roomId) || Promise.resolve();
-  const next = prev.then(() => runQueuedTask(roomId, fn, timeoutMs));
+  // ★ 数は仕事が終わったとき (時間切れの強制 resolve も含む) に戻す。runQueuedTask は reject しない
+  const next = prev.then(() => runQueuedTask(roomId, fn, timeoutMs)).finally(() => {
+    const n = queueDepthOf(roomId) - 1;
+    if (n > 0) roomDepth.set(roomId, n); else roomDepth.delete(roomId);
+  });
   roomQueues.set(roomId, next);
   await next;
+}
+
+/**
+ * #644 前に仕事があるとき、AI に宛てた便 (1 対 1 か名指し、ゲストは除く) に「順番待ち」を出す。
+ * ★ 前の仕事 (Deep は最大 8 分) が終わるまで黙って待つので、AI が反応していないように見えた (11-05 に 8 件が並んだ)。
+ *   投稿にはせず、既にある処理中の表示 (agent:status) に乗せる (履歴・AI の文脈・通知に入れない)。
+ *   消すのは今の仕組みのまま (前の仕事の idle・AI の返事で消え、次の仕事が「考え中」を出す)。
+ *   ★ 名指しの判定は軽い 1 回だけ (部屋の response_mode はキューの中で読むので、'all' の部屋のグループでは出ないことがある)
+ */
+function noticeIfQueued(message: WebhookMessage, room: DispatchParams['room'], agentName: DispatchParams['agentName']): void {
+  const ahead = queueDepthOf(room.id);
+  if (ahead === 0 || message.sender?.role === 'guest') return;
+  const text = stripAutoPostMark(extractPromptFromMessage(message));
+  if (!text) return;
+  const addressed = !((room.member_count || 2) > 2) || isMentioned(text, agentName);
+  if (!addressed) return;
+  void botApi.pushStatus(room.id, 'queued', `順番待ちです。前に ${ahead} 件あります。終わったら取りかかります…`).catch(() => {});
 }
 
 // @メンション検知は mention.mts に切り出し（handler と共有・依存分離）。既存 import 互換で re-export。
@@ -220,6 +246,7 @@ export async function dispatch({ message, room, agentId, agentName }: DispatchPa
   try {
     // ルームごとにシリアライズ（並行実行防止）
     // ★ #564 依頼した人 = この便を投稿した人。AI の道具の読み取りをその人の部屋に絞る (lib/requesterContext.mts)
+    noticeIfQueued(message, room, agentName);
     await enqueueForRoom(roomId, () => runAsRequester(message.sender?.id, () => _dispatch({ message, room, agentId, agentName })));
   } finally {
     if (spikeEnabled) inflightRooms.release(roomId);
