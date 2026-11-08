@@ -12,7 +12,12 @@
 #           ★ 暗号化はしない。置き場に誰が入れるかに注意
 #           ★ 無いファイルは記録して飛ばす (失敗にしない)。写すのに失敗したら失敗にする
 #           ★ gitignore で外す設定を増やしたら、下の $Secrets にも足すこと (2026-10-13 に watchdogs.json が漏れていた)
-# 4. 記録 : <置き先>\logs\backup-YYYYMMDD.log。失敗したら終了コード 1
+# 4. 記録と作業場 (2026-11-08、控えの監査で漏れと分かったもの): メディアと同じく robocopy で足すだけ
+#           report\ (非公開の申し送り)・~\.claude\projects\*\memory (各班の AI の memory)・部屋の AI の作業場 (AGENT_WORKSPACE_ROOT)
+#           ★ 作業場の資格情報 (auth.json・.env・鍵・★ _codex-homes の config.toml = AI の Tealus のパスワードと API の鍵が入る) と
+#             _room-configs (3 の secrets に入る)・cache・.tmp (道具の一時置き) は除く
+#           ★ ~\.tealus の鍵 (WireGuard など) はまだ入れない。置き場を読める人を確かめてから (小野さん)
+# 5. 記録 : <置き先>\logs\backup-YYYYMMDD.log。失敗したら終了コード 1
 #           ★★ 最後の行の「=== 終了: 成功 ===」は**約束**。本体の見張り (docs/09) と doctor が
 #              server/src/services/backupLog.mts でこの文字列を読む。変えるならそちらも直す
 #
@@ -25,14 +30,16 @@ param(
   [string]$DbUser    = 'tealus',
   [string]$DbName    = 'tealus',
   [int]$Keep         = 14,
-  [int]$MinTables    = 20
+  [int]$MinTables    = 20,
+  # 試しに一部だけ流すとき (例: -Parts secrets,records を別の置き先へ)。既定は全部
+  [string[]]$Parts   = @('db', 'media', 'secrets', 'records')
 )
 
 $ErrorActionPreference = 'Stop'
 $EnvFile = Join-Path $Repo 'server\.env'
 
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmm'
-foreach ($d in 'db', 'media', 'logs', 'secrets') { New-Item -ItemType Directory -Force (Join-Path $Dest $d) | Out-Null }
+foreach ($d in 'db', 'media', 'logs', 'secrets', 'records') { New-Item -ItemType Directory -Force (Join-Path $Dest $d) | Out-Null }
 $Log = Join-Path $Dest ("logs\backup-{0}.log" -f (Get-Date -Format 'yyyyMMdd'))
 function Write-Log([string]$m) { Add-Content -Path $Log -Value ("{0} {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m) -Encoding UTF8 }
 
@@ -40,7 +47,7 @@ $ok = $true
 Write-Log "=== 開始 ==="
 
 # ---- 1. DB ----------------------------------------------------------------------
-try {
+if ($Parts -contains 'db') { try {
   $inner = "/tmp/tealus-$Stamp.dump"
   $local = Join-Path $env:TEMP "tealus-$Stamp.dump"
   docker exec $Container pg_dump -U $DbUser -Fc -f $inner $DbName
@@ -57,10 +64,10 @@ try {
   foreach ($f in $old) { Remove-Item $f.FullName -Force; Write-Log "DB 古いものを消した: $($f.Name)" }
 } catch {
   $ok = $false; Write-Log "DB 失敗: $($_.Exception.Message)"
-}
+} }
 
 # ---- 2. メディア --------------------------------------------------------------------
-try {
+if ($Parts -contains 'media') { try {
   $mediaLine = Select-String -Path $EnvFile -Pattern '^MEDIA_ROOT=' | Select-Object -First 1
   if (-not $mediaLine) { throw "MEDIA_ROOT が $EnvFile に無い" }
   $media = ($mediaLine.Line -split '=', 2)[1].Trim().Trim('"')
@@ -72,12 +79,14 @@ try {
   Write-Log "メディア ok: robocopy exit $rc (0=変化なし 1=コピーあり。8 以上が失敗)"
 } catch {
   $ok = $false; Write-Log "メディア失敗: $($_.Exception.Message)"
-}
+} }
 
 # ---- 3. 鍵と設定 ------------------------------------------------------------------
-try {
+if ($Parts -contains 'secrets') { try {
   $Secrets = @(
-    'server\.env', 'agent-server\.env', 'agent-server\mcp_config.json', 'agent-server\config\system_prompt.md', 'agent-server\config\settings.json',
+    'server\.env', 'agent-server\.env', 'agent-server\mcp_config.json', 'agent-server\config\settings.json',
+    # ★ 2026-11-08: system_prompt.md は存在しない古い名前だった (毎日「無いので飛ばした」)。cc-queue の役割別の設定を足した
+    '.claude\cc-tealus.tealus.json', '.claude\cc-tealus.support.json',
     'server\config\room-triggers.json', 'server\config\watchdogs.json',
     'server\config\line-groups.json', 'server\config\line-group-mappings.json',
     'server\config\line-members.json', 'server\config\mining_report.json', 'server\config\dictionary.local.ttl'
@@ -114,7 +123,36 @@ try {
   foreach ($d in $oldS) { Remove-Item $d.FullName -Recurse -Force; Write-Log "鍵と設定 古いものを消した: $($d.Name)" }
 } catch {
   $ok = $false; Write-Log "鍵と設定 失敗: $($_.Exception.Message)"
-}
+} }
+
+# ---- 4. 記録と作業場 ----------------------------------------------------------------
+if ($Parts -contains 'records') { try {
+  $rlog4 = Join-Path $Dest ("logs\robocopy-records-{0}.log" -f (Get-Date -Format 'yyyyMMdd'))
+  # ★ 資格情報になりうる名前はどの写しでも除く (report\ の中にも .env があった)
+  $noSecrets = @('/XF', 'auth.json', 'config.toml', '.env', '.env.*', '*.key', '*.pw')
+  $copies = @()
+  $copies += ,@((Join-Path $Repo 'report'), (Join-Path $Dest 'records\report'), $noSecrets)
+  Get-ChildItem (Join-Path $env:USERPROFILE '.claude\projects') -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $mem = Join-Path $_.FullName 'memory'
+    if (Test-Path $mem) { $copies += ,@($mem, (Join-Path $Dest "records\claude-memory\$($_.Name)"), $noSecrets) }
+  }
+  $agentEnv4 = Join-Path $Repo 'agent-server\.env'
+  $ws4 = Select-String -Path $agentEnv4 -Pattern '^AGENT_WORKSPACE_ROOT=' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($ws4) {
+    $wsRoot = ($ws4.Line -split '=', 2)[1].Trim().Trim('"')
+    $copies += ,@($wsRoot, (Join-Path $Dest 'records\workspaces'), (@('/XD', '_room-configs', 'cache', '.tmp') + $noSecrets))
+  } else { Write-Log "作業場: agent-server\.env に AGENT_WORKSPACE_ROOT が無いので飛ばした" }
+  foreach ($c in $copies) {
+    if (-not (Test-Path $c[0])) { Write-Log "記録: 無いので飛ばした ($($c[0]))"; continue }
+    $extra = $c[2]
+    robocopy $c[0] $c[1] /E /FFT /R:2 /W:5 /NP /NDL /NFL "/LOG+:$rlog4" @extra | Out-Null
+    $rc4 = $LASTEXITCODE
+    if ($rc4 -ge 8) { throw "robocopy 失敗 (exit $rc4、$($c[0])、詳細は $rlog4)" }
+  }
+  Write-Log ("記録と作業場 ok: {0} か所 → records\ (足すだけ)" -f $copies.Count)
+} catch {
+  $ok = $false; Write-Log "記録と作業場 失敗: $($_.Exception.Message)"
+} }
 
 Write-Log ("=== 終了: {0} ===" -f $(if ($ok) { '成功' } else { '★ 失敗あり' }))
 if (-not $ok) { exit 1 }
