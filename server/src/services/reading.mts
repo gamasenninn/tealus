@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export function kata2hira(s: string): string {
   return [...String(s || '')].map((c) => {
@@ -63,7 +64,7 @@ export async function getReadings(texts: string[], opts: { pykakasiImpl?: (t: st
     let failed = false;
     try { readings = await impl(need); } catch (err) {
       failed = true;
-      logger.warn(`[reading] pykakasi に失敗、カナ→かなで代用 (${need.length} 語): ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`[reading] pykakasi に失敗、カナ→かなで代用 (${need.length} 語): ${errorText(err)}`);
     }
     for (const t of need) {
       const r = (readings && readings[t]) || kata2hira(t);

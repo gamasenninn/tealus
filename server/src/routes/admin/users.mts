@@ -9,6 +9,7 @@ import { announceUserUpdated } from '../../services/userUpdated.mts';
 
 import { SALT_ROUNDS } from '../../constants/config.mts';
 import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../../utils/userFields.mts';
+import { errorText } from '../../utils/logFormat.mts';
 
 export const router = express.Router();
 
@@ -153,7 +154,7 @@ router.put('/users/:id', async (req, res) => {
       try {
         refreshSocketUser(getIo(), id, { display_name: result.rows[0].display_name });
       } catch (err) {
-        logger.warn(`[admin] socket の利用者情報を書き換えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+        logger.warn(`[admin] socket の利用者情報を書き換えられませんでした: ${errorText(err)}`);
       }
       await announceUserUpdated(result.rows[0]);
     }

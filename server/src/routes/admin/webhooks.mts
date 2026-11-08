@@ -4,6 +4,7 @@ import express from 'express';
 import { pool } from '../../db/pool.mts';
 import { dispatchWebhook } from '../../services/webhook.mts';
 import { isWebUrl } from '../../utils/webUrl.mts';
+import { errorText } from '../../utils/logFormat.mts';
 
 const E_WEB_URL = 'URL は http:// か https:// で始めてください';
 
@@ -172,6 +173,6 @@ router.post('/webhooks/:id/test', async (req, res) => {
     res.json({ success: testResult.ok, status: testResult.status });
   } catch (err) {
     logger.error('Admin test webhook error:', err);
-    res.status(502).json({ error: 'テスト送信に失敗しました', details: err instanceof Error ? err.message : String(err) });
+    res.status(502).json({ error: 'テスト送信に失敗しました', details: errorText(err) });
   }
 });

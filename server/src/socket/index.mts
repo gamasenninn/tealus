@@ -11,6 +11,7 @@ import { registerTypingHandler } from './handlers/typing.mts';
 import { registerCallHandler } from './handlers/call.mts';
 import { setViewing, removeSocket } from './viewingRooms.mts';
 import type { SocketUser } from '../types.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 const GUEST_ROOM = 'role:guest';
 
@@ -113,7 +114,7 @@ export function setupSocketHandlers(io: Server): void {
         }
       } catch (err) {
         // 6/9 DoS crash fix: async handler 内 throw を catch (= 個別 safety net、global は app.mts)
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorText(err);
         logger.error(`room:join error user=${socket.user.display_name} room=${roomId}: ${message}`);
       }
     });

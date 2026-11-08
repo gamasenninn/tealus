@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** 送信先 Webhook (webhooksテーブルの行のうち送信に使うフィールド) */
 interface WebhookTarget {
@@ -129,7 +130,7 @@ export async function dispatchWithRetry(webhook: WebhookTarget, body: string, op
         const delay = baseDelay * Math.pow(3, attempt - 1);
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
-        return { ok: false, status: 0, attempts: attempt, error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, status: 0, attempts: attempt, error: errorText(err) };
       }
     }
   }
@@ -215,7 +216,7 @@ export async function fireWebhooks(eventType: string, roomId: string | null, pay
           logger.info(`Webhook succeeded after retry: ${webhook.url} (attempts: ${result.attempts})`);
         }
       }).catch(err => {
-        logger.error(`Webhook dispatch error: ${webhook.url}`, err instanceof Error ? err.message : String(err));
+        logger.error(`Webhook dispatch error: ${webhook.url}`, errorText(err));
       });
     }
   } catch (err) {

@@ -2,6 +2,7 @@ import type { Server } from 'socket.io';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { formatTranscription } from './formatting.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * ★ #585 受付を始めてからの経過 (ms)。SQL では DB 自身の now() から引いて「受付を始めた時刻」にする。
@@ -42,7 +43,7 @@ export async function recoverStuckFormatting(
     try {
       await format(r.message_id, r.raw_text, io, r.room_id, r.version, r.type);
     } catch (err) {
-      logger.warn(`[transcription-recovery] 整え直しに失敗 message=${r.message_id}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`[transcription-recovery] 整え直しに失敗 message=${r.message_id}: ${errorText(err)}`);
     }
   }
   return rows.length;
@@ -81,7 +82,7 @@ export async function recoverStuckTranscribing(
     try {
       await run(r.message_id, r.file_path, { io, roomId: r.room_id, version: r.version, isVideo: r.type === 'video', messageType: r.type });
     } catch (err) {
-      logger.warn(`[transcription-recovery] やり直しに失敗 message=${r.message_id}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`[transcription-recovery] やり直しに失敗 message=${r.message_id}: ${errorText(err)}`);
     }
   }
   return rows.length;

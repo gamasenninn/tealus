@@ -16,6 +16,7 @@
  *   listFiles を渡されたら、台帳 (schema_migrations) とファイルを突き合わせて未適用を名前つきで warn する
  */
 import { planMigrations } from '../db/migrationPlan.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** 存在を確認する中核テーブル (#327 辞書、023 で作成)。023 が無ければ 024/025 も無い。 */
 const CORE_TABLE = 'dictionary_terms';
@@ -48,7 +49,7 @@ export async function checkMigrations({ query, warn, listFiles }: MigrationCheck
       warn(`[migration-check]   辞書育成タブ (admin) が 500 になり、自己成長辞書 (#327) が動作しません。稼働は継続します (file フォールバック)。`);
     } else {
       // DB 不達など: テーブルの有無を断定できないが、setup 中の可能性があるので surface する
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorText(err);
       warn(`[migration-check] ${CORE_TABLE} の確認に失敗しました (DB 不達?): ${msg}`);
     }
     return false;
@@ -89,7 +90,7 @@ export async function findPendingMigrations(
     return planMigrations(listFiles(), new Set(rows.map((r) => r.filename)));
   } catch (err) {
     // ★ 理由を渡す。台帳が無い・DB に届かない・フォルダを読めない、が記録で見分けられるように (改善ループ 31)
-    onSkip?.(err instanceof Error ? err.message : String(err));
+    onSkip?.(errorText(err));
     return null;
   }
 }

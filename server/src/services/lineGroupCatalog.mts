@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from '../utils/logger.mts';
 import type { FetchLike } from './lineBridge.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const DEFAULT_CATALOG_FILE = path.join(import.meta.dirname, '../../config/line-groups.json');
 export const LINE_GROUP_SUMMARY_BASE = 'https://api.line.me/v2/bot/group';
@@ -47,7 +48,7 @@ export function readCatalog(filePath: string): CatalogFile {
     return raw || {};
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    logger.warn(`[lineGroupCatalog] readCatalog failed: ${e instanceof Error ? e.message : String(e)}, treating as empty`);
+    logger.warn(`[lineGroupCatalog] readCatalog failed: ${errorText(e)}, treating as empty`);
     return {};
   }
 }
@@ -128,7 +129,7 @@ export async function upsertGroupEntry(
       name = summary.groupName;
       fetchedName = true;
     } catch (e) {
-      logger.warn(`[lineGroupCatalog] fetchGroupSummary failed for ${groupId}: ${e instanceof Error ? e.message : String(e)}`);
+      logger.warn(`[lineGroupCatalog] fetchGroupSummary failed for ${groupId}: ${errorText(e)}`);
       // name は null のまま、★ 次回 webhook で再 try
     }
   }
@@ -151,7 +152,7 @@ export async function upsertGroupEntry(
     writeCatalogAtomic(filePath, catalog);
     return { updated: true, fetchedName };
   } catch (e) {
-    logger.warn(`[lineGroupCatalog] writeCatalogAtomic failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[lineGroupCatalog] writeCatalogAtomic failed: ${errorText(e)}`);
     return { updated: false, fetchedName };
   }
 }

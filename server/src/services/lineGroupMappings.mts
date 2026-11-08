@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const DEFAULT_MAPPINGS_FILE = path.join(import.meta.dirname, '../../config/line-group-mappings.json');
 
@@ -69,7 +70,7 @@ export function loadGroupToRoomMap(
   } catch (e) {
     // file なし or parse fail → fallback chain
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-      logger.warn(`[lineGroupMappings] file load failed: ${e instanceof Error ? e.message : String(e)}, falling back to env`);
+      logger.warn(`[lineGroupMappings] file load failed: ${errorText(e)}, falling back to env`);
     }
   }
 
@@ -79,7 +80,7 @@ export function loadGroupToRoomMap(
       const raw = JSON.parse(envValue) as unknown;
       return normalizeMap(raw);
     } catch (e) {
-      logger.warn(`[lineGroupMappings] env LINE_GROUP_TO_ROOM JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
+      logger.warn(`[lineGroupMappings] env LINE_GROUP_TO_ROOM JSON parse failed: ${errorText(e)}`);
     }
   }
 

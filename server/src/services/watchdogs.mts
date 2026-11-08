@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isHeartbeatName } from './heartbeats.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const CONFIG_PATH = path.join(import.meta.dirname, '..', '..', 'config', 'watchdogs.json');
 
@@ -234,6 +235,6 @@ export function loadWatchdogs(configPath: string = CONFIG_PATH): LoadResult {
   try {
     return loadWatchdogsFrom(JSON.parse(text.replace(/^﻿/, '')));
   } catch (err) {
-    return { config: null, warnings: [`watchdogs.json が JSON として読めません: ${err instanceof Error ? err.message : String(err)}`] };
+    return { config: null, warnings: [`watchdogs.json が JSON として読めません: ${errorText(err)}`] };
   }
 }

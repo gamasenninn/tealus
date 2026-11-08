@@ -16,7 +16,7 @@ const FFMPEG_TIMEOUT_MS = 5 * 60_000;
 function removeTempQuietly(p: string | null): void {
   if (!p) return;
   try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (err) {
-    logger.warn(`[transcribe] 一時ファイルを消せませんでした: ${p} (${err instanceof Error ? err.message : String(err)})`);
+    logger.warn(`[transcribe] 一時ファイルを消せませんでした: ${p} (${errorText(err)})`);
   }
 }
 import OpenAI from 'openai';
@@ -26,6 +26,7 @@ import { loadGuideline, buildWhisperPrompt, buildGlossary, buildVocabularyTerms,
 import { transcribeAudio } from './sttBackend.mts';
 import { fireWebhooks } from './webhook.mts';
 import type { Server } from 'socket.io';
+import { errorText } from '../utils/logFormat.mts';
 
 // ★ 時間切れはこちらで決める (改善ループ 10 回目の F)。SDK の既定は 10 分 × やり直し 2 回 = 最長 30 分で、
 //   相手が固まると音声が「文字起こし中」のまま残っていた
@@ -128,7 +129,7 @@ export async function transcribeMessage(
       } catch (e) {
         removeTempQuietly(tempPath);   // ★ 殺した直後の ffmpeg がまだ掴んでいると Windows で EBUSY。元のエラーを上書きしない
         tempPath = null;
-        const message = e instanceof Error ? e.message : String(e);
+        const message = errorText(e);
         const stderrRaw = (e as { stderr?: Buffer | string }).stderr;
         const stderr = stderrRaw ? stderrRaw.toString() : '';
         const stderrTail = stderr ? `\nffmpeg stderr (last 500 chars): ${stderr.slice(-500)}` : '';

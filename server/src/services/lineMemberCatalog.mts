@@ -16,6 +16,7 @@ import path from 'node:path';
 import { logger } from '../utils/logger.mts';
 import { readCatalog, writeCatalogAtomic } from './lineGroupCatalog.mts';
 import type { FetchLike } from './lineBridge.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const DEFAULT_MEMBER_CATALOG_FILE = path.join(import.meta.dirname, '../../config/line-members.json');
 export const LINE_GROUP_BASE = 'https://api.line.me/v2/bot/group';
@@ -82,7 +83,7 @@ export async function getMemberDisplayName(
   try {
     profile = await fetchMemberProfile(groupId, userId, accessToken, { fetchImpl: options.fetchImpl });
   } catch (e) {
-    logger.warn(`[lineMemberCatalog] fetchMemberProfile failed for ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[lineMemberCatalog] fetchMemberProfile failed for ${userId}: ${errorText(e)}`);
     return null;
   }
   if (!profile.displayName) return null;
@@ -96,7 +97,7 @@ export async function getMemberDisplayName(
   try {
     writeCatalogAtomic(filePath, catalog);
   } catch (e) {
-    logger.warn(`[lineMemberCatalog] writeCatalogAtomic failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[lineMemberCatalog] writeCatalogAtomic failed: ${errorText(e)}`);
   }
   return profile.displayName;
 }

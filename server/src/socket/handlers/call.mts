@@ -7,6 +7,7 @@ import { getOnlineUserIds } from '../index.mts';
 import { isRoomMember } from '../../services/roomMembership.mts';
 import { isUuid } from '../../utils/uuid.mts';
 import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../../services/postEffects.mts';
+import { errorText } from '../../utils/logFormat.mts';
 
 /**
  * Handle call events (notification + history + status)
@@ -37,7 +38,7 @@ async function insertCallMessage(roomId: string, senderId: string, content: stri
     // ★ 付随処理は announcePost から (docs/07 §5.1、#2)。名前は付けない (移す前と同じ)
     await announcePost({ roomId, emit: result.rows[0], ...SYSTEM_MESSAGE_EFFECTS });
   } catch (err) {
-    console.error('insertCallMessage error:', err);
+    logger.error('insertCallMessage error:', err);
   }
 }
 
@@ -131,7 +132,7 @@ export function registerCallHandler(socket: Socket, io: Server): void {
       await insertCallMessage(roomId, socket.user.id, `📞 ${socket.user.display_name} が通話を開始しました`);
       broadcastCallStatus(roomId, io);
     } catch (err) {
-      console.error('call:start error:', err);
+      logger.error('call:start error:', err);
     }
   });
 
@@ -145,7 +146,7 @@ export function registerCallHandler(socket: Socket, io: Server): void {
     try {
       if (!(await isRoomMember(roomId, socket.user.id))) return;
     } catch (err) {
-      logger.error('call:reject error:', err instanceof Error ? err.message : String(err));
+      logger.error('call:reject error:', errorText(err));
       return;
     }
     io.to(`user:${callerId}`).emit('call:rejected', {
@@ -196,7 +197,7 @@ export function registerCallHandler(socket: Socket, io: Server): void {
         });
       }
     } catch (err) {
-      console.error('call:end error:', err);
+      logger.error('call:end error:', err);
     }
   });
 
@@ -210,7 +211,7 @@ export function registerCallHandler(socket: Socket, io: Server): void {
     try {
       if (!(await isRoomMember(roomId, socket.user.id))) return;
     } catch (err) {
-      logger.error(`call:getStatus のメンバー確認に失敗: user=${socket.user.id} room=${roomId}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(`call:getStatus のメンバー確認に失敗: user=${socket.user.id} room=${roomId}: ${errorText(err)}`);
       return;
     }
     const call = activeCalls.get(roomId);

@@ -13,6 +13,7 @@
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { sendPushToRoomMembers } from './push.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export interface MachinePost {
   roomId: string;
@@ -37,7 +38,7 @@ export async function pushMachinePost(post: MachinePost): Promise<void> {
       data: { roomId: post.roomId, messageId: post.messageId },
     }).catch(() => {});
   } catch (err) {
-    logger.warn('機械の投稿の通知に失敗しました (投稿は成功): ' + (err instanceof Error ? err.message : String(err)));
+    logger.warn('機械の投稿の通知に失敗しました (投稿は成功): ' + (errorText(err)));
   }
 }
 

@@ -11,6 +11,7 @@
  */
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { errorText } from '../utils/logFormat.mts';
 
 /** 毎日 1 回のバックアップが 1 回飛んだら異常 (24h + 実行時間の揺れ 2h) */
 export const BACKUP_STALE_HOURS = 26;
@@ -106,7 +107,7 @@ export async function readLatestBackupLog(
   try {
     return await Promise.race([work, timeout]);
   } catch (err) {
-    return { latest: null, readError: err instanceof Error ? err.message : String(err) };
+    return { latest: null, readError: errorText(err) };
   } finally {
     clearTimeout(timer);
   }

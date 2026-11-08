@@ -79,6 +79,9 @@
   border: 1px solid var(--border-medium);
   padding: 4px 8px;
   min-width: 4em;   /* 日本語の列が 1 文字幅まで縮まない */
+  /* ★ 改善ループ 44: 日本語は 1 文字ごとに折れるので、4em の幅で 2 文字ずつ折れていた。語のまとまりで扱い、長文だけ 16em で折る */
+  word-break: keep-all;
+  max-width: 16em;
   text-align: left;
   vertical-align: top;
 }
@@ -92,6 +95,8 @@
 
 :where(.md-body) img { max-width: 100%; height: auto; }
 :where(.md-body) a { overflow-wrap: anywhere; }
+/* 表の中のリンク (remark-gfm が URL を自動でリンクにする) は anywhere だと表が縮んで 1 文字ずつ折れる (改善ループ 44) */
+:where(.md-body) table a { overflow-wrap: break-word; }
 
 /* 脚注の見出し (英語の "Footnotes") は読み上げ用。画面には出さない */
 :where(.md-body) .sr-only {

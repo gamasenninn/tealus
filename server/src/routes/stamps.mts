@@ -13,6 +13,7 @@ import { announcePost, SYSTEM_MESSAGE_EFFECTS } from '../services/postEffects.mt
 import { MEDIA_ROOT } from '../middleware/upload.mts';
 import { generateStampPack, saveStampFiles, checkDailyLimit } from '../services/stamp/index.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const router = express.Router();
 router.use(authenticate);
@@ -183,7 +184,7 @@ router.post('/generate', async (req, res) => {
       }
 
       try {
-        io.to(`user:${userId}`).emit('stamp:error', { jobId, error: err instanceof Error ? err.message : String(err) });
+        io.to(`user:${userId}`).emit('stamp:error', { jobId, error: errorText(err) });
       } catch {
         // Socket may be gone, ignore
       }

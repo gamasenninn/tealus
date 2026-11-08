@@ -11,6 +11,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * 種別。★ text は **原則 許さない** —— ループ防止の本体 (docs/06 §6.1)。
@@ -210,7 +211,7 @@ export function loadTriggers(configPath: string = CONFIG_PATH): LoadResult {
   } catch (err) {
     return {
       triggers: [],
-      warnings: [`room-triggers.json が JSON として読めません: ${err instanceof Error ? err.message : String(err)}`],
+      warnings: [`room-triggers.json が JSON として読めません: ${errorText(err)}`],
       mtime,
     };
   }

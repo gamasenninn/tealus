@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export interface PullState {
   last_pull_at: string;
@@ -163,7 +164,7 @@ export function writePullState(state: PullState): boolean {
     return true;
   } catch (err) {
     logger.warn(
-      `[organon-dock] pull 状態の書き出しに失敗 (pull は成功しています): ${err instanceof Error ? err.message : String(err)}`,
+      `[organon-dock] pull 状態の書き出しに失敗 (pull は成功しています): ${errorText(err)}`,
     );
     return false;
   }

@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import { logger } from '../utils/logger.mts';
 import { syncFromOrganon } from '../../scripts/sync_organon_dict.mts';
 import { refreshVocabFromTable } from './transcriptionConfig.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 const DEFAULT_INTERVAL_MS = 300_000; // 5 分 (organon.ttl は日次更新、poll は疎で十分)
 
@@ -47,7 +48,7 @@ export async function checkAndSync(ttlPath: string): Promise<{ changed: boolean;
     return { changed: true, hash };
   } catch (err) {
     // lastHash を進めない = 次 tick で retry
-    logger.warn(`[organon-dock] pull failed (will retry): ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[organon-dock] pull failed (will retry): ${errorText(err)}`);
     return { changed: false, hash };
   }
 }
@@ -64,9 +65,9 @@ export function start(): void {
   }
   const interval = parseInt(process.env.ORGANON_WATCH_INTERVAL_MS || String(DEFAULT_INTERVAL_MS), 10);
   logger.info(`[organon-dock] watcher started: ${ttlPath} (poll ${interval}ms)`);
-  void checkAndSync(ttlPath).catch((err) => logger.warn(`[organon-dock] initial pull error: ${err instanceof Error ? err.message : String(err)}`));
+  void checkAndSync(ttlPath).catch((err) => logger.warn(`[organon-dock] initial pull error: ${errorText(err)}`));
   _timer = setInterval(() => {
-    void checkAndSync(ttlPath).catch((err) => logger.warn(`[organon-dock] poll error: ${err instanceof Error ? err.message : String(err)}`));
+    void checkAndSync(ttlPath).catch((err) => logger.warn(`[organon-dock] poll error: ${errorText(err)}`));
   }, interval);
   if (_timer.unref) _timer.unref(); // watcher が event loop を掴んで process を延命しない
 }

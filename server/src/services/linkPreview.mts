@@ -5,6 +5,7 @@ import dns from 'node:dns';
 import net from 'node:net';
 import { Agent, fetch as undiciFetch } from 'undici';
 import type { Server } from 'socket.io';
+import { errorText } from '../utils/logFormat.mts';
 
 // ★ #510 URL に使える ASCII の文字だけを取る (' とバッククォートは除く)。以前は空白までを全部取り、
 //   `https://youtu.be/xxx（限定公開）` や AI の返信の `[こちら](https://…)で確認できます` のように後ろの日本語まで URL にしていた。
@@ -187,7 +188,7 @@ export function createOgpFetcher({ isAllowed = isPublicAddress, timeoutMs = 5000
       if (e.cause?.code === 'ENOTPUBLIC' || e.cause?.code === 'ENOTFOUND') {
         logger.info(`[link-preview] ${String(e.cause && (e.cause as Error).message)}`);
       } else {
-        logger.error('OGP fetch error:', url, err instanceof Error ? err.message : String(err));
+        logger.error('OGP fetch error:', url, errorText(err));
       }
       return null;
     } finally {

@@ -20,6 +20,7 @@
 
 /** 予告が proxy を通って別マシンへ届くまでの待ち。これを挟まず接続を切ると予告が消える。 */
 const NOTIFY_SETTLE_MS = 200;
+import { errorText } from './logFormat.mts';
 
 /**
  * ★ winston の file transport は非同期。`process.exit` を即座に呼ぶと直前のログが
@@ -95,14 +96,14 @@ export async function runShutdown(deps: ShutdownDeps): Promise<void> {
     try {
       fn();
     } catch (e) {
-      deps.warn(`[shutdown] ${label} に失敗: ${e instanceof Error ? e.message : String(e)}`);
+      deps.warn(`[shutdown] ${label} に失敗: ${errorText(e)}`);
     }
   };
   const stepAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
     try {
       await fn();
     } catch (e) {
-      deps.warn(`[shutdown] ${label} に失敗: ${e instanceof Error ? e.message : String(e)}`);
+      deps.warn(`[shutdown] ${label} に失敗: ${errorText(e)}`);
     }
   };
 
@@ -128,7 +129,7 @@ export async function runShutdown(deps: ShutdownDeps): Promise<void> {
     ]);
   } catch (e) {
     // sequence 内は個別に握りつぶしてあるので通常ここには来ない (最後の網)
-    deps.warn(`[shutdown] 予期しない失敗: ${e instanceof Error ? e.message : String(e)}`);
+    deps.warn(`[shutdown] 予期しない失敗: ${errorText(e)}`);
   }
   exitOnce(0);
 }

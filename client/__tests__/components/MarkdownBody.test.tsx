@@ -72,6 +72,10 @@ describe('styles/markdown.css', () => {
   it('★ 改善ループ 43: 表は吹き出しの word-break を打ち消す (85.131.221.30 が 4 行に折れていた)', () => {
     expect(css).toMatch(/:where\(\.md-body\) table \{[^}]*word-break: normal/);
   });
+  it('★ 改善ループ 44: 表の日本語は語のまとまりで、表の中のリンクは anywhere で折らない', () => {
+    expect(css).toMatch(/:where\(\.md-body\) td \{[^}]*word-break: keep-all/);
+    expect(css).toContain(':where(.md-body) table a { overflow-wrap: break-word; }');
+  });
   it('★ 画面の入口で読み込まれている', () => {
     const main = readSrc('main.tsx');
     expect(main).toContain("import './styles/markdown.css'");

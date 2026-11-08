@@ -18,6 +18,7 @@ import { fireWebhooks, type WebhookPayload } from './webhook.mts';
 import { sendPushToRoomMembers, type PushPayload } from './push.mts';
 import { processLinkPreviews } from './linkPreview.mts';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** 付けない、と理由つきで書く */
 export interface Off {
@@ -70,7 +71,7 @@ export async function announcePost(e: PostEffects): Promise<void> {
     //   (sendPushToRoomMembers は async なので同期の例外は出ない)。LINE (#13) は移す前から .catch で捨てていた
     //   Promise.resolve で包むのは、Promise を返さない差し替え (テストの jest.fn()) でも .catch で落ちないため。呼ぶのは同期のまま
     Promise.resolve(sendPushToRoomMembers(e.roomId, e.push.senderId, e.push.payload)).catch((err: unknown) => {
-      logger.warn('Push notification failed: ' + (err instanceof Error ? err.message : String(err)));
+      logger.warn('Push notification failed: ' + (errorText(err)));
     });
   }
   if (e.push.kind === 'machine') await pushMachinePost(e.push.post);

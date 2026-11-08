@@ -57,6 +57,7 @@ import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 import { router as clientErrorRoutes } from './routes/clientErrors.mts';
 import { agentUrl, rtcUrl, mcpHttpUrl } from './lib/upstream.mts';
+import { errorText } from './utils/logFormat.mts';
 
 // 6/9 DoS crash fix: defense in depth global safety net
 // (= 個別 async handler の try/catch 漏れに対する Node.js default exit 抑止、
@@ -375,13 +376,13 @@ if (import.meta.main) {
       query: (sql) => pool.query(sql), warn: (m) => logger.warn(m),
       listFiles: () => fs.readdirSync(path.join(import.meta.dirname, 'db/migrations')).filter((f) => f.endsWith('.sql')).sort(),
     })
-      .catch((err) => logger.warn(`[migration-check] 確認をスキップ: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[migration-check] 確認をスキップ: ${errorText(err)}`));
     // rtc-server reachability の動的検出を開始
     import('./services/capabilityWatcher.mts').then(cw => { capabilityWatcher = cw; cw.start(io); });
     // #327: dictionary テーブルの vocab を in-memory オーバーレイに読み込む (空/不達なら file フォールバック)
     import('./services/transcriptionConfig.mts')
       .then(tc => tc.refreshVocabFromTable())
-      .catch((err) => logger.warn(`[dictionary] initial vocab refresh failed: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[dictionary] initial vocab refresh failed: ${errorText(err)}`));
     // #331: organon dock watcher。organon.ttl (RDF 契約) の到着で辞書テーブルへ pull + overlay reload。
     // 起動時に 1 回 pull するので上の initial refresh を subsume する (ORGANON_TTL_PATH 未設定なら no-op)。
     import('./services/organonWatcher.mts').then(ow => { organonWatcher = ow; ow.start(); });
@@ -389,22 +390,22 @@ if (import.meta.main) {
     // 設定 (server/config/room-triggers.json) が無ければ何もしない = 既定では止まったまま。
     import('./services/roomTriggerRunner.mts')
       .then(rt => { roomTriggers = rt; rt.startRoomTriggers(); })
-      .catch((err) => logger.warn(`[room-triggers] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[room-triggers] 起動に失敗: ${errorText(err)}`));
     // #595 見張り: 来るはずのもの (バックアップ・通話履歴・無線) が来ないとき業務メモに 1 回だけ知らせる (docs/09)。
     // 設定 (server/config/watchdogs.json) が無ければ何もしない。
     import('./services/watchdogRunner.mts')
       .then(wd => { watchdogs = wd; wd.startWatchdogs(); })
-      .catch((err) => logger.warn(`[watchdogs] 起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[watchdogs] 起動に失敗: ${errorText(err)}`));
     // #536 整えている途中で前のプロセスが落ちた文字起こしを整え直す (「AIが文章を整えています…」のまま止まっていた)
     import('./services/transcriptionRecovery.mts')
       // ★ #579 音を文字にしている途中 (pending / transcribing) で止まったものもやり直す (「⏳ 文字起こし中...」のまま止まっていた)
       .then(async tr => { await tr.recoverStuckFormatting({ io, startedAt: recoverBefore }); await tr.recoverStuckTranscribing({ io, startedAt: recoverBefore }); })
-      .catch((err) => logger.warn(`[transcription-recovery] 起動時の整え直しに失敗: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[transcription-recovery] 起動時の整え直しに失敗: ${errorText(err)}`));
     // ★ 2026-10-16 30 日送り直されない通知の宛先を外す (入れ直しなどで置き去りになった宛先へ送り続けていた)。
     //   画面は表に出たときにも送り直すので、使っている端末は外れない。外れても開き直せば戻る
     import('./services/push.mts')
       .then(p => p.startPushStaleSweep())
-      .catch((err) => logger.warn(`[push] 古い宛先の掃除の起動に失敗: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[push] 古い宛先の掃除の起動に失敗: ${errorText(err)}`));
     // #362 login の失敗カウンタの掃除。★ 口は外から到達できるので鍵は攻撃者が自由に作れる。
     //   窓を過ぎた鍵を定期的に落とす (上限での追い出しもあるが、平時はこちらで減る)。
     loginThrottlePruneTimer = setInterval(() => loginThrottle.prune(), LOGIN_THROTTLE_WINDOW_MS);

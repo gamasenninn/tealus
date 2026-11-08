@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { logger as defaultLogger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * STT backend strategy (#自ホストSTT)
@@ -175,7 +176,7 @@ export async function transcribeAudio({
         log.info?.(`[stt] gemini ok ${Date.now() - started}ms vocab=${vocabTerms.length} chars=${text.length}`);
         return text;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorText(err);
         // ★ 空の答えは、ここでは warn にしない (改善ループ 16 回目)。多くは無線の空押し (無音) で、
         //   openai も空なら害は無い。openai の答えを見てから下で決める。ほかの失敗 (切れた・503・時間切れ) は今までどおり warn
         if (message === GEMINI_EMPTY) {
@@ -201,7 +202,7 @@ export async function transcribeAudio({
       }
       return text;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorText(err);
       const strict = !!process.env.STT_LOCAL_STRICT && process.env.STT_LOCAL_STRICT !== '0';
       if (strict) {
         log.error(`[stt] local backend failed (STT_LOCAL_STRICT): ${message}`);

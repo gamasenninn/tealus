@@ -24,6 +24,7 @@ import type { AuthUser } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
 import { generateThumbnail } from './thumbnail.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 // ★ ★ Option D refactor (= Day 21 PM): sender info は ★ ★ ★ helper 内で query せず、
 // ★ ★ caller (= routes/line.js dispatchEvent) で context object として渡される。
@@ -157,7 +158,7 @@ async function imageThumbnail(mediaInfo: { filePath: string; mimeType: string })
   try {
     return await generateThumbnail(mediaInfo.filePath, mediaInfo.mimeType);
   } catch (e) {
-    logger.warn(`[lineMessageBridge] generateThumbnail failed for image: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[lineMessageBridge] generateThumbnail failed for image: ${errorText(e)}`);
     return null;
   }
 }
@@ -198,7 +199,7 @@ export async function postImageToTealus(
       width = metadata.width || null;
       height = metadata.height || null;
     } catch (e) {
-      logger.warn(`[lineMessageBridge] sharp metadata failed: ${e instanceof Error ? e.message : String(e)}`);
+      logger.warn(`[lineMessageBridge] sharp metadata failed: ${errorText(e)}`);
     }
 
     const mediaResult = await client.query<MediaRow>(
@@ -276,7 +277,7 @@ export async function postImagesToTealus(
         width = metadata.width || null;
         height = metadata.height || null;
       } catch (e) {
-        logger.warn(`[lineMessageBridge] sharp metadata failed: ${e instanceof Error ? e.message : String(e)}`);
+        logger.warn(`[lineMessageBridge] sharp metadata failed: ${errorText(e)}`);
       }
 
       const mediaResult = await client.query<MediaRow>(
@@ -364,7 +365,7 @@ export async function postVoiceToTealus(
         preview: LINE_MEDIA_NO_PREVIEW,
       });
     } catch (err) {
-      logger.error(`[lineMessageBridge] 音声の保存のあとの付随処理に失敗 (便は保存済み・文字起こしは続ける): ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(`[lineMessageBridge] 音声の保存のあとの付随処理に失敗 (便は保存済み・文字起こしは続ける): ${errorText(err)}`);
     }
 
     // ★ ★ ★ Background transcription trigger (= voice.js line 116-118 同型)
@@ -372,10 +373,10 @@ export async function postVoiceToTealus(
     // organon polyseme inject (= 5/31 Day 15 完成) もここから自動連動
     try {
       transcribeVoiceMessage(message.id, mediaInfo.relativePath, io, roomId).catch((err: unknown) => {
-        logger.error(`[lineMessageBridge] Background transcription error: ${err instanceof Error ? err.message : String(err)}`);
+        logger.error(`[lineMessageBridge] Background transcription error: ${errorText(err)}`);
       });
     } catch (e) {
-      logger.warn(`[lineMessageBridge] transcribeVoiceMessage not available: ${e instanceof Error ? e.message : String(e)}`);
+      logger.warn(`[lineMessageBridge] transcribeVoiceMessage not available: ${errorText(e)}`);
     }
 
     logger.info(`[lineMessageBridge] voice post: room=${roomId} msg=${message.id} file=${mediaInfo.fileName}`);
@@ -415,7 +416,7 @@ export async function postFileToTealus(
     try {
       thumbnailPath = await generateThumbnail(mediaInfo.filePath, mediaInfo.mimeType);
     } catch (err) {
-      logger.warn(`[lineMessageBridge] file thumbnail failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`[lineMessageBridge] file thumbnail failed: ${errorText(err)}`);
     }
   }
 
@@ -483,7 +484,7 @@ export async function postVideoToTealus(
   try {
     thumbnailPath = await generateThumbnail(mediaInfo.filePath, mediaInfo.mimeType);
   } catch (e) {
-    logger.warn(`[lineMessageBridge] generateThumbnail failed for video: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[lineMessageBridge] generateThumbnail failed for video: ${errorText(e)}`);
   }
 
   const client = await pool.connect();

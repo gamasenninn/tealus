@@ -22,6 +22,7 @@ import type { Server } from 'socket.io';
 import { logger } from '../utils/logger.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import type { LineSenderContext } from './lineMessageBridge.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** バッファに積む 1 画像 (= index は imageSet.index) */
 export interface BufferedImage {
@@ -129,7 +130,7 @@ export class ImageSetBuffer {
     // onFlush 失敗は webhook dispatch を阻害しない
     Promise.resolve(this.onFlush(set.ctx, images)).catch((err: unknown) => {
       logger.error(
-        `[lineImageSetBuffer] flush post failed: set=${setId} ${err instanceof Error ? err.message : String(err)}`
+        `[lineImageSetBuffer] flush post failed: set=${setId} ${errorText(err)}`
       );
     });
   }

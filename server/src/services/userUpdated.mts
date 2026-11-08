@@ -1,6 +1,7 @@
 import { getIo } from '../io-registry.mts';
 import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * ★ #534 表示名・アイコンが変わったことを、その人が入っている部屋と本人の全端末に知らせる。
@@ -15,6 +16,6 @@ export async function announceUserUpdated(user: { id: string; display_name: stri
     getIo().to([...rows.map((r) => r.room_id), `user:${user.id}`])
       .emit('user:updated', { user_id: user.id, display_name: user.display_name, avatar_url: user.avatar_url ?? null });
   } catch (err) {
-    logger.warn(`[profile] 名前の変更を知らせられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[profile] 名前の変更を知らせられませんでした: ${errorText(err)}`);
   }
 }

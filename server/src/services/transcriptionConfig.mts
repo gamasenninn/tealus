@@ -3,6 +3,7 @@ import path from 'node:path';
 import { logger } from '../utils/logger.mts';
 import * as dictionaryRepo from './dictionaryRepo.mts';
 import { writeLocalTtl, DEFAULT_LOCAL_TTL_PATH } from './dictionaryTtl.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** guideline の vocabulary 1 エントリ (file JSON / テーブルオーバーレイ共通の形) */
 export interface VocabularyEntry {
@@ -60,7 +61,7 @@ function loadFileGuideline(): TranscriptionGuideline {
     logger.info(`Loaded transcription guideline: ${cached.vocabulary.length} vocab, ${cached.guidelines.length} rules`);
     return cached;
   } catch (err) {
-    logger.error('Failed to load transcription guideline, using empty:', err instanceof Error ? err.message : String(err));
+    logger.error('Failed to load transcription guideline, using empty:', errorText(err));
     cached = EMPTY;
     cachedMtimeMs = null;
     return cached;
@@ -80,7 +81,7 @@ async function emitLocalTtl(vocab: VocabularyEntry[]): Promise<void> {
   try {
     await writeLocalTtl(DEFAULT_LOCAL_TTL_PATH, vocab);
   } catch (err) {
-    logger.warn(`[dictionary] local.ttl write failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[dictionary] local.ttl write failed (non-fatal): ${errorText(err)}`);
   }
 }
 
@@ -121,7 +122,7 @@ export async function refreshVocabFromTable(): Promise<number> {
     return 0;
   } catch (err) {
     tableVocab = null; // DB 不達 → file フォールバック (非破壊)
-    logger.warn(`[dictionary] table vocab refresh failed, falling back to file: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[dictionary] table vocab refresh failed, falling back to file: ${errorText(err)}`);
     return 0;
   }
 }

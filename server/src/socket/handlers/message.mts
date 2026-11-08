@@ -6,6 +6,7 @@ import { announcePost } from '../../services/postEffects.mts';
 import { checkMessageRefs } from '../../services/messageRefs.mts';
 import { SOCKET_POST_TYPES, MAX_CONTENT_LENGTH, contentTooLongMessage } from '../../services/messageTypes.mts';
 import { REPLY_SELECT, normalizeReply, type ReplyMessageRow } from '../../services/messageAttachments.mts';
+import { errorText } from '../../utils/logFormat.mts';
 
 interface ForwardMessageRow extends ReplyMessageRow {
   room_name: string | null;
@@ -111,7 +112,7 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
       // ★ #482 返信先・転送元は指してよい投稿だけ。満たさなければ投稿ごと断る
       refs = await checkMessageRefs({ roomId: room_id, userId: socket.user.id, replyTo: reply_to, forwardedFrom: forwarded_from });
     } catch (err) {
-      logger.error(`message:send の確認に失敗: user=${socket.user.id} room=${room_id}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(`message:send の確認に失敗: user=${socket.user.id} room=${room_id}: ${errorText(err)}`);
       return reject('送れませんでした。もう一度お試しください');
     }
     if (!refs.ok) {

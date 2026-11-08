@@ -8,6 +8,7 @@ import { requireMember } from '../middleware/roomAccess.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { isAdmin } from '../utils/permissions.mts';
 import { getIo } from '../io-registry.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * ★ #496 投稿のタグの変化を部屋に知らせる (その投稿の今のタグ一覧を丸ごと)。
@@ -27,7 +28,7 @@ export async function announceMessageTags(messageId: string, roomId: string | un
     );
     getIo().to(roomId).emit('message:tags', { message_id: messageId, room_id: roomId, tags: result.rows });
   } catch (err) {
-    logger.warn(`[tags] 知らせを出せませんでした (変更は済んでいます): message=${messageId} ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[tags] 知らせを出せませんでした (変更は済んでいます): message=${messageId} ${errorText(err)}`);
   }
 }
 
@@ -153,7 +154,7 @@ roomRouter.delete('/:tagId', async (req, res) => {
     try {
       getIo().to(roomId).emit('room:tag_deleted', { room_id: roomId, tag_id: tagId });
     } catch (err) {
-      logger.warn(`[tags] 削除の知らせを出せませんでした: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`[tags] 削除の知らせを出せませんでした: ${errorText(err)}`);
     }
     res.json({ success: true });
   } catch (err) {

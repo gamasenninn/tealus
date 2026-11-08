@@ -10,6 +10,7 @@ import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { isGuest } from '../utils/permissions.mts';
 import { MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -141,7 +142,7 @@ router.put('/', authenticate, async (req, res) => {
           logger.info(`[dictionary] gate-accept ${x.status}: 「${x.garble}」(${x.garbleReading}) → 「${x.term}」(${x.termReading}) 距離 ${x.distance.toFixed(2)} / term ${x.termMoras} モーラ`);
         }
       })
-      .catch((err: unknown) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err: unknown) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${errorText(err)}`));
 
     // Broadcast update
     const io = getIo();

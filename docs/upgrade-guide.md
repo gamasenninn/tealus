@@ -151,6 +151,7 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
   - bot の画像の口 (`/api/bot/push-image`、`/api/bot/push-file` で種類が `image/*` のとき) は、HEIC・BMP と途中で切れた画像を 400 で断ります
   - 管理 API: 自分自身・最後の有効なシステム管理者は無効にも一般にもできません。`is_active` は `true` / `false` だけ (文字列の `"false"` を送るスクリプトは 400)。役割は `admin` / `user` / `guest` だけ。部屋の最後の有効なグループ管理者は、解除も退会させることもできません
   - `GET /api/auth/me` に `push_active_subscriptions` (有効な通知の宛先の本数) が増えました。0 本の人には画面が案内を出します
+- 2026-11-08 (改善ループ 42〜44) の変更 (手順は増えません。client の再ビルドと server の再起動だけ、migration なし): Markdown の表示の共通化・部屋の一覧の取り直しをタブ・パネル間で分け合う・パネルを起動の繰り返しに数えない / ログの失敗の理由 (`errorText`)
 
 ### → v0.11.1（0.11.0 の監査で見つかった穴 2 つ）
 

@@ -33,7 +33,7 @@ function refreshConnectedUser(userId: string, patch: { display_name?: string; av
   try {
     refreshSocketUser(getIo(), userId, patch);
   } catch (err) {
-    logger.warn(`[profile] socket の利用者情報を書き換えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[profile] socket の利用者情報を書き換えられませんでした: ${errorText(err)}`);
   }
 }
 
@@ -42,6 +42,7 @@ export const router = express.Router();
 import { SALT_ROUNDS } from '../constants/config.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
 import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../utils/userFields.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** login クエリで password_hash も一緒に取得する行 (レスポンス前に削除する) */
 interface UserWithPasswordRow extends AuthUser {
@@ -185,7 +186,7 @@ router.get('/me', authenticate, async (req, res) => {
     pushActiveSubscriptions = r.rows[0].active;
     pushTotalSubscriptions = r.rows[0].total;
   } catch (err) {
-    logger.warn(`[auth/me] 通知の宛先を数えられませんでした: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[auth/me] 通知の宛先を数えられませんでした: ${errorText(err)}`);
   }
   res.json({ user: req.user, push_active_subscriptions: pushActiveSubscriptions, push_total_subscriptions: pushTotalSubscriptions });
 });
@@ -218,7 +219,7 @@ router.get('/authz', authenticate, async (req, res) => {
     const room = r.rows[0] ? { id: r.rows[0].id, type: r.rows[0].type, member_role: r.rows[0].member_role ?? null } : null;
     return res.json({ user_id: user.id, role: user.role, room });
   } catch (err) {
-    logger.error('authz error:', err instanceof Error ? err.message : String(err));
+    logger.error('authz error:', errorText(err));
     return res.status(500).json({ error: 'サーバーエラー' });
   }
 });

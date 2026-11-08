@@ -38,6 +38,7 @@ import { getMemberDisplayName } from '../services/lineMemberCatalog.mts';
 import { recordLineMessageLinks, findLinkedMessageId } from '../services/lineMessageLinks.mts';
 import { logger } from '../utils/logger.mts';
 import { applyContentLabel } from '../utils/lineContent.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 export const router = express.Router();
 
@@ -122,7 +123,7 @@ async function resolveSenderLabel(
   try {
     name = await getMemberDisplayName(groupId, userId, channelToken, { fetchImpl: cfg.memberFetchImpl });
   } catch (e) {
-    logger.warn(`[LINE Bridge] sender name resolve failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[LINE Bridge] sender name resolve failed: ${errorText(e)}`);
   }
   if (!name) return null;
 
@@ -168,7 +169,7 @@ async function linkPosted(lineMessageIds: string[], messageId: string | undefine
   try {
     await recordLineMessageLinks({ lineMessageIds, messageId, roomId });
   } catch (e) {
-    logger.warn(`[LINE Bridge] link record failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[LINE Bridge] link record failed: ${errorText(e)}`);
   }
 }
 
@@ -182,7 +183,7 @@ async function resolveQuote(message: LineEventMessage, roomId: string): Promise<
     const found = await findLinkedMessageId(message.quotedMessageId, roomId);
     if (found) return { replyTo: found, note: false };
   } catch (e) {
-    logger.warn(`[LINE Bridge] quote lookup failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.warn(`[LINE Bridge] quote lookup failed: ${errorText(e)}`);
   }
   return { note: true };
 }
@@ -238,7 +239,7 @@ export async function dispatchEvent(
         timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
       }, { accessToken: channelToken }).catch((e) => {
         // catalog 失敗は silent (= message 経路と同じ、200 OK 最優先)。name は次の message で再 try される
-        logger.warn(`[LINE Bridge] catalog upsert failed (join): ${e instanceof Error ? e.message : String(e)}`);
+        logger.warn(`[LINE Bridge] catalog upsert failed (join): ${errorText(e)}`);
       });
       logger.info(`[LINE Bridge] join catalogued: ${joinGroupId} name=${readGroupName(joinGroupId) || '(未取得)'}`);
     }
@@ -261,7 +262,7 @@ export async function dispatchEvent(
       snippet,
       timestamp: event.timestamp ? new Date(event.timestamp).toISOString() : undefined,
     }, { accessToken: channelToken }).catch((e) => {
-      logger.warn(`[LINE Bridge] catalog upsert failed: ${e instanceof Error ? e.message : String(e)}`);
+      logger.warn(`[LINE Bridge] catalog upsert failed: ${errorText(e)}`);
     });
   }
   const roomId = map[groupId];
@@ -296,7 +297,7 @@ export async function dispatchEvent(
       }
       sender = userRes.rows[0];
     } catch (err) {
-      logger.error(`[LINE Bridge] bot user fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(`[LINE Bridge] bot user fetch failed: ${errorText(err)}`);
       return { skipped: 'bot-user-fetch-error' };
     }
   }
@@ -467,7 +468,7 @@ router.post(
     try {
       payload = JSON.parse(req.body.toString('utf8')) as { events?: LineWebhookEvent[] };
     } catch (e) {
-      logger.warn(`[LINE Bridge] JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
+      logger.warn(`[LINE Bridge] JSON parse failed: ${errorText(e)}`);
       return res.status(200).json({ ok: true }); // 200 で retry 防止
     }
 
@@ -489,7 +490,7 @@ router.post(
       try {
         await dispatchEvent(event, { io });
       } catch (err) {
-        logger.error(`[LINE Bridge] event dispatch error: ${err instanceof Error ? err.message : String(err)}`);
+        logger.error(`[LINE Bridge] event dispatch error: ${errorText(err)}`);
       }
     }
   }

@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.mts';
 import webpush from 'web-push';
 import { pool } from '../db/pool.mts';
 import { viewingUserIds } from '../socket/viewingRooms.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * VAPID の連絡先 (subject) の点検。問題が無ければ null (2026-09-27)
@@ -72,7 +73,7 @@ async function calculateTotalUnreadForUser(userId: string): Promise<number> {
     `, [userId]);
     return r.rows[0]?.total || 0;
   } catch (err) {
-    logger.warn('calculateTotalUnreadForUser failed:', err instanceof Error ? err.message : String(err));
+    logger.warn('calculateTotalUnreadForUser failed:', errorText(err));
     return 0;
   }
 }
@@ -88,7 +89,7 @@ export function describePushFailure(err: unknown, sub: Pick<PushSubscriptionRow,
   let host = '?';
   try { host = new URL(sub.endpoint).host; } catch { /* 壊れた endpoint でもログは書く */ }
   const body = typeof e.body === 'string' ? e.body.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
-  const detail = body || (err instanceof Error ? err.message : String(err));
+  const detail = body || (errorText(err));
   return `Push failed: status=${e.statusCode ?? '-'} reason=${detail || '-'} host=${host} sub=${sub.id.slice(0, 8)} device=${sub.device_name ?? '-'}`;
 }
 
@@ -245,10 +246,10 @@ export function startPushStaleSweep(): void {
   const run = () => {
     deactivateStaleSubscriptions(days)
       .then((n) => { if (n > 0) logger.info(`[push] ${days} 日送り直されていない宛先を ${n} 本外しました`); })
-      .catch((err) => logger.warn(`[push] 古い宛先の掃除に失敗: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[push] 古い宛先の掃除に失敗: ${errorText(err)}`));
     deleteOldInactiveSubscriptions(deleteDays)
       .then((n) => { if (n > 0) logger.info(`[push] 無効になってから ${deleteDays} 日たった宛先を ${n} 本消しました`); })
-      .catch((err) => logger.warn(`[push] 無効の宛先の削除に失敗: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => logger.warn(`[push] 無効の宛先の削除に失敗: ${errorText(err)}`));
   };
   run();
   staleSweepTimer = setInterval(run, 24 * 3_600_000);

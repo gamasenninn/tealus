@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.mts';
 import { getIo } from '../io-registry.mts';
 import { insertSystemMessage } from './systemMessage.mts';
 import { agentUrl } from '../lib/upstream.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /**
  * AI に届かなかった便に、部屋へ 1 行返す (2026-10-30 小野さん判断 C)。
@@ -70,7 +71,7 @@ export async function noticeAiUnreachable(eventType: string, roomId: string | nu
     await insertSystemMessage(roomId, NOTICE, io, botId);
     return true;
   } catch (err) {
-    logger.error('[ai-unreachable] 知らせを出せませんでした:', err instanceof Error ? err.message : String(err));
+    logger.error('[ai-unreachable] 知らせを出せませんでした:', errorText(err));
     return false;
   }
 }
