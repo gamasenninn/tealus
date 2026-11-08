@@ -8,8 +8,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readSrc } from '../helpers/srcFiles';
 
 vi.mock('../../src/services/api', () => ({ api: { request: vi.fn(), get: vi.fn() } }));
 
@@ -58,20 +57,20 @@ describe('MD ファイルのプレビュー', () => {
 
 describe('お知らせ (ホーム)', () => {
   it('★ 本文の包みに md-body が付いている', () => {
-    const src = readFileSync(resolve(__dirname, '../../src/components/home/HomePage.tsx'), 'utf8');
+    const src = readSrc('components/home/HomePage.tsx');
     expect(src).toMatch(/className=\{`announcement-body md-body /);
   });
 });
 
 describe('styles/markdown.css', () => {
-  const css = readFileSync(resolve(__dirname, '../../src/styles/markdown.css'), 'utf8');
+  const css = readSrc('styles/markdown.css');
   it.each(['ul', 'h4', 'h6', 'blockquote', 'table', 'th', 'pre', 'hr', 'img', 'li.task-list-item', '.sr-only'])(
     '%s の規則がある', (sel) => {
       expect(css).toContain(`:where(.md-body) ${sel}`);
     },
   );
   it('★ 画面の入口で読み込まれている', () => {
-    const main = readFileSync(resolve(__dirname, '../../src/main.tsx'), 'utf8');
+    const main = readSrc('main.tsx');
     expect(main).toContain("import './styles/markdown.css'");
   });
 });
