@@ -22,6 +22,7 @@ import { pool } from '../db/pool.mts';
 import { textPushBody } from './machinePush.mts';
 import { announcePost } from './postEffects.mts';
 import { logger } from '../utils/logger.mts';
+import { errorText } from '../utils/logFormat.mts';
 
 /** 4 経路で共通の sender context (docs/05 §4) */
 export interface SenderContext {
@@ -121,7 +122,7 @@ export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResu
 
     return { ok: true, message };
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = errorText(err);   // ★ 改善ループ 43: DB 停止の空の AggregateError でも理由を残す
     logger.error(`postAsUser 失敗: room=${roomId} user=${sender.id} ${reason}`);
     return { ok: false, code: 'error', reason };
   }

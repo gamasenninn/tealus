@@ -56,3 +56,20 @@ describe('applyUserUpdated (#534)', () => {
     expect(useMessageStore.getState().messages[0]).toMatchObject({ sender_display_name: '田中' });
   });
 });
+
+describe('改善ループ 43: 一覧の取り直しはタブ・パネル間で分け合う', () => {
+  it('★ 分け合いが張られていれば、すぐには取りに行かず少し待つ (その間に他のタブの結果が届けば行かない)', async () => {
+    const { bindRoomsChannel } = await import('../../src/stores/roomStore');
+    vi.useFakeTimers();
+    try {
+      bindRoomsChannel('u-me');
+      applyUserUpdated({ user_id: 'u-tanaka', display_name: '田中 (営業)', avatar_url: null });
+      expect(fetchRooms).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(400);
+      expect(fetchRooms).toHaveBeenCalledTimes(1);
+    } finally {
+      useRoomStore.getState().reset();   // 分け合いを外す
+      vi.useRealTimers();
+    }
+  });
+});

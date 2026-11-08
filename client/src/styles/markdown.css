@@ -70,11 +70,15 @@
   margin: 0.4em 0;
   font-size: 0.9em;
   overflow-wrap: break-word;
+  /* ★ 改善ループ 43: 吹き出しの word-break: break-word が効くと、最小幅が 1 文字になり横に動かずに縮む
+     (85.131.221.30 が 4 行に折れた。WebKit で確かめた) */
+  word-break: normal;
 }
 :where(.md-body) th,
 :where(.md-body) td {
   border: 1px solid var(--border-medium);
   padding: 4px 8px;
+  min-width: 4em;   /* 日本語の列が 1 文字幅まで縮まない */
   text-align: left;
   vertical-align: top;
 }

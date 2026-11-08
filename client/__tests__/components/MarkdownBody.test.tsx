@@ -69,6 +69,9 @@ describe('styles/markdown.css', () => {
       expect(css).toContain(`:where(.md-body) ${sel}`);
     },
   );
+  it('★ 改善ループ 43: 表は吹き出しの word-break を打ち消す (85.131.221.30 が 4 行に折れていた)', () => {
+    expect(css).toMatch(/:where\(\.md-body\) table \{[^}]*word-break: normal/);
+  });
   it('★ 画面の入口で読み込まれている', () => {
     const main = readSrc('main.tsx');
     expect(main).toContain("import './styles/markdown.css'");

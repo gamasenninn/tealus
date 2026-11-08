@@ -1,4 +1,4 @@
-import { useRoomStore } from '../stores/roomStore';
+import { useRoomStore, fetchRoomsFromEvent } from '../stores/roomStore';
 import { useMessageStore } from '../stores/messageStore';
 
 /**
@@ -24,5 +24,6 @@ export function applyUserUpdated(data: unknown): void {
       ? { ...m, sender_display_name: displayName, sender_avatar_url: avatarUrl }
       : m)),
   }));
-  void useRoomStore.getState().fetchRooms();
+  // ★ 改善ループ 43: 同じ部屋の全員の全タブ・全パネルに届く知らせなので、取り直しは分け合う
+  void fetchRoomsFromEvent();
 }

@@ -23,7 +23,7 @@ function registerPushIfAllowed(onRegistered?: () => void): void {
   if (pushPermission() === 'granted') void Promise.resolve(registerPushNotification()).then((r) => { if (r === 'ok') onRegistered?.(); });
 }
 import { clearRoomViewCache } from './roomViewCache';
-import { useRoomStore } from './roomStore';
+import { useRoomStore, bindRoomsChannel } from './roomStore';
 
 /** #508 購読の取り消しを待つ上限。返ってこなくてもログアウトは終わらせる */
 const UNSUBSCRIBE_WAIT_MS = 3000;
@@ -115,6 +115,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         //   ★ 新しい鍵で取り直す (改善ループ 22 回目)。何もせず返すと、起動中に別のタブで鍵が替わったとき「読み込み中...」のまま止まった
         if (localStorage.getItem('token') !== token) { tokenChanged = true; return; }
         connectSocket(token);
+        // ★ 改善ループ 43: 一覧の分け合いはここで張る (一覧の画面だけが張っていたので、一覧を出さないパネルに通り道が無かった)
+        bindRoomsChannel(data.user.id);
         await refreshConfig();
         set({ user: data.user, token, isLoading: false, offline: false,
           pushActiveSubscriptions: typeof data.push_active_subscriptions === 'number' ? data.push_active_subscriptions : null,
@@ -151,6 +153,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     forgetPreviousUser();
     api.setToken(data.token);
     connectSocket(data.token);
+    bindRoomsChannel(data.user.id);
     await refreshConfig();
     // ★ 本数は /login では分からない。前の人の本数を残さない (改善ループ 41。ログアウトせずに別の人が入る道)
     set({ user: data.user, token: data.token, offline: false, pushActiveSubscriptions: null, pushHadSubscriptions: true });

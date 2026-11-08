@@ -196,6 +196,14 @@ describe('postAsUser', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('error');
   });
+
+  test('★ 改善ループ 43: 本文が空の例外 (DB 停止の AggregateError) でも理由が空にならない', async () => {
+    // 理由が空だと見張り・トリガーの記録が warn でなく info で理由なしになる (11-06 の DB 停止)
+    mockQuery.mockRejectedValueOnce(new AggregateError([new Error('connect ECONNREFUSED 127.0.0.1:5432')], ''));
+    const r = await postAsUser({ roomId: ROOM, sender: SENDER, content: 'hi' });
+    if (!r.ok) expect(r.reason).toContain('ECONNREFUSED');
+    expect(r.ok).toBe(false);
+  });
 });
 
 /**
