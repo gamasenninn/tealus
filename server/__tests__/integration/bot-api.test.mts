@@ -709,6 +709,45 @@ describe('Bot API', () => {
       expect(res.body.file_size).toBe('PNG-TEST-DATA'.length);
     });
 
+    /** 大きさは DB の file_size で判定されるので、中身は小さいまま「40MB の動画」として入れる */
+    async function insertBigMedia(type: 'video' | 'image' | 'voice', mime: string, size: number) {
+      const pool = getTestPool();
+      const filename = `big-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
+      fs.writeFileSync(path.join(TEST_FIXTURE_PATH, filename), 'x');
+      const msgRes = await pool.query(
+        `INSERT INTO messages (room_id, sender_id, type, content) VALUES ($1, $2, $3, NULL) RETURNING id`,
+        [roomId, user1.user.id, type]
+      );
+      await pool.query(
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size) VALUES ($1, $2, $3, $4, $5)`,
+        [msgRes.rows[0].id, `${TEST_FIXTURE_DIR}/${filename}`, filename, mime, size]
+      );
+      return msgRes.rows[0].id as string;
+    }
+
+    // ★ #646 朝礼の議事録トリガーで AI が 33〜72MB の動画を取りに行き、上限のエラーだけを受けて transcribe_media に寄り道していた
+    //   (10-15〜11-07 で 16 件)。道具 (tealus-mcp) はこの文面をそのまま AI に渡すので、ここで行き先を案内する
+    it('★ #646 10MB を超える動画は、上限の文面に transcribe_media の案内を添える', async () => {
+      const id = await insertBigMedia('video', 'video/mp4', 40 * 1024 * 1024);
+      const res = await request(app).get(`/api/bot/messages/${id}/media`).set('Authorization', `Bearer ${bot.token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data_base64).toBeUndefined();
+      expect(res.body.error).toContain('transcribe_media');
+    });
+
+    it('#646 10MB を超える音声も同じ案内', async () => {
+      const id = await insertBigMedia('voice', 'audio/wav', 12 * 1024 * 1024);
+      const res = await request(app).get(`/api/bot/messages/${id}/media`).set('Authorization', `Bearer ${bot.token}`);
+      expect(res.body.error).toContain('transcribe_media');
+    });
+
+    it('#646 10MB を超える画像には transcribe_media を案内しない (上限の文面だけ)', async () => {
+      const id = await insertBigMedia('image', 'image/png', 12 * 1024 * 1024);
+      const res = await request(app).get(`/api/bot/messages/${id}/media`).set('Authorization', `Bearer ${bot.token}`);
+      expect(res.body.error).toContain('上限');
+      expect(res.body.error).not.toContain('transcribe_media');
+    });
+
     it('should reject non-member bot', async () => {
       // Create another room without bot
       const user2 = await createTestUser({ login_id: 'EMP002', display_name: '別ユーザ' });

@@ -31,7 +31,7 @@ import {
   postLocationToTealus,
 } from '../services/lineMessageBridge.mts';
 import type { LineSenderContext } from '../services/lineMessageBridge.mts';
-import { ImageSetBuffer, DEFAULT_FLUSH_DELAY_MS, DEFAULT_MAX_WAIT_MS } from '../services/lineImageSetBuffer.mts';
+import { ImageSetBuffer, DEFAULT_FLUSH_DELAY_MS, DEFAULT_MAX_WAIT_MS, imageSetContent } from '../services/lineImageSetBuffer.mts';
 import { loadGroupToRoomMap } from '../services/lineGroupMappings.mts';
 import { upsertGroupEntry, readGroupName } from '../services/lineGroupCatalog.mts';
 import { getMemberDisplayName } from '../services/lineMemberCatalog.mts';
@@ -144,12 +144,12 @@ const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(import.meta.dirname, '../
 const imageSetBuffer = new ImageSetBuffer({
   flushDelayMs: Number(process.env.LINE_IMAGESET_FLUSH_MS) || DEFAULT_FLUSH_DELAY_MS,
   maxWaitMs: Number(process.env.LINE_IMAGESET_MAX_WAIT_MS) || DEFAULT_MAX_WAIT_MS,
-  onFlush: async (ctx, images) => {
+  onFlush: async (ctx, images, meta) => {
     const { message } = await postImagesToTealus({
       roomId: ctx.roomId,
       sender: ctx.sender,
       mediaInfos: images.map((i) => i.mediaInfo),
-      content: ctx.content,
+      content: imageSetContent(ctx.content, images.length, meta),   // ★ #646 欠けたまま投稿するときは本文で知らせる
       io: ctx.io,
     });
     // ★ #490 束のどの 1 枚が引用されても同じ投稿へ引き当てる
@@ -222,7 +222,10 @@ export async function dispatchEvent(
 
   // entry log: silent skip ('not-group' 等) でも「届いた事実」を log で binary 残す
   // (= memory feedback_silent_skip_log_distinction.md、AI session が「届かない」誤判断するのを構造的に防止する device、恒久)
-  logger.info(`[LINE Bridge] dispatchEvent: type=${event?.type}, source=${event?.source?.type}, msg=${event?.message?.type}`);
+  // ★ #646 画像の組は id・何枚目/何枚 も書く (「9 枚になった」と言われたとき、LINE が 9 枚の組で送ったのか 1 枚落ちたのかを 1 行で分ける)
+  const imgSet = event?.message?.imageSet;
+  logger.info(`[LINE Bridge] dispatchEvent: type=${event?.type}, source=${event?.source?.type}, msg=${event?.message?.type}`
+    + (imgSet?.id ? ` imageSet=${String(imgSet.id).slice(0, 8)} ${imgSet.index}/${imgSet.total}` : ''));
 
   // ★ #367: join (= bot がグループに招待された) は catalog upsert だけ通し、★ ★ 投影経路には入れない。
   // join は本文を持たないので Tealus に投稿するものが無い。目的は group ID / name を

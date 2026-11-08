@@ -841,6 +841,11 @@ router.get('/messages/:id/media', scopeByMessage, requireUuidId, async (req, res
 
     if (parseInt(sel.file_size) > BOT_MEDIA_MAX_SIZE) {
       response.error = `ファイルサイズが上限 (${BOT_MEDIA_MAX_SIZE / 1024 / 1024}MB) を超えています。data_base64 は省略。`;
+      // ★ #646 動画・音声は中身 (話した内容) を文字起こしで取れる。朝礼の議事録トリガーで AI が 33〜72MB の動画を取りに来て、
+      //   この文面だけを受けて transcribe_media に寄り道していた (10-15〜11-07 で 16 件)。道具はこの文面をそのまま AI に渡す
+      if (/^(video|audio)\//.test(sel.mime_type || '')) {
+        response.error += ' 動画・音声の内容 (話している内容) は transcribe_media(message_id) で文字起こしを取ってください。';
+      }
     } else {
       // ★ 非同期で読む (改善ループ 13 回目)。apps の画像取得が 1 日 7 千回あり、10MB の動画なら同期の間は全員が止まる
       const buffer = await fs.promises.readFile(filePath);

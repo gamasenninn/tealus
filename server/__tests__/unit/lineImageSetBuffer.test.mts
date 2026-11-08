@@ -14,7 +14,7 @@ jest.mock('../../src/utils/logger.mts', () => ({ logger: {
   debug: jest.fn(),
 } }));
 
-import { ImageSetBuffer } from '../../src/services/lineImageSetBuffer.mts';
+import { ImageSetBuffer, imageSetContent } from '../../src/services/lineImageSetBuffer.mts';
 import type { BufferedImage, ImageSetFlushContext } from '../../src/services/lineImageSetBuffer.mts';
 import type { SavedLineContent } from '../../src/services/lineBridge.mts';
 
@@ -149,5 +149,33 @@ describe('ImageSetBuffer', () => {
     // 最初から約 120ms。最後から 0ms だが、上限で打ち切られている
     await new Promise((r) => setTimeout(r, 30));
     expect(onFlush).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * #646 LINE の組が欠けたまま時間切れで投稿するとき、読む人に「欠けた」と分かるようにする
+ * ★ 2026-11-03 11:53 に 10 枚中 9 枚で投稿された (10 枚目の webhook が本体に届いていない)。投稿を見ても欠けたと分からなかった。
+ *   LINE が 9 枚の組で送ったもの (19 枚 = 10 + 9) は欠けていないので、文を添えるのは時間切れで数が足りないときだけ
+ */
+describe('#646 欠けた組の知らせ', () => {
+  test('★ flush に組の枚数と理由を渡す', async () => {
+    const onFlush = jest.fn();
+    const buf = new ImageSetBuffer({ flushDelayMs: 30, onFlush });
+    buf.add('set-m', 3, mkImage(1, 'a.jpg'), CTX);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(onFlush.mock.calls[0][2]).toEqual({ total: 3, reason: 'timeout' });
+
+    buf.add('set-n', 1 + 1, mkImage(1, 'a.jpg'), CTX);
+    buf.add('set-n', 2, mkImage(2, 'b.jpg'), CTX);
+    expect(onFlush.mock.calls[1][2]).toEqual({ total: 2, reason: 'complete' });
+  });
+
+  test('★ 時間切れで足りないときだけ、本文に「N 枚中 M 枚だけ」を添える', () => {
+    expect(imageSetContent('[LINE: 小野]', 9, { total: 10, reason: 'timeout' }))
+      .toBe('[LINE: 小野]\n(LINE から 10 枚中 9 枚だけ届きました。残りの 1 枚はこちらに届いていません)');
+    expect(imageSetContent(undefined, 9, { total: 10, reason: 'timeout' }))
+      .toBe('(LINE から 10 枚中 9 枚だけ届きました。残りの 1 枚はこちらに届いていません)');
+    expect(imageSetContent('[LINE: 小野]', 9, { total: 9, reason: 'complete' })).toBe('[LINE: 小野]');
+    expect(imageSetContent(undefined, 10, { total: 10, reason: 'complete' })).toBeUndefined();
   });
 });

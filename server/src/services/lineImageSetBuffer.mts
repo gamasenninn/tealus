@@ -40,10 +40,25 @@ export interface ImageSetFlushContext {
   io?: Server | null;
 }
 
+/** #646 組の枚数と、揃って投稿したか (complete) 時間切れで投稿したか (timeout) */
+export interface ImageSetFlushMeta { total: number; reason: 'complete' | 'timeout' }
+
 export type ImageSetFlushHandler = (
   ctx: ImageSetFlushContext,
-  images: BufferedImage[]
+  images: BufferedImage[],
+  meta: ImageSetFlushMeta,
 ) => void | Promise<void>;
+
+/**
+ * #646 投稿の本文。時間切れで枚数が足りないときだけ「N 枚中 M 枚だけ届きました」を添える。
+ * ★ 2026-11-03 に 10 枚中 9 枚で投稿され、読む人には欠けたと分からなかった (10 枚目の webhook が本体に届いていない)。
+ *   LINE が 9 枚の組で送ったもの (19 枚選ぶと 10 + 9 の 2 組になる) は欠けていないので添えない
+ */
+export function imageSetContent(content: string | undefined, arrived: number, meta: ImageSetFlushMeta): string | undefined {
+  if (meta.reason !== 'timeout' || arrived >= meta.total) return content;
+  const note = `(LINE から ${meta.total} 枚中 ${arrived} 枚だけ届きました。残りの ${meta.total - arrived} 枚はこちらに届いていません)`;
+  return content ? `${content}\n${note}` : note;
+}
 
 /** 貯まり中の 1 set */
 interface PendingSet {
@@ -128,7 +143,7 @@ export class ImageSetBuffer {
       );
     }
     // onFlush 失敗は webhook dispatch を阻害しない
-    Promise.resolve(this.onFlush(set.ctx, images)).catch((err: unknown) => {
+    Promise.resolve(this.onFlush(set.ctx, images, { total: set.total, reason })).catch((err: unknown) => {
       logger.error(
         `[lineImageSetBuffer] flush post failed: set=${setId} ${errorText(err)}`
       );

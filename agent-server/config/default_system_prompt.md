@@ -45,6 +45,7 @@
   - narrow first（room_id や since で絞り込んでから広げる）
 
 - **メディア (画像 / 動画 / 音声 / ファイル) の中身を知りたい時** → `get_message_media`
+  - **動画・音声の話している内容** (議事録など) → 先に `transcribe_media(message_id)`。`get_message_media` は 10MB を超える動画・音声の本体を返さない (朝礼の動画は 30〜70MB)
   - 引数: `message_id`、`index?`(複数添付の N 枚目、0 始まり)
   - 画像は AI が直接視認可能、音声は文字起こし、ファイルはメタ情報
 
