@@ -164,12 +164,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   logout: async (opts) => {
-    // ★ #508 トークンを消す前に通知の購読を外す (後だとサーバーへの取り消しが認証で弾かれる)。
-    //   ★ 鍵が切れたあとは本体に頼まない (2026-10-29。切れた鍵では 401 になるだけ)
-    await Promise.race([
-      unregisterPushNotification({ server: !opts?.expired }),
-      new Promise<void>((resolve) => setTimeout(resolve, UNSUBSCRIBE_WAIT_MS)),
-    ]);
+    // ★ #508 自分でログアウトしたら、トークンを消す前に通知の購読を外す (後だとサーバーへの取り消しが認証で弾かれる)。
+    // ★★ 鍵が切れたときは外さない (2026-11-08 改善ループ 44、小野さん判断)。以前は端末の側だけ外していた →
+    //   iPhone は自分で作り直せず、Apple は外された宛先にも 7 日「受け取った」と返すので、本体の記録では届いているように
+    //   見えたまま通知が止まった (蒲さん 10-27〜、草野さん 10-24〜 は通知で呼べず戻ってこない)。
+    //   外さなければ期限切れのあとも通知が届き、それを見て開けばログインし直せる。ログイン画面のままの端末に出る通知は、
+    //   次の人がその端末でログインする (本体が同じ宛先の他人の行を消す) か、30 日の掃除で止まる
+    if (!opts?.expired) {
+      await Promise.race([
+        unregisterPushNotification({ server: true }),
+        new Promise<void>((resolve) => setTimeout(resolve, UNSUBSCRIBE_WAIT_MS)),
+      ]);
+    }
     api.setToken(null);
     disconnectSocket();
     forgetPreviousUser();

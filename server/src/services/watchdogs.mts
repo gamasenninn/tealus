@@ -27,6 +27,8 @@ interface WatchBase {
   /** 知らせの 1 行目に出る名前 */
   name: string;
   enabled: boolean;
+  /** 何回続けて異常なら ⚠ を出すか (既定 1)。5 分で戻る揺れを飲み込む (docs/09 §3.3、2026-11-08) */
+  alert_after: number;
 }
 
 export interface BackupLogWatch extends WatchBase {
@@ -127,7 +129,10 @@ function validate(raw: unknown, i: number): Watch | string {
   if (!isNonEmptyString(r.id)) return `${where}: id がありません`;
   const label = `${where} (${r.id})`;
   if (!isNonEmptyString(r.name)) return `${label}: name がありません`;
-  const base = { id: r.id, name: r.name, enabled: r.enabled !== false };
+  if (r.alert_after !== undefined && !(Number.isInteger(r.alert_after) && (r.alert_after as number) >= 1)) {
+    return `${label}: alert_after が 1 以上の整数ではありません`;
+  }
+  const base = { id: r.id, name: r.name, enabled: r.enabled !== false, alert_after: (r.alert_after as number | undefined) ?? 1 };
 
   switch (r.kind) {
     case 'backup_log':

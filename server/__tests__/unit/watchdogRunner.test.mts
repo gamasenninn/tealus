@@ -222,3 +222,58 @@ describe('runOnce — disk_free', () => {
     expect(d.posts[0].content).toContain('少なくなっています');
   });
 });
+
+/**
+ * 揺れを飲み込む alert_after (docs/09 §3.3、2026-11-08 改善ループ 44 小野さん判断)
+ * ★ NAS の記録置き場が 5 分見えなくなっては戻るのを 2 日で 5 回、業務メモに ⚠/✅ が 10 件出ていた
+ */
+describe('alert_after', () => {
+  const twice = loadWatchdogsFrom({
+    notify: { room_id: NOTIFY_ROOM, room: '業務メモ', as_user_id: USER },
+    watches: [{ id: 'backup', name: 'バックアップ', kind: 'backup_log', dir: 'X:\logs', alert_after: 2, enabled: true }],
+  });
+  const unreadable = { readBackup: async () => ({ error: 'ENOENT' }) as never };
+
+  test('★ 設定を読める。書かなければ 1 (今までどおり)', () => {
+    expect(twice.config!.watches[0]).toMatchObject({ alert_after: 2 });
+    expect(config.watches[0]).toMatchObject({ alert_after: 1 });
+  });
+
+  test('正の整数でなければ設定の誤りとして断る', () => {
+    const bad = loadWatchdogsFrom({
+      notify: { room_id: NOTIFY_ROOM, room: '業務メモ', as_user_id: USER },
+      watches: [{ id: 'b', name: 'b', kind: 'backup_log', dir: 'X', alert_after: 0, enabled: true }],
+    });
+    expect(JSON.stringify(bad)).toContain('alert_after');
+  });
+
+  test('★★ 1 回目の異常では知らせず、2 回続いたら ⚠', async () => {
+    const streaks = new Map<string, number>();
+    const d = deps({ ...unreadable, streaks });
+    const r1 = await runOnce(twice.config!, d);
+    expect(d.posts).toHaveLength(0);
+    expect(r1[0].detail).toContain('1/2');
+    await runOnce(twice.config!, d);
+    expect(d.posts).toHaveLength(1);
+    expect(d.posts[0].content).toMatch(/^⚠/);
+  });
+
+  test('★ 間に正常が挟まれば数え直す (5 分の揺れは知らせない)', async () => {
+    const streaks = new Map<string, number>();
+    const bad = deps({ ...unreadable, streaks });
+    const good = deps({ streaks });
+    await runOnce(twice.config!, bad);
+    await runOnce(twice.config!, good);
+    await runOnce(twice.config!, bad);
+    expect(bad.posts).toHaveLength(0);
+    expect(good.posts).toHaveLength(0);
+  });
+
+  test('戻ったとき (✅) は待たない', async () => {
+    const streaks = new Map<string, number>();
+    const d = deps({ streaks, lastNotice: async () => ({ kind: 'alert', at: jst('2026-10-13T11:00:00') }) as never });
+    await runOnce(twice.config!, d);
+    expect(d.posts).toHaveLength(1);
+    expect(d.posts[0].content).toMatch(/^✅/);
+  });
+});

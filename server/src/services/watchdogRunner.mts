@@ -45,7 +45,12 @@ export interface RunDeps {
   diskFree: (path: string) => Promise<DiskRead>;
   resolveSender: (userId: string) => Promise<SenderContext | null>;
   post: (input: { roomId: string; sender: SenderContext; content: string }) => Promise<PostAsUserResult>;
+  /** 続けて異常だった回数 (単位の id ごと、alert_after のため)。★ 本体の中だけで持つ (docs/09 §3.3 の例外) */
+  streaks?: Map<string, number>;
 }
+
+/** 本番の 1 本 (再起動で数え直す) */
+const STREAKS = new Map<string, number>();
 
 export interface RunResult {
   id: string;
@@ -57,14 +62,14 @@ export interface RunResult {
 }
 
 /** 知らせの単位。ふつうは設定の 1 行、push_reach は 1 人 (id は `<行の id>:<user_id>`) */
-interface Unit { id: string; name: string; kind?: Watch['kind']; observe: () => Promise<Observation> }
+interface Unit { id: string; name: string; kind?: Watch['kind']; alertAfter?: number; observe: () => Promise<Observation> }
 
 async function unitsOf(w: Watch, deps: RunDeps): Promise<Unit[]> {
   switch (w.kind) {
-    case 'backup_log': return [{ id: w.id, name: w.name, observe: async () => judgeBackupLog(assessBackup(await deps.readBackup(w.dir), deps.now)) }];
-    case 'room_quiet': return [{ id: w.id, name: w.name, observe: async () => judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now) }];
-    case 'heartbeat': return [{ id: w.id, name: w.name, observe: async () => judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now) }];
-    case 'disk_free': return [{ id: w.id, name: w.name, kind: w.kind, observe: async () => judgeDiskFree(w, await deps.diskFree(w.path)) }];
+    case 'backup_log': return [{ id: w.id, name: w.name, alertAfter: w.alert_after, observe: async () => judgeBackupLog(assessBackup(await deps.readBackup(w.dir), deps.now)) }];
+    case 'room_quiet': return [{ id: w.id, name: w.name, alertAfter: w.alert_after, observe: async () => judgeRoomQuiet(w, await deps.lastPostAt(w), deps.now) }];
+    case 'heartbeat': return [{ id: w.id, name: w.name, alertAfter: w.alert_after, observe: async () => judgeHeartbeat(w, await deps.heartbeatOf(w), deps.now) }];
+    case 'disk_free': return [{ id: w.id, name: w.name, alertAfter: w.alert_after, kind: w.kind, observe: async () => judgeDiskFree(w, await deps.diskFree(w.path)) }];
     case 'push_reach': {
       // ★ 人ごとに開く。状態も人ごとの印から引くので、A が ⚠ のままでも B の ⚠ は出る (docs/09 §3.6)
       const exclude = new Set(w.exclude_user_ids);
@@ -73,6 +78,7 @@ async function unitsOf(w: Watch, deps: RunDeps): Promise<Unit[]> {
         .map((t) => ({
           id: `${w.id}:${t.user_id}`,
           name: `${t.display_name} さんへの${w.name}`,
+          alertAfter: w.alert_after,
           observe: async () => judgePushReach(t, w.active_within_days, deps.now),
         }));
     }
@@ -99,6 +105,15 @@ export async function runOnce(config: WatchdogConfig, deps: RunDeps): Promise<Ru
         // ★ 稼働時間の外 (使っていない人) は前回の知らせも引かない (DB を無駄に叩かない)
         if (obs.state === 'skip') { results.push({ id: u.id, state: 'skip', detail: obs.detail, posted: null }); continue; }
         const d = decideNotice(u, obs, await deps.lastNotice(u, config.notify), deps.now);
+        // ★ alert_after: 続けて異常だった回数が足りなければ ⚠ を待つ。正常に戻れば数え直す。✅ は待たない (docs/09 §3.3)
+        const streaks = deps.streaks ?? STREAKS;
+        const streak = obs.state === 'down' ? (streaks.get(u.id) ?? 0) + 1 : 0;
+        streaks.set(u.id, streak);
+        const need = u.alertAfter ?? 1;
+        if (d.kind === 'alert' && streak < need) {
+          results.push({ id: u.id, state: obs.state, detail: `${obs.detail} (異常 ${streak}/${need} 回目、続いたら知らせる)`, posted: null });
+          continue;
+        }
         if (!d.kind || !d.body) { results.push({ id: u.id, state: obs.state, detail: obs.detail, posted: null }); continue; }
 
         if (sender === undefined) sender = await deps.resolveSender(config.notify.as_user_id);

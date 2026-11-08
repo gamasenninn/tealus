@@ -10,6 +10,7 @@
       "name": "NAS へのバックアップ",
       "kind": "backup_log",
       "dir": "//nas/share/tealus-bak/logs",
+      "alert_after": 2,
       "enabled": false
     },
     {

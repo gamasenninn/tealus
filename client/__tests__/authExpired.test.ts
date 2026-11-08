@@ -33,11 +33,19 @@ describe('認証が切れたとき (#539)', () => {
     expect(api.token).toBeNull();
   });
 
-  // ★ 2026-10-29: 切れた鍵で本体に宛先の取り外しを頼んでも 401 になるだけ (14 日で 8 回)。ブラウザ側だけ外す
-  it('★ 鍵切れのログアウトでは、本体に宛先の取り外しを頼まない', async () => {
+  // ★ 2026-11-08 (改善ループ 44、小野さん判断 A): 鍵切れでは端末の宛先も外さない。
+  //   以前はブラウザ側だけ外していた → iPhone は自分で作り直せず、Apple は外された宛先にも 7 日「受け取った」と返すので、
+  //   本体の記録では届いているように見えたまま通知が止まった (蒲さん 10-27〜、草野さん 10-24〜 戻ってこない)。
+  //   外さなければ、期限切れのあとも通知が届き、それを見て開けばログインし直せる。自分でログアウトしたときは今までどおり外す (#508)
+  it('★★ 鍵切れのログアウトでは、宛先を外さない (本体にも端末にも)', async () => {
     api.notifyUnauthorized();
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('/login'));
-    expect(unregister).toHaveBeenCalledWith({ server: false });
+    expect(unregister).not.toHaveBeenCalled();
+  });
+
+  it('★ 自分でログアウトしたときは、今までどおり本体と端末の両方から外す (#508)', async () => {
+    await useAuthStore.getState().logout();
+    expect(unregister).toHaveBeenCalledWith({ server: true });
   });
 
   it('★ 続けて何度知らせが来ても、ログアウトは 1 回だけ', async () => {
@@ -45,7 +53,6 @@ describe('認証が切れたとき (#539)', () => {
     api.notifyUnauthorized();
     api.notifyUnauthorized();
     await vi.waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
-    expect(unregister).toHaveBeenCalledTimes(1);
   });
 
   it('★ #600 ログアウトで、覚えていた部屋の中身を捨てる (同じ画面で次の人に前の人の会話を出さない)', async () => {
@@ -67,14 +74,10 @@ describe('認証が切れたとき (#539)', () => {
 });
 
 // ★ 改善ループ 18 回目: 期限切れのまま開き直すと、宛先の取り外しが鍵なしで飛んで 401 になっていた (14 日で 10 回)。
-//   initialize の catch がトークンを先に消し、ログアウトの取り外しは getRegistration を待った後に本体へ送るため
+//   ★ 2026-11-08 (改善ループ 44) から鍵切れでは宛先を外さないので、取り外し自体が飛ばない
 describe('期限切れのまま開き直したとき', () => {
-  it('★★ 宛先の取り外しを本体へ送る時点で、まだ鍵を持っている', async () => {
-    let tokenWhenSent: string | null | undefined;
-    unregister.mockImplementationOnce(async () => {
-      await new Promise((r) => setTimeout(r, 0));   // 本物は getRegistration・getSubscription を待ってから送る
-      tokenWhenSent = api.token;
-    });
+  it('★★ 宛先は外さず、鍵は消してログイン画面へ', async () => {
+    unregister.mockClear();
     localStorage.setItem('token', 'expired');
     vi.spyOn(api, 'getMe').mockImplementationOnce(async () => {
       api.notifyUnauthorized();   // 本物の api は 401 で知らせてから投げる
@@ -82,9 +85,8 @@ describe('期限切れのまま開き直したとき', () => {
     });
     useAuthStore.setState({ user: null, token: null, isLoading: true });
     await useAuthStore.getState().initialize();
-    await vi.waitFor(() => expect(tokenWhenSent).not.toBeUndefined());
-    expect(tokenWhenSent).toBe('expired');
     await vi.waitFor(() => expect(api.token).toBeNull());
+    expect(unregister).not.toHaveBeenCalled();
     expect(useAuthStore.getState().isLoading).toBe(false);
   });
 });
