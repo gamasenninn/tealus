@@ -4,6 +4,9 @@
  * ★ 画面の型検査では Node の型が揃っていない (__dirname が無い・読んだ値が any) ので、使う関数の型だけここで付ける
  *   (10-10 に node:fs を素で書いて CI の型検査を落とした)
  */
+// ★ @ts-expect-error でなく @ts-ignore: 手元の機械では上の階の node_modules から Node の型が見えて通り
+//   (expect-error だと「使われていない」で落ちる)、CI では型が無くて落ちる。どちらでも通すため
+// @ts-ignore
 import * as fs from 'node:fs';
 
 interface FsLike {
