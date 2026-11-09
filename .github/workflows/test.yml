@@ -193,8 +193,16 @@ jobs:
         working-directory: agent-server
         run: npm ci
 
+      # ★ 2026-11-09: mediasoup 3.19.19 には runner (kernel 7、2026-10-29〜) 用の prebuilt worker が無く
+      #   (release の資産は linux-x64-kernel6 まで)、postinstall が毎回ソースからビルドし、外部サイト
+      #   (github の archive・wrapdb・openssl.org) の 5xx で断続的に落ちていた。
+      #   このジョブは型検査と wsAccess のテストだけで worker のバイナリを使わないので、
+      #   MEDIASOUP_WORKER_BIN を置いて postinstall の取得とビルドを飛ばす (値は確かめられない、何でもよい)。
+      #   mediasoup を 3.20.7 以上に上げたら外せる (kernel7 の prebuilt がある)。本番 (Windows) には関係しない
       - name: Install rtc-server dependencies
         working-directory: rtc-server
+        env:
+          MEDIASOUP_WORKER_BIN: /nonexistent/mediasoup-worker
         run: npm ci
 
       - name: License check (fail on GPL/AGPL)
