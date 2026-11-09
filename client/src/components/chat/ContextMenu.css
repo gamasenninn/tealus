@@ -13,6 +13,10 @@
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   overflow: hidden;
+  /* ★ 2026-11-09: マルチトークのパネル (高さ 550px ほど) ではメニューが窓より高く、下の方 (「エージェントに送る」「削除」) が
+     切れて見えなかった。窓の高さを上限にし、超えたらメニューの中で縦に動かす (位置は ContextMenu.tsx が上に 10px 寄せる) */
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
   min-width: 160px;
   z-index: 901;
 }

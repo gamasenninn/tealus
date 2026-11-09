@@ -35,3 +35,20 @@ describe('ContextMenu — Esc で閉じる', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 2026-11-09 小野さん「自分のメッセージをエージェントに送る、が右クリックでできなくなった」
+ * ★ マルチトークのパネル (高さ 550px ほど) では、メニュー (絵文字 + 10 項目) が窓より高く、上に 10px 寄せたうえで
+ *   はみ出した分が overflow: hidden で切れていた。下の方の「エージェントに送る」「削除」が見えなかった。
+ *   窓の高さを上限にして、超えたらメニューの中で縦に動かす
+ */
+import { readSrc } from '../helpers/srcFiles';
+
+describe('窓より高いメニュー', () => {
+  it('★ 高さの上限は窓の高さで、超えたらメニューの中で縦に動かせる', () => {
+    const css = readSrc('components/chat/ContextMenu.css');
+    const rule = css.slice(css.indexOf('.context-menu {'), css.indexOf('}', css.indexOf('.context-menu {')));
+    expect(rule).toMatch(/max-height:\s*calc\(100(vh|dvh) - 20px\)/);
+    expect(rule).toMatch(/overflow-y:\s*auto/);
+  });
+});
