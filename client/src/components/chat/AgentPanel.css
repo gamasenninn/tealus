@@ -11,6 +11,8 @@
   display: flex;
   flex-direction: column;
   max-height: min(420px, 60vh);
+  /* ★ それでも入りきらないとき (極端に低い窓) は枠の中で切る。下の入力欄に重ねない (2026-11-11) */
+  overflow: hidden;
   z-index: 100;
 }
 
@@ -104,6 +106,8 @@
 
 .agent-panel-list {
   flex: 1;
+  /* ★ 枠が低くても最近の指示を 1 行は残す (2026-11-11。足りない分は固定した指示の段が縮む) */
+  min-height: 44px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -149,7 +153,12 @@
 /* 固定した指示の段は高くしすぎない (最近の指示が見えなくならないように) */
 .agent-panel-pinned {
   flex: none;
-  max-height: 132px;
+  /* ★ 低い窓では低くする (2026-11-11)。枠は 60vh までなので、窓の縦が 536px だと枠は 321px。
+     見出し・宛先・段の名前とこの段の 132px だけで枠を超え、最近の指示が枠の下へはみ出して
+     入力欄に重なっていた (宛先の段は Windows の横スクロールバーのぶん背が高い)。
+     250px = 見出し・宛先・段の名前 2 つ・最近の指示 1 行のおおよその合計。
+     ★ flex-shrink で縮める形は使わない: 縦に長い窓でも、最近の指示が多いと 132px より縮んだ */
+  max-height: max(0px, min(132px, calc(60vh - 250px)));
 }
 
 .agent-panel-item {
