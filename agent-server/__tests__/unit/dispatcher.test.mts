@@ -807,6 +807,19 @@ describe('Dispatcher', () => {
       await Promise.all([p1, p2]);
       expect(pendingRooms().find((p: { roomId: string }) => p.roomId === 'room-t5')).toBeUndefined();
     });
+
+    // 改善ループ 46: 委譲先の部屋では誰も頼んでいないので、停止の知らせの数に入れない (順番待ちの数には入れる)
+    test('T6: 委譲で積んだ仕事は pendingRooms に数えないが、queueDepthOf には数える', async () => {
+      const { pendingRooms, queueDepthOf } = require('../../src/webhook/dispatcher');
+      let release: () => void = () => {};
+      const delegated = jest.fn(() => new Promise<void>((r) => { release = r; }));
+      const p = enqueueForRoom('room-t6', delegated, 1000, { delegated: true });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(queueDepthOf('room-t6')).toBe(1);
+      expect(pendingRooms().find((x: { roomId: string }) => x.roomId === 'room-t6')).toBeUndefined();
+      release();
+      await p;
+    });
   });
 
   // #292 Light backend config 化 (= AGENT_LIGHT_BACKEND 切替動作)

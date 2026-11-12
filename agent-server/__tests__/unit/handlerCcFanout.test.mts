@@ -250,3 +250,47 @@ describe('#542 参加していない部屋の受付エコー', () => {
     expect(ackCalls()).toEqual([]);
   });
 });
+
+/**
+ * 改善ループ 46 (2026-11-12) 停止の知らせ (droppedWorkNotice) を、再起動した自分が拾って返事をしない。
+ * ★ 部屋をまたぐ委譲を有効にしていると、自分のボットの便も「部屋が inflight でなければ」通る。
+ *   知らせの webhook は停止の直後に届くか、再送 (5 秒後) で新しいプロセスに届き、新しいプロセスは inflight が空。
+ *   1 対 1 の部屋では名指し無しで AI が返事をしてしまう (「承知しました」など)
+ */
+import { dispatch as dispatchMock46 } from '../../src/webhook/dispatcher.mts';
+import { updateBotRooms } from '../../src/webhook/handler.mts';
+import { droppedWorkText } from '../../src/webhook/droppedWorkNotice.mts';
+
+describe('改善ループ 46 停止の知らせに返事をしない', () => {
+  const bot = { id: 'own-bot-46', display_name: 'アシスタント' };
+  beforeEach(() => {
+    process.env.ENABLE_CROSS_ROOM_DELEGATION = 'true';
+    inflightRooms._reset();
+    registerBotUserId(bot.id);
+    updateBotRooms([{ id: 'r-dm' }]);   // ★ アシスタントが参加している 1 対 1 の部屋
+  });
+  afterEach(() => {
+    delete process.env.ENABLE_CROSS_ROOM_DELEGATION;
+    inflightRooms._reset();
+  });
+
+  test('★ 自分の停止の知らせは dispatch しない', async () => {
+    (dispatchMock46 as jest.Mock).mockClear();
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'm-46', content: droppedWorkText(3), type: 'text', sender: bot, created_at: '2026-11-12T06:00:00Z' },
+      room: { id: 'r-dm', name: '蒲 ↔ アシスタント', member_count: 2 },
+    } as unknown as WebhookPayload);
+    expect(dispatchMock46).not.toHaveBeenCalled();
+  });
+
+  test('対照: 自分のほかの便 (知らせでない) は inflight でなければ dispatch まで行く', async () => {
+    (dispatchMock46 as jest.Mock).mockClear();
+    await handleWebhook({
+      event: 'message.created',
+      message: { id: 'm-46b', content: '別の部屋からの問い合わせです', type: 'text', sender: bot, created_at: '2026-11-12T06:00:00Z' },
+      room: { id: 'r-dm', name: '蒲 ↔ アシスタント', member_count: 2 },
+    } as unknown as WebhookPayload);
+    expect(dispatchMock46).toHaveBeenCalledTimes(1);
+  });
+});

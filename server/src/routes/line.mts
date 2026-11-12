@@ -158,6 +158,14 @@ const imageSetBuffer = new ImageSetBuffer({
 });
 
 /** ★ #490 引き当てられなかった引用返信に添える一文。黙って普通の投稿にすると、読む側 (人も AI も) が返信だと気づけない */
+/**
+ * 改善ループ 46: 停止のとき、貯まり中の束を投稿してから止める (app.mts の flushPending)。
+ * ★ これが無いと、束は 1 枚も投稿されずに消える (LINE には 200 を返し済みで再送されない)
+ */
+export async function flushLineImageSets(): Promise<number> {
+  return imageSetBuffer.flushAll();
+}
+
 export const QUOTE_NOT_FOUND_NOTE = '（LINE の引用返信。引用元はこちらに届いていません）';
 
 /**

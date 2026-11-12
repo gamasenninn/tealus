@@ -10,6 +10,7 @@ import * as botSendThrottle from '../lib/botSendThrottle.mts';
 import type { UnroutedAddressHint } from './ccQueue.mts';
 import { extractCcProjects, findDroppedCcMentions, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
 import { isMentioned } from './mention.mts';
+import { isDroppedWorkNotice } from './droppedWorkNotice.mts';
 import { kickInitRetry, whenAgentReady, isInitInProgress } from '../lib/initGate.mts';
 import type { WebhookPayload, WebhookRoom } from '../types.mts';
 
@@ -209,6 +210,12 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
     const spikeOff = process.env.ENABLE_CROSS_ROOM_DELEGATION !== 'true' || botSendThrottle.isSpikeTripped();
     if (spikeOff) {
       logger.debug(`Skipped bot message from ${senderId}`);
+      return;
+    }
+    // ★ 改善ループ 46: 自分の停止の知らせは拾わない。再起動後の新しいプロセスは inflight が空なので、
+    //   下の判定では通ってしまい、1 対 1 の部屋で AI が知らせに返事をする
+    if (isDroppedWorkNotice(message.content)) {
+      logger.debug(`Skipped own shutdown notice in ${room.name || room.id}`);
       return;
     }
     if (inflightRooms.isInflight(room.id)) {

@@ -179,3 +179,46 @@ describe('#646 欠けた組の知らせ', () => {
     expect(imageSetContent(undefined, 10, { total: 10, reason: 'complete' })).toBeUndefined();
   });
 });
+
+/**
+ * 改善ループ 46 (2026-11-12) 本体を止めるとき、貯まり中の束を投稿してから止める。
+ * ★ 束はメモリの中だけにあり、LINE には 200 を返し済み (再送されない)。以前は停止で投稿 0 のまま消えていた
+ *   (先頭のコメントの「バラバラ投影に degrade」は誤り。onFlush が呼ばれないので 1 枚も投稿されない)
+ */
+describe('停止のときの flushAll', () => {
+  test('★ 貯まり中の束をすべて時間切れ扱いで投稿し、投稿が終わるまで待つ', async () => {
+    const done: string[] = [];
+    const onFlush = jest.fn(async (_ctx: ImageSetFlushContext, images: BufferedImage[], _meta?: unknown) => {
+      await new Promise((r) => setTimeout(r, 10));
+      done.push(images.map((i) => i.mediaInfo.fileName).join(','));
+    });
+    const buf = new ImageSetBuffer({ flushDelayMs: 60_000, onFlush });
+    buf.add('set-s1', 3, mkImage(2, 'b.jpg'), CTX);
+    buf.add('set-s1', 3, mkImage(1, 'a.jpg'), CTX);
+    buf.add('set-s2', 2, mkImage(1, 'c.jpg'), CTX);
+
+    const n = await buf.flushAll();
+
+    expect(n).toBe(2);
+    expect(done.sort()).toEqual(['a.jpg,b.jpg', 'c.jpg']);   // ★ 待っている (await の後に全部終わっている)・順に並べ直す
+    expect(onFlush.mock.calls.map((c) => c[2])).toEqual([
+      { total: 3, reason: 'timeout' },
+      { total: 2, reason: 'timeout' },
+    ]);
+    expect(buf.pendingCount()).toBe(0);
+  });
+
+  test('貯まり中が無ければ 0 を返し、何も投稿しない', async () => {
+    const onFlush = jest.fn();
+    const buf = new ImageSetBuffer({ flushDelayMs: 60_000, onFlush });
+    expect(await buf.flushAll()).toBe(0);
+    expect(onFlush).not.toHaveBeenCalled();
+  });
+
+  test('投稿に失敗しても投げない (停止を止めない)', async () => {
+    const onFlush = jest.fn(() => Promise.reject(new Error('db down')));
+    const buf = new ImageSetBuffer({ flushDelayMs: 60_000, onFlush });
+    buf.add('set-f', 2, mkImage(1, 'a.jpg'), CTX);
+    await expect(buf.flushAll()).resolves.toBe(1);
+  });
+});

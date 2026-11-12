@@ -41,6 +41,11 @@ export interface ShutdownDeps {
   notifyGateway: () => Promise<void>;
   /** unref されていない interval を止める (capabilityWatcher / organonWatcher)。 */
   stopTimers: () => void;
+  /**
+   * 改善ループ 46: メモリの中にだけある貯まり中の仕事 (LINE の画像の束) を投稿してから止める。
+   * ★ DB と Socket.IO が生きているうち (= closeServer / endPool より前) に呼ぶ。失敗は警告して停止を続ける
+   */
+  flushPending?: () => Promise<void>;
   /** 新規受付を止める (server.close)。★ await しない — 下記参照。 */
   closeServer: () => void;
   /** 残っている接続を明示的に切る (server.closeAllConnections)。 */
@@ -113,6 +118,7 @@ export async function runShutdown(deps: ShutdownDeps): Promise<void> {
     await stepAsync('停止の予告', deps.notifyGateway);
     await deps.sleep(NOTIFY_SETTLE_MS);
     step('タイマーの停止', deps.stopTimers);
+    if (deps.flushPending) await stepAsync('貯まり中の仕事の投稿', deps.flushPending);
     step('新規受付の停止', deps.closeServer);
     step('接続の切断', deps.closeConnections);
     step('Socket.IO の終了', deps.closeIo);

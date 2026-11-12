@@ -16,8 +16,22 @@ export interface DroppedWorkDeps {
   log: (line: string) => void;
 }
 
+/**
+ * ★ 数は「依頼」でなく「仕事」と書く (改善ループ 46)。列には AI に宛てていない便も入る
+ *   (宛先の判定は列の中の _dispatch でする)。長い仕事の後ろに雑談が並ぶと、数が依頼の数より多くなる
+ */
+const DROPPED_WORK_HEAD = 'AI を再起動したため、この部屋で処理中・順番待ちだった仕事';
+
 export function droppedWorkText(count: number): string {
-  return `AI を再起動したため、処理中・順番待ちだった依頼 ${count} 件が中断されました。お手数ですが、必要ならもう一度送ってください。`;
+  return `${DROPPED_WORK_HEAD} (${count} 件) が中断されました。AI に頼んでいた方は、お手数ですが必要ならもう一度送ってください。`;
+}
+
+/**
+ * 改善ループ 46: 自分の停止の知らせか。handler の自分のボットの分岐で弾く (再起動した自分が拾って返事をしないように)。
+ * ★ 部屋をまたぐ委譲を有効にしていると、自分の便も inflight でない部屋では通るため
+ */
+export function isDroppedWorkNotice(content: string | null | undefined): boolean {
+  return typeof content === 'string' && content.startsWith(DROPPED_WORK_HEAD);
 }
 
 export async function noticeDroppedWork(

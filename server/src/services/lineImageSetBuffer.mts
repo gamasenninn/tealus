@@ -7,8 +7,9 @@
  *
  * 設計:
  * - ★ in-memory Map (= Redis 不使用)。「1台・1プロセス・同一オリジン」構成の前提に沿い、
- *   アルバムの webhook 群は数秒内に届くため短命 state で足りる (プロセス再起動で消えても
- *   最悪「バラバラ投影に degrade」であり事故にならない)
+ *   アルバムの webhook 群は数秒内に届くため短命 state で足りる。
+ *   ★ 以前ここに「再起動で消えても最悪バラバラ投影に degrade」と書いていたが誤り: onFlush が呼ばれないので
+ *   1 枚も投稿されずに消える (LINE には 200 済みで再送もない)。停止のときは flushAll で投稿してから止める (改善ループ 46)
  * - flush 条件: total 枚そろったら即 / そろわなくても最後の 1 枚から flushDelayMs (最初から maxWaitMs で打ち切り) で部分 flush (#552)
  *   (= 1 枚の fetch 失敗や webhook 欠落でも止まらない)
  * - flush 時は imageSet.index 昇順にソート (= 順不同到着の再構成)
@@ -92,7 +93,7 @@ export class ImageSetBuffer {
   /** 最後の 1 枚から flushDelayMs、ただし最初の 1 枚から maxWaitMs を超えない */
   private arm(setId: string, firstAt: number): NodeJS.Timeout {
     const left = Math.max(0, this.maxWaitMs - (Date.now() - firstAt));
-    const timer = setTimeout(() => this.flush(setId, 'timeout'), Math.min(this.flushDelayMs, left));
+    const timer = setTimeout(() => { void this.flush(setId, 'timeout'); }, Math.min(this.flushDelayMs, left));
     timer.unref?.();   // プロセス終了を妨げない
     return timer;
   }
@@ -119,7 +120,7 @@ export class ImageSetBuffer {
     set.images.push(image);
 
     if (set.images.length >= set.total) {
-      this.flush(setId, 'complete');
+      void this.flush(setId, 'complete');
       return true;
     }
     return false;
@@ -130,9 +131,20 @@ export class ImageSetBuffer {
     return this.pending.size;
   }
 
-  private flush(setId: string, reason: 'complete' | 'timeout'): void {
+  /**
+   * 改善ループ 46 (2026-11-12) 停止のとき、貯まり中の束をすべて時間切れ扱いで投稿し、投稿が終わるまで待つ。
+   * ★ 束はメモリの中だけにあり、LINE には 200 を返し済み (再送されない)。これを呼ばずに止まると 1 枚も投稿されずに消える
+   * @returns 投稿した束の数。投稿の失敗は飲み込む (停止を止めない)
+   */
+  async flushAll(): Promise<number> {
+    const ids = [...this.pending.keys()];
+    await Promise.all(ids.map((id) => this.flush(id, 'timeout')));
+    return ids.length;
+  }
+
+  private flush(setId: string, reason: 'complete' | 'timeout'): Promise<void> {
     const set = this.pending.get(setId);
-    if (!set) return; // 既に flush 済 (= complete と timeout の race 防御)
+    if (!set) return Promise.resolve(); // 既に flush 済 (= complete と timeout の race 防御)
     this.pending.delete(setId);
     clearTimeout(set.timer);
 
@@ -142,8 +154,11 @@ export class ImageSetBuffer {
         `[lineImageSetBuffer] timeout flush: set=${setId} arrived=${images.length}/${set.total} (= 部分 flush degrade)`
       );
     }
-    // onFlush 失敗は webhook dispatch を阻害しない
-    Promise.resolve(this.onFlush(set.ctx, images, { total: set.total, reason })).catch((err: unknown) => {
+    // onFlush 失敗は webhook dispatch を阻害しない (★ 返す Promise は reject しない。flushAll が待つ)
+    //   ★ onFlush は今までどおりこの場で (同期に) 呼ぶ。同期に投げた例外も reject として扱う
+    let posted: Promise<unknown>;
+    try { posted = Promise.resolve(this.onFlush(set.ctx, images, { total: set.total, reason })); } catch (e) { posted = Promise.reject(e); }
+    return posted.then(() => {}, (err: unknown) => {
       logger.error(
         `[lineImageSetBuffer] flush post failed: set=${setId} ${errorText(err)}`
       );

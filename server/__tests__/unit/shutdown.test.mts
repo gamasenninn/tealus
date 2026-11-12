@@ -36,6 +36,22 @@ function makeDeps(over: Partial<ShutdownDeps> = {}): { deps: ShutdownDeps; calls
 }
 
 describe('runShutdown — 手順と順序 (#368)', () => {
+  test('★ 改善ループ 46: 貯まり中の仕事 (LINE の画像の束) はタイマーの後・受付を止める前に投稿する (DB と Socket.IO が生きているうち)', async () => {
+    const { deps, calls } = makeDeps({ flushPending: async () => { calls.push('flushPending'); } });
+    await runShutdown(deps);
+    expect(calls.indexOf('flushPending')).toBe(calls.indexOf('stopTimers') + 1);
+    expect(calls.indexOf('flushPending')).toBeLessThan(calls.indexOf('closeServer'));
+    expect(calls.indexOf('flushPending')).toBeLessThan(calls.indexOf('endPool'));
+  });
+
+  test('★ 改善ループ 46: 貯まり中の仕事の投稿に失敗しても停止は続く', async () => {
+    const { deps, calls, warns, exits } = makeDeps({ flushPending: async () => { throw new Error('boom'); } });
+    await runShutdown(deps);
+    expect(calls).toContain('endPool');
+    expect(warns.join(' ')).toContain('boom');
+    expect(exits).toEqual([0]);
+  });
+
   test('定義した順に実行し、exit(0) で終わる', async () => {
     const { deps, calls, logs, exits } = makeDeps();
     await runShutdown(deps);

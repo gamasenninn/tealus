@@ -66,7 +66,15 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 });
 
 // Graceful shutdown
+// ★ 改善ループ 46: 停止は 1 回だけ走らせる。知らせ (最大 3 秒) を足したので「終わらないからもう一度 Ctrl+C」が起きやすく、
+//   2 回目が並行に走ると同じ部屋へ知らせが 2 回出る。2 回目は待たずに終わる (後始末が止まったときに押し直せるように)
+let shuttingDown = false;
 const shutdown = async () => {
+  if (shuttingDown) {
+    logger.warn('停止処理中に 2 回目の停止の合図を受けたので、待たずに終了します');
+    process.exit(130);
+  }
+  shuttingDown = true;
   logger.info('Shutting down...');
   // ★ cc-queue の購読者に「計画的な停止」を先に伝える (#365)。
   //   これが無いと、別マシンのクライアントは再起動を「予定外の切断」として

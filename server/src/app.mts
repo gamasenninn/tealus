@@ -31,7 +31,7 @@ import { notifyGatewayBye } from './utils/gatewayBye.mts';
 import { describeProxyClose, endDownstream, isCcStreamPath } from './utils/ccStreamProxyLog.mts';
 import { JWT_SECRET } from './middleware/auth.mts';
 
-import { router as lineRoutes } from './routes/line.mts';
+import { router as lineRoutes, flushLineImageSets } from './routes/line.mts';
 import { router as authRoutes } from './routes/auth.mts';
 import { router as roomRoutes } from './routes/rooms.mts';
 import { router as messageRoutes } from './routes/messages.mts';
@@ -453,6 +453,11 @@ if (import.meta.main) {
     stopTimers: () => {
       capabilityWatcher?.stop(); organonWatcher?.stop(); roomTriggers?.stopRoomTriggers(); watchdogs?.stopWatchdogs();
       if (loginThrottlePruneTimer) { clearInterval(loginThrottlePruneTimer); loginThrottlePruneTimer = null; }
+    },
+    // ★ 改善ループ 46: LINE の画像の束を投稿してから止める (DB と Socket.IO が生きているうち)
+    flushPending: async () => {
+      const n = await flushLineImageSets();
+      if (n > 0) logger.warn(`[shutdown] 貯まり中の LINE の画像の束 ${n} 件を投稿しました (揃う前に止めたので欠けていることがあります)`);
     },
     // ★ server.close() は await しない — cc-queue の中継は終わらないので callback が来ない
     closeServer: () => { server.close(); },

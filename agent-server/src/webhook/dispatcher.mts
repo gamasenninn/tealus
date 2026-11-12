@@ -77,16 +77,32 @@ export function queueDepthOf(roomId: string): number { return roomDepth.get(room
  * ★ 列はメモリの中だけにあり、停止すると黙って消える。停止のときに部屋へ知らせるために使う (droppedWorkNotice.mts)
  */
 export function pendingRooms(): Array<{ roomId: string; count: number }> {
-  return [...roomDepth].map(([roomId, count]) => ({ roomId, count }));
+  return [...roomDepth]
+    .map(([roomId, count]) => ({ roomId, count: count - (delegatedDepth.get(roomId) ?? 0) }))
+    .filter((p) => p.count > 0);
 }
 
-export async function enqueueForRoom(roomId: string, fn: () => unknown, timeoutMs: number = config.QUEUE_TASK_TIMEOUT): Promise<void> {
+/**
+ * 改善ループ 46: 委譲で積んだ仕事の数。委譲先の部屋では誰も頼んでいないので、停止の知らせの数から除く
+ * (順番待ちの表示 queueDepthOf には数える = 前に仕事があるのは本当)
+ */
+const delegatedDepth = new Map<string, number>();
+
+export async function enqueueForRoom(
+  roomId: string, fn: () => unknown, timeoutMs: number = config.QUEUE_TASK_TIMEOUT,
+  opts: { delegated?: boolean } = {},
+): Promise<void> {
   roomDepth.set(roomId, queueDepthOf(roomId) + 1);
+  if (opts.delegated) delegatedDepth.set(roomId, (delegatedDepth.get(roomId) ?? 0) + 1);
   const prev = roomQueues.get(roomId) || Promise.resolve();
   // ★ 数は仕事が終わったとき (時間切れの強制 resolve も含む) に戻す。runQueuedTask は reject しない
   const next = prev.then(() => runQueuedTask(roomId, fn, timeoutMs)).finally(() => {
     const n = queueDepthOf(roomId) - 1;
     if (n > 0) roomDepth.set(roomId, n); else roomDepth.delete(roomId);
+    if (opts.delegated) {
+      const d = (delegatedDepth.get(roomId) ?? 0) - 1;
+      if (d > 0) delegatedDepth.set(roomId, d); else delegatedDepth.delete(roomId);
+    }
   });
   roomQueues.set(roomId, next);
   await next;
@@ -414,7 +430,7 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
             } else {
               out = await processLightV2({ roomId: targetRoomId, prompt: DELEGATION_NO_POST + buildLightPrompt(targetRoomId, userPrompt), workspacePath: tctx.workspace_path, suppressAutoPost: true });
             }
-          }));
+          }), config.QUEUE_TASK_TIMEOUT, { delegated: true });   // ★ 改善ループ 46 委譲先では誰も頼んでいない (停止の知らせに数えない)
         } finally {
           inflightRooms.release(targetRoomId);
           endWait(roomId, targetRoomId);
