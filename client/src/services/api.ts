@@ -173,6 +173,23 @@ class ApiClient {
   /** socket の接続が認証で断られたときにも同じ受け手へ (services/socket.ts から) */
   notifyUnauthorized(): void { this.onUnauthorized?.(); }
 
+  /**
+   * 鍵を延ばしたときの受け手 (2026-11-12、docs/05 §5)。authStore が socket の鍵の差し替え (updateSocketToken) につなぐ
+   */
+  private onTokenRefreshed: ((token: string) => void) | null = null;
+  setOnTokenRefreshed(fn: ((token: string) => void) | null): void { this.onTokenRefreshed = fn; }
+
+  /**
+   * 本体が残りが半分を切った鍵の応答に付ける X-Refreshed-Token を受けて、鍵を差し替える。
+   * ★ ログアウトしている (鍵が無い) ときは受け取らない
+   */
+  private takeRefreshedToken(res: { headers?: { get?: (k: string) => string | null } }): void {
+    const fresh = res.headers?.get?.('X-Refreshed-Token');
+    if (!fresh || !this.token || fresh === this.token) return;
+    this.setToken(fresh);
+    this.onTokenRefreshed?.(fresh);
+  }
+
   setToken(token: string | null): void {
     const prev = this.token;
     this.token = token;
@@ -214,6 +231,7 @@ class ApiClient {
       const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
       try {
         const res = await fetch(`${API_BASE}${path}`, { ...opts, signal: controller.signal });
+        this.takeRefreshedToken(res);   // ★ 使っている間に延ばす (docs/05 §5)
 
         let data: (T & { error?: string }) | undefined;
         try {

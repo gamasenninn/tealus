@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import type { AuthResponse } from '../services/api';
-import { connectSocket, disconnectSocket } from '../services/socket';
+import { connectSocket, disconnectSocket, updateSocketToken } from '../services/socket';
 import { loadConfig } from '../services/clientConfig';
 import { useCapabilityStore } from './capabilityStore';
 import { pushPermission, registerPushNotification, startPushResumeRefresh, unregisterPushNotification } from '../services/pushNotification';
@@ -203,3 +203,7 @@ api.setOnUnauthorized?.(() => {   // ?. は api を一部だけ差し替えた�
     window.location.assign('/login');
   });
 });
+
+// ★ 鍵を延ばしたら (本体の X-Refreshed-Token)、socket にも次のつなぎ直しから新しい鍵を渡す (2026-11-12、docs/05 §5)。
+//   socket は作り直さない (入っている部屋の記録が消えるため)
+api.setOnTokenRefreshed?.((token) => updateSocketToken(token));   // ?. は api を一部だけ差し替えたテストのため

@@ -48,7 +48,9 @@ export function connectSocket(token: string): Socket {
   socketToken = token;
   everConnected = false;
   socket = io('/', {
-    auth: { token },
+    // ★ つなぎ直すたびに最新の鍵を渡す (2026-11-12、docs/05 §5)。以前は io() に渡した鍵を持ち続け、
+    //   鍵を延ばしても、つなぎ直したときに古い (切れた) 鍵で断られた。差し替えは updateSocketToken
+    auth: (cb) => cb({ token: socketToken }),
     transports: ['websocket', 'polling'],
   });
 
@@ -115,6 +117,16 @@ export function isSocketDisconnectedAfterConnect(): boolean {
 
 export function getSocket(): Socket | null {
   return socket;
+}
+
+/**
+ * 鍵を延ばしたとき (2026-11-12、docs/05 §5)。socket は作り直さず、次につなぎ直すときから新しい鍵を渡す。
+ * ★ 作り直すと入っている部屋の記録 (roomRefs) が消える。本体は接続のときにしか鍵を見ないので、今の接続はそのまま使える
+ * ★ socket が無い (ログアウト後) ときは何もしない
+ */
+export function updateSocketToken(token: string): void {
+  if (!socket) return;
+  socketToken = token;
 }
 
 export function disconnectSocket(): void {
