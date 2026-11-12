@@ -122,6 +122,9 @@ export async function runShutdown(deps: ShutdownDeps): Promise<void> {
     step('新規受付の停止', deps.closeServer);
     step('接続の切断', deps.closeConnections);
     step('Socket.IO の終了', deps.closeIo);
+    // ★ 改善ループ 47: 受付を止めるまでの間に積まれた束を拾う (LINE は先に 200 を返してから画像を取りに行くので、
+    //   1 回目の投稿の後に積まれることがある)。DB を閉じる前。積まれていなければ何もしない
+    if (deps.flushPending) await stepAsync('停止の途中で積まれた仕事の投稿', deps.flushPending);
     await stepAsync('DB プールの終了', deps.endPool);
     await deps.sleep(LOG_FLUSH_MS);
   };

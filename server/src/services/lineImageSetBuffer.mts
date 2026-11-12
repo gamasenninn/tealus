@@ -42,7 +42,7 @@ export interface ImageSetFlushContext {
 }
 
 /** #646 組の枚数と、揃って投稿したか (complete) 時間切れで投稿したか (timeout) */
-export interface ImageSetFlushMeta { total: number; reason: 'complete' | 'timeout' }
+export interface ImageSetFlushMeta { total: number; reason: 'complete' | 'timeout' | 'shutdown' }
 
 export type ImageSetFlushHandler = (
   ctx: ImageSetFlushContext,
@@ -56,8 +56,11 @@ export type ImageSetFlushHandler = (
  *   LINE が 9 枚の組で送ったもの (19 枚選ぶと 10 + 9 の 2 組になる) は欠けていないので添えない
  */
 export function imageSetContent(content: string | undefined, arrived: number, meta: ImageSetFlushMeta): string | undefined {
-  if (meta.reason !== 'timeout' || arrived >= meta.total) return content;
-  const note = `(LINE から ${meta.total} 枚中 ${arrived} 枚だけ届きました。残りの ${meta.total - arrived} 枚はこちらに届いていません)`;
+  if (meta.reason === 'complete' || arrived >= meta.total) return content;
+  // ★ 改善ループ 47: 停止で先に投稿したときは「届いていません」と書かない (残りは再起動後に別の投稿で届くことがある)
+  const note = meta.reason === 'shutdown'
+    ? `(本体の再起動のため、LINE の ${meta.total} 枚中 ${arrived} 枚を先に投稿しました。残りは別の投稿になることがあります)`
+    : `(LINE から ${meta.total} 枚中 ${arrived} 枚だけ届きました。残りの ${meta.total - arrived} 枚はこちらに届いていません)`;
   return content ? `${content}\n${note}` : note;
 }
 
@@ -132,17 +135,19 @@ export class ImageSetBuffer {
   }
 
   /**
-   * 改善ループ 46 (2026-11-12) 停止のとき、貯まり中の束をすべて時間切れ扱いで投稿し、投稿が終わるまで待つ。
+   * 改善ループ 46 (2026-11-12) 停止のとき、貯まり中の束をすべて投稿し、投稿が終わるまで待つ。
    * ★ 束はメモリの中だけにあり、LINE には 200 を返し済み (再送されない)。これを呼ばずに止まると 1 枚も投稿されずに消える
+   * ★ 理由は 'shutdown' (改善ループ 47)。'timeout' にすると「残りはこちらに届いていません」と添えてしまうが、
+   *   残りは再起動後に届いて別の投稿になることがある
    * @returns 投稿した束の数。投稿の失敗は飲み込む (停止を止めない)
    */
   async flushAll(): Promise<number> {
     const ids = [...this.pending.keys()];
-    await Promise.all(ids.map((id) => this.flush(id, 'timeout')));
+    await Promise.all(ids.map((id) => this.flush(id, 'shutdown')));
     return ids.length;
   }
 
-  private flush(setId: string, reason: 'complete' | 'timeout'): Promise<void> {
+  private flush(setId: string, reason: ImageSetFlushMeta['reason']): Promise<void> {
     const set = this.pending.get(setId);
     if (!set) return Promise.resolve(); // 既に flush 済 (= complete と timeout の race 防御)
     this.pending.delete(setId);
@@ -153,6 +158,8 @@ export class ImageSetBuffer {
       logger.warn(
         `[lineImageSetBuffer] timeout flush: set=${setId} arrived=${images.length}/${set.total} (= 部分 flush degrade)`
       );
+    } else if (reason === 'shutdown') {
+      logger.warn(`[lineImageSetBuffer] shutdown flush: set=${setId} arrived=${images.length}/${set.total} (本体の停止で先に投稿)`);
     }
     // onFlush 失敗は webhook dispatch を阻害しない (★ 返す Promise は reject しない。flushAll が待つ)
     //   ★ onFlush は今までどおりこの場で (同期に) 呼ぶ。同期に投げた例外も reject として扱う

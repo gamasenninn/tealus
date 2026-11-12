@@ -202,10 +202,18 @@ describe('停止のときの flushAll', () => {
     expect(n).toBe(2);
     expect(done.sort()).toEqual(['a.jpg,b.jpg', 'c.jpg']);   // ★ 待っている (await の後に全部終わっている)・順に並べ直す
     expect(onFlush.mock.calls.map((c) => c[2])).toEqual([
-      { total: 3, reason: 'timeout' },
-      { total: 2, reason: 'timeout' },
+      { total: 3, reason: 'shutdown' },
+      { total: 2, reason: 'shutdown' },
     ]);
     expect(buf.pendingCount()).toBe(0);
+  });
+
+  test('★ 改善ループ 47: 停止で先に投稿した束には「届いていません」でなく「再起動で先に投稿した」と添える (残りは再起動後に別の投稿で届く)', () => {
+    expect(imageSetContent(undefined, 4, { total: 10, reason: 'shutdown' }))
+      .toBe('(本体の再起動のため、LINE の 10 枚中 4 枚を先に投稿しました。残りは別の投稿になることがあります)');
+    expect(imageSetContent('[LINE: 小野]', 4, { total: 10, reason: 'shutdown' }))
+      .toBe('[LINE: 小野]\n(本体の再起動のため、LINE の 10 枚中 4 枚を先に投稿しました。残りは別の投稿になることがあります)');
+    expect(imageSetContent(undefined, 3, { total: 3, reason: 'shutdown' })).toBeUndefined();
   });
 
   test('貯まり中が無ければ 0 を返し、何も投稿しない', async () => {

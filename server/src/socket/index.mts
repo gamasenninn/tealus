@@ -12,6 +12,7 @@ import { registerCallHandler } from './handlers/call.mts';
 import { setViewing, removeSocket } from './viewingRooms.mts';
 import type { SocketUser } from '../types.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { socketAuthRejectLine } from './authReject.mts';
 
 const GUEST_ROOM = 'role:guest';
 
@@ -48,7 +49,9 @@ export function setupSocketHandlers(io: Server): void {
     let decoded: { id: string };
     try {
       decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-    } catch {
+    } catch (err) {
+      // ★ 改善ループ 47: 断った理由を残す (期限切れの入り直しが REST の 401 にしか見えていなかった)
+      logger.info(socketAuthRejectLine(err, token, clientLabel(socket.handshake, socket.conn.transport?.name)));
       return next(new Error('トークンが無効です'));
     }
     // ★ DB の失敗は「トークンが無効」にしない。画面はその文言でログイン画面へ落とす (HTTP の authenticate と同じ)

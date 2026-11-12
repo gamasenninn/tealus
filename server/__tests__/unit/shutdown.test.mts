@@ -44,6 +44,14 @@ describe('runShutdown — 手順と順序 (#368)', () => {
     expect(calls.indexOf('flushPending')).toBeLessThan(calls.indexOf('endPool'));
   });
 
+  test('★ 改善ループ 47: 受付を止めた後にもう 1 回投稿する (停止の途中で積まれた束を拾う)。DB を閉じる前', async () => {
+    const { deps, calls } = makeDeps({ flushPending: async () => { calls.push('flushPending'); } });
+    await runShutdown(deps);
+    expect(calls.filter((c) => c === 'flushPending')).toHaveLength(2);
+    expect(calls.lastIndexOf('flushPending')).toBeGreaterThan(calls.indexOf('closeConnections'));
+    expect(calls.lastIndexOf('flushPending')).toBeLessThan(calls.indexOf('endPool'));
+  });
+
   test('★ 改善ループ 46: 貯まり中の仕事の投稿に失敗しても停止は続く', async () => {
     const { deps, calls, warns, exits } = makeDeps({ flushPending: async () => { throw new Error('boom'); } });
     await runShutdown(deps);
