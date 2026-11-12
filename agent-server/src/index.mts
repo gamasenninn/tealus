@@ -10,6 +10,9 @@ import { app } from './app.mts';
 import { initializeAgentWithRetry } from './setup/register.mts';
 import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
 import { broadcastShutdown } from './webhook/ccSubscribers.mts';
+import { pendingRooms } from './webhook/dispatcher.mts';
+import { noticeDroppedWork } from './webhook/droppedWorkNotice.mts';
+import * as botApi from './lib/botApi.mts';
 import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
 import { runDoctor } from './lib/doctor.mts';
@@ -71,6 +74,13 @@ const shutdown = async () => {
   //   クラッシュ時には当然出ない = 予告できないものは異常として残る。
   //   server.close() より先に呼ぶこと (接続を閉じてからでは届かない)。
   try { broadcastShutdown(config.CC_SHUTDOWN_EXPECT_BACK_MS); } catch { /* 停止処理は止めない */ }
+  // ★ 終わっていない AI の仕事を、その部屋に知らせてから止める (改善ループ 45)。
+  //   列はメモリの中だけにあり、これが無いと黙って消える (11-05 に 7 件)。上限 3 秒で、失敗しても止まる
+  await noticeDroppedWork(pendingRooms(), {
+    pushStatus: (roomId, status) => botApi.pushStatus(roomId, status),
+    pushMessage: (roomId, content) => botApi.pushMessage(roomId, content),
+    log: (line) => logger.warn(line),
+  }, 3000).catch(() => {});
   server.close();
   await closeAllRoomMcp();
   // ★ logger (winston) の file transport は非同期。process.exit を即座に呼ぶと

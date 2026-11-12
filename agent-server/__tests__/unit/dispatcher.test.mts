@@ -790,6 +790,23 @@ describe('Dispatcher', () => {
       expect(failing).toHaveBeenCalledTimes(1);
       expect(next).toHaveBeenCalledTimes(1);
     });
+
+    // 改善ループ 45 (2026-11-12): 停止のときに「終わっていない仕事のある部屋」を知るため
+    test('T5: pendingRooms は走っている + 待っている仕事のある部屋と数を返し、終われば消える', async () => {
+      const { pendingRooms } = require('../../src/webhook/dispatcher');
+      let release: () => void = () => {};
+      const running = jest.fn(() => new Promise<void>((r) => { release = r; }));
+      const waiting = jest.fn().mockResolvedValue('ok');
+
+      const p1 = enqueueForRoom('room-t5', running, 1000);
+      const p2 = enqueueForRoom('room-t5', waiting, 1000);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(pendingRooms()).toEqual(expect.arrayContaining([{ roomId: 'room-t5', count: 2 }]));
+
+      release();
+      await Promise.all([p1, p2]);
+      expect(pendingRooms().find((p: { roomId: string }) => p.roomId === 'room-t5')).toBeUndefined();
+    });
   });
 
   // #292 Light backend config 化 (= AGENT_LIGHT_BACKEND 切替動作)

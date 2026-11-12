@@ -259,3 +259,23 @@ describe('AgentPanel — キーボード操作 (PC)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 2026-11-10 小野さん「表示と入力が崩れている」(e087f4c7)
+ * ★ 低い窓 (縦 536px) で、見出し・宛先・段の名前と固定した指示の 132px だけで枠 (60vh) を超え、
+ *   最近の指示が枠の下へはみ出して入力欄に重なっていた。CSS だけの直しなので、戻ったら気づけるよう規則を読む
+ */
+import { readSrc } from '../helpers/srcFiles';
+
+describe('低い窓で枠からはみ出さない', () => {
+  const css = readSrc('components/chat/AgentPanel.css');
+  const ruleOf = (sel: string) => css.slice(css.indexOf(`${sel} {`), css.indexOf('}', css.indexOf(`${sel} {`)));
+
+  it('★ 固定した指示の段は、窓が低いと 132px より低くなる', () => {
+    expect(ruleOf('.agent-panel-pinned')).toMatch(/max-height:\s*max\(0px,\s*min\(132px,\s*calc\(60vh - 250px\)\)\)/);
+  });
+
+  it('★ それでも入りきらないときは枠の中で切る (入力欄に重ねない)', () => {
+    expect(ruleOf('.agent-panel')).toMatch(/overflow:\s*hidden/);
+  });
+});

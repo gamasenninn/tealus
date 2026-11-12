@@ -72,6 +72,14 @@ function runQueuedTask(roomId: string, fn: () => unknown, timeoutMs: number): Pr
 const roomDepth = new Map<string, number>();
 export function queueDepthOf(roomId: string): number { return roomDepth.get(roomId) ?? 0; }
 
+/**
+ * 改善ループ 45 (2026-11-12) 終わっていない仕事 (走っている + 待っている) のある部屋と数。
+ * ★ 列はメモリの中だけにあり、停止すると黙って消える。停止のときに部屋へ知らせるために使う (droppedWorkNotice.mts)
+ */
+export function pendingRooms(): Array<{ roomId: string; count: number }> {
+  return [...roomDepth].map(([roomId, count]) => ({ roomId, count }));
+}
+
 export async function enqueueForRoom(roomId: string, fn: () => unknown, timeoutMs: number = config.QUEUE_TASK_TIMEOUT): Promise<void> {
   roomDepth.set(roomId, queueDepthOf(roomId) + 1);
   const prev = roomQueues.get(roomId) || Promise.resolve();
