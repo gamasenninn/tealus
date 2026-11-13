@@ -13,7 +13,9 @@
 # 4. 本体が応える (/api/config が 200) のを待ってから、agent-server のタブを開いて npm start
 #    ★ 本体の webhook は 3 回試して諦めるので、agent-server は本体のすぐ後に上げる
 # ★ 止め方は今までどおり: そのタブで Ctrl+C (SIGINT が届く。docs/05)
-# ★ rtc-server・無線の送り込み・ptt・SP2TXT はまだ手で上げる (判断 8 は「まず本体と agent-server」)
+# 5. rtc-server (3100) を上げる (2026-11-13 判断。3100 がもう待ち受けていれば上げない)
+# 6. ~\.tealus\startup\extras.ps1 があれば呼ぶ。会社ごとに違うもの (無線の送り込み・ptt・通話履歴など) はリポジトリの外のそこに書く
+#    (docs/10 §6 の 1。11-13 01:11 の予告なしの再起動で、無線の録音が手で上げるまで 19 分止まった)
 # 記録: ~\.tealus\startup\logs\autostart-YYYYMMDD.log
 #
 # 登録 (管理者でなくてよい。ログオンした本人の権限で走る):
@@ -32,6 +34,8 @@ param(
   [int]$WaitServerSeconds = 180,
   [int]$ServerPort        = 3000,
   [int]$AgentPort         = 4000,
+  [int]$RtcPort           = 3100,
+  [string]$Extras         = (Join-Path $env:USERPROFILE '.tealus\startup\extras.ps1'),
   [switch]$DryRun
 )
 
@@ -97,5 +101,18 @@ if (Test-Port $AgentPort) {
   Write-Log "agent-server ($AgentPort) はもう動いているので、上げません"
 } else {
   Open-Tab 'agent-server' (Join-Path $Repo 'agent-server')
+}
+
+# 5. rtc-server (通話・トランシーバー)。★ ネットにつながってから上げる (公開 IP を起動時に引く)。ここまで来ればつながっている
+if (Test-Port $RtcPort) {
+  Write-Log "rtc-server ($RtcPort) はもう動いているので、上げません"
+} elseif (Test-Path (Join-Path $Repo 'rtc-server')) {
+  Open-Tab 'rtc-server' (Join-Path $Repo 'rtc-server')
+}
+
+# 6. 会社ごとに違う常駐 (リポジトリの外)。無ければ何もしない。失敗しても本体側の起動は済んでいる
+if (Test-Path $Extras) {
+  Write-Log "追加の起動 ($Extras) を呼びます"
+  try { & $Extras -DryRun:$DryRun -Logger ${function:Write-Log} } catch { Write-Log "★ 追加の起動に失敗: $($_.Exception.Message)" }
 }
 Write-Log '=== 終了: 成功 ==='
