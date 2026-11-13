@@ -391,7 +391,13 @@ router.get('/', async (req, res) => {
               COALESCE(unread.count, 0)::int AS unread_count,
               -- ★ 利用停止の人は数えない (一覧には「利用停止」と添えて残す、改善ループ 10-13 の 4.)
               (SELECT COUNT(*)::int FROM room_members rmc JOIN users uc ON uc.id = rmc.user_id
-                WHERE rmc.room_id = r.id AND uc.is_active = true) AS member_count
+                WHERE rmc.room_id = r.id AND uc.is_active = true) AS member_count,
+              -- ★ お客様の部屋 (2026-11-13、docs/02 users.is_external_contact)。社外の窓口の口座がいる / ゲストがいる。
+              --   画面のタブ「お客様」と、窓口のいる部屋をほかのタブから外すのに使う
+              EXISTS (SELECT 1 FROM room_members rmx JOIN users ux ON ux.id = rmx.user_id
+                       WHERE rmx.room_id = r.id AND ux.is_external_contact) AS has_external_contact,
+              EXISTS (SELECT 1 FROM room_members rmg JOIN users ug ON ug.id = rmg.user_id
+                       WHERE rmg.room_id = r.id AND ug.role = 'guest') AS has_guest
        FROM rooms r
        JOIN room_members rm ON rm.room_id = r.id
        LEFT JOIN LATERAL (

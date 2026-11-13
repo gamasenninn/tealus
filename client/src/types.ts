@@ -17,6 +17,8 @@ export interface User {
   role: UserRole;
   is_active?: boolean;
   is_bot?: boolean;
+  /** 社外の窓口 (2026-11-13、docs/02 users.is_external_contact)。管理者の利用者一覧で返る */
+  is_external_contact?: boolean;
   /** メッセージの通知で音を鳴らす (アカウントごと、2026-10-08) */
   notification_sound?: boolean;
   /** 次のログインでパスワードの変更を求める (2026-10-29、docs/02)。立っている間は ForcePasswordChange だけを出す */
@@ -37,6 +39,10 @@ export interface Room {
   partner_avatar_url?: string | null;
   member_count?: number;
   unread_count?: number;
+  /** 社外の窓口の口座がメンバーにいる (2026-11-13、docs/02 users.is_external_contact)。タブ「お客様」に入り、ほかのタブには出さない */
+  has_external_contact?: boolean;
+  /** ゲスト (role=guest) がメンバーにいる。タブ「お客様」に入る (ほかのタブにも出す) */
+  has_guest?: boolean;
   last_message?: string | null;
   /** RoomList のプレビューが消費する実応答フィールド */
   last_message_content?: string | null;

@@ -20,7 +20,7 @@ export const router = express.Router();
 router.get('/users', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, last_seen_at, created_at, updated_at FROM users ORDER BY created_at'
+      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, is_external_contact, last_seen_at, created_at, updated_at FROM users ORDER BY created_at'
     );
     res.json({ users: result.rows });
   } catch (err) {
@@ -89,7 +89,7 @@ async function otherActiveAdminExists(id: string): Promise<boolean> {
  */
 router.put('/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { display_name, password, role, is_bot } = req.body;
+  const { display_name, password, role, is_bot, is_external_contact } = req.body;
 
   try {
     // Check user exists
@@ -130,6 +130,12 @@ router.put('/users/:id', async (req, res) => {
       updates.push(`is_bot = $${paramIndex++}`);
       values.push(is_bot);
     }
+    // ★ 社外の窓口 (2026-11-13、docs/02 users.is_external_contact)。この口座がいる部屋が画面の「お客様」のタブに入る
+    if (is_external_contact !== undefined) {
+      if (typeof is_external_contact !== 'boolean') return res.status(400).json({ error: '社外の窓口の印は true か false です' });
+      updates.push(`is_external_contact = $${paramIndex++}`);
+      values.push(is_external_contact);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: '更新する項目がありません' });
@@ -140,7 +146,7 @@ router.put('/users/:id', async (req, res) => {
 
     const result = await pool.query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, created_at, updated_at`,
+       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, is_external_contact, created_at, updated_at`,
       values
     );
 

@@ -270,3 +270,20 @@
   border-bottom-color: var(--primary);
   font-weight: 600;
 }
+
+/* ★ 2026-11-13 タブ「お客様」の未読のある部屋の数 (.room-unread と同じ色・形を小さく) */
+.room-list-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  vertical-align: middle;
+}

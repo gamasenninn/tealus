@@ -18,6 +18,7 @@ function UserForm({ user, onSubmit, onCancel }: UserFormProps) {
     password: '',
     role: user?.role || 'user',
     is_bot: user?.is_bot || false,
+    is_external_contact: user?.is_external_contact || false,
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -48,6 +49,9 @@ function UserForm({ user, onSubmit, onCancel }: UserFormProps) {
       }
       if (!isEdit || formData.is_bot !== user!.is_bot) {
         data.is_bot = formData.is_bot;
+      }
+      if (isEdit && formData.is_external_contact !== (user!.is_external_contact || false)) {
+        data.is_external_contact = formData.is_external_contact;
       }
 
       await onSubmit(data);
@@ -122,6 +126,23 @@ function UserForm({ user, onSubmit, onCancel }: UserFormProps) {
           AIエージェント
         </label>
       </div>
+
+      {/* ★ 2026-11-13 社外の窓口 (docs/02 users.is_external_contact)。この口座がいる部屋がトーク一覧の「お客様」のタブに入る。
+          既にある口座に付けるものなので、編集のときだけ出す */}
+      {isEdit && (
+        <div className="form-field">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              name="is_external_contact"
+              checked={formData.is_external_contact}
+              onChange={(e) => setFormData({ ...formData, is_external_contact: e.target.checked })}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
+            />
+            社外の窓口 (この口座がいる部屋を「お客様」のタブにまとめる)
+          </label>
+        </div>
+      )}
 
       <div className="form-buttons">
         <button type="button" className="cancel-btn" onClick={onCancel}>キャンセル</button>

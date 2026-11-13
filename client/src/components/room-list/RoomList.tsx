@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMultiTalkStore, roomClickAction } from '../../stores/multiTalkStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -17,13 +17,10 @@ import { shouldRefreshOnNewMessage } from '../../utils/roomListRefresh';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './RoomList.css';
 import { roomPreview } from '../../utils/replyQuote';
+import { roomTabs, filterRoomsByTab, loadRoomTab, saveRoomTab } from '../../utils/roomTabs';
 
 // ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
-const TAB_OPTIONS = [
-  { key: 'all', label: 'すべて' },
-  { key: 'direct', label: '1:1 ルーム' },
-  { key: 'group', label: 'グループ' },
-];
+// ★ 2026-11-13: タブの決まりは utils/roomTabs.ts (お客様の部屋のタブ・窓口のいる部屋をほかのタブから外す・選んだタブを覚える)
 
 // rooms 一覧 API はプレビュー用に last_message_content を返す (types.ts の Room には未定義)
 type RoomRow = Room & { last_message_content?: string | null };
@@ -45,7 +42,11 @@ function RoomList() {
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<RoomContextMenuState | null>(null);
-  const [activeTab, setActiveTab] = useState('all');
+  const tabs = useMemo(() => roomTabs(rooms), [rooms]);
+  const [chosenTab, setChosenTab] = useState<string>(() => loadRoomTab(['all', 'direct', 'group', 'customer']));
+  // ★ 覚えていたタブが今は出ていない (お客様の部屋が無くなった) ときは「すべて」を見せる
+  const activeTab = tabs.some((t) => t.key === chosenTab) ? chosenTab : 'all';
+  const setActiveTab = (key: string) => { setChosenTab(key); saveRoomTab(key); };
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // #485-6 右クリック (長押し) メニューを Esc でも閉じる (外のクリックだけだった)
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
@@ -182,19 +183,20 @@ function RoomList() {
 
       {/* ★ 6/7 Day 22 PM: tab 切替 (= room.type direct/group filter、HomePage 同型 pattern) */}
       <div className="room-list-tabs">
-        {TAB_OPTIONS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.key}
             className={`room-list-tab ${activeTab === tab.key ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.key)}
           >
             {tab.label}
+            {!!tab.unreadRooms && <span className="room-list-tab-badge">{tab.unreadRooms}</span>}
           </button>
         ))}
       </div>
 
       {(() => {
-        const filteredRooms = activeTab === 'all' ? rooms : rooms.filter((r) => r.type === activeTab);
+        const filteredRooms = filterRoomsByTab(rooms, activeTab);
         return (
       <div className="room-list">
         {filteredRooms.length === 0 && (
