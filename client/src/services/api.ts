@@ -39,6 +39,22 @@ function friendlyNetworkError(err: unknown): unknown {
   return err;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 鍵 (JWT) の中身から、誰の鍵か (id) と期限 (exp、秒) を読む。署名は確かめない (本体が確かめる。ここでは取り違えを防ぐだけ)。
+ * 読めなければ null (改善ループ 48)
+ */
+export function tokenClaims(token: string): { id: string; exp: number } | null {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '='));
+    const p = JSON.parse(json) as { id?: unknown; exp?: unknown };
+    return typeof p.id === 'string' && typeof p.exp === 'number' ? { id: p.id, exp: p.exp } : null;
+  } catch {
+    return null;
+  }
+}
 const withJitter = (ms: number) => ms + Math.floor(Math.random() * 150);
 
 type Json = Record<string, unknown>;
@@ -182,11 +198,24 @@ class ApiClient {
   /**
    * 本体が残りが半分を切った鍵の応答に付ける X-Refreshed-Token を受けて、鍵を差し替える。
    * ★ ログアウトしている (鍵が無い) ときは受け取らない
+   * ★ 改善ループ 48 (2026-11-13): 受け取るのは「今の鍵と同じ人で、期限が今より後」の鍵だけ。
+   *   /api の GET はブラウザが保存して 304 で確かめ直し、304 では届いたヘッダーだけが差し替わるので、
+   *   以前の応答に付いた古い鍵 (共用 PC では前の人の鍵) がそのまま見えることがある
+   * ★ 保存場所 (localStorage) に書くのは、そこにある鍵が同じ人の古い鍵のときだけ。別のタブで入り直した別の人の鍵や、
+   *   別のタブでログアウトした (空の) 保存場所は書き換えない (判断 D と同じ考え)
    */
   private takeRefreshedToken(res: { headers?: { get?: (k: string) => string | null } }): void {
     const fresh = res.headers?.get?.('X-Refreshed-Token');
     if (!fresh || !this.token || fresh === this.token) return;
-    this.setToken(fresh);
+    const next = tokenClaims(fresh);
+    const cur = tokenClaims(this.token);
+    if (!next || !cur || next.id !== cur.id || next.exp <= cur.exp) return;
+    const stored = localStorage.getItem('token');
+    const storedClaims = stored ? tokenClaims(stored) : null;
+    this.token = fresh;
+    if (stored === this.token || (storedClaims && storedClaims.id === next.id && storedClaims.exp < next.exp)) {
+      localStorage.setItem('token', fresh);
+    }
     this.onTokenRefreshed?.(fresh);
   }
 

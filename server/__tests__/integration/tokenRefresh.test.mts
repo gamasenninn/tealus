@@ -28,6 +28,8 @@ describe('X-Refreshed-Token (使っている間に延ばす)', () => {
     expect(res.status).toBe(200);
     const fresh = res.headers['x-refreshed-token'];
     expect(typeof fresh).toBe('string');
+    // ★ 改善ループ 48: 新しい鍵を付けた応答はブラウザに保存させない (304 のあと古い鍵・前の人の鍵が見えるのを防ぐ)
+    expect(res.headers['cache-control']).toMatch(/no-store/);
 
     const again = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${fresh}`);
     expect(again.status).toBe(200);

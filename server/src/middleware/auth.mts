@@ -37,6 +37,12 @@ export function generateToken(user: Pick<AuthUser, 'id' | 'login_id'>): string {
 
 interface VerifiedClaims { id: string; login_id?: string; iat?: number; exp?: number; auth_at?: number }
 
+/** 秒の時刻を JST の「MM-DD HH:mm」に (ログ用) */
+function fmtJst(sec: number | undefined): string {
+  if (typeof sec !== 'number') return '?';
+  return new Date(sec * 1000).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 /**
  * 使っている間に延ばす (2026-11-12、docs/05 §5)。残りが半分を切っていれば新しい鍵を返し、そうでなければ null。
  * ★ 期限は「今から 7 日」と「auth_at から 30 日」の早い方。今の期限より延びないなら返さない
@@ -95,7 +101,15 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   // ★ 使っている間に延ばす (2026-11-12、docs/05 §5)。画面は api.request でこのヘッダーを受けて鍵を差し替える。
   //   ヘッダーを読まない相手 (ボット等) には無害 (今の鍵はそのまま期限まで使える)
   const fresh = refreshTokenIfDue(decoded);
-  if (fresh) res.setHeader('X-Refreshed-Token', fresh);
+  if (fresh) {
+    res.setHeader('X-Refreshed-Token', fresh);
+    // ★ 改善ループ 48: この応答はブラウザに保存させない。保存されると、後の 304 (届いたヘッダーだけが差し替わる) で
+    //   この古い鍵が見え続け、共用 PC では次の人の画面に前の人の鍵が見える (画面側でも同じ人・期限が後の鍵しか受け取らない)
+    res.setHeader('Cache-Control', 'no-store');
+    // ★ 延ばしたことを残す (応答のヘッダーはログに出ないので、効いているかを測れなかった)。鍵そのものは出さない
+    const exp = (jwt.decode(fresh) as { exp?: number } | null)?.exp;
+    logger.info(`[auth] 鍵を延ばしました user=${String(decoded.id).slice(0, 8)} 旧期限=${fmtJst(decoded.exp)} 新期限=${fmtJst(exp)}`);
+  }
   next();
 }
 
