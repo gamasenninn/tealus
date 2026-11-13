@@ -1,4 +1,5 @@
 import { useAuthStore } from '../stores/authStore';
+import { api } from './api';
 import { BUILD_ID } from '../utils/buildVersion';
 
 /**
@@ -62,7 +63,8 @@ export function reportClientError(kind: ClientErrorKind, err: unknown, component
     sent++;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = useAuthStore.getState().token;
+    // ★ 改善ループ 50: api が持つ今の鍵を先に使う (鍵を延ばすと api の鍵だけが新しくなる。store の鍵は古いまま)
+    const token = api.token ?? useAuthStore.getState().token;
     if (token) headers.Authorization = `Bearer ${token}`;
     void fetch('/api/client-errors', {
       method: 'POST',

@@ -4,7 +4,10 @@
  * ★ それまでは 7 日で切れて延ばす口が無く、毎日使う人も週 1 回入り直していた
  */
 import jwt from 'jsonwebtoken';
-import { generateToken, refreshTokenIfDue, JWT_SECRET } from '../../src/middleware/auth.mts';
+import { generateToken, refreshTokenIfDue, JWT_SECRET, resetRefreshedTokenCache } from '../../src/middleware/auth.mts';
+
+// ★ 改善ループ 50: 同じ鍵からは同じ新しい鍵を返す (キャッシュ) ので、テストの順番に左右されないよう毎回空にする
+beforeEach(() => resetRefreshedTokenCache());
 
 const DAY = 24 * 60 * 60;
 const user = { id: 'u-1', login_id: 'taro' };

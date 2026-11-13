@@ -28,16 +28,17 @@ migrateAllRoomConfigs(config.WORKSPACE_ROOT);
 // Start server
 // ★ 改善ループ 49: AI の仕事の控え。予告なしに止まった (電源断・Windows の再起動・クラッシュ) ときも、
 //   次の起動で「中断されました」を知らせるため (pendingWorkJournal.mts)。置き場はリポジトリの外
-//   ★ 前の控えは、新しい仕事が上書きする前に読んでおく
+//   ★ 改善ループ 50: 既定の名前にポート番号を入れる (同じ利用者で 2 本動かしても取り合わない)
 const pendingJournal = createPendingWorkJournal(
-  process.env.AGENT_PENDING_JOURNAL || path.join(os.homedir(), '.tealus', 'agent', 'pending-work.json'),
+  process.env.AGENT_PENDING_JOURNAL || path.join(os.homedir(), '.tealus', 'agent', `pending-work-${config.PORT}.json`),
 );
-const leftoverWork = pendingJournal.readLeftover();
-pendingJournal.clear();   // ★ 読んだら消す (残すと、次の起動でもう一度知らせてしまう。中身は leftoverWork に持っている)
-setPendingObserver((pending) => pendingJournal.record(pending));
 
 const server = app.listen(config.PORT, async () => {
   logger.info(`Agent Server started on port ${config.PORT}`);
+  // ★ 改善ループ 50: 前の控えは、ポートを取れてから (= 二重起動の 2 つ目ではないと分かってから) 退避する。
+  //   新しい仕事が上書きする前に退避し、知らせが済むまで消さない (知らせる前にもう一度落ちても次の起動に渡す)
+  const leftoverWork = pendingJournal.takeLeftover();
+  setPendingObserver((pending) => pendingJournal.record(pending));
   logger.info(`Tealus API: ${config.TEALUS_API_URL}`);
   logger.info(`Light model: ${config.AGENT_LIGHT_MODEL}`);
   // TTS provider のログは config.mts の load 時に出力済み（責務分離）
@@ -72,6 +73,7 @@ const server = app.listen(config.PORT, async () => {
       pushMessage: (roomId, content) => botApi.pushMessage(roomId, content),
       log: (line) => logger.warn(line),
     }, 5000, { unplannedSince: leftoverWork.at }).catch(() => {});
+    pendingJournal.clearLeftover();   // ★ 知らせが済んだので退避した分を消す
   }
 });
 
@@ -95,6 +97,9 @@ let shuttingDown = false;
 const shutdown = async () => {
   if (shuttingDown) {
     logger.warn('停止処理中に 2 回目の停止の合図を受けたので、待たずに終了します');
+    // ★ 改善ループ 50: 知らせは 1 回目が送り始めているので、控えを消してから終わる (残すと次の起動で二重に知らせる)
+    setPendingObserver(null);
+    pendingJournal.clear();
     process.exit(130);
   }
   shuttingDown = true;
