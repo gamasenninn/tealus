@@ -57,3 +57,12 @@ describe('noticeDroppedWork', () => {
     expect(droppedWorkText(3)).toContain('もう一度');
   });
 });
+
+describe('予告なしに止まったときの知らせ (改善ループ 49)', () => {
+  test('★ unplannedSince を渡すと、予告なしの文で知らせる', async () => {
+    const deps = makeDeps();
+    await noticeDroppedWork([{ roomId: 'r1', count: 2 }], deps, 1000, { unplannedSince: '2026-11-13T01:10:00.000Z' });
+    expect(deps.pushMessage).toHaveBeenCalledWith('r1', droppedWorkText(2, { unplannedSince: '2026-11-13T01:10:00.000Z' }));
+    expect(deps.log).toHaveBeenCalledWith(expect.stringContaining('予告なく'));
+  });
+});

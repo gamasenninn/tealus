@@ -10,9 +10,12 @@ import { app } from './app.mts';
 import { initializeAgentWithRetry } from './setup/register.mts';
 import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
 import { broadcastShutdown } from './webhook/ccSubscribers.mts';
-import { pendingRooms } from './webhook/dispatcher.mts';
+import { pendingRooms, setPendingObserver } from './webhook/dispatcher.mts';
 import { noticeDroppedWork } from './webhook/droppedWorkNotice.mts';
+import { createPendingWorkJournal } from './webhook/pendingWorkJournal.mts';
 import * as botApi from './lib/botApi.mts';
+import os from 'node:os';
+import path from 'node:path';
 import { logOrganonInjectState } from './lib/organonContext.mts';
 import { logVocabInjectState } from './lib/vocabContext.mts';
 import { runDoctor } from './lib/doctor.mts';
@@ -23,6 +26,16 @@ import { migrateAllRoomConfigs } from './lib/roomConfigPaths.mts';
 migrateAllRoomConfigs(config.WORKSPACE_ROOT);
 
 // Start server
+// ★ 改善ループ 49: AI の仕事の控え。予告なしに止まった (電源断・Windows の再起動・クラッシュ) ときも、
+//   次の起動で「中断されました」を知らせるため (pendingWorkJournal.mts)。置き場はリポジトリの外
+//   ★ 前の控えは、新しい仕事が上書きする前に読んでおく
+const pendingJournal = createPendingWorkJournal(
+  process.env.AGENT_PENDING_JOURNAL || path.join(os.homedir(), '.tealus', 'agent', 'pending-work.json'),
+);
+const leftoverWork = pendingJournal.readLeftover();
+pendingJournal.clear();   // ★ 読んだら消す (残すと、次の起動でもう一度知らせてしまう。中身は leftoverWork に持っている)
+setPendingObserver((pending) => pendingJournal.record(pending));
+
 const server = app.listen(config.PORT, async () => {
   logger.info(`Agent Server started on port ${config.PORT}`);
   logger.info(`Tealus API: ${config.TEALUS_API_URL}`);
@@ -49,7 +62,17 @@ const server = app.listen(config.PORT, async () => {
 
   // エージェント初期化（Bot APIログイン、ルーム取得、MCP接続）
   // ★ #581 つながるまで試し直す (本体より先に起きても、本体が上がれば AI が返事をする)
-  await initializeAgentWithRetry();
+  const init = await initializeAgentWithRetry();
+
+  // ★ 改善ループ 49: 前のプロセスが予告なく止まっていたら (控えが残っていた)、その部屋に「中断されました」を知らせる。
+  //   計画的な停止では停止の手順が知らせて控えを消すので、ここには来ない。やり直しはしない (11-12 判断「知らせるだけ」)
+  if (leftoverWork && init.ok) {
+    await noticeDroppedWork(leftoverWork.pending, {
+      pushStatus: (roomId, status) => botApi.pushStatus(roomId, status),
+      pushMessage: (roomId, content) => botApi.pushMessage(roomId, content),
+      log: (line) => logger.warn(line),
+    }, 5000, { unplannedSince: leftoverWork.at }).catch(() => {});
+  }
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {
@@ -89,6 +112,9 @@ const shutdown = async () => {
     pushMessage: (roomId, content) => botApi.pushMessage(roomId, content),
     log: (line) => logger.warn(line),
   }, 3000).catch(() => {});
+  // ★ 改善ループ 49: 知らせたので控えを消し、以後は書かない (残すと次の起動で「予告なく止まった」と二重に知らせる)
+  setPendingObserver(null);
+  pendingJournal.clear();
   server.close();
   await closeAllRoomMcp();
   // ★ logger (winston) の file transport は非同期。process.exit を即座に呼ぶと
@@ -100,3 +126,7 @@ const shutdown = async () => {
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+// ★ 改善ループ 49 (2026-11-13): Windows では窓・タブを閉じると SIGHUP が来る (約 10 秒後に強制終了。知らせの上限は 3 秒)。
+//   以前は Ctrl+C のときしか「中断しました」の知らせ・購読者への予告が走らなかった。Windows の再起動で来るかは未確認
+process.on('SIGHUP', shutdown);
+process.on('SIGBREAK', shutdown);   // Ctrl+Break

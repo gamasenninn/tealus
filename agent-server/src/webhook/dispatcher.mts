@@ -88,12 +88,24 @@ export function pendingRooms(): Array<{ roomId: string; count: number }> {
  */
 const delegatedDepth = new Map<string, number>();
 
+/**
+ * 改善ループ 49: 列が変わるたびに呼ぶ受け手 (index.mts が控えのファイルへの書き込みを差し込む。pendingWorkJournal.mts)。
+ * ★ 既定は何もしない (テストが本番の置き場へ書かないように)。受け手の失敗は列を止めない
+ */
+let pendingObserver: ((pending: Array<{ roomId: string; count: number }>) => void) | null = null;
+export function setPendingObserver(fn: typeof pendingObserver): void { pendingObserver = fn; }
+function notifyPending(): void {
+  if (!pendingObserver) return;
+  try { pendingObserver(pendingRooms()); } catch { /* 列を止めない */ }
+}
+
 export async function enqueueForRoom(
   roomId: string, fn: () => unknown, timeoutMs: number = config.QUEUE_TASK_TIMEOUT,
   opts: { delegated?: boolean } = {},
 ): Promise<void> {
   roomDepth.set(roomId, queueDepthOf(roomId) + 1);
   if (opts.delegated) delegatedDepth.set(roomId, (delegatedDepth.get(roomId) ?? 0) + 1);
+  notifyPending();
   const prev = roomQueues.get(roomId) || Promise.resolve();
   // ★ 数は仕事が終わったとき (時間切れの強制 resolve も含む) に戻す。runQueuedTask は reject しない
   const next = prev.then(() => runQueuedTask(roomId, fn, timeoutMs)).finally(() => {
@@ -103,6 +115,7 @@ export async function enqueueForRoom(
       const d = (delegatedDepth.get(roomId) ?? 0) - 1;
       if (d > 0) delegatedDepth.set(roomId, d); else delegatedDepth.delete(roomId);
     }
+    notifyPending();
   });
   roomQueues.set(roomId, next);
   await next;

@@ -33,14 +33,14 @@ describe('X-Refreshed-Token (使っている間に延ばす)', () => {
 
     const again = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${fresh}`);
     expect(again.status).toBe(200);
-    expect(again.headers['x-refreshed-token']).toBeUndefined();
+    expect(again.headers['x-refreshed-token']).toBe('');   // ★ 改善ループ 49: 延ばさない応答は空
   });
 
   it('残りが多い鍵では返さない', async () => {
     const { token } = await createTestUser({ login_id: 'REF002', display_name: '延長花子' });
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.headers['x-refreshed-token']).toBeUndefined();
+    expect(res.headers['x-refreshed-token']).toBe('');
   });
 
   it('★ 期限切れの鍵は今までどおり 401 (延ばさない)', async () => {
@@ -50,5 +50,18 @@ describe('X-Refreshed-Token (使っている間に延ばす)', () => {
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${expired}`);
     expect(res.status).toBe(401);
     expect(res.headers['x-refreshed-token']).toBeUndefined();
+  });
+});
+
+describe('X-Refreshed-Token の空の値 (改善ループ 49)', () => {
+  beforeAll(async () => { await setupTestDb(); });
+  afterAll(async () => { await closeTestDb(); });
+  beforeEach(async () => { await cleanTestDb(); });
+
+  it('★ 延ばさない応答にも空の X-Refreshed-Token を付ける (304 のとき、ブラウザに保存済みの古い値を空で上書きする)', async () => {
+    const { token } = await createTestUser({ login_id: 'REF009', display_name: '空値花子' });
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['x-refreshed-token']).toBe('');
   });
 });

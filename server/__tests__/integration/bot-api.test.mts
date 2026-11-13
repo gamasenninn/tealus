@@ -220,7 +220,10 @@ describe('Bot API', () => {
   // ============================================
   describe('GET /api/bot/messages', () => {
     it('should return messages since timestamp', async () => {
-      const since = new Date().toISOString();
+      // ★ 起点は DB の時計で取る (2026-11-13)。投稿の created_at は DB の now() なので、テストの時計と DB の時計が
+      //   ずれていると (Windows の再起動の後、Docker の時計が約 0.5 秒遅れた)、新着が起点より前に見えて時々落ちた
+      const { rows } = await getTestPool().query<{ t: Date }>('SELECT clock_timestamp() AS t');
+      const since = rows[0].t.toISOString();
 
       // Wait a bit then send
       await new Promise(r => setTimeout(r, 100));

@@ -53,13 +53,29 @@ export function refreshTokenIfDue(decoded: VerifiedClaims, nowSec: number = Math
   if (decoded.exp - nowSec > TOKEN_TTL_SEC / 2) return null;
   const authAt = typeof decoded.auth_at === 'number' ? decoded.auth_at : decoded.iat;
   if (typeof authAt !== 'number') return null;
+  // ★ 改善ループ 49: 同じ鍵 (人・期限) からは同じ新しい鍵を返す。ボット (agent-server・EC窓口など) は X-Refreshed-Token を
+  //   読まず古い鍵で要求し続けるので、毎回署名し直し・ログを書いていた (EC窓口は 1 日 13 万要求)
+  const key = `${decoded.id}:${decoded.exp}:${authAt}`;
+  const hit = refreshedCache.get(key);
+  if (hit) return hit.token;
   const exp = Math.min(nowSec + TOKEN_TTL_SEC, authAt + TOKEN_MAX_AGE_SEC);
   if (exp <= decoded.exp) return null;
-  return jwt.sign(
+  const token = jwt.sign(
     { id: decoded.id, login_id: decoded.login_id, auth_at: authAt, iat: nowSec, exp },
     JWT_SECRET,
   );
+  if (refreshedCache.size >= REFRESHED_CACHE_MAX) refreshedCache.clear();   // 人数 × 端末で十分小さい。溢れたら作り直すだけ
+  refreshedCache.set(key, { token });
+  return token;
 }
+
+/** 改善ループ 49: 「人:元の期限」→ 作った新しい鍵 (同じ鍵からは 1 回だけ作り、ログも 1 回だけ) */
+const refreshedCache = new Map<string, { token: string }>();
+const REFRESHED_CACHE_MAX = 1000;
+/** 改善ループ 49: 延ばしたことをログに書いた鍵 (人:元の期限) */
+const loggedRefresh = new Set<string>();
+/** テスト用 (別のテストで作った鍵が残らないように) */
+export function resetRefreshedTokenCache(): void { refreshedCache.clear(); loggedRefresh.clear(); }
 
 /**
  * JWT authentication middleware
@@ -100,15 +116,24 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   req.user = result.rows[0];
   // ★ 使っている間に延ばす (2026-11-12、docs/05 §5)。画面は api.request でこのヘッダーを受けて鍵を差し替える。
   //   ヘッダーを読まない相手 (ボット等) には無害 (今の鍵はそのまま期限まで使える)
+  const cacheKey = `${decoded.id}:${decoded.exp}`;
+  const firstTime = !loggedRefresh.has(cacheKey);
   const fresh = refreshTokenIfDue(decoded);
+  // ★ 改善ループ 49: 延ばさない応答にも空の値を付ける。304 では届いたヘッダーだけが差し替わるので、
+  //   ブラウザに保存済みの応答の古い X-Refreshed-Token を空で上書きできる (古い画面も救える。空は新旧どちらの画面も無視する)
+  if (!fresh) res.setHeader('X-Refreshed-Token', '');
   if (fresh) {
     res.setHeader('X-Refreshed-Token', fresh);
     // ★ 改善ループ 48: この応答はブラウザに保存させない。保存されると、後の 304 (届いたヘッダーだけが差し替わる) で
     //   この古い鍵が見え続け、共用 PC では次の人の画面に前の人の鍵が見える (画面側でも同じ人・期限が後の鍵しか受け取らない)
     res.setHeader('Cache-Control', 'no-store');
     // ★ 延ばしたことを残す (応答のヘッダーはログに出ないので、効いているかを測れなかった)。鍵そのものは出さない
-    const exp = (jwt.decode(fresh) as { exp?: number } | null)?.exp;
-    logger.info(`[auth] 鍵を延ばしました user=${String(decoded.id).slice(0, 8)} 旧期限=${fmtJst(decoded.exp)} 新期限=${fmtJst(exp)}`);
+    if (firstTime) {   // ★ 同じ鍵からは 1 回だけ書く (ボットは同じ古い鍵で要求し続ける)
+      if (loggedRefresh.size >= 1000) loggedRefresh.clear();
+      loggedRefresh.add(cacheKey);
+      const exp = (jwt.decode(fresh) as { exp?: number } | null)?.exp;
+      logger.info(`[auth] 鍵を延ばしました user=${String(decoded.id).slice(0, 8)} 旧期限=${fmtJst(decoded.exp)} 新期限=${fmtJst(exp)}`);
+    }
   }
   next();
 }

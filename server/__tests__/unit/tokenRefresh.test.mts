@@ -62,3 +62,18 @@ describe('refreshTokenIfDue', () => {
     expect(d.exp).toBe(now + 7 * DAY);
   });
 });
+
+/**
+ * 改善ループ 49: 同じ鍵からは同じ新しい鍵を返す (ボットは X-Refreshed-Token を読まず古い鍵で要求し続けるので、
+ * 毎回署名し直し・ログを書いていた。EC窓口は 1 日 13 万要求)
+ */
+describe('refreshTokenIfDue — 同じ鍵からは 1 回だけ作る (改善ループ 49)', () => {
+  const now = 1_800_000_000;
+  test('★ 同じ人・同じ期限の鍵なら、2 回目も同じ新しい鍵を返す', () => {
+    const c = claims({ iat: now - 5 * DAY, exp: now + 2 * DAY, auth_at: now - 5 * DAY });
+    const a = refreshTokenIfDue(c, now);
+    const b = refreshTokenIfDue({ ...c }, now + 60);
+    expect(a).not.toBeNull();
+    expect(b).toBe(a);
+  });
+});

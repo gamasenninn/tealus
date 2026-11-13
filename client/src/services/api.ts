@@ -212,8 +212,10 @@ class ApiClient {
     if (!next || !cur || next.id !== cur.id || next.exp <= cur.exp) return;
     const stored = localStorage.getItem('token');
     const storedClaims = stored ? tokenClaims(stored) : null;
+    const prev = this.token;
     this.token = fresh;
-    if (stored === this.token || (storedClaims && storedClaims.id === next.id && storedClaims.exp < next.exp)) {
+    // ★ 改善ループ 49: 比べるのは差し替える前の自分の鍵 (以前は代入した後の this.token と比べていて、この条件は効いていなかった)
+    if (stored === prev || (storedClaims && storedClaims.id === next.id && storedClaims.exp < next.exp)) {
       localStorage.setItem('token', fresh);
     }
     this.onTokenRefreshed?.(fresh);

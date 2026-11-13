@@ -982,3 +982,16 @@ describe('#644 順番待ちの表示', () => {
     expect(queueDepthOf('room-q6')).toBe(0);
   });
 });
+
+// 改善ループ 49: 列が変わるたびに控えを書く (予告なしに止まったとき、起動したときに知らせるため)
+describe('setPendingObserver (改善ループ 49)', () => {
+  test('★ 積んだとき・終わったときに pendingRooms の中身で呼ばれ、最後は空で呼ばれる', async () => {
+    const { enqueueForRoom, setPendingObserver } = require('../../src/webhook/dispatcher');
+    const seen: Array<Array<{ roomId: string; count: number }>> = [];
+    setPendingObserver((p: Array<{ roomId: string; count: number }>) => seen.push(p.filter((x) => x.roomId === 'room-obs')));
+    await enqueueForRoom('room-obs', jest.fn().mockResolvedValue('ok'), 1000);
+    setPendingObserver(null);
+    expect(seen[0]).toEqual([{ roomId: 'room-obs', count: 1 }]);
+    expect(seen[seen.length - 1]).toEqual([]);
+  });
+});

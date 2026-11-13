@@ -21,32 +21,48 @@ export interface DroppedWorkDeps {
  *   (宛先の判定は列の中の _dispatch でする)。長い仕事の後ろに雑談が並ぶと、数が依頼の数より多くなる
  */
 const DROPPED_WORK_HEAD = 'AI を再起動したため、この部屋で処理中・順番待ちだった仕事';
+/** 改善ループ 49: 予告なしに止まったとき (起動したときに控えが残っていた) の文の頭 */
+const UNPLANNED_HEAD = 'AI が予告なく止まったため';
 
-export function droppedWorkText(count: number): string {
+/**
+ * @param opts.unplannedSince 予告なしに止まったとき、最後に控えを書いた時刻 (ISO)。止まったおおよその時刻として JST で出す
+ */
+export function droppedWorkText(count: number, opts: { unplannedSince?: string } = {}): string {
+  const tail = `この部屋で処理中・順番待ちだった仕事 (${count} 件) が中断されました。AI に頼んでいた方は、お手数ですが必要ならもう一度送ってください。`;
+  if (opts.unplannedSince) {
+    const d = new Date(opts.unplannedSince);
+    const hhmm = Number.isNaN(d.getTime()) ? '?' : d.toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
+    return `${UNPLANNED_HEAD} (${hhmm} ごろ)、${tail}`;
+  }
   return `${DROPPED_WORK_HEAD} (${count} 件) が中断されました。AI に頼んでいた方は、お手数ですが必要ならもう一度送ってください。`;
 }
 
 /**
  * 改善ループ 46: 自分の停止の知らせか。handler の自分のボットの分岐で弾く (再起動した自分が拾って返事をしないように)。
  * ★ 部屋をまたぐ委譲を有効にしていると、自分の便も inflight でない部屋では通るため
+ * ★ 改善ループ 49: 予告なしのときの文も弾く
  */
 export function isDroppedWorkNotice(content: string | null | undefined): boolean {
-  return typeof content === 'string' && content.startsWith(DROPPED_WORK_HEAD);
+  return typeof content === 'string' && (content.startsWith(DROPPED_WORK_HEAD) || content.startsWith(UNPLANNED_HEAD));
 }
 
 export async function noticeDroppedWork(
   pending: Array<{ roomId: string; count: number }>,
   deps: DroppedWorkDeps,
   timeoutMs: number,
+  opts: { unplannedSince?: string } = {},
 ): Promise<void> {
   if (pending.length === 0) return;
   const total = pending.reduce((n, p) => n + p.count, 0);
   // ★ 記録は先に残す (知らせが届かなくても、捨てた数はログに残る)
-  deps.log(`[shutdown] 終わっていない仕事 ${total} 件を捨てます: ${pending.map((p) => `room=${p.roomId} ${p.count}`).join(', ')}`);
+  const rooms = pending.map((p) => `room=${p.roomId} ${p.count}`).join(', ');
+  deps.log(opts.unplannedSince
+    ? `[startup] 前のプロセスが予告なく止まっていました (控えの最終 ${opts.unplannedSince})。終わっていなかった仕事 ${total} 件を知らせます: ${rooms}`
+    : `[shutdown] 終わっていない仕事 ${total} 件を捨てます: ${rooms}`);
 
   const all = Promise.allSettled(pending.map(async (p) => {
     await deps.pushStatus(p.roomId, 'idle').catch(() => {});   // 画面の「考え中」を消す
-    await deps.pushMessage(p.roomId, droppedWorkText(p.count)).catch(() => {});
+    await deps.pushMessage(p.roomId, droppedWorkText(p.count, opts)).catch(() => {});
   }));
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<void>((r) => { timer = setTimeout(r, timeoutMs); });

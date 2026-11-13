@@ -206,4 +206,8 @@ api.setOnUnauthorized?.(() => {   // ?. は api を一部だけ差し替えた�
 
 // ★ 鍵を延ばしたら (本体の X-Refreshed-Token)、socket にも次のつなぎ直しから新しい鍵を渡す (2026-11-12、docs/05 §5)。
 //   socket は作り直さない (入っている部屋の記録が消えるため)
-api.setOnTokenRefreshed?.((token) => updateSocketToken(token));   // ?. は api を一部だけ差し替えたテストのため
+// ★ 改善ループ 49: store の鍵も替える (エラー報告 errorReport.ts が store の鍵を使う。古いままだと切れたあと利用者不明になった)
+api.setOnTokenRefreshed?.((token) => {   // ?. は api を一部だけ差し替えたテストのため
+  updateSocketToken(token);
+  if (useAuthStore.getState().token) useAuthStore.setState({ token });
+});

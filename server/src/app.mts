@@ -470,6 +470,11 @@ if (import.meta.main) {
   });
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
+  // ★ 改善ループ 49 (2026-11-13): Windows では窓・タブを閉じると SIGHUP が来る (Node の文書。約 10 秒後に Windows が強制終了。
+  //   停止の上限は 5 秒なので間に合う)。以前は Ctrl+C のときしか後始末 (LINE の束の投稿・購読者への予告) が走らなかった。
+  //   ★ Windows の再起動で SIGHUP が来るかは確かめていない (11-13 01:11 の予告なしの再起動ではログに [shutdown] が出なかった)
+  process.on('SIGHUP', onSignal);
+  process.on('SIGBREAK', onSignal);   // Ctrl+Break
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
