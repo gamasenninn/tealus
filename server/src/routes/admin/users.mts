@@ -6,6 +6,7 @@ import { pool } from '../../db/pool.mts';
 import { getIo } from '../../io-registry.mts';
 import { refreshSocketUser } from '../../socket/index.mts';
 import { announceUserUpdated } from '../../services/userUpdated.mts';
+import { announceRoomUpdated } from '../../services/roomJoined.mts';
 
 import { SALT_ROUNDS } from '../../constants/config.mts';
 import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../../utils/userFields.mts';
@@ -93,7 +94,7 @@ router.put('/users/:id', async (req, res) => {
 
   try {
     // Check user exists
-    const existing = await pool.query<{ id: string; role: string; is_bot: boolean }>('SELECT id, role, is_bot FROM users WHERE id = $1', [id]);
+    const existing = await pool.query<{ id: string; role: string; is_bot: boolean; is_external_contact: boolean }>('SELECT id, role, is_bot, is_external_contact FROM users WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'ユーザーが見つかりません' });
     }
@@ -163,6 +164,19 @@ router.put('/users/:id', async (req, res) => {
         logger.warn(`[admin] socket の利用者情報を書き換えられませんでした: ${errorText(err)}`);
       }
       await announceUserUpdated(result.rows[0]);
+    }
+
+    // ★ 改善ループ 51: 社外の窓口の印・役割 (ゲスト) が変わったら、その口座のいる部屋に知らせる。
+    //   部屋の一覧のタブ「お客様」の振り分けがこの 2 つで決まるのに、知らせが無く、ほかの人の一覧は
+    //   次に取り直すまで古いままだった (知らせは部屋の ID だけ。受け手が一覧を取り直す)
+    if (result.rows[0].role !== existing.rows[0].role
+      || result.rows[0].is_external_contact !== existing.rows[0].is_external_contact) {
+      try {
+        const { rows } = await pool.query<{ room_id: string }>('SELECT room_id FROM room_members WHERE user_id = $1', [id]);
+        for (const r of rows) announceRoomUpdated(r.room_id);
+      } catch (err) {
+        logger.warn(`[admin] 印・役割の変更を部屋に知らせられませんでした: ${errorText(err)}`);
+      }
     }
 
     res.json({ user: result.rows[0] });

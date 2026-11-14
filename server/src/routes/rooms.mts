@@ -394,10 +394,12 @@ router.get('/', async (req, res) => {
                 WHERE rmc.room_id = r.id AND uc.is_active = true) AS member_count,
               -- ★ お客様の部屋 (2026-11-13、docs/02 users.is_external_contact)。社外の窓口の口座がいる / ゲストがいる。
               --   画面のタブ「お客様」と、窓口のいる部屋をほかのタブから外すのに使う
+              --   ★ 見る人自身は数えない (改善ループ 51)。数えると、ゲスト本人の画面では自分のいる部屋が全部「お客様」になり、
+              --     窓口の口座で入ると「すべて」「グループ」が空になる
               EXISTS (SELECT 1 FROM room_members rmx JOIN users ux ON ux.id = rmx.user_id
-                       WHERE rmx.room_id = r.id AND ux.is_external_contact) AS has_external_contact,
+                       WHERE rmx.room_id = r.id AND ux.is_external_contact AND ux.id != $1) AS has_external_contact,
               EXISTS (SELECT 1 FROM room_members rmg JOIN users ug ON ug.id = rmg.user_id
-                       WHERE rmg.room_id = r.id AND ug.role = 'guest') AS has_guest
+                       WHERE rmg.room_id = r.id AND ug.role = 'guest' AND ug.id != $1) AS has_guest
        FROM rooms r
        JOIN room_members rm ON rm.room_id = r.id
        LEFT JOIN LATERAL (

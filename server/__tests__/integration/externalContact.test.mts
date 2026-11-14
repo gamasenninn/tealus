@@ -62,4 +62,21 @@ describe('社外の窓口の印とお客様の部屋', () => {
     expect(byId(guestRoom)).toMatchObject({ has_external_contact: false, has_guest: true });
     expect(byId(plainRoom)).toMatchObject({ has_external_contact: false, has_guest: false });
   });
+
+  // ★ 改善ループ 51: 見る人自身は数えない。数えると、ゲスト本人の画面では自分のいる部屋が全部「お客様」になり、
+  //   窓口の口座で入ると「すべて」「グループ」が空になる
+  it('★ 見る人自身が窓口・ゲストのときは、自分を数えない', async () => {
+    await getTestPool().query('UPDATE users SET is_external_contact = true WHERE id = $1', [window.user.id]);
+    const ecRoom = await makeRoom(window, 'EC チャット お客様 #2', [staff.user.id]);
+    const guestRoom = await makeRoom(staff, '社内とゲスト', [guest.user.id]);
+
+    const asWindow = await request(app).get('/api/rooms').set('Authorization', `Bearer ${window.token}`);
+    expect(asWindow.body.rooms.find((r: { id: string }) => r.id === ecRoom)).toMatchObject({ has_external_contact: false });
+    const asGuest = await request(app).get('/api/rooms').set('Authorization', `Bearer ${guest.token}`);
+    expect(asGuest.body.rooms.find((r: { id: string }) => r.id === guestRoom)).toMatchObject({ has_guest: false });
+    // 社内の人から見れば、どちらも今までどおり
+    const asStaff = await request(app).get('/api/rooms').set('Authorization', `Bearer ${staff.token}`);
+    expect(asStaff.body.rooms.find((r: { id: string }) => r.id === ecRoom)).toMatchObject({ has_external_contact: true });
+    expect(asStaff.body.rooms.find((r: { id: string }) => r.id === guestRoom)).toMatchObject({ has_guest: true });
+  });
 });

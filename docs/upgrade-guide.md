@@ -138,7 +138,7 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ### → 次の版 (main を追っている場合は今すぐ)
 
-- ★ **migration が 4 本増えました (041〜044)**。`cd server && npm run migrate` → **server の再起動**。起動ログに `[migration-check] ★ 未適用 N 件` が出ていれば流し忘れです
+- ★ **migration が 5 本増えました (041〜045)**。`cd server && npm run migrate` → **server の再起動**。起動ログに `[migration-check] ★ 未適用 N 件` が出ていれば流し忘れです
 
 | 番号 | 中身 | 忘れると |
 |---|---|---|
@@ -146,6 +146,7 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 | 042 | 初回ログインでパスワードの変更を求める印 (`users.must_change_password`、10-29) | ★★★ **ログインもその後の操作もすべて失敗する** (認証のたびにこの列を読む) |
 | 043 | 削除した投稿の本文の退避 (`deleted_message_contents`、10-30) | 投稿の削除が失敗する |
 | 044 | 指示の履歴の ☆ 固定 (`prompt_pins`、11-01) | 指示の履歴が出ない |
+| 045 | 社外の窓口の印 (`users.is_external_contact`、11-13。トーク一覧のタブ「お客様」) | ★ トーク一覧 (`GET /api/rooms`) が全員 500 |
 
 - 2026-11-05 (改善ループ 39・40) の振る舞いの変更 (手順は増えません。client の再ビルドと server の再起動だけ):
   - bot の画像の口 (`/api/bot/push-image`、`/api/bot/push-file` で種類が `image/*` のとき) は、HEIC・BMP と途中で切れた画像を 400 で断ります
