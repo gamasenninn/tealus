@@ -240,7 +240,7 @@ describe('cc-stream.sh — 接続コマンドのスクリプト (#484)', () => {
  * つながらない curl と、待たない sleep で、接続のループを回す。
  * stream: /stream の振る舞い (sh)。$N は何回目の /stream か。既定は「つながらない」(curl=7)
  */
-function runFailingLoop(env: Record<string, string>, killAfterSleeps: number, stream = 'exit 7') {
+function runFailingLoop(env: Record<string, string>, killAfterSleeps: number, stream = 'exit 7', prepHome?: (home: string) => void) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-stream-giveup-'));
   const bin = path.join(dir, 'bin');
   fs.mkdirSync(bin);
@@ -267,6 +267,7 @@ function runFailingLoop(env: Record<string, string>, killAfterSleeps: number, st
   ].join('\n'), { mode: 0o755 });
   const home = path.join(dir, 'home');
   fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  prepHome?.(home);
   let status = 0;
   let out = '';
   try {
@@ -364,10 +365,29 @@ describe('cc-stream.sh — 新しい待ち受けが張られたら、古いル�
     expect(r.streams).toBeGreaterThanOrEqual(4);
   });
 
-  it('★ 終わるときは起こさない (stdout に出さない)', () => {
+  it('★ 終わるときは 1 行だけ知らせる (止められた側が気づける。改善ループ 53)。切断の知らせは出さない', () => {
     const r = runFailingLoop({}, 10,
       `[ "$N" -ge 1 ] && printf 'newer' > "$HOME/.claude/.cc-stream-stubproj.owner"; exit 7`);
     expect(r.status).toBe(0);
-    expect(r.out.split('\n').filter(Boolean)).toEqual([]);
+    const lines = r.out.split('\n').filter(Boolean);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('替わった');
+  });
+
+  it('★★ つながったままでも、札が替わったら次の 1 行を渡さずに終わる (改善ループ 53。22 本の件の本命)', () => {
+    // 1 回目の /stream: 札を書き換えてから便を 1 行流す。古いループはそれを受け取ってはいけない
+    const r = runFailingLoop({}, 10,
+      `printf 'newer' > "$HOME/.claude/.cc-stream-stubproj.owner"; printf '{"id":"evt-1"}\\n'; exit 0`);
+    expect(r.status).toBe(0);
+    expect(r.out).not.toContain('evt-1');
+    expect(r.streams).toBe(1);
+  });
+
+  it('★★ 札を書けない・読めないときは、黙って止まらずに札なしで続ける (改善ループ 53)', () => {
+    // 札の場所にフォルダを置いて、書けない・読めないようにする
+    const r = runFailingLoop({}, 4, 'exit 7', (home) => fs.mkdirSync(path.join(home, '.claude', '.cc-stream-stubproj.owner')));
+    expect(r.status).not.toBe(0);
+    expect(r.streams).toBeGreaterThanOrEqual(4);
+    expect(r.out).toContain('持ち主の札');
   });
 });

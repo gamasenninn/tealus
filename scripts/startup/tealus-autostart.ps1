@@ -17,7 +17,7 @@
 # 5. rtc-server (3100) を上げる (2026-11-13 判断。3100 がもう待ち受けていれば上げない)
 # 6. ~\.tealus\startup\extras.ps1 があれば呼ぶ。会社ごとに違うもの (無線の送り込み・ptt・通話履歴など) はリポジトリの外のそこに書く
 #    (docs/10 §6 の 1。11-13 01:11 の予告なしの再起動で、無線の録音が手で上げるまで 19 分止まった)
-# 7. 45 秒待って、本体・agent-server・rtc-server が待ち受けているかを数え直す。欠けがあれば ★ と「終了: 欠けあり」(改善ループ 51)
+# 7. 最長 120 秒、5 秒おきに、本体・agent-server (と rtc-server) が待ち受けているかを数え直す。欠けがあれば ★ と「終了: 欠けあり」(改善ループ 51)
 # 記録: ~\.tealus\startup\logs\autostart-YYYYMMDD.log
 #
 # 登録 (管理者でなくてよい。ログオンした本人の権限で走る):
@@ -86,7 +86,7 @@ if ($serverWasUp) {
     Start-Sleep -Seconds 10
   }
   if (-not $dbReady) {
-    Write-Log "★ DB ($Container) が $WaitDbMinutes 分待っても応えないので、本体・agent-server・rtc-server は上げません (Docker Desktop を確かめてから、手で上げてください)"
+    Write-Log "★ DB ($Container) が $WaitDbMinutes 分待っても応えないので、本体・agent-server・rtc-server は上げません (Docker Desktop を確かめてから、手で上げてください)。★ 本体を上げたら、タスク TealusAutostart をもう一度走らせると、本体が要るもの (無線の送り込みなど) も上げ直します"
     # ★ 追加の起動 (録音など) は DB も本体も要らないものがあるので、それだけは上げる (改善ループ 51)。
     #   以前は DB がこけると録音まで道連れで上がらなかった
     Invoke-Extras
@@ -125,9 +125,12 @@ if (Test-Port $AgentPort) {
 }
 
 # 5. rtc-server (通話・トランシーバー)。★ ネットにつながってから上げる (公開 IP を起動時に引く)。ここまで来ればつながっている
+#    ★ 使っているかは node_modules の有無で見る (改善ループ 53)。フォルダはリポジトリに入っているので誰の環境にもあり、
+#      通話を使わない採用者 (docs では「不要」) でも毎回失敗するタブを開き、数え直しで必ず「欠けあり」になっていた
+$useRtc = Test-Path (Join-Path $Repo 'rtc-server\node_modules')
 if (Test-Port $RtcPort) {
   Write-Log "rtc-server ($RtcPort) はもう動いているので、上げません"
-} elseif (Test-Path (Join-Path $Repo 'rtc-server')) {
+} elseif ($useRtc) {
   Open-Tab 'rtc-server' (Join-Path $Repo 'rtc-server')
 }
 
@@ -136,16 +139,19 @@ Invoke-Extras
 
 # 7. ★ 上がったかを数え直す (改善ループ 51)。以前はタブを開いただけで「成功」と書き、上がらなくても誰も気づけなかった
 if ($DryRun) { Write-Log '=== 終了: 試すだけ ==='; exit 0 }
-Start-Sleep -Seconds 45
-$missing = @()
-foreach ($p in @(@{ Name = '本体'; Port = $ServerPort }, @{ Name = 'agent-server'; Port = $AgentPort }, @{ Name = 'rtc-server'; Port = $RtcPort })) {
-  if ($p.Name -eq 'rtc-server' -and -not (Test-Path (Join-Path $Repo 'rtc-server'))) { continue }
-  if (-not (Test-Port $p.Port)) { $missing += "$($p.Name) ($($p.Port))" }
-}
+#    ★ 最長 120 秒、5 秒おきに数える (改善ループ 53)。固定の 45 秒だと、再起動直後の重いときに間に合わず誤って「欠けあり」になりうる
+$checks = @(@{ Name = '本体'; Port = $ServerPort }, @{ Name = 'agent-server'; Port = $AgentPort })
+if ($useRtc) { $checks += @{ Name = 'rtc-server'; Port = $RtcPort } }
+$deadline = (Get-Date).AddSeconds(120)
+do {
+  $missing = @($checks | Where-Object { -not (Test-Port $_.Port) } | ForEach-Object { "$($_.Name) ($($_.Port))" })
+  if ($missing.Count -eq 0) { break }
+  Start-Sleep -Seconds 5
+} while ((Get-Date) -lt $deadline)
 if ($missing.Count) {
   Write-Log "★ 待ち受けていないもの: $($missing -join '、') (タブを開いて、エラーを確かめてください)"
   Write-Log '=== 終了: 欠けあり ==='
   exit 1
 }
-Write-Log '本体・agent-server・rtc-server が待ち受けています'
+Write-Log "$(($checks | ForEach-Object { $_.Name }) -join '・') が待ち受けています"
 Write-Log '=== 終了: 成功 ==='

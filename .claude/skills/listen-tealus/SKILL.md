@@ -183,9 +183,10 @@ Monitor (
 P={project_name}; API={本体の origin}; STREAM={stream_url}
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye; UP=~/.claude/.cc-stream-$P.up; OWNER=~/.claude/.cc-stream-$P.owner
 FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
-ME="$$-$(date +%s)-${RANDOM:-0}"; printf '%s' "$ME" > "$OWNER"   # ★ 改善ループ 52 持ち主の札 (新しい待ち受けが張られたら古いループは終わる)
-still_mine() { [ "$(cat "$OWNER" 2>/dev/null)" = "$ME" ]; }
-superseded() { echo "[stream] 新しい待ち受けに替わったので終わります" >&2; exit 0; }
+ME="$$-$(date +%s)-${RANDOM:-0}"; printf '%s' "$ME" > "$OWNER" 2>/dev/null   # ★ 改善ループ 52 持ち主の札 (新しい待ち受けが張られたら古いループは終わる)
+[ "$(cat "$OWNER" 2>/dev/null)" = "$ME" ] || echo "[stream] ★ 持ち主の札 ($OWNER) を書けません。札なしで続けます (張り直すと古いループが残ります)"
+still_mine() { O=$(cat "$OWNER" 2>/dev/null); [ -z "$O" ] || [ "$O" = "$ME" ]; }   # ★ 53: 読めない・空は「替わった」に数えない
+superseded() { echo "[stream] 新しい待ち受け (同じ project) に替わったので、この待ち受けは終わります"; exit 0; }   # ★ 53: stdout に 1 行 (止められた側が気づける)
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @{auth_file} | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
 fetch_meta() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P"; }
@@ -301,7 +302,7 @@ done
 | ★ クラッシュでは `__bye` が出ない | これは欠陥ではなく**意図した振る舞い**。計画的な停止 (SIGINT / SIGTERM) だけが静かになり、クラッシュ・電源断・`kill -9` は異常として残る。**予告できるものは予告し、予告できないものは異常として残る** —— 仕組みから自然にそうなるので、例外処理を書く必要がない |
 | `BACKOFF` の jitter | サーバが同時刻に全接続を閉じる (#360) ので、**固定待ちだと N セッションの再ログインが揃う**。3〜12 秒に散らす。★ **以前は「login が毎回 bcrypt を踏むので CPU がスパイクする」を理由に挙げていたが、#427 でトークンを使い回すようになったので、その理由は消えた**。★★ **jitter 自体は残す** —— 同時刻に N セッションが同じ口へ殺到すること自体は変わらない。`RANDOM` は POSIX `sh` に無いので PID で代用する |
 | ★ `CC_STREAM_GIVE_UP` と `STREAK` (#484) | **既定は粘る** (Claude Code の Monitor には起こし直す者がいないので、自力で張り直すのが正しい)。PaneDeck の service の中では前提が変わる —— 永久に粘ると「**つながっていないのにプロセスは生きている**」になり、静かな日と見分けが付かない。正の整数を入れると、想定外の切断が **続けて** N 回で `exit 1` し、PaneDeck が待ち時間を延ばしながら起こし直して回数を見せる (PaneDeck 班の依頼、2026-10-05)。<br>★ **`FAILS` を使わないこと。** `FAILS` は周回頭の `/pending` が通ると 0 に戻るので、「`/pending` は通るのに受信だけすぐ切れる」状態では 1 より増えない (試験で実際にそうなった)。`STREAK` は予告・寿命の切断と、**1 分以上つながってから**の切断でだけ数え直す。<br>★ 数でない値・0 は「付けていない」扱い (書き間違いで黙って落ちる側に倒さない) |
-| ★ 持ち主の札 `OWNER` と `still_mine` (改善ループ 52) | **張り直すと、前のループが止まらずに残ることがある。** Monitor が期限・停止で止めるのは自分の殻だけで、`sh cc-stream.sh …` のように子の sh で回していると、中の `while true` が生き残って 55 分ごとにつなぎ直し続ける。★ 2026-11-14 に別マシンの `@cc-dbbackup` が 30 分ごとに 1 本ずつ増えて **22 本**になった (本体の agent-server のログで `subscriber added … total=22`)。<br>★ 直し方: 起動したループが札 (`~/.claude/.cc-stream-<project>.owner`) に自分の印を書き、周回の頭・切断の直後・受け取る 1 行ごとに確かめる。**札が別の印に替わっていたら黙って終わる** (stdout に出さない = 誰も起こさない)。新しい待ち受けを張れば、古いループは次の 1 行 (heartbeat は 15 秒ごと) か次の切断で終わる。<br>★ 同じ機械・同じ project で 2 つの受け手を同時に動かす作りは、もともと二重に届くので想定しない (後から張った方が勝つ)。<br>★ 最後の 1 本は、Monitor が止まっても次に張るまで残る (それ以上は増えない) |
+| ★ 持ち主の札 `OWNER` と `still_mine` (改善ループ 52) | **張り直すと、前のループが止まらずに残ることがある。** Monitor が期限・停止で止めるのは自分の殻だけで、`sh cc-stream.sh …` のように子の sh で回していると、中の `while true` が生き残って 55 分ごとにつなぎ直し続ける。★ 2026-11-14 に別マシンの `@cc-dbbackup` が 30 分ごとに 1 本ずつ増えて **22 本**になった (本体の agent-server のログで `subscriber added … total=22`)。<br>★ 直し方: 起動したループが札 (`~/.claude/.cc-stream-<project>.owner`) に自分の印を書き、周回の頭・切断の直後・受け取る 1 行ごとに確かめる。**札が別の印に替わっていたら黙って終わる** (stdout に出さない = 誰も起こさない)。新しい待ち受けを張れば、古いループは次の 1 行 (heartbeat は 15 秒ごと) か次の切断で終わる。終わるときは stdout に 1 行だけ出す (止められた側が気づけるように。改善ループ 53)。<br>★ **札が書けない・読めない・空のときは「替わった」に数えず、札なしで続ける** (改善ループ 53。以前は書けないと黙って始まらなかった)。<br>★ 同じ機械・同じ project で 2 つの受け手を同時に動かす作りは、もともと二重に届くので想定しない (後から張った方が勝ち、先の方は 1 行出して終わる)。**PaneDeck の service (受け取り方 C) を動かしている project で、同じ機械に Monitor を張らないこと** —— 張ると止め合う。<br>★ 最後の 1 本は、Monitor が止まっても次に張るまで残る (それ以上は増えない) |
 | — | ★ **定期的な切断は正常**。サーバは `CC_STREAM_MAX_AGE_MS` (既定 55 分) で意図的に接続を閉じ、再ログイン + 再認可を促す (#360)。`[stream] disconnected` が 55 分周期で出るのは異常ではない |
 
 > ★ **接続コマンドを変えたら、配布前に構文を通すこと。**

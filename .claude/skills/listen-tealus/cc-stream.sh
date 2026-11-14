@@ -20,9 +20,10 @@ fi
 # ---- ここから SKILL.md と同じ ----
 LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye; UP=~/.claude/.cc-stream-$P.up; OWNER=~/.claude/.cc-stream-$P.owner
 FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
-ME="$$-$(date +%s)-${RANDOM:-0}"; printf '%s' "$ME" > "$OWNER"   # ★ 改善ループ 52 持ち主の札 (新しい待ち受けが張られたら古いループは終わる)
-still_mine() { [ "$(cat "$OWNER" 2>/dev/null)" = "$ME" ]; }
-superseded() { echo "[stream] 新しい待ち受けに替わったので終わります" >&2; exit 0; }
+ME="$$-$(date +%s)-${RANDOM:-0}"; printf '%s' "$ME" > "$OWNER" 2>/dev/null   # ★ 改善ループ 52 持ち主の札 (新しい待ち受けが張られたら古いループは終わる)
+[ "$(cat "$OWNER" 2>/dev/null)" = "$ME" ] || echo "[stream] ★ 持ち主の札 ($OWNER) を書けません。札なしで続けます (張り直すと古いループが残ります)"
+still_mine() { O=$(cat "$OWNER" 2>/dev/null); [ -z "$O" ] || [ "$O" = "$ME" ]; }   # ★ 53: 読めない・空は「替わった」に数えない
+superseded() { echo "[stream] 新しい待ち受け (同じ project) に替わったので、この待ち受けは終わります"; exit 0; }   # ★ 53: stdout に 1 行 (止められた側が気づける)
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @"$AUTH" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
 fetch_meta() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P"; }
