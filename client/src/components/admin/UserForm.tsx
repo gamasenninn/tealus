@@ -127,7 +127,8 @@ function UserForm({ user, onSubmit, onCancel }: UserFormProps) {
         </label>
       </div>
 
-      {/* ★ 2026-11-13 社外の窓口 (docs/02 users.is_external_contact)。この口座がいる部屋がトーク一覧の「お客様」のタブに入る。
+      {/* ★ 2026-11-13 社外の窓口 (docs/02 users.is_external_contact)。この口座が作った部屋がトーク一覧の「お客様」のタブに入る
+          (11-14: 社内の人が作った部屋に入れても移らない)。
           既にある口座に付けるものなので、編集のときだけ出す */}
       {isEdit && (
         <div className="form-field">
@@ -139,7 +140,7 @@ function UserForm({ user, onSubmit, onCancel }: UserFormProps) {
               onChange={(e) => setFormData({ ...formData, is_external_contact: e.target.checked })}
               style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
             />
-            社外の窓口 (この口座がいる部屋を「お客様」のタブにまとめる)
+            社外の窓口 (この口座が作った部屋を「お客様」のタブにまとめる)
           </label>
         </div>
       )}

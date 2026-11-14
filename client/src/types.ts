@@ -39,7 +39,7 @@ export interface Room {
   partner_avatar_url?: string | null;
   member_count?: number;
   unread_count?: number;
-  /** 社外の窓口の口座がメンバーにいる (2026-11-13、docs/02 users.is_external_contact)。タブ「お客様」に入り、ほかのタブには出さない */
+  /** 社外の窓口の口座が作り、いまもメンバーにいる (2026-11-13・11-14、docs/02 users.is_external_contact)。タブ「お客様」に入り、ほかのタブには出さない */
   has_external_contact?: boolean;
   /** ゲスト (role=guest) がメンバーにいる。タブ「お客様」に入る (ほかのタブにも出す) */
   has_guest?: boolean;

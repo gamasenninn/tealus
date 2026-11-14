@@ -396,8 +396,11 @@ router.get('/', async (req, res) => {
               --   画面のタブ「お客様」と、窓口のいる部屋をほかのタブから外すのに使う
               --   ★ 見る人自身は数えない (改善ループ 51)。数えると、ゲスト本人の画面では自分のいる部屋が全部「お客様」になり、
               --     窓口の口座で入ると「すべて」「グループ」が空になる
+              --   ★ 窓口の口座が「作った」部屋だけ (2026-11-14 小野さん判断「EC窓口は社内のグループに入れたい」)。
+              --     社内の人が作った部屋に窓口を入れても、全員の「すべて」「グループ」から消さない。作った窓口が抜けたら外れる
               EXISTS (SELECT 1 FROM room_members rmx JOIN users ux ON ux.id = rmx.user_id
-                       WHERE rmx.room_id = r.id AND ux.is_external_contact AND ux.id != $1) AS has_external_contact,
+                       WHERE rmx.room_id = r.id AND ux.id = r.created_by
+                         AND ux.is_external_contact AND ux.id != $1) AS has_external_contact,
               EXISTS (SELECT 1 FROM room_members rmg JOIN users ug ON ug.id = rmg.user_id
                        WHERE rmg.room_id = r.id AND ug.role = 'guest' AND ug.id != $1) AS has_guest
        FROM rooms r

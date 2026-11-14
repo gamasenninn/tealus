@@ -63,6 +63,28 @@ describe('社外の窓口の印とお客様の部屋', () => {
     expect(byId(plainRoom)).toMatchObject({ has_external_contact: false, has_guest: false });
   });
 
+  // ★ 2026-11-14 小野さん判断「EC窓口は社内のグループに入れたい」: 窓口が作った部屋だけがお客様の部屋。
+  //   社内の人が作った部屋に窓口を入れても、その部屋は「お客様」に移らない (全員の「すべて」「グループ」から消えない)
+  it('★★ 社内の人が作った部屋に窓口の口座を入れても、お客様の部屋にならない', async () => {
+    await getTestPool().query('UPDATE users SET is_external_contact = true WHERE id = $1', [window.user.id]);
+    const ecRoom = await makeRoom(window, 'ECゲスト #1', [staff.user.id]);
+    const internal = await makeRoom(staff, '業務メモ', [admin.user.id, window.user.id]);
+
+    const res = await request(app).get('/api/rooms').set('Authorization', `Bearer ${staff.token}`);
+    const byId = (id: string) => res.body.rooms.find((r: { id: string }) => r.id === id);
+    expect(byId(ecRoom)).toMatchObject({ has_external_contact: true });
+    expect(byId(internal)).toMatchObject({ has_external_contact: false });
+  });
+
+  it('★ 窓口が作った部屋でも、窓口が抜けたらお客様の部屋ではなくなる', async () => {
+    await getTestPool().query('UPDATE users SET is_external_contact = true WHERE id = $1', [window.user.id]);
+    const ecRoom = await makeRoom(window, 'ECゲスト #2', [staff.user.id, admin.user.id]);
+    await getTestPool().query('DELETE FROM room_members WHERE room_id = $1 AND user_id = $2', [ecRoom, window.user.id]);
+
+    const res = await request(app).get('/api/rooms').set('Authorization', `Bearer ${staff.token}`);
+    expect(res.body.rooms.find((r: { id: string }) => r.id === ecRoom)).toMatchObject({ has_external_contact: false });
+  });
+
   // ★ 改善ループ 51: 見る人自身は数えない。数えると、ゲスト本人の画面では自分のいる部屋が全部「お客様」になり、
   //   窓口の口座で入ると「すべて」「グループ」が空になる
   it('★ 見る人自身が窓口・ゲストのときは、自分を数えない', async () => {
