@@ -51,7 +51,16 @@ export function addSubscriber(sub: CcSubscriber): void {
   }
   set.add(sub);
   logger.debug(`[cc-stream] subscriber added: project=${sub.project} rooms=${sub.allowedRooms.size} total=${set.size}`);
+  // ★ 改善ループ 52: 1 つの班の購読者が多すぎたら warn。受け手が張り直すたびに古いループが残ると増え続けるが
+  //   (2026-11-14 に @cc-dbbackup が 22 本)、上の行は debug なので本番では見えなかった。
+  //   9 本目と、その後は 10 本ごとに 1 回 (増え続けている間、毎回は出さない)
+  if (set.size === SUBSCRIBER_WARN_AT + 1 || (set.size > SUBSCRIBER_WARN_AT && set.size % 10 === 0)) {
+    logger.warn(`[cc-stream] ★ 購読者が多すぎます: project=${sub.project} total=${set.size} (受け手の待ち受けが張り直しのたびに残っていないか)`);
+  }
 }
+
+/** 1 つの班の購読者がこれを超えたら warn (ふだんは 1〜4 本) */
+const SUBSCRIBER_WARN_AT = 8;
 
 /** ミリ秒差を「Ns」に。基準が無ければ `-` (= 0 秒と区別する) */
 function secsSince(at: number | undefined, now: number): string {

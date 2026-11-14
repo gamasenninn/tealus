@@ -341,3 +341,33 @@ describe('cc-stream.sh — 受信の口だけ壊れたときに起こし続け�
     expect(lines.some((l) => /recovered after 2 attempts/.test(l))).toBe(true);
   });
 });
+
+/**
+ * 改善ループ 52: 待ち受けを張り直すたびに、前の受信のループが残って増えていた
+ * ★ 2026-11-14 に、別マシン (バックアップ機) の @cc-dbbackup の待ち受けが、Monitor の期限 (30 分) ごとに
+ *   1 本ずつ増えて 22 本になった。Monitor が止めるのは自分の殻だけで、スクリプトを sh で呼ぶと中のループが生き残る
+ * ★★ 直し方: 起動したループが「持ち主の札」(~/.claude/.cc-stream-<project>.owner) に自分の印を書く。
+ *   札が別の印に替わっていたら (新しい待ち受けが張られた)、古いループは黙って終わる
+ */
+describe('cc-stream.sh — 新しい待ち受けが張られたら、古いループは終わる (改善ループ 52)', () => {
+  it('★★★ 札を別の印に書き換えられたら、次の切断で exit 0 し、つなぎ直さない', () => {
+    // 2 回目の /stream の最中に、新しい待ち受けが札を書き換えた、という筋
+    const r = runFailingLoop({}, 10,
+      `[ "$N" -ge 2 ] && printf 'newer' > "$HOME/.claude/.cc-stream-stubproj.owner"; exit 7`);
+    expect(r.status).toBe(0);
+    expect(r.streams).toBe(2);
+  });
+
+  it('★ 札がそのままなら、今までどおり粘る', () => {
+    const r = runFailingLoop({}, 4);
+    expect(r.status).not.toBe(0);
+    expect(r.streams).toBeGreaterThanOrEqual(4);
+  });
+
+  it('★ 終わるときは起こさない (stdout に出さない)', () => {
+    const r = runFailingLoop({}, 10,
+      `[ "$N" -ge 1 ] && printf 'newer' > "$HOME/.claude/.cc-stream-stubproj.owner"; exit 7`);
+    expect(r.status).toBe(0);
+    expect(r.out.split('\n').filter(Boolean)).toEqual([]);
+  });
+});

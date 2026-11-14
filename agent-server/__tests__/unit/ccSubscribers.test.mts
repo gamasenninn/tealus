@@ -368,3 +368,29 @@ describe('#359 subscriber removed の計器 (id / age / hb_age)', () => {
     expect(lastRemovedLog()).toContain('project=tealus');
   });
 });
+
+/**
+ * 改善ループ 52: 1 つの班の待ち受けが増え続けても、本体側では debug でしか見えなかった
+ * ★ 2026-11-14 に @cc-dbbackup が 30 分ごとに 1 本ずつ増えて 22 本になった (受け手の張り直しで古いのが残る)。
+ *   接続の行は debug で、本番 (warn 以上) では見えない。多すぎたら warn で 1 行出す
+ */
+describe('改善ループ 52 購読者が多すぎたら知らせる', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { logger } = jest.requireMock('../../src/lib/logger.mts') as { logger: { warn: jest.Mock } };
+  beforeEach(() => logger.warn.mockClear());
+  afterEach(() => { while (created.length) removeSubscriber(created.pop()!); });
+
+  it('★ 1 つの班で 8 本までは黙っている。9 本目で warn を 1 回', () => {
+    for (let i = 0; i < 8; i++) addSubscriber(makeSub('many', ['r']).s);
+    expect(logger.warn).not.toHaveBeenCalled();
+    addSubscriber(makeSub('many', ['r']).s);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(String(logger.warn.mock.calls[0][0])).toContain('project=many');
+  });
+
+  it('増え続けても毎回は出さない (10 本ごとに 1 回)', () => {
+    for (let i = 0; i < 25; i++) addSubscriber(makeSub('many2', ['r']).s);
+    // 9 本目・10 本目・20 本目
+    expect(logger.warn).toHaveBeenCalledTimes(3);
+  });
+});

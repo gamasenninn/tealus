@@ -18,8 +18,11 @@ if [ -z "$P" ] || [ -z "$API" ] || [ -z "$STREAM" ]; then
   exit 2
 fi
 # ---- ここから SKILL.md と同じ ----
-LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye; UP=~/.claude/.cc-stream-$P.up
+LOG=~/.claude/.cc-stream-$P.ndjson; RC=~/.claude/.cc-stream-$P.rc; BYE=~/.claude/.cc-stream-$P.bye; UP=~/.claude/.cc-stream-$P.up; OWNER=~/.claude/.cc-stream-$P.owner
 FAILS=0; DOWN_FROM=0; DISC=0; LASTDAY=""; WARNED=0; GRACE_LIMIT=300; COUNT_FROM=$(date +%s); TOKEN=; STREAK=0
+ME="$$-$(date +%s)-${RANDOM:-0}"; printf '%s' "$ME" > "$OWNER"   # ★ 改善ループ 52 持ち主の札 (新しい待ち受けが張られたら古いループは終わる)
+still_mine() { [ "$(cat "$OWNER" 2>/dev/null)" = "$ME" ]; }
+superseded() { echo "[stream] 新しい待ち受けに替わったので終わります" >&2; exit 0; }
 get_token() { curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
               -d @"$AUTH" | node -pe "try{JSON.parse(require('fs').readFileSync(0,'utf8')).token}catch(e){''}"; }
 fetch_meta() { curl -s -w '\n%{http_code}' -H "Authorization: Bearer $TOKEN" "$STREAM/pending?project=$P"; }
@@ -36,6 +39,7 @@ mark_up() {                                         # ★ #512 /stream から本
   FAILS=0                                           # (パイプの中の写し。外の FAILS は $UP を見て戻す)
 }
 while true; do
+  still_mine || superseded
   auth_prepare
   MAX_AGE=$(printf '%s' "$META" | node -pe "try{const v=Math.round(JSON.parse(require('fs').readFileSync(0,'utf8')).max_age_ms/1000);Number.isFinite(v)?v:0}catch(e){0}")
   if [ "$MAX_AGE" = "0" ]; then                     # 古いサーバ / 到達できない → 仮定値で続行
@@ -57,6 +61,7 @@ while true; do
   START=$(date +%s); rm -f "$UP"
   { curl -sN -H "Authorization: Bearer $TOKEN" "$STREAM/stream?project=$P${SINCE:+&since=$SINCE}"; echo $? > "$RC"; } \
   | while IFS= read -r line || [ -n "$line" ]; do
+      still_mine || exit 0                                              # ★ 改善ループ 52 札が替わった: 読むのをやめる (curl は次の書き込みで終わる)
       case "$line" in
         '{"__hb"'*)   mark_up ;;                                        # heartbeat: 捨てる (つながった印にだけ使う)
         '{"__bye"'*)                                                    # ★ 予告された切断 (#365 停止 / #366 寿命)
@@ -76,6 +81,7 @@ while true; do
                       fi ;;
       esac
     done
+  still_mine || superseded                          # ★ 改善ループ 52 切断の数え方より先に (古いループは何も知らせない)
   END=$(date +%s); SEC=$(( END - START )); RC_VAL=$(cat "$RC" 2>/dev/null); DISC=$((DISC+1))
   [ -e "$UP" ] && FAILS=0                           # ★ #512 この接続はつながっていた → 想定外の数え直しはここで
   BACKOFF=$(( 3 + ${RANDOM:-$$} % 10 ))     # jitter。RANDOM が無い sh では PID で代用
