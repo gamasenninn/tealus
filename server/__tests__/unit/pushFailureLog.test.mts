@@ -79,6 +79,18 @@ describe('sendPushToUser の失敗', () => {
     expect(mockQuery.mock.calls.some(([sql]) => String(sql).includes('is_active = false'))).toBe(true);
   });
 
+  // ★ 改善ループ 54 (2026-11-15): 410/404 は「端末が購読をやめた・期限が切れた」で、Tealus の不具合ではない。
+  //   error で書くと、本番ログの error の 1/3 がこれになり、洗い出しのたびに本物と見分ける手間が出る
+  test.each([410, 404])('★ %i は error ではなく info で「無効にした」と残す', async (code) => {
+    mockSend.mockRejectedValue(webPushError(code, 'push subscription has unsubscribed or expired.'));
+    await sendPushToUser('u1', { title: 't' });
+    expect(logger.error).not.toHaveBeenCalled();
+    const logged = (logger.info as jest.Mock).mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logged).toContain(`status=${code}`);
+    expect(logged).toContain('sub=11111111');
+    expect(logged).toContain('無効にしました');
+  });
+
   test('★ 無効にした時刻を残す (見張りの push_reach が「最後の宛先が無効になった時刻」に使う、docs/09 §3.6)', async () => {
     mockSend.mockRejectedValue(webPushError(410, ''));
     await sendPushToUser('u1', { title: 't' });

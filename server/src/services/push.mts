@@ -140,6 +140,9 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
             'UPDATE push_subscriptions SET is_active = false, updated_at = now() WHERE id = $1',
             [sub.id]
           );
+          // ★ 改善ループ 54: 端末側が購読をやめた・期限切れ = 決まった後始末。error にすると本物の失敗と混ざる
+          logger.info(`${describePushFailure(err, sub)} → 宛先を無効にしました`);
+          return;
         }
         // ★ 403 はまだ無効にしない —— 理由を見てから決める
         logger.error(describePushFailure(err, sub));
