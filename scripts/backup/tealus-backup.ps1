@@ -6,6 +6,8 @@
 #
 # 1. DB   : 毎回まるごと (pg_dump -Fc)。表の数を確かめてから置く。新しい方から -Keep 本を残す
 #           ★ PowerShell 5.1 の > は文字コードを変えて dump を壊すので、コンテナの中で書いてから docker cp で出す
+#           ★ 横に件数の控え tealus-<日時>.counts.json を置く (2026-11-15、BD の控えの戻す試しで使う)。
+#             dump の直前の cutoff までに作られた users・rooms・messages・message_media の数。戻した側も同じ cutoff で数える
 # 2. メディア: robocopy /E で新しい・変わったファイルだけを足す。★ 元で消えたものはバックアップでは消さない
 #           (うっかり消したものも戻せるように。溜まり続けるので、容量は時々見る)
 # 3. 鍵と設定: .env (鍵)・.gitignore で外している会社の設定を <置き先>\secrets\<日時>\ へ写す。-Keep 世代を残す
@@ -50,6 +52,20 @@ Write-Log "=== 開始 ==="
 if ($Parts -contains 'db') { try {
   $inner = "/tmp/tealus-$Stamp.dump"
   $local = Join-Path $env:TEMP "tealus-$Stamp.dump"
+  # ★ 件数の控え (2026-11-15、BD の控え hks-portal docs/bd-backup.md 7.3・7.6 の 1)。戻す試しで「戻した DB の数」と比べる。
+  #   ★★ dump の直前に、DB の時計で「いま」(cutoff) を取り、cutoff までに作られた行だけを数える。
+  #     ただ数えると、dump の最中に入った投稿のぶん数が食い違い、戻す試しが誤って失敗する。
+  #     戻した側も同じ cutoff で数える (下の COUNTS_SQL の now() を cutoff の値に替えて流す)。
+  #   ★ 数えてから dump の始まりまでは 1 秒ほど。その間に行を消す (部屋を消す) と食い違うことはある (起きたら人が見る)
+  $countsSql = "select json_build_object('cutoff', c.t, " +
+    "'users', (select count(*) from users where created_at <= c.t), " +
+    "'rooms', (select count(*) from rooms where created_at <= c.t), " +
+    "'messages', (select count(*) from messages where created_at <= c.t), " +
+    "'message_media', (select count(*) from message_media where created_at <= c.t), " +
+    "'max_message_created_at', (select max(created_at) from messages where created_at <= c.t)) " +
+    "from (select now() as t) c"
+  $countsJson = (docker exec $Container psql -U $DbUser -d $DbName -tAc $countsSql | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $countsJson.StartsWith('{')) { throw "件数を数えられない (exit $LASTEXITCODE)" }
   docker exec $Container pg_dump -U $DbUser -Fc -f $inner $DbName
   if ($LASTEXITCODE -ne 0) { throw "pg_dump 失敗 (exit $LASTEXITCODE)" }
   $tables = (docker exec $Container pg_restore --list $inner | Select-String 'TABLE DATA').Count
@@ -59,9 +75,20 @@ if ($Parts -contains 'db') { try {
   docker exec $Container rm -f $inner | Out-Null
   $size = (Get-Item $local).Length
   Move-Item $local (Join-Path $Dest "db\tealus-$Stamp.dump") -Force
-  Write-Log ("DB ok: tealus-{0}.dump {1:N1} MB, 表 {2}" -f $Stamp, ($size / 1MB), $tables)
+  # ★ 件数の控えは dump と同じ名前で横に置く。表の数・cutoff の取り方も入れる (BD の機械は本番に問い合わせない)
+  #   ★ DB が返した JSON は読み直さずにそのまま包む (PowerShell 7 の ConvertFrom-Json は日時を変換し、書き戻すと形が変わる)
+  $counts = $countsJson | ConvertFrom-Json
+  $countsOut = '{"dump": "tealus-' + $Stamp + '.dump", "tables": ' + $tables +
+    ', "how": "created_at <= cutoff の行の数。戻した DB でも同じ cutoff で数えて比べる", "counts": ' + $countsJson + '}'
+  # ★ BOM なしの UTF-8 (PowerShell 5.1 の -Encoding UTF8 は BOM を付け、Python の json.load が読めない)
+  [IO.File]::WriteAllText((Join-Path $Dest "db\tealus-$Stamp.counts.json"), $countsOut, (New-Object Text.UTF8Encoding $false))
+  Write-Log ("DB ok: tealus-{0}.dump {1:N1} MB, 表 {2} / 件数 messages {3}・rooms {4}・users {5}・media {6}" -f $Stamp, ($size / 1MB), $tables, $counts.messages, $counts.rooms, $counts.users, $counts.message_media)
   $old = Get-ChildItem (Join-Path $Dest 'db') -Filter 'tealus-*.dump' | Sort-Object Name -Descending | Select-Object -Skip $Keep
-  foreach ($f in $old) { Remove-Item $f.FullName -Force; Write-Log "DB 古いものを消した: $($f.Name)" }
+  foreach ($f in $old) {
+    Remove-Item $f.FullName -Force; Write-Log "DB 古いものを消した: $($f.Name)"
+    $oldCounts = [IO.Path]::ChangeExtension($f.FullName, '.counts.json')
+    if (Test-Path $oldCounts) { Remove-Item $oldCounts -Force }
+  }
 } catch {
   $ok = $false; Write-Log "DB 失敗: $($_.Exception.Message)"
 } }
