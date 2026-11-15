@@ -423,7 +423,7 @@ cp .claude/cc-tealus.json.example .claude/cc-tealus.json
 | **その班の bot** (ステップ 1A) | 班が返事を投稿する | 返事が 403 で断られる |
 | **agent-server の Bot** (アシスタント) | 「cc-x に届きました」の受付表示・アシスタントの返事 | 受付表示が出ない。★ **`@cc-x` の配達そのものは届く** (配達はルームの在室を見る前に走る、`agent-server/src/webhook/handler.mts`) |
 
-★ **班の bot をルームに入れるのは人の仕事**です。bot は人を招待できず、`join_room` はルーム ID が要りますが、
+★ **班の bot をルームに入れるのは人の仕事**です。bot は人を招待できず (★ 例外は「社外の窓口」の口座が自分の作った部屋に社員を足すときだけ、docs/02 `is_external_contact`)、`join_room` はルーム ID が要りますが、
 `list_rooms` には**自分が入っていないルームは出ません**。管理者がメンバー一覧から追加するか、ルーム ID を班に渡してください。
 
 agent-server の Bot の詳細は [`docs/setup-ai-agent.md`](./setup-ai-agent.md) ステップ 6 参照。

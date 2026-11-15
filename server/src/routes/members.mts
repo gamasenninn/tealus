@@ -12,6 +12,23 @@ import { fireWebhooks } from '../services/webhook.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { announceRoomJoined, announceRoomUpdated, announceRoomLeft } from '../services/roomJoined.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
+import { REQUESTER_HEADER } from '../services/requesterScope.mts';
+
+/**
+ * ★ 窓口の口座が、自分の作った部屋に社員を後から足す (2026-11-15 小野さん承認、EC の Q0(15) の 1、docs/02 is_external_contact)。
+ *   機械のアカウントは招待しない (改善ループ 13) のただ 1 つの例外。EC の店の人が後から増えると、前の「ECゲスト #N」を見られなかった。
+ *   呼んだ口座に窓口の印があり、その部屋を作ったのがその口座で、AI の道具の印が付いていないときだけ真。
+ * ★ 印は認証の SELECT に足さず、ここで引く (新しい列を認証で読むと、migrate 前の起動で全員のログインが落ちる)
+ */
+async function deskMayInvite(req: Request, roomId: string): Promise<boolean> {
+  if (!req.user?.is_bot || req.get(REQUESTER_HEADER) !== undefined) return false;
+  const r = await pool.query(
+    `SELECT 1 FROM users u JOIN rooms r ON r.created_by = u.id
+      WHERE u.id = $1 AND u.is_external_contact AND r.id = $2`,
+    [req.user.id, roomId]
+  );
+  return r.rows.length > 0;   // ★ いまもメンバーかは手前の requireMemberOrSystemAdmin が見ている
+}
 
 export const router = express.Router({ mergeParams: true });
 
@@ -40,10 +57,15 @@ async function otherActiveGroupAdminExists(roomId: string, userId: string): Prom
 router.post('/', authenticate, requireMemberOrSystemAdmin, requireGroup, async (req: Request, res: Response) => {
   // #282: guest は member であっても他 user を招待できない (fail-closed)。
   // client は招待ボタンを隠すが、API 直叩きもサーバーで弾く。
-  if (!canInviteToRoom(req.user)) {
-    return res.status(403).json({ error: req.user?.is_bot ? '機械のアカウントはメンバーを招待できません' : 'ゲストユーザはメンバーを招待できません' });
-  }
   const roomId = (req.params as { id: string }).id;
+  // ★ 窓口の例外 (上の deskMayInvite)。この道では、足す相手も絞る (下の userResult)
+  let viaDesk = false;
+  if (!canInviteToRoom(req.user)) {
+    try { viaDesk = await deskMayInvite(req, roomId); } catch (err) { logger.error('Add member desk check error:', err); return res.status(500).json({ error: E.SERVER_ERROR }); }
+    if (!viaDesk) {
+      return res.status(403).json({ error: req.user?.is_bot ? '機械のアカウントはメンバーを招待できません' : 'ゲストユーザはメンバーを招待できません' });
+    }
+  }
   const { user_id } = req.body;
 
   if (!user_id) {
@@ -62,12 +84,17 @@ router.post('/', authenticate, requireMemberOrSystemAdmin, requireGroup, async (
     }
 
     // Check user exists
-    const userResult = await pool.query<{ id: string; display_name: string }>(
-      'SELECT id, display_name FROM users WHERE id = $1 AND is_active = true',
+    const userResult = await pool.query<{ id: string; display_name: string; role: string; is_bot: boolean; is_external_contact: boolean }>(
+      'SELECT id, display_name, role, is_bot, is_external_contact FROM users WHERE id = $1 AND is_active = true',
       [user_id]
     );
     if (userResult.rows.length === 0) {
       return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+    // ★ 窓口の道で足せるのは社員だけ (ゲスト・機械・窓口は不可)。作るときより狭くする (docs/02)
+    const target = userResult.rows[0];
+    if (viaDesk && (target.role === 'guest' || target.is_bot || target.is_external_contact)) {
+      return res.status(403).json({ error: '窓口の口座が足せるのは社員だけです' });
     }
 
     // Add member

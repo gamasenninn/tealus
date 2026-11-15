@@ -112,4 +112,70 @@ describe('社外の窓口の印とお客様の部屋', () => {
     expect(asStaff.body.rooms.find((r: { id: string }) => r.id === ecRoom)).toMatchObject({ has_external_contact: true });
     expect(asStaff.body.rooms.find((r: { id: string }) => r.id === guestRoom)).toMatchObject({ has_guest: true });
   });
+
+  // ★ 2026-11-15 小野さん承認 (EC の Q0(15) の 1、docs/02 is_external_contact): 窓口の口座は、自分が作った部屋に社員を後から足せる。
+  //   機械のアカウントは招待しない (改善ループ 13) のただ 1 つの例外。EC の店の人が後から増えると、前の部屋を見られなかった
+  describe('窓口の口座が、自分の作った部屋に社員を後から足す', () => {
+    let late: TestUser, bot: TestUser, window2: TestUser;
+    beforeEach(async () => {
+      // 本番の EC窓口は機械 (is_bot) で、窓口の印付き
+      await getTestPool().query('UPDATE users SET is_bot = true, is_external_contact = true WHERE id = $1', [window.user.id]);
+      late = await createTestUser({ login_id: 'EMP002', display_name: '後から来た店の人' });
+      bot = await createTestUser({ login_id: 'bot-x', display_name: 'ほかの機械' });
+      await getTestPool().query('UPDATE users SET is_bot = true WHERE id = $1', [bot.user.id]);
+      window2 = await createTestUser({ login_id: 'ec-front2', display_name: '別の窓口' });
+      await getTestPool().query('UPDATE users SET is_bot = true, is_external_contact = true WHERE id = $1', [window2.user.id]);
+    });
+    const invite = (by: TestUser, roomId: string, userId: string, headers: Record<string, string> = {}) =>
+      request(app).post(`/api/rooms/${roomId}/members`).set('Authorization', `Bearer ${by.token}`).set(headers).send({ user_id: userId });
+
+    it('★★ 自分が作った部屋に、有効な社員を足せる', async () => {
+      const ecRoom = await makeRoom(window, 'ECゲスト #1', [staff.user.id]);
+      const res = await invite(window, ecRoom, late.user.id);
+      expect(res.status).toBe(200);
+      const m = await getTestPool().query('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [ecRoom, late.user.id]);
+      expect(m.rowCount).toBe(1);
+    });
+
+    it('既にメンバーなら 409 (5 分ごとの見回りはこれを正常として扱う)', async () => {
+      const ecRoom = await makeRoom(window, 'ECゲスト #2', [staff.user.id]);
+      expect((await invite(window, ecRoom, staff.user.id)).status).toBe(409);
+    });
+
+    it('★ 窓口の印の無い機械は、今までどおり足せない', async () => {
+      const room = await makeRoom(bot, '機械の部屋', [staff.user.id]);
+      expect((await invite(bot, room, late.user.id)).status).toBe(403);
+    });
+
+    it('★ 自分が作っていない部屋には足せない (窓口がメンバーでも)', async () => {
+      const room = await makeRoom(staff, '社内の部屋', [window.user.id]);
+      expect((await invite(window, room, late.user.id)).status).toBe(403);
+      const other = await makeRoom(window2, 'ECゲスト 別の窓口', [window.user.id]);
+      expect((await invite(window, other, late.user.id)).status).toBe(403);
+    });
+
+    it.each([
+      ['ゲスト', 'guest'], ['機械', 'bot'], ['窓口', 'window2'], ['利用停止の人', 'inactive'],
+    ])('★ %s は足せない', async (_label, who) => {
+      const ecRoom = await makeRoom(window, 'ECゲスト #3', [staff.user.id]);
+      let target = who === 'guest' ? guest : who === 'bot' ? bot : who === 'window2' ? window2 : late;
+      if (who === 'inactive') await getTestPool().query('UPDATE users SET is_active = false WHERE id = $1', [late.user.id]);
+      const res = await invite(window, ecRoom, target.user.id);
+      expect([403, 404]).toContain(res.status);
+      const m = await getTestPool().query('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [ecRoom, target.user.id]);
+      expect(m.rowCount).toBe(0);
+    });
+
+    it('★ AI の道具の印 (依頼した人のヘッダ) が付いていたら断る', async () => {
+      const ecRoom = await makeRoom(window, 'ECゲスト #4', [staff.user.id]);
+      const res = await invite(window, ecRoom, late.user.id, { 'x-tealus-requester': staff.user.id });
+      expect(res.status).toBe(403);
+    });
+
+    it('窓口の印を外したら、もう足せない', async () => {
+      const ecRoom = await makeRoom(window, 'ECゲスト #5', [staff.user.id]);
+      await getTestPool().query('UPDATE users SET is_external_contact = false WHERE id = $1', [window.user.id]);
+      expect((await invite(window, ecRoom, late.user.id)).status).toBe(403);
+    });
+  });
 });
