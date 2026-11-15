@@ -131,7 +131,7 @@ router.put('/users/:id', async (req, res) => {
       updates.push(`is_bot = $${paramIndex++}`);
       values.push(is_bot);
     }
-    // ★ 社外の窓口 (2026-11-13、docs/02 users.is_external_contact)。この口座がいる部屋が画面の「お客様」のタブに入る
+    // ★ 社外の窓口 (2026-11-13、docs/02 users.is_external_contact)。この口座が作って今もいる部屋が画面の「お客様」のタブに入る (2026-11-14 c90b5ff6)
     if (is_external_contact !== undefined) {
       if (typeof is_external_contact !== 'boolean') return res.status(400).json({ error: '社外の窓口の印は true か false です' });
       updates.push(`is_external_contact = $${paramIndex++}`);

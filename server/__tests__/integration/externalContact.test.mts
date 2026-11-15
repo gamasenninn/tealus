@@ -49,7 +49,7 @@ describe('社外の窓口の印とお客様の部屋', () => {
     expect(res.status).toBe(403);
   });
 
-  it('★ 部屋の一覧は、窓口の口座がいる部屋に has_external_contact、ゲストがいる部屋に has_guest を付ける', async () => {
+  it('★ 部屋の一覧は、窓口の口座が作った部屋に has_external_contact、ゲストがいる部屋に has_guest を付ける', async () => {
     await getTestPool().query('UPDATE users SET is_external_contact = true WHERE id = $1', [window.user.id]);
     const ecRoom = await makeRoom(window, 'EC チャット お客様 #1', [staff.user.id]);
     const guestRoom = await makeRoom(staff, '社内とゲスト', [guest.user.id]);
@@ -83,6 +83,17 @@ describe('社外の窓口の印とお客様の部屋', () => {
 
     const res = await request(app).get('/api/rooms').set('Authorization', `Bearer ${staff.token}`);
     expect(res.body.rooms.find((r: { id: string }) => r.id === ecRoom)).toMatchObject({ has_external_contact: false });
+  });
+
+  // ★ 改善ループ 55 (外の目の指摘): 抜けて入り直したら戻る。作り手は created_by に残っているので、規則どおりならまたお客様の部屋
+  it('★ 作った窓口が抜けて入り直すと、またお客様の部屋に戻る', async () => {
+    await getTestPool().query('UPDATE users SET is_external_contact = true WHERE id = $1', [window.user.id]);
+    const ecRoom = await makeRoom(window, 'ECゲスト #3', [staff.user.id]);
+    await getTestPool().query('DELETE FROM room_members WHERE room_id = $1 AND user_id = $2', [ecRoom, window.user.id]);
+    await getTestPool().query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [ecRoom, window.user.id]);
+
+    const res = await request(app).get('/api/rooms').set('Authorization', `Bearer ${staff.token}`);
+    expect(res.body.rooms.find((r: { id: string }) => r.id === ecRoom)).toMatchObject({ has_external_contact: true });
   });
 
   // ★ 改善ループ 51: 見る人自身は数えない。数えると、ゲスト本人の画面では自分のいる部屋が全部「お客様」になり、

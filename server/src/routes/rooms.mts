@@ -392,12 +392,13 @@ router.get('/', async (req, res) => {
               -- ★ 利用停止の人は数えない (一覧には「利用停止」と添えて残す、改善ループ 10-13 の 4.)
               (SELECT COUNT(*)::int FROM room_members rmc JOIN users uc ON uc.id = rmc.user_id
                 WHERE rmc.room_id = r.id AND uc.is_active = true) AS member_count,
-              -- ★ お客様の部屋 (2026-11-13、docs/02 users.is_external_contact)。社外の窓口の口座がいる / ゲストがいる。
+              -- ★ お客様の部屋 (2026-11-13、docs/02 users.is_external_contact)。社外の窓口の口座が作って今もいる / ゲストがいる。
               --   画面のタブ「お客様」と、窓口のいる部屋をほかのタブから外すのに使う
               --   ★ 見る人自身は数えない (改善ループ 51)。数えると、ゲスト本人の画面では自分のいる部屋が全部「お客様」になり、
               --     窓口の口座で入ると「すべて」「グループ」が空になる
               --   ★ 窓口の口座が「作った」部屋だけ (2026-11-14 小野さん判断「EC窓口は社内のグループに入れたい」)。
-              --     社内の人が作った部屋に窓口を入れても、全員の「すべて」「グループ」から消さない。作った窓口が抜けたら外れる
+              --     社内の人が作った部屋に窓口を入れても、全員の「すべて」「グループ」から消さない。作った窓口が抜けたら外れ、入り直すと戻る
+              --   ★ 1 対 1 は先に開いた方が作り手になる。窓口の口座から社員へ開くと「お客様」だけに出て、社員から先に開いていれば「1:1」に残る (改善ループ 55)
               EXISTS (SELECT 1 FROM room_members rmx JOIN users ux ON ux.id = rmx.user_id
                        WHERE rmx.room_id = r.id AND ux.id = r.created_by
                          AND ux.is_external_contact AND ux.id != $1) AS has_external_contact,
