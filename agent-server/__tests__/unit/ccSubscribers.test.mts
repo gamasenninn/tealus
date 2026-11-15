@@ -394,3 +394,62 @@ describe('改善ループ 52 購読者が多すぎたら知らせる', () => {
     expect(logger.warn).toHaveBeenCalledTimes(3);
   });
 });
+
+/**
+ * 改善ループ 56: 受け手が「2 本以上、長く並んだまま」を知らせる
+ * ★ 2026-11-15 に @cc-tealus-dev (Mac) が 4〜7 本つながり続けていた (11-01 から呼ばれていない)。
+ *   9 本目の warn (ループ 52) には届かず、昨日の @cc-dbbackup も 9 本になるまで 4 時間見えなかった。
+ * ★ 張り直しの引き継ぎでは、古い 1 本と新しい 1 本が 20 秒ほど並ぶだけ (札で古い方が終わる)。
+ *   なので「新しく来たとき、既に 2 分以上つながっている先客が 2 本以上いる」= 残っている、と読む
+ */
+describe('改善ループ 56 長く並んだ受け手を知らせる', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { logger } = jest.requireMock('../../src/lib/logger.mts') as { logger: { warn: jest.Mock } };
+  const T0 = new Date('2026-11-15T10:00:00+09:00').getTime();
+  beforeEach(() => { logger.warn.mockClear(); jest.useFakeTimers({ now: T0 }); });
+  afterEach(() => { jest.useRealTimers(); while (created.length) removeSubscriber(created.pop()!); });
+
+  it('★ 張り直しの引き継ぎ (古い 1 本 + 新しい 1 本) は黙っている', () => {
+    addSubscriber(makeSub('handover', ['r']).s);
+    jest.setSystemTime(T0 + 30 * 60_000);
+    addSubscriber(makeSub('handover', ['r']).s);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('★★ 2 分以上つながっている先客が 2 本いるところへ 3 本目が来たら warn', () => {
+    addSubscriber(makeSub('stale', ['r']).s);
+    addSubscriber(makeSub('stale', ['r']).s);
+    jest.setSystemTime(T0 + 3 * 60_000);
+    addSubscriber(makeSub('stale', ['r']).s);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const line = String(logger.warn.mock.calls[0][0]);
+    expect(line).toContain('project=stale');
+    expect(line).toContain('total=3');
+  });
+
+  it('先客が来たばかり (2 分未満) なら黙っている', () => {
+    addSubscriber(makeSub('fresh', ['r']).s);
+    addSubscriber(makeSub('fresh', ['r']).s);
+    jest.setSystemTime(T0 + 60_000);
+    addSubscriber(makeSub('fresh', ['r']).s);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('★ 続いている間は 6 時間に 1 回だけ (55 分ごとのつなぎ直しで毎回は出さない)', () => {
+    // 3 本が並んだまま、55 分ごとにいちばん古い 1 本がつなぎ直す (本数は 3 のまま)
+    const reconnectOldest = () => {
+      const old = created.find((s) => s.project === 'loop')!;
+      removeSubscriber(old); created.splice(created.indexOf(old), 1);
+      addSubscriber(makeSub('loop', ['r']).s);
+    };
+    for (let i = 0; i < 3; i++) addSubscriber(makeSub('loop', ['r']).s);
+    for (let k = 1; k <= 6; k++) {               // 5 時間半
+      jest.setSystemTime(T0 + k * 55 * 60_000);
+      reconnectOldest();
+    }
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    jest.setSystemTime(T0 + 7 * 60 * 60_000);
+    reconnectOldest();
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
+});

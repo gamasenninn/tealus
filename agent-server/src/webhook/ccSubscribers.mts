@@ -49,8 +49,27 @@ export function addSubscriber(sub: CcSubscriber): void {
     set = new Set();
     subscribers.set(sub.project, set);
   }
+  const now = Date.now();
+  // ★ 改善ループ 56: 先客のうち、2 分以上つながっているものを数える (足す前に)
+  let staleOthers = 0;
+  for (const other of set) {
+    const at = addedAt.get(other);
+    if (at !== undefined && now - at >= STALE_PEER_MS) staleOthers++;
+  }
   set.add(sub);
+  addedAt.set(sub, now);
   logger.debug(`[cc-stream] subscriber added: project=${sub.project} rooms=${sub.allowedRooms.size} total=${set.size}`);
+  // ★ 改善ループ 56: 張り直しの引き継ぎで並ぶのは「古い 1 本 + 新しい 1 本」を 20 秒ほど (札で古い方が終わる)。
+  //   長く続いている先客が 2 本以上いるところへ新しく来た = 受け手が残っている。
+  //   2026-11-15 に @cc-tealus-dev が 4〜7 本並んだままで、9 本目の warn (下) には届かなかった。
+  //   つなぎ直しは 55 分ごとなので、続いている間は 6 時間に 1 回だけ出す
+  if (staleOthers >= 2) {
+    const last = lastStaleWarnAt.get(sub.project);
+    if (last === undefined || now - last >= STALE_WARN_EVERY_MS) {
+      lastStaleWarnAt.set(sub.project, now);
+      logger.warn(`[cc-stream] ★ 受け手が並んだままです: project=${sub.project} total=${set.size} (2 分以上つながっている先客 ${staleOthers} 本。受け手の古い待ち受けが残っていないか)`);
+    }
+  }
   // ★ 改善ループ 52: 1 つの班の購読者が多すぎたら warn。受け手が張り直すたびに古いループが残ると増え続けるが
   //   (2026-11-14 に @cc-dbbackup が 22 本)、上の行は debug なので本番では見えなかった。
   //   9 本目と、その後は 10 本ごとに 1 回 (増え続けている間、毎回は出さない)
@@ -59,8 +78,16 @@ export function addSubscriber(sub: CcSubscriber): void {
   }
 }
 
-/** 1 つの班の購読者がこれを超えたら warn (ふだんは 1〜4 本) */
+/** 1 つの班の購読者がこれを超えたら warn (ふだんは 1 本。張り直しの引き継ぎで 20 秒ほど 2 本) */
 const SUBSCRIBER_WARN_AT = 8;
+
+/** ★ 改善ループ 56: 「長く並んだまま」の判定。引き継ぎ (約 20 秒) より十分長く、つなぎ直し (55 分) より短い */
+const STALE_PEER_MS = 2 * 60_000;
+const STALE_WARN_EVERY_MS = 6 * 60 * 60_000;
+/** 購読者がいつ足されたか (connectedAt は省略可なので、ここで自分で持つ) */
+const addedAt = new WeakMap<CcSubscriber, number>();
+/** project → 最後に「並んだまま」を知らせた時刻 */
+const lastStaleWarnAt = new Map<string, number>();
 
 /** ミリ秒差を「Ns」に。基準が無ければ `-` (= 0 秒と区別する) */
 function secsSince(at: number | undefined, now: number): string {
