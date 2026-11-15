@@ -215,6 +215,14 @@
   color: var(--primary);
 }
 
+/* ★ 別のタブで開く (2026-11-15、docs/11 §5.3)。開閉トグルの左に並べ、右寄せはこちらが受け持つ */
+.app-panel-toggle.app-panel-newtab {
+  padding: 0 8px;
+}
+.app-panel-newtab + .app-panel-toggle {
+  margin-left: 0;
+}
+
 .app-panel-tab {
   padding: 8px 14px;
   font-size: 12px;

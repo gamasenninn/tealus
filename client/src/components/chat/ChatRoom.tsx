@@ -22,7 +22,8 @@ import { scrollIntoContainer } from '../../utils/scrollWithin';
 import { findUnreadStartId } from '../../utils/unreadLine';
 import { showComposer } from '../../utils/roomComposer';
 import UnreadSeparator from './UnreadSeparator';
-import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic } from 'lucide-react';
+import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic, ExternalLink } from 'lucide-react';
+import { openAppInNewTab } from '../../utils/openAppInNewTab';
 import CallConfirmModal from '../call/CallConfirmModal';
 import VoiceChatView from '../voicechat/VoiceChatView';
 import { useTransceiver } from '../../hooks/useTransceiver';
@@ -288,6 +289,20 @@ function ChatRoom() {
                 {app.title}
               </button>
             ))}
+            {/* ★ 別のタブで開く (2026-11-15、EC の管理画面を PC で全画面に。docs/11 §5.3) */}
+            {appUrls[activeAppIndex] && (
+              <button
+                className="app-panel-toggle app-panel-newtab"
+                onClick={() => {
+                  const app = appUrls[activeAppIndex];
+                  void openAppInNewTab(app, () => api.getAppPass(roomId, activeAppIndex, app.url));
+                }}
+                title="別のタブで開く"
+                aria-label="別のタブで開く"
+              >
+                <ExternalLink size={15} />
+              </button>
+            )}
             <button
               className="app-panel-toggle"
               onClick={() => setShowAppPanel(!showAppPanel)}
