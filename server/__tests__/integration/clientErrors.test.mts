@@ -101,6 +101,32 @@ describe('POST /api/client-errors', () => {
     expect(logged()).toEqual([]);
   });
 
+  // ★ 改善ループ 59 (2026-11-16): iPhone の Safari が自分で持つ動画・音声の操作部品のプログラムの中で起きるエラー。
+  //   Tealus のコードではない (ファイルの場所が無い・関数は syncControl / endTimeForBufferedRangeContainingCurrentTime)。
+  //   11-09〜11-15 の端末のエラー 15 件のうち 10 件がこれで、本物を見分ける手間になっていた。捨てずに info に下げる
+  it('★ Safari の操作部品の中のエラー (EmptyRanges) は warn に積まず、info に残す', async () => {
+    const info = jest.spyOn(logger, 'info').mockImplementation(() => logger);
+    const res = await request(app).post('/api/client-errors').send({
+      kind: 'error', message: "Can't find variable: EmptyRanges",
+      stack: 'played@\nsyncControl@\nhandleEvent@', path: '/talk', build: 'x', ctx: { line: 1705, col: 541 },
+    });
+    expect(res.status).toBe(204);
+    expect(logged()).toEqual([]);
+    const infos = (info.mock.calls as unknown[][]).map((c) => String(c[0])).filter((s) => s.startsWith('[client-error:browser]'));
+    expect(infos).toHaveLength(1);
+    expect(infos[0]).toMatch(/EmptyRanges/);
+    info.mockRestore();
+  });
+
+  it('同じ文でも、Tealus のファイルの中で起きたものは今までどおり warn', async () => {
+    const res = await request(app).post('/api/client-errors').send({
+      kind: 'error', message: "Can't find variable: EmptyRanges",
+      stack: 'played@https://app.tealus.dev/assets/index-abc.js:1:2', path: '/talk', build: 'x', ctx: { src: 'https://app.tealus.dev/assets/index-abc.js', line: 1, col: 2 },
+    });
+    expect(res.status).toBe(204);
+    expect(logged()).toHaveLength(1);
+  });
+
   it('★ 巡回からの報告は回数制限の数に入れない (正規の報告を 429 にしない)', async () => {
     const bot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
     for (let i = 0; i < 40; i++) await request(app).post('/api/client-errors').set('User-Agent', bot).send(valid);

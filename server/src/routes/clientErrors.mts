@@ -74,6 +74,17 @@ function ctxLine(ctx: unknown): string {
 
 const CRAWLER_UA = /Googlebot|bingbot|Applebot|YandexBot|Baiduspider|DuckDuckBot|crawler|spider/i;
 
+/**
+ * ★ 改善ループ 59 (2026-11-16): iPhone の Safari が自分で持つ動画・音声の操作部品のプログラムで起きるエラーか。
+ *   Tealus のコードではない (ファイルの場所が無い・関数は syncControl など)。11-09〜11-15 の端末のエラー 15 件のうち 10 件。
+ *   ★ 文で決め打ちし、Tealus のファイルの位置 (http…) が付いていれば本物として扱う (同じ文の本物を隠さない)
+ */
+function isBrowserInternal(body: Record<string, unknown>, stack: string): boolean {
+  if (body.message !== "Can't find variable: EmptyRanges") return false;
+  const src = body.ctx && typeof body.ctx === 'object' ? (body.ctx as Record<string, unknown>).src : undefined;
+  return !/https?:/.test(stack) && (src === undefined || src === null || src === '' || src === 'undefined');
+}
+
 router.post('/', (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   if (typeof body.kind !== 'string' || !KINDS.has(body.kind)) {
@@ -98,6 +109,12 @@ router.post('/', (req, res) => {
 
   // スタックは先頭の数行 (どこで落ちたか) だけ。画面側が「部品 3 行 + 位置 3 行」で送ってくる
   const stack = typeof body.stack === 'string' ? body.stack.split('\n').slice(0, 6).join(' | ') : '';
+  if (isBrowserInternal(body, stack)) {
+    logger.info(`[client-error:browser] Safari の操作部品の中のエラー (Tealus のコードではない) user=${userId ? userId.slice(0, 8) : '-'}`
+      + ` message=${clip(body.message, 120)} at=${clip(stack, 200)}`);
+    res.status(204).end();
+    return;
+  }
   logger.warn(`[client-error] kind=${body.kind} path=${clip(body.path, 120)} build=${clip(body.build, 60)}`
     + ` user=${userId ? userId.slice(0, 8) : '-'} ua=${clip(req.headers['user-agent'], 120)}`
     + ` message=${clip(body.message, 300)} at=${clip(stack, 500)} ctx=${ctxLine(body.ctx)}`);
