@@ -44,8 +44,22 @@ function bodyFields(req: Request): string {
   return keys.length > 0 ? keys.join(',') : '-';
 }
 
+/**
+ * ★ 改善ループ 58 (2026-11-16): 断ったときに本体が返した error の文。[http-denied] に添える。
+ *   11-15 の 403 は理由が残らず、前後の行から推測するしかなかった。★ 送られてきた本文は見ない (本体が返した文だけ)
+ */
+function deniedReason(body: unknown): string {
+  const e = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  if (typeof e !== 'string' || !e) return '-';
+  const s = e.replace(/\s+/g, ' ').replace(/"/g, "'");
+  return `"${s.length > 120 ? s.slice(0, 120) + '…' : s}"`;
+}
+
 export function requestLog(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
+  let sentBody: unknown;
+  const json = res.json.bind(res);
+  res.json = (body: unknown) => { sentBody = body; return json(body); };
   res.on('finish', () => {
     const url = req.originalUrl;
     if (!url.startsWith('/api/')) return;
@@ -57,7 +71,7 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
     if (flood) logger.warn(`${flood} ua=${clip(req.headers['user-agent'], 120)}`);
 
     if (DENIED.has(status)) {
-      logger.warn(`[http-denied] ${status} ${req.method} ${path} user=${who(req)} ip=${req.ip ?? '-'} ua=${clip(req.headers['user-agent'], 120)}`);
+      logger.warn(`[http-denied] ${status} ${req.method} ${path} user=${who(req)} ip=${req.ip ?? '-'} ua=${clip(req.headers['user-agent'], 120)} reason=${deniedReason(sentBody)}`);
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS'

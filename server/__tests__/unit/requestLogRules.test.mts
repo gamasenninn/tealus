@@ -101,3 +101,40 @@ test('★ 同じ相手が同じ口を 1 分に 60 回を超えて叩いたら [h
   await settle();
   expect(lines(warn, '[http-flood]').length).toBe(1);
 });
+
+/**
+ * ★ 改善ループ 58 (2026-11-16): [http-denied] に「なぜ断ったか」(応答の error) を添える。
+ *   11-15 の 403 (EC班の GET /api/bot/messages・出品業務の PUT) は、理由がログに無く、前後の行から推測するしかなかった。
+ *   ★ 送られてきた本文 (パスワード等) は今までどおり書かない。書くのは本体が返した error の文だけ (120 字で切る)
+ */
+function appDenying(status: number, body: unknown) {
+  const app = express();
+  app.use(express.json());
+  app.use(requestLog);
+  app.all('*', (_req, res) => { res.status(status).json(body); });
+  return app;
+}
+
+test('★★ 断った理由 (応答の error) を reason= で添える', async () => {
+  await request(appDenying(403, { error: '機械のアカウントはメンバーを招待できません' })).post('/api/rooms/r1/members').send({ user_id: 'u' });
+  await settle();
+  const l = lines(warn, '[http-denied]');
+  expect(l).toHaveLength(1);
+  expect(l[0]).toContain('reason="機械のアカウントはメンバーを招待できません"');
+});
+
+test('理由が無い応答は reason=-。送られてきた本文は書かない', async () => {
+  await request(appDenying(401, { ok: false })).post('/api/auth/login').send({ login_id: 'x', password: 'secret' });
+  await settle();
+  const l = lines(warn, '[http-denied]');
+  expect(l[0]).toContain('reason=-');
+  expect(l[0]).not.toContain('secret');
+});
+
+test('長い理由は 120 字で切り、改行と " を潰す', async () => {
+  await request(appDenying(403, { error: `あ"い\nう${'x'.repeat(300)}` })).get('/api/rooms/r1');
+  await settle();
+  const l = lines(warn, '[http-denied]');
+  expect(l[0]).toMatch(/reason="あ'い うx+…"$/);
+  expect(l[0].length).toBeLessThan(400);
+});
