@@ -172,6 +172,37 @@ describe('社外の窓口の印とお客様の部屋', () => {
       expect(res.status).toBe(403);
     });
 
+    // ★ 改善ループ 57 (Fable の点検 3): 窓口の口座の role が admin だと、手前の requireMemberOrSystemAdmin がメンバーでなくても通す。
+    //   抜けた後でも自分が作った部屋に足せていた (docs/02 の条件② と食い違う)
+    it('★ 窓口の口座がシステム管理者でも、部屋を抜けた後は足せない', async () => {
+      await getTestPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [window.user.id]);
+      const ecRoom = await makeRoom(window, 'ECゲスト #6', [staff.user.id]);
+      await getTestPool().query('DELETE FROM room_members WHERE room_id = $1 AND user_id = $2', [ecRoom, window.user.id]);
+      expect((await invite(window, ecRoom, late.user.id)).status).toBe(403);
+    });
+
+    // ★ 改善ループ 57: 本番の EC窓口 (ec-front) は機械ではなく、ふつうの利用者の口座だった (is_bot=false、11-16 に DB で確かめた)。
+    //   機械だけに効く作りだと、守り (自分が作った部屋だけ・社員だけ) が ec-front に一つも掛からない。
+    //   窓口の印があれば、機械でなくても同じ守りを掛ける
+    describe('窓口の口座が機械でないとき (本番の ec-front の形)', () => {
+      beforeEach(async () => {
+        await getTestPool().query('UPDATE users SET is_bot = false WHERE id = $1', [window.user.id]);
+      });
+      it('★ 自分が作った部屋には、社員を足せる', async () => {
+        const ecRoom = await makeRoom(window, 'ECゲスト #7', [staff.user.id]);
+        expect((await invite(window, ecRoom, late.user.id)).status).toBe(200);
+      });
+      it('★★ ゲスト・機械は足せない', async () => {
+        const ecRoom = await makeRoom(window, 'ECゲスト #8', [staff.user.id]);
+        expect((await invite(window, ecRoom, guest.user.id)).status).toBe(403);
+        expect((await invite(window, ecRoom, bot.user.id)).status).toBe(403);
+      });
+      it('★★ 社内の人が作った部屋には (メンバーでも) 足せない', async () => {
+        const room = await makeRoom(staff, '社内の部屋', [window.user.id]);
+        expect((await invite(window, room, late.user.id)).status).toBe(403);
+      });
+    });
+
     it('窓口の印を外したら、もう足せない', async () => {
       const ecRoom = await makeRoom(window, 'ECゲスト #5', [staff.user.id]);
       await getTestPool().query('UPDATE users SET is_external_contact = false WHERE id = $1', [window.user.id]);

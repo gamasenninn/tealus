@@ -64,8 +64,15 @@ if ($Parts -contains 'db') { try {
     "'message_media', (select count(*) from message_media where created_at <= c.t), " +
     "'max_message_created_at', (select max(created_at) from messages where created_at <= c.t)) " +
     "from (select now() as t) c"
-  $countsJson = (docker exec $Container psql -U $DbUser -d $DbName -tAc $countsSql | Out-String).Trim()
-  if ($LASTEXITCODE -ne 0 -or -not $countsJson.StartsWith('{')) { throw "件数を数えられない (exit $LASTEXITCODE)" }
+  # ★ 数えられなくても dump は取る (改善ループ 57、Fable の点検)。件数は控えの添え物で、ここで止めると DB の控えそのものが無くなる。
+  #   失敗は記録して $ok を落とす (見張りが気づく)
+  $countsJson = $null
+  try {
+    $countsJson = (docker exec $Container psql -U $DbUser -d $DbName -tAc $countsSql | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $countsJson.StartsWith('{')) { throw "exit $LASTEXITCODE" }
+  } catch {
+    $countsJson = $null; $ok = $false; Write-Log "件数の控え 失敗 (dump は取る): $($_.Exception.Message)"
+  }
   docker exec $Container pg_dump -U $DbUser -Fc -f $inner $DbName
   if ($LASTEXITCODE -ne 0) { throw "pg_dump 失敗 (exit $LASTEXITCODE)" }
   $tables = (docker exec $Container pg_restore --list $inner | Select-String 'TABLE DATA').Count
@@ -77,12 +84,16 @@ if ($Parts -contains 'db') { try {
   Move-Item $local (Join-Path $Dest "db\tealus-$Stamp.dump") -Force
   # ★ 件数の控えは dump と同じ名前で横に置く。表の数・cutoff の取り方も入れる (BD の機械は本番に問い合わせない)
   #   ★ DB が返した JSON は読み直さずにそのまま包む (PowerShell 7 の ConvertFrom-Json は日時を変換し、書き戻すと形が変わる)
-  $counts = $countsJson | ConvertFrom-Json
-  $countsOut = '{"dump": "tealus-' + $Stamp + '.dump", "tables": ' + $tables +
-    ', "how": "created_at <= cutoff の行の数。戻した DB でも同じ cutoff で数えて比べる", "counts": ' + $countsJson + '}'
-  # ★ BOM なしの UTF-8 (PowerShell 5.1 の -Encoding UTF8 は BOM を付け、Python の json.load が読めない)
-  [IO.File]::WriteAllText((Join-Path $Dest "db\tealus-$Stamp.counts.json"), $countsOut, (New-Object Text.UTF8Encoding $false))
-  Write-Log ("DB ok: tealus-{0}.dump {1:N1} MB, 表 {2} / 件数 messages {3}・rooms {4}・users {5}・media {6}" -f $Stamp, ($size / 1MB), $tables, $counts.messages, $counts.rooms, $counts.users, $counts.message_media)
+  if ($countsJson) {
+    $counts = $countsJson | ConvertFrom-Json
+    $countsOut = '{"dump": "tealus-' + $Stamp + '.dump", "tables": ' + $tables +
+      ', "how": "created_at <= cutoff の行の数。戻した DB でも同じ cutoff で数えて比べる", "counts": ' + $countsJson + '}'
+    # ★ BOM なしの UTF-8 (PowerShell 5.1 の -Encoding UTF8 は BOM を付け、Python の json.load が読めない)
+    [IO.File]::WriteAllText((Join-Path $Dest "db\tealus-$Stamp.counts.json"), $countsOut, (New-Object Text.UTF8Encoding $false))
+    Write-Log ("DB ok: tealus-{0}.dump {1:N1} MB, 表 {2} / 件数 messages {3}・rooms {4}・users {5}・media {6}" -f $Stamp, ($size / 1MB), $tables, $counts.messages, $counts.rooms, $counts.users, $counts.message_media)
+  } else {
+    Write-Log ("DB ok: tealus-{0}.dump {1:N1} MB, 表 {2} / ★ 件数の控えなし" -f $Stamp, ($size / 1MB), $tables)
+  }
   $old = Get-ChildItem (Join-Path $Dest 'db') -Filter 'tealus-*.dump' | Sort-Object Name -Descending | Select-Object -Skip $Keep
   foreach ($f in $old) {
     Remove-Item $f.FullName -Force; Write-Log "DB 古いものを消した: $($f.Name)"

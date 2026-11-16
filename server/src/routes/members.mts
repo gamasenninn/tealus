@@ -21,13 +21,16 @@ import { REQUESTER_HEADER } from '../services/requesterScope.mts';
  * ★ 印は認証の SELECT に足さず、ここで引く (新しい列を認証で読むと、migrate 前の起動で全員のログインが落ちる)
  */
 async function deskMayInvite(req: Request, roomId: string): Promise<boolean> {
-  if (!req.user?.is_bot || req.get(REQUESTER_HEADER) !== undefined) return false;
+  if (!req.user || req.get(REQUESTER_HEADER) !== undefined) return false;
   const r = await pool.query(
     `SELECT 1 FROM users u JOIN rooms r ON r.created_by = u.id
+       JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = u.id
       WHERE u.id = $1 AND u.is_external_contact AND r.id = $2`,
     [req.user.id, roomId]
   );
-  return r.rows.length > 0;   // ★ いまもメンバーかは手前の requireMemberOrSystemAdmin が見ている
+  // ★ いまもメンバーかはここで見る (改善ループ 57、Fable の点検)。手前の requireMemberOrSystemAdmin は、
+  //   口座がシステム管理者ならメンバーでなくても通すので、そこに頼ると抜けた部屋にも足せた
+  return r.rows.length > 0;
 }
 
 export const router = express.Router({ mergeParams: true });
@@ -58,13 +61,20 @@ router.post('/', authenticate, requireMemberOrSystemAdmin, requireGroup, async (
   // #282: guest は member であっても他 user を招待できない (fail-closed)。
   // client は招待ボタンを隠すが、API 直叩きもサーバーで弾く。
   const roomId = (req.params as { id: string }).id;
-  // ★ 窓口の例外 (上の deskMayInvite)。この道では、足す相手も絞る (下の userResult)
+  // ★ 窓口の口座 (上の deskMayInvite)。この道では、足す相手も絞る (下の userResult)
+  // ★ 改善ループ 57: 窓口の印があれば、機械でなくても窓口の道だけを通す。本番の ec-front はふつうの利用者の口座で、
+  //   機械だけに効く作りだと「どの部屋にも誰でも足せる」ままだった (守りが一つも掛からない)
   let viaDesk = false;
-  if (!canInviteToRoom(req.user)) {
-    try { viaDesk = await deskMayInvite(req, roomId); } catch (err) { logger.error('Add member desk check error:', err); return res.status(500).json({ error: E.SERVER_ERROR }); }
-    if (!viaDesk) {
-      return res.status(403).json({ error: req.user?.is_bot ? '機械のアカウントはメンバーを招待できません' : 'ゲストユーザはメンバーを招待できません' });
-    }
+  let isDesk = false;
+  try {
+    isDesk = (await pool.query('SELECT 1 FROM users WHERE id = $1 AND is_external_contact', [req.user!.id])).rows.length > 0;
+    if (isDesk) viaDesk = await deskMayInvite(req, roomId);
+  } catch (err) { logger.error('Add member desk check error:', err); return res.status(500).json({ error: E.SERVER_ERROR }); }
+  if (isDesk && !viaDesk) {
+    return res.status(403).json({ error: '窓口の口座が足せるのは、自分が作って今もいる部屋だけです' });
+  }
+  if (!isDesk && !canInviteToRoom(req.user)) {
+    return res.status(403).json({ error: req.user?.is_bot ? '機械のアカウントはメンバーを招待できません' : 'ゲストユーザはメンバーを招待できません' });
   }
   const { user_id } = req.body;
 
