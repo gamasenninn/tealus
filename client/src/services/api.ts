@@ -783,6 +783,11 @@ class ApiClient {
     return this.request<PortalLinksResponse>('GET', '/rooms/portal-links');
   }
 
+  /** ブラウザから「Tealus でログイン」の戻り先 (札つき)。docs/11 §5.5。出せないときは投げる */
+  getAppLogin(aud: string, state: string) {
+    return this.request<{ url: string }>('POST', '/sso/app-login', { aud, state });
+  }
+
   /** #607 ホーム画面のタブの通行証つき入口 URL (docs/11 §5.4)。出せないときは投げる */
   getPortalAppPass(linkId: string) {
     return this.request<{ url: string }>('POST', `/rooms/portal-links/${linkId}/app-pass`, {});

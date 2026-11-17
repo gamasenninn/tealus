@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { safeNextPath } from '../../utils/safeNext';
 import './Login.css';
 
 function Login() {
@@ -10,6 +11,8 @@ function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuthStore();
   const navigate = useNavigate();
+  // ★ ログインのあと ?next= のアプリの中のパスへ戻す (docs/11 §5.5 ブラウザから「Tealus でログイン」)。よそへ出る形は /
+  const [searchParams] = useSearchParams();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +21,7 @@ function Login() {
 
     try {
       await login(loginId, password);
-      navigate('/');
+      navigate(safeNextPath(searchParams.get('next')), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

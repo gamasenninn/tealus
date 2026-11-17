@@ -6,6 +6,7 @@ import { useCapabilityStore } from './stores/capabilityStore';
 import { useCallNotification } from './hooks/useCallNotification';
 import { useVisualViewportVars } from './hooks/useVisualViewportVars';
 import Login from './components/auth/Login';
+import SsoAppLogin from './components/auth/SsoAppLogin';
 import HomeRoute from './components/home/HomeRoute';
 import TalkPage from './components/room-list/TalkPage';
 import ChatRoom from './components/chat/ChatRoom';
@@ -105,6 +106,8 @@ function App() {
       )}
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* ブラウザから「Tealus でログイン」(docs/11 §5.5)。★ 自分でログインの有無を見るので PrivateRoute の外 */}
+        <Route path="/sso/app-login" element={<SsoAppLogin />} />
         {/* 認証必須 routes は DesktopShell でラップ (#237 Phase 1)
             Mobile (< 1024px): shell の sidebar 非表示で main 全画面 (既存 UX 維持)
             Desktop (>= 1024px): sidebar (RoomList) + main pane (各画面) の 2-pane */}
