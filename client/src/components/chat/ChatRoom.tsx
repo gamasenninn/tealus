@@ -62,7 +62,7 @@ function ChatRoom() {
   const [showVoiceChat, setShowVoiceChat] = useState(false);
   // #476 日付の札を押したら、その日を入れてカレンダーを開く
   const [calendarDate, setCalendarDate] = useState<string | null>(null);
-  const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom);
+  const { showAppPanel, setShowAppPanel, activeAppIndex, setActiveAppIndex, appUrls } = useAppPanel(currentRoom, roomId);
   // #607 「通行証を添える」が付いたアプリは、通行証つきの入口 URL で開く (docs/11 §5.3)
   const appFrameSrc = useAppPassUrl(roomId, appUrls[activeAppIndex], activeAppIndex, showAppPanel);
   useVoiceContinuousPlay(messages);

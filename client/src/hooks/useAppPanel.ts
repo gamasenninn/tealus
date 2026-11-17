@@ -20,10 +20,13 @@ export interface UseAppPanelResult {
  * - auto_open による自動オープン
  * - wake_lock フラグによるWake Lock制御
  */
-export function useAppPanel(currentRoom: RoomWithAppUrls | null): UseAppPanelResult {
+export function useAppPanel(currentRoom: RoomWithAppUrls | null, roomId: string): UseAppPanelResult {
   const [showAppPanel, setShowAppPanel] = useState(false);
   const [activeAppIndex, setActiveAppIndex] = useState(0);
-  const appUrls = currentRoom?.app_urls || [];
+  // ★ 改善ループ 61: 部屋を移った直後は URL の roomId が先に変わり、currentRoom は前の部屋のまま。
+  //   その間に前の部屋のアプリを並べると、新しい部屋の番号で通行証を頼んで 404 になり、
+  //   元の URL (ベーシック認証の箱が出る方) で開いてしまう。中身が今の部屋になるまで何も並べない
+  const appUrls = (currentRoom?.id === roomId && currentRoom.app_urls) || [];
 
   // Auto-open app panel
   useEffect(() => {
