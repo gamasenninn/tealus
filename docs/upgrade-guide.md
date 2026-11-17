@@ -114,11 +114,11 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 | `[build-check] client/dist/index.html が見つかりません` | クライアント未ビルド | 手順 4（`npm run build`）を実行 |
 | `[build-check] dashboard/dist/index.html が見つかりません` | エージェントのダッシュボード (/system) 未ビルド。エージェントの設定・ログが見られない (★ ユーザーと webhook は本体の 管理ダッシュボード `/admin` で作るので影響しない) | `cd dashboard && npm install`（postinstall でビルド） |
 | `[migration-check] ★ 未適用 N 件: …` (v0.11.1 以降) | DB migration 忘れ | 手順 3（`npm run migrate`）を実行。★ 名前が出たものが流れていない |
-| `[migration-check] ★ 未適用の migration が N 件あるので起動しません: …` (2026-10-30 以降) | DB migration 忘れ。★ **本体は起動せずに終わる** (流す前に起動すると、新しい列を読む口が全部 500 になるため) | 手順 3（`npm run migrate`）を実行してから、もう一度起動 |
+| `[migration-check] ★ 未適用の migration が N 件あるので起動しません: …` (v0.12.0 以降) | DB migration 忘れ。★ **本体は起動せずに終わる** (流す前に起動すると、新しい列を読む口が全部 500 になるため) | 手順 3（`npm run migrate`）を実行してから、もう一度起動 |
 | `[media] removed_media の表がありません` | DB migration 忘れ (v0.11.0 の 040) | 手順 3（`npm run migrate`）を実行。★ そのままだと削除した部屋の添付がまだ開ける |
 | `[model-guard] ... は ChatGPT アカウント (subscription) の codex では使えません` (agent-server) | Codex のモデルが外されたもの | v0.11.0 のノートの 1. を参照 |
 
-> どれも **稼働は止まりません**（フォールバックで動き続ける）。だからこそ「気づかないうちに機能だけ欠ける」ので、更新直後にログを一度確認してください。
+> 「起動しません」の行を除いて、どれも **稼働は止まりません**（フォールバックで動き続ける）。だからこそ「気づかないうちに機能だけ欠ける」ので、更新直後にログを一度確認してください。
 
 ### 画面（ブラウザ / PWA）
 
@@ -136,23 +136,105 @@ server（ポート 3000） → agent-server → rtc-server →（使っていれ
 
 ## バージョン別ノート
 
-### → 次の版 (main を追っている場合は今すぐ)
+### → v0.12.0（アプリの通行証 / お客様のタブ / 初回のパスワード変更 / 入口の締め直し）
 
-- ★ **migration が 5 本増えました (041〜045)**。`cd server && npm run migrate` → **server の再起動**。起動ログに `[migration-check] ★ 未適用 N 件` が出ていれば流し忘れです
+> **★ 影響範囲**: **全員に作業があります。** DB migration が 5 本 (`041`〜`045`)、client の再ビルドも要ります。
+> ★★ この版から、**migrate を忘れると本体は起動しません** (下の 1.)。通話 (rtc-server) を使っている環境は 4.、ルームごとの AI の設定を手で置いている環境は 5. も読んでください。
+> 一覧は [CHANGELOG](../CHANGELOG.md) の v0.12.0。
 
-| 番号 | 中身 | 忘れると |
+**必須の作業:**
+
+#### 1. ★★★ migrate は再起動の前に (忘れると本体が起動しない)
+
+```bash
+cd server && npm run migrate      # 041〜045 の 5 本が流れる (v0.11.1 の DB には台帳があるので、そのまま続きから)
+```
+
+- 出力に `Running migration: 041_portal_links_pass.sql` 〜 `045_users_is_external_contact.sql` と `5 件の migration を適用しました。` が出れば成功 (v0.11.1 の形の DB で実際に流して確かめています)
+- ★ 5 本とも列・表を**足すだけ**です。v0.11.1 の本体が動いたまま流して構いません (流してから再起動、の順が止まる時間が最も短い)
+- ★★ **流す前に新しい本体を起動すると、起動せずに終わります** (`[migration-check] ★ 未適用の migration が 5 件あるので起動しません: …` を error で出して終了コード 1)。以前は起動して warn を出すだけで、下の表の口が失敗し続けました
+- ★ `npm run dev` (nodemon) で動かしている環境は、**`git pull` の時点で自動で再起動がかかり、ここで止まります**。migrate のあと、手で起動し直してください (ファイルが変わらないので nodemon は自分では戻りません)。落ちたら起こし直す仕組み (pm2・サービス) の下では、migrate を流すまで起動と終了を繰り返します
+- 起動を止めるのは「未適用が確か」なときだけです。DB に届かない・台帳が無いときは `[migration-check] 未適用かどうかを確かめられないまま起動します: …` を warn に出して起動するので、そのときは下の表のとおりに壊れます
+
+| 番号 | 中身 | 流さずに動くと |
 |---|---|---|
-| 041 | アプリの通行証 (`portal_links`、#607、10-18) | ホーム画面のタブ (`GET /api/rooms/portal-links`) が全員 500 |
-| 042 | 初回ログインでパスワードの変更を求める印 (`users.must_change_password`、10-29) | ★★★ **ログインもその後の操作もすべて失敗する** (認証のたびにこの列を読む) |
-| 043 | 削除した投稿の本文の退避 (`deleted_message_contents`、10-30) | 投稿の削除が失敗する |
-| 044 | 指示の履歴の ☆ 固定 (`prompt_pins`、11-01) | 指示の履歴が出ない |
-| 045 | 社外の窓口の印 (`users.is_external_contact`、11-13。トーク一覧のタブ「お客様」) | ★ トーク一覧 (`GET /api/rooms`) が全員 500 |
+| 041 | アプリの通行証 (`portal_links.pass`、#607) | ホーム画面のタブ (`GET /api/rooms/portal-links`) が全員 500 |
+| 042 | 初回ログインでパスワードの変更を求める印 (`users.must_change_password`) | ★★★ **ログインもその後の操作もすべて失敗する** (認証のたびにこの列を読む) |
+| 043 | 削除した投稿の本文の退避 (`deleted_message_contents`) | 投稿の削除が失敗する |
+| 044 | 指示の履歴の ☆ 固定 (`prompt_pins`) | 指示の履歴が出ない |
+| 045 | 社外の窓口の印 (`users.is_external_contact`。トーク一覧のタブ「お客様」) | ★ トーク一覧 (`GET /api/rooms`) が全員 500 |
 
-- 2026-11-05 (改善ループ 39・40) の振る舞いの変更 (手順は増えません。client の再ビルドと server の再起動だけ):
-  - bot の画像の口 (`/api/bot/push-image`、`/api/bot/push-file` で種類が `image/*` のとき) は、HEIC・BMP と途中で切れた画像を 400 で断ります
-  - 管理 API: 自分自身・最後の有効なシステム管理者は無効にも一般にもできません。`is_active` は `true` / `false` だけ (文字列の `"false"` を送るスクリプトは 400)。役割は `admin` / `user` / `guest` だけ。部屋の最後の有効なグループ管理者は、解除も退会させることもできません
-  - `GET /api/auth/me` に `push_active_subscriptions` (有効な通知の宛先の本数) が増えました。0 本の人には画面が案内を出します
-- 2026-11-08 (改善ループ 42〜44) の変更 (手順は増えません。client の再ビルドと server の再起動だけ、migration なし): Markdown の表示の共通化・部屋の一覧の取り直しをタブ・パネル間で分け合う・パネルを起動の繰り返しに数えない / ログの失敗の理由 (`errorText`)
+#### 2. ★ 依存を入れ直す (server / agent-server / rtc-server)
+
+新しく増えたパッケージはありませんが、3 つとも依存の版 (package-lock) が上がっています。基本の手順 2 のとおり、各パッケージで `npm install` を。client と dashboard は依存の変更なしですが、`npm install` が再ビルドを兼ねます。
+
+#### 3. ★ client を本番ビルドし直す
+
+ビルドしないと次のものが**エラーなしで出ません**: 初回ログインのパスワード変更の画面 (042 の印は付くのに、画面が求めない)・タブ「お客様」・アプリの通行証・ログインの鍵の延長 (下の「挙動が変わるもの」)・通知の宛先が無い人への案内。
+
+#### 4. ★★ 通話・トランシーバー (rtc-server) を使っている環境
+
+rtc-server の入口 (`/ws`) は、**ログインした、その部屋のメンバーだけ**を通すようになりました。鍵なしで入れるのは同じマシンから直接つないだものだけです。rtc-server を再起動したうえで、次の 2 つを確かめてください。
+
+- **`JWT_SECRET` が本体と同じ値で rtc-server に届いていること**。rtc-server は `server/.env` を読みます (Docker は `rtc-server/.env`)。空だと全員が「鍵なし」扱いになり、リバースプロキシ越しの接続は `[WS] 鍵の無い接続を断りました` で切られます
+- ★★ **rtc-server を本体と別のマシン・別のコンテナで動かしているなら `TEALUS_API_URL` に本体の URL を入れること**。メンバーかどうかは rtc-server が本体 (`GET /api/rooms/:id`) に聞きます。既定は `http://127.0.0.1:<PORT、既定 3000>` なので、届かないと**メンバーも全員「この部屋のメンバーではありません」で断られます** (rtc-server のログに `[WS] メンバーでない部屋への参加を断りました`)
+- 鍵を付けずに別のマシンから `/ws` へつなぐ自作の道具は、つながらなくなります
+
+#### 5. ★★ agent-server: 再起動の前に tealus-mcp を取っておく / ルームの設定の置き場が変わる
+
+```bash
+cd agent-server && npm install
+npx -y github:gamasenninn/tealus-mcp#v0.17.0 < /dev/null     # ★ 最後まで流す (途中で止めない)
+```
+
+- agent-server が起動する tealus-mcp が **v0.14.7 → v0.17.0** に上がりました (`send_form`・`edit_message` が AI から見える)。版はコードの中 (`agent-server/src/lib/mcpPackages.mts`) なので設定は要りませんが、**上げて最初の起動は npx のダウンロードで遅く、AI の道具が時間切れで 1 つも出ないことがあります**。上の 1 行を先に流しておけば起きません。★ 途中で打ち切ると、欠けたキャッシュが残って道具が出ないままになります
+- ★★ **ルームごとの設定 4 つ (`room_settings.json`・`light_prompt.md`・`mcp_config.json`・`CLAUDE.md`) の置き場が、AI の作業場所の外へ移りました**: `<AGENT_WORKSPACE_ROOT>/<agentId>/<roomId>/` → `<AGENT_WORKSPACE_ROOT>/_room-configs/<agentId>/<roomId>/`。今あるものは agent-server の**起動のときに自動で移ります** (ログに `[room-config] workspace 内の設定 N 個を外 (_room-configs) へ移しました`)。ダッシュボードから設定している環境は何もしなくて構いません
+  - ★ **手でファイルを置いている環境は、これからは新しい置き場を編集してください**。古い置き場に置いたファイルは読まれません (次の起動で、新しい置き場に同じ名前が無いときだけ移ります。あると古い方は黙って無視されます)
+  - ★ バックアップの対象に `_room-configs` を入れてください
+- cc-bridge を使っている環境は、**消費側の skill も差し替えてください** (`.claude/skills/listen-tealus/` の `SKILL.md` と `cc-stream.sh`。取り方は「→ v0.9.0」と同じ)。張り直しのたびに古い待ち受けが残って増えるのを止める直しが入っています。サーバだけ上げても壊れません
+
+**挙動が変わるもの (作業は不要):**
+
+- **管理者が作った・パスワードを入れ直した人の利用者は、次のログインでパスワードの変更を求められます** (機械のアカウントと、今いる利用者には付きません)。新しく決めるパスワードは **8 文字以上**。★ 管理 API で利用者を作る自作のスクリプトは、8 文字未満だと 400 になります
+- **ログインの鍵は、使っている間は延びます** (7 日。ただし最初のログインから 30 日で入り直し)。v0.11.1 で出した鍵はそのまま使えるので、上げた日に入り直しは起きません。本体は応答のヘッダー `X-Refreshed-Token` で新しい鍵を返します (読まない相手には影響なし)
+- **部屋の AI の MCP 設定を書けるのはシステム管理者だけ** (`PUT/POST/DELETE /config/room/:id/mcp`)。読むのは今までどおり。会話モードでは `edit_message` を既定で外しました (部屋の設定で戻せます)
+- 管理 API: 自分自身・最後の有効なシステム管理者は無効にも一般にもできません。`is_active` は `true` / `false` だけ (文字列の `"false"` を送るスクリプトは 400)。役割は `admin` / `user` / `guest` だけ。部屋の最後の有効なグループ管理者は、解除も退会させることもできません
+- bot の画像の口 (`/api/bot/push-image`、`/api/bot/push-file` で種類が `image/*` のとき) は、HEIC・BMP と途中で切れた画像を 400 で断ります。部屋のアプリ・ホームのリンク・webhook の宛先は `http` / `https` の URL だけ
+- 通知の宛先は、30 日送り直されなければ本体が外します (その人のいちばん新しい 1 本は外しません。その端末で開き直せば戻ります)。機械のアカウントには部屋の通知を送りません
+- `GET /api/auth/me` に `push_active_subscriptions` (有効な通知の宛先の本数) が増えました。0 本の人には画面が案内を出します
+- `@Claude` の別名 (`agent-server/config/cc-aliases.json`) を既定から外しました。使っていた環境は自分で足してください。★ このファイルを手元で書き換えていると `git pull` がぶつかります (先に退避を)
+
+**任意 (新しい必須の環境変数はありません):**
+
+| 環境変数 / 設定 | 既定 | |
+|---|---|---|
+| `APP_PASS_KEY_DIR` (server) | `~/.tealus/app-pass` | アプリの通行証 (#607、`docs/11`) の鍵 `<ホスト名>.key` の置き場。鍵を置かなければ通行証は出ません (機能は止まったまま) |
+| `APP_LOGIN_TARGETS` (server) | 空 (= 誰にも出さない) | ブラウザから「Tealus でログイン」(`docs/11` §5.5)。`<origin>\|<戻り先のパス>` をカンマで並べる。例: `https://portal.example.com\|/auth/callback` |
+| `PUSH_STALE_DAYS` / `PUSH_INACTIVE_DELETE_DAYS` (server) | `30` / `90` | 通知の宛先を外すまで・無効の宛先を消すまでの日数 |
+| `TEALUS_API_URL` (rtc-server) | `http://127.0.0.1:3000` | 上の 4. |
+| `OPENAI_IMAGE_MODEL` (agent-server) | `gpt-image-1` | 画像生成のモデル。この版から `.env` に書いた値が tealus-mcp に届きます |
+| `TAVILY_API_KEY` (agent-server) | なし | web 検索を使うなら `.env` に置き、`mcp_config.json` の `env` で `${TAVILY_API_KEY}` と引く (#573) |
+| `ENABLE_CROSS_ROOM_DELEGATION` (agent-server) | off | 部屋をまたいで仕事を頼む (`%<部屋> <頼みごと>`)。以前からある設定で、`.env.example` に書かれていなかっただけです |
+| `AGENT_PENDING_JOURNAL` (agent-server) | `~/.tealus/agent/pending-work-<ポート>.json` | AI の仕事の控え (予告なしに止まったあと、次の起動で「中断されました」を知らせる) |
+| `BACKUP_LOG_DIR` (agent-server) | なし | 入れると `npm run doctor` がバックアップの記録を見ます |
+
+- **見張り** (`server/config/watchdogs.json`、`docs/09`): 見方が 2 つ増えました (`push_reach` 通知が届かない人 / `disk_free` 空き容量)。`alert_after` (何回続けて異常なら知らせるか、既定 1) も。書き方は `watchdogs.example.json`。足さなければ今までどおりです
+- **MCP (Claude Code の側の tealus-mcp)**: タグ固定の運用なら pin を `#v0.17.0` に上げてフル再起動 (検索で見つけた投稿の全文の取り方・`search_messages` の `type` に `file` / `form`)
+- Windows でログオン時に本体と agent-server を上げる `scripts/startup/tealus-autostart.ps1` を足しました (登録は自分で。冒頭の説明を参照)
+- `AGENT_CODEX_BIN` を指定しなければ、Deep も agent-server の `node_modules` の codex (Light v2 と同じ版) を使います
+
+**切り戻すとき (v0.11.1 へ):** DB はそのままで動きます (041〜045 は足すだけ。v0.11.1 は知らない台帳の行を無視します)。★ ただし **ルームの設定は `_room-configs` に移ったまま**なので、v0.11.1 の agent-server からは見えず、ルームの設定が既定に戻ったように動きます。戻すなら `_room-configs/<agentId>/<roomId>/` の中身を `<agentId>/<roomId>/` へ写してください。
+
+**この版で直った不具合（更新すれば解消）:**
+
+- ログインの期限 (7 日) が切れたとき、端末の通知の登録まで外していた (iPhone は自分で作り直せず、通知が止まったままになる)
+- 通知の宛先が 0 本になった人に、画面が何も言わなかった / 招待された人に、入る前の便が全部「未読」で出ていた
+- 誰も消せない部屋が残った ([#643](https://github.com/gamasenninn/tealus/issues/643)) / 同じ名前のグループに気づけなかった
+- 部屋の知らせのたびに、全タブ・全パネルがそれぞれ部屋の一覧を取りに行っていた / 端末の読み込みの繰り返しで本体が大量に叩かれても誰も気づけなかった (`[http-flood]` を warn に 1 行)
+- DB が止まったときの失敗の理由がログで空だった / DB の失敗を 401 で返し、利用者がログイン画面へ落ちていた (500 に)
+- 見張りがバックアップの記録 (NAS) を同期で読み、NAS が応答しないと本体の全部が止まる形だった
+- 画像生成のモデル名 `OPENAI_IMAGE_MODEL` が tealus-mcp に届いていなかった / node 直起動の Docker で Deep (codex) が codex を見つけなかった
+- 文字起こし・文字の投稿を同じ文のまま保存すると版が積まれていた
 
 ### → v0.11.1（0.11.0 の監査で見つかった穴 2 つ）
 
@@ -187,7 +269,7 @@ agent-server を再起動します。
 
 - ★ **モデルだけ替えても直りません** — codex 0.128 は gpt-5.6-sol を「新しい版にしてください」で断ります (本家で実測)
 - ★ OpenAI の案内の `gpt-6.1-sol` も codex 0.162.1 なら通ります (0.154 以前は not supported)。プランや時期で使えるモデルは変わるので、**必ず 1 回試してから**設定してください
-- ★ `AGENT_CODEX_BIN` を指定しなければ、Deep も agent-server の node_modules の codex (Light と同じ版) を使います (v0.11.1 の次の版から。それまでは node 直起動の Docker で Deep が codex を見つけませんでした)。`AGENT_CODEX_BIN` でグローバルの codex を指している場合、Deep はそちらを使います。グローバルの codex も上げてください (`npm i -g @openai/codex`)。gpt-5.6-sol なら 0.154 以上、gpt-6.1-sol なら 0.162 以上 (本家で実測)
+- ★ `AGENT_CODEX_BIN` を指定しなければ、Deep も agent-server の node_modules の codex (Light と同じ版) を使います (v0.12.0 から。それまでは node 直起動の Docker で Deep が codex を見つけませんでした)。`AGENT_CODEX_BIN` でグローバルの codex を指している場合、Deep はそちらを使います。グローバルの codex も上げてください (`npm i -g @openai/codex`)。gpt-5.6-sol なら 0.154 以上、gpt-6.1-sol なら 0.162 以上 (本家で実測)
 - API キーで使っている環境は影響ありません
 
 #### 2. ★★★ migrate は再起動の前に (忘れると 034 でログインもできない)
