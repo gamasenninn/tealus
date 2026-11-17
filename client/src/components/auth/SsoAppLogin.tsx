@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
@@ -32,24 +32,35 @@ function SsoAppLogin({ go = (u) => window.location.replace(u), framed = isFramed
   const state = params.get('state') ?? '';
   const valid = aud.startsWith('https://') && STATE_RE.test(state);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
-  useEffect(() => {
-    if (framed || !valid || isLoading || !user) return;
-    let current = true;
+  // ★ 押すまでは口を呼ばない (2026-11-17 Fable の点検 中-1)。自動で呼ぶと、攻撃者が始めた state のリンクを
+  //   踏ませるだけで本人の札が出る。守りが「札が 90 秒漏れないこと」だけになる
+  const confirm = () => {
+    setSending(true);
     api.getAppLogin(aud, state)
-      .then((r) => { if (current) go(r.url); })
-      .catch((e: unknown) => { if (current) setError(e instanceof Error ? e.message : String(e)); });
-    return () => { current = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- go は毎回作られるので見ない
-  }, [framed, valid, isLoading, user, aud, state]);
+      .then((r) => { if (mounted.current) go(r.url); })
+      .catch((e: unknown) => {
+        if (!mounted.current) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setSending(false);
+      });
+  };
+
+  let host = '';
+  try { host = new URL(aud).host; } catch { /* valid で弾く */ }
 
   let message: string;
   if (framed) message = 'このページは枠の中では開けません。ブラウザで直接開いてください。';
-  else if (!valid) message = 'ログインの開き方が正しくありません。元のサイトからもう一度「Tealus でログイン」を押してください。';
+  else if (!valid || !host) message = 'ログインの開き方が正しくありません。元のサイトからもう一度「Tealus でログイン」を押してください。';
   else if (error) message = `${error}。元のサイトからもう一度お試しください。`;
   else if (isLoading) message = '読み込み中...';
   else if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
-  else message = 'ログインしています...';
+  else message = `Tealus の ID で ${host} にログインします。自分で開いたページでなければ、押さずに閉じてください。`;
+
+  const showButton = !framed && valid && !!host && !error && !isLoading && !!user;
 
   return (
     <div className="login-container">
@@ -57,6 +68,11 @@ function SsoAppLogin({ go = (u) => window.location.replace(u), framed = isFramed
         <img src="/logo.png" alt="Tealus" className="login-logo" />
         <h1 className="login-title">Tealus</h1>
         <p className="login-subtitle">{message}</p>
+        {showButton && (
+          <button type="button" className="login-button" onClick={confirm} disabled={sending}>
+            {sending ? 'ログインしています...' : `${host} にログインする`}
+          </button>
+        )}
       </div>
     </div>
   );

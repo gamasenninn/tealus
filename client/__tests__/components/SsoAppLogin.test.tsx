@@ -5,7 +5,7 @@
  * - 枠 (iframe) の中では動かない
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../../src/services/api', () => ({ api: { getAppLogin: vi.fn() } }));
@@ -44,10 +44,17 @@ describe('SsoAppLogin', () => {
     authState.isLoading = false;
   });
 
-  it('★ ログイン済みなら口を呼び、返った URL へ移る', async () => {
+  it('★ ログイン済みでも、押すまでは口を呼ばない (リンクを踏ませるだけで札を出さない。Fable の点検 中-1)', () => {
+    renderAt(PATH, { go: vi.fn(), framed: false });
+    expect(screen.getByRole('button', { name: /portal\.example\.com にログイン/ })).toBeInTheDocument();
+    expect(getAppLogin).not.toHaveBeenCalled();
+  });
+
+  it('★ ボタンを押したら口を呼び、返った URL へ移る', async () => {
     getAppLogin.mockResolvedValue({ url: `${AUD}/auth/?a=tcallback&tealus_login=v1.a.b` });
     const go = vi.fn();
     renderAt(PATH, { go, framed: false });
+    fireEvent.click(screen.getByRole('button', { name: /にログイン/ }));
     await waitFor(() => expect(go).toHaveBeenCalledWith(`${AUD}/auth/?a=tcallback&tealus_login=v1.a.b`));
     expect(getAppLogin).toHaveBeenCalledWith(AUD, STATE);
   });
@@ -65,6 +72,7 @@ describe('SsoAppLogin', () => {
     const go = vi.fn();
     renderAt(PATH, { go, framed: true });
     expect(screen.getByText(/枠の中/)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
     expect(getAppLogin).not.toHaveBeenCalled();
     expect(go).not.toHaveBeenCalled();
   });
@@ -82,6 +90,7 @@ describe('SsoAppLogin', () => {
     getAppLogin.mockRejectedValue(new Error('このサイトにはログインの札を出せません'));
     const go = vi.fn();
     renderAt(PATH, { go, framed: false });
+    fireEvent.click(screen.getByRole('button', { name: /にログイン/ }));
     expect(await screen.findByText(/ログインの札を出せません/)).toBeInTheDocument();
     expect(go).not.toHaveBeenCalled();
   });
@@ -93,7 +102,9 @@ describe('safeNextPath (ログインのあとに戻る先)', () => {
     expect(safeNextPath('/rooms/abc')).toBe('/rooms/abc');
   });
   it('★ よそへ出る形は / に倒す', () => {
-    for (const bad of [null, '', 'https://evil.example.com', '//evil.example.com', '/\\evil.example.com', 'javascript:alert(1)', 'rooms']) {
+    // ★ ブラウザは URL のタブ・改行を取り除くので、/\t/evil は //evil と読まれる (Fable の点検 低-2)
+    for (const bad of [null, '', 'https://evil.example.com', '//evil.example.com', '/\\evil.example.com', 'javascript:alert(1)', 'rooms',
+      '/\t/evil.example.com', '/\n/evil.example.com', '/\r/evil.example.com']) {
       expect(safeNextPath(bad)).toBe('/');
     }
   });

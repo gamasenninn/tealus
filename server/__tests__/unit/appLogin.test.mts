@@ -18,6 +18,7 @@ describe('parseLoginTargets', () => {
       'https://d.example.com|//evil.example.com/',
       'https://e.example.com|/\\evil.example.com',
       'https://f.example.com',
+      'https://h.example.com|/auth/#x',
       'https://g.example.com|/ok',
     ].join(','));
     expect([...m.keys()]).toEqual(['https://g.example.com']);

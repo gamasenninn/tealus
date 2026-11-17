@@ -10,6 +10,7 @@ import request from 'supertest';
 import { app } from '../../src/app.mts';
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { logger } from '../../src/utils/logger.mts';
 
 type TestUser = Awaited<ReturnType<typeof createTestUser>>;
 
@@ -111,6 +112,14 @@ describe('POST /api/sso/app-login', () => {
     expectNoLogin(await post(user, { aud: AUD, state: STATE }));
     await getTestPool().query("UPDATE users SET role = 'user', is_bot = true WHERE id = $1", [user.user.id]);
     expectNoLogin(await post(user, { aud: AUD, state: STATE }));
+  });
+
+  it('★ 断った記録に aud の改行を持ち込ませない (偽の行を作らせない。Fable の点検 低-3)', async () => {
+    const spy = jest.spyOn(logger, 'info');
+    expectNoLogin(await post(user, { aud: 'https://evil.example.com\n[app-login] 出した: aud=x', state: STATE }));
+    const line = spy.mock.calls.map((c) => String(c[0])).find((l) => l.includes('出さない'))!;
+    expect(line).not.toMatch(/[\r\n]/);
+    spy.mockRestore();
   });
 
   it('ログインしていなければ 401', async () => {

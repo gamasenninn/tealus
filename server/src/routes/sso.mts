@@ -21,7 +21,8 @@ router.post('/app-login', (req, res) => {
   if (typeof state !== 'string' || !LOGIN_STATE_RE.test(state)) {
     return res.status(400).json({ error: 'state は 32 桁の 16 進 (小文字) で指定してください' });
   }
-  const audLabel = typeof aud === 'string' ? aud.slice(0, 100) : '-';
+  // ★ 改行などを空白にしてから記録に書く (送り手が偽の行を作れないように。Fable の点検 低-3)
+  const audLabel = typeof aud === 'string' ? aud.slice(0, 100).replace(/[\u0000-\u001f\u007f]/g, ' ') : '-';
   const refuse = (why: string) => {
     logger.info(`[app-login] 出さない: aud=${audLabel} user=${req.user!.id} — ${why}`);
     return res.status(404).json({ error: LOGIN_UNAVAILABLE });

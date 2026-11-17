@@ -49,6 +49,8 @@ export function parseLoginTargets(raw: string | undefined): Map<string, string> 
     try { u = new URL(origin); } catch { continue; }
     if (u.protocol !== 'https:' || u.origin !== origin) continue;
     if (!cbPath.startsWith('/') || cbPath.startsWith('//') || cbPath.startsWith('/\\')) continue;
+    // ★ # を含むと、札がハッシュの後ろに付いて相手のサーバに届かない (Fable の点検 2026-11-17)
+    if (cbPath.includes('#')) continue;
     map.set(origin, cbPath);
   }
   return map;
