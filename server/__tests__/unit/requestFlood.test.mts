@@ -57,3 +57,39 @@ describe('floodKey', () => {
     expect(floodKey({ get: () => undefined, ip: '127.0.0.1' } as never)).toBe('ip=127.0.0.1');
   });
 });
+
+describe('★ 違う URL の数を添える (改善ループ 60)', () => {
+  // ★ 2026-11-16 に 3 回出た [http-flood] (アシスタントの口座、Python-urllib) は、画像の取り込みのスクリプト
+  //   (tealus-apps の room_images) が 6〜7 投稿の画像 (1 投稿 20 枚) を index=0..19 で順に読んだもので、
+  //   1 分の中に同じ URL は無かった。文面の「繰り返し・連打の疑い」では、読んだ人が端末の暴走と取り違える
+  it('同じ URL の繰り返しなら、違う URL は 1 件で「繰り返し」と書く', () => {
+    let line: string | null = null;
+    for (let i = 0; i < 61; i++) line = noteRequestForFlood('user=a', 'GET /api/config', T0 + i, 'GET /api/config') ?? line;
+    expect(line).toContain('違う URL 1 件');
+    expect(line).toContain('繰り返し');
+    expect(line).not.toContain('まとめて');
+  });
+
+  it('★ 1 回ずつ違う URL なら「まとめての読み込み」と書く (端末の暴走と取り違えない)', () => {
+    let line: string | null = null;
+    for (let i = 0; i < 61; i++) {
+      line = noteRequestForFlood('user=a', 'GET /api/bot/messages/0890aaad-f5f8-4314-bc52-5d43d7b0c8af/media', T0 + i,
+        `GET /api/bot/messages/0890aaad-f5f8-4314-bc52-5d43d7b0c8af/media?index=${i}`) ?? line;
+    }
+    expect(line).toContain('GET /api/bot/messages/:id/media');
+    expect(line).toContain('違う URL 61 件');
+    expect(line).toContain('まとめて');
+  });
+
+  it('URL を渡さない呼び方は、口そのものを URL として数える (前と同じに動く)', () => {
+    let line: string | null = null;
+    for (let i = 0; i < 61; i++) line = noteRequestForFlood('user=a', 'GET /api/config', T0 + i) ?? line;
+    expect(line).toContain('違う URL 1 件');
+  });
+
+  it('★ 覚える URL の数には上限がある (相手ごとに増え続けない)。上限を超えたら「以上」と書く', () => {
+    let line: string | null = null;
+    for (let i = 0; i < 61; i++) line = noteRequestForFlood('user=a', 'GET /x', T0 + i, `GET /x?i=${i}`, 50) ?? line;
+    expect(line).toContain('違う URL 50 件以上');
+  });
+});

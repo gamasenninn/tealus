@@ -67,7 +67,7 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
     const status = res.statusCode;
     const path = url.split('?')[0];
     logger.debug(`${req.method} ${url} ${status} ${ms}ms user=${who(req)}`);
-    const flood = noteRequestForFlood(floodKey(req), `${req.method} ${path}`);
+    const flood = noteRequestForFlood(floodKey(req), `${req.method} ${path}`, Date.now(), `${req.method} ${url}`);
     if (flood) logger.warn(`${flood} ua=${clip(req.headers['user-agent'], 120)}`);
 
     if (DENIED.has(status)) {
