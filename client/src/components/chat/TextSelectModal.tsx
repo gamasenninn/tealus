@@ -28,11 +28,14 @@ function TextSelectModal({ text, onClose }: TextSelectModalProps) {
     ta.select();
   };
 
-  const rows = Math.min(14, Math.max(3, (text || '').split('\n').length + 1));
-
+  // ★ 2026-11-17 小野さん「通常のメッセージ編集と同じくらいの大きさに。その方がコピーしやすい」。
+  //   大きさは編集の窓 (MessageEditModal) と同じクラス voice-edit-modal に任せる
+  //   (PC は 80vh・幅 720px、スマホは見えている領域を埋める。VoiceBubble.css)。
+  //   ★ 箱の大きさ・枠・伸び縮みをここの style に書くと、そのクラスの指定が効かなくなる
+  //   rows は visualViewport も PC の指定も無い環境向けの控え (編集の窓と同じ 6)
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-box voice-edit-modal" onClick={(e) => e.stopPropagation()}>
         <h3>部分コピー</h3>
         <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'var(--text-secondary, #888)' }}>
           ドラッグで範囲を選んでコピーしてください。
@@ -41,22 +44,14 @@ function TextSelectModal({ text, onClose }: TextSelectModalProps) {
           ref={taRef}
           readOnly
           value={text}
-          rows={rows}
+          rows={6}
           style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '10px 12px',
-            border: '1px solid var(--border-medium, #ccc)',
-            borderRadius: '8px',
-            fontSize: 'var(--chat-font-size, 16px)',
-            lineHeight: 1.6,
-            resize: 'vertical',
             userSelect: 'text',
             WebkitUserSelect: 'text',
             WebkitTouchCallout: 'default',
           }}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+        <div className="voice-edit-buttons">
           <button className="btn-cancel" onClick={selectAll}>全選択</button>
           <button className="btn-primary" onClick={onClose}>閉じる</button>
         </div>
