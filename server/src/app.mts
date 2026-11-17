@@ -56,6 +56,7 @@ import { errorHandler } from './middleware/errorHandler.mts';
 import { router as versionRoutes } from './routes/version.mts';
 import { router as configRoutes } from './routes/config.mts';
 import { router as clientErrorRoutes } from './routes/clientErrors.mts';
+import { router as ssoRoutes } from './routes/sso.mts';
 import { agentUrl, rtcUrl, mcpHttpUrl } from './lib/upstream.mts';
 import { errorText } from './utils/logFormat.mts';
 
@@ -233,6 +234,7 @@ app.use('/api/version', versionRoutes);
 app.use('/api/client-errors', clientErrorRoutes);   // #525 画面のエラーを本体のログへ (認証不要)
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/sso', ssoRoutes);   // ブラウザから「Tealus でログイン」(docs/11 §5.5)
 app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms/:id/messages', messageRoutes);
 app.use('/api/rooms/:id/media', mediaRoutes);
