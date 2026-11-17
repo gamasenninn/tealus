@@ -28,15 +28,13 @@ export function useAppPanel(currentRoom: RoomWithAppUrls | null, roomId: string)
   //   元の URL (ベーシック認証の箱が出る方) で開いてしまう。中身が今の部屋になるまで何も並べない
   const appUrls = (currentRoom?.id === roomId && currentRoom.app_urls) || [];
 
-  // Auto-open app panel
+  // 部屋が変わったら: 自動で開く印のあるアプリを開き、無ければ閉じて 1 番目に戻す
+  // ★ 改善ループ 62: パソコンの 2 列の画面では部屋を移ってもトーク画面が作り直されないので、
+  //   ここで戻さないと、開いた状態と選んだ番号を次の部屋へ持ち越す (番号がアプリの数を超えると空の枠が出る)
   useEffect(() => {
-    if (appUrls.length > 0) {
-      const autoIdx = appUrls.findIndex(a => a.auto_open);
-      if (autoIdx >= 0) {
-        setShowAppPanel(true);
-        setActiveAppIndex(autoIdx);
-      }
-    }
+    const autoIdx = appUrls.findIndex(a => a.auto_open);
+    setShowAppPanel(autoIdx >= 0);
+    setActiveAppIndex(autoIdx >= 0 ? autoIdx : 0);
   }, [currentRoom?.id]);
 
   // App panel wake lock

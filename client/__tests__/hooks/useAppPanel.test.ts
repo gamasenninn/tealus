@@ -7,7 +7,7 @@
  *   2026-11-16 11:56 に本番で 1 回 (EC 管理 → 業務メモ。[app-pass] 出さない: その番号のアプリが無い)
  */
 import { describe, it, expect } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useAppPanel } from '../../src/hooks/useAppPanel';
 import type { Room } from '../../src/types';
 
@@ -30,6 +30,44 @@ describe('useAppPanel', () => {
     expect(result.current.appUrls).toEqual([]);
     rerender({ room: MEMO, id: 'room-memo' });        // 中身が届いた
     expect(result.current.appUrls).toEqual([]);
+  });
+
+  /**
+   * ★ 改善ループ 62: パソコンの 2 列の画面では、部屋を移ってもトーク画面は作り直されない (App.tsx の Route に key が無い)。
+   *   開いたまま・選んだ番号のまま次の部屋に持ち越し、自動で開かない部屋でもアプリが開き、
+   *   番号が次の部屋のアプリの数を超えると、どのタブも選ばれていない空の枠が出ていた
+   */
+  it('★ 部屋を移ったら、開いた状態と選んだ番号を持ち越さない (自動で開く印が無ければ閉じる)', () => {
+    const MULTI = { id: 'room-multi', app_urls: [{ title: 'a', url: 'https://a.example/' }, { title: 'b', url: 'https://b.example/' }] } as unknown as Room;
+    const PLAIN = { id: 'room-plain', app_urls: [{ title: 'c', url: 'https://c.example/' }] } as unknown as Room;
+    const { result, rerender } = renderHook(({ room, id }) => useAppPanel(room, id), {
+      initialProps: { room: MULTI, id: 'room-multi' },
+    });
+    act(() => { result.current.setActiveAppIndex(1); result.current.setShowAppPanel(true); });
+    rerender({ room: MULTI, id: 'room-plain' });
+    rerender({ room: PLAIN, id: 'room-plain' });
+    expect(result.current.showAppPanel).toBe(false);
+    expect(result.current.activeAppIndex).toBe(0);
+  });
+
+  it('★ 移った先に自動で開く印があれば、その番号で開く', () => {
+    const { result, rerender } = renderHook(({ room, id }) => useAppPanel(room, id), {
+      initialProps: { room: MEMO, id: 'room-memo' },
+    });
+    expect(result.current.showAppPanel).toBe(false);
+    rerender({ room: MEMO, id: 'room-ec' });
+    rerender({ room: EC, id: 'room-ec' });
+    expect(result.current.showAppPanel).toBe(true);
+    expect(result.current.activeAppIndex).toBe(0);
+  });
+
+  it('同じ部屋の中身を読み直しても (同じ id)、開いた状態は変えない', () => {
+    const { result, rerender } = renderHook(({ room, id }) => useAppPanel(room, id), {
+      initialProps: { room: MEMO, id: 'room-memo' },
+    });
+    act(() => { result.current.setShowAppPanel(true); });
+    rerender({ room: { ...MEMO } as Room, id: 'room-memo' });
+    expect(result.current.showAppPanel).toBe(true);
   });
 
   it('部屋の中身がまだ無い (null) なら、何も並べない', () => {
