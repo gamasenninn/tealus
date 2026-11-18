@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, type TtsOptions } from '../../services/api';
+import { editAppUrls, type AppUrlsAction } from '../../utils/appUrlsEdit';
 import type { AppUrl, Room } from '../../types';
 import { useRoomStore } from '../../stores/roomStore';
 import './RoomSettings.css';
@@ -49,6 +50,9 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
   // #463 機械の投稿の通知 (ルームの管理者が選ぶ)。既定は鳴らさない
   const [machinePush, setMachinePush] = useState<boolean>(!!currentRoom?.push_machine_posts);
   const [appUrls, setAppUrls] = useState<AppUrl[]>(currentRoom?.app_urls || []);
+  // ★ 改善ループ 76 (#649 C): 部屋の中身 (別の部屋・保存後の新しい版) が変わったら、手元の一覧も合わせ直す。
+  //   以前は開いたときの props から 1 回だけ取っていたので、古い一覧を作り替えて丸ごと上書きしえた
+  useEffect(() => { setAppUrls(currentRoom?.app_urls || []); }, [currentRoom?.id, currentRoom?.app_urls]);
   const [newAppTitle, setNewAppTitle] = useState('');
   const [newAppUrl, setNewAppUrl] = useState('');
   const [editingAppIndex, setEditingAppIndex] = useState<number | null>(null);
@@ -245,66 +249,39 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
   };
 
   // --- アプリパネル ---
-  const handleToggleAutoOpen = async (index: number) => {
+  // ★ 改善ループ 76 (#649 C): 7 本の手続きの作り替えを editAppUrls 1 つにした (テストあり)。
+  //   保存は 1 か所 (saveApps)。作り替えの元は「今の部屋の中身」に合わせ直した手元の一覧 (下の effect)
+  const saveApps = async (action: AppUrlsAction): Promise<boolean> => {
     try {
-      const updated = appUrls.map((app, i) => i === index ? { ...app, auto_open: !app.auto_open } : app);
+      const updated = editAppUrls(appUrls, action);
       await api.updateRoom(roomId, { app_urls: updated });
       setAppUrls(updated);
       await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+      return true;
+    } catch (err) { showError(err instanceof Error ? err.message : String(err)); return false; }
   };
 
-  const handleToggleWakeLock = async (index: number) => {
-    try {
-      const updated = appUrls.map((app, i) => i === index ? { ...app, wake_lock: !app.wake_lock } : app);
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
-  };
-
+  const handleToggleAutoOpen = (index: number) => saveApps({ kind: 'toggle', index, field: 'auto_open' });
+  const handleToggleWakeLock = (index: number) => saveApps({ kind: 'toggle', index, field: 'wake_lock' });
   // #607 開くときに Tealus の通行証を添える (docs/11)。★ 相手側と取り決めがあるサイトにだけ効く
-  const handleTogglePass = async (index: number) => {
-    try {
-      const updated = appUrls.map((app, i) => i === index ? { ...app, pass: !app.pass } : app);
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
-  };
-
-  const handleAppRatioChange = async (index: number, ratio: string) => {
-    try {
-      const updated = appUrls.map((app, i) => i === index ? { ...app, ratio: parseInt(ratio) } : app);
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
-  };
+  const handleTogglePass = (index: number) => saveApps({ kind: 'toggle', index, field: 'pass' });
+  const handleAppRatioChange = (index: number, ratio: string) => saveApps({ kind: 'ratio', index, ratio });
 
   const handleAddApp = async () => {
     if (!newAppTitle.trim() || !newAppUrl.trim()) return;
-    try {
-      const updated = [...appUrls, { title: newAppTitle.trim(), url: newAppUrl.trim(), ratio: 50, auto_open: false, wake_lock: false }];
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
+    if (await saveApps({ kind: 'add', title: newAppTitle, url: newAppUrl })) {
       setNewAppTitle('');
       setNewAppUrl('');
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+    }
   };
 
   const handleUpdateApp = async () => {
     if (editingAppIndex === null || !newAppTitle.trim() || !newAppUrl.trim()) return;
-    try {
-      const updated = appUrls.map((app, i) => i === editingAppIndex ? { ...app, title: newAppTitle.trim(), url: newAppUrl.trim() } : app);
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
+    if (await saveApps({ kind: 'update', index: editingAppIndex, title: newAppTitle, url: newAppUrl })) {
       setNewAppTitle('');
       setNewAppUrl('');
       setEditingAppIndex(null);
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
+    }
   };
 
   const handleEditApp = (index: number) => {
@@ -313,14 +290,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
     setEditingAppIndex(index);
   };
 
-  const handleRemoveApp = async (index: number) => {
-    try {
-      const updated = appUrls.filter((_, i) => i !== index);
-      await api.updateRoom(roomId, { app_urls: updated });
-      setAppUrls(updated);
-      await selectRoom(roomId);
-    } catch (err) { showError(err instanceof Error ? err.message : String(err)); }
-  };
+  const handleRemoveApp = (index: number) => saveApps({ kind: 'remove', index });
 
   // --- システム設定 ---
   const handleToggleAnnouncement = async () => {
@@ -473,7 +443,7 @@ function RoomSettings({ roomId, currentRoom, isAdmin: isAdminProp, isSysAdmin: i
               </div>
               <div className="app-url-actions">
                 <button className="app-url-edit" onClick={() => handleEditApp(i)}>編集</button>
-                <button className="app-url-remove" onClick={() => handleRemoveApp(i)}>✕</button>
+                <button className="app-url-remove" onClick={() => handleRemoveApp(i)} title="削除" aria-label="削除">✕</button>
               </div>
             </div>
           ))}

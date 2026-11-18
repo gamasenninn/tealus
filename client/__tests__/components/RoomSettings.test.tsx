@@ -578,3 +578,23 @@ describe('RoomSettings — 1 対 1 の AI の設定を本人に (判断 A)', () 
     expect(screen.queryByLabelText('応答モード')).toBeNull();
   });
 });
+
+/**
+ * ★ アプリ一覧は「今の部屋の中身」から作り替える (改善ループ 76、#649 C)。
+ *   以前は開いたときの props から 1 回だけ取った手元の一覧を作り替えて丸ごと保存していたので、
+ *   中身が別の部屋・新しい版に変わっても、古い一覧で上書きしえた
+ */
+describe('RoomSettings — アプリ一覧の編集 (改善ループ 76)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('★ 部屋の中身が変わったら、新しい一覧から削除する (古い一覧で上書きしない)', async () => {
+    const roomA = { id: 'room-1', type: 'group', app_urls: [{ title: '古い', url: 'https://old.example/' }] } as unknown as Room;
+    const roomB = { id: 'room-1', type: 'group', app_urls: [{ title: '新1', url: 'https://n1.example/' }, { title: '新2', url: 'https://n2.example/' }] } as unknown as Room;
+    const { rerender } = render(<RoomSettings {...baseProps} currentRoom={roomA} isAdmin={true} isSysAdmin={false} />);
+    rerender(<RoomSettings {...baseProps} currentRoom={roomB} isAdmin={true} isSysAdmin={false} />);
+    expect(await screen.findByText('新1')).toBeInTheDocument();
+    const removeButtons = screen.getAllByTitle('削除');
+    fireEvent.click(removeButtons[0]);
+    await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('room-1', { app_urls: [{ title: '新2', url: 'https://n2.example/' }] }));
+  });
+});
