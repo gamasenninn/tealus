@@ -3,6 +3,7 @@
  * 無限ループ防止 + DM/グループ判定
  */
 import { logger } from '../lib/logger.mts';
+import { ensureBotInRoom } from '../lib/botRoomMembership.mts';
 import { dispatch } from './dispatcher.mts';
 import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
@@ -253,23 +254,13 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
     }
   }
 
-  // Bot が参加していないルームは無視（ただしルーム一覧を再取得して確認）
-  if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
-    try {
-      const roomData = await botApi.getRooms();
-      const rooms = roomData.rooms || [];
-      botRoomIds.clear();
-      rooms.forEach((r: { id: string }) => botRoomIds.add(r.id));
-      if (!botRoomIds.has(room.id)) {
-        logger.debug(`Skipped: bot not member of room ${room.name || room.id}`);
-        return;
-      }
-      logger.info(`Bot room list refreshed, now includes ${room.name || room.id}`);
-    } catch (err) {
-      // ★ 本体の一時的な失敗 (5xx・時間切れ) は「メンバーでない」と分けて warn で残す (debug では返事が無かった理由が残らなかった)
-      logger.warn(`Skipped: could not confirm bot membership of room ${room.name || room.id}: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
+  // Bot が参加していないルームは無視（ただしルーム一覧を再取得して確認）。判定は ensureBotInRoom 1 つ (改善ループ 71)
+  {
+    const check = await ensureBotInRoom(botRoomIds, room.id, () => botApi.getRooms());
+    if (check.result === 'not-member') { logger.debug(`Skipped: bot not member of room ${room.name || room.id}`); return; }
+    // ★ 本体の一時的な失敗 (5xx・時間切れ) は「メンバーでない」と分けて warn で残す (debug では返事が無かった理由が残らなかった)
+    if (check.result === 'unknown') { logger.warn(`Skipped: could not confirm bot membership of room ${room.name || room.id}: ${check.error}`); return; }
+    if (check.result === 'refreshed-member') logger.info(`Bot room list refreshed, now includes ${room.name || room.id}`);
   }
 
   // 音声メッセージは voice.transcription_completed で処理する
@@ -343,21 +334,11 @@ async function handleMessageUpdated(payload: WebhookPayload): Promise<void> {
   const mentionPrev = isMentioned(prevContent, botAgentName);
   if (!(mentionNow && !mentionPrev)) return;
 
-  // Bot が参加していないルームは無視 (handleMessageCreated と同型に再取得して確認)
-  if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
-    try {
-      const roomData = await botApi.getRooms();
-      const rooms = roomData.rooms || [];
-      botRoomIds.clear();
-      rooms.forEach((r: { id: string }) => botRoomIds.add(r.id));
-      if (!botRoomIds.has(room.id)) {
-        logger.debug(`[edit-trigger] Skipped: bot not member of room ${room.name || room.id}`);
-        return;
-      }
-    } catch (err) {
-      logger.warn(`[edit-trigger] Skipped: could not confirm bot membership of room ${room.name || room.id}: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
+  // Bot が参加していないルームは無視 (handleMessageCreated と同じ ensureBotInRoom、改善ループ 71)
+  {
+    const check = await ensureBotInRoom(botRoomIds, room.id, () => botApi.getRooms());
+    if (check.result === 'not-member') { logger.debug(`[edit-trigger] Skipped: bot not member of room ${room.name || room.id}`); return; }
+    if (check.result === 'unknown') { logger.warn(`[edit-trigger] Skipped: could not confirm bot membership of room ${room.name || room.id}: ${check.error}`); return; }
   }
 
   logger.info(`[edit-trigger] Mention newly added via edit in room ${room.name || room.id} → dispatch`);
@@ -397,20 +378,11 @@ async function handleTranscriptionCompleted(payload: WebhookPayload): Promise<vo
     logger.info(`[SPIKE] cross-room delegation transcription accepted: ${senderId} in ${room.id}`);
   }
 
-  if (botRoomIds.size > 0 && !botRoomIds.has(room.id)) {
-    try {
-      const roomData = await botApi.getRooms();
-      const rooms = roomData.rooms || [];
-      botRoomIds.clear();
-      rooms.forEach((r: { id: string }) => botRoomIds.add(r.id));
-      if (!botRoomIds.has(room.id)) {
-        logger.debug(`Skipped transcription: bot not member of room ${room.id}`);
-        return;
-      }
-    } catch (err) {
-      logger.warn(`Skipped transcription: could not confirm bot membership of room ${room.id}: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
+  // 判定は ensureBotInRoom 1 つ (改善ループ 71)
+  {
+    const check = await ensureBotInRoom(botRoomIds, room.id, () => botApi.getRooms());
+    if (check.result === 'not-member') { logger.debug(`Skipped transcription: bot not member of room ${room.id}`); return; }
+    if (check.result === 'unknown') { logger.warn(`Skipped transcription: could not confirm bot membership of room ${room.id}: ${check.error}`); return; }
   }
 
   const text = transcription?.formatted_text || transcription?.raw_text;
