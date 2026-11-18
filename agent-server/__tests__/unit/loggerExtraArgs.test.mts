@@ -8,7 +8,9 @@
  */
 import { createLogger, format } from 'winston';
 import Transport from 'winston-transport';
-import { appendExtras, EXTRA_MAX_CHARS } from '../../src/lib/logFormat.mts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { appendExtras, EXTRA_MAX_CHARS, errorText } from '../../src/lib/logFormat.mts';
 
 class Capture extends Transport {
   infos: Record<string | symbol, unknown>[] = [];
@@ -60,5 +62,49 @@ describe('agent-server logger: 2 つ目以降の引数', () => {
     const b = new Capture({ format: format.combine(appendExtras(), format.json()) });
     createLogger({ level: 'debug', transports: [a, b] }).error('status:', 403);
     expect([a.infos[0].message, b.infos[0].message]).toEqual(['status: 403', 'status: 403']);
+  });
+});
+
+/**
+ * ★ 本文が空のエラーにも理由を足す (改善ループ 67、#649 B-1)。本体は 11-08 (改善ループ 42) に直したが、
+ *   agent-server の写しには入っていなかった。agent-server も DB を使うので、DB が止まると理由が空の行になる
+ */
+describe('agent-server logger: 本文が空のエラー', () => {
+  test('★ AggregateError (本文が空) は中のエラーの理由を足す', () => {
+    const err = new AggregateError([new Error('connect ECONNREFUSED ::1:5432'), new Error('connect ECONNREFUSED 127.0.0.1:5432')], '');
+    const { message } = emit('DB error:', err);
+    expect(message).toContain('ECONNREFUSED ::1:5432');
+    expect(message).toContain('127.0.0.1:5432');
+  });
+
+  test('本文のあるエラーは足さない (winston が既に本文へつないでいる。二重にしない)', () => {
+    const { message } = emit('failed:', new Error('boom'));
+    expect(message.split('boom').length - 1).toBeLessThanOrEqual(1);
+  });
+
+  test('errorText: 本文があれば本文、空なら中身、中身も無ければ code か名前', () => {
+    expect(errorText(new Error('x'))).toBe('x');
+    expect(errorText(Object.assign(new Error(''), { code: 'ECONNRESET' }))).toBe('Error: ECONNRESET');
+    expect(errorText('s')).toBe('s');
+  });
+});
+
+/**
+ * ★ 本体と agent-server の写しが同じであることを固定する (片方だけ直す型を止める、#649 B-1)。
+ *   別パッケージなので import はしない。ファイルを文字として読んで、関数の中身を比べる
+ */
+describe('本体と agent-server の logFormat の写し', () => {
+  test('★ extraToString と errorText の中身が同じ', () => {
+    const here = import.meta.dirname;
+    const a = fs.readFileSync(path.join(here, '../../src/lib/logFormat.mts'), 'utf8');
+    const b = fs.readFileSync(path.join(here, '../../../server/src/utils/logFormat.mts'), 'utf8');
+    const body = (raw: string, name: string) => {
+      const src = raw.split(String.fromCharCode(13)).join('');   // ★ 改行の形 (CRLF / LF) はファイルごとに違う
+      const start = src.indexOf(`function ${name}(`);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const end = src.indexOf('\n}\n', start);
+      return src.slice(start, end).replace(/\r/g, '').replace(/"/g, "'");
+    };
+    for (const name of ['extraToString', 'errorText']) expect(body(a, name)).toBe(body(b, name));
   });
 });
