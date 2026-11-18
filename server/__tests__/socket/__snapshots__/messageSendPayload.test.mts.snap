@@ -5,6 +5,7 @@ exports[`#1 画面から打つメッセージ: 送る中身 人・テキスト: 
   "content": "こんにちは",
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",
@@ -57,6 +58,7 @@ exports[`#1 画面から打つメッセージ: 送る中身 人・前後に空�
   "content": "見てください https://example.com/a",
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",
@@ -109,6 +111,7 @@ exports[`#1 画面から打つメッセージ: 送る中身 人・転送: AI 通
   "content": "転送される元の投稿",
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",
@@ -179,6 +182,7 @@ exports[`#1 画面から打つメッセージ: 送る中身 人・返信あり: 
   "content": "返信します",
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",
@@ -259,6 +263,7 @@ exports[`#1 画面から打つメッセージ: 送る中身 機械が socket か
   "content": "ボットです",
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",

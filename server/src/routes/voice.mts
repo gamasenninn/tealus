@@ -16,6 +16,7 @@ import { announcePost } from '../services/postEffects.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
 import fs from 'node:fs';
 import { safeExt } from '../utils/safeExt.mts';
+import { webhookMessage } from '../services/webhookMessage.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -153,7 +154,7 @@ router.post('/', authenticate, requireMember, (req, res, next) => {
           : { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: '🎤 音声メッセージ', data: { roomId, messageId: message.id } } },
         webhook: { kind: 'on', payload: {
           room: { id: roomId },
-          message: { id: message.id, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null, sender: { id: req.user!.id, display_name: req.user!.display_name } },
+          message: webhookMessage({ message: { ...message, type: 'voice', content: null, reply_to: replyTo || null, reply_to_message: fullMessage.reply_to_message || null }, sender: req.user! }),   // ★ 改善ループ 66
         } },
         preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。音声は本文を持たない (文字起こしは後から入る)' },
       });

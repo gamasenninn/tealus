@@ -100,7 +100,8 @@ describe('postAsUser', () => {
     });
     expect(mockFireWebhooks).toHaveBeenCalledWith('message.created', ROOM, {
       room: { id: ROOM },
-      message: { id: 'msg-1', type: 'text', content: 'hi', reply_to: null, sender: { id: USER, display_name: 'テスト太郎' } },
+      // ★ 改善ループ 66: 形は webhookMessage で作る (行に created_at があれば載る。この試験の行には無い)
+      message: { id: 'msg-1', type: 'text', content: 'hi', reply_to: null, reply_to_message: null, sender: { id: USER, display_name: 'テスト太郎' } },
     });
     expect(mockEmit).toHaveBeenCalledTimes(1);
     expect(mockFireWebhooks).toHaveBeenCalledTimes(1);

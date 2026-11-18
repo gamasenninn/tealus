@@ -12,6 +12,7 @@ import { attachMedia, attachForwards } from '../services/messageAttachments.mts'
 import type { AttachableMessage } from '../services/messageAttachments.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
+import { webhookMessage } from '../services/webhookMessage.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -322,13 +323,8 @@ router.post('/forward', authenticate, requireMember, async (req, res) => {
       } },
       webhook: { kind: 'on', payload: {
         room: { id: targetRoomId },
-        message: {
-          id: fullMessage.id,
-          type: src.type,
-          content: fullMessage.content,
-          forwarded_from: source_message_id,
-          sender: { id: userId, display_name: req.user!.display_name },
-        },
+        // ★ 改善ループ 66: 添付のファイル名・作った時刻も載せる (以前は無く、AI から見てファイル名が「不明なファイル」だった)
+        message: webhookMessage({ message: { ...fullMessage, type: src.type, content: fullMessage.content ?? null }, sender: req.user!, forwardedFrom: source_message_id }),
       } },
       preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });

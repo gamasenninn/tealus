@@ -94,7 +94,10 @@ describe('#4 メディアの転送: 送る中身', () => {
     expect(recorded.push).toEqual([[roomB, human.id, { title: '転送する人', body: pushBody, data: { roomId: roomB, messageId: m.id } }]]);
     expect(recorded.webhook).toEqual([['message.created', roomB, {
       room: { id: roomB },
-      message: { id: m.id, type, content: null, forwarded_from: srcId, sender: { id: human.id, display_name: '転送する人' } },
+      // ★ 改善ループ 66: 作った時刻と添付のファイル名・種類・大きさも載せる (以前は無く、AI から見てファイル名が「不明なファイル」だった)
+      message: { id: m.id, type, content: null, created_at: expect.any(String), reply_to: null, reply_to_message: null,
+        forwarded_from: srcId, media: [{ file_name: name, mime_type: mime, file_size: (body as Buffer).length }],
+        sender: { id: human.id, display_name: '転送する人' } },
     }]]);
     expect(recorded.machine).toEqual([]);
     expect(recorded.preview).toEqual([]);

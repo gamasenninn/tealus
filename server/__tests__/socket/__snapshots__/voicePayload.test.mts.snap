@@ -56,6 +56,7 @@ exports[`#8 音声メッセージ: 送る中身 人・返信あり: 配信 + 通
   "content": null,
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",
@@ -125,6 +126,7 @@ exports[`#8 音声メッセージ: 送る中身 人・返信なし: 配信 + 通
   "content": null,
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",
@@ -181,6 +183,7 @@ exports[`#8 音声メッセージ: 送る中身 機械・返信なし: 配信 + 
   "content": null,
   "message_keys": [
     "content",
+    "created_at",
     "id",
     "reply_to",
     "reply_to_message",

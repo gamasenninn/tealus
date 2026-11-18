@@ -23,6 +23,7 @@ import { textPushBody } from './machinePush.mts';
 import { announcePost } from './postEffects.mts';
 import { logger } from '../utils/logger.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { webhookMessage } from './webhookMessage.mts';
 
 /** 4 経路で共通の sender context (docs/05 §4) */
 export interface SenderContext {
@@ -105,13 +106,7 @@ export async function postAsUser(input: PostAsUserInput): Promise<PostAsUserResu
       } },
       webhook: { kind: 'on', payload: {
         room: { id: roomId },
-        message: {
-          id: message.id,
-          type,
-          content,
-          reply_to: message.reply_to || null,
-          sender: { id: sender.id, display_name: sender.display_name },
-        },
+        message: webhookMessage({ message: { ...message, type, content }, sender }),   // ★ 改善ループ 66
       } },
       // ★ #383 第 2 段 (2026-10-02 利用者判断) で付けた。それまでは「不明」で付いていなかった。#1 と同じく text だけ
       //   ボットの URL つきの投稿は一覧型が多い (60 日 133 件、平均 6.7 本) が、プレビューは先頭の 1 本だけを作る

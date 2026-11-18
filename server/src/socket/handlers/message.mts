@@ -7,6 +7,7 @@ import { checkMessageRefs } from '../../services/messageRefs.mts';
 import { SOCKET_POST_TYPES, MAX_CONTENT_LENGTH, contentTooLongMessage } from '../../services/messageTypes.mts';
 import { REPLY_SELECT, normalizeReply, type ReplyMessageRow } from '../../services/messageAttachments.mts';
 import { errorText } from '../../utils/logFormat.mts';
+import { webhookMessage } from '../../services/webhookMessage.mts';
 
 interface ForwardMessageRow extends ReplyMessageRow {
   room_name: string | null;
@@ -157,7 +158,7 @@ export function registerMessageHandler(socket: Socket, io: Server): void {
           kind: 'on',
           payload: {
             room: { id: room_id },
-            message: { id: message.id, type, content: content.trim(), reply_to: reply_to || null, reply_to_message: message.reply_to_message || null, sender: { id: socket.user.id, display_name: socket.user.display_name } },
+            message: webhookMessage({ message: { ...(message as typeof message & { created_at?: string | Date }), type, content: content.trim(), reply_to: reply_to || null }, sender: socket.user }),   // ★ 形は 1 か所で作る (改善ループ 66)
           },
         },
         preview: type === 'text'
