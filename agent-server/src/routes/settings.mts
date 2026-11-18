@@ -221,37 +221,17 @@ async function listAgentRooms(agentId: string): Promise<RoomSummary[]> {
   const agentDir = path.join(WORKSPACE_ROOT, agentId);
   if (!fs.existsSync(agentDir)) return [];
 
-  // admin API で全ルーム情報を取得（エージェントに関係なくルーム名を解決）
+  // ルーム名は Bot API の一覧から引く (Bot が入っている部屋だけ)。
+  // ★ 改善ループ 75 (#649 B-9): 以前はこの前に、export されていない botApi.request で /admin/rooms を呼ぶ分岐があり、
+  //   必ず例外になってここへ落ちていた (コメント自身が「常に例外」と書いていた)。消しただけで振る舞いは同じ
   const roomInfoMap = new Map<string, { name?: string; type?: string; member_count?: number }>();
   try {
-    // botApi.request は private helper で export されていない (#330 TS 移行時点の
-    // botApi.mts 確認済み)。元実装 (routes/settings.js) も同様に botApi.request を
-    // 呼んでおり、常に例外→下の Bot API フォールバックに落ちる潜在挙動だった。
-    // これを変えずに保持するため、存在しない前提でキャストして呼び出す。
-    const request = (botApi as unknown as {
-      request?: (method: string, path: string) => Promise<AdminRoomsResponse>;
-    }).request;
-    const allRooms = await request!('GET', '/admin/rooms');
-    const roomList = allRooms.rooms || [];
+    const apiRooms = (await botApi.getRooms()) as AdminRoomsResponse | RoomApiItem[];
+    const roomList: RoomApiItem[] = Array.isArray(apiRooms) ? apiRooms : (apiRooms.rooms || []);
     for (const r of roomList) {
-      let name = r.name;
-      if (r.type === 'direct' && r.members) {
-        // DM: エージェント以外のメンバー名を表示
-        const other = r.members.find((m: RoomApiMember) => m.id !== agentId);
-        name = other?.display_name || 'DM';
-      }
-      roomInfoMap.set(r.id, { name, type: r.type, member_count: r.member_count });
+      roomInfoMap.set(r.id, { name: r.name || r.partner_display_name || 'DM', type: r.type, member_count: r.member_count });
     }
-  } catch {
-    // フォールバック: Bot API
-    try {
-      const apiRooms = (await botApi.getRooms()) as AdminRoomsResponse | RoomApiItem[];
-      const roomList: RoomApiItem[] = Array.isArray(apiRooms) ? apiRooms : (apiRooms.rooms || []);
-      for (const r of roomList) {
-        roomInfoMap.set(r.id, { name: r.name || r.partner_display_name || 'DM', type: r.type, member_count: r.member_count });
-      }
-    } catch { /* ignore */ }
-  }
+  } catch { /* ignore */ }
 
   const rooms: RoomSummary[] = [];
   for (const roomId of fs.readdirSync(agentDir)) {
