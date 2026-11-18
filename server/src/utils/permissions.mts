@@ -81,3 +81,13 @@ export function canInviteToRoom(user: UserLike): boolean {
 export function canSearchUsers(user: UserLike): boolean {
   return isAdmin(user) || isUser(user);
 }
+
+/**
+ * 音声の文字起こしを直せる (やり直せる) か (改善ループ 68、#649 B-2)。直す・やり直すの 2 つの口で使う。
+ * ★ 画面の client/src/utils/permissions.ts と同じ形・同じ規則 (テストで中身を突き合わせている)。
+ * - 本人は直せる / ゲストは他の人の音声を直せない (部屋の設定がオンでも・機械の音声でも、2026-10-27)
+ * - それ以外は、部屋の設定でメンバーの編集が許されているか、送り手が機械 (2026-10-24) のとき
+ */
+export function canEditTranscription(p: { isOwn: boolean; isGuest: boolean; allowMemberEdit: boolean; senderIsBot: boolean }): boolean {
+  return p.isOwn || (!p.isGuest && (p.allowMemberEdit || p.senderIsBot));
+}

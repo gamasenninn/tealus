@@ -8,7 +8,7 @@ import { authenticate } from '../middleware/auth.mts';
 import { learnFromEdit } from '../services/dictionaryLearner.mts';
 import { transcribeVoiceMessage } from '../services/transcription.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
-import { isGuest } from '../utils/permissions.mts';
+import { isGuest, canEditTranscription } from '../utils/permissions.mts';
 import { MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
 import { errorText } from '../utils/logFormat.mts';
 
@@ -70,13 +70,10 @@ router.put('/', authenticate, async (req, res) => {
     // ★ ただし機械 (is_bot) が送った音声はメンバーなら直せる (2026-10-24 小野さん判断、docs/02。送り手が機械だと誰も直せなかった)
     // ★ ゲストは機械の音声でも直せない (セキュリティチェックループの L、2026-10-27)。ゲストの原則「招かれた部屋の中だけ」(#282) の上でも、
     //   直した文は辞書の自己成長と手直しの台帳に流れるため
-    const machineVoiceOk = sender_is_bot && !isGuest(req.user!);
     // ★ ゲストは部屋の設定がオンでも、他の人の音声を直せない (2026-10-27 小野さん判断、L の続き)。
     //   L は設定がオフの部屋だけで、オンの部屋ではゲストが誰の分でも直せた (辞書と台帳に流れる理由はオンでも同じ)
-    if (sender_id !== userId && isGuest(req.user!)) {
-      return res.status(403).json({ error: '送信者のみ編集できます' });
-    }
-    if (sender_id !== userId && !allow_member_transcription_edit && !machineVoiceOk) {
+    // ★ 判定は canEditTranscription 1 つ (改善ループ 68)。やり直しの口と同じ関数を使う
+    if (!canEditTranscription({ isOwn: sender_id === userId, isGuest: isGuest(req.user!), allowMemberEdit: !!allow_member_transcription_edit, senderIsBot: !!sender_is_bot })) {
       return res.status(403).json({ error: '送信者のみ編集できます' });
     }
 
@@ -249,10 +246,8 @@ router.post('/retranscribe', authenticate, async (req: Request, res: Response) =
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ error: 'ルームメンバーのみ再文字起こしできます' });
     }
-    if (sender_id !== userId && isGuest(req.user!)) {   // ★ 編集と同じ (ゲストは設定がオンでも他の人の音声は不可、2026-10-27)
-      return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
-    }
-    if (sender_id !== userId && !allow_member_transcription_edit && !(sender_is_bot && !isGuest(req.user!))) {   // ★ 編集と同じ (機械の音声はゲスト以外のメンバーなら)
+    // ★ 編集と同じ判定 (canEditTranscription、改善ループ 68)。以前は同じ 3 行を写していて、片方だけ直した日があった
+    if (!canEditTranscription({ isOwn: sender_id === userId, isGuest: isGuest(req.user!), allowMemberEdit: !!allow_member_transcription_edit, senderIsBot: !!sender_is_bot })) {
       return res.status(403).json({ error: '送信者のみ再文字起こしできます' });
     }
 
