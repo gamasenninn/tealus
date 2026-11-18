@@ -158,3 +158,17 @@ export function uploadSizeError(err: unknown, _req: Request, res: Response, next
   }
   next(err);
 }
+
+/**
+ * 断ったとき (応答が 400 以上) は、受け取ったファイルを消す (改善ループ 63、#649 A-1)。upload.single の直後に置く。
+ * ★ 以前は説明文が長い・大きすぎ・画像として読めないの 3 つだけが消していて、部屋の指定なし・メンバーでない・DB の失敗では
+ *   ディスクに残っていた。口ごとに消し忘れないよう、応答が終わったところで 1 か所で見る
+ */
+export function discardUploadOnFailure(req: Request, res: Response, next: NextFunction): void {
+  res.on('finish', () => {
+    if (res.statusCode < 400) return;
+    const files = [req.file, ...(Array.isArray(req.files) ? req.files : [])].filter((f): f is Express.Multer.File => !!f?.path);
+    for (const f of files) void fs.promises.unlink(f.path).catch(() => {});
+  });
+  next();
+}

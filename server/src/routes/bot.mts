@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
-import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName, rejectOversizedUpload, uploadSizeError } from '../middleware/upload.mts';
+import { upload, MEDIA_ROOT, getMessageType, getSubdir, decodeFileName, rejectOversizedUpload, uploadSizeError, discardUploadOnFailure } from '../middleware/upload.mts';
 import sharp from 'sharp';
 import { generateThumbnail } from '../services/thumbnail.mts';
 import { fireWebhooks } from '../services/webhook.mts';
@@ -415,89 +415,118 @@ async function rejectUnreadableImage(file: Express.Multer.File, res: Response): 
   return true;
 }
 
+interface BotAttachmentKind {
+  /** 口の名前 (記録用) */
+  name: 'push-image' | 'push-file';
+  /** ファイルが無いときの文 */
+  missingFile: string;
+  /** 画像として読めるかを見るか */
+  checkImage: (file: Express.Multer.File) => boolean;
+  /** 投稿の type と置き場のフォルダ */
+  typeOf: (file: Express.Multer.File) => { type: string; subdir: string };
+  /** 通知の本文 (説明文が無いとき) */
+  pushBody: (file: Express.Multer.File) => string;
+  /** docs/07 の経路の番号 (付随処理の理由に書く) */
+  webhookOff: string;
+}
+
 /**
- * POST /api/bot/push-image
- * Send an image message to a room
+ * bot の画像・ファイルの投稿 (push-image / push-file) の共通の中身 (改善ループ 63、#649 A-1)。
+ * ★ 以前は 2 本の写しで、片方だけ直して漏れたことが 2 回 (#548 サムネイル 5625ce2b・改善ループ 40 画像の検査 d4a618e2)。
+ * ★ DB の接続はここで 1 回だけ返す (メンバーでないとき 2 回返して例外になっていた)。
+ *   断ったときに受け取ったファイルを消すのは discardUploadOnFailure (upload.mts) の仕事
  */
-router.post('/push-image', upload.single('image'), uploadSizeError, rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req: Request, res: Response) => {
-  const { room_id, content } = req.body as { room_id?: string; content?: string };
-  const userId = req.user!.id;
-  const file = req.file;
+function postBotAttachment(kind: BotAttachmentKind) {
+  return async (req: Request, res: Response) => {
+    const { room_id, content } = req.body as { room_id?: string; content?: string };
+    const userId = req.user!.id;
+    const file = req.file;
 
-  if (!room_id) {
-    return res.status(400).json({ error: 'room_id は必須です' });
-  }
-  if (!file) {
-    return res.status(400).json({ error: '画像ファイルが添付されていません' });
-  }
-  if (await rejectLongCaption(content, file, res)) return;
-  if (await rejectUnreadableImage(file, res)) return;
+    if (!room_id) return res.status(400).json({ error: 'room_id は必須です' });
+    if (!file) return res.status(400).json({ error: kind.missingFile });
+    if (await rejectLongCaption(content, file, res)) return;
+    if (kind.checkImage(file) && await rejectUnreadableImage(file, res)) return;
 
-  const client = await pool.connect();
-  try {
-    // Check membership
     const memberCheck = await pool.query(
       'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
       [room_id, userId]
-    );
+    ).catch((err: unknown) => { logger.error(`Bot ${kind.name} member check error:`, err); return null; });
+    if (!memberCheck) return res.status(500).json({ error: E.SERVER_ERROR });
     if (memberCheck.rows.length === 0) {
-      client.release();
       return res.status(403).json({ error: 'このルームのメンバーではありません' });
     }
 
-    await client.query('BEGIN');
+    const { type, subdir } = kind.typeOf(file);
+    const client = await pool.connect();
+    let message: MessageRow;
+    let media: MediaRow;
+    try {
+      await client.query('BEGIN');
+      const msgResult = await client.query<MessageRow>(
+        `INSERT INTO messages (room_id, sender_id, content, type)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [room_id, userId, content || null, type]
+      );
+      message = msgResult.rows[0];
+      // ★ #548 画像・動画ならサムネイルと寸法も (アシスタントの画像は push-file を通る。以前は 30 日で 93% が原寸のまま一覧に出ていた)
+      const { width, height, thumbnailPath } = await mediaExtras(file);
+      const mediaResult = await client.query<MediaRow>(
+        `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [message.id, `${subdir}/${file.filename}`, decodeFileName(file.originalname), file.mimetype, file.size, width, height, thumbnailPath]
+      );
+      media = mediaResult.rows[0];
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      logger.error(`Bot ${kind.name} error:`, err);
+      return res.status(500).json({ error: E.SERVER_ERROR });
+    } finally {
+      client.release();
+    }
 
-    // Create image message
-    const msgResult = await client.query<MessageRow>(
-      `INSERT INTO messages (room_id, sender_id, content, type)
-       VALUES ($1, $2, $3, 'image')
-       RETURNING *`,
-      [room_id, userId, content || null]
-    );
-    const message = msgResult.rows[0];
-
-    // Get image dimensions
-    const relativePath = `images/${file.filename}`;
-    const { width, height, thumbnailPath } = await mediaExtras(file);
-
-    // Insert media record
-    const mediaResult = await client.query<MediaRow>(
-      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size, width, height, thumbnailPath]
-    );
-
-    await client.query('COMMIT');
-
-    // ★ 付随処理は announcePost から (docs/07 §5.1、#6)
+    // ★ 付随処理は announcePost から (docs/07 §5.1)。投稿はもう済んでいるので、ここで失敗しても 201 を返す
+    //   (以前は try の中で、失敗すると投稿済みなのに 500 を返していた)
+    try {
     await announcePost({
       roomId: room_id,
       emit: {
         ...message,
         sender_display_name: req.user!.display_name,
         sender_avatar_url: req.user!.avatar_url,
-        media: [mediaResult.rows[0]],
+        media: [media],
       },
       // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。失敗しても投稿は止めない
       push: { kind: 'machine', post: {
         roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
-        body: content?.trim() ? content.trim().slice(0, 100) : '📷 写真',
+        body: content?.trim() ? content.trim().slice(0, 100) : kind.pushBody(file),
       } },
-      webhook: { kind: 'off', reason: '意図 (docs/07 §3.1 #6、2026-10-02 利用者判断)。60 日 2,883 件で行頭の @ は 0 件。付けると応答モード all の部屋や DM でボットが画像を置いただけで AI が反応する' },
+      webhook: { kind: 'off', reason: kind.webhookOff },
       preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
     });
+    } catch (err) {
+      logger.error(`Bot ${kind.name} announce error:`, err);
+    }
 
-    logger.info(`Bot push-image: ${req.user!.display_name} → room ${room_id}`);
-    res.status(201).json({ message, media: [mediaResult.rows[0]] });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    logger.error('Bot push-image error:', err);
-    res.status(500).json({ error: E.SERVER_ERROR });
-  } finally {
-    client.release();
-  }
-});
+    logger.info(`Bot ${kind.name}: ${req.user!.display_name} → room ${room_id}${kind.name === 'push-file' ? ` (${decodeFileName(file.originalname)})` : ''}`);
+    res.status(201).json({ message, media: [media] });
+  };
+}
+
+/**
+ * POST /api/bot/push-image
+ * Send an image message to a room
+ */
+router.post('/push-image', upload.single('image'), discardUploadOnFailure, uploadSizeError, rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), postBotAttachment({
+  name: 'push-image',
+  missingFile: '画像ファイルが添付されていません',
+  checkImage: () => true,
+  typeOf: () => ({ type: 'image', subdir: 'images' }),
+  pushBody: () => '📷 写真',
+  webhookOff: '意図 (docs/07 §3.1 #6、2026-10-02 利用者判断)。60 日 2,883 件で行頭の @ は 0 件。付けると応答モード all の部屋や DM でボットが画像を置いただけで AI が反応する',
+}));
 
 /**
  * POST /api/bot/push-file
@@ -507,88 +536,17 @@ router.post('/push-image', upload.single('image'), uploadSizeError, rejectOversi
  * Image / video は existing /push-image, /media path に lateral OK だが、
  * text / pdf 等の attached file は本 endpoint で。
  */
-router.post('/push-file', upload.single('file'), uploadSizeError, rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), async (req: Request, res: Response) => {
-  const { room_id, content } = req.body as { room_id?: string; content?: string };
-  const userId = req.user!.id;
-  const file = req.file;
-
-  if (!room_id) {
-    return res.status(400).json({ error: 'room_id は必須です' });
-  }
-  if (!file) {
-    return res.status(400).json({ error: 'ファイルが添付されていません' });
-  }
-  if (await rejectLongCaption(content, file, res)) return;
+router.post('/push-file', upload.single('file'), discardUploadOnFailure, uploadSizeError, rejectOversizedUpload, requireUuidRoomId, scopeByRoom('body'), postBotAttachment({
+  name: 'push-file',
+  missingFile: 'ファイルが添付されていません',
   // ★ 種類が image/* なら画像の投稿になるので、push-image と同じく読めるかを見る (改善ループ 40)。
   //   send_text_as_file は種類を呼び手が決められるので、ここを通らないと 11-02 と同じ壊れた画像が出せた
-  if (getMessageType(file.mimetype) === 'image' && await rejectUnreadableImage(file, res)) return;
-
-  const client = await pool.connect();
-  try {
-    const memberCheck = await pool.query(
-      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-      [room_id, userId]
-    );
-    if (memberCheck.rows.length === 0) {
-      client.release();
-      return res.status(403).json({ error: 'このルームのメンバーではありません' });
-    }
-
-    await client.query('BEGIN');
-
-    // mime に応じて type 判定 (image/video は専用 type、それ以外は 'file')
-    const messageType = getMessageType(file.mimetype);
-
-    const msgResult = await client.query<MessageRow>(
-      `INSERT INTO messages (room_id, sender_id, content, type)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [room_id, userId, content || null, messageType]
-    );
-    const message = msgResult.rows[0];
-
-    const subdir = getSubdir(file.mimetype);
-    const relativePath = `${subdir}/${file.filename}`;
-
-    // ★ #548 画像・動画ならサムネイルと寸法も (アシスタントの画像はこの口を通る。以前は 30 日で 93% が原寸のまま一覧に出ていた)
-    const { width, height, thumbnailPath } = await mediaExtras(file);
-    const mediaResult = await client.query<MediaRow>(
-      `INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size, width, height, thumbnail_path)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [message.id, relativePath, decodeFileName(file.originalname), file.mimetype, file.size, width, height, thumbnailPath]
-    );
-
-    await client.query('COMMIT');
-
-    // ★ 付随処理は announcePost から (docs/07 §5.1、#7)
-    await announcePost({
-      roomId: room_id,
-      emit: {
-        ...message,
-        sender_display_name: req.user!.display_name,
-        sender_avatar_url: req.user!.avatar_url,
-        media: [mediaResult.rows[0]],
-      },
-      // #463 機械の投稿の通知 (ルームの管理者が選んだルームだけ)。通話履歴ボットはここを通る
-      push: { kind: 'machine', post: {
-        roomId: room_id, senderId: userId, senderName: req.user!.display_name, messageId: message.id,
-        body: content?.trim() ? content.trim().slice(0, 100) : `📎 ${decodeFileName(file.originalname)}`,
-      } },
-      webhook: { kind: 'off', reason: '意図 (docs/07 §3.1 #7、2026-10-02 利用者判断)。#6 と同じ' },
-      preview: { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' },
-    });
-
-    logger.info(`Bot push-file: ${req.user!.display_name} → room ${room_id} (${decodeFileName(file.originalname)})`);
-    res.status(201).json({ message, media: [mediaResult.rows[0]] });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    logger.error('Bot push-file error:', err);
-    res.status(500).json({ error: E.SERVER_ERROR });
-  } finally {
-    client.release();
-  }
-});
+  checkImage: (file) => getMessageType(file.mimetype) === 'image',
+  // mime に応じて type 判定 (image/video は専用 type、それ以外は 'file')
+  typeOf: (file) => ({ type: getMessageType(file.mimetype), subdir: getSubdir(file.mimetype) }),
+  pushBody: (file) => `📎 ${decodeFileName(file.originalname)}`,
+  webhookOff: '意図 (docs/07 §3.1 #7、2026-10-02 利用者判断)。#6 と同じ',
+}));
 
 /**
  * GET /api/bot/messages?room_id=xxx&since=timestamp

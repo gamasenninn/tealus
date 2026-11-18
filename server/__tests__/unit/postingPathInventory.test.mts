@@ -16,12 +16,12 @@ import path from 'node:path';
 
 const SRC = path.join(import.meta.dirname, '../../src');
 
-/** docs/07 §2 の表と同じ 18 本。キーは src からの相対パス */
+/** docs/07 §2 の表と同じ 18 本の経路。キーは src からの相対パス、値は INSERT の数 (#6 #7 と #12 #12' は 1 か所を 2 本で共有するので 17) */
 const EXPECTED: Record<string, number> = {
   'socket/handlers/message.mts': 1,  // #1
   'socket/handlers/call.mts': 1,     // #2
   'routes/media.mts': 2,             // #3 #4
-  'routes/bot.mts': 2,               // #6 #7 (#5 は postAsUser、#12' は systemMessage)
+  'routes/bot.mts': 1,               // #6 #7 (共通の postBotAttachment で 1 か所、改善ループ 63。#5 は postAsUser、#12' は systemMessage)
   'routes/voice.mts': 1,             // #8
   'routes/messages.mts': 1,          // #9
   'routes/stamps.mts': 2,            // #10 #11
@@ -50,7 +50,7 @@ describe('投稿を作る所の一覧 (docs/07 §2)', () => {
     expect(countInserts()).toEqual(EXPECTED);
   });
 
-  it('合計は 18 本 (docs/07 §1)', () => {
-    expect(Object.values(EXPECTED).reduce((a, b) => a + b, 0)).toBe(18);
+  it('INSERT は 17 か所 = 経路 18 本 (docs/07 §1) から、1 か所を共有する #6 #7 の 1 を引いた数', () => {
+    expect(Object.values(EXPECTED).reduce((a, b) => a + b, 0)).toBe(17);
   });
 });
