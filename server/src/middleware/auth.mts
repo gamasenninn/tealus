@@ -6,6 +6,7 @@ import type { AuthUser } from '../types.mts';
 import { SERVER_ERROR } from '../constants/errors.mts';
 import { logger } from '../utils/logger.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { SELF_USER_COLUMNS } from '../utils/selfUserColumns.mts';
 
 export const JWT_SECRET = (() => {
   const secret = process.env.JWT_SECRET;
@@ -101,7 +102,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   let result;
   try {
     result = await pool.query<AuthUser>(
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, is_bot, notification_sound, must_change_password, created_at FROM users WHERE id = $1 AND is_active = true',
+      `SELECT ${SELF_USER_COLUMNS} FROM users WHERE id = $1 AND is_active = true`,   // ★ 列は 1 か所 (改善ループ 73)
       [decoded.id]
     );
   } catch (err) {

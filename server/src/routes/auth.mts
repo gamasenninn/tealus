@@ -43,6 +43,7 @@ import { SALT_ROUNDS } from '../constants/config.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
 import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../utils/userFields.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { SELF_USER_COLUMNS } from '../utils/selfUserColumns.mts';
 
 /** login クエリで password_hash も一緒に取得する行 (レスポンス前に削除する) */
 interface UserWithPasswordRow extends AuthUser {
@@ -100,7 +101,7 @@ router.post('/register', async (req, res) => {
     const result = await pool.query<AuthUser>(
       `INSERT INTO users (login_id, display_name, password_hash, role)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, must_change_password, created_at`,
+       RETURNING ${SELF_USER_COLUMNS}`,   // ★ 列は 1 か所 (改善ループ 73。以前は is_bot が無かった)
       [login_id, display_name, password_hash, role]
     );
 
@@ -135,7 +136,7 @@ router.post('/login', createLoginThrottleMiddleware(), async (req, res) => {
     // Find user
     const result = await pool.query<UserWithPasswordRow>(
       // ★ #532 notification_sound も返す (無いと、ログインし直した直後の画面が「鳴らす」と見なした)
-      'SELECT id, login_id, display_name, avatar_url, status_message, role, is_active, notification_sound, must_change_password, password_hash, created_at FROM users WHERE login_id = $1 AND is_active = true',
+      `SELECT ${SELF_USER_COLUMNS}, password_hash FROM users WHERE login_id = $1 AND is_active = true`,   // ★ 改善ループ 73: /me と同じ列
       [login_id]
     );
 
