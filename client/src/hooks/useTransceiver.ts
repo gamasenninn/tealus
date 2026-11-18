@@ -11,6 +11,7 @@ import { useRoomStore } from '../stores/roomStore';
 import { useCapabilityStore } from '../stores/capabilityStore';
 import type { RoomMember } from '../types';
 import { getSharedAudioContext, unlockAudio } from '../services/audioContext';
+import { waitForSignal } from '../utils/transceiverSignal';
 
 export type TransceiverState = 'idle' | 'connecting' | 'connected' | 'producing' | 'error';
 
@@ -97,19 +98,10 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
     }
   }, []);
 
+  // ★ 時間切れつき (改善ループ 65、#649 A-3)。以前は返事が来ないと「接続中」のまま止まり、やり直しもできなかった。
+  //   時間切れは connect の catch で 'error' になり、もう一度押せる
   const waitForMessage = useCallback(<T extends SignalMessage = SignalMessage>(predicate: (msg: SignalMessage) => boolean): Promise<T> => {
-    return new Promise((resolve) => {
-      const handler = (msg: SignalMessage) => {
-        if (predicate(msg)) {
-          const idx = handlersRef.current.indexOf(handler);
-          if (idx >= 0) handlersRef.current.splice(idx, 1);
-          resolve(msg as T);
-          return true;
-        }
-        return false;
-      };
-      handlersRef.current.push(handler);
-    });
+    return waitForSignal<SignalMessage, T>(handlersRef.current, predicate);
   }, []);
 
   // peerId → 表示名に変換
@@ -387,26 +379,28 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
 
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      try { send({ type: 'leave' }); } catch {}
-      wsRef.current.close();
+    const ws = wsRef.current;
+    // ★ つなぎかけ (CONNECTING) のものも閉じる (改善ループ 65)。以前は開いているものだけ閉じ、つなぎかけは残っていた
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      if (ws.readyState === WebSocket.OPEN) { try { send({ type: 'leave' }); } catch {} }
+      ws.close();
     }
     wsRef.current = null;
     cleanup();
     setState('idle');
   }, [send, cleanup]);
 
-  // ルーム変更時に切断
+  // ルーム変更時・画面を離れたときに切断
+  // ★ 改善ループ 65 (#649 A-3): 片づけは「今の状態」と「今の disconnect」を見る。以前は effect が走った時点の state
+  //   (部屋に入ったときは 'idle') を見ていて、接続したまま部屋を移っても切れなかった。2 回目の移動では WS は閉じるが
+  //   'idle' に戻さず、ボタンは「接続中」のままだった
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const disconnectRef = useRef(disconnect);
+  disconnectRef.current = disconnect;
   useEffect(() => {
     return () => {
-      if (state !== 'idle') {
-        intentionalCloseRef.current = true;
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          try { wsRef.current.send(JSON.stringify({ type: 'leave' })); } catch {}
-          wsRef.current.close();
-        }
-        cleanup();
-      }
+      if (stateRef.current !== 'idle' || wsRef.current) disconnectRef.current();
     };
   }, [roomId]);
 
