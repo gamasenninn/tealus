@@ -19,6 +19,7 @@ import os from 'node:os';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { logger } from '../lib/logger.mts';
+import { sentToOwnRoom } from '../lib/ownRoomSend.mts';
 import * as botApi from '../lib/botApi.mts';
 import * as deepRegistry from './deepRegistry.mts';
 import * as config from '../config.mts';
@@ -425,16 +426,8 @@ export function extractAgentMessageText(event: CodexJsonlEvent | null | undefine
 export function isToolCallSendMessageToOwnRoom(event: CodexJsonlEvent | null | undefined, roomId: string): boolean {
   if (!event || event.type !== 'item.completed' || !event.item) return false;
   if (event.item.type !== 'mcp_tool_call') return false;
-  if (event.item.tool !== 'send_message') return false;
-  if (event.item.status && event.item.status !== 'completed') return false;
-  try {
-    const text = event.item.result?.content?.[0]?.text;
-    if (!text) return false;
-    const parsed = JSON.parse(text);
-    return parsed?.message?.room_id === roomId;
-  } catch {
-    return false;
-  }
+  // ★ 判定の中身は sentToOwnRoom 1 つ (改善ループ 70、#649 B-4。Light と同じ関数・テストあり)
+  return sentToOwnRoom(event.item, roomId);
 }
 
 /**

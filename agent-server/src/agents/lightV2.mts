@@ -22,6 +22,7 @@ import type {
 } from '@openai/codex-sdk';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
+import { sentToOwnRoom } from '../lib/ownRoomSend.mts';
 import { expandEnvRefs } from '../lib/envRefs.mts';
 import * as botApi from '../lib/botApi.mts';
 import { loadMemoryForPrompt } from '../memory/fileMemory.mts';
@@ -414,28 +415,14 @@ export async function processLightV2({ roomId, prompt, workspacePath, suppressAu
             } else if (event.item.type === 'mcp_tool_call') {
               // MCP tool call の result/error 詳細を log (debug 用)
               const mcpItem: McpToolCallItem = event.item;
-              const status = mcpItem.status || '?';
-              const tool = mcpItem.tool || '?';
               const described = describeToolCall(mcpItem as ToolCallLike);
               logger[described.level](described.line);
               // #292 follow-up: LLM が send_message tool で自 room へ投函していたら、
               // 最終 response auto-post の重複を skip するため flag を立てる
-              if (tool === 'send_message' && status === 'completed' && mcpItem.result) {
-                try {
-                  const firstContent = mcpItem.result.content?.[0] as { text?: string } | undefined;
-                  const text = firstContent?.text;
-                  if (text) {
-                    const parsed = JSON.parse(text) as { message?: { room_id?: string } };
-                    const sentRoomId = parsed?.message?.room_id;
-                    if (sentRoomId === roomId) {
-                      llmSentToOwnRoom = true;
-                      logger.info(`[LightV2] LLM sent_message to own room ${roomId} (= 2 件返信防止 flag、最終 auto-post skip)`);
-                    }
-                  }
-                } catch (parseErr) {
-                  const message = parseErr instanceof Error ? parseErr.message : String(parseErr);
-                  logger.debug(`[LightV2] send_message result parse skipped: ${message}`);
-                }
+              // ★ 判定は sentToOwnRoom 1 つ (改善ループ 70、#649 B-4。Deep と同じ関数・テストあり)
+              if (!llmSentToOwnRoom && sentToOwnRoom(mcpItem, roomId)) {
+                llmSentToOwnRoom = true;
+                logger.info(`[LightV2] LLM sent_message to own room ${roomId} (= 2 件返信防止 flag、最終 auto-post skip)`);
               }
               await botApi.pushStatus(roomId, 'thinking', '考え中...').catch(() => {});
             } else {
