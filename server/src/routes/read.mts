@@ -9,7 +9,7 @@ import { isGuest } from '../utils/permissions.mts';
 import { badIdMessage } from '../utils/uuid.mts';
 import { isUuid } from '../utils/uuid.mts';
 import { announceUnreadChanged } from '../services/unreadChanged.mts';
-import { countReads } from '../services/readCounts.mts';
+import { countReads, advanceReadCursor } from '../services/readCounts.mts';
 import { getIo } from '../io-registry.mts';
 
 export const router = express.Router({ mergeParams: true });
@@ -64,19 +64,7 @@ router.post('/', requireMemberOrAnnouncementReader, async (req: Request, res: Re
     );
 
     if (latestMsg.rows.length > 0) {
-      await pool.query(
-        `INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at)
-         VALUES ($1, $2, $3, $4::timestamptz + interval '1 millisecond')
-         ON CONFLICT (room_id, user_id)
-         DO UPDATE SET
-           last_read_message_id = CASE
-             WHEN room_read_cursors.last_read_at < EXCLUDED.last_read_at
-             THEN EXCLUDED.last_read_message_id
-             ELSE room_read_cursors.last_read_message_id
-           END,
-           last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
-        [roomId, userId, latestMsg.rows[0].id, latestMsg.rows[0].created_at]
-      );
+      await advanceReadCursor(pool, String(roomId), userId, latestMsg.rows[0].id, latestMsg.rows[0].created_at);   // ★ 改善ループ 69
       // ★ 部屋を開いている人の「既読 N」へ (socket の message:read と同じ。ホームで読んだお知らせが投稿者の画面で動かなかった)
       const counts = await countReads(String(roomId), message_ids);
       getIo().to(String(roomId)).emit('message:read', { room_id: String(roomId), read_counts: counts });
@@ -134,20 +122,8 @@ router.post('/all', requireMember, async (req: Request, res: Response) => {
     );
 
     if (latest.rows.length > 0) {
-      await pool.query(
-        `INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at)
-         VALUES ($1, $2, $3, $4::timestamptz + interval '1 millisecond')
-         ON CONFLICT (room_id, user_id)
-         -- ★ #553 ほかの 3 つの口と同じく新しいほうを残す (別の端末がより先まで読んでいたら戻さない)
-         DO UPDATE SET
-           last_read_message_id = CASE
-             WHEN room_read_cursors.last_read_at < EXCLUDED.last_read_at
-             THEN EXCLUDED.last_read_message_id
-             ELSE room_read_cursors.last_read_message_id
-           END,
-           last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
-        [roomId, userId, latest.rows[0].id, latest.rows[0].created_at]
-      );
+      // ★ #553 新しいほうを残す (別の端末がより先まで読んでいたら戻さない)。ほかの 3 つの口と同じ関数 (改善ループ 69)
+      await advanceReadCursor(pool, String(roomId), userId, latest.rows[0].id, latest.rows[0].created_at);
     }
 
     const count = unreadRes.rows[0].count;

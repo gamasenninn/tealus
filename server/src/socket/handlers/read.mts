@@ -4,7 +4,7 @@ import { pool } from '../../db/pool.mts';
 import { isRoomMember } from '../../services/roomMembership.mts';
 import { isUuid } from '../../utils/uuid.mts';
 import { announceUnreadChanged } from '../../services/unreadChanged.mts';
-import { countReads } from '../../services/readCounts.mts';
+import { countReads, advanceReadCursor } from '../../services/readCounts.mts';
 
 interface ReadPayload {
   room_id?: string;
@@ -36,19 +36,7 @@ export function registerReadHandler(socket: Socket): void {
 
       if (latestMsg.rows.length > 0) {
         // Advance cursor
-        await pool.query(
-          `INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at)
-           VALUES ($1, $2, $3, $4::timestamptz + interval '1 millisecond')
-           ON CONFLICT (room_id, user_id)
-           DO UPDATE SET
-             last_read_message_id = CASE
-               WHEN room_read_cursors.last_read_at < EXCLUDED.last_read_at
-               THEN EXCLUDED.last_read_message_id
-               ELSE room_read_cursors.last_read_message_id
-             END,
-             last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
-          [room_id, socket.user.id, latestMsg.rows[0].id, latestMsg.rows[0].created_at]
-        );
+        await advanceReadCursor(pool, room_id, socket.user.id, latestMsg.rows[0].id, latestMsg.rows[0].created_at);   // ★ 改善ループ 69
       }
 
       const counts = await countReads(room_id, message_ids);

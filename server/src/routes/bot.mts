@@ -27,6 +27,7 @@ import { formatLocalTime, hasExplicitZone, resolveTimeZone } from '../lib/localT
 import { announceRoomJoined } from '../services/roomJoined.mts';
 import { recordHeartbeat, validateHeartbeatBody } from '../services/heartbeats.mts';
 import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
+import { advanceReadCursor } from '../services/readCounts.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -1565,19 +1566,7 @@ router.post('/mark-read', async (req, res) => {
 
     if (latestMsg.rows.length > 0) {
       const { id, room_id, created_at } = latestMsg.rows[0];
-      await pool.query(
-        `INSERT INTO room_read_cursors (room_id, user_id, last_read_message_id, last_read_at)
-         VALUES ($1, $2, $3, $4::timestamptz + interval '1 millisecond')
-         ON CONFLICT (room_id, user_id)
-         DO UPDATE SET
-           last_read_message_id = CASE
-             WHEN room_read_cursors.last_read_at < EXCLUDED.last_read_at
-             THEN EXCLUDED.last_read_message_id
-             ELSE room_read_cursors.last_read_message_id
-           END,
-           last_read_at = GREATEST(room_read_cursors.last_read_at, EXCLUDED.last_read_at)`,
-        [room_id, userId, id, created_at]
-      );
+      await advanceReadCursor(pool, room_id, userId, id, created_at);   // ★ 改善ループ 69
     }
 
     logger.info(`Bot mark-read: ${message_ids.length} messages`);
