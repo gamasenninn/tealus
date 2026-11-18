@@ -324,7 +324,10 @@ function ChatRoom() {
       )}
 
       {/* ★ #494-3 開けなかった部屋では入力欄を出さない (送ってもサーバーが捨てる) */}
-      {showComposer(roomError) && <MessageInput roomId={roomId} transceiver={transceiver} collapsible={isEmbed} />}
+      {/* ★ key={roomId}: 部屋を移ったら入力欄を作り直す (改善ループ 64、#649 A-2)。パソコンの 2 列の画面ではこの画面が
+          作り直されないので、下書き・録音・送信中の状態が次の部屋へ持ち越され、そのまま別の部屋へ送れた。
+          利用者の判断 (2026-11-18): 下書きは部屋ごとに残さず消す */}
+      {showComposer(roomError) && <MessageInput key={roomId} roomId={roomId} transceiver={transceiver} collapsible={isEmbed} />}
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />

@@ -82,6 +82,9 @@ function VoiceRecorder({ stream, onSend, onCancel, isTransceiverActive }: VoiceR
       source.disconnect();   // ★ #562 共有なので close しない
       if (wakeLock) wakeLock.release().catch(() => {});
       recorderRef.current = null;
+      // ★ 外れたらマイクも止める (改善ループ 64)。部屋を移って入力欄が作り直されると、送る・やめるを通らずに外れ、
+      //   マイク使用中の表示が残っていた。送る・やめるの道で既に止めていても、2 回止めて害は無い
+      stream.getTracks().forEach((t) => t.stop());
     };
   }, [stream]);
 
