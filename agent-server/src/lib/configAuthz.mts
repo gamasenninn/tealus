@@ -43,6 +43,23 @@ export interface AuthzFacts {
   room: { id: string; type: string; member_role: string | null } | null;
 }
 
+/**
+ * 本体の /api/auth/authz の応答を確かめて受け取る (改善ループ 72、#649 B-6)。形が崩れていたら null。
+ * ★ 以前は `as AuthzFacts` で受けていた。判定は `room.member_role !== null` で「メンバーか」を決めるので、
+ *   本体が列の名前を変えると undefined になり「メンバー」と読まれた (開く側に倒れる)
+ */
+export function parseAuthzFacts(v: unknown): AuthzFacts | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.user_id !== 'string' || typeof o.role !== 'string') return null;
+  if (o.room === null) return { user_id: o.user_id, role: o.role, room: null };
+  if (!o.room || typeof o.room !== 'object') return null;
+  const r = o.room as Record<string, unknown>;
+  if (typeof r.id !== 'string' || typeof r.type !== 'string') return null;
+  if (!('member_role' in r) || (r.member_role !== null && typeof r.member_role !== 'string')) return null;
+  return { user_id: o.user_id, role: o.role, room: { id: r.id, type: r.type, member_role: r.member_role as string | null } };
+}
+
 /** ★ 秘密を含まず、ログインだけでよい道 */
 const OPEN_PATHS = new Set(['/tts-options']);
 const ROOM_PATH = /^\/room\/([^/]+)(?:\/|$)/;
@@ -153,7 +170,9 @@ export function createConfigAuthz({
       return value;
     }
     if (!res.ok) throw new Error(`authz ${res.status}`);   // ★ 覚えない
-    const value: Lookup = { status: 'ok', facts: (await res.json()) as AuthzFacts };
+    const facts = parseAuthzFacts(await res.json());
+    if (!facts) throw new Error('authz の応答の形が崩れています');   // ★ 覚えない。呼び手は聞けなかったときと同じく断る
+    const value: Lookup = { status: 'ok', facts };
     cache.set(key, { at: now(), value });
     // ★ 古いものを掃除 (鍵の数だけ増え続けないように)
     if (cache.size > 500) for (const [k, v] of cache) if (now() - v.at > ttlMs) cache.delete(k);
