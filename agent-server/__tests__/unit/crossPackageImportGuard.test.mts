@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
-const PKGS = ['server', 'client', 'dashboard', 'agent-server', 'rtc-server']
+const PKGS = ['server', 'client', 'dashboard', 'agent-server', 'rtc-server', 'courier']   // courier: 配達役 (docs/12、2026-11-19)
   .filter((p) => fs.existsSync(path.join(REPO, p, 'package.json')));
 
 /**
