@@ -9,7 +9,7 @@
  * ★ 状態 (班ごとの state・新着の数・続いている時間) を返す。鼓動 (§7・§12.6) に載せるのは班の名前と状態と数だけ
  */
 import path from 'node:path';
-import { readQueue, newSince } from './queue.mts';
+import { readQueue, newSince, QUEUE_BEGIN } from './queue.mts';
 import { loadCursor, saveCursor } from './cursor.mts';
 import { isHeld, setHold, RateLimiter } from './limit.mts';
 import { buildNotice } from './notice.mts';
@@ -56,13 +56,21 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   const now = d.now();
   if (isHeld(d.stateDir, b.project)) return report(b.project, 'held', 0, now);
 
-  const q = readQueue(path.join(d.queueDir, `${b.project}.jsonl`));
-  if (!q.ok) return report(b.project, 'unreadable', 0, now);   // ★ 読めない瞬間は新着ともカーソルの消失ともみなさない
-
   // ★ 空回しはカーソルのファイルを作らないので、手元で覚えたカーソルを先に見る。
   //   以前はファイルだけを見ていて、空回しでは毎回「初回」と見なして末尾へ飛び直し、新着を 1 つも記録しなかった
   //   (2026-11-19 18:36〜18:59 の本番で 4 便を記録しなかった)
   const stored = (d.dryRun ? dryCursor.get(b.project) : undefined) ?? loadCursor(d.stateDir, b.project);
+
+  const q = readQueue(path.join(d.queueDir, `${b.project}.jsonl`));
+  if (!q.ok) {
+    // ★ queue のファイルがまだ無い班 (一度も便が来ていない) は「先頭から」の印を置く。置かないと、最初の便で
+    //   ファイルが現れたときに「初回は末尾から」と見なし、その 1 便を配らずに飛ばす (2026-11-19 オントロジー本班)
+    if (stored === null && q.reason === 'ENOENT') {
+      if (d.dryRun) dryCursor.set(b.project, QUEUE_BEGIN);
+      else saveCursor(d.stateDir, b.project, QUEUE_BEGIN);
+    }
+    return report(b.project, 'unreadable', 0, now);   // ★ 読めない瞬間は新着ともカーソルの消失ともみなさない
+  }
   if (stored === null) {
     // ★ 初回は末尾から (過去分は流さない)
     const last = q.ids.length ? q.ids[q.ids.length - 1] : null;

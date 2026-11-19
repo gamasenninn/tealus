@@ -141,6 +141,26 @@ describe('配る輪 (tickBridge)', () => {
     expect(loadCursor(stateDir, 'pd')).toBe(id(1));
   });
 
+  it('★ queue のファイルがまだ無い班は、現れた最初の便から配る (2026-11-19 オントロジー本班で最初の 1 便を飛ばしかけた)', async () => {
+    const c = fake('idle');
+    expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('unreadable');
+    writeQueue(1);
+    const r = await tickBridge({ project: 'pd', courier: c }, deps());
+    expect(r.state).toBe('delivered');
+    expect(c.delivered).toHaveLength(1);
+    expect(c.delivered[0]).toContain('新着 1 件');
+    expect(loadCursor(stateDir, 'pd')).toBe(id(1));
+  });
+
+  it('★ 同じことを空回しでも (印は手元で覚える・ファイルは作らない)', async () => {
+    const c = fake('idle');
+    await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));
+    writeQueue(1);
+    await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));
+    expect(events.filter((e) => e.kind === 'dry-run').map((e) => e.ids)).toEqual([[id(1)]]);
+    expect(loadCursor(stateDir, 'pd')).toBeNull();
+  });
+
   it('★ カーソルが消えていたら (切り詰め) 件数を数えず「新着あり」', async () => {
     saveCursor(stateDir, 'pd', id(1));
     writeQueue(5, 6);

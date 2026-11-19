@@ -41,10 +41,14 @@ export function readQueue(filePath: string): QueueRead {
  * - カーソルが無い (初回) は末尾から始める (過去分は流さない。listen-tealus の tail -n 0 と同じ)
  * - 同じ id が 2 回入っていたら、最後に出てきた位置で探す (編集で宛名を付け直した便)
  * - カーソルが消えていたら (切り詰め)、残りを全部新着にして lost を立てる (呼び手は件数を数えず「新着あり」にする)
+ * - カーソルが QUEUE_BEGIN (queue のファイルがまだ無いうちに置く印) なら、全部が新着 (lost ではない)
  */
+export const QUEUE_BEGIN = '00000000-0000-0000-0000-000000000000';
+
 export function newSince(ids: string[], cursor: string | null): { ids: string[]; last: string | null; lost: boolean } {
   const last = ids.length ? ids[ids.length - 1] : cursor;
   if (cursor === null) return { ids: [], last, lost: false };
+  if (cursor === QUEUE_BEGIN) return { ids: [...ids], last, lost: false };
   const at = ids.lastIndexOf(cursor);
   if (at >= 0) return { ids: ids.slice(at + 1), last, lost: false };
   return { ids: [...ids], last, lost: true };
