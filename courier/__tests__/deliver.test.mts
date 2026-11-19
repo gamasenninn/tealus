@@ -178,6 +178,18 @@ describe('配る輪 (tickBridge)', () => {
     expect(events.filter((e) => e.kind === 'dry-run')).toHaveLength(1);
   });
 
+  it('★ 空回しでカーソルのファイルが無いとき、2 回目以降を「初回」と見なさない (2026-11-19 の本番で 4 便を記録しなかった)', async () => {
+    writeQueue(1);
+    const c = fake('missing');
+    await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));   // 初回: 末尾 (1) から
+    writeQueue(1, 2, 3);
+    await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));
+    const e = events.filter((x) => x.kind === 'dry-run');
+    expect(e).toHaveLength(1);
+    expect(e[0].ids).toEqual([id(2), id(3)]);
+    expect(loadCursor(stateDir, 'pd')).toBeNull();   // 空回しはカーソルのファイルを作らない
+  });
+
   it('★ 空回しは届け先が居なくても (herdr を起こす前でも) 判断を ids つきで記録する', async () => {
     saveCursor(stateDir, 'pd', id(1));
     writeQueue(1, 2, 3);

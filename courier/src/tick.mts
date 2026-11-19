@@ -57,7 +57,10 @@ export async function tickBridge(b: Bridge, d: TickDeps): Promise<BridgeReport> 
   const q = readQueue(path.join(d.queueDir, `${b.project}.jsonl`));
   if (!q.ok) return report(b.project, 'unreadable', 0, now);   // ★ 読めない瞬間は新着ともカーソルの消失ともみなさない
 
-  const stored = loadCursor(d.stateDir, b.project);
+  // ★ 空回しはカーソルのファイルを作らないので、手元で覚えたカーソルを先に見る。
+  //   以前はファイルだけを見ていて、空回しでは毎回「初回」と見なして末尾へ飛び直し、新着を 1 つも記録しなかった
+  //   (2026-11-19 18:36〜18:59 の本番で 4 便を記録しなかった)
+  const stored = (d.dryRun ? dryCursor.get(b.project) : undefined) ?? loadCursor(d.stateDir, b.project);
   if (stored === null) {
     // ★ 初回は末尾から (過去分は流さない)
     const last = q.ids.length ? q.ids[q.ids.length - 1] : null;
