@@ -161,7 +161,7 @@ describe('配る輪 (tickBridge)', () => {
     expect(loadCursor(stateDir, 'pd')).toBeNull();
   });
 
-  it('★ 新着が無くても、30 秒ごとに届け先の状態を見て返す (管理画面の一覧・確認待ちの知らせのため、2026-11-20)', async () => {
+  it('★ 新着が無くても、10 秒ごとに届け先の状態を見て返す (管理画面の一覧・確認待ちの知らせのため、2026-11-20)', async () => {
     writeQueue(1);
     saveCursor(stateDir, 'pd', id(1));
     let calls = 0;
@@ -170,9 +170,9 @@ describe('配る輪 (tickBridge)', () => {
     expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('blocked');
     st = 'busy';
     t += 3_000;
-    expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('blocked');   // 30 秒たつまでは前の結果
+    expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('blocked');   // 10 秒たつまでは前の結果
     expect(calls).toBe(1);
-    t += 30_000;
+    t += 10_000;
     expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('busy');
     expect(calls).toBe(2);
     expect(loadCursor(stateDir, 'pd')).toBe(id(1));   // 見ただけでカーソルは動かない

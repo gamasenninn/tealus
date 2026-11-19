@@ -35,10 +35,10 @@ export interface TickDeps {
 
 /** 状態が変わった時刻を班ごとに覚える (「確認待ちが N 分続く」を出すため) */
 const stateSince = new Map<string, { state: BridgeState; at: number }>();
-/** 新着が無いときに届け先の状態を見た時刻と結果 (30 秒に 1 回だけ見る) */
+/** 新着が無いときに届け先の状態を見た時刻と結果 (10 秒に 1 回だけ見る。管理画面を 10 秒ごとに読み直すのに合わせた、2026-11-20) */
 const lastLook = new Map<string, { at: number; state: BridgeState }>();
 /** 新着が無いときに届け先の状態を見る間隔 */
-export const IDLE_LOOK_MS = 30_000;
+export const IDLE_LOOK_MS = 10_000;
 /** 空回しで最後に記録した id (同じ判断を何度も記録しない) */
 const dryCursor = new Map<string, string>();
 
@@ -87,7 +87,7 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   if (fresh.ids.length === 0) {
     // ★ 空回しの班は見に行かない (まだ移していない班の届け先は居ないのが普通で、「居ない」と鳴ってしまう。2026-11-20 PaneDeck 班)
     if (d.dryRun) return report(b.project, 'idle', 0, now);
-    // ★ 新着が無くても 30 秒ごとに届け先の状態を見る (管理画面の一覧と、便が無いときの確認待ちの知らせのため、2026-11-20)。
+    // ★ 新着が無くても 10 秒ごとに届け先の状態を見る (管理画面の一覧と、便が無いときの確認待ちの知らせのため、2026-11-20)。
     //   見るだけで打たない・カーソルも動かさない
     const prev = lastLook.get(b.project);
     if (prev && now - prev.at < IDLE_LOOK_MS) return report(b.project, prev.state, 0, now);

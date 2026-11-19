@@ -26,6 +26,8 @@ const QUEUE_DIR = process.env.CC_QUEUE_DIR || path.join(os.homedir(), '.tealus',
 const DRY_RUN = process.env.COURIER_DRY_RUN === '1';
 const TICK_MS = 3_000;
 const HEARTBEAT_MS = 60_000;
+/** ★ 班の状態が変わったら 1 分を待たずに送る (管理画面の一覧を早く変えるため、2026-11-20)。ただし続けて送るのは 5 秒あける */
+const HEARTBEAT_MIN_GAP_MS = 5_000;
 
 function log(line: string): void {
   console.log(`${new Date().toISOString()} [courier] ${line}`);
@@ -78,6 +80,7 @@ async function main(): Promise<void> {
   const sendHb = auth ? heartbeatSender(auth) : null;
   const latest = new Map<string, BridgeReport>();
   let lastHb = 0;
+  let changed = false;
 
   for (;;) {
     for (const b of bridges) {
@@ -87,14 +90,17 @@ async function main(): Promise<void> {
           onHold: (p, reason) => log(`${p}: 保留しました (${reason})。~/.tealus/courier/hold-${p}.json を消すと戻ります`),
         });
         const prev = latest.get(b.project);
-        if (!prev || prev.state !== r.state) log(`${b.project}: ${r.state} (新着 ${r.pending} 件)`);
+        if (!prev || prev.state !== r.state) { log(`${b.project}: ${r.state} (新着 ${r.pending} 件)`); changed = true; }
+        else if (prev.pending !== r.pending) changed = true;
         latest.set(b.project, r);
       } catch (err) {
         log(`${b.project}: 輪の途中で失敗しました: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-    if (sendHb && Date.now() - lastHb >= HEARTBEAT_MS) {
+    const since = Date.now() - lastHb;
+    if (sendHb && (since >= HEARTBEAT_MS || (changed && since >= HEARTBEAT_MIN_GAP_MS))) {
       lastHb = Date.now();
+      changed = false;
       const ok = await sendHb(heartbeatInfo([...latest.values()], Date.now()));
       if (!ok) log('鼓動を送れませんでした (配達は続けます)');
     }

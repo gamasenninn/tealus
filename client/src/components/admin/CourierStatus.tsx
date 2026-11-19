@@ -18,7 +18,7 @@ const STATE_LABEL: Record<string, string> = {
 const ALERT_STATES = new Set(['blocked', 'missing', 'unknown', 'held', 'failed']);
 /** 配達役は 1 分ごとに鼓動を送る。これより古ければ一覧は今の様子ではない */
 const STALE_MS = 5 * 60_000;
-const REFRESH_MS = 30_000;
+const REFRESH_MS = 10_000;
 
 function ago(iso: string | undefined, now: number): string {
   if (!iso) return '—';
@@ -32,7 +32,7 @@ function ago(iso: string | undefined, now: number): string {
 /**
  * 管理画面「AIの班」(2026-11-20 利用者判断「A でつくって」、docs/12 §7)。
  * ★ 配達役の鼓動 (1 分ごと) を班ごとに並べるだけ。画面の文字や本文は出さない (配達役が載せない作り)
- * ★ 30 秒ごとに読み直す
+ * ★ 10 秒ごとに読み直す (開いているあいだだけ)
  */
 function CourierStatus() {
   const [items, setItems] = useState<CourierEntry[]>([]);
@@ -62,7 +62,7 @@ function CourierStatus() {
   return (
     <div>
       <div className="admin-section-header"><h2>AIの班</h2></div>
-      <p>配達役が届けている班の様子です (30 秒ごとに読み直します)。確認待ちが 10 分続くと業務メモにも知らせます。</p>
+      <p>配達役が届けている班の様子です (開いているあいだ 10 秒ごとに読み直します)。確認待ちが 10 分続くと業務メモにも知らせます。</p>
       {error && <div className="admin-error">{error}</div>}
       {items.length === 0 ? <p>配達役の鼓動がまだありません (配達役が動いていないか、動き出したばかりです)</p> : items.map((c) => {
         const stale = now - new Date(c.last_seen).getTime() >= STALE_MS;
