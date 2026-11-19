@@ -178,6 +178,16 @@ describe('配る輪 (tickBridge)', () => {
     expect(loadCursor(stateDir, 'pd')).toBe(id(1));   // 見ただけでカーソルは動かない
   });
 
+  it('★ 空回しの班は、新着が無いときに届け先を見に行かない (まだ移していない班が「居ない」と鳴るため)', async () => {
+    writeQueue(1);
+    let calls = 0;
+    const c: Courier = { status: async () => { calls++; return 'missing'; }, deliver: async () => ({ ok: true, ref: 'r' }) };
+    await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));   // 初回 (末尾から)
+    t += 60_000;
+    expect((await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }))).state).toBe('idle');
+    expect(calls).toBe(0);
+  });
+
   it('★ カーソルが消えていたら (切り詰め) 件数を数えず「新着あり」', async () => {
     saveCursor(stateDir, 'pd', id(1));
     writeQueue(5, 6);

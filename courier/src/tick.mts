@@ -85,6 +85,8 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   const cursor = d.dryRun ? (dryCursor.get(b.project) ?? stored) : stored;
   const fresh = newSince(q.ids, cursor);
   if (fresh.ids.length === 0) {
+    // ★ 空回しの班は見に行かない (まだ移していない班の届け先は居ないのが普通で、「居ない」と鳴ってしまう。2026-11-20 PaneDeck 班)
+    if (d.dryRun) return report(b.project, 'idle', 0, now);
     // ★ 新着が無くても 30 秒ごとに届け先の状態を見る (管理画面の一覧と、便が無いときの確認待ちの知らせのため、2026-11-20)。
     //   見るだけで打たない・カーソルも動かさない
     const prev = lastLook.get(b.project);
