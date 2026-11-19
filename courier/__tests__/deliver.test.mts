@@ -24,7 +24,13 @@ describe('herdr の届け先', () => {
   });
 
   it('★ 状態は JSON の agent_status だけを見る (「not running」を running と読まない)', async () => {
-    expect(await herdrCourier(runWith({ code: 0, stdout: '{"agent_status":"idle"}' }), 'a').status()).toBe('idle');
+    // ★ herdr 0.9.5 の実物 (2026-11-19 PaneDeck 班がバックアップ PC で取った): agent_status は result.agent の中
+    const real = '{"id":"cli:agent:get","result":{"agent":{"agent":"claude","agent_status":"idle","completion_seq":3,"name":"hb1","pane_id":"w6:p1"},"type":"agent_info"}}';
+    expect(await herdrCourier(runWith({ code: 0, stdout: real }), 'a').status()).toBe('idle');
+    expect(await herdrCourier(runWith({ code: 0, stdout: real.replace('"idle"', '"working"') }), 'a').status()).toBe('busy');
+    expect(await herdrCourier(runWith({ code: 0, stdout: real.replace('"idle"', '"blocked"') }), 'a').status()).toBe('blocked');
+    // 中身の無い成功は分からない (上の階層の agent_status だけでは読まない)
+    expect(await herdrCourier(runWith({ code: 0, stdout: '{"agent_status":"idle"}' }), 'a').status()).toBe('unknown');
     expect(await herdrCourier(runWith({ code: 0, stdout: 'status: not running' }), 'a').status()).toBe('unknown');
     expect(await herdrCourier(runWith({ code: 1, stderr: 'agent not found' }), 'a').status()).toBe('missing');
     expect(await herdrCourier(runWith({ code: 1, stderr: 'boom' }), 'a').status()).toBe('unknown');

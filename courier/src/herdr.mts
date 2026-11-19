@@ -59,8 +59,9 @@ export function herdrCourier(run: Run, agent: string, opts: { bin?: string; time
         return /not found|no such agent/i.test(r.stderr) ? 'missing' : 'unknown';
       }
       try {
-        const v = JSON.parse(r.stdout) as { agent_status?: unknown };
-        return mapAgentStatus(v.agent_status);
+        // ★ 0.9.5 の実物は {"result":{"agent":{"agent_status":…}}} (2026-11-19 PaneDeck 班が取った)
+        const v = JSON.parse(r.stdout) as { result?: { agent?: { agent_status?: unknown } } };
+        return mapAgentStatus(v.result?.agent?.agent_status);
       } catch {
         return 'unknown';   // ★ JSON でなければ読まない (一部一致で running と読み違えない)
       }
