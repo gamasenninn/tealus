@@ -28,6 +28,9 @@ describe('herdr の届け先', () => {
     expect(await herdrCourier(runWith({ code: 0, stdout: 'status: not running' }), 'a').status()).toBe('unknown');
     expect(await herdrCourier(runWith({ code: 1, stderr: 'agent not found' }), 'a').status()).toBe('missing');
     expect(await herdrCourier(runWith({ code: 1, stderr: 'boom' }), 'a').status()).toBe('unknown');
+    // ★ herdr 0.9.5 の実物 (2026-11-19 にこの機械で確かめた): 失敗は stdout の JSON {"error":{"code":…}}
+    expect(await herdrCourier(runWith({ code: 1, stdout: '{"id":"cli:agent:get","error":{"code":"server_not_running","message":"no herdr server is running"}}' }), 'a').status()).toBe('missing');
+    expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_not_found"}}' }), 'a').status()).toBe('missing');
   });
 
   it('★ 渡すのは agent prompt (動き出すまで相手の側で待つ)。pane send-text は使わない', async () => {
@@ -42,6 +45,9 @@ describe('herdr の届け先', () => {
 
   it('確認待ちで断られたら blocked、ほかの失敗は理由つき', async () => {
     expect(await herdrCourier(runWith({ code: 2, stderr: 'agent_blocked' }), 'a').deliver('x')).toEqual({ ok: false, error: 'blocked' });
+    expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_blocked"}}' }), 'a').deliver('x')).toEqual({ ok: false, error: 'blocked' });
+    // ★ 受け付けたが 5 秒で動き出さなかった (herdr 0.9.5 の agent_prompt_stalled)。押し直しはせず、理由を返す
+    expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_prompt_stalled"}}' }), 'a').deliver('x')).toEqual({ ok: false, error: 'agent_prompt_stalled' });
     const r = await herdrCourier(runWith({ code: 3 }), 'a').deliver('x');
     expect(r.ok).toBe(false);
   });

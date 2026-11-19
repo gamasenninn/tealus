@@ -33,6 +33,19 @@ export function mapAgentStatus(s: unknown): CourierStatus {
   }
 }
 
+/** herdr の失敗は stdout の JSON {"error":{"code":…}} で返る (0.9.5 の実物、2026-11-19) */
+function errorCode(r: RunResult): string | null {
+  try {
+    const v = JSON.parse(r.stdout) as { error?: { code?: unknown } };
+    return typeof v.error?.code === 'string' ? v.error.code : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 届け先が居ない (サーバが動いていない・その名前のエージェントが居ない) と分かる失敗 */
+const MISSING_CODES = new Set(['server_not_running', 'agent_not_found', 'not_found']);
+
 export function herdrCourier(run: Run, agent: string, opts: { bin?: string; timeoutMs?: number } = {}): Courier {
   const bin = opts.bin ?? 'herdr';
   const timeout = String(opts.timeoutMs ?? 5000);
@@ -40,7 +53,11 @@ export function herdrCourier(run: Run, agent: string, opts: { bin?: string; time
     async status() {
       let r: RunResult;
       try { r = await run(bin, ['agent', 'get', agent]); } catch { return 'unknown'; }
-      if (r.code !== 0) return /not found|no such agent/i.test(r.stderr + r.stdout) ? 'missing' : 'unknown';
+      if (r.code !== 0) {
+        const code = errorCode(r);
+        if (code !== null) return MISSING_CODES.has(code) ? 'missing' : 'unknown';
+        return /not found|no such agent/i.test(r.stderr) ? 'missing' : 'unknown';
+      }
       try {
         const v = JSON.parse(r.stdout) as { agent_status?: unknown };
         return mapAgentStatus(v.agent_status);
@@ -56,8 +73,9 @@ export function herdrCourier(run: Run, agent: string, opts: { bin?: string; time
         return { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
       if (r.code === 0) return { ok: true, ref: `${agent}@${Date.now()}` };
-      if (/agent_blocked/.test(r.stderr + r.stdout)) return { ok: false, error: 'blocked' };
-      return { ok: false, error: `herdr agent prompt が ${r.code} で終わりました` };
+      const code = errorCode(r);
+      if (code === 'agent_blocked' || /agent_blocked/.test(r.stderr)) return { ok: false, error: 'blocked' };
+      return { ok: false, error: code ?? `herdr agent prompt が ${r.code} で終わりました` };
     },
   };
 }
