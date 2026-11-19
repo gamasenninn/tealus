@@ -177,4 +177,15 @@ describe('配る輪 (tickBridge)', () => {
     expect(loadCursor(stateDir, 'pd')).toBe(id(1));
     expect(events.filter((e) => e.kind === 'dry-run')).toHaveLength(1);
   });
+
+  it('★ 空回しは届け先が居なくても (herdr を起こす前でも) 判断を ids つきで記録する', async () => {
+    saveCursor(stateDir, 'pd', id(1));
+    writeQueue(1, 2, 3);
+    const c = fake('missing');
+    await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));
+    const e = events.find((x) => x.kind === 'dry-run')!;
+    expect(e.ids).toEqual([id(2), id(3)]);
+    expect(e.courier_status).toBe('missing');
+    expect(c.delivered).toEqual([]);
+  });
 });
