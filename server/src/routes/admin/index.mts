@@ -15,6 +15,7 @@ import { router as roomsRouter } from './rooms.mts';
 import { router as transcriptionRouter } from './transcription.mts';
 import { router as dictionaryRouter } from './dictionary.mts';
 import { router as deletedMessagesRouter } from './deleted-messages.mts';
+import { router as courierRouter } from './courier.mts';
 
 export const router = express.Router();
 
@@ -30,3 +31,4 @@ router.use('/', roomsRouter);
 router.use('/', transcriptionRouter);
 router.use('/', dictionaryRouter);
 router.use('/', deletedMessagesRouter);
+router.use('/', courierRouter);

@@ -161,6 +161,23 @@ describe('配る輪 (tickBridge)', () => {
     expect(loadCursor(stateDir, 'pd')).toBeNull();
   });
 
+  it('★ 新着が無くても、30 秒ごとに届け先の状態を見て返す (管理画面の一覧・確認待ちの知らせのため、2026-11-20)', async () => {
+    writeQueue(1);
+    saveCursor(stateDir, 'pd', id(1));
+    let calls = 0;
+    let st: CourierStatus = 'blocked';
+    const c: Courier = { status: async () => { calls++; return st; }, deliver: async () => ({ ok: true, ref: 'r' }) };
+    expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('blocked');
+    st = 'busy';
+    t += 3_000;
+    expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('blocked');   // 30 秒たつまでは前の結果
+    expect(calls).toBe(1);
+    t += 30_000;
+    expect((await tickBridge({ project: 'pd', courier: c }, deps())).state).toBe('busy');
+    expect(calls).toBe(2);
+    expect(loadCursor(stateDir, 'pd')).toBe(id(1));   // 見ただけでカーソルは動かない
+  });
+
   it('★ カーソルが消えていたら (切り詰め) 件数を数えず「新着あり」', async () => {
     saveCursor(stateDir, 'pd', id(1));
     writeQueue(5, 6);

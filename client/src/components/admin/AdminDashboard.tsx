@@ -8,6 +8,7 @@ import PortalManager from './PortalManager';
 import AccessLog from './AccessLog';
 import DictionaryCultivation from './DictionaryCultivation';
 import DeletedMessages from './DeletedMessages';
+import CourierStatus from './CourierStatus';
 import { roleLabel } from '../../utils/permissions';
 import ContextMenu from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
@@ -108,6 +109,7 @@ function AdminDashboard() {
         <button className={`admin-tab ${activeTab === 'access-log' ? 'active' : ''}`} onClick={() => setActiveTab('access-log')}>アクセスログ</button>
         <button className={`admin-tab ${activeTab === 'dictionary' ? 'active' : ''}`} onClick={() => setActiveTab('dictionary')}>辞書育成</button>
         <button className={`admin-tab ${activeTab === 'deleted' ? 'active' : ''}`} onClick={() => setActiveTab('deleted')}>削除された投稿</button>
+        <button className={`admin-tab ${activeTab === 'courier' ? 'active' : ''}`} onClick={() => setActiveTab('courier')}>AIの班</button>
       </div>
 
       {activeTab === 'webhooks' ? (
@@ -120,6 +122,8 @@ function AdminDashboard() {
         <DictionaryCultivation />
       ) : activeTab === 'deleted' ? (
         <DeletedMessages />
+      ) : activeTab === 'courier' ? (
+        <CourierStatus />
       ) : (
       <>
       <div className="admin-section-header">

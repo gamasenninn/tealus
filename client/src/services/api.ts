@@ -66,6 +66,12 @@ export interface DeletedMessageEntry {
   message_id: string; content: string | null; deleted_at: string; type: string; room_id: string; created_at: string;
   room_name: string | null; sender_display_name: string; deleted_by_display_name: string | null;
 }
+/** 配達役の鼓動 (管理画面「AIの班」、docs/12 §7)。bridges は班ごとの状態・新着の数・その状態になった時刻 */
+export interface CourierBridgeBeat { state: string; pending: number; since?: string }
+export interface CourierEntry {
+  user_id: string; display_name: string; last_seen: string;
+  info: { bridges?: Record<string, CourierBridgeBeat>; problem?: string } | null;
+}
 /**
  * push_active_subscriptions: 有効な通知の宛先の本数 (改善ループ 40) / push_total_subscriptions: 外れたものも含めた本数 (41)。
  * 数えられなかったら null、古い本体は返さない
@@ -839,6 +845,11 @@ class ApiClient {
   // 削除された投稿 (admin、2026-10-30 利用者判断 3)
   getAdminDeletedMessages() {
     return this.request<{ messages: DeletedMessageEntry[] }>('GET', '/admin/deleted-messages');
+  }
+
+  // AIの班 (admin、2026-11-20 利用者判断)
+  getAdminCourier() {
+    return this.request<{ couriers: CourierEntry[] }>('GET', '/admin/courier');
   }
 
   restoreAdminDeletedMessage(messageId: string) {

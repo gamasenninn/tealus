@@ -12,11 +12,16 @@ export const BLOCKED_ALERT_MS = 10 * 60_000;
 export const MISSING_ALERT_MS = 10 * 60_000;
 const INFO_MAX = 2000;
 
-export function heartbeatInfo(reports: BridgeReport[], now: number): { bridges?: Record<string, { state: string; pending: number }>; problem?: string } {
+/** 班ごとに載せる中身。since はその状態になった時刻 (管理画面の「いつから」、2026-11-20) */
+export interface BridgeBeat { state: string; pending: number; since?: string }
+
+export function heartbeatInfo(reports: BridgeReport[], now: number): { bridges?: Record<string, BridgeBeat>; problem?: string } {
   const problems: string[] = [];
-  const bridges: Record<string, { state: string; pending: number }> = {};
+  const bridges: Record<string, BridgeBeat> = {};
   for (const r of reports) {
-    bridges[r.project] = { state: r.state, pending: r.pending };
+    bridges[r.project] = r.since === null
+      ? { state: r.state, pending: r.pending }
+      : { state: r.state, pending: r.pending, since: new Date(r.since).toISOString() };
     const minutes = r.since === null ? 0 : Math.floor((now - r.since) / 60_000);
     if (r.state === 'blocked' && r.since !== null && now - r.since >= BLOCKED_ALERT_MS) {
       problems.push(`${r.project} が確認待ちのまま ${minutes} 分 (新着 ${r.pending} 件)`);
@@ -26,7 +31,7 @@ export function heartbeatInfo(reports: BridgeReport[], now: number): { bridges?:
       problems.push(`${r.project} の配達を保留しています (上限。人が保留の印を消すまで止めています)`);
     }
   }
-  const info: { bridges?: Record<string, { state: string; pending: number }>; problem?: string } = { bridges };
+  const info: { bridges?: Record<string, BridgeBeat>; problem?: string } = { bridges };
   if (problems.length) info.problem = problems.join(' / ');
   if (JSON.stringify(info).length <= INFO_MAX) return info;
   // ★ 大きすぎるときは班の一覧を省き、problem だけ (それも長ければ切る)

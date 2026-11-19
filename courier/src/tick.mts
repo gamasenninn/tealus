@@ -35,10 +35,14 @@ export interface TickDeps {
 
 /** 状態が変わった時刻を班ごとに覚える (「確認待ちが N 分続く」を出すため) */
 const stateSince = new Map<string, { state: BridgeState; at: number }>();
+/** 新着が無いときに届け先の状態を見た時刻と結果 (30 秒に 1 回だけ見る) */
+const lastLook = new Map<string, { at: number; state: BridgeState }>();
+/** 新着が無いときに届け先の状態を見る間隔 */
+export const IDLE_LOOK_MS = 30_000;
 /** 空回しで最後に記録した id (同じ判断を何度も記録しない) */
 const dryCursor = new Map<string, string>();
 
-export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); }
+export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); lastLook.clear(); }
 
 function report(project: string, state: BridgeState, pending: number, now: number): BridgeReport {
   const prev = stateSince.get(project);
@@ -80,7 +84,17 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   }
   const cursor = d.dryRun ? (dryCursor.get(b.project) ?? stored) : stored;
   const fresh = newSince(q.ids, cursor);
-  if (fresh.ids.length === 0) return report(b.project, 'idle', 0, now);
+  if (fresh.ids.length === 0) {
+    // ★ 新着が無くても 30 秒ごとに届け先の状態を見る (管理画面の一覧と、便が無いときの確認待ちの知らせのため、2026-11-20)。
+    //   見るだけで打たない・カーソルも動かさない
+    const prev = lastLook.get(b.project);
+    if (prev && now - prev.at < IDLE_LOOK_MS) return report(b.project, prev.state, 0, now);
+    const st0 = await b.courier.status();
+    const state: BridgeState = st0 === 'idle' ? 'idle' : busyLike[st0];
+    lastLook.set(b.project, { at: now, state });
+    return report(b.project, state, 0, now);
+  }
+  lastLook.delete(b.project);
 
   const st = await b.courier.status();
   // ★ 空回しは届け先の状態によらず判断を記録する (herdr を起こす前でも、PaneDeck のトリガーの結果と ids で見比べられるように)

@@ -13,7 +13,10 @@ const rep = (project: string, state: BridgeReport['state'], minutesAgo: number, 
 describe('heartbeatInfo', () => {
   it('問題が無ければ problem を付けない。班ごとの状態と件数だけ', () => {
     const info = heartbeatInfo([rep('panedeck', 'idle', 30), rep('tealus', 'busy', 2, 1)], now);
-    expect(info).toEqual({ bridges: { panedeck: { state: 'idle', pending: 0 }, tealus: { state: 'busy', pending: 1 } } });
+    expect(info).toEqual({ bridges: {
+      panedeck: { state: 'idle', pending: 0, since: new Date(now - 30 * 60_000).toISOString() },
+      tealus: { state: 'busy', pending: 1, since: new Date(now - 2 * 60_000).toISOString() },
+    } });
   });
 
   it('★ 確認待ちが 10 分を超えたら problem に入れる (10 分未満は入れない)', () => {
