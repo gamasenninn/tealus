@@ -171,6 +171,35 @@ jobs:
           OPENAI_API_KEY: dummy-key-for-ci
         run: npm test
 
+  courier-test:
+    # 配達役 (docs/12、2026-11-19)。本体・agent-server とは別の包み
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: courier/package-lock.json
+
+      - name: Install courier dependencies
+        working-directory: courier
+        run: npm ci
+
+      - name: Typecheck courier (tsc --noEmit)
+        working-directory: courier
+        run: npm run typecheck
+
+      - name: Test courier
+        working-directory: courier
+        run: npm test
+
   rtc-server-typecheck:
     runs-on: ubuntu-latest
     strategy:
