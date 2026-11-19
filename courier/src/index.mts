@@ -2,7 +2,8 @@
  * 配達役の入口 (docs/12)。`node src/index.mts` で動かす。本体・agent-server とは別のプロセス。
  *
  * - 置き場: ~/.tealus/courier/ (bridges.json・auth.json・カーソル・鍵・保留の印・出来事の記録)。cc-queue のフォルダには書かない
- * - ★ 既定は空回し (打たずに記録だけ)。本当に配るのは COURIER_DRY_RUN=0 のときだけ (docs/12 §12.11)
+ * - ★ 既定は空回し (打たずに記録だけ)。本当に配るのは bridges.json に dry_run: false と書いた班だけ。
+ *   COURIER_DRY_RUN=1 ならどの班も空回し (docs/12 §12.11)
  * - 3 秒ごとに班ごとの輪を 1 回。1 分ごとに鼓動 (班の名前・状態・件数と problem)
  * - 起動時に班ごとの鍵を取る。取れない班 (生きている別の配達役が持っている) は配らない
  * - 外のコマンド (herdr) はこの機械で execFile (シェルを通さない。引数は形を確かめた値だけ)
@@ -21,7 +22,8 @@ import { heartbeatSender, type CourierAuth } from './sendHeartbeat.mts';
 
 const COURIER_DIR = process.env.COURIER_DIR || path.join(os.homedir(), '.tealus', 'courier');
 const QUEUE_DIR = process.env.CC_QUEUE_DIR || path.join(os.homedir(), '.tealus', 'cc-queue');
-const DRY_RUN = process.env.COURIER_DRY_RUN !== '0';
+/** ★ 全体の空回し。COURIER_DRY_RUN=1 ならどの班も空回し。0 (や未設定) なら班ごとの dry_run に従う (既定は空回し) */
+const DRY_RUN = process.env.COURIER_DRY_RUN === '1';
 const TICK_MS = 3_000;
 const HEARTBEAT_MS = 60_000;
 
@@ -62,9 +64,9 @@ async function main(): Promise<void> {
   const bridges: Bridge[] = [];
   for (const b of loaded.bridges) {
     if (!acquireLock(COURIER_DIR, b.project)) { log(`${b.project}: 別の配達役が鍵を持っているので配りません`); continue; }
-    bridges.push({ project: b.project, courier: herdrCourier(run, b.agent) });
+    bridges.push({ project: b.project, courier: herdrCourier(run, b.agent, { bin: process.env.HERDR_BIN || 'herdr' }), dryRun: b.dryRun });
   }
-  log(`始めます: ${bridges.map((b) => b.project).join(', ') || '(なし)'} ${DRY_RUN ? '★ 空回し (打たずに記録だけ)' : '本番 (配る)'}`);
+  log(`始めます: ${bridges.map((b) => `${b.project}${DRY_RUN || b.dryRun ? '(空回し)' : '(本番)'}`).join(', ') || '(なし)'}`);
 
   const release = () => { for (const b of bridges) releaseLock(COURIER_DIR, b.project); process.exit(0); };
   process.on('SIGINT', release);

@@ -21,7 +21,7 @@ describe('loadBridges', () => {
       { project: 'panedeck', adapter: 'herdr', agent: 'pd', enabled: true },
       { project: 'tealus', adapter: 'herdr', agent: 'tl', enabled: false },
     ]);
-    expect(loadBridges(dir)).toEqual({ ok: true, bridges: [{ project: 'panedeck', adapter: 'herdr', agent: 'pd' }], skipped: [] });
+    expect(loadBridges(dir)).toEqual({ ok: true, bridges: [{ project: 'panedeck', adapter: 'herdr', agent: 'pd', dryRun: true }], skipped: [] });
   });
 
   it('★ 形の違う行は使わず、理由を返す (班の名前・届け先の種類・名前)', () => {
@@ -41,6 +41,16 @@ describe('loadBridges', () => {
       { project: 'panedeck', adapter: 'herdr', agent: 'b', enabled: true },
     ]);
     expect(loadBridges(dir).ok).toBe(false);
+  });
+
+  it('★ 班ごとの空回し: 既定は空回し。dry_run が false と書いた班だけ本当に配る', () => {
+    write([
+      { project: 'panedeck', adapter: 'herdr', agent: 'pd', enabled: true },
+      { project: 'lp', adapter: 'herdr', agent: 'lp', enabled: true, dry_run: false },
+      { project: 'x', adapter: 'herdr', agent: 'x', enabled: true, dry_run: 'no' },
+    ]);
+    const r = loadBridges(dir);
+    expect(r.ok && r.bridges.map((b) => [b.project, b.dryRun])).toEqual([['panedeck', true], ['lp', false], ['x', true]]);
   });
 
   it('無い・壊れているは ok=false', () => {

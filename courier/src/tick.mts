@@ -15,7 +15,7 @@ import { isHeld, setHold, RateLimiter } from './limit.mts';
 import { buildNotice } from './notice.mts';
 import type { Courier, CourierStatus } from './herdr.mts';
 
-export interface Bridge { project: string; courier: Courier }
+export interface Bridge { project: string; courier: Courier; dryRun?: boolean }
 
 export type BridgeState = 'idle' | 'delivered' | 'busy' | 'blocked' | 'missing' | 'unknown' | 'held' | 'unreadable' | 'failed';
 
@@ -50,7 +50,9 @@ const busyLike: Record<Exclude<CourierStatus, 'idle'>, BridgeState> = {
   busy: 'busy', blocked: 'blocked', missing: 'missing', unknown: 'unknown',
 };
 
-export async function tickBridge(b: Bridge, d: TickDeps): Promise<BridgeReport> {
+export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeReport> {
+  // ★ 班ごとの空回し (bridges.json の dry_run)。全体の空回し (deps.dryRun) が立っていれば、どの班も空回し
+  const d: TickDeps = { ...deps, dryRun: deps.dryRun || b.dryRun === true };
   const now = d.now();
   if (isHeld(d.stateDir, b.project)) return report(b.project, 'held', 0, now);
 

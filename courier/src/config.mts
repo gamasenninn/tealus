@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isValidProject } from './cursor.mts';
 
-export interface BridgeConfig { project: string; adapter: 'herdr'; agent: string }
+/** dryRun: 打たずに記録だけ。★ 既定は true。本当に配るのは bridges.json に dry_run: false (真偽値) と書いた班だけ */
+export interface BridgeConfig { project: string; adapter: 'herdr'; agent: string; dryRun: boolean }
 
 const AGENT_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const ADAPTERS = new Set(['herdr']);
@@ -37,7 +38,7 @@ export function loadBridges(dir: string): LoadResult {
     if (!isValidProject(project)) { skipped.push(`${i} 行目: 班の名前の形が違います`); continue; }
     if (typeof o.adapter !== 'string' || !ADAPTERS.has(o.adapter)) { skipped.push(`${i} 行目 (${project}): 届け先の種類が使えません`); continue; }
     if (typeof o.agent !== 'string' || !AGENT_RE.test(o.agent)) { skipped.push(`${i} 行目 (${project}): 届け先の名前の形が違います`); continue; }
-    bridges.push({ project, adapter: 'herdr', agent: o.agent });
+    bridges.push({ project, adapter: 'herdr', agent: o.agent, dryRun: o.dry_run !== false });
   }
   return { ok: true, bridges, skipped };
 }
