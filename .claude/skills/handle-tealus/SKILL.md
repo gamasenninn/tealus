@@ -27,6 +27,23 @@ http mode / 再接続 / backoff / 期限切れの張り直し）。**PaneDeck �
 - PaneDeck の設定にトリガーがあり、`~/.tealus/cc-queue/{project}.jsonl` を見ている
 - `listen-tealus` の設定ファイル（`.claude/cc-tealus.json` など）がある。
   **auto_level と catch_up_policy はそこから読む**
+- ★ PaneDeck のほか、**配達役** (`courier/`、docs/12) に起こされることもある。文面は
+  `Tealus: @cc-{project} に新着 N 件 (最新 id=…)。handle-tealus の手順で読んで対応してください`
+
+## ★ 役割 (設定ファイル) の選び方 — 起こされた文面の `@cc-{project}` で決める
+
+1 つのフォルダに役割別の設定が 2 つ以上あるとき (`C:\app\tealus` の `cc-tealus.tealus.json` /
+`cc-tealus.support.json`、#392)、`listen-tealus` の第 1 節は「止まって user に聞く」。
+**このペインには答える人がいない** (herdr や PaneDeck の中で、人は見ていない) ので、ここでは聞かない:
+
+1. 起こされた文面に `@cc-{project}` があれば、**その `{project}` の設定を使う** (`.claude/cc-tealus.{project}.json`、
+   無ければ `.claude/cc-tealus.json` の `project_name` が `{project}` と同じときだけそれ)
+2. 文面に無い・その設定が無いときは、**何もせず** 1 行だけ報告する (どの役割として扱うかを推測しない。
+   間違った班の queue を進めると、静かに便が消える)
+3. 決めた役割で、MCP も合わせる (`tealus` 本体班は `mcp__tealus__*`、`support` は `mcp__tealus-support__*`。
+   CLAUDE.md の「このディレクトリには tealus MCP が 2 本ある」)
+
+★ 2026-11-20 に本体班・サポート班を配達役へ移すときに足した。
 
 ## ★ Monitor を張らないこと
 
