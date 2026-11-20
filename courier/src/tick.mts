@@ -41,8 +41,10 @@ const lastLook = new Map<string, { at: number; state: BridgeState }>();
 export const IDLE_LOOK_MS = 10_000;
 /** 空回しで最後に記録した id (同じ判断を何度も記録しない) */
 const dryCursor = new Map<string, string>();
+/** 打ったが戻りが失われた便 (docs/12 §13.2)。次の回に相手の進み具合が変わっていれば届いたとみなす */
+const uncertainSent = new Map<string, { last: string; seq: number; count: number }>();
 
-export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); lastLook.clear(); }
+export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); lastLook.clear(); uncertainSent.clear(); }
 
 function report(project: string, state: BridgeState, pending: number, now: number): BridgeReport {
   const prev = stateSince.get(project);
@@ -98,6 +100,19 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   }
   lastLook.delete(b.project);
 
+  // ★ 前の回に打ったが戻りが失われた (SSH 越し)。相手の進み具合が変わっていれば届いたとみなし、打ち直さない (docs/12 §13.2)。
+  //   変わっていなければ届いていないので、下でもう一度打つ。★ 二重に届けるより、遅れるほうがよい
+  const pendingUncertain = uncertainSent.get(b.project);
+  if (pendingUncertain) {
+    uncertainSent.delete(b.project);
+    const seqNow = (await b.courier.progress?.()) ?? null;
+    if (seqNow !== null && seqNow !== pendingUncertain.seq) {
+      saveCursor(d.stateDir, b.project, pendingUncertain.last);
+      d.record({ kind: 'delivered', project: b.project, count: pendingUncertain.count, last: pendingUncertain.last, confirmed_late: true });
+      return report(b.project, 'delivered', 0, now);
+    }
+  }
+
   const st = await b.courier.status();
   // ★ 空回しは届け先の状態によらず判断を記録する (herdr を起こす前でも、PaneDeck のトリガーの結果と ids で見比べられるように)
   if (st !== 'idle' && !d.dryRun) return report(b.project, busyLike[st], fresh.ids.length, now);
@@ -117,7 +132,13 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
     return report(b.project, 'delivered', 0, now);
   }
 
+  const seqBefore = (await b.courier.progress?.()) ?? null;
   const r = await b.courier.deliver(text);
+  if (!r.ok && r.error === 'uncertain' && seqBefore !== null) {
+    uncertainSent.set(b.project, { last: fresh.last!, seq: seqBefore, count: fresh.ids.length });
+    d.record({ kind: 'deliver-uncertain', project: b.project, count: fresh.ids.length, last: fresh.last });
+    return report(b.project, 'unknown', fresh.ids.length, now);
+  }
   if (!r.ok) {
     d.record({ kind: 'deliver-failed', project: b.project, error: r.error });
     return report(b.project, r.error === 'blocked' ? 'blocked' : 'failed', fresh.ids.length, now);

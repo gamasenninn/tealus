@@ -13,6 +13,8 @@ export type CourierStatus = 'idle' | 'busy' | 'blocked' | 'missing' | 'unknown';
 export interface Courier {
   status(): Promise<CourierStatus>;
   deliver(text: string): Promise<{ ok: true; ref: string } | { ok: false; error: string }>;
+  /** 相手の進み具合 (herdr の state_change_seq)。打ったあとの戻りが失われたとき、動いたかを見るのに使う (docs/12 §13.2)。分からなければ null */
+  progress?(): Promise<number | null>;
 }
 
 export interface RunResult { code: number; stdout: string; stderr: string }
@@ -44,12 +46,23 @@ function errorCode(r: RunResult): string | null {
 }
 
 /** 届け先が居ない (サーバが動いていない・その名前のエージェントが居ない) と分かる失敗 */
-const MISSING_CODES = new Set(['server_not_running', 'agent_not_found', 'not_found']);
+const MISSING_CODES = new Set(['server_not_running', 'agent_not_found', 'not_found', 'unreachable']);
 
 export function herdrCourier(run: Run, agent: string, opts: { bin?: string; timeoutMs?: number } = {}): Courier {
   const bin = opts.bin ?? 'herdr';
   const timeout = String(opts.timeoutMs ?? 5000);
   return {
+    async progress() {
+      try {
+        const r = await run(bin, ['agent', 'get', agent]);
+        if (r.code !== 0) return null;
+        const v = JSON.parse(r.stdout) as { result?: { agent?: { state_change_seq?: unknown } } };
+        const n = v.result?.agent?.state_change_seq;
+        return typeof n === 'number' ? n : null;
+      } catch {
+        return null;
+      }
+    },
     async status() {
       let r: RunResult;
       try { r = await run(bin, ['agent', 'get', agent]); } catch { return 'unknown'; }
@@ -75,6 +88,8 @@ export function herdrCourier(run: Run, agent: string, opts: { bin?: string; time
       }
       if (r.code === 0) return { ok: true, ref: `${agent}@${Date.now()}` };
       const code = errorCode(r);
+      // ★ SSH 越しで、つながらなかったのか・打ったあとの戻りだけ失ったのか分からない (255) → uncertain (docs/12 §13.2)
+      if (code === 'unreachable') return { ok: false, error: 'uncertain' };
       if (code === 'agent_blocked' || /agent_blocked/.test(r.stderr)) return { ok: false, error: 'blocked' };
       return { ok: false, error: code ?? `herdr agent prompt が ${r.code} で終わりました` };
     },

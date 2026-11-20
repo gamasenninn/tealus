@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadBridges } from './config.mts';
 import { herdrCourier, type Run } from './herdr.mts';
+import { sshRun } from './ssh.mts';
 import { tickBridge, type Bridge, type BridgeReport } from './tick.mts';
 import { RateLimiter } from './limit.mts';
 import { acquireLock, releaseLock } from './lock.mts';
@@ -68,7 +69,11 @@ async function main(): Promise<void> {
   const bridges: Bridge[] = [];
   for (const b of loaded.bridges) {
     if (!acquireLock(COURIER_DIR, b.project)) { log(`${b.project}: 別の配達役が鍵を持っているので配りません`); continue; }
-    bridges.push({ project: b.project, courier: herdrCourier(run, b.agent, { bin: process.env.HERDR_BIN || 'herdr' }), dryRun: b.dryRun });
+    // ★ herdr-ssh (docs/12 §13): 相手の PC の herdr を SSH で呼ぶ。判断 (状態の読み方・打ち方) は手元の herdr と同じ
+    const courier = b.adapter === 'herdr-ssh'
+      ? herdrCourier(sshRun(run, { host: b.host!, user: b.user! }), b.agent, { bin: b.herdr! })
+      : herdrCourier(run, b.agent, { bin: process.env.HERDR_BIN || 'herdr' });
+    bridges.push({ project: b.project, courier, dryRun: b.dryRun });
   }
   log(`始めます: ${bridges.map((b) => `${b.project}${DRY_RUN || b.dryRun ? '(空回し)' : '(本番)'}`).join(', ') || '(なし)'}`);
 

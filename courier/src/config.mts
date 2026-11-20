@@ -9,10 +9,19 @@ import path from 'node:path';
 import { isValidProject } from './cursor.mts';
 
 /** dryRun: 打たずに記録だけ。★ 既定は true。本当に配るのは bridges.json に dry_run: false (真偽値) と書いた班だけ */
-export interface BridgeConfig { project: string; adapter: 'herdr'; agent: string; dryRun: boolean }
+export interface BridgeConfig {
+  project: string; adapter: 'herdr' | 'herdr-ssh'; agent: string; dryRun: boolean;
+  /** herdr-ssh だけ (docs/12 §13): 相手の PC・ユーザ・相手の herdr の場所 */
+  host?: string; user?: string; herdr?: string;
+}
 
 const AGENT_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-const ADAPTERS = new Set(['herdr']);
+const ADAPTERS = new Set(['herdr', 'herdr-ssh']);
+const HOST_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/;
+/** ユーザ名は漢字もありうる (バックアップ機)。空白・引用符・シェルの記号は不可 */
+const USER_RE = /^[^\s"'`;&|<>%^]{1,64}$/u;
+/** 相手の herdr の場所 (Windows の道)。引用符・% ・改行は不可 */
+const REMOTE_PATH_RE = /^[^"%\r\n]{1,260}$/;
 
 export type LoadResult =
   | { ok: true; bridges: BridgeConfig[]; skipped: string[] }
@@ -38,6 +47,13 @@ export function loadBridges(dir: string): LoadResult {
     if (!isValidProject(project)) { skipped.push(`${i} 行目: 班の名前の形が違います`); continue; }
     if (typeof o.adapter !== 'string' || !ADAPTERS.has(o.adapter)) { skipped.push(`${i} 行目 (${project}): 届け先の種類が使えません`); continue; }
     if (typeof o.agent !== 'string' || !AGENT_RE.test(o.agent)) { skipped.push(`${i} 行目 (${project}): 届け先の名前の形が違います`); continue; }
+    if (o.adapter === 'herdr-ssh') {
+      if (typeof o.host !== 'string' || !HOST_RE.test(o.host)) { skipped.push(`${i} 行目 (${project}): 相手の PC の名前の形が違います`); continue; }
+      if (typeof o.user !== 'string' || !USER_RE.test(o.user)) { skipped.push(`${i} 行目 (${project}): 相手のユーザ名の形が違います`); continue; }
+      if (typeof o.herdr !== 'string' || !REMOTE_PATH_RE.test(o.herdr)) { skipped.push(`${i} 行目 (${project}): 相手の herdr の場所の形が違います`); continue; }
+      bridges.push({ project, adapter: 'herdr-ssh', agent: o.agent, dryRun: o.dry_run !== false, host: o.host, user: o.user, herdr: o.herdr });
+      continue;
+    }
     bridges.push({ project, adapter: 'herdr', agent: o.agent, dryRun: o.dry_run !== false });
   }
   return { ok: true, bridges, skipped };
