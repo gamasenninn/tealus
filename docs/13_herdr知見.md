@@ -73,3 +73,74 @@
 | `--machine` | 別の PC の班へ同じコマンドで届く。自前の SSH 越し (docs/12 §13) と比べる |
 | `terminal session observe` | 読むだけで画面を外へ流せる。★ 秘密が映るので Tealus には写さない (docs/12 §9) |
 | plugin の events | 出来事ごとに herdr がコマンドを起動する。常駐を持たずに済む可能性 |
+
+## 2. エージェントの様子をつかむ (学習ループ 2)
+
+試験用セッションで、自分で状態を申告する偽の AI と、偽の claude (端末の題で working を演じる) を動かして確かめた。本物の Claude は起こしていない。
+
+### 2.1 出来事の流れ (`events.subscribe`)
+
+- 形 【確】: `{"id":"s","method":"events.subscribe","params":{"subscriptions":[{"type":"pane.agent_status_changed","pane_id":"w1:p1"},{"type":"pane.agent_detected"},{"type":"pane.created"},{"type":"pane.closed"}]}}`
+  → `{"id":"s","result":{"type":"subscription_started"}}`、以後 1 行 1 出来事
+- ★ **状態の購読はペインを 1 つずつ並べる** 【確】。`pane.agent_status_changed` は `pane_id` が必須 (`*` や班の名前は使えない)。
+  並べれば 1 本の接続で全部見られる。1 つでも無いペインがあると全体が `pane_not_found` で断られて切られる
+- ★ **1 接続 = 1 命令** 【確】。同じ接続に 2 つ目の命令を送っても黙って無視される。購読を足すときはつなぎ直す
+- ★ **`pane.updated` では状態は分からない** 【確】 (出るのは改名・札・手放しのとき)
+- 中身 【確】: `{"event":"pane.agent_status_changed","data":{"agent":"claude","agent_status":"done","pane_id":"w3:p1","workspace_id":"w3"}}`。
+  **班の名前・`state_change_seq`・`completion_seq` は入っていない** (`agent` は種類)。名前は `agent list` の `pane_id` で引く
+- 名前の書き方 【確】: 状態だけ点 (`pane.agent_status_changed`)、ほかは下線 (`pane_agent_detected`・`pane_created`・`pane_closed`・`pane_updated`)
+
+| 起きたこと | 流れてくるもの 【確】 |
+|---|---|
+| エージェントが現れる | `pane_agent_detected` (全体)。そのペインを並べてあれば状態の出来事も |
+| エージェントが消える | `pane_agent_detected` に `released:true`・`final_status`。同じペインに戻れば購読はそのまま効く |
+| ペインを閉じる | `pane_closed`。接続は切れない |
+| ペインが増える | `pane_created` だけ。状態の購読は入っていないので張り直す |
+| サーバが止まる | 何も言わずに切れる (約 0.5 秒)。上げ直すとペインの番号は同じ・エージェントは 0 |
+| 読むのが遅れる | 600 件ためても無事、1200 件で `events_lost` が来て切られる。ほかの購読者は無事 |
+| 静かなとき | 何も流れない (生存確認の行は無い)。切れたかは接続が閉じたことでしか分からない |
+
+- 合わせ直し 【文】: 購読を張り直す → `subscription_started` を待つ → 別の接続で `session.snapshot` → 出来事は「読み直せ」の合図として扱う (ためた出来事を重ねない)
+
+### 2.2 実測 (2026-11-20)
+
+| 測ったもの | 値 【確】 |
+|---|---|
+| 状態の変わり目 → 出来事の到着 | 0.5〜97 ms (中央 57)。サーバが約 0.1 秒ごとにまとめて流す |
+| 画面で判定する相手が動き出す → working と分かる | 約 0.3〜0.5 秒。30 ms だけの仕事は見逃す |
+| 口から直接 `agent.get`・`agent.list`・`session.snapshot` | 0.3〜0.4 ms |
+| `herdr agent get` を 1 回起動 | 10〜20 ms、CPU 約 8 ms (11 班を 10 秒ごとに見ても 1 コアの 1% ほど) |
+
+### 2.3 待つ命令
+
+| 命令 | 動き 【確】 |
+|---|---|
+| `agent wait` | 今の状態が合っていれば即返る。`--until` 無しは idle・done・blocked。時間切れは `timeout`、待つ間に相手が消えると `agent_not_running`。`--timeout` 無しは無期限 |
+| `events.wait` | `match_event` に 1 つの出来事。これも今その状態なら即 `wait_matched` (変わり目ではなく状態を見る) |
+| `pane wait-output` | 既に出ている文字にも当たる |
+| `agent prompt --wait` | blocked には打たず `agent_blocked`。打って 5 秒 (実測 5.3 秒) 動きが無いと `agent_prompt_stalled`。`--timeout` が 5000 以下だと先に `timeout` が返る |
+
+- ★ **`timeout` も `agent_prompt_stalled` も「打たなかった」ではない** 【確】。文字は相手の画面に入っている。送り直す前に確かめる 【文】
+- ★ **失敗の JSON は stderr に出る** (stdout は空、終了コード 1。使い方の誤りは 2) 【確】
+
+### 2.4 状態の読み方の落とし穴
+
+- `done` と `idle` 【確】: `done` は「終わったがまだ誰も見ていない」。人が見ると (`focus`) `idle` になる。人が見ているペインでは working からいきなり `idle` になる
+  → **待つときは `idle` と `done` を両方並べる**
+- `state_change_seq` 【確】: 状態の変わり目ごとに増える。★ **サーバ全体で 1 本の通し番号** (班ごとではない)。「前と違う」は「動いた」の印で、「自分の便で動いた」の証明ではない
+- `completion_seq` 【確】: working (か blocked) → idle のときだけ付き、値はそのときの `state_change_seq`。「起こしたあと仕事を終えたか」は「打つ前と違う値が付いているか」で見る
+- 現れた直後は数秒 `unknown` 【確】。その間に打つと動きを見逃す
+- `blocked` は知っている形の画面だけ 【文】。`agent explain <名前> --json` で当たった決まり (`matched_rule`)・`fallback_reason`・`visible_blocker` が見える。
+  `--file 画面.txt --agent claude` ならサーバ無しで試せる 【確】。Claude の working のいちばん強い決まりは端末の題の先頭の点字 【確】
+
+### 2.5 別の PC
+
+- `herdr --machine <名前> <命令>` は 1 回の命令を SSH 越しに送るだけ 【文】。購読を包むコマンドは無い 【確】
+- 購読を持つなら、相手で小さな中継を走らせて SSH の標準出力で行を流す形になる 【推】。相手に置くものが増えるので、班が少ないうちは 1 回ずつ呼ぶままでよい
+
+### 2.6 Tealus (配達役) への含み
+
+- **購読は「いま見に行け」の合図にだけ使い、打つかどうかは読んでから決める**。定期の見回りは安全網として残す (切れても黙っているので)
+- 費用の面で急ぐ理由は無い。得るのは速さ (数秒 → 0.1 秒)。11 回の `agent get` は 1 回の `agent list` にまとめられる
+- ★ このループで見つけて直したもの (2026-11-20): 配達役は失敗の JSON を stdout で読んでいた (→ stderr も読む。`server_not_running` が「分からない」に落ちていた) /
+  `timeout`・`agent_prompt_stalled` を「届かなかった」と扱い、打ち直しで二重になりえた (→ 「戻りが分からない」として、相手の進み具合が変わったか見る。変わらなくても 30 秒は打ち直さない)

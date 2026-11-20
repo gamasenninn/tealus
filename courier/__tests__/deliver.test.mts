@@ -37,6 +37,9 @@ describe('herdr の届け先', () => {
     // ★ herdr 0.9.5 の実物 (2026-11-19 にこの機械で確かめた): 失敗は stdout の JSON {"error":{"code":…}}
     expect(await herdrCourier(runWith({ code: 1, stdout: '{"id":"cli:agent:get","error":{"code":"server_not_running","message":"no herdr server is running"}}' }), 'a').status()).toBe('missing');
     expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_not_found"}}' }), 'a').status()).toBe('missing');
+    // ★ herdr 0.9.5 の実物は失敗の JSON を stderr に出す (stdout は空)。SSH 越しなら前置きの警告の行のあと (2026-11-20 確かめた)
+    expect(await herdrCourier(runWith({ code: 1, stderr: '{"error":{"code":"server_not_running","message":"x"},"id":"cli:agent:get"}' }), 'a').status()).toBe('missing');
+    expect(await herdrCourier(runWith({ code: 1, stderr: '** WARNING: post-quantum\r\n{"error":{"code":"server_not_running"}}\r\n' }), 'a').status()).toBe('missing');
   });
 
   it('★ 渡すのは agent prompt (動き出すまで相手の側で待つ)。pane send-text は使わない', async () => {
@@ -53,7 +56,10 @@ describe('herdr の届け先', () => {
     expect(await herdrCourier(runWith({ code: 2, stderr: 'agent_blocked' }), 'a').deliver('x')).toEqual({ ok: false, error: 'blocked' });
     expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_blocked"}}' }), 'a').deliver('x')).toEqual({ ok: false, error: 'blocked' });
     // ★ 受け付けたが 5 秒で動き出さなかった (herdr 0.9.5 の agent_prompt_stalled)。押し直しはせず、理由を返す
-    expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_prompt_stalled"}}' }), 'a').deliver('x')).toEqual({ ok: false, error: 'agent_prompt_stalled' });
+    // ★ 受け付けたが 5 秒で動き出さなかった・待ちの時間切れは「打たなかった」ではない (文字は相手に入っている)。
+    //   届かなかったと扱うと打ち直しで二重になる → uncertain (学習ループ 2、2026-11-20 偽の claude で確かめた)
+    expect(await herdrCourier(runWith({ code: 1, stdout: '{"error":{"code":"agent_prompt_stalled"}}' }), 'a').deliver('x')).toEqual({ ok: false, error: 'uncertain' });
+    expect(await herdrCourier(runWith({ code: 1, stderr: '{"error":{"code":"timeout","message":"x"},"id":"cli:agent:prompt"}' }), 'a').deliver('x')).toEqual({ ok: false, error: 'uncertain' });
     const r = await herdrCourier(runWith({ code: 3 }), 'a').deliver('x');
     expect(r.ok).toBe(false);
   });

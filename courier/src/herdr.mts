@@ -37,13 +37,22 @@ export function mapAgentStatus(s: unknown): CourierStatus {
 
 /** herdr の失敗は stdout の JSON {"error":{"code":…}} で返る (0.9.5 の実物、2026-11-19) */
 function errorCode(r: RunResult): string | null {
-  try {
-    const v = JSON.parse(r.stdout) as { error?: { code?: unknown } };
-    return typeof v.error?.code === 'string' ? v.error.code : null;
-  } catch {
-    return null;
+  // ★ 0.9.5 の実物は失敗の JSON を stderr に出す (stdout は空。2026-11-20 学習ループ 2 で確かめた。11-19 の「stdout」は誤り)。
+  //   SSH 越しなら前置きの警告の行が先に来るので、行ごとに JSON を探す。stdout も念のため見る
+  for (const text of [r.stdout, r.stderr]) {
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim().startsWith('{')) continue;
+      try {
+        const v = JSON.parse(line) as { error?: { code?: unknown } };
+        if (typeof v.error?.code === 'string') return v.error.code;
+      } catch { /* 次の行 */ }
+    }
   }
+  return null;
 }
+
+/** 打ったが動き出しを確かめられなかった (文字は相手に入っている)。届かなかったと扱うと打ち直しで二重になる */
+const UNCERTAIN_CODES = new Set(['unreachable', 'timeout', 'agent_prompt_stalled']);
 
 /** 届け先が居ない (サーバが動いていない・その名前のエージェントが居ない) と分かる失敗 */
 const MISSING_CODES = new Set(['server_not_running', 'agent_not_found', 'not_found', 'unreachable']);
@@ -89,7 +98,7 @@ export function herdrCourier(run: Run, agent: string, opts: { bin?: string; time
       if (r.code === 0) return { ok: true, ref: `${agent}@${Date.now()}` };
       const code = errorCode(r);
       // ★ SSH 越しで、つながらなかったのか・打ったあとの戻りだけ失ったのか分からない (255) → uncertain (docs/12 §13.2)
-      if (code === 'unreachable') return { ok: false, error: 'uncertain' };
+      if (code !== null && UNCERTAIN_CODES.has(code)) return { ok: false, error: 'uncertain' };
       if (code === 'agent_blocked' || /agent_blocked/.test(r.stderr)) return { ok: false, error: 'blocked' };
       return { ok: false, error: code ?? `herdr agent prompt が ${r.code} で終わりました` };
     },

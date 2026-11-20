@@ -85,11 +85,14 @@ describe('★ 戻りが失われたとき (docs/12 §13.2)', () => {
     expect(events.some((e) => e.kind === 'delivered' && e.confirmed_late === true)).toBe(true);
   });
 
-  it('打ったが戻りが無く、相手の進み具合が変わっていない → 届いていないので打ち直す', async () => {
+  it('★ 打ったが戻りが無く、相手の進み具合が変わっていない → すぐには打ち直さない (30 秒待つ)。過ぎてから打ち直す', async () => {
     writeQueue(1); saveCursor(stateDir, 'db', id(1)); writeQueue(1, 2);
-    const c = fake([5, 5, 5], [{ ok: false, error: 'uncertain' }, { ok: true, ref: 'r' }]);
+    const c = fake([5, 5, 5, 5], [{ ok: false, error: 'uncertain' }, { ok: true, ref: 'r' }]);
     await tickBridge({ project: 'db', courier: c }, deps());
     t += 3_000;
+    expect((await tickBridge({ project: 'db', courier: c }, deps())).state).toBe('unknown');
+    expect(c.sent).toBe(1);   // 相手が遅れて動き出すかもしれないので、まだ打たない
+    t += 30_000;
     await tickBridge({ project: 'db', courier: c }, deps());
     expect(c.sent).toBe(2);
     expect(loadCursor(stateDir, 'db')).toBe(id(2));
