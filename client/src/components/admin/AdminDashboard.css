@@ -34,6 +34,10 @@
   color: white;
   font-size: 20px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4px;
 }
 
 .admin-back-btn:hover {
@@ -303,6 +307,8 @@
 }
 
 /* Tabs */
+/* ★ タブが画面の幅に収まらないとき (スマホ・タブが 7 つ、2026-11-20「AIの班」を足して崩れた) は、
+   タブの帯の中だけで横に送る。帯が広がると管理画面全体が画面より広くなり、題や「ユーザー管理」が左右で切れていた */
 .admin-tabs {
   display: flex;
   gap: 0;
@@ -310,11 +316,20 @@
   border-bottom: 1px solid var(--border-light);
   border-radius: 8px 8px 0 0;
   margin-bottom: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .admin-tab {
-  flex: 1;
-  padding: 12px 0;
+  flex: 1 0 auto;
+  white-space: nowrap;
+  padding: 12px 12px;
   font-size: 14px;
   border: none;
   background: white;
@@ -457,8 +472,10 @@
     align-items: stretch;
   }
 
+  /* ★ スマホでは「← 管理ダッシュボード」を左に寄せる (space-between で題が右端へ離れ、戻るの矢印が取り残されて見えた、2026-11-20) */
   .admin-header-left {
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 8px;
   }
 
   .admin-user-list td,
