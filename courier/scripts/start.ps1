@@ -87,8 +87,13 @@ foreach ($b in $agents) {
 $alive = $false
 foreach ($f in Get-ChildItem -Path $CourierDir -Filter 'lock-*.json' -ErrorAction SilentlyContinue) {
   try {
-    $lockPid = (Get-Content $f.FullName -Raw | ConvertFrom-Json).pid
-    if ($lockPid -and (Get-Process -Id $lockPid -ErrorAction SilentlyContinue)) { $alive = $true; Say "配達役は起きています (pid $lockPid)"; break }
+    $lock = Get-Content $f.FullName -Raw | ConvertFrom-Json
+    $proc = if ($lock.pid) { Get-Process -Id $lock.pid -ErrorAction SilentlyContinue } else { $null }
+    # ★ 番号が生きているだけでは配達役とは限らない (Windows は番号を使い回す。再起動のあとは特に)。
+    #   node であること、鍵を書いた時刻より前 (1 分の余裕) に起きたプロセスであることも見る (2026-11-20 改善ループ 97)
+    $same = $proc -and $proc.ProcessName -eq 'node' -and $lock.at -and ($proc.StartTime -le ([datetime]$lock.at).ToLocalTime().AddMinutes(1))
+    if ($same) { $alive = $true; Say "配達役は起きています (pid $($lock.pid))"; break }
+    if ($proc) { Say "鍵の番号 $($lock.pid) は別のプロセス ($($proc.ProcessName)) なので、配達役は居ないとみなします" }
   } catch { }
 }
 if (-not $alive) {
