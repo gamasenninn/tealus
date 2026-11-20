@@ -1,0 +1,75 @@
+# 13. herdr の知見 — AI と人が同じ場で働くために
+
+2026-11-20 開始。利用者の依頼「Tealus はエージェントとのやりとりが密になってきた。エージェント同士の自律的なやりとりも
+要るかもしれない。もっと深く広く自由に、エージェントと人間がコミュニケーションできるよう、herdr のどんな機能を使えばよいかを学んで
+ドキュメント化してほしい」(学習ループ 5 回、fable と協力)。
+
+★ 対象は herdr 0.9.5 (2026-11 時点)。herdr は保守者が少ない若い道具で、口は版で変わる。**使う前に `herdr --help` と `herdr api schema` で
+今の版を確かめること。**
+★ 印: 【確】= 実際に動かして確かめた / 【文】= 公式の文書にある / 【推】= 推測。
+★ Tealus での今の使い方 (配達役が herdr の中の Claude を起こす) は [docs/12](12_配達役設計.md)。ここはその外側まで含めた「何ができるか」の地図。
+★ 試すときは**名前つきの試験用セッション** (`herdr --session <名前> …`) だけで行う。本番の herdr には読むだけのコマンドしか打たない。
+  ★ herdr の中で動くエージェントには `HERDR_SOCKET_PATH`・`HERDR_PANE_ID` が入っていて、`--session` を付け忘れると本番に当たる。
+
+## 1. 全体像 (学習ループ 1)
+
+### 1.1 ものの形
+
+| もの | 中身 | 名前の例 | サーバを上げ直したら |
+|---|---|---|---|
+| session | サーバ 1 つぶんの世界。ペイン・通信の口・保存先がまるごと別 | `default` / 試験用の名前 | 残る 【確】 |
+| workspace | 仕事場 (班 1 つに相当) | `w1`、ラベル `tealus` | 戻る 【確】 |
+| tab | 仕事場の中の画面 | `w1:t1` | 戻る 【確】 |
+| pane | 端末の「場所」。閉じた番号は使い回さない 【文】 | `w1:p1` | 番号・作業フォルダは戻る。中の処理は消えて新しいシェルになる 【確】 |
+| terminal | ペインの中身の端末そのもの | `term_…` | 番号が変わる 【確】 |
+| agent | ペインの中で herdr が見分けた AI。名前は `[a-z][a-z0-9_-]{0,31}`、生きている間だけ | `lp`、`support` | 消える 【確】 |
+
+- 保存物: `%APPDATA%\herdr\session.json` (配置と作業フォルダだけ) と `session-snapshots\` (上限 48、15 分に 1 回まで 【文】)。名前つきセッションは `sessions\<名前>\` の下 【確】
+- **Claude が戻らない理由**: 戻すには `herdr integration install claude` が要り、入っていれば `claude --resume <id>` で開き直す 【文】。
+  Tealus の機械では未導入 (`herdr integration status` → `claude: not installed`) 【確】。入れると Claude の設定に hook が足される 【文】 (→ ループ 5 で安全を見る)
+- 画面の中身は既定では戻らない (`pane_history` は実験的・既定は切。秘密が残るため) 【文】
+- 止めずに入れ替える道 `herdr update --handoff` は実験的 (待ち・購読は切れる) 【文】
+
+### 1.2 外から触れる口
+
+| 口 | 一言 |
+|---|---|
+| `status` / `session` / `server` | 状態を見る、名前つきセッションの一覧・停止・削除、サーバ停止・設定の読み直し |
+| `workspace` / `tab` / `pane` | 配置を作る・一覧・改名・閉じる。pane は `run` `send-text` `send-keys` `read` `wait-output` `split` `move` も |
+| `agent` | `list` `get` `read` `prompt` `wait` `start` `rename` `send-keys` `explain` (状態の判定の理由を見る) |
+| `pane report-agent` / `release-agent` | 自作の AI が自分の状態を申告する・手放す 【確】 |
+| `pane report-metadata` / `workspace report-metadata` | 表示だけの札 (題・状態の表示名・`名前=値`)。期限つきにできる。再起動で消える 【確】 |
+| `notification show` | 画面に知らせを出す (画面がつながっていないと出ない様子 【確】、条件はループ 4) |
+| `worktree` | git worktree を作って仕事場として開く・消す 【文】 |
+| `terminal session observe` | **読むだけ**の画面の流れ (1 行 1 JSON、中身は base64) 【確】。`control` は書ける版 【文】 |
+| `machine` / `--machine` / `--remote` | 保存した SSH 先へ同じコマンドを送る。相手のサーバを勝手に起動・更新しない 【文】 |
+| `integration` | 18 種の AI 向けの hook を入れる・外す・状態を見る 【確】 |
+| `plugin` | 宣言ファイルに actions / events / startup / panes。キーに結べる 【文】 |
+| `api schema` / `api snapshot` | 通信の決まり (protocol 22、約 110 の命令) と全体の状態 【確】 |
+
+- **通信の口 (socket API)**: 1 行 1 JSON。Windows では名前つきパイプ。node の `net.connect` でつながる 【確】
+- ★ **出来事の流れ (`events.subscribe`) がある** 【確】: つないだまま `pane.agent_status_changed`・`pane_agent_detected`・`pane_updated`・`pane_closed`・
+  `workspace_metadata_updated`・`pane.output_matched` (画面に指定の文字が出たら) が流れてくる。状態の申告から届くまで約 0.1 秒。
+  過去ぶんは流れず、取りこぼすと `events_lost` で切られるので、つなぎ直して `session.snapshot` で合わせる 【文】。1 回だけ待つ版は `events.wait`・`agent wait`・`pane wait-output`
+
+### 1.3 AI の見分け方
+
+- 見分けられる AI は 24 種 (claude・codex・gemini・cursor など) 【確】
+- Claude の状態は hook ではなく**画面の下端の見た目**で決めている。判定の決まりは herdr.dev から自動で更新される 【文】
+- 状態は 5 つ 【文】: `working` (動いている)・`blocked` (許可や質問の画面を認識)・`done` (終わったがまだ誰も見ていない)・`idle` (待ち)・`unknown`
+  - ★ 知らない形の許可画面は `idle` に見える。**`idle` は「打ってよい」の保証ではない** 【文】
+- 項目: `completion_seq` (仕事を終えた回数)・`state_change_seq`・`interactive_ready`・`revision`・`terminal_title` 【確】
+- `agent prompt` は `blocked` の相手には打たずに `agent_blocked` を返す。`--wait` は 5 秒以内に動きが無いと `agent_prompt_stalled` 【文】
+
+### 1.4 Tealus に効きそうなもの (ループ 2〜5 で確かめる)
+
+| 候補 | 何に効くか |
+|---|---|
+| `events.subscribe` | 配達役の「数秒ごとに見に行く」を、つなぎっぱなしの知らせに置き換えられる |
+| `agent_blocked` の拒否 | 許可待ちの画面に便を打ち込む事故を herdr 側で止められる (配達役は既に使っている) |
+| `completion_seq` | 「起こしたあと仕事を終えたか」を、誰が画面を見たかに左右されずに数えられる |
+| `report-metadata` の札 | 「未読 3 件」などを herdr の一覧に出せる。期限つきで消し忘れない |
+| Claude の integration | 再起動のあと各班が会話ごと戻る (今は自前の start.ps1 で戻している) |
+| `--machine` | 別の PC の班へ同じコマンドで届く。自前の SSH 越し (docs/12 §13) と比べる |
+| `terminal session observe` | 読むだけで画面を外へ流せる。★ 秘密が映るので Tealus には写さない (docs/12 §9) |
+| plugin の events | 出来事ごとに herdr がコマンドを起動する。常駐を持たずに済む可能性 |
