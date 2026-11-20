@@ -217,6 +217,20 @@ describe('cc-queue — GET /pending', () => {
     expect(res.body.count).toBe(2);
     await srv.close();
   });
+
+  test('★ events=1 なら、数えた行そのものも返す (別の PC の受け手が id を知るため、docs/12 §13.3)', async () => {
+    appendCcEvent('tealus', EV('m1', ROOM_A));
+    appendCcEvent('tealus', EV('m2', OTHER));
+    appendCcEvent('tealus', EV('m3', ROOM_B));
+
+    const srv = await listen(makeApp());
+    const res = await fetchJson(srv.port, '/cc-queue/pending?project=tealus&since=m1&events=1', token);
+    expect(res.body.count).toBe(1);
+    expect((res.body.events as Array<{ id: string }>).map((e) => e.id)).toEqual(['m3']);   // メンバーでない部屋 (m2) は入らない
+    const plain = await fetchJson(srv.port, '/cc-queue/pending?project=tealus', token);
+    expect(plain.body.events).toBeUndefined();   // 付けなければ今までどおり (古い受け手を変えない)
+    await srv.close();
+  });
 });
 
 // --- stream ------------------------------------------------------------------

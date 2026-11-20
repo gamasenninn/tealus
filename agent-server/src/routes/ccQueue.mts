@@ -224,11 +224,15 @@ router.get('/pending', async (req, res) => {
   //   自分で判定する。無いと値をハードコードするしかなく、サーバ側で max_age を変えた瞬間に
   //   **全ての切断が「想定外」に落ちて通知の嵐になる** (2026-08-01 の 120 秒実験で実例)。
   //   既存フィールドは不変なので、知らないクライアントは無視するだけで壊れない。
+  // ★ events=1 なら数えた行そのものも返す (docs/12 §13.3、2026-11-20)。配達役に SSH 越しに起こされた別の PC の受け手は
+  //   queue のファイルを持たないので、ここで watermark より後の id を知る。部屋のメンバー判定は数えるときと同じ
+  const withEvents = req.query.events === '1';
   res.json({
     project: ctx.project,
     count: pending.length,
     max_age_ms: maxAgeMs(),
     heartbeat_ms: heartbeatMs(),
+    ...(withEvents ? { events: pending } : {}),
   });
 });
 
