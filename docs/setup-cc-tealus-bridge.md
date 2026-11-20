@@ -258,9 +258,9 @@ stdio (`@tealus list_rooms`) と同じ結果が返れば transport 透明性が�
 - **公開**: tealus host を public expose する場合は HTTPS / reverse proxy (nginx 等) で TLS 終端必須。`<JWT>` は適切な expiry で運用、漏洩時は `JWT_SECRET` rotate で全 token 失効。
 - **詳細**: [tealus-mcp README v0.12.x](https://github.com/gamasenninn/tealus-mcp#http-transport-リモート利用-v0120) 参照。
 
-## 提供される 19 個の MCP tool
+## 提供される MCP tool (19 個 + 設定したときだけ出る send_file)
 
-[tealus-mcp v0.15.0 時点](https://github.com/gamasenninn/tealus-mcp)。**ツール数は版で変わる**ので、`/mcp` の表示と食い違うときは自分の tealus-mcp の版を確認すること:
+[tealus-mcp v0.18.0 時点](https://github.com/gamasenninn/tealus-mcp)。**ツール数は版で変わる**ので、`/mcp` の表示と食い違うときは自分の tealus-mcp の版を確認すること:
 
 | Tool | 用途 |
 |---|---|
@@ -268,6 +268,7 @@ stdio (`@tealus list_rooms`) と同じ結果が返れば transport 透明性が�
 | `send_image` | ルームに画像送信 (base64) |
 | `generate_and_send_image` | 画像を生成して送信 |
 | `send_text_as_file` | 長文をファイルとして送信 |
+| `send_file` | 手元のファイルをパス指定でそのまま添付 (v0.18.0〜)。★ `TEALUS_FILE_ROOT` を設定したときだけ出る。そのフォルダの中だけ・「.」で始まるもの・鍵らしい名前は断る。誰でも話しかけられる AI (agent-server) には設定しない |
 | `send_form` | 選択式フォームを送信 |
 | `get_messages` | ルームのメッセージ履歴取得。voice transcription は default で `formatted_text` のみ inline (`include_raw=true` / `include_transcription=false` で verbosity 制御、v0.7.0〜) |
 | `get_message_media` | メッセージのメディア取得 (画像は AI 直接視認可、音声は文字起こし優先) |
