@@ -19,6 +19,12 @@ describe('heartbeatInfo', () => {
     } });
   });
 
+  it('★ 配達役の起動時刻を載せる (それより前の状態は覚えていない。画面が「○時より前から」と出すため、2026-11-20)', () => {
+    const startedAt = now - 90 * 60_000;
+    expect(heartbeatInfo([rep('lp', 'idle', 90)], now, startedAt).started_at).toBe(new Date(startedAt).toISOString());
+    expect(heartbeatInfo([rep('lp', 'idle', 90)], now).started_at).toBeUndefined();
+  });
+
   it('★ 確認待ちが 10 分を超えたら problem に入れる (10 分未満は入れない)', () => {
     expect(BLOCKED_ALERT_MS).toBe(10 * 60_000);
     expect(heartbeatInfo([rep('panedeck', 'blocked', 9, 1)], now).problem).toBeUndefined();

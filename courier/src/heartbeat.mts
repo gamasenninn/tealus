@@ -15,7 +15,10 @@ const INFO_MAX = 2000;
 /** 班ごとに載せる中身。since はその状態になった時刻 (管理画面の「いつから」、2026-11-20) */
 export interface BridgeBeat { state: string; pending: number; since?: string }
 
-export function heartbeatInfo(reports: BridgeReport[], now: number): { bridges?: Record<string, BridgeBeat>; problem?: string } {
+/** started_at: 配達役の起動時刻。それより前の状態は覚えていないので、画面は since がこれと同じなら「○時より前から」と出す (2026-11-20) */
+export type HeartbeatInfo = { bridges?: Record<string, BridgeBeat>; problem?: string; started_at?: string };
+
+export function heartbeatInfo(reports: BridgeReport[], now: number, startedAt?: number): HeartbeatInfo {
   const problems: string[] = [];
   const bridges: Record<string, BridgeBeat> = {};
   for (const r of reports) {
@@ -31,10 +34,13 @@ export function heartbeatInfo(reports: BridgeReport[], now: number): { bridges?:
       problems.push(`${r.project} の配達を保留しています (上限。人が保留の印を消すまで止めています)`);
     }
   }
-  const info: { bridges?: Record<string, BridgeBeat>; problem?: string } = { bridges };
+  const info: HeartbeatInfo = { bridges };
+  if (startedAt !== undefined) info.started_at = new Date(startedAt).toISOString();
   if (problems.length) info.problem = problems.join(' / ');
   if (JSON.stringify(info).length <= INFO_MAX) return info;
   // ★ 大きすぎるときは班の一覧を省き、problem だけ (それも長ければ切る)
   const problem = (info.problem ?? '').slice(0, INFO_MAX - 40);
-  return problem ? { problem } : {};
+  const small: HeartbeatInfo = problem ? { problem } : {};
+  if (startedAt !== undefined) small.started_at = new Date(startedAt).toISOString();
+  return small;
 }

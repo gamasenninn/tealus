@@ -25,6 +25,8 @@ const QUEUE_DIR = process.env.CC_QUEUE_DIR || path.join(os.homedir(), '.tealus',
 /** ★ 全体の空回し。COURIER_DRY_RUN=1 ならどの班も空回し。0 (や未設定) なら班ごとの dry_run に従う (既定は空回し) */
 const DRY_RUN = process.env.COURIER_DRY_RUN === '1';
 const TICK_MS = 3_000;
+/** 配達役の起動時刻 (鼓動に載せる。それより前の班の状態は覚えていない) */
+const STARTED_AT = Date.now();
 const HEARTBEAT_MS = 60_000;
 /** ★ 班の状態が変わったら 1 分を待たずに送る (管理画面の一覧を早く変えるため、2026-11-20)。ただし続けて送るのは 5 秒あける */
 const HEARTBEAT_MIN_GAP_MS = 5_000;
@@ -101,7 +103,7 @@ async function main(): Promise<void> {
     if (sendHb && (since >= HEARTBEAT_MS || (changed && since >= HEARTBEAT_MIN_GAP_MS))) {
       lastHb = Date.now();
       changed = false;
-      const ok = await sendHb(heartbeatInfo([...latest.values()], Date.now()));
+      const ok = await sendHb(heartbeatInfo([...latest.values()], Date.now(), STARTED_AT));
       if (!ok) log('鼓動を送れませんでした (配達は続けます)');
     }
     await new Promise((r) => setTimeout(r, TICK_MS));

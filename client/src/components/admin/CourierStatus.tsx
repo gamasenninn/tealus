@@ -20,8 +20,14 @@ const ALERT_STATES = new Set(['blocked', 'missing', 'unknown', 'held', 'failed']
 const STALE_MS = 5 * 60_000;
 const REFRESH_MS = 10_000;
 
-function ago(iso: string | undefined, now: number): string {
+/** 配達役の起動より前は覚えていないので、状態の始まりが起動と同じ (5 秒以内) なら「○時より前から」と出す (2026-11-20) */
+const SAME_AS_START_MS = 5_000;
+
+function ago(iso: string | undefined, now: number, startedAt?: string): string {
   if (!iso) return '—';
+  if (startedAt && Math.abs(new Date(iso).getTime() - new Date(startedAt).getTime()) <= SAME_AS_START_MS) {
+    return `${new Date(startedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} より前から`;
+  }
   const m = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
   if (m < 1) return '1 分以内';
   if (m < 60) return `${m} 分前から`;
@@ -76,7 +82,7 @@ function CourierStatus() {
             {c.info?.problem && <div className="admin-error">★ {c.info.problem}</div>}
             {bridges.length === 0 ? <p>届けている班がありません</p> : (
               <div className="admin-user-list"><table>
-                <thead><tr><th>班</th><th>状態</th><th>新着</th><th>いつから</th></tr></thead>
+                <thead><tr><th>班</th><th>状態</th><th>新着</th><th>この状態はいつから</th></tr></thead>
                 <tbody>
                   {bridges.map(([project, b]) => (
                     <tr key={project}>
@@ -85,7 +91,7 @@ function CourierStatus() {
                         {STATE_LABEL[b.state] ?? b.state}
                       </td>
                       <td>{b.pending}</td>
-                      <td>{ago(b.since, now)}</td>
+                      <td>{ago(b.since, now, c.info?.started_at)}</td>
                     </tr>
                   ))}
                 </tbody>

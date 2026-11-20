@@ -47,6 +47,21 @@ describe('AIの班', () => {
     expect(await screen.findByText(/配達役が止まっているかもしれません/)).toBeTruthy();
   });
 
+  it('★ 状態の始まりが配達役の起動と同じなら「○時より前から」(それより前は覚えていない。2026-11-20 lp が起動から 2 時間に見えた)', async () => {
+    const started = new Date(NOW - 165 * 60_000).toISOString();   // 配達役の起動 (時刻は表示の形だけ確かめる)
+    api.getAdminCourier.mockResolvedValue({ couriers: [{
+      user_id: 'c1', display_name: '配達役', last_seen: new Date(NOW - 30_000).toISOString(),
+      info: { started_at: started, bridges: {
+        lp: { state: 'idle', pending: 0, since: new Date(new Date(started).getTime() + 20).toISOString() },
+        ontology: { state: 'idle', pending: 0, since: new Date(NOW - 53 * 60_000).toISOString() },
+      } },
+    }] });
+    render(<CourierStatus />);
+    expect(await screen.findByText(/より前から/)).toBeTruthy();
+    expect(screen.getByText('53 分前から')).toBeTruthy();
+    expect(screen.getByText('この状態はいつから')).toBeTruthy();
+  });
+
   it('配達役の鼓動がまだ無ければ、そう書く', async () => {
     api.getAdminCourier.mockResolvedValue({ couriers: [] });
     render(<CourierStatus />);

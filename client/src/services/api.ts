@@ -70,7 +70,7 @@ export interface DeletedMessageEntry {
 export interface CourierBridgeBeat { state: string; pending: number; since?: string }
 export interface CourierEntry {
   user_id: string; display_name: string; last_seen: string;
-  info: { bridges?: Record<string, CourierBridgeBeat>; problem?: string } | null;
+  info: { bridges?: Record<string, CourierBridgeBeat>; problem?: string; started_at?: string } | null;
 }
 /**
  * push_active_subscriptions: 有効な通知の宛先の本数 (改善ループ 40) / push_total_subscriptions: 外れたものも含めた本数 (41)。
