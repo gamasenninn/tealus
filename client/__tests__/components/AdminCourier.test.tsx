@@ -62,6 +62,21 @@ describe('AIの班', () => {
     expect(screen.getByText('この状態はいつから')).toBeTruthy();
   });
 
+  it('★ 確認待ちの班にだけ、開き方 (herdr → その班 → 答える → Ctrl+B → q) を出す (2026-11-20 小野さん承認、docs/13 §4.4)', async () => {
+    api.getAdminCourier.mockResolvedValue({ couriers: [{
+      user_id: 'c1', display_name: '配達役', last_seen: new Date(NOW - 30_000).toISOString(),
+      info: { bridges: {
+        lp: { state: 'idle', pending: 0 },
+        ontology: { state: 'blocked', pending: 1 },
+      } },
+    }] });
+    render(<CourierStatus />);
+    const howto = await screen.findAllByText(/Ctrl\+B → q/);
+    expect(howto).toHaveLength(1);
+    expect(howto[0].textContent).toMatch(/herdr/);
+    expect(howto[0].textContent).toMatch(/ontology/);
+  });
+
   it('配達役の鼓動がまだ無ければ、そう書く', async () => {
     api.getAdminCourier.mockResolvedValue({ couriers: [] });
     render(<CourierStatus />);

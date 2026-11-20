@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { api } from '../../services/api';
 import type { CourierEntry, CourierBridgeBeat } from '../../services/api';
 
@@ -85,14 +85,24 @@ function CourierStatus() {
                 <thead><tr><th>班</th><th>状態</th><th>新着</th><th>この状態はいつから</th></tr></thead>
                 <tbody>
                   {bridges.map(([project, b]) => (
-                    <tr key={project}>
-                      <td>{project}</td>
-                      <td style={ALERT_STATES.has(b.state) ? { color: 'var(--color-danger, #c0392b)', fontWeight: 'bold' } : undefined}>
-                        {STATE_LABEL[b.state] ?? b.state}
-                      </td>
-                      <td>{b.pending}</td>
-                      <td>{ago(b.since, now, c.info?.started_at)}</td>
-                    </tr>
+                    <Fragment key={project}>
+                      <tr>
+                        <td>{project}</td>
+                        <td style={ALERT_STATES.has(b.state) ? { color: 'var(--color-danger, #c0392b)', fontWeight: 'bold' } : undefined}>
+                          {STATE_LABEL[b.state] ?? b.state}
+                        </td>
+                        <td>{b.pending}</td>
+                        <td>{ago(b.since, now, c.info?.started_at)}</td>
+                      </tr>
+                      {/* ★ 確認に答えるのは人が画面で (Tealus からは答えない。docs/12 §9・docs/13 §4.4)。開き方だけを出す */}
+                      {b.state === 'blocked' && (
+                        <tr>
+                          <td colSpan={4} style={{ fontSize: '0.9em' }}>
+                            開き方: 配達役の動いている PC で <code>herdr</code> → {project} を選ぶ → 答える → Ctrl+B → q (抜けても班はそのまま)
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table></div>

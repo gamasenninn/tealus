@@ -377,6 +377,11 @@ herdr pane report-metadata w1:p1 --source tealus:courier --clear-token unread --
 | 10 | Claude の連携 (§5.3) | 急がない | 別の機械で試すか |
 | — | plugin / `--machine` で届ける / 画面の履歴を残す / 止めずに入れ替え / 班をまたいで直接打つ / Tealus から確認に答える / 画面を Tealus に写す | 使わない | — |
 
+★ **2026-11-20 22:06 利用者の判断**: 1・2・4・5 は入れる、6〜8 は試してよい。
+- 1・2: 本番の server の config.toml に `[session] resume_agents_on_restore = false` と Ctrl+C の結びを足し、`server reload-config` (診断なし・11 班は止まらず)。元の設定は `~/.tealus/courier/` に控え
+- 4: 各班の手順 `handle-tealus` に下の 8 か条を足した
+- 5: 「AIの班」の確認待ちの行の下に開き方を出す (クライアントをビルド済み)
+
 ### 6.1 herdr の作法 (班の手順に貼る)
 
 1. ほかの班とのやりとりは Tealus の部屋で。**ほかの班のペインには、読む・打つ・閉じる・名前を変える、のどれもしない**
