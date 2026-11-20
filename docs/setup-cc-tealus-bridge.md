@@ -7,7 +7,7 @@
 | 方向 | 仕組み | 用途 |
 |---|---|---|
 | **Outbound** (Claude Code → Tealus) | [tealus-mcp](https://github.com/gamasenninn/tealus-mcp) 経由で Bot API を MCP ツール化 | session から `mcp__tealus__send_message` 等で Tealus に送信、検索、ルーム作成・削除など |
-| **Inbound** (Tealus → Claude Code) | cc-tealus bridge ([#213](https://github.com/gamasenninn/tealus/issues/213) Phase A、file beacon + 受け取り方 3 通り: Monitor / HTTP / PaneDeck) | Tealus 上の `@cc-{project}` mention で session を起こす |
+| **Inbound** (Tealus → Claude Code) | cc-tealus bridge ([#213](https://github.com/gamasenninn/tealus/issues/213) Phase A、file beacon + 受け取り方 4 通り: Monitor / HTTP / PaneDeck / 配達役) | Tealus 上の `@cc-{project}` mention で session を起こす |
 
 両方をセットアップすると、Claude Code session が **Tealus 上の能動的なメンバー**として振る舞えるようになります。「session が Tealus でメッセージを書く」「Tealus でユーザーが session を呼ぶ」が両方 1 つの操作 fabric として機能します。
 
@@ -549,7 +549,7 @@ session が L2 で reply 案を作り、`OK` で送信されるとき、内部�
 
 ---
 
-## 受け取り方は 3 通り (#484)
+## 受け取り方は 4 通り (#484・docs/12)
 
 agent-server が書くのは `~/.tealus/cc-queue/{project}.jsonl` の 1 行だけで、**誰が・どうやって受け手を起こすか**は受け手側で選びます。
 
@@ -558,6 +558,7 @@ agent-server が書くのは `~/.tealus/cc-queue/{project}.jsonl` の 1 行だ�
 | A | `listen-tealus` (file mode) | session 自身の Monitor (`tail -F`) | 同じマシン。PaneDeck を使わない |
 | B | `listen-tealus` (http mode) | session 自身の Monitor (接続コマンド) | 別マシン ([`setup-cc-remote.md`](setup-cc-remote.md)) |
 | **C** | **PaneDeck のペイン** + `handle-tealus` | **PaneDeck のトリガー** | PaneDeck でペインを並べて動かしている |
+| **D** | **herdr の中の Claude** + `handle-tealus` | **配達役** (`courier/`、[docs/12](12_配達役設計.md)) | 本体と同じ機械で、画面を開かずに班を動かしたい (2026-11-19〜 LP班・オントロジー本班) |
 
 ★ **A/B の弱さは「起こす仕組みが session の寿命に預けられている」こと**です。Monitor は最長 30 分で黙って切れ、張り直しを忘れると受け手が黙って耳を失います (2026-09-20 に 7 時間、誰も待っていなかった)。C は起こす仕組みを、ペインと同じだけ生きている PaneDeck の 1 か所に移します。**落ちるときはツールバーに理由が出る** (黙らない)。
 
@@ -614,6 +615,29 @@ http mode の接続コマンドは、受け取った便を `~/.claude/.cc-stream
 ★ 接続コマンドの出力をペインへ直接流さず、**必ずファイルを挟む**こと。受け取った直後に PaneDeck が落ちても、行がファイルに残るためです。
 
 ★ この形 (別マシン × PaneDeck) は、まだ試験していません (#484 のチェックリスト)。
+
+### 受け取り方 D: herdr の中の Claude に配達役が届ける
+
+設計と「作らないもの」は [docs/12](12_配達役設計.md)。ここは**班を 1 つ足す手順**だけ (2026-11-19 にオントロジー本班を足したときの手順をそのまま書いた。改善ループ 95)。
+
+1. **班の bot と部屋** — 上の「新しい班の立ち上げ」の 1〜3 と同じ。パスワードは作ってすぐ班のフォルダの `.mcp.json` にだけ書く
+2. **班のフォルダ**
+   - git が無ければ `git init` して今の中身を 1 回記録する (配達役で動く Claude はファイルを書き換えうる。戻し先を先に作る)。
+     `.gitignore` に `.mcp.json`・`.env`・`.claude/settings.local.json` を入れる
+   - `.mcp.json` に tealus-mcp (★ 版を `#vX.Y.Z` で固定)。パス指定の添付 (`send_file`、v0.18.0〜) を使わせるなら `TEALUS_FILE_ROOT` にそのフォルダ
+   - `.claude/cc-tealus.json` (project_name・auto_level)。`.claude/settings.local.json` に `enabledMcpjsonServers: ["tealus"]` と前もって許す道具
+   - ★ **前もって許す道具を広げる (Edit・Write・Bash など) のは、その機械の利用者が自分で書く。** 別の Claude に広い権限を渡す操作は、AI が書こうとすると安全確認で止められる (2026-11-19)
+3. **herdr に workspace と Claude** — `herdr workspace create --cwd <フォルダ> --label <班> --no-focus` → `herdr agent start <班> --kind claude --pane <ペイン> [-- --resume <会話の id>]`
+   - ★ **初めて開くフォルダは「このフォルダを信頼しますか」で止まる。** これは承認なので、利用者が `herdr` を開いて答える (AI は答えない)
+   - ★ Git Bash から `herdr agent prompt <班> "/exit"` を打つと、`/exit` がパスと見なされて `C:/Program Files/Git/exit` に化ける。`MSYS_NO_PATHCONV=1` を付ける
+4. **配達役に登録** — `~/.tealus/courier/bridges.json` に `{ "project", "adapter": "herdr", "agent", "enabled": true, "dry_run": false }`。
+   まず `dry_run` を省いて (= 空回し) 様子を見てもよい。配達役を起こし直すと読み込む (★ 止めるのは配達役の番号だけ。`lock-*.json` に pid がある)
+5. **起動時に戻す** — `~/.tealus/herdr-agents.json` に `{ "agent", "label", "cwd", "resume" }`。ログオン時の自動起動 (`courier/scripts/start.ps1`) が、
+   居ない Claude を同じ会話の続きで起こし直す (herdr はサーバを起こし直すと workspace は戻すが Claude は戻さない)
+6. **試しの便** — 班の部屋で `@cc-<班>` を 1 通。`~/.tealus/courier/events-YYYYMMDD.jsonl` に `delivered`、部屋に班の返事が来れば終わり。
+   管理画面「AIの班」に班が並ぶ
+
+★ 様子を見るときは `herdr agent list` / `herdr agent read <班>` (つながずに読む)。`herdr` で画面につないだら **Ctrl+C を押さない** (中の Claude が止まって消える)。閉じるのは窓の × でよい
 
 ### 「届けた」と「処理した」は別
 
