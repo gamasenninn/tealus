@@ -215,3 +215,90 @@
 - ★ herdr は止めてくれないので、この線引きは各班の手順 (`handle-tealus`) に書いて守る。
   破られたことに気づく手として、`herdr-server.log` の `agent.prompt` の回数と配達役が打った回数を突き合わせる案がある 【推】
 - ★ ペインの中で動くものは何でも、同じ機械の全部の班に打てる (認証なし)。安全の見直しはループ 5
+
+## 4. 人とエージェント (学習ループ 4)
+
+試験用セッションで、受けたキーを全部記録する偽の TUI を置き、pty 越しに herdr の画面 (TUI) をつないで確かめた。本物の Claude は起こしていない。
+
+### 4.1 見るだけ・事故を防ぐ
+
+- ★ **TUI を読むだけでつなぐ口は無い** 【確】。`herdr`・`herdr session attach <名前>`・`--remote` のどれにも読むだけの指定は無い。つないだ人のキーは全部ペインに届く
+- **読むだけなのは `terminal session observe` だけ** 【確】。1 行 1 JSON (中身は base64)。stdin に何を書いてもペインには届かない。何人でも同時に見られる 【文】。
+  人が見るには base64 を戻して端末に書く小さな道具が要る 【推】
+- `terminal attach`・`agent attach` は **Windows では未対応** 【確】
+- ★ **Ctrl+C は設定で飲み込める** 【確】 (2026-11-19 に「止める設定は無い」と答えたのは誤り)。既定では TUI で押した Ctrl+C はそのままペインに届く (Claude が落ちた事故の道)。
+  server の config.toml に次を足して `herdr server reload-config` すると届かなくなる (再起動は要らない):
+
+  ```toml
+  [[keys.command]]
+  key = "ctrl+c"
+  type = "shell"
+  command = "rem"
+  description = "ctrl+c は届けない"
+  ```
+
+| 試した形 | ペインに届いた Ctrl+C 【確】 |
+|---|---|
+| 既定 | 届く |
+| server の設定に上の結び | 届かない (ほかの文字は届く) |
+| client の設定だけに結び | 届く — **キーは server 側の設定で決まる** |
+| 結んだまま、外から `herdr pane send-keys <ペイン> ctrl+c` | 届く (止めたいときはこれ) |
+
+  - ★ 効くのはその server の全ペイン。herdr の中の普通のシェルも TUI からは Ctrl+C で止められなくなる (Claude Code を止めるのは Esc なので班には困らない)
+  - `HERDR_CONFIG_PATH` を変えて server を起こせば、セッションごとに別の設定にできる 【確】
+- 抜けるのは Ctrl+B → q。抜けてもエージェントはそのまま 【確】。2 人が同時につないでも両方生きる 【確】
+
+### 4.2 知らせ
+
+- `notification show` が `disabled` だったのは、`[ui.toast] delivery` の既定が `"off"` のため 【確】。`delivery` は `off` / `herdr` (画面の中) / `terminal` / `system` (OS の通知) 【文】
+- `herdr` にすると画面の隅に出る。裏の仕事場のエージェントが blocked になると自動で「<種類> needs attention」 (画面の文字は出ない) 【確】
+- ★ どの形も**画面をつないでいる人**にしか届かない 【確】【文】。**スマホには届かない** — 届くのは Tealus の通知
+- plugin で Tealus に投稿することはできる 【推】 が**作らない**: plugin は全セッションに効き・箱に入らず・Tealus の鍵を持つことになり、配達役の鼓動と同じ仕事が 2 か所になる
+
+### 4.3 札 (`report-metadata`)
+
+```
+herdr pane report-metadata w1:p1 --source tealus:courier --token unread="未3" --token last="14:05" --ttl-ms 120000
+herdr pane report-metadata w1:p1 --source tealus:courier --clear-token unread --clear-token last
+```
+
+- ★ **既定の画面には出ない** 【確】。サイドバーの行に `$名前` を足して初めて見える (`[ui.sidebar.agents] rows = [..., ["$unread", "$last"]]`)
+- 期限 (`--ttl-ms`) が来ると画面からも `agent get` の `tokens` からも消える 【確】。配達役が見回りのたびに付け直せば、配達役が止まると札も自然に消える
+- 上限 【確】: 値 80 字・1 回 16 個まで・名前は英数字と `_` `-` (日本語の名前は不可)・`--ttl-ms` は 24 時間まで。サイドバーは幅 26 桁が既定なので短く。狭い画面 (1 列表示) には出ない
+- 札は表示だけで、状態・待ち・知らせには効かない 【文】
+
+### 4.4 口を挟む
+
+| 道 | 確認待ち (blocked) の相手に | 向くもの |
+|---|---|---|
+| TUI でその班を選んで打つ | 届く (人が画面を見て答える) | **確認に答える正しい道** |
+| `agent prompt` | 断る (`agent_blocked`) 【確】 | 空いている相手への指示。配達役はこれだけ |
+| `pane send-text`・`pane send-keys` | **通って答えになる** 【確】 | 使わない (docs/12 §8 の 12) |
+
+- **Tealus から代わりに答える仕組みは作らない** (docs/12 §9 のまま)。何を許すのかを見せる (= 画面の文字を写す)・押した人の確かめ・取り違え防止・記録を、全部 Tealus と配達役が持つことになり、配達役が「もう 1 人の利用者」になる
+- 間の案: Tealus は「ec班が確認待ち」と**開き方**だけを出す (PC で `herdr` → その班 → 答える → Ctrl+B → q)
+
+### 4.5 スマホ・離れた所から
+
+- herdr にスマホ用のアプリも web の画面も無い 【文】。道は「SSH のアプリで機械に入って `herdr`」。狭い幅では 1 列の表示になる 【確】
+- ★ SSH で入ったスマホは、全部の班に打てる・閉じられる (§3.1)。常用は勧めない
+
+| | herdr | Tealus |
+|---|---|---|
+| スマホで班の状態を見る | SSH + TUI | 「AIの班」のタブ |
+| 確認待ちを知る | 画面をつないでいる間だけ | 業務メモ + 通知 |
+| 班に頼む・聞く | その班の端末に打つ (記録なし) | 部屋に `@cc-班` (記録あり) |
+| 確認に答える | TUI で打つ | できない (作らない) |
+| 画面そのものを見る | できる | 写さない (docs/12 §9) |
+
+### 4.6 Tealus への提案 (上から順)
+
+| # | 案 | 使う機能 | 危なさ |
+|---|---|---|---|
+| 1 | Ctrl+C を飲み込む結びを config.toml に足す | `[[keys.command]]`・`server reload-config` | 普通のシェルも TUI から Ctrl+C が効かなくなる。本番の設定を変える (利用者の判断) |
+| 2 | 「AIの班」の確認待ちの行に開き方を出す | 今の鼓動だけ | なし |
+| 3 | 配達役が `unread`・`last` の札を期限つきで付ける | `pane report-metadata`・サイドバーの行 | 配達役が herdr に書く口が 1 つ増える (表示だけ) |
+| 4 | PC 用の読むだけの覗き窓 | `terminal session observe` | 画面は手元にだけ出す |
+| 5 | PC の前の人向けの知らせ | `[ui.toast] delivery` | 画面をつないでいる間だけ |
+
+- **しない**: Tealus から確認に答える / plugin で Tealus に投稿する / 画面を Tealus に写す
