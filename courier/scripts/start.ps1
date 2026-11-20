@@ -92,6 +92,17 @@ foreach ($f in Get-ChildItem -Path $CourierDir -Filter 'lock-*.json' -ErrorActio
   } catch { }
 }
 if (-not $alive) {
+  # ★ 起こすたびに courier.log を上書きしていたので、前の記録を日時つきの名前に移してから起こす (2026-11-20 改善ループ 93)。
+  #   止まった理由はたいてい前の記録の末尾にある。14 日より古い控えは消す
+  $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+  foreach ($n in @('courier.log', 'courier.err.log')) {
+    $src = Join-Path $CourierDir $n
+    if ((Test-Path $src) -and (Get-Item $src).Length -gt 0) {
+      Move-Item -Path $src -Destination (Join-Path $CourierDir ($n -replace '\.log$', "-$stamp.log")) -Force
+    }
+  }
+  Get-ChildItem -Path $CourierDir -Filter 'courier*-????????-??????.log' -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-14) } | Remove-Item -Force -ErrorAction SilentlyContinue
   $env:HERDR_BIN = $Herdr
   $p = Start-Process -FilePath 'node' -ArgumentList 'src/index.mts' -WorkingDirectory $RepoCourier -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (Join-Path $CourierDir 'courier.log') -RedirectStandardError (Join-Path $CourierDir 'courier.err.log')
