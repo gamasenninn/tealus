@@ -4,6 +4,9 @@
  * ★ 整える処理は status を formatting にしてから AI を呼ぶ。途中でプロセスが落ちると catch を通らず、
  *   起動時に拾い直す処理も無かった (2026-10-04 16:59、行ができて 9 秒後の再起動で 1 件、5 日間止まったまま)
  * ★ 起動時に、最新の版が formatting のまま止まっていて生の文字起こしがあるものを整え直す
+ * ★ 拾うのは「受付を始めた時刻より前に作られた行」(#585)。テストの行を作った直後に拾わせると、速い CI では
+ *   作った時刻と拾う時刻の差が 1〜2 ms しかなく、境目で落ちることがあった (2026-11-19 CI で 1 回)。
+ *   前のプロセスの取り残しを表す行は作った時刻を 5 分前にして置き、#585 の「後に作られた行」だけ今の時刻で置く (fresh)
  */
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
@@ -24,15 +27,16 @@ describe('#536 起動時に、整えている途中で止まった文字起こ�
     roomId = rows[0].id;
   });
 
-  const voice = async (opts: { status: string; raw?: string | null; deleted?: boolean; versions?: string[]; type?: string }) => {
+  const voice = async (opts: { status: string; raw?: string | null; deleted?: boolean; versions?: string[]; type?: string; fresh?: boolean }) => {
     const { rows } = await getTestPool().query<{ id: string }>(
       `INSERT INTO messages (room_id, sender_id, type, is_deleted) VALUES ($1, $2, $3, $4) RETURNING id`,
       [roomId, userId, opts.type ?? 'voice', opts.deleted ?? false]);
     const statuses = opts.versions ?? [opts.status];
     for (let i = 0; i < statuses.length; i++) {
       await getTestPool().query(
-        `INSERT INTO voice_transcriptions (message_id, version, raw_text, status) VALUES ($1, $2, $3, $4)`,
-        [rows[0].id, i + 1, opts.raw === undefined ? '生の文字起こし' : opts.raw, statuses[i]]);
+        `INSERT INTO voice_transcriptions (message_id, version, raw_text, status, created_at)
+         VALUES ($1, $2, $3, $4, CASE WHEN $5 THEN now() ELSE now() - interval '5 minutes' END)`,
+        [rows[0].id, i + 1, opts.raw === undefined ? '生の文字起こし' : opts.raw, statuses[i], opts.fresh === true]);
     }
     return rows[0].id;
   };
@@ -70,7 +74,7 @@ describe('#536 起動時に、整えている途中で止まった文字起こ�
   });
 
   it('★ #585 受付を始めた後に作られた行は拾わない (起動直後の投稿を二重に整えない)', async () => {
-    await voice({ status: 'formatting' });
+    await voice({ status: 'formatting', fresh: true });
     const format = jest.fn();
     const n = await recoverStuckFormatting({ format, io: null, startedAt: new Date(Date.now() - 60_000) });
     expect(n).toBe(0);
@@ -102,7 +106,7 @@ describe('★ #579 起動時に、音を文字にしている途中で止まっ�
     const { rows } = await getTestPool().query<{ id: string }>(`INSERT INTO rooms (type, name) VALUES ('group', '部屋') RETURNING id`);
     roomId = rows[0].id;
   });
-  const voice = async (status: string, opts: { deleted?: boolean; type?: string; media?: boolean } = {}) => {
+  const voice = async (status: string, opts: { deleted?: boolean; type?: string; media?: boolean; fresh?: boolean } = {}) => {
     const { rows } = await getTestPool().query<{ id: string }>(
       `INSERT INTO messages (room_id, sender_id, type, is_deleted) VALUES ($1, $2, $3, $4) RETURNING id`,
       [roomId, userId, opts.type ?? 'voice', opts.deleted ?? false]);
@@ -110,7 +114,9 @@ describe('★ #579 起動時に、音を文字にしている途中で止まっ�
       await getTestPool().query(`INSERT INTO message_media (message_id, file_path, file_name, mime_type, file_size) VALUES ($1, $2, 'a.wav', 'audio/wav', 10)`,
         [rows[0].id, `voices/${rows[0].id}.wav`]);
     }
-    await getTestPool().query(`INSERT INTO voice_transcriptions (message_id, version, status) VALUES ($1, 1, $2)`, [rows[0].id, status]);
+    await getTestPool().query(
+      `INSERT INTO voice_transcriptions (message_id, version, status, created_at)
+       VALUES ($1, 1, $2, CASE WHEN $3 THEN now() ELSE now() - interval '5 minutes' END)`, [rows[0].id, status, opts.fresh === true]);
     return rows[0].id;
   };
 
@@ -131,7 +137,7 @@ describe('★ #579 起動時に、音を文字にしている途中で止まっ�
   });
 
   it('★ #585 受付を始めた後に作られた行は拾わない (起動直後の投稿を二重に文字起こししない)', async () => {
-    await voice('pending');
+    await voice('pending', { fresh: true });
     const transcribe = jest.fn();
     const n = await recoverStuckTranscribing({ transcribe, startedAt: new Date(Date.now() - 60_000) });
     expect(n).toBe(0);
