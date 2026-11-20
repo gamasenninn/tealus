@@ -17,7 +17,11 @@
 $ErrorActionPreference = 'Continue'   # ★ 'Stop' だと herdr が stderr に書いた時点で止まる (PowerShell 5.1)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8   # ★ herdr の出力は UTF-8。既定 (cp932) で読むと日本語の題名で JSON が壊れ、居る Claude を「居ない」と見る
 $CourierDir = Join-Path $env:USERPROFILE '.tealus\courier'
-$Herdr = if ($env:HERDR_BIN) { $env:HERDR_BIN } else { Join-Path $env:USERPROFILE '.herdr-test\bin\herdr.exe' }
+# herdr の場所: HERDR_BIN → 正式な置き場 (%LOCALAPPDATA%\Programs\herdr、2026-11-20〜) → PATH の herdr → 試験用の置き場 (.herdr-test、11-19 までの場所)
+$Herdr = if ($env:HERDR_BIN) { $env:HERDR_BIN }
+  elseif (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\herdr\herdr.exe')) { Join-Path $env:LOCALAPPDATA 'Programs\herdr\herdr.exe' }
+  elseif (Get-Command herdr -ErrorAction SilentlyContinue) { (Get-Command herdr).Source }
+  else { Join-Path $env:USERPROFILE '.herdr-test\bin\herdr.exe' }
 $RepoCourier = Split-Path -Parent $PSScriptRoot
 $Log = Join-Path $CourierDir 'start.log'
 
