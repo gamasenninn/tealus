@@ -15,6 +15,7 @@
 - **配達役 (`courier/`、docs/12)** — `@cc-{班}` の便を、herdr の中で動く Claude に中央から届ける別プロセス。渡すのは id だけ・作業中には打たず空いてから 1 通・1 時間 20 通の上限・確認待ちには打たない。班ごとに空回し (打たずに記録だけ) を選べる (`~/.tealus/courier/bridges.json` の `dry_run`)。起動は `courier/scripts/start.ps1` (herdr のサーバ → 居ない Claude を同じ会話で起こし直す → 配達役)。手順は `docs/setup-cc-tealus-bridge.md` の受け取り方 D
 - **管理画面に「AIの班」のタブ** (`GET /api/admin/courier`、システム管理者だけ) — 配達役が届けている班ごとの状態 (待っている / 作業中 / 確認待ち / 居ない)・新着の数・いつからを、開いているあいだ 10 秒ごとに読み直して並べる。配達役の鼓動が 5 分古ければそう出す。確認待ちの班には、その行の下に開き方 (`herdr` → その班 → 答える → Ctrl+B → q) を出す (Tealus からは答えない)
 - 手順 `handle-tealus` に「herdr の中で動いているときの作法」8 か条 (ほかの班のペインに触らない・確認待ちに答えない など、docs/13 §6.1)
+- 配達役の段階 3 (docs/12 §14): 別の PC でも配達役を動かし、便を agent-server の `/agent-api/cc-queue/pending?events=1` で取り寄せて手元の herdr に渡す (`bridges.json` の `"queue": "http"`)。SSH の鍵を中央に置かなくてよい。取り寄せた id だけを手元の写しに置き、配る判断は段階 1 と同じもの
 - 見張り (docs/09) に配達役を足せる (`watchdogs.json` の `heartbeat: "courier"`)。班が確認待ちのまま 10 分・届け先が居ないまま 10 分で業務メモに 1 回
 
 ### ★ 更新時の急所 (この版を出すときに見出しへ移す)

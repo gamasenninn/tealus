@@ -15,7 +15,11 @@ import { isHeld, setHold, RateLimiter } from './limit.mts';
 import { buildNotice } from './notice.mts';
 import type { Courier, CourierStatus } from './herdr.mts';
 
-export interface Bridge { project: string; courier: Courier; dryRun?: boolean }
+export interface Bridge {
+  project: string; courier: Courier; dryRun?: boolean;
+  /** 便を読むフォルダ。無ければ deps.queueDir。段階 3 (docs/12 §14) は取り寄せた写しのフォルダ */
+  queueDir?: string;
+}
 
 export type BridgeState = 'idle' | 'delivered' | 'busy' | 'blocked' | 'missing' | 'unknown' | 'held' | 'unreadable' | 'failed';
 
@@ -69,7 +73,7 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   //   (2026-11-19 18:36〜18:59 の本番で 4 便を記録しなかった)
   const stored = (d.dryRun ? dryCursor.get(b.project) : undefined) ?? loadCursor(d.stateDir, b.project);
 
-  const q = readQueue(path.join(d.queueDir, `${b.project}.jsonl`));
+  const q = readQueue(path.join(b.queueDir ?? d.queueDir, `${b.project}.jsonl`));
   if (!q.ok) {
     // ★ queue のファイルがまだ無い班 (一度も便が来ていない) は「先頭から」の印を置く。置かないと、最初の便で
     //   ファイルが現れたときに「初回は末尾から」と見なし、その 1 便を配らずに飛ばす (2026-11-19 オントロジー本班)

@@ -21,7 +21,7 @@ describe('loadBridges', () => {
       { project: 'panedeck', adapter: 'herdr', agent: 'pd', enabled: true },
       { project: 'tealus', adapter: 'herdr', agent: 'tl', enabled: false },
     ]);
-    expect(loadBridges(dir)).toEqual({ ok: true, bridges: [{ project: 'panedeck', adapter: 'herdr', agent: 'pd', dryRun: true }], skipped: [] });
+    expect(loadBridges(dir)).toEqual({ ok: true, bridges: [{ project: 'panedeck', adapter: 'herdr', agent: 'pd', dryRun: true, queue: 'file' }], skipped: [] });
   });
 
   it('★ 形の違う行は使わず、理由を返す (班の名前・届け先の種類・名前)', () => {

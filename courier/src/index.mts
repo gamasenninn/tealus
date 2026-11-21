@@ -20,6 +20,7 @@ import { RateLimiter } from './limit.mts';
 import { acquireLock, releaseLock } from './lock.mts';
 import { heartbeatInfo } from './heartbeat.mts';
 import { heartbeatSender, type CourierAuth } from './sendHeartbeat.mts';
+import { httpQueueMirror } from './httpQueue.mts';
 
 const COURIER_DIR = process.env.COURIER_DIR || path.join(os.homedir(), '.tealus', 'courier');
 const QUEUE_DIR = process.env.CC_QUEUE_DIR || path.join(os.homedir(), '.tealus', 'cc-queue');
@@ -31,6 +32,9 @@ const STARTED_AT = Date.now();
 const HEARTBEAT_MS = 60_000;
 /** ★ 班の状態が変わったら 1 分を待たずに送る (管理画面の一覧を早く変えるため、2026-11-20)。ただし続けて送るのは 5 秒あける */
 const HEARTBEAT_MIN_GAP_MS = 5_000;
+/** 段階 3 (docs/12 §14): agent-server から便を取り寄せる間隔と、取り寄せた写しの置き場 */
+const MIRROR_MS = 5_000;
+const MIRROR_DIR = path.join(COURIER_DIR, 'queue-mirror');
 
 function log(line: string): void {
   console.log(`${new Date().toISOString()} [courier] ${line}`);
@@ -66,30 +70,48 @@ async function main(): Promise<void> {
   if (!loaded.ok) { log(`止まります: ${loaded.reason}`); process.exit(1); }
   for (const s of loaded.skipped) log(`使わない登録: ${s}`);
 
+  const auth = loadAuth();
   const bridges: Bridge[] = [];
+  const httpProjects: string[] = [];
   for (const b of loaded.bridges) {
+    // ★ 段階 3 は取り寄せにログインが要る。auth.json が無ければその班は配らない (古い写しで配り続けない)
+    if (b.queue === 'http' && !auth) { log(`${b.project}: 便を HTTP で取り寄せる班ですが auth.json が無いので配りません`); continue; }
     if (!acquireLock(COURIER_DIR, b.project)) { log(`${b.project}: 別の配達役が鍵を持っているので配りません`); continue; }
     // ★ herdr-ssh (docs/12 §13): 相手の PC の herdr を SSH で呼ぶ。判断 (状態の読み方・打ち方) は手元の herdr と同じ
     const courier = b.adapter === 'herdr-ssh'
       ? herdrCourier(sshRun(run, { host: b.host!, user: b.user! }), b.agent, { bin: b.herdr! })
       : herdrCourier(run, b.agent, { bin: process.env.HERDR_BIN || 'herdr' });
-    bridges.push({ project: b.project, courier, dryRun: b.dryRun });
+    bridges.push({ project: b.project, courier, dryRun: b.dryRun, ...(b.queue === 'http' ? { queueDir: MIRROR_DIR } : {}) });
+    if (b.queue === 'http') httpProjects.push(b.project);
   }
-  log(`始めます: ${bridges.map((b) => `${b.project}${DRY_RUN || b.dryRun ? '(空回し)' : '(本番)'}`).join(', ') || '(なし)'}`);
+  log(`始めます: ${bridges.map((b) => `${b.project}${DRY_RUN || b.dryRun ? '(空回し)' : '(本番)'}${b.queueDir ? '(HTTP)' : ''}`).join(', ') || '(なし)'}`);
 
   const release = () => { for (const b of bridges) releaseLock(COURIER_DIR, b.project); process.exit(0); };
   process.on('SIGINT', release);
   process.on('SIGTERM', release);
 
   const limiter = new RateLimiter();
-  const auth = loadAuth();
   if (!auth) log('auth.json が無いので鼓動を送りません (配達は続けます)');
   const sendHb = auth ? heartbeatSender(auth) : null;
   const latest = new Map<string, BridgeReport>();
   let lastHb = 0;
   let changed = false;
+  const mirror = auth && httpProjects.length ? httpQueueMirror(auth) : null;
+  let lastMirror = 0;
+  /** 取り寄せの失敗が続いた回数 (班ごと)。1・10・100 回目だけ記録に出す (5 秒ごとに書かない) */
+  const mirrorFails = new Map<string, number>();
 
   for (;;) {
+    if (mirror && Date.now() - lastMirror >= MIRROR_MS) {
+      lastMirror = Date.now();
+      for (const p of httpProjects) {
+        const m = await mirror(p, MIRROR_DIR);
+        const n = m.ok ? 0 : (mirrorFails.get(p) ?? 0) + 1;
+        if (!m.ok && (n === 1 || n === 10 || n === 100)) log(`${p}: 便を取り寄せられません (${n} 回目): ${m.reason}`);
+        if (m.ok && (mirrorFails.get(p) ?? 0) > 0) log(`${p}: 便の取り寄せが戻りました`);
+        mirrorFails.set(p, n);
+      }
+    }
     for (const b of bridges) {
       try {
         const r = await tickBridge(b, {

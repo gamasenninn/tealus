@@ -2,7 +2,7 @@
  * ブリッジの登録 (docs/12 §5)。置き場は配達役の機械の ~/.tealus/courier/bridges.json (repo・DB の外)。
  * ★ 形の違う行は使わない (班の名前はファイル名になる・届け先の名前はコマンドの引数になる)
  * ★ 同じ班が 2 回あれば全体を読み込まない (1 つの班に配る人は 1 人)
- * ★ 段階 1 の届け先は herdr (この機械) だけ。SSH 越し・PaneDeck のペイン・codex は段階 2 以降
+ * ★ 届け先は herdr (この機械) と herdr-ssh (段階 2)。便の読み方は file (この機械の queue) と http (段階 3)
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,12 +11,15 @@ import { isValidProject } from './cursor.mts';
 /** dryRun: 打たずに記録だけ。★ 既定は true。本当に配るのは bridges.json に dry_run: false (真偽値) と書いた班だけ */
 export interface BridgeConfig {
   project: string; adapter: 'herdr' | 'herdr-ssh'; agent: string; dryRun: boolean;
+  /** 便の読み方。file = この機械の cc-queue (段階 1・2)。http = agent-server から取り寄せる (段階 3、docs/12 §14) */
+  queue: 'file' | 'http';
   /** herdr-ssh だけ (docs/12 §13): 相手の PC・ユーザ・相手の herdr の場所 */
   host?: string; user?: string; herdr?: string;
 }
 
 const AGENT_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const ADAPTERS = new Set(['herdr', 'herdr-ssh']);
+const QUEUES = new Set(['file', 'http']);
 const HOST_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/;
 /** ユーザ名は漢字もありうる (バックアップ機)。空白・引用符・シェルの記号は不可 */
 const USER_RE = /^[^\s"'`;&|<>%^]{1,64}$/u;
@@ -47,14 +50,17 @@ export function loadBridges(dir: string): LoadResult {
     if (!isValidProject(project)) { skipped.push(`${i} 行目: 班の名前の形が違います`); continue; }
     if (typeof o.adapter !== 'string' || !ADAPTERS.has(o.adapter)) { skipped.push(`${i} 行目 (${project}): 届け先の種類が使えません`); continue; }
     if (typeof o.agent !== 'string' || !AGENT_RE.test(o.agent)) { skipped.push(`${i} 行目 (${project}): 届け先の名前の形が違います`); continue; }
+    const queue = o.queue === undefined ? 'file' : o.queue;
+    if (typeof queue !== 'string' || !QUEUES.has(queue)) { skipped.push(`${i} 行目 (${project}): 便の読み方 (queue) が使えません`); continue; }
+    const q = queue as 'file' | 'http';
     if (o.adapter === 'herdr-ssh') {
       if (typeof o.host !== 'string' || !HOST_RE.test(o.host)) { skipped.push(`${i} 行目 (${project}): 相手の PC の名前の形が違います`); continue; }
       if (typeof o.user !== 'string' || !USER_RE.test(o.user)) { skipped.push(`${i} 行目 (${project}): 相手のユーザ名の形が違います`); continue; }
       if (typeof o.herdr !== 'string' || !REMOTE_PATH_RE.test(o.herdr)) { skipped.push(`${i} 行目 (${project}): 相手の herdr の場所の形が違います`); continue; }
-      bridges.push({ project, adapter: 'herdr-ssh', agent: o.agent, dryRun: o.dry_run !== false, host: o.host, user: o.user, herdr: o.herdr });
+      bridges.push({ project, adapter: 'herdr-ssh', agent: o.agent, dryRun: o.dry_run !== false, queue: q, host: o.host, user: o.user, herdr: o.herdr });
       continue;
     }
-    bridges.push({ project, adapter: 'herdr', agent: o.agent, dryRun: o.dry_run !== false });
+    bridges.push({ project, adapter: 'herdr', agent: o.agent, dryRun: o.dry_run !== false, queue: q });
   }
   return { ok: true, bridges, skipped };
 }
