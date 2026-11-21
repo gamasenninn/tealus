@@ -34,7 +34,8 @@
 @media (min-width: 1024px) {
   .desktop-shell {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    /* 2026-11-21 小野さん「PCのトーク一覧を広く」→ 固定で 400px (以前は 320px) */
+    grid-template-columns: 400px 1fr;
   }
 
   .desktop-sidebar {
@@ -55,7 +56,7 @@
     overflow-x: hidden;
   }
 
-  /* sidebar 内の RoomList は max-width 制約を外して sidebar 幅 (320px) を使う */
+  /* sidebar 内の RoomList は max-width 制約を外して sidebar 幅 (400px) を使う */
   .desktop-sidebar .room-list-container {
     max-width: none;
     width: 100%;
@@ -97,6 +98,12 @@
 .desktop-shell--multi .desktop-main {
   height: 100dvh;
   overflow: hidden;
+}
+/* 広い画面のマルチトークも一覧は 400px (狭いウィンドウでは上の 320px のまま。本文が狭くなりすぎないように) */
+@media (min-width: 1024px) {
+  .desktop-shell--multi {
+    grid-template-columns: 400px 1fr;
+  }
 }
 /* ツールバーで一覧を隠したとき (パネルを広く使う)。★ RoomList は動かしたまま (新着の音を止めない) */
 .desktop-shell--multi.desktop-shell--sidebar-hidden {
