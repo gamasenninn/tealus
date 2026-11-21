@@ -84,6 +84,12 @@ describe('httpQueueMirror', () => {
     expect(r.ok && r.ids).toEqual([id(1), id(2), id(5), id(6)]);
   });
 
+  it('★ 一度も便が無い班でも、取れたら空の写しを作る (配る輪が「便はまだ無い」と分かるように)', async () => {
+    const s = fakeServer(() => []);
+    expect(await httpQueueMirror(auth, s.fetchImpl)('db', dir)).toEqual({ ok: true, added: 0 });
+    expect(fs.readFileSync(file(), 'utf8')).toBe('');
+  });
+
   it('新着が無ければ写しを書き換えない', async () => {
     const s = fakeServer(() => [row(1)]);
     const m = httpQueueMirror(auth, s.fetchImpl);

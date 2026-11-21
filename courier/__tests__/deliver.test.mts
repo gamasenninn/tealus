@@ -158,6 +158,34 @@ describe('配る輪 (tickBridge)', () => {
     expect(loadCursor(stateDir, 'pd')).toBe(id(1));
   });
 
+  it('★ 段階 3 (写しを読む班) は、写しが無いのを「便がまだ無い」とみなさない (取り寄せの前に回ると過去分を全部配ってしまう、2026-11-21)', async () => {
+    const mirrorDir = fs.mkdtempSync(path.join(os.tmpdir(), 'courier-mir-'));
+    try {
+      const c = fake('idle');
+      const b = { project: 'pd', courier: c, queueDir: mirrorDir };
+      expect((await tickBridge(b, deps())).state).toBe('unreadable');
+      expect(loadCursor(stateDir, 'pd')).toBeNull();
+      fs.writeFileSync(path.join(mirrorDir, 'pd.jsonl'), [1, 2, 3].map((n) => JSON.stringify({ id: id(n) }) + '\n').join(''));
+      await tickBridge(b, deps());   // 初回: 末尾から
+      expect(c.delivered).toEqual([]);
+      expect(loadCursor(stateDir, 'pd')).toBe(id(3));
+    } finally { fs.rmSync(mirrorDir, { recursive: true, force: true }); }
+  });
+
+  it('★ 写しが空 (便が一度も無い班) でカーソルも無いときは「先頭から」の印を置く (次に来る最初の便を飛ばさない)', async () => {
+    const mirrorDir = fs.mkdtempSync(path.join(os.tmpdir(), 'courier-mir-'));
+    try {
+      const c = fake('idle');
+      const b = { project: 'pd', courier: c, queueDir: mirrorDir };
+      fs.writeFileSync(path.join(mirrorDir, 'pd.jsonl'), '');
+      await tickBridge(b, deps());
+      fs.writeFileSync(path.join(mirrorDir, 'pd.jsonl'), JSON.stringify({ id: id(1) }) + '\n');
+      const r = await tickBridge(b, deps());
+      expect(r.state).toBe('delivered');
+      expect(c.delivered[0]).toContain('新着 1 件');
+    } finally { fs.rmSync(mirrorDir, { recursive: true, force: true }); }
+  });
+
   it('★ 同じことを空回しでも (印は手元で覚える・ファイルは作らない)', async () => {
     const c = fake('idle');
     await tickBridge({ project: 'pd', courier: c }, deps({ dryRun: true }));

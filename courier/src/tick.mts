@@ -77,7 +77,12 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   if (!q.ok) {
     // ★ queue のファイルがまだ無い班 (一度も便が来ていない) は「先頭から」の印を置く。置かないと、最初の便で
     //   ファイルが現れたときに「初回は末尾から」と見なし、その 1 便を配らずに飛ばす (2026-11-19 オントロジー本班)
-    if (stored === null && q.reason === 'ENOENT') {
+    // ★ 段階 3 (b.queueDir = 取り寄せた写し) では、写しが無いのは「まだ取り寄せていない」こと。ここで印を置くと、
+    //   最初の取り寄せで過去分が全部入ったときに全部を配ってしまう (2026-11-21)。写しは取れた時点で必ず作られる (httpQueue)
+    // ★ 写しが空 (取れたが便が一度も無い) も「先頭から」。写しは置き換えで書くので、書きかけで空に見える瞬間は無い
+    //   (手元の queue は書き直しの途中で空に見えうるので、こちらは今までどおり読めないとみなす)
+    const begin = b.queueDir ? q.reason === 'empty' : q.reason === 'ENOENT';
+    if (stored === null && begin) {
       if (d.dryRun) dryCursor.set(b.project, QUEUE_BEGIN);
       else saveCursor(d.stateDir, b.project, QUEUE_BEGIN);
     }

@@ -39,7 +39,11 @@ export function httpQueueMirror(auth: CourierAuth, fetchImpl?: FetchLike) {
       seen.add(eid);
       add.push(eid);
     }
-    if (add.length === 0) return { ok: true, added: 0 };
+    // ★ 一度も便が無い班でも、取れたら空の写しを作る。写しが無い間は配る輪が「まだ取り寄せていない」と見て待つ (tick)
+    if (add.length === 0) {
+      if (!have.ok && have.reason === 'ENOENT') { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, ''); }
+      return { ok: true, added: 0 };
+    }
 
     const all = [...ids, ...add].slice(-MIRROR_MAX_LINES);
     fs.mkdirSync(dir, { recursive: true });
