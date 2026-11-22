@@ -182,6 +182,19 @@ describe('マルチトークのパネル (同じ Tealus の中の iframe)', () =
     stop();
   });
 
+  it('★★ 開いた (読み込んだ) ばかりのパネルは、触るまで「使っていない」(2026-11-23 試験2: 開き直して 45 秒後の投稿が既読になった)', () => {
+    delete (window as Window & { __tealusAttention?: unknown }).__tealusAttention;
+    expect(isAttending()).toBe(false);
+    noteInput();
+    expect(isAttending()).toBe(true);
+  });
+
+  it('普通の画面は、開いたばかりなら「使っている」(今までどおり)', () => {
+    emb.on = false;
+    delete (window as Window & { __tealusAttention?: unknown }).__tealusAttention;
+    expect(isAttending()).toBe(true);
+  });
+
   it('★ 窓が選ばれていなければ、触ったばかりのパネルも「使っていない」', () => {
     focus = false;
     expect(isAttending()).toBe(false);

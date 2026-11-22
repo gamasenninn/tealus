@@ -33,10 +33,14 @@ function host(): HostWindow {
   return (isEmbeddedInSameApp() ? window.top : window) as HostWindow;
 }
 
-/** 最後の操作の時刻は、それぞれの窓 (パネルならパネル) が持つ */
+/**
+ * 最後の操作の時刻は、それぞれの窓 (パネルならパネル) が持つ。
+ * ★ パネルは「触ったことがない」から始める。開いたばかりを「使っている」にすると、マルチトークを開き直してから
+ *   1 分の間、全パネルが既読をつけた (2026-11-23 試験2)。普通の画面は開いた = 使っている、のまま。
+ */
 function shared(): Shared {
   const w = window as HostWindow;
-  if (!w.__tealusAttention) w.__tealusAttention = { lastInput: Date.now(), lastSignal: 0 };
+  if (!w.__tealusAttention) w.__tealusAttention = { lastInput: isEmbeddedInSameApp() ? -Infinity : Date.now(), lastSignal: -Infinity };
   return w.__tealusAttention;
 }
 
