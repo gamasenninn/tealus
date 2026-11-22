@@ -5,7 +5,9 @@
  * 使っている = 画面に出ている かつ 窓が選ばれている かつ 最後の操作から 3 分以内
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { isAttending, onAttentionChange, noteInput, IDLE_MS } from '../../src/services/attention';
+const emb = vi.hoisted(() => ({ on: false }));
+vi.mock('../../src/utils/embedded', () => ({ isEmbeddedInSameApp: () => emb.on }));
+import { isAttending, onAttentionChange, noteInput, IDLE_MS, PANEL_IDLE_MS } from '../../src/services/attention';
 
 let visibility: DocumentVisibilityState = 'visible';
 let focus = true;
@@ -16,6 +18,7 @@ beforeEach(() => {
   vi.spyOn(document, 'hasFocus').mockImplementation(() => focus);
   visibility = 'visible';
   focus = true;
+  emb.on = false;
   noteInput(Date.now());
 });
 afterEach(() => {
@@ -123,6 +126,18 @@ describe('onAttentionChange', () => {
     stop();
   });
 
+  it('★ 時計が戻っても (時刻合わせ)、操作をすぐ知らせる', () => {
+    const start = Date.now();   // 最後に知らせた時刻 (beforeEach の noteInput)
+    const cb = vi.fn();
+    const stop = onAttentionChange(cb);
+    vi.advanceTimersByTime(IDLE_MS);
+    expect(cb).toHaveBeenLastCalledWith(false);
+    vi.setSystemTime(start - 60_000);   // 最後に知らせた時刻より前へ戻る
+    document.dispatchEvent(new Event('pointerdown'));
+    expect(cb).toHaveBeenLastCalledWith(true);
+    stop();
+  });
+
   it('止めたあとは知らせない (窓の切り替えの判定待ちも捨てる)', () => {
     const cb = vi.fn();
     const stop = onAttentionChange(cb);
@@ -131,5 +146,44 @@ describe('onAttentionChange', () => {
     stop();
     vi.advanceTimersByTime(IDLE_MS * 2);
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 2026-11-23 小野さん「マルチトークに出ているものが未読にならないとまずくない?」「1分でいこう」
+ * 窓ごとにまとめて判定すると、隣のパネルで書いている間、横に出ている部屋が読んでいなくても既読になった。
+ * パネルは「そのパネルを最後に触ってから 1 分」で判定する
+ */
+describe('マルチトークのパネル (同じ Tealus の中の iframe)', () => {
+  beforeEach(() => {
+    emb.on = true;
+    noteInput(Date.now());
+  });
+
+  it('パネルは 1 分 (小野さんと決めた数)', () => {
+    expect(PANEL_IDLE_MS).toBe(60_000);
+  });
+
+  it('★★ パネルは、そのパネルを触ってから 1 分で「使っていない」(3 分を待たない)', () => {
+    const t = Date.now();
+    expect(isAttending(t + PANEL_IDLE_MS - 1)).toBe(true);
+    expect(isAttending(t + PANEL_IDLE_MS)).toBe(false);
+  });
+
+  it('★★ 触らずに 1 分経つと「使っていない」を知らせ、パネルの上でマウスを動かすと「使っている」に戻る', () => {
+    const cb = vi.fn();
+    const stop = onAttentionChange(cb);
+    vi.advanceTimersByTime(PANEL_IDLE_MS - 1000);
+    expect(cb).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(cb).toHaveBeenLastCalledWith(false);
+    document.dispatchEvent(new Event('pointermove'));
+    expect(cb).toHaveBeenLastCalledWith(true);
+    stop();
+  });
+
+  it('★ 窓が選ばれていなければ、触ったばかりのパネルも「使っていない」', () => {
+    focus = false;
+    expect(isAttending()).toBe(false);
   });
 });

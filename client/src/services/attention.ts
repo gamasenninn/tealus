@@ -7,16 +7,21 @@
  *
  *   使っている = 画面に出ている かつ 窓が選ばれている かつ 最後の操作から IDLE_MS 以内
  *
- * ★ マルチトークのパネル (同じ Tealus の中の iframe) は親の窓でまとめて判定する。
- *   パネルごとに「選ばれているか」を見ると、隣のパネルで書いている間、見えている部屋が全部未読になる。
- *   親の document.hasFocus() は中の iframe が選ばれていても true になる。最後の操作の時刻も親の窓に置いて分け合う。
+ * ★ マルチトークのパネル (同じ Tealus の中の iframe) は、パネルごとに「そのパネルを最後に触ってから PANEL_IDLE_MS」で判定する。
+ *   窓ごとにまとめて判定すると、隣のパネルで書いている間、横に出ている部屋が読んでいなくても既読になった
+ *   (2026-11-23 小野さん「マルチトークに出ているものが未読にならないとまずくない?」)。
+ *   パネルの上をマウスが通れば (pointermove) 触ったことになるので、読みたいパネルはマウスを乗せれば既読になる。
+ *   「窓が選ばれているか」だけは親の窓で見る (親の document.hasFocus() は中の iframe が選ばれていても true になる。
+ *   パネル自身の hasFocus は、隣のパネルを選んだだけで false になる)。
  * ★ スクロールは操作に数えない。新着でいちばん下へ合わせる (プログラムが動かす) と、それで「使っている」に戻ってしまう。
  *   人のスクロールはホイール・タッチ・キーで拾う。
  */
 import { isEmbeddedInSameApp } from '../utils/embedded';
 
 export const IDLE_MS = 3 * 60 * 1000;
-/** 操作を知らせる回数を抑える (マウスを動かすたびに全パネルが判定し直さないように) */
+/** マルチトークのパネルは短く (2026-11-23 小野さん「1分でいこう」) */
+export const PANEL_IDLE_MS = 60 * 1000;
+/** 操作を知らせる回数を抑える (マウスを動かすたびに判定し直さないように) */
 const INPUT_THROTTLE_MS = 1000;
 const INPUT_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'touchmove'] as const;
 const SIGNAL = 'tealus:attention-input';
@@ -28,10 +33,15 @@ function host(): HostWindow {
   return (isEmbeddedInSameApp() ? window.top : window) as HostWindow;
 }
 
+/** 最後の操作の時刻は、それぞれの窓 (パネルならパネル) が持つ */
 function shared(): Shared {
-  const h = host();
-  if (!h.__tealusAttention) h.__tealusAttention = { lastInput: Date.now(), lastSignal: 0 };
-  return h.__tealusAttention;
+  const w = window as HostWindow;
+  if (!w.__tealusAttention) w.__tealusAttention = { lastInput: Date.now(), lastSignal: 0 };
+  return w.__tealusAttention;
+}
+
+function idleMs(): number {
+  return isEmbeddedInSameApp() ? PANEL_IDLE_MS : IDLE_MS;
 }
 
 function focused(): boolean {
@@ -46,21 +56,23 @@ function focused(): boolean {
 export function isAttending(now: number = Date.now()): boolean {
   if (document.visibilityState !== 'visible') return false;
   if (!focused()) return false;
-  return now - shared().lastInput < IDLE_MS;
+  return now - shared().lastInput < idleMs();
 }
 
 /** 人の操作があったことを記録する (テストと、入力の受け口から呼ぶ) */
 export function noteInput(now: number = Date.now()): void {
   const s = shared();
   s.lastInput = now;
-  if (now - s.lastSignal < INPUT_THROTTLE_MS) return;
+  // ★ 時計が戻ったとき (時刻合わせ) は抑えない。差が負のままだと、時計が追いつくまで操作を知らせなくなる
+  const since = now - s.lastSignal;
+  if (since >= 0 && since < INPUT_THROTTLE_MS) return;
   s.lastSignal = now;
-  host().dispatchEvent(new Event(SIGNAL));
+  window.dispatchEvent(new Event(SIGNAL));
 }
 
 /**
  * 使っている / 使っていないが変わったら cb を呼ぶ。戻り値で止める。
- * ★ 使っていない側へは操作が止まって IDLE_MS 経ったときに、使っている側へは操作・窓の選択・表に出たときにすぐ変わる。
+ * ★ 使っていない側へは操作が止まって IDLE_MS (パネルは PANEL_IDLE_MS) 経ったときに、使っている側へは操作・窓の選択・表に出たときにすぐ変わる。
  */
 export function onAttentionChange(cb: (attending: boolean) => void): () => void {
   let last = isAttending();
@@ -74,7 +86,7 @@ export function onAttentionChange(cb: (attending: boolean) => void): () => void 
     const now = Date.now();
     const attending = isAttending(now);
     // 使っている間だけ、操作が止まったときに判定し直す時計を置く (使っていない間は操作・選択・表示の知らせで起きる)
-    if (attending) timer = setTimeout(check, Math.max(1000, shared().lastInput + IDLE_MS - now));
+    if (attending) timer = setTimeout(check, Math.max(1000, shared().lastInput + idleMs() - now));
     if (attending !== last) {
       last = attending;
       cb(attending);
@@ -87,14 +99,14 @@ export function onAttentionChange(cb: (attending: boolean) => void): () => void 
   const h = host();
   for (const ev of INPUT_EVENTS) document.addEventListener(ev, onInput, { capture: true, passive: true });
   document.addEventListener('visibilitychange', check);
-  h.addEventListener(SIGNAL, check);
+  window.addEventListener(SIGNAL, check);
   h.addEventListener('focus', check);
   h.addEventListener('blur', checkSoon);
   if (h !== window) {
     window.addEventListener('focus', check);
     window.addEventListener('blur', checkSoon);
   }
-  if (last) timer = setTimeout(check, Math.max(1000, shared().lastInput + IDLE_MS - Date.now()));
+  if (last) timer = setTimeout(check, Math.max(1000, shared().lastInput + idleMs() - Date.now()));
 
   return () => {
     stopped = true;
@@ -102,7 +114,7 @@ export function onAttentionChange(cb: (attending: boolean) => void): () => void 
     clearTimeout(soon);
     for (const ev of INPUT_EVENTS) document.removeEventListener(ev, onInput, { capture: true });
     document.removeEventListener('visibilitychange', check);
-    h.removeEventListener(SIGNAL, check);
+    window.removeEventListener(SIGNAL, check);
     h.removeEventListener('focus', check);
     h.removeEventListener('blur', checkSoon);
     if (h !== window) {
