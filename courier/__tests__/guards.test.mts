@@ -39,11 +39,11 @@ describe('鍵 (1 つの班に配る人は 1 人)', () => {
   });
 });
 
-describe('上限 (班ごとに 1 時間に 20 通、docs/12 §12.4)', () => {
-  it('★ 20 通までは通し、21 通目で止める', () => {
+describe('上限 (班ごとに 1 時間に 40 通、docs/12 §12.4)', () => {
+  it('★ 既定は 40 通までは通し、41 通目で止める (2026-11-23 利用者が 20 → 40。試験のやりとりで 1 時間に 21 通になり止まった)', () => {
     let t = 0;
-    const lim = new RateLimiter(20, 60 * 60_000, () => t);
-    for (let i = 0; i < 20; i++) { expect(lim.take('panedeck')).toBe(true); t += 1000; }
+    const lim = new RateLimiter(undefined, 60 * 60_000, () => t);
+    for (let i = 0; i < 40; i++) { expect(lim.take('panedeck')).toBe(true); t += 1000; }
     expect(lim.take('panedeck')).toBe(false);
   });
 

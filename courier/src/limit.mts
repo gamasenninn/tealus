@@ -1,5 +1,5 @@
 /**
- * 配達の上限 (docs/12 §8 の 8・§12.4)。班ごとに 1 時間に 20 通を超えたら保留する (2026-11-19 利用者)。
+ * 配達の上限 (docs/12 §8 の 8・§12.4)。班ごとに 1 時間に 40 通を超えたら保留する (2026-11-19 利用者が 20 通、11-23 に 40 通へ)。
  * ★ 人が居ない・道具を広げた班どうしが @cc- で起こし合うと、止める人が居ないまま回るため
  * ★ 保留は捨てない。印をファイルに置き、人が消すまで戻さない (段階 1 は消す口を作らない)
  */
@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isValidProject } from './cursor.mts';
 
-export const DEFAULT_MAX_PER_HOUR = 20;
+export const DEFAULT_MAX_PER_HOUR = 40;
 
 export class RateLimiter {
   private sent = new Map<string, number[]>();
