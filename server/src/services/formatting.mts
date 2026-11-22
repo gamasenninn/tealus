@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { pool } from '../db/pool.mts';
 import { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscriptionMode, buildOrganonCorrectionPrompt, getCorrectionModel, completionParams, videoTranscriptLooksCut, VIDEO_CUT_NOTE } from './transcriptionConfig.mts';
 import { fireWebhooks } from './webhook.mts';
+import { loadRoomExamples } from './roomExamples.mts';
 import type { Server } from 'socket.io';
 
 // ★ 時間切れはこちらで決める (改善ループ 10 回目の F)。SDK の既定は 10 分 × やり直し 2 回 = 最長 30 分で、
@@ -41,10 +42,20 @@ function buildSystemPrompt(): string {
  *   organon : organon を「補正の知識源」として使う専用 prompt (buildOrganonCorrectionPrompt)。
  *             ★ 指示はモデルの系統ごと (luna 系は別の指示)。ORGANON_AI_MODEL を替えれば指示も一緒に替わる
  */
-function systemPromptForMode(mode: ReturnType<typeof getTranscriptionMode>, model: string): string {
+function systemPromptForMode(mode: ReturnType<typeof getTranscriptionMode>, model: string, roomExamples: string = ''): string {
   return mode === 'organon'
-    ? buildOrganonCorrectionPrompt(loadGuideline(), model)
+    ? roomExamples + buildOrganonCorrectionPrompt(loadGuideline(), model)
     : buildSystemPrompt();
+}
+
+/**
+ * 部屋の「人が直した例」(docs/15)。organon モードで TRANSCRIPTION_ROOM_EXAMPLES=1 のときだけ読む。
+ * ★ 既定 OFF。OFF・例が無い部屋・読み込み失敗のときは '' (= 指示は今と同じ)
+ */
+async function roomExamplesFor(mode: ReturnType<typeof getTranscriptionMode>, roomId: string | null): Promise<string> {
+  if (mode !== 'organon' || !roomId || process.env.TRANSCRIPTION_ROOM_EXAMPLES !== '1') return '';
+  const terms = (loadGuideline().vocabulary || []).map((v) => v.term).filter(Boolean);
+  return loadRoomExamples(roomId, terms);
 }
 
 /** messages テーブルの sender 参照行 */
@@ -89,10 +100,11 @@ export async function formatTranscription(
 
     // Call AI API (mode 別モデル + モデル世代別パラメータ)
     const model = getCorrectionModel(mode);
+    const roomExamples = await roomExamplesFor(mode, roomId);
     const response = await openai.chat.completions.create({
       model,
       messages: [
-        { role: 'system', content: systemPromptForMode(mode, model) },
+        { role: 'system', content: systemPromptForMode(mode, model, roomExamples) },
         { role: 'user', content: rawText },
       ],
       ...completionParams(model),
