@@ -5,7 +5,7 @@
  * 復帰(再接続)後も agentStatus/typingUsers が残り続ける（議事録が完成しても「考え中」が消えない）。
  * 修正: socket 'connect'(再接続) で ephemeral 表示をリセットする。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 // --- 依存 mock（hook のロジックだけを検証するため最小化） ---
@@ -27,6 +27,22 @@ vi.mock('../src/stores/roomStore', () => {
   (useRoomStore as unknown as { getState: () => unknown }).getState = () => ({ refreshRoom });
   return { useRoomStore };
 });
+// ★ 2026-11-23 既読と「見ている」は「人が使っているか」(services/attention.ts) で決める。ここでは画面の表裏と
+//   att.using (窓が選ばれていて 3 分以内に触った、の代わり) で置き換える。attention 自身の判定は attention.test.ts
+const att = vi.hoisted(() => ({ using: true, cbs: new Set<(a: boolean) => void>() }));
+vi.mock('../src/services/attention', () => {
+  const isAttending = () => document.visibilityState === 'visible' && att.using;
+  return {
+    isAttending,
+    onAttentionChange: (cb: (a: boolean) => void) => {
+      const onVis = () => cb(isAttending());
+      document.addEventListener('visibilitychange', onVis);
+      att.cbs.add(cb);
+      return () => { document.removeEventListener('visibilitychange', onVis); att.cbs.delete(cb); };
+    },
+  };
+});
+const setUsing = (v: boolean) => { att.using = v; for (const cb of [...att.cbs]) cb(document.visibilityState === 'visible' && v); };
 vi.mock('../src/services/api', () => ({ api: { markRead: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock('../src/services/browserTts', () => ({ speakAuto: vi.fn() }));
 vi.mock('../src/services/ttsAudioPlayer', () => ({ playTtsSrc: vi.fn() }));
@@ -269,6 +285,61 @@ describe('useSocketSync — 部屋を見ていることを知らせる (#475)', 
       { room_id: 'room1', viewing: true },
       { room_id: 'room1', viewing: true },
     ]);
+  });
+});
+
+describe('useSocketSync — 画面に出ていても、人が使っていなければ既読にしない (2026-11-23)', () => {
+  // 小野さん「トークが開かれていても操作がされていないものには未読をつける」(マルチ画面・複数の端末)
+  const markRead = () => vi.mocked(api.markRead);
+  const viewingEmits = () => vi.mocked(fakeSocket.emit).mock.calls
+    .filter((c) => (c as unknown[])[0] === 'room:viewing')
+    .map((c) => (c as unknown[])[1]);
+  const newMessage = (id: string) =>
+    fakeSocket.trigger('message:new', { id, room_id: 'room1', sender_id: 'other', type: 'text', content: 'x' });
+
+  beforeEach(() => {
+    fakeSocket.handlers = {};
+    localStorage.setItem('ttsReadAloud', 'off');
+    localStorage.setItem('notificationSound', 'off');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    att.using = true;
+    markRead().mockClear();
+    markRead().mockResolvedValue(undefined as never);
+    vi.spyOn(fakeSocket, 'emit').mockClear();
+  });
+  afterEach(() => { att.using = true; });
+
+  it('★★ 使っていない間 (別の窓で作業中・3 分触っていない) に届いた投稿は既読にしない', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setUsing(false));
+    act(() => newMessage('m1'));
+    expect(markRead()).not.toHaveBeenCalled();
+  });
+
+  it('★★ 使い始めたら、その間の分をまとめて 1 回で既読にする', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setUsing(false));
+    act(() => { newMessage('m1'); newMessage('m2'); });
+    act(() => setUsing(true));
+    expect(markRead()).toHaveBeenCalledTimes(1);
+    expect(markRead()).toHaveBeenCalledWith('room1', ['m1', 'm2']);
+  });
+
+  it('★★ 使っていない間は「見ていない」を知らせる (スマホに通知が届く)、使い始めたら「見ている」', () => {
+    renderHook(() => useSocketSync('room1'));
+    act(() => setUsing(false));
+    act(() => setUsing(true));
+    expect(viewingEmits()).toEqual([
+      { room_id: 'room1', viewing: true },
+      { room_id: 'room1', viewing: false },
+      { room_id: 'room1', viewing: true },
+    ]);
+  });
+
+  it('★ 使っていない状態で開いた部屋は「見ている」を知らせない', () => {
+    att.using = false;
+    renderHook(() => useSocketSync('room1'));
+    expect(viewingEmits()).toEqual([]);
   });
 });
 

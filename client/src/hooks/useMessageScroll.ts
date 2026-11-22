@@ -5,6 +5,7 @@ import { useMessageStore } from '../stores/messageStore';
 import { useRoomStore } from '../stores/roomStore';
 import { getSocket } from '../services/socket';
 import { api } from '../services/api';
+import { isAttending, onAttentionChange } from '../services/attention';
 import { SCROLL_NEAR_BOTTOM, INITIAL_SCROLL_DELAY } from '../constants/ui';
 import { scrollContainerTo } from '../utils/scrollWithin';
 
@@ -131,7 +132,8 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
       if (atBottom.current && !hasNewerRef.current && !isLoadingNewer.current) {
         pinToBottom();
         // #474 裏にある間は既読にしない (その間の分は useSocketSync が溜めて、画面に戻ったときに既読にする)
-        if (document.visibilityState === 'visible') markVisibleAsRead();
+        // ★ 2026-11-23 人が使っていない (窓が選ばれていない・3 分触っていない) 間も同じ (services/attention.ts)
+        if (isAttending()) markVisibleAsRead();
       }
     }
     // ★ #600 isStale も見る: 取り直しが同じ件数 (20 → 20) で届くと、件数だけでは届いたことに気づけない
@@ -192,19 +194,18 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
   const markRef = useRef(markVisibleAsRead);
   markRef.current = markVisibleAsRead;
   const markReadWhenVisible = () => {
-    if (document.visibilityState === 'visible') markRef.current();
+    if (isAttending()) markRef.current();
     else readDeferred.current = true;
   };
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && readDeferred.current) {
+    const stop = onAttentionChange((attending) => {
+      if (attending && readDeferred.current) {
         readDeferred.current = false;
         markRef.current();
       }
-    };
-    document.addEventListener('visibilitychange', onVisible);
+    });
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
+      stop();
       readDeferred.current = false;   // 部屋を切り替えたら、前の部屋の「待ち」は持ち越さない
     };
   }, [roomId]);

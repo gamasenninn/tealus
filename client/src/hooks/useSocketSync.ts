@@ -4,6 +4,7 @@ import { useRoomStore } from '../stores/roomStore';
 import { useMessageStore } from '../stores/messageStore';
 import { getSocket, joinRoom, leaveRoom, isSocketDisconnectedAfterConnect } from '../services/socket';
 import { api } from '../services/api';
+import { isAttending, onAttentionChange } from '../services/attention';
 import { speakAuto } from '../services/browserTts';
 import { playTtsSrc } from '../services/ttsAudioPlayer';
 import { isAudioHeld } from '../utils/audioExclusive';
@@ -123,21 +124,21 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     const sendViewing = (viewing: boolean) => {
       getSocket()?.emit('room:viewing', { room_id: roomId, viewing });
     };
-    if (document.visibilityState === 'visible') sendViewing(true);
+    // ★ 2026-11-23 「画面に出ている」だけでなく「人が使っている」(窓が選ばれていて 3 分以内に触った) を条件にした。
+    //   2 枚目の画面に出しっぱなしの PC が、見ていないのに既読をつけ、スマホへの通知も止めていた (services/attention.ts)
+    if (isAttending()) sendViewing(true);
+    const stopAttention = onAttentionChange((attending) => {
+      sendViewing(attending);
+      if (attending && pendingReadIds.length > 0) {
+        markRead(pendingReadIds);
+        pendingReadIds = [];
+      }
+    });
 
     // Re-fetch messages when app returns from background
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        sendViewing(true);
-        if (pendingReadIds.length > 0) {
-          markRead(pendingReadIds);
-          pendingReadIds = [];
-        }
-        // ★ #538 最新に置き換えず、手元の最後より新しい分を足す (以前は読んでいた位置・検索から開いた投稿が消えた)
-        catchUp(roomId);
-      } else {
-        sendViewing(false);
-      }
+      // ★ #538 最新に置き換えず、手元の最後より新しい分を足す (以前は読んでいた位置・検索から開いた投稿が消えた)
+      if (document.visibilityState === 'visible') catchUp(roomId);
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -148,7 +149,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
     const handleConnect = () => {
       socket!.emit('room:join', roomId);
       // #475 サーバーは切断で「見ている」を忘れるので、見えていれば知らせ直す
-      if (document.visibilityState === 'visible') sendViewing(true);
+      if (isAttending()) sendViewing(true);
       // 再接続 = 切断中に idle / typing:stop を取りこぼした可能性がある。
       // 一過性の「考え中」/「入力中」は履歴に残らないので、ここでリセットしないと
       // スマホのスリープ復帰後に消えず残り続ける（議事録完成後も「考え中」のまま）。
@@ -175,7 +176,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
       // 考え中だった agent 自身の返信が届いたら「考え中」を解除 (idle 取りこぼしの保険、agent_id 一致のみ)
       setAgentStatus(prev => (prev && prev.agent_id === msg.sender_id ? null : prev));
       if (msg.sender_id !== user!.id) {
-        if (document.visibilityState === 'visible') markRead([msg.id]);
+        if (isAttending()) markRead([msg.id]);
         else pendingReadIds.push(msg.id);
         // ★ #505 新着の音はここでは鳴らさない。一覧 (RoomList) が iframe の中以外ではいつも動いていて、
         //   開いている部屋の新着でも鳴らす。ここでも鳴らしていたので 1 件で 2 回鳴っていた
@@ -325,6 +326,7 @@ export function useSocketSync(roomId: string, targetMsgId: string | null = null)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
+      stopAttention();
       sendViewing(false);   // #475 部屋を離れたら「見ていない」
       clearCurrentRoom();
       clearMessages();

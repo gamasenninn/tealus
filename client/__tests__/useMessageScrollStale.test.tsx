@@ -18,6 +18,19 @@ vi.mock('../src/stores/authStore', () => ({ useAuthStore: () => ({ user: { id: '
 vi.mock('../src/stores/roomStore', () => ({ useRoomStore: { getState: () => ({ fetchRooms: vi.fn() }) } }));
 vi.mock('../src/services/socket', () => ({ getSocket: () => null }));
 const markRead = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+// ★ 2026-11-23 既読は「人が使っているか」(services/attention.ts) で決める。ここでは画面の表裏だけで置き換える
+//   (jsdom は窓が選ばれていない扱いなので、本物だと何も既読にならない)
+vi.mock('../src/services/attention', () => {
+  const isAttending = () => document.visibilityState === 'visible';
+  return {
+    isAttending,
+    onAttentionChange: (cb: (a: boolean) => void) => {
+      const onVis = () => cb(isAttending());
+      document.addEventListener('visibilitychange', onVis);
+      return () => document.removeEventListener('visibilitychange', onVis);
+    },
+  };
+});
 vi.mock('../src/services/api', () => ({ api: { markRead } }));
 
 import { useMessageScroll } from '../src/hooks/useMessageScroll';

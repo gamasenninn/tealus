@@ -18,6 +18,22 @@ vi.mock('../../src/stores/roomStore', () => {
   (useRoomStore as unknown as { getState: () => unknown }).getState = () => ({ fetchRooms });
   return { useRoomStore };
 });
+// ★ 2026-11-23 既読と「見ている」は「人が使っているか」(services/attention.ts) で決める。ここでは画面の表裏と
+//   att.using (窓が選ばれていて 3 分以内に触った、の代わり) で置き換える。attention 自身の判定は attention.test.ts
+const att = vi.hoisted(() => ({ using: true, cbs: new Set<(a: boolean) => void>() }));
+vi.mock('../../src/services/attention', () => {
+  const isAttending = () => document.visibilityState === 'visible' && att.using;
+  return {
+    isAttending,
+    onAttentionChange: (cb: (a: boolean) => void) => {
+      const onVis = () => cb(isAttending());
+      document.addEventListener('visibilitychange', onVis);
+      att.cbs.add(cb);
+      return () => { document.removeEventListener('visibilitychange', onVis); att.cbs.delete(cb); };
+    },
+  };
+});
+const setUsing = (v: boolean) => { att.using = v; for (const cb of [...att.cbs]) cb(document.visibilityState === 'visible' && v); };
 vi.mock('../../src/services/api', () => ({ api: { markRead: vi.fn() } }));
 const emit = vi.fn();
 let connected = true;
@@ -125,6 +141,45 @@ describe('useMessageScroll — 画面が見えているときだけ、まとめ�
  * ★ 直し方: 「最下部にいるか」はスクロールのたびに記録し、新着が来る前の状態で判定する。
  *   最下部にいたら一度に一番下へ合わせる。画像の読み込みなどで背が伸びても合わせ直す
  */
+describe('useMessageScroll — 画面に出ていても、人が使っていなければ既読にしない (2026-11-23)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    att.using = true;
+    vi.mocked(api.markRead).mockReset().mockResolvedValue(undefined as never);
+    connected = true;
+    messages = [{ id: 'm0', sender_id: 'other' }];
+  });
+  afterEach(() => { vi.useRealTimers(); att.using = true; });
+
+  const mount = () => {
+    const hook = renderHook(() => useMessageScroll('room1'));
+    hook.result.current.messagesEndRef.current = { scrollIntoView: vi.fn() } as unknown as HTMLDivElement;
+    hook.result.current.messagesContainerRef.current = document.createElement('div');
+    return hook;
+  };
+
+  it('★★ 使っていない状態で部屋を開いても既読にせず、使い始めたら既読にする', () => {
+    att.using = false;
+    mount();
+    act(() => { vi.runAllTimers(); });
+    expect(api.markRead).not.toHaveBeenCalled();
+    act(() => setUsing(true));
+    expect(api.markRead).toHaveBeenCalledWith('room1', ['m0']);
+  });
+
+  it('★★ 使っていない間に投稿が増えても既読にしない', () => {
+    const hook = mount();
+    act(() => { vi.runAllTimers(); });
+    vi.mocked(api.markRead).mockClear();
+    act(() => setUsing(false));
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    hook.rerender();
+    act(() => { vi.runAllTimers(); });
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+});
+
 describe('useMessageScroll — 最下部にいたら新着を追いかける (#506)', () => {
   let visibility: DocumentVisibilityState = 'visible';
 
