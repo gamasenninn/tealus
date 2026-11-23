@@ -25,6 +25,12 @@ import { roomTabs, filterRoomsByTab, loadRoomTab, saveRoomTab } from '../../util
 // rooms 一覧 API はプレビュー用に last_message_content を返す (types.ts の Room には未定義)
 type RoomRow = Room & { last_message_content?: string | null };
 
+// アイコンの無い部屋に出す 1 文字。見た目の 1 文字で取る (charAt(0) は絵文字を半分に割る)。英字は大文字に
+function roomInitial(name: string | null | undefined): string {
+  const first = Array.from((name || '').trim())[0];
+  return first ? first.toUpperCase() : '';
+}
+
 interface RoomContextMenuState {
   x: number;
   y: number;
@@ -250,7 +256,9 @@ function RoomList() {
               ) : room.type === 'group' && room.icon_url ? (
                 <img src={`/media/${room.icon_url}`} alt="" className="room-avatar-img" />
               ) : (
-                room.type === 'group' ? '👥' : '👤'
+                // ★ アイコンが無い部屋は名前の最初の 1 文字 (2026-11-23)。名前が空のときだけ絵に戻る
+                roomInitial(room.type === 'group' ? room.name : room.partner_display_name)
+                  || (room.type === 'group' ? '👥' : '👤')
               )}
               {room.type === 'direct' && room.partner_id && onlineUsers.has(room.partner_id) && (
                 <span className="online-dot" />
