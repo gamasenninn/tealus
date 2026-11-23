@@ -49,6 +49,8 @@ const dryCursor = new Map<string, string>();
 const uncertainSent = new Map<string, { last: string; seq: number; count: number; at: number }>();
 /** 戻りが分からなかった便を、進み具合が変わらないまま打ち直すまでに待つ時間 (相手が遅れて動き出すことがある) */
 export const UNCERTAIN_RETRY_MS = 30_000;
+/** 保留だった班 (印が消えたのを見た回に数えを空にするため) */
+const wasHeld = new Set<string>();
 
 export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); lastLook.clear(); uncertainSent.clear(); }
 
@@ -66,7 +68,9 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   // ★ 班ごとの空回し (bridges.json の dry_run)。全体の空回し (deps.dryRun) が立っていれば、どの班も空回し
   const d: TickDeps = { ...deps, dryRun: deps.dryRun || b.dryRun === true };
   const now = d.now();
-  if (isHeld(d.stateDir, b.project)) return report(b.project, 'held', 0, now);
+  if (isHeld(d.stateDir, b.project)) { wasHeld.add(b.project); return report(b.project, 'held', 0, now); }
+  // ★ 人が印を消した。数えはメモリにあるので、ここで空にしないと 1 時間の窓が明けるまで再保留する (2026-11-23 印を消して 4 秒後にまた保留)
+  if (wasHeld.delete(b.project)) d.limiter.reset(b.project);
 
   // ★ 空回しはカーソルのファイルを作らないので、手元で覚えたカーソルを先に見る。
   //   以前はファイルだけを見ていて、空回しでは毎回「初回」と見なして末尾へ飛び直し、新着を 1 つも記録しなかった
@@ -134,6 +138,7 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   if (!d.limiter.take(b.project)) {
     const reason = '1 時間に配る数の上限を超えた';
     setHold(d.stateDir, b.project, reason);
+    wasHeld.add(b.project);   // ★ 次の回に印が消えていれば数えを空にする (上の isHeld より先に印が消されることがある)
     d.record({ kind: 'held', project: b.project, reason });
     d.onHold?.(b.project, reason);
     return report(b.project, 'held', fresh.ids.length, now);
@@ -154,6 +159,7 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
     return report(b.project, 'unknown', fresh.ids.length, now);
   }
   if (!r.ok) {
+    d.limiter.refund(b.project);   // ★ 届かなかった回は数えない (失敗が続くと「上限」の保留に化ける。uncertain は届いたかもしれないので数えたまま)
     d.record({ kind: 'deliver-failed', project: b.project, error: r.error });
     return report(b.project, r.error === 'blocked' ? 'blocked' : 'failed', fresh.ids.length, now);
   }

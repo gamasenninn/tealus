@@ -248,6 +248,33 @@ describe('配る輪 (tickBridge)', () => {
     expect(c.delivered).toHaveLength(1);
   });
 
+  it('★ 人が保留の印を消したら数えも空にして配り直す (再起動を要さない。2026-11-23 印を消して 4 秒後にまた保留した)', async () => {
+    const lim = new RateLimiter(1, 3600_000, () => t);
+    saveCursor(stateDir, 'pd', id(1));
+    writeQueue(1, 2);
+    const c = fake('idle');
+    await tickBridge({ project: 'pd', courier: c }, deps({ limiter: lim }));
+    writeQueue(1, 2, 3);
+    expect((await tickBridge({ project: 'pd', courier: c }, deps({ limiter: lim }))).state).toBe('held');
+    fs.rmSync(path.join(stateDir, 'hold-pd.json'));
+    t += 5000;
+    expect((await tickBridge({ project: 'pd', courier: c }, deps({ limiter: lim }))).state).toBe('delivered');
+    expect(c.delivered).toHaveLength(2);
+  });
+
+  it('★ 届かなかった回は上限に数えない (herdr の失敗が続くと 2 分で「上限」の保留に化けていた)', async () => {
+    const lim = new RateLimiter(2, 3600_000, () => t);
+    saveCursor(stateDir, 'pd', id(1));
+    writeQueue(1, 2);
+    const bad = fake('idle', false);
+    for (let i = 0; i < 5; i++) {
+      expect((await tickBridge({ project: 'pd', courier: bad }, deps({ limiter: lim }))).state).toBe('failed');
+      t += 3000;
+    }
+    expect(isHeld(stateDir, 'pd')).toBe(false);
+    expect((await tickBridge({ project: 'pd', courier: fake('idle') }, deps({ limiter: lim }))).state).toBe('delivered');
+  });
+
   it('★ 空回しは打たずに記録だけ。カーソルも進めず、同じ判断を 2 度記録しない', async () => {
     saveCursor(stateDir, 'pd', id(1));
     writeQueue(1, 2);

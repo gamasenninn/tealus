@@ -31,7 +31,7 @@ export function heartbeatInfo(reports: BridgeReport[], now: number, startedAt?: 
     } else if ((r.state === 'missing' || r.state === 'unknown') && r.since !== null && now - r.since >= MISSING_ALERT_MS) {
       problems.push(`${r.project} の届け先が見つかりません (${minutes} 分)`);
     } else if (r.state === 'held') {
-      problems.push(`${r.project} の配達を保留しています (上限。人が保留の印を消すまで止めています)`);
+      problems.push(`${r.project} の配達を保留しています (上限。~/.tealus/courier/hold-${r.project}.json を消せば再開します・再起動は不要)`);
     }
   }
   const info: HeartbeatInfo = { bridges };

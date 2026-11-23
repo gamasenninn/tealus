@@ -2,6 +2,7 @@
  * 配達の上限 (docs/12 §8 の 8・§12.4)。班ごとに 1 時間に 40 通を超えたら保留する (2026-11-19 利用者が 20 通、11-23 に 40 通へ)。
  * ★ 人が居ない・道具を広げた班どうしが @cc- で起こし合うと、止める人が居ないまま回るため
  * ★ 保留は捨てない。印をファイルに置き、人が消すまで戻さない (段階 1 は消す口を作らない)
+ * ★ 印が消えたのを見た回に、その班の数えも空にする (tick.mts。数えはメモリだけなので、以前は再起動まで再保留した)
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,6 +34,16 @@ export class RateLimiter {
     list.push(t);
     this.sent.set(project, list);
     return true;
+  }
+
+  /** 最後に使った 1 通を返す (届かなかった回は上限に数えない。2026-11-23) */
+  refund(project: string): void {
+    this.sent.get(project)?.pop();
+  }
+
+  /** 班の数えを空にする (人が保留の印を消したとき。再起動しなくても配り直せるように、2026-11-23) */
+  reset(project: string): void {
+    this.sent.delete(project);
   }
 }
 
