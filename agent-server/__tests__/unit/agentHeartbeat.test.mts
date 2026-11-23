@@ -18,8 +18,9 @@ jest.mock('../../src/lib/logger.mts', () => ({ logger: {
 } }));
 
 import { agentHeartbeatInfo, startAgentHeartbeat, stopAgentHeartbeat } from '../../src/setup/agentHeartbeat.mts';
+import * as botSendThrottle from '../../src/lib/botSendThrottle.mts';
 
-beforeEach(() => { tealusProblem = null; jest.useFakeTimers(); });
+beforeEach(() => { tealusProblem = null; botSendThrottle._reset(); jest.useFakeTimers(); });
 afterEach(() => { stopAgentHeartbeat(); jest.useRealTimers(); });
 
 describe('agentHeartbeatInfo', () => {
@@ -30,6 +31,19 @@ describe('agentHeartbeatInfo', () => {
   test('★ 共有の tealus が欠けていれば problem に一文', () => {
     tealusProblem = '会話モードの tealus の道具がつながっていません';
     expect(agentHeartbeatInfo()).toEqual({ problem: '会話モードの tealus の道具がつながっていません' });
+  });
+
+  // ★ 改善ループ 101 (2026-11-23): 部屋またぎの委譲の安全装置は一度落ちると再起動まで戻らないのに、warn 1 行しか出ていなかった
+  test('★ 部屋またぎの委譲の安全装置が落ちていれば problem に一文 (再起動で戻ると書く)', () => {
+    for (let i = 0; i < botSendThrottle.SPIKE_TRIP_THRESHOLD; i++) botSendThrottle.checkAndRecord();
+    expect(botSendThrottle.isSpikeTripped()).toBe(true);
+    expect(String(agentHeartbeatInfo().problem)).toMatch(/委譲.*止め.*再起動/);
+  });
+
+  test('★ 両方あれば両方を並べる', () => {
+    tealusProblem = 'x';
+    for (let i = 0; i < botSendThrottle.SPIKE_TRIP_THRESHOLD; i++) botSendThrottle.checkAndRecord();
+    expect(String(agentHeartbeatInfo().problem)).toMatch(/^x \/ .*委譲/);
   });
 });
 

@@ -9,6 +9,7 @@
  */
 import { sharedTealusProblem } from '../mcp/roomMcpManager.mts';
 import { logger } from '../lib/logger.mts';
+import { isSpikeTripped, SPIKE_TRIP_THRESHOLD } from '../lib/botSendThrottle.mts';
 
 export const AGENT_HEARTBEAT_NAME = 'agent-server';
 const DEFAULT_INTERVAL_MS = 60_000;
@@ -19,8 +20,13 @@ let timer: NodeJS.Timeout | null = null;
 let failing = false;
 
 export function agentHeartbeatInfo(): Record<string, unknown> {
-  const problem = sharedTealusProblem();
-  return problem ? { problem } : {};
+  const problems: string[] = [];
+  const tealus = sharedTealusProblem();
+  if (tealus) problems.push(tealus);
+  // ★ 改善ループ 101 (2026-11-23): 安全装置は一度落ちると再起動まで戻らない (lib/botSendThrottle.mts、意図的)。
+  //   以前は warn が 1 行出るだけで、委譲が黙って旧挙動になっても誰にも届かなかった
+  if (isSpikeTripped()) problems.push(`部屋またぎの委譲を止めています (bot の送信が 1 分に ${SPIKE_TRIP_THRESHOLD} 通に達した。agent-server の再起動で戻ります)`);
+  return problems.length ? { problem: problems.join(' / ') } : {};
 }
 
 function beat(send: Send): void {
