@@ -3,6 +3,7 @@ import Markdown from 'react-markdown';
 import { MARKDOWN_PLUGINS } from '../../utils/markdownPlugins';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import { isAttending, onAttentionChange } from '../../services/attention';
 import BottomNav from '../common/BottomNav';
 import type { Message, MediaItem, PortalLink } from '../../types';
 import { usePortalPassUrl } from '../../hooks/useAppPassUrl';
@@ -36,6 +37,7 @@ function HomePage() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   /** お知らせの出ている部屋 (新着で取り直すかの判定) */
   const announcementRoomIds = useRef<Set<string>>(new Set());
+  const pendingRead = useRef<Map<string, string>>(new Map());   // 使っていない間に溜めた未読のお知らせ (id → 部屋)
   const iframeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // #607 「通行証を添える」が付いたタブは、通行証つきの入口 URL で開く (docs/11 §5.4)
   const activePortal = portalLinks.find((p) => `portal-${p.id}` === activeTab);
@@ -45,6 +47,11 @@ function HomePage() {
     loadAnnouncements();
     loadPortalLinks();
   }, []);
+
+  // 使っていない間に溜めたお知らせ (id → 部屋) を、使い始めたら既読にする
+  useEffect(() => onAttentionChange((attending) => { if (attending) flushPendingRead(); }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []);
 
   // ★ 開いたままでも取り直す (2026-10-30 小野さん判断 11)。以前は開いたときの 1 回だけで、開いている間・
   //   通信が戻ったあとに来たお知らせは、開き直すまで出なかった。続けて来た知らせは 1 回にまとめる
@@ -113,6 +120,17 @@ function HomePage() {
     }
   };
 
+  const flushPendingRead = () => {
+    if (pendingRead.current.size === 0) return;
+    // ルームごとにグループ化してmarkRead
+    const byRoom: Record<string, string[]> = {};
+    pendingRead.current.forEach((roomId, id) => { (byRoom[roomId] ||= []).push(id); });
+    pendingRead.current.clear();
+    Object.entries(byRoom).forEach(([roomId, ids]) => {
+      api.markRead(roomId, ids).catch(() => {});
+    });
+  };
+
   const loadAnnouncements = async () => {
     try {
       setLoadError(null);
@@ -121,18 +139,11 @@ function HomePage() {
       announcementRoomIds.current = new Set(((data.messages || []) as AnnouncementMessage[]).map((m) => m.room_id));
 
       // 未読メッセージを既読にする
+      // ★ 改善ループ 100 (2026-11-23): 人が使っていない窓では既読にせず、使い始めたときにまとめて既読にする
+      //   (#651 と同じ。ホームを出したままの 2 枚目の画面や裏のタブが、届いたお知らせを 500ms 後に既読にしていた)
       const unreadMsgs = ((data.messages || []) as AnnouncementMessage[]).filter(m => m.is_unread);
-      if (unreadMsgs.length > 0) {
-        // ルームごとにグループ化してmarkRead
-        const byRoom: Record<string, string[]> = {};
-        unreadMsgs.forEach(m => {
-          if (!byRoom[m.room_id]) byRoom[m.room_id] = [];
-          byRoom[m.room_id].push(m.id);
-        });
-        Object.entries(byRoom).forEach(([roomId, ids]) => {
-          api.markRead(roomId, ids).catch(() => {});
-        });
-      }
+      unreadMsgs.forEach(m => pendingRead.current.set(m.id, m.room_id));
+      if (isAttending()) flushPendingRead();
     } catch (err) {
       console.error('Load announcements error:', err);
       setLoadError(err instanceof Error ? err.message : '原因不明');
