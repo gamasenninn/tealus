@@ -128,7 +128,7 @@ export function setupSocketHandlers(io: Server): void {
       socket.leave(roomId);
     });
 
-    // #475 その部屋を開いていて画面が見えている間だけ viewing: true が届く。通知の送り先から外すのに使う
+    // #475 その部屋を開いていて人が使っている (画面が見えていて・窓が選ばれていて・最近触った、2026-11-23) 間だけ viewing: true が届く。通知の送り先から外すのに使う
     // ★ 影響するのは自分への通知だけなので、メンバーかどうかは確かめない (形だけ確かめる)
     socket.on('room:viewing', (data: unknown) => {
       const d = data as { room_id?: unknown; viewing?: unknown } | null;

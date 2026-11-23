@@ -60,7 +60,7 @@ describe('上限 (班ごとに 1 時間に 40 通、docs/12 §12.4)', () => {
 
   it('★ 保留の印はファイルに残り、人が消すまで保留のまま (捨てない・勝手に戻さない)', () => {
     expect(isHeld(dir, 'panedeck')).toBe(false);
-    setHold(dir, 'panedeck', '1 時間に 20 通を超えた');
+    setHold(dir, 'panedeck', '1 時間に配る数の上限を超えた');
     expect(isHeld(dir, 'panedeck')).toBe(true);
     fs.rmSync(path.join(dir, 'hold-panedeck.json'));
     expect(isHeld(dir, 'panedeck')).toBe(false);
