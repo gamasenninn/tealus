@@ -8,6 +8,7 @@ import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
 import { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } from '../constants/config.mts';
 import { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps, type AttachableMessage } from '../services/messageAttachments.mts';
+import { ccIntakeUpdated } from '../services/cc/ccIntake.mts';
 import { fireWebhooks } from '../services/webhook.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { checkMessageRefs } from '../services/messageRefs.mts';
@@ -480,6 +481,9 @@ router.put('/:msgId', async (req: Request, res: Response) => {
       edited_by: userId,
       edited_by_name: req.user!.display_name,
     });
+
+    // ★ #650 CC ブリッジの受け付け (編集で宛先を足した救済、#338)。CC_INTAKE=server のときだけ動く
+    void ccIntakeUpdated({ roomId, messageId: String(msgId), content: content.trim(), previousContent: msg.content, senderId: msg.sender_id, editorId: userId });
 
     // Webhook
     fireWebhooks('message.updated', roomId, {

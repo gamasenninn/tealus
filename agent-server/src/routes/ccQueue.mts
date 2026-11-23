@@ -28,10 +28,21 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import * as config from '../config.mts';
 import { logger } from '../lib/logger.mts';
-import { getCcQueueDir } from '../webhook/ccQueue.mts';
+import { getCcQueueDir, ccIntakeByServer } from '../webhook/ccQueue.mts';
 import { addSubscriber, removeSubscriber, broadcastBye, type CcSubscriber } from '../webhook/ccSubscribers.mts';
 
 export const router = express.Router();
+
+/**
+ * ★ #650 (docs/14 §5.3) CC_INTAKE=server なら受け箱を書くのは本体で、流れ (/stream) に配れるのも本体だけ。
+ *   ここでつながると heartbeat は来るのに便が来ない (静かに外れる)。4000 番を直接叩く線のために 410 で断る
+ *   (本体の /agent-api/cc-queue/* は本体が答えるので、ここには来ない)
+ */
+router.use(['/pending', '/stream'], (req: Request, res: Response, next) => {
+  if (!ccIntakeByServer()) return next();
+  logger.warn(`[cc-stream] 410 ${req.method} ${req.baseUrl}${req.path}: CC ブリッジの受け付けは本体に移っています (CC_INTAKE=server)`);
+  res.status(410).json({ error: 'CC ブリッジの受け付けは本体に移りました。本体の /agent-api/cc-queue/* を使ってください (docs/14)' });
+});
 
 /**
  * 本体サーバが gateway-bye を呼ぶときに名乗る id (server/src/utils/gatewayBye.mts が鍵に入れる)。

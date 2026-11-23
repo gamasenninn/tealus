@@ -36,6 +36,15 @@ function getCcQueueDir(): string {
   return process.env.CC_QUEUE_DIR || DEFAULT_QUEUE_DIR;
 }
 
+/**
+ * ★ #650 (docs/14、2026-11-23) `CC_INTAKE=server` なら CC ブリッジの受け付けは本体がする。agent-server は受け箱に書かず、
+ *   取りに来る口 (/cc-queue/stream・/pending) も 410 で断る (書く人と配る人が別のプロセスだと、つながっても便が来ない)。
+ *   ★ 本体と同じ名前を両方が読む。呼ぶたびに読む (テストが env を後から変える)
+ */
+function ccIntakeByServer(): boolean {
+  return process.env.CC_INTAKE === 'server';
+}
+
 // #335 cc-bridge 受付エコーの表示時間 (ms)。processing を出してこの時間後に idle で消す。
 const CC_ACK_TTL_MS = parseInt(process.env.CC_ACK_TTL_MS || '5000', 10);
 
@@ -470,4 +479,5 @@ export {
   emitCcAck,
   DEFAULT_QUEUE_DIR,
   getCcQueueDir,
+  ccIntakeByServer,
 };

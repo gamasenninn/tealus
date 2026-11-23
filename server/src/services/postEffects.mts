@@ -17,6 +17,7 @@ import { pushMachinePost, type MachinePost } from './machinePush.mts';
 import { fireWebhooks, type WebhookPayload } from './webhook.mts';
 import { sendPushToRoomMembers, type PushPayload } from './push.mts';
 import { processLinkPreviews } from './linkPreview.mts';
+import { ccIntakeCreated, type CcSourceMessage } from './cc/ccIntake.mts';
 import { logger } from '../utils/logger.mts';
 import { errorText } from '../utils/logFormat.mts';
 
@@ -75,6 +76,12 @@ export async function announcePost(e: PostEffects): Promise<void> {
     });
   }
   if (e.push.kind === 'machine') await pushMachinePost(e.push.post);
-  if (e.webhook.kind === 'on') fireWebhooks('message.created', e.roomId, e.webhook.payload);
+  if (e.webhook.kind === 'on') {
+    // ★ #650 ⑤ CC ブリッジの受け付けは ③ と同じ on/off (docs/14 §4)。CC_INTAKE=server のときだけ動く (それ以外は agent-server が webhook で受ける)。
+    //   ★ fireWebhooks より先に写しを渡す (fireWebhooks は payload を後から書き換える)
+    const m = e.webhook.payload.message as CcSourceMessage | undefined;
+    if (m?.id && m.sender?.id) void ccIntakeCreated(e.roomId, { ...m, sender: { ...m.sender } });
+    fireWebhooks('message.created', e.roomId, e.webhook.payload);
+  }
   if (e.preview.kind === 'on') processLinkPreviews(e.preview.messageId, e.preview.text, io, e.roomId).catch(() => {});
 }

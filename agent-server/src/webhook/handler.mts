@@ -9,7 +9,8 @@ import * as botApi from '../lib/botApi.mts';
 import * as inflightRooms from './inflightRooms.mts';
 import * as botSendThrottle from '../lib/botSendThrottle.mts';
 import type { UnroutedAddressHint } from './ccQueue.mts';
-import { extractCcProjects, findDroppedCcMentions, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck } from './ccQueue.mts';
+import { extractCcProjects, findDroppedCcMentions, detectUnroutedAddressHint, appendCcEvent, shouldSkipCcSender, loadSkipSenderIds, emitCcAck, getCcQueueDir, ccIntakeByServer } from './ccQueue.mts';
+import { claimWriter } from './ccWriter.mts';
 import { isMentioned } from './mention.mts';
 import { isDroppedWorkNotice } from './droppedWorkNotice.mts';
 import { kickInitRetry, whenAgentReady, isInitInProgress } from '../lib/initGate.mts';
@@ -122,6 +123,13 @@ function routeCcEvent(
       + `room=${room.name || room.id} sender=${message.sender.display_name || message.sender.id || '?'}`);
     return [];
   }
+  // ★ #650 受け箱を書くのは 1 プロセス (docs/14 §6)。書くたびに札を見る。本体が持っていれば書かず、便の id を残す
+  const claim = claimWriter(getCcQueueDir());
+  if (!claim.ok) {
+    logger.error(`${tag}[cc-queue] ★ 受け箱の持ち主が別のプロセス (${claim.holder.process} pid=${claim.holder.pid}) のため書いていません: `
+      + `@cc-${targets.join(' @cc-')} id=${message.id} room=${room.name || room.id}。CC_INTAKE を本体と同じ値にしてください (docs/14 §6)`);
+    return [];
+  }
   const ccPayload = {
     id: message.id,
     room_id: room.id,
@@ -191,6 +199,40 @@ const UNROUTED_REMEDY: Record<Exclude<UnroutedAddressHint, null>, string> = {
 };
 
 /**
+ * 新しい投稿の cc の受け付け (#213・#387・#359 (a))。★ #650 CC_INTAKE=server のときは呼ばない (本体が受け付ける)
+ */
+function routeCcOnCreated(
+  message: NonNullable<WebhookPayload['message']>,
+  room: WebhookRoom,
+  senderId: string | undefined,
+): void {
+  const ccProjects = extractCcProjects(message.content);
+  if (ccProjects.length > 0) {
+    if (shouldSkipCcSender(senderId, ccSkipSenderIds)) {
+      // #213 Phase A polish: Claude Code session 等の cc bot からの @cc-* 言及は self-loop の元。skip。
+      logger.debug(`[cc-queue] Skipped self-loop sender ${senderId} for @cc-${ccProjects.join(' @cc-')}`);
+    } else {
+      const delivered = routeCcEvent(message, room, ccProjects, ccProjects);
+      // ★ #491 ゲストの便は丸ごと断ったので、「1 行目以外の宛先を捨てた」の warn は出さない (理由が違う)
+      if (message.sender?.role !== 'guest') warnDroppedCcMentions(message.content, delivered, room, senderId);
+    }
+    // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
+  } else {
+    // #359 (a): 宛先を書いたつもりで配送されなかった便を可視化する。
+    // 2026-08-20 の実害は「3 日間どこにも届かず、痕跡も残らなかった」。
+    // ★ silent をやめるだけで 3 日は 1 時間になっていた (issue の選択肢 6)。
+    // 精度優先で拾うので info。全件を上げると通常の会話に埋もれて「見えない」に戻る。
+    const hint = detectUnroutedAddressHint(message.content);
+    if (hint) {
+      const head = (message.content || '').split('\n').find(l => l.trim().length > 0) || '';
+      logger.info(`[cc-queue] 宛先未解決のため配送していません (${hint}): `
+        + `room=${room.name || room.id} sender=${message.sender?.display_name || senderId} head="${head.slice(0, 60)}"`
+        + UNROUTED_REMEDY[hint]);
+    }
+  }
+}
+
+/**
  * message.created イベント処理
  */
 async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
@@ -229,30 +271,8 @@ async function handleMessageCreated(payload: WebhookPayload): Promise<void> {
   // #213 Phase A: cc-queue routing — `@cc-{project}` mention を file beacon に追記。
   // #387: 1 行目の先頭に並べた宛先 (`@cc-a @cc-b`) は全部に配る (同報)。
   // Bot membership 検証より前に実行 (cc routing は agent-server の Light/Deep dispatch とは独立)。
-  const ccProjects = extractCcProjects(message.content);
-  if (ccProjects.length > 0) {
-    if (shouldSkipCcSender(senderId, ccSkipSenderIds)) {
-      // #213 Phase A polish: Claude Code session 等の cc bot からの @cc-* 言及は self-loop の元。skip。
-      logger.debug(`[cc-queue] Skipped self-loop sender ${senderId} for @cc-${ccProjects.join(' @cc-')}`);
-    } else {
-      const delivered = routeCcEvent(message, room, ccProjects, ccProjects);
-      // ★ #491 ゲストの便は丸ごと断ったので、「1 行目以外の宛先を捨てた」の warn は出さない (理由が違う)
-      if (message.sender?.role !== 'guest') warnDroppedCcMentions(message.content, delivered, room, senderId);
-    }
-    // continue: dispatch にも通す (bot が同 message に @mention されてれば応答)
-  } else {
-    // #359 (a): 宛先を書いたつもりで配送されなかった便を可視化する。
-    // 2026-08-20 の実害は「3 日間どこにも届かず、痕跡も残らなかった」。
-    // ★ silent をやめるだけで 3 日は 1 時間になっていた (issue の選択肢 6)。
-    // 精度優先で拾うので info。全件を上げると通常の会話に埋もれて「見えない」に戻る。
-    const hint = detectUnroutedAddressHint(message.content);
-    if (hint) {
-      const head = (message.content || '').split('\n').find(l => l.trim().length > 0) || '';
-      logger.info(`[cc-queue] 宛先未解決のため配送していません (${hint}): `
-        + `room=${room.name || room.id} sender=${message.sender?.display_name || senderId} head="${head.slice(0, 60)}"`
-        + UNROUTED_REMEDY[hint]);
-    }
-  }
+  // ★ #650 CC_INTAKE=server なら本体が受け付ける (docs/14)。cc の節ごと飛ばす (ログが 2 か所に出ない)
+  if (!ccIntakeByServer()) routeCcOnCreated(message, room, senderId);
 
   // Bot が参加していないルームは無視（ただしルーム一覧を再取得して確認）。判定は ensureBotInRoom 1 つ (改善ループ 71)
   {
@@ -322,7 +342,8 @@ async function handleMessageUpdated(payload: WebhookPayload): Promise<void> {
   // cc-queue: 編集で @cc-<project> が新規に付いたら beacon 追記 (cc-bridge の呼び忘れ救済)
   // ★ #387: 宛先が複数になったので「付いたか / 付いていないか」の真偽値ではなく **差分**で見る。
   //   既に届いている班へ積み直すと、同じ便で 2 回起こすことになる。
-  const ccNow = extractCcProjects(content);
+  // ★ #650 CC_INTAKE=server なら本体が受け付ける (routes/messages.mts の ccIntakeUpdated)
+  const ccNow = ccIntakeByServer() ? [] : extractCcProjects(content);
   const ccPrev = new Set(extractCcProjects(prevContent));
   const ccAdded = ccNow.filter((p) => !ccPrev.has(p));
   if (ccAdded.length > 0 && !shouldSkipCcSender(senderId, ccSkipSenderIds)) {

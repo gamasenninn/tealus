@@ -1,0 +1,457 @@
+/**
+ * ★ #650 (2026-11-23) agent-server の __tests__/unit/ccSubscribers.test.mts から写した (道だけ変えた)
+ *
+ * cc-queue 購読者レジストリ (#214) unit test
+ *
+ * scope: project ごとの購読者管理と、★ 認可 = 接続者が member のルームのイベントだけを配る。
+ *
+ * ★ なぜ認可がここに要るか (#214 で判明):
+ *   beacon を書くのは agent-server の bot、消費して返信するのは CC セッションの bot で
+ *   **別 principal**。実データでも、agent-server の bot は member だが CC 側の bot は
+ *   member でない DM が beacon に入っていた (返信しようとすると bot API が 403)。
+ *   購読者ごとの allowedRooms で絞り、**消費者が実際に行動できる範囲に揃える**。
+ */
+// logger をモックしないと、テストの購読者が **本番の agent-server ログ** に書き込む
+// (実際に `rooms=1` / `project=organon` 等のテストデータが本番ログに混入した)
+jest.mock('../../src/utils/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+
+import {
+  addSubscriber, removeSubscriber, publish, subscriberCount,
+  broadcastControl, broadcastShutdown, broadcastBye,
+  type CcSubscriber,
+} from '../../src/services/cc/ccSubscribers.mts';
+
+/** res.write を記録するだけの最小 fake */
+function fakeRes() {
+  const written: string[] = [];
+  return {
+    written,
+    write: (chunk: string) => { written.push(chunk); return true; },
+    payloads: () => written.map((l) => JSON.parse(l.trim())),
+  };
+}
+
+/** テスト用の購読者を作る。afterEach で確実に落とすため作ったものを覚えておく */
+const created: CcSubscriber[] = [];
+function makeSub(project: string, rooms: string[]) {
+  const res = fakeRes();
+  const s: CcSubscriber = { project, allowedRooms: new Set(rooms), sink: res };
+  created.push(s);
+  return { s, res };
+}
+
+afterEach(() => {
+  for (const s of created) removeSubscriber(s);
+  created.length = 0;
+});
+
+const EV = (roomId: string, id = 'm1') => ({ id, room_id: roomId, room_name: 'r', content: 'hi', type: 'text' });
+
+describe('ccSubscribers — 登録と解除', () => {
+  it('登録すると数に反映され、解除すると戻る', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    expect(subscriberCount('tealus')).toBe(0);
+    addSubscriber(s);
+    expect(subscriberCount('tealus')).toBe(1);
+    removeSubscriber(s);
+    expect(subscriberCount('tealus')).toBe(0);
+  });
+
+  it('同じ project に複数の購読者が並存できる', () => {
+    const a = makeSub('tealus', ['r1']);
+    const b = makeSub('tealus', ['r1']);
+    addSubscriber(a.s);
+    addSubscriber(b.s);
+    expect(subscriberCount('tealus')).toBe(2);
+  });
+
+  it('未登録の購読者を解除しても壊れない', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    expect(() => removeSubscriber(s)).not.toThrow();
+    expect(subscriberCount('tealus')).toBe(0);
+  });
+
+  it('未知の project の購読者数は 0', () => {
+    expect(subscriberCount('does-not-exist')).toBe(0);
+  });
+});
+
+describe('ccSubscribers — publish の配信と認可', () => {
+  it('★ allowedRooms に含まれるルームのイベントだけ届く', () => {
+    const { s, res } = makeSub('tealus', ['r1', 'r2']);
+    addSubscriber(s);
+
+    publish('tealus', EV('r1', 'a'));
+    publish('tealus', EV('r9', 'b'));   // ★ member でないルーム
+    publish('tealus', EV('r2', 'c'));
+
+    expect(res.payloads().map((p) => p.id)).toEqual(['a', 'c']);
+  });
+
+  it('★ 実データで見つかった形: 他人の DM は member でない購読者に届かない', () => {
+    // agent-server の bot は member なので beacon に載るが、CC 側の bot は member でない
+    const DM = '4df09fa9-9433-4dcf-9cf8-3de4e8ead951';
+    const { s, res } = makeSub('tealus', ['ai-room']);
+    addSubscriber(s);
+
+    publish('tealus', EV(DM, 'dm'));
+
+    expect(res.written).toHaveLength(0);
+  });
+
+  it('別 project の購読者には届かない', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r1']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    publish('tealus', EV('r1', 'x'));
+
+    expect(t.res.payloads().map((p) => p.id)).toEqual(['x']);
+    expect(o.res.written).toHaveLength(0);
+  });
+
+  it('同 project でも購読者ごとの allowedRooms で判定される', () => {
+    const a = makeSub('tealus', ['r1']);
+    const b = makeSub('tealus', ['r2']);
+    addSubscriber(a.s);
+    addSubscriber(b.s);
+
+    publish('tealus', EV('r1', 'only-a'));
+
+    expect(a.res.payloads().map((p) => p.id)).toEqual(['only-a']);
+    expect(b.res.written).toHaveLength(0);
+  });
+
+  it('room_id が無い payload は誰にも配らない (安全側に倒す)', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+
+    publish('tealus', { id: 'no-room', content: 'x' });
+
+    expect(res.written).toHaveLength(0);
+  });
+
+  it('購読者ゼロでも publish は例外を投げない (file beacon は既に書けている)', () => {
+    expect(() => publish('tealus', EV('r1'))).not.toThrow();
+  });
+
+  it('NDJSON = 1 イベント 1 行、末尾に改行', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    publish('tealus', EV('r1', 'z'));
+    expect(res.written[0]).toBe(JSON.stringify(EV('r1', 'z')) + '\n');
+  });
+});
+
+describe('ccSubscribers — 切断済み購読者の扱い', () => {
+  /** write が必ず投げる購読者 (切断済み接続の模擬) */
+  function makeBrokenSub(project: string, rooms: string[]) {
+    const s: CcSubscriber = {
+      project,
+      allowedRooms: new Set(rooms),
+      sink: { write: () => { throw new Error('EPIPE'); } },
+    };
+    created.push(s);
+    return s;
+  }
+
+  it('★ write が投げる購読者がいても、他の購読者への配信は続く', () => {
+    const broken = makeBrokenSub('tealus', ['r1']);
+    const ok = makeSub('tealus', ['r1']);
+    addSubscriber(broken);
+    addSubscriber(ok.s);
+
+    expect(() => publish('tealus', EV('r1', 'survive'))).not.toThrow();
+    expect(ok.res.payloads().map((p) => p.id)).toEqual(['survive']);
+  });
+
+  it('★ write が投げた購読者は登録から外れる (切断済みを溜めない)', () => {
+    const broken = makeBrokenSub('tealus', ['r1']);
+    addSubscriber(broken);
+    expect(subscriberCount('tealus')).toBe(1);
+
+    publish('tealus', EV('r1'));
+
+    expect(subscriberCount('tealus')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #365 計画的な停止の予告 (`__bye`)
+//
+// ★ なぜ要るか: 再起動はバグ修正のたびに起きる。人が毎回予告する運用は
+//   **忘れるようになった時点で、本当に必要な場面でも使われなくなる**。
+//   情報を持っているサーバが自分で予告すれば、覚えておく必要が消える。
+//
+// ★ 制御メッセージは room に属さないので publish() では送れない
+//   (publish は room_id が無い payload を捨てる)。専用の経路が要る。
+// ---------------------------------------------------------------------------
+describe('broadcastControl — #365 制御メッセージの一斉送信', () => {
+  it('★ room に関係なく全購読者に届く', () => {
+    const a = makeSub('tealus', ['r1']);
+    const b = makeSub('tealus', ['r9']);   // ★ 全く別の room だけの購読者
+    addSubscriber(a.s);
+    addSubscriber(b.s);
+
+    broadcastControl('tealus', { __bye: { reason: 'shutdown', expect_back_ms: 30000 } });
+
+    for (const r of [a.res, b.res]) {
+      expect(r.written).toHaveLength(1);
+      expect(JSON.parse(r.written[0].trim())).toEqual({ __bye: { reason: 'shutdown', expect_back_ms: 30000 } });
+    }
+  });
+
+  it('別 project の購読者には届かない', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r1']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    broadcastControl('tealus', { __bye: { reason: 'shutdown' } });
+
+    expect(t.res.written).toHaveLength(1);
+    expect(o.res.written).toHaveLength(0);
+  });
+
+  it('NDJSON = 1 行 + 改行', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    broadcastControl('tealus', { __bye: { reason: 'shutdown' } });
+    expect(res.written[0]).toBe('{"__bye":{"reason":"shutdown"}}' + '\n');
+  });
+
+  it('購読者ゼロでも例外を投げない', () => {
+    expect(() => broadcastControl('tealus', { __bye: {} })).not.toThrow();
+  });
+
+  it('★ write が投げても他の購読者への送信は続く (停止時なので特に重要)', () => {
+    const broken: CcSubscriber = {
+      project: 'tealus', allowedRooms: new Set(['r1']),
+      sink: { write: () => { throw new Error('EPIPE'); } },
+    };
+    created.push(broken);
+    const ok = makeSub('tealus', ['r1']);
+    addSubscriber(broken);
+    addSubscriber(ok.s);
+
+    expect(() => broadcastControl('tealus', { __bye: {} })).not.toThrow();
+    expect(ok.res.written).toHaveLength(1);
+  });
+});
+
+describe('broadcastShutdown — #365 全 project への停止予告', () => {
+  it('★ project を問わず全購読者に予告を送る', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r2']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    broadcastShutdown(30000);
+
+    for (const r of [t.res, o.res]) {
+      const msg = JSON.parse(r.written[0].trim());
+      expect(msg.__bye.reason).toBe('shutdown');
+      expect(msg.__bye.expect_back_ms).toBe(30000);
+    }
+  });
+
+  it('購読者が一人もいなくても例外を投げない (停止処理を阻害しない)', () => {
+    expect(() => broadcastShutdown(30000)).not.toThrow();
+  });
+
+  it('★ 出力が従来と 1 バイトも変わらない (broadcastBye 切り出しの回帰止め)', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    broadcastShutdown(30000);
+    expect(res.written[0]).toBe('{"__bye":{"reason":"shutdown","expect_back_ms":30000}}' + '\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #368 本体サーバ (中継) の再起動を予告する
+//
+// ★ 本体サーバは「自分が落ちる」を知っているが購読者を知らない。agent-server は
+//   その逆。情報と配る能力が別プロセスにあるので、本体から一段渡して配らせる。
+//   reason を分けるのは、購読者側の記録に「何で切れたか」を残すため
+//   (SKILL は `{"__bye"` の接頭辞一致 + expect_back_ms しか見ないので、
+//    新しい reason 値でも既存クライアントはそのまま扱える = 再配布不要)。
+// ---------------------------------------------------------------------------
+describe('broadcastBye — #368 理由つきの予告', () => {
+  it('★ 指定した reason で全 project の購読者に届く', () => {
+    const t = makeSub('tealus', ['r1']);
+    const o = makeSub('organon', ['r2']);
+    addSubscriber(t.s);
+    addSubscriber(o.s);
+
+    broadcastBye('gateway_restart', 30000);
+
+    for (const r of [t.res, o.res]) {
+      const msg = JSON.parse(r.written[0].trim());
+      expect(msg.__bye.reason).toBe('gateway_restart');
+      expect(msg.__bye.expect_back_ms).toBe(30000);
+    }
+  });
+
+  it('NDJSON = 1 行 + 改行 (キーの順序も固定)', () => {
+    const { s, res } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    broadcastBye('gateway_restart', 5000);
+    expect(res.written[0]).toBe('{"__bye":{"reason":"gateway_restart","expect_back_ms":5000}}' + '\n');
+  });
+
+  it('購読者ゼロでも例外を投げない (停止処理を阻害しない)', () => {
+    expect(() => broadcastBye('gateway_restart', 30000)).not.toThrow();
+  });
+
+  it('★ 送信件数を返す (呼び出し側が「誰にも届いていない」を判別できる)', () => {
+    expect(broadcastBye('gateway_restart', 30000)).toBe(0);
+    const { s } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    expect(broadcastBye('gateway_restart', 30000)).toBe(1);
+  });
+});
+
+/**
+ * #359 follow-up (2026-08-20): 切断の起点を両側で突き合わせるための計器。
+ *
+ * Mac セッションは切断時の `hb_age` (最後に heartbeat を受けてからの経過) の分布で
+ * 「予告済みは 13-14s に 97% 集中 / 想定外は 2-15s に一様」を出した。同じ土俵の数字を
+ * サーバ側でも出せないと、「サーバのタイマと同期しているか」を突き合わせられない。
+ * ★ 名目値 (15s 間隔) からの計算では代用できない —— setInterval は 220 回でおよそ
+ * 13-14 秒ドリフトしており、それがまさに測りたい量に混ざる。実測しか使えない。
+ */
+describe('#359 subscriber removed の計器 (id / age / hb_age)', () => {
+  const { logger } = require('../../src/utils/logger.mts');
+
+  function lastRemovedLog(): string {
+    const calls = [...(logger.info as jest.Mock).mock.calls, ...(logger.debug as jest.Mock).mock.calls];
+    const lines = calls.map((c) => String(c[0])).filter((m) => m.includes('subscriber removed'));
+    return lines[lines.length - 1] ?? '';
+  }
+
+  beforeEach(() => {
+    (logger.info as jest.Mock).mockClear();
+    (logger.debug as jest.Mock).mockClear();
+  });
+
+  it('★ hb_age (最後に heartbeat を書いてからの秒数) と接続齢を出す', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    s.id = 'ab12cd';
+    s.connectedAt = Date.now() - 30_000;
+    s.lastHbAt = Date.now() - 7_000;
+    addSubscriber(s);
+    removeSubscriber(s);
+
+    const line = lastRemovedLog();
+    expect(line).toContain('id=ab12cd');
+    expect(line).toMatch(/age=(29|30|31)s/);
+    expect(line).toMatch(/hb_age=(6|7|8)s/);
+  });
+
+  it('★ heartbeat をまだ 1 回も書いていなければ hb_age=- (0 と区別する)', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    s.id = 'ef34gh';
+    s.connectedAt = Date.now() - 3_000;
+    addSubscriber(s);
+    removeSubscriber(s);
+
+    const line = lastRemovedLog();
+    expect(line).toContain('hb_age=-');
+    expect(line).not.toContain('hb_age=0s');
+  });
+
+  it('計器のフィールドが無い購読者でも落ちない (後方互換)', () => {
+    const { s } = makeSub('tealus', ['r1']);
+    addSubscriber(s);
+    expect(() => removeSubscriber(s)).not.toThrow();
+    expect(lastRemovedLog()).toContain('project=tealus');
+  });
+});
+
+/**
+ * 改善ループ 52: 1 つの班の待ち受けが増え続けても、本体側では debug でしか見えなかった
+ * ★ 2026-11-14 に @cc-dbbackup が 30 分ごとに 1 本ずつ増えて 22 本になった (受け手の張り直しで古いのが残る)。
+ *   接続の行は debug で、本番 (warn 以上) では見えない。多すぎたら warn で 1 行出す
+ */
+describe('改善ループ 52 購読者が多すぎたら知らせる', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { logger } = jest.requireMock('../../src/utils/logger.mts') as { logger: { warn: jest.Mock } };
+  beforeEach(() => logger.warn.mockClear());
+  afterEach(() => { while (created.length) removeSubscriber(created.pop()!); });
+
+  it('★ 1 つの班で 8 本までは黙っている。9 本目で warn を 1 回', () => {
+    for (let i = 0; i < 8; i++) addSubscriber(makeSub('many', ['r']).s);
+    expect(logger.warn).not.toHaveBeenCalled();
+    addSubscriber(makeSub('many', ['r']).s);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(String(logger.warn.mock.calls[0][0])).toContain('project=many');
+  });
+
+  it('増え続けても毎回は出さない (10 本ごとに 1 回)', () => {
+    for (let i = 0; i < 25; i++) addSubscriber(makeSub('many2', ['r']).s);
+    // 9 本目・10 本目・20 本目
+    expect(logger.warn).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * 改善ループ 56: 受け手が「2 本以上、長く並んだまま」を知らせる
+ * ★ 2026-11-15 に @cc-tealus-dev (Mac) が 4〜7 本つながり続けていた (11-01 から呼ばれていない)。
+ *   9 本目の warn (ループ 52) には届かず、昨日の @cc-dbbackup も 9 本になるまで 4 時間見えなかった。
+ * ★ 張り直しの引き継ぎでは、古い 1 本と新しい 1 本が 20 秒ほど並ぶだけ (札で古い方が終わる)。
+ *   なので「新しく来たとき、既に 2 分以上つながっている先客が 2 本以上いる」= 残っている、と読む
+ */
+describe('改善ループ 56 長く並んだ受け手を知らせる', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { logger } = jest.requireMock('../../src/utils/logger.mts') as { logger: { warn: jest.Mock } };
+  const T0 = new Date('2026-11-15T10:00:00+09:00').getTime();
+  beforeEach(() => { logger.warn.mockClear(); jest.useFakeTimers({ now: T0 }); });
+  afterEach(() => { jest.useRealTimers(); while (created.length) removeSubscriber(created.pop()!); });
+
+  it('★ 張り直しの引き継ぎ (古い 1 本 + 新しい 1 本) は黙っている', () => {
+    addSubscriber(makeSub('handover', ['r']).s);
+    jest.setSystemTime(T0 + 30 * 60_000);
+    addSubscriber(makeSub('handover', ['r']).s);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('★★ 2 分以上つながっている先客が 2 本いるところへ 3 本目が来たら warn', () => {
+    addSubscriber(makeSub('stale', ['r']).s);
+    addSubscriber(makeSub('stale', ['r']).s);
+    jest.setSystemTime(T0 + 3 * 60_000);
+    addSubscriber(makeSub('stale', ['r']).s);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const line = String(logger.warn.mock.calls[0][0]);
+    expect(line).toContain('project=stale');
+    expect(line).toContain('total=3');
+  });
+
+  it('先客が来たばかり (2 分未満) なら黙っている', () => {
+    addSubscriber(makeSub('fresh', ['r']).s);
+    addSubscriber(makeSub('fresh', ['r']).s);
+    jest.setSystemTime(T0 + 60_000);
+    addSubscriber(makeSub('fresh', ['r']).s);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('★ 続いている間は 6 時間に 1 回だけ (55 分ごとのつなぎ直しで毎回は出さない)', () => {
+    // 3 本が並んだまま、55 分ごとにいちばん古い 1 本がつなぎ直す (本数は 3 のまま)
+    const reconnectOldest = () => {
+      const old = created.find((s) => s.project === 'loop')!;
+      removeSubscriber(old); created.splice(created.indexOf(old), 1);
+      addSubscriber(makeSub('loop', ['r']).s);
+    };
+    for (let i = 0; i < 3; i++) addSubscriber(makeSub('loop', ['r']).s);
+    for (let k = 1; k <= 6; k++) {               // 5 時間半
+      jest.setSystemTime(T0 + k * 55 * 60_000);
+      reconnectOldest();
+    }
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    jest.setSystemTime(T0 + 7 * 60 * 60_000);
+    reconnectOldest();
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
+});

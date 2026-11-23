@@ -9,6 +9,7 @@
  *      machine … 機械の投稿の通知 (`pushMachinePost` = 部屋の管理者の設定で鳴らすか決まる、#463)
  *   ③ webhook … `fireWebhooks('message.created')` = エージェントが起きる
  *   ④ preview … `processLinkPreviews`
+ *   ⑤ cc      … `ccIntakeCreated` = CC ブリッジの受け付け (#650、2026-11-23)。★ ③ と同じ on/off (表の「⑤ = ③」も下で確かめる)
  * ★★ 「無い」は 2 種類ある (docs/07 §3):
  *   意図 … 理由がコードか docs に書いてある
  *   不明 … 何も書かれていない (第 2 段で判断する)。★ ここでは**現状**として固定する。
@@ -36,6 +37,11 @@ jest.mock('../../src/services/machinePush.mts', () => {
 jest.mock('../../src/services/webhook.mts', () => {
   const actual = jest.requireActual('../../src/services/webhook.mts');
   return { ...actual, fireWebhooks: jest.fn((event: string) => { if (event === 'message.created') calls.push('webhook'); }) };
+});
+// ★ #650 ⑤ CC ブリッジの受け付け (docs/14 §4)。呼ばれたかだけを見る (中で CC_INTAKE を見るので、テストでは何も書かない)
+jest.mock('../../src/services/cc/ccIntake.mts', () => {
+  const actual = jest.requireActual('../../src/services/cc/ccIntake.mts');
+  return { ...actual, ccIntakeCreated: jest.fn(async () => { calls.push('cc'); return []; }) };
 });
 jest.mock('../../src/services/linkPreview.mts', () => {
   const actual = jest.requireActual('../../src/services/linkPreview.mts');
@@ -148,7 +154,7 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
       c.on('connect', () => { c.emit('room:join', roomId); setTimeout(() => resolve(c), 200); });
     });
     try {
-      expect(await run(async () => { s.emit('message:send', { room_id: roomId, content: URL_TEXT }); })).toEqual(['emit', 'preview', 'push', 'webhook']);
+      expect(await run(async () => { s.emit('message:send', { room_id: roomId, content: URL_TEXT }); })).toEqual(['cc', 'emit', 'preview', 'push', 'webhook']);
     } finally { s.close(); }
   });
 
@@ -164,7 +170,7 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
 
   it('#5 Bot API のテキスト投稿 (postAsUser) — 4 つ全部 (② は機械の通知)。④ は 2026-10-02 に付けた (#383 第 2 段、利用者判断)', async () => {
     expect(await run(() => request(app).post('/api/bot/push').set(auth(bot.token))
-      .send({ room_id: roomId, content: URL_TEXT }))).toEqual(['emit', 'machine', 'preview', 'webhook']);
+      .send({ room_id: roomId, content: URL_TEXT }))).toEqual(['cc', 'emit', 'machine', 'preview', 'webhook']);
   });
 
   it('#6 Bot API の画像投稿 — emit + machine。③ は意図して無し (§3.1、2026-10-02 利用者判断)', async () => {
@@ -181,12 +187,12 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
 
   it('#8 音声メッセージ (人) — emit + push + webhook。④ は不明 (§3.2)', async () => {
     expect(await run(() => request(app).post(`/api/rooms/${roomId}/voice`).set(auth(human.token))
-      .attach('voice', Buffer.from('RIFF0000WAVEfmt '), { filename: 'v.wav', contentType: 'audio/wav' }))).toEqual(['emit', 'push', 'webhook']);
+      .attach('voice', Buffer.from('RIFF0000WAVEfmt '), { filename: 'v.wav', contentType: 'audio/wav' }))).toEqual(['cc', 'emit', 'push', 'webhook']);
   });
 
   it('#8 音声メッセージ (機械) — emit + machine + webhook', async () => {
     expect(await run(() => request(app).post(`/api/rooms/${roomId}/voice`).set(auth(bot.token))
-      .attach('voice', Buffer.from('RIFF0000WAVEfmt '), { filename: 'w.wav', contentType: 'audio/wav' }))).toEqual(['emit', 'machine', 'webhook']);
+      .attach('voice', Buffer.from('RIFF0000WAVEfmt '), { filename: 'w.wav', contentType: 'audio/wav' }))).toEqual(['cc', 'emit', 'machine', 'webhook']);
   });
 
   it('#9 REST の新規メッセージ — 4 つとも無し。★ ① は不明 (§3.2、14 日間呼ばれた回数 0)', async () => {
@@ -232,7 +238,7 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
     expect(await run(async () => {
       status = (await request(app).post(`/api/rooms/${roomId}/media/forward`).set(auth(human.token))
         .send({ source_message_id: src })).status;
-    })).toEqual(['emit', 'push', 'webhook']);
+    })).toEqual(['cc', 'emit', 'push', 'webhook']);
     expect(status).toBe(201);
   });
 
@@ -301,21 +307,24 @@ describe('投稿経路ごとの付随処理 (docs/07 の表)', () => {
    *   ③ ○ = webhook / ④ ○ = preview。印の後ろの注記 (意図・日付) と太字は読まない
    * ★ この file を -t で絞って流したときは、観測した経路だけを比べる (経路の増減は上の 2 本が見ている)
    */
-  it('★ 表の ①〜④ が観測と一致する (docs/07 §2)', () => {
+  it('★ 表の ①〜⑤ が観測と一致する (docs/07 §2)', () => {
     const doc = fs.readFileSync(path.resolve(import.meta.dirname, '../../../docs/07_投稿経路と付随処理.md'), 'utf8');
     const rows = new Map<string, string[]>();
     for (const line of doc.split(/\r?\n/)) {
       const cells = line.split('|').map((c) => c.replace(/\*\*/g, '').trim());
-      if (cells.length >= 9 && /^\d+'?$/.test(cells[1])) rows.set(cells[1], cells.slice(4, 8));
+      if (cells.length >= 10 && /^\d+'?$/.test(cells[1])) rows.set(cells[1], cells.slice(4, 9));
     }
     expect(rows.size).toBe(20); // 18 本 + #12' + #9' (スタンプ)
-    const expectedOf = ([c1, c2, c3, c4]: string[]): string[] => {
+    // ★ #650 ⑤ は ③ と同じ (docs/14 §4)。表の上でも 1 行ずつ確かめる
+    for (const [no, row] of rows) expect(`#${no} ⑤=${row[4].startsWith('○')}`).toBe(`#${no} ⑤=${row[2].startsWith('○')}`);
+    const expectedOf = ([c1, c2, c3, c4, c5]: string[]): string[] => {
       const out: string[] = [];
       if (c1.startsWith('○')) out.push('emit');
       if (c2.includes('○')) out.push('push');
       if (c2.includes('設定')) out.push('machine');
       if (c3.startsWith('○')) out.push('webhook');
       if (c4.startsWith('○')) out.push('preview');
+      if (c5.startsWith('○')) out.push('cc');
       return out.sort();
     };
     const diffs: string[] = [];

@@ -1,0 +1,219 @@
+/**
+ * cc-queue 購読者レジストリ (#214)
+ *
+ * `@cc-{project}` の起床通知を、file beacon に加えて **接続中の HTTP 購読者にも配る**。
+ * file への append は一切変えない (併存)。この module は「配る側」だけを持つ。
+ *
+ * ★ 認可がここに入る理由:
+ *   beacon を書くのは agent-server の bot、消費して返信するのは CC セッションの bot で
+ *   **別 principal**。参加ルームが違うため、agent-server の bot は member でも CC 側は
+ *   member でないルーム (他人の DM 等) が beacon に載りうる。そのまま配ると、
+ *   **返信できない (bot API が 403) イベントで起こされる**うえ、HTTP 公開時は
+ *   読み手の権限を超えた本文が流れる。
+ *   → 購読者ごとの `allowedRooms` (接続時に呼び出し元のトークンで /api/rooms を引いた結果) で絞り、
+ *     **消費者が実際に行動できる範囲に揃える**。
+ */
+import { logger } from '../../utils/logger.mts';
+
+/** 購読者が書き出せる最小のインターフェース (express の Response を想定) */
+export interface CcSubscriberSink {
+  write(chunk: string): boolean;
+}
+
+export interface CcSubscriber {
+  /** cc-queue の project 識別子 (= beacon の file 名) */
+  project: string;
+  /** ★ この購読者に配ってよい room id 集合。接続時に確定させる */
+  allowedRooms: Set<string>;
+  sink: CcSubscriberSink;
+  /**
+   * ★ 以下 3 つは切断を突き合わせるための計器 (#359 follow-up、2026-08-20)。
+   * 省略可 = 既存の呼び出し側を壊さない。
+   *
+   * `id` が無いと、購読者が 2 本あるとき **サーバ側ではどちらが落ちたか区別できない**
+   * (removed 行に識別子が無く、8 月の切断調査で実際に詰まった)。
+   * `lastHbAt` は **実際に `__hb` を書いた時刻**。名目間隔からの計算では代用できない ——
+   * `setInterval` は 220 回でおよそ 13-14 秒ドリフトしており、それが測りたい量に混ざる。
+   */
+  id?: string;
+  connectedAt?: number;
+  lastHbAt?: number;
+}
+
+/** project → 購読者集合 */
+const subscribers = new Map<string, Set<CcSubscriber>>();
+
+export function addSubscriber(sub: CcSubscriber): void {
+  let set = subscribers.get(sub.project);
+  if (!set) {
+    set = new Set();
+    subscribers.set(sub.project, set);
+  }
+  const now = Date.now();
+  // ★ 改善ループ 56: 先客のうち、2 分以上つながっているものを数える (足す前に)
+  let staleOthers = 0;
+  for (const other of set) {
+    const at = addedAt.get(other);
+    if (at !== undefined && now - at >= STALE_PEER_MS) staleOthers++;
+  }
+  set.add(sub);
+  addedAt.set(sub, now);
+  logger.debug(`[cc-stream] subscriber added: project=${sub.project} rooms=${sub.allowedRooms.size} total=${set.size}`);
+  // ★ 改善ループ 56: 張り直しの引き継ぎで並ぶのは「古い 1 本 + 新しい 1 本」を 20 秒ほど (札で古い方が終わる)。
+  //   長く続いている先客が 2 本以上いるところへ新しく来た = 受け手が残っている。
+  //   2026-11-15 に @cc-tealus-dev が 4〜7 本並んだままで、9 本目の warn (下) には届かなかった。
+  //   つなぎ直しは 55 分ごとなので、続いている間は 6 時間に 1 回だけ出す
+  if (staleOthers >= 2) {
+    const last = lastStaleWarnAt.get(sub.project);
+    if (last === undefined || now - last >= STALE_WARN_EVERY_MS) {
+      lastStaleWarnAt.set(sub.project, now);
+      logger.warn(`[cc-stream] ★ 受け手が並んだままです: project=${sub.project} total=${set.size} (2 分以上つながっている先客 ${staleOthers} 本。受け手の古い待ち受けが残っていないか)`);
+    }
+  }
+  // ★ 改善ループ 52: 1 つの班の購読者が多すぎたら warn。受け手が張り直すたびに古いループが残ると増え続けるが
+  //   (2026-11-14 に @cc-dbbackup が 22 本)、上の行は debug なので本番では見えなかった。
+  //   9 本目と、その後は 10 本ごとに 1 回 (増え続けている間、毎回は出さない)
+  if (set.size === SUBSCRIBER_WARN_AT + 1 || (set.size > SUBSCRIBER_WARN_AT && set.size % 10 === 0)) {
+    logger.warn(`[cc-stream] ★ 購読者が多すぎます: project=${sub.project} total=${set.size} (受け手の待ち受けが張り直しのたびに残っていないか)`);
+  }
+}
+
+/** 1 つの班の購読者がこれを超えたら warn (ふだんは 1 本。張り直しの引き継ぎで 20 秒ほど 2 本) */
+const SUBSCRIBER_WARN_AT = 8;
+
+/** ★ 改善ループ 56: 「長く並んだまま」の判定。引き継ぎ (約 20 秒) より十分長く、つなぎ直し (55 分) より短い */
+const STALE_PEER_MS = 2 * 60_000;
+const STALE_WARN_EVERY_MS = 6 * 60 * 60_000;
+/** 購読者がいつ足されたか (connectedAt は省略可なので、ここで自分で持つ) */
+const addedAt = new WeakMap<CcSubscriber, number>();
+/** project → 最後に「並んだまま」を知らせた時刻 */
+const lastStaleWarnAt = new Map<string, number>();
+
+/** ミリ秒差を「Ns」に。基準が無ければ `-` (= 0 秒と区別する) */
+function secsSince(at: number | undefined, now: number): string {
+  return typeof at === 'number' ? `${Math.round((now - at) / 1000)}s` : '-';
+}
+
+export function removeSubscriber(sub: CcSubscriber): void {
+  const set = subscribers.get(sub.project);
+  if (!set) return;
+  if (set.delete(sub)) {
+    // ★ info で出す (接続行と同じ高さ)。debug のままだと NODE_ENV=production で
+    //   level が warn に上がったとき、**接続行だけ残って切断行が消える**。
+    const now = Date.now();
+    logger.info(
+      `[cc-stream] subscriber removed: project=${sub.project} id=${sub.id ?? '-'}`
+      + ` age=${secsSince(sub.connectedAt, now)} hb_age=${secsSince(sub.lastHbAt, now)} total=${set.size}`,
+    );
+  }
+  if (set.size === 0) subscribers.delete(sub.project);
+}
+
+export function subscriberCount(project: string): number {
+  return subscribers.get(project)?.size ?? 0;
+}
+
+/**
+ * 1 行を購読者集合に書き出す共通処理。write が投げた購読者は登録から外す。
+ * 配信中に set を触るので、走査は snapshot に対して行う。
+ */
+function writeTo(set: Set<CcSubscriber>, line: string, filter?: (s: CcSubscriber) => boolean): void {
+  for (const sub of [...set]) {
+    if (filter && !filter(sub)) continue;
+    try {
+      sub.sink.write(line);
+    } catch (err) {
+      logger.debug(`[cc-stream] write 失敗のため購読解除: project=${sub.project} ${err instanceof Error ? err.message : String(err)}`);
+      removeSubscriber(sub);
+    }
+  }
+}
+
+/**
+ * project の全購読者に**制御メッセージ**を送る (#365)。
+ *
+ * ★ `publish()` では送れない。制御メッセージは room に属さないため
+ *   `publish` の「room_id が無い payload は捨てる」に引っかかる。
+ *   逆に言うと、**制御メッセージは認可 (allowedRooms) の対象外**である
+ *   ことを明示するために経路を分けている。room の中身を含めてはいけない。
+ *
+ * 消費側は `{"__` 接頭辞を「イベントではない制御行」として扱う (前方互換)。
+ */
+export function broadcastControl(project: string, payload: Record<string, unknown>): void {
+  const set = subscribers.get(project);
+  if (!set || set.size === 0) return;
+  writeTo(set, JSON.stringify(payload) + '\n');
+}
+
+/**
+ * ★ 計画的な停止を全 project の購読者に予告する (#365)。
+ *
+ * 再起動はバグ修正のたびに起きる。人が毎回予告する運用は **忘れるようになった
+ * 時点で、本当に必要な場面でも使われなくなる**。情報を持っているサーバが
+ * 自分で予告すれば、覚えておく必要が消える。
+ *
+ * ★ この予告が出るのは graceful shutdown (SIGINT / SIGTERM) のときだけ。
+ *   クラッシュや強制終了では出ない —— **予告できるものは予告し、
+ *   予告できないものは異常として残る**、が仕組みから自然にそうなる。
+ *
+ * @param expectBackMs クライアントに伝える「戻ってくるまでの見込み」。
+ *   これをクライアント側にハードコードさせない (デプロイ時間を知るのはサーバだけ)。
+ */
+export function broadcastShutdown(expectBackMs: number): void {
+  broadcastBye('shutdown', expectBackMs);
+}
+
+/**
+ * ★ 理由つきの切断予告を全 project の購読者へ送る (#368 で `broadcastShutdown` から切り出し)。
+ *
+ * reason を外から渡せるようにしたのは、**agent-server 自身の停止以外にも
+ * 予告すべき停止がある**と分かったため。2026-08-04、本体サーバ (cc-queue の中継を
+ * している側) を再起動したところ、別マシンの購読者が予告なしで切れた
+ * (`curl=92` = HTTP/2 ストリーム破損)。
+ *
+ * ★ 本体サーバは「自分が落ちる」を知っているが購読者を知らない。こちらはその逆。
+ *   **情報と、配る能力が別プロセスにある**ので、本体から一段渡して配らせる
+ *   (`POST /cc-queue/gateway-bye` → `reason: 'gateway_restart'`)。
+ *
+ * 消費側は `{"__bye"` の接頭辞一致で猶予窓を張り、読むのは `expect_back_ms` だけ。
+ * reason は記録に残るのみなので、**新しい reason 値を足しても再配布は要らない**。
+ *
+ * @param reason 予告の理由 (`shutdown` = 自分の停止 / `gateway_restart` = 中継の再起動)
+ * @param expectBackMs 「戻ってくるまでの見込み」。★ 値を知っているのは停止する側なので、
+ *   クライアントにハードコードさせない (#361 と同じ理由)。
+ * @returns 送信した購読者数。0 なら誰も繋いでいない (呼び出し側が判別できるように返す)
+ */
+export function broadcastBye(reason: string, expectBackMs: number): number {
+  const payload = { __bye: { reason, expect_back_ms: expectBackMs } };
+  const line = JSON.stringify(payload) + '\n';
+  let total = 0;
+  for (const set of subscribers.values()) {
+    total += set.size;
+    writeTo(set, line);
+  }
+  if (total > 0) {
+    logger.info(`[cc-stream] 切断を予告しました: reason=${reason} ${total} 購読者 (expect_back_ms=${expectBackMs})`);
+  }
+  return total;
+}
+
+/**
+ * project の購読者に 1 イベントを配る (NDJSON = 1 行 + 改行)。
+ *
+ * - **allowedRooms に含まれる room_id のイベントだけ**配る (認可)
+ * - `room_id` を持たない payload は誰にも配らない (安全側)
+ * - write が投げた購読者 (切断済み) は登録から外す。他の購読者への配信は続ける
+ * - 購読者ゼロでも例外を投げない。file beacon への append は既に済んでいる
+ */
+export function publish(project: string, payload: Record<string, unknown>): void {
+  const set = subscribers.get(project);
+  if (!set || set.size === 0) return;
+
+  const roomId = payload.room_id;
+  if (typeof roomId !== 'string' || !roomId) {
+    logger.warn(`[cc-stream] payload に room_id が無いため配信しません (project=${project})`);
+    return;
+  }
+
+  writeTo(set, JSON.stringify(payload) + '\n', (sub) => sub.allowedRooms.has(roomId));
+}

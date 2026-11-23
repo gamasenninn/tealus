@@ -26,6 +26,7 @@ import { isRoomMember } from '../services/roomMembership.mts';
 import { formatLocalTime, hasExplicitZone, resolveTimeZone } from '../lib/localTime.mts';
 import { announceRoomJoined } from '../services/roomJoined.mts';
 import { recordHeartbeat, validateHeartbeatBody } from '../services/heartbeats.mts';
+import { emitAgentStatus } from '../services/agentStatus.mts';
 import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
 import { advanceReadCursor } from '../services/readCounts.mts';
 
@@ -316,14 +317,8 @@ router.post('/status', async (req, res) => {
     if (!(await isRoomMember(room_id, userId))) {
       return res.status(403).json({ error: 'このルームのメンバーではありません' });
     }
-    const io = getIo();
-    io.to(room_id).emit('agent:status', {
-      agent_id: userId,
-      room_id,
-      status,
-      message: message || '',
-      display_name: req.user!.display_name,
-    });
+    // ★ #650 表示は 1 か所から配る (部屋ごとの番号を進める。cc の「届きました」を消す idle がそれを見る)
+    emitAgentStatus(room_id, { agent_id: userId, status, message: message || '', display_name: req.user!.display_name });
 
     res.json({ success: true });
   } catch (err) {

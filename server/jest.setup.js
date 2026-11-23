@@ -30,3 +30,17 @@ if (!process.env.MEDIA_ROOT) {
 if (!process.env.OPENAI_API_KEY) {
   process.env.OPENAI_API_KEY = 'dummy-key-for-ci';
 }
+
+// ★★ CC ブリッジの受け箱もテスト用の一時フォルダにする (#650、docs/14 §10、2026-11-23)
+//   既定の ~/.tealus/cc-queue はこの機械では本番の受け箱そのもので、配達役 (courier) が見ている。
+//   受け付けを本体に移すと、本文に `@cc-` を含むテストの投稿が本番の受け箱に行を足し、**実在の班を起こす**
+//   別名の設定 (cc-aliases.json) も本番の server/config/ を読まないよう、無いファイルを指しておく
+if (!process.env.CC_QUEUE_DIR) {
+  process.env.CC_QUEUE_DIR = path.join(os.tmpdir(), `tealus-test-cc-queue-${process.pid}`);
+}
+if (!process.env.CC_ALIASES_FILE) {
+  process.env.CC_ALIASES_FILE = path.join(os.tmpdir(), `tealus-test-cc-aliases-${process.pid}.json`);
+}
+// ★ #650 の監査 5: CC_INTAKE は既定 (off) で固定する。本番の .env が CC_INTAKE=server になっても、この機械のテストだけ挙動が変わらないように。
+//   CC_INTAKE を見るテストは自分で入れる (ccIntake.test.mts・ccQueueStream.test.mts)
+process.env.CC_INTAKE = '';

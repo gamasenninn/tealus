@@ -24,12 +24,18 @@ import {
 } from './services/loginThrottle.mts';
 import { loginThrottle } from './middleware/loginThrottle.mts';
 import { requestLog } from './middleware/requestLog.mts';
+import { router as ccQueueRoutes } from './routes/ccQueue.mts';
+import { ccIntakeEnabled, describeCcIntake, learnAssistantSender, checkAgentIntake, warnIfAliasesNotCarried } from './services/cc/ccIntake.mts';
+import { broadcastBye } from './services/cc/ccSubscribers.mts';
+import { claimWriter, releaseWriter } from './services/cc/ccWriter.mts';
+import { getCcQueueDir } from './services/cc/ccQueue.mts';
 import { setupSocketHandlers } from './socket/index.mts';
 import { setIo } from './io-registry.mts';
 import { createSignalHandler, realSleep, realDeadline } from './utils/shutdown.mts';
 import { notifyGatewayBye } from './utils/gatewayBye.mts';
 import { describeProxyClose, endDownstream, isCcStreamPath } from './utils/ccStreamProxyLog.mts';
 import { JWT_SECRET } from './middleware/auth.mts';
+import jwt from 'jsonwebtoken';
 
 import { router as lineRoutes, flushLineImageSets } from './routes/line.mts';
 import { router as authRoutes } from './routes/auth.mts';
@@ -116,6 +122,10 @@ setIo(io);
 app.disable('x-powered-by');
 app.use((_req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); next(); });
 app.use(cors());
+
+// ★ #650 CC ブリッジの取りに来る口 (docs/14 §5.3)。CC_INTAKE=server のときだけ本体が答え、それ以外は下の中継へ素通りする。
+//   URL は今までと同じ (/agent-api/cc-queue/*・/agent-api/agent/cc-projects)。中継より前に置く
+app.use('/agent-api', ccQueueRoutes);
 
 // Agent Server proxy（express.json() より前に配置 — body をパースせずに転送するため）
 //
@@ -358,6 +368,35 @@ if (import.meta.main) {
   });
   checkBuildArtifacts();
 
+  // ★ #650 CC ブリッジの受け付け (docs/14 §6)。札を取るのは import.meta.main の中だけ (テストは app.mts を import する)
+  logger.info(describeCcIntake());
+  if (!ccIntakeEnabled()) {
+    // 戻したとき: 前の自分 (CC_INTAKE=server だった本体) が強制終了で残した札を外す (agent-server が次の便で取れるように、§6)
+    try { releaseWriter(getCcQueueDir()); } catch { /* noop */ }
+  } else {
+    try {
+      const c = claimWriter(getCcQueueDir());
+      if (!c.ok) logger.error(`[cc-queue] ★ 受け箱の持ち主が ${c.holder.process} (pid=${c.holder.pid}) のままです。agent-server も CC_INTAKE=server で起こし直してください (このままでは本体は受け箱に書きません、docs/14 §6)`);
+    } catch (err) {
+      logger.error(`[cc-queue] 受け箱の札を取れませんでした: ${errorText(err)}`);
+    }
+    warnIfAliasesNotCarried(path.join(import.meta.dirname, '..', '..', 'agent-server', 'config', 'cc-aliases.json'));
+    // アシスタントの口座を聞き、agent-server が受け付けをやめているかも確かめる (§4・§6)。
+    // agent-server が後から上がることもあるので、取れるまで最初の 10 分は 1 分おき、そのあとは 5 分おきに聞き続ける
+    let tries = 0;
+    let skewChecked = false;
+    const ask = async (): Promise<void> => {
+      tries++;
+      const token = () => jwt.sign({ id: 'tealus-server', login_id: 'SYSTEM' }, JWT_SECRET, { expiresIn: 60 });
+      const id = await learnAssistantSender(agentUrl(), token());
+      if (!skewChecked) skewChecked = (await checkAgentIntake(agentUrl(), token())) !== 'unreachable';
+      if (tries === 10 && !id) logger.info('[cc-queue] アシスタントの口座をまだ聞けていません (agent-server を使っていなければ問題ありません)。'
+        + '使っているなら、聞けるまでアシスタントの投稿も班を起こします。確実に止めるなら CC_SKIP_SENDER_IDS に書く');
+      if (!id || !skewChecked) setTimeout(() => { void ask(); }, tries < 10 ? 60_000 : 5 * 60_000).unref();
+    };
+    void ask();
+  }
+
   // #368 停止時に止める watcher。起動時に読み込んだ module をそのまま覚えておく
   // (ここで static import すると、モジュール読込時に env を読む都合 (docs/05 §2a) と
   //  起動順が変わるため、既存の動的 import の結果を捕まえる形にしている)
@@ -445,6 +484,13 @@ if (import.meta.main) {
     warn: (m) => logger.warn(m),
     // ★ 予告は「中継が生きているうち」に通す。接続を切ってからでは届かない
     notifyGateway: async () => {
+      // ★ #650 本体が受け付けているなら、購読者は本体が持っている。自分で __bye を書き、札を手放す (docs/14 §5.3・§6)
+      if (ccIntakeEnabled()) {
+        const n = broadcastBye('shutdown', parseInt(process.env.CC_SHUTDOWN_EXPECT_BACK_MS || process.env.CC_GATEWAY_EXPECT_BACK_MS || '', 10) || 30000);
+        if (n > 0) logger.info(`[shutdown] cc-queue の購読者 ${n} 件に再起動を予告しました`);
+        try { releaseWriter(getCcQueueDir()); } catch { /* noop */ }
+        return;
+      }
       const notified = await notifyGatewayBye({
         baseUrl: agentUrl(),   // ★ #556
         secret: JWT_SECRET,

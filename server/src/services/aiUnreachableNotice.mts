@@ -4,6 +4,7 @@ import { getIo } from '../io-registry.mts';
 import { insertSystemMessage } from './systemMessage.mts';
 import { agentUrl } from '../lib/upstream.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { ccIntakeEnabled } from './cc/ccIntake.mts';
 
 /**
  * AI に届かなかった便に、部屋へ 1 行返す (2026-10-30 小野さん判断 C)。
@@ -12,6 +13,8 @@ import { errorText } from '../utils/logFormat.mts';
  *   投稿した人は返事を待ち続けた。AI に宛てた便 (下の 3 つ) のときだけ知らせる:
  *   1. 行頭が `@<部屋にいる機械の名前>` (例 @アシスタント)
  *   2. 行頭が `@cc-` (Claude Code のセッションを起こす便。同じ道で届く)
+ *      ★ #650 `CC_INTAKE=server` のときは数えない (本体が受け付けるので、agent-server が止まっても班には届く、docs/14 §5.5)。
+ *        無条件に外すと、移す前は agent-server が止まっても知らせが出なくなる
  *   3. 相手が機械の 1 対 1
  * ★ 障害の間に同じ部屋へ何度も出さない (部屋ごとに 10 分に 1 回)
  */
@@ -37,7 +40,7 @@ export async function addressedBot(roomId: string, payload: CreatedPayload): Pro
   const head = (payload.message?.content ?? '').trimStart();
   const named = rows.find((b) => head.startsWith(`@${b.display_name}`));
   if (named) return named.id;
-  if (head.startsWith('@cc-')) return rows[0].id;
+  if (head.startsWith('@cc-') && !ccIntakeEnabled()) return rows[0].id;
   if (rows[0].room_type === 'direct' && rows[0].members === 2) return rows[0].id;
   return null;
 }

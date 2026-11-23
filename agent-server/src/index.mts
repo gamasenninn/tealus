@@ -10,6 +10,8 @@ import { app } from './app.mts';
 import { initializeAgentWithRetry } from './setup/register.mts';
 import { closeAllRoomMcp } from './mcp/roomMcpManager.mts';
 import { broadcastShutdown } from './webhook/ccSubscribers.mts';
+import { releaseWriter } from './webhook/ccWriter.mts';
+import { getCcQueueDir, ccIntakeByServer } from './webhook/ccQueue.mts';
 import { pendingRooms, setPendingObserver } from './webhook/dispatcher.mts';
 import { noticeDroppedWork } from './webhook/droppedWorkNotice.mts';
 import { createPendingWorkJournal } from './webhook/pendingWorkJournal.mts';
@@ -40,6 +42,11 @@ const server = app.listen(config.PORT, async () => {
   const leftoverWork = pendingJournal.takeLeftover();
   setPendingObserver((pending) => pendingJournal.record(pending));
   logger.info(`Tealus API: ${config.TEALUS_API_URL}`);
+  // ★ #650 (docs/14 §6) CC_INTAKE=server なら受け付けをやめ、受け箱の札を手放す (本体が取る)
+  if (ccIntakeByServer()) {
+    try { releaseWriter(getCcQueueDir()); } catch { /* noop */ }
+    logger.info('[cc-queue] CC ブリッジの受け付けは本体 (CC_INTAKE=server)。agent-server は受け箱に書きません');
+  }
   logger.info(`Light model: ${config.AGENT_LIGHT_MODEL}`);
   // TTS provider のログは config.mts の load 時に出力済み（責務分離）
   logOrganonInjectState(); // organon inject の ON/OFF を起動時に明示（#304、default OFF）
@@ -110,6 +117,8 @@ const shutdown = async () => {
   //   クラッシュ時には当然出ない = 予告できないものは異常として残る。
   //   server.close() より先に呼ぶこと (接続を閉じてからでは届かない)。
   try { broadcastShutdown(config.CC_SHUTDOWN_EXPECT_BACK_MS); } catch { /* 停止処理は止めない */ }
+  // ★ #650 受け箱の札を手放す (戻すときに本体が先でも後でも、次の便で取れるように。docs/14 §6)
+  try { releaseWriter(getCcQueueDir()); } catch { /* noop */ }
   // ★ 終わっていない AI の仕事を、その部屋に知らせてから止める (改善ループ 45)。
   //   列はメモリの中だけにあり、これが無いと黙って消える (11-05 に 7 件)。上限 3 秒で、失敗しても止まる
   await noticeDroppedWork(pendingRooms(), {

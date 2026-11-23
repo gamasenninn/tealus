@@ -1,0 +1,1023 @@
+/**
+ * cc-queue (Claude Code routing) ユニットテスト
+ * #213 Phase A
+ * ★ #650 (2026-11-23) agent-server の __tests__/unit/ccQueue.test.mts から写した。違いは 3 つだけ:
+ *   - 別名の設定の場所は CC_ALIASES_FILE (agent-server は CC_ALIASES_FILE)
+ *   - 旧互換の「既定の班」の env は持ってこない (本番で未設定。docs/14 §7)
+ *   - 「届きました」は宛先を表示名に入れる (画面は `${display_name}: ${message}`。本体から直接配る)
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+
+jest.mock('../../src/utils/logger.mts', () => ({ logger: {
+  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
+} }));
+
+import { logger } from '../../src/utils/logger.mts';
+import {
+  addSubscriber, removeSubscriber, type CcSubscriber,
+} from '../../src/services/cc/ccSubscribers.mts';
+import {
+  extractCcProject,
+  extractCcProjects,
+  findDroppedCcMentions,
+  CC_FANOUT_MAX,
+  appendCcEvent,
+  shouldSkipCcSender,
+  loadSkipSenderIds,
+  loadAliases,
+  reloadAliases,
+  getAliasesConfigPath,
+  emitCcAck,
+  detectUnroutedAddressHint,
+  _resetLineCounts,
+} from '../../src/services/cc/ccQueue.mts';
+
+describe('extractCcProject (先頭マッチング、#215)', () => {
+  test('文字列の先頭にあれば match', () => {
+    expect(extractCcProject('@cc-tealus 進捗教えて')).toBe('tealus');
+    expect(extractCcProject('@cc-life-line')).toBe('life-line');
+    expect(extractCcProject('@cc-foo123')).toBe('foo123');
+    expect(extractCcProject('@cc-multi-hyphen-name')).toBe('multi-hyphen-name');
+  });
+
+  test('改行直後 (新しい行の先頭) なら match (multi-line)', () => {
+    expect(extractCcProject('hello\n@cc-tealus 進捗')).toBe('tealus');
+    expect(extractCcProject('line1\nline2\n@cc-foo')).toBe('foo');
+  });
+
+  test('文中 (先頭以外) なら null (#215 で挙動変更)', () => {
+    expect(extractCcProject('hello @cc-tealus bye')).toBeNull();
+    expect(extractCcProject('これも見て @cc-tealus')).toBeNull();
+    expect(extractCcProject('  @cc-tealus  ')).toBeNull(); // 前に whitespace
+  });
+
+  test('複数 @cc mention があり、先頭のものが返る', () => {
+    expect(extractCcProject('@cc-foo middle @cc-bar')).toBe('foo');
+    expect(extractCcProject('not at start\n@cc-bar')).toBe('bar'); // 2 行目の先頭は match
+  });
+
+  test('hyphen 無し / project 名空は null', () => {
+    expect(extractCcProject('@cc')).toBeNull();
+    expect(extractCcProject('@cc-')).toBeNull();
+  });
+
+  test('別形式の mention は null', () => {
+    expect(extractCcProject('hello world')).toBeNull();
+    expect(extractCcProject('@AI please help')).toBeNull();
+  });
+
+  test('null / undefined / 空文字を安全に処理', () => {
+    expect(extractCcProject('')).toBeNull();
+    expect(extractCcProject(null)).toBeNull();
+    expect(extractCcProject(undefined)).toBeNull();
+  });
+
+  test('mailto 偽 match を回避 (引き続き)', () => {
+    expect(extractCcProject('mailto:user@cc-test.com')).toBeNull();
+    expect(extractCcProject('a@cc-test')).toBeNull();
+    expect(extractCcProject('user@cc-test')).toBeNull();
+  });
+
+  test('英大文字は不可 (lowercase 規約、引き続き)', () => {
+    expect(extractCcProject('@cc-Tealus')).toBeNull();
+    expect(extractCcProject('@cc-TEALUS')).toBeNull();
+  });
+});
+
+describe('@Claude mention routing (#263)', () => {
+  // 既存 cc-tealus bot の display_name "Claude" で mention picker から
+  // 挿入される `@Claude` も @cc-{default-project} 同等に routing する
+  //
+  // ★ この describe は **実機の agent-server/config/cc-aliases.json を読んでいた**。
+  //   同 dir は git 管理外のローカル設定なので、運用で `Claude` の宛先を変えると
+  //   (2026-08-20 に tealus → support へ変更) テストが 4 件赤くなり、
+  //   「テスト全体が信号として使えない」状態になっていた。
+  //   → CC_ALIASES_FILE を tmp に向けて隔離する (他の describe と同じ形)。
+  let origConfigDir: string | undefined;
+  let aliasDir: string;
+
+  beforeEach(() => {
+    origConfigDir = process.env.CC_ALIASES_FILE;
+    aliasDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-alias-'));
+    fs.writeFileSync(path.join(aliasDir, 'cc-aliases.json'),
+      JSON.stringify({ aliases: [{ mention: 'Claude', project: 'tealus' }] }));
+    process.env.CC_ALIASES_FILE = path.join(aliasDir, 'cc-aliases.json');
+    reloadAliases();
+  });
+
+  afterEach(() => {
+    if (origConfigDir === undefined) delete process.env.CC_ALIASES_FILE;
+    else process.env.CC_ALIASES_FILE = origConfigDir;
+    fs.rmSync(aliasDir, { recursive: true, force: true });
+    reloadAliases();   // ★ cache を持ち越さない (module 変数なので後続 describe に漏れる)
+  });
+
+  test('@Claude 行頭 → default project (tealus) に routing', () => {
+    expect(extractCcProject('@Claude 進捗教えて')).toBe('tealus');
+    expect(extractCcProject('@Claude README をレビュー')).toBe('tealus');
+  });
+
+  test('case-insensitive で受け付け', () => {
+    expect(extractCcProject('@claude hello')).toBe('tealus');
+    expect(extractCcProject('@CLAUDE hello')).toBe('tealus');
+    expect(extractCcProject('@cLaUdE hello')).toBe('tealus');
+  });
+
+  test('改行直後の @Claude も match', () => {
+    expect(extractCcProject('hello\n@Claude 進捗')).toBe('tealus');
+  });
+
+  test('文中 (先頭以外) なら null (#215 同 stance)', () => {
+    expect(extractCcProject('hello @Claude bye')).toBeNull();
+    expect(extractCcProject('  @Claude  ')).toBeNull();
+  });
+
+  test('@Claudeなんとか (続き字) は word boundary 違反で match しない', () => {
+    expect(extractCcProject('@Claudette is different')).toBeNull();
+    expect(extractCcProject('@Claudia hello')).toBeNull();
+  });
+
+  test('@cc-{project} と @Claude が共存する場合 cc- が優先', () => {
+    expect(extractCcProject('@cc-foo bar @Claude')).toBe('foo');
+  });
+
+  test('@Claude 単独 (引数なし) でも match', () => {
+    expect(extractCcProject('@Claude')).toBe('tealus');
+  });
+});
+
+describe('cc-aliases.json (Level 2 config file、#263 follow-up)', () => {
+  // CC_ALIASES_FILE を tmp dir に向けて test isolation
+  let origConfigDir: string | undefined;
+  let testConfigDir: string;
+
+  beforeEach(() => {
+    origConfigDir = process.env.CC_ALIASES_FILE;
+    testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-aliases-test-'));
+    process.env.CC_ALIASES_FILE = path.join(testConfigDir, 'cc-aliases.json');
+    reloadAliases();  // cache clear
+  });
+
+  afterEach(() => {
+    if (origConfigDir === undefined) delete process.env.CC_ALIASES_FILE;
+    else process.env.CC_ALIASES_FILE = origConfigDir;
+    fs.rmSync(testConfigDir, { recursive: true, force: true });
+    reloadAliases();  // cache clear
+  });
+
+  function writeConfig(obj: unknown) {
+    fs.writeFileSync(path.join(testConfigDir, 'cc-aliases.json'), JSON.stringify(obj));
+  }
+
+  test('config file 不在で extractCcProject は @cc-* のみ動作 (alias なし)', () => {
+    expect(extractCcProject('@cc-tealus hello')).toBe('tealus');
+    expect(extractCcProject('@Claude hello')).toBeNull();  // alias 未登録なので null
+  });
+
+  test('cc-aliases.json で 単一 alias を登録', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('tealus');
+  });
+
+  test('複数 alias を登録、それぞれ別 project に routing', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Claude', project: 'tealus' },
+        { mention: 'Helper', project: 'proj1' },
+        { mention: 'AI', project: 'proj2' },
+      ],
+    });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('tealus');
+    expect(extractCcProject('@Helper task')).toBe('proj1');
+    expect(extractCcProject('@AI ask')).toBe('proj2');
+  });
+
+  test('alias は case-insensitive で match', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@claude hello')).toBe('tealus');
+    expect(extractCcProject('@CLAUDE hello')).toBe('tealus');
+    expect(extractCcProject('@cLaUdE hello')).toBe('tealus');
+  });
+
+  test('alias でも word boundary で誤 match 防止', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claudette hello')).toBeNull();
+    expect(extractCcProject('@Claudia hello')).toBeNull();
+  });
+
+  test('alias でも 行頭 only (#215 同 stance)', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('hello @Claude bye')).toBeNull();
+    expect(extractCcProject('  @Claude  ')).toBeNull();
+  });
+
+  test('複数 alias で先に登録された方が優先 (登録順)', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Helper', project: 'proj-a' },
+        { mention: 'Helper', project: 'proj-b' },  // duplicate mention
+      ],
+    });
+    reloadAliases();
+    expect(extractCcProject('@Helper task')).toBe('proj-a');
+  });
+
+  test('@cc-{project} は alias より優先 (regex 順)', () => {
+    writeConfig({ aliases: [{ mention: 'cc-test', project: 'override' }] });
+    reloadAliases();
+    expect(extractCcProject('@cc-test hello')).toBe('test');  // alias でなく標準 path
+  });
+
+  test('invalid JSON は空 alias 扱い (graceful degrade)', () => {
+    fs.writeFileSync(path.join(testConfigDir, 'cc-aliases.json'), '{ invalid json');
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBeNull();
+    expect(extractCcProject('@cc-tealus hello')).toBe('tealus');  // 標準 path は健在
+  });
+
+  test('aliases field が array でない場合は空扱い', () => {
+    writeConfig({ aliases: 'not-an-array' });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBeNull();
+  });
+
+  test('alias entry に必須 field が無いものは skip', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Valid', project: 'good' },
+        { mention: '' },  // empty mention
+        { project: 'no-mention' },  // no mention
+        { mention: 'NoProject' },  // no project
+        null,
+        { mention: 'Helper', project: '' },  // empty project
+      ],
+    });
+    reloadAliases();
+    expect(extractCcProject('@Valid hello')).toBe('good');
+    expect(extractCcProject('@NoProject hello')).toBeNull();
+    expect(extractCcProject('@Helper hello')).toBeNull();
+  });
+
+  test('特殊文字を含む mention 名も escape されて regex として安全', () => {
+    writeConfig({ aliases: [{ mention: 'Bot.X+Y', project: 'special' }] });
+    reloadAliases();
+    expect(extractCcProject('@Bot.X+Y hello')).toBe('special');
+    expect(extractCcProject('@BotXY hello')).toBeNull();  // . が literal なので match しない
+  });
+
+  test('reloadAliases() で file 編集後の変更が反映される', () => {
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'tealus' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('tealus');
+
+    // file を rewrite
+    writeConfig({ aliases: [{ mention: 'Claude', project: 'newproj' }] });
+    reloadAliases();
+    expect(extractCcProject('@Claude hello')).toBe('newproj');
+  });
+
+  test('CC_ALIASES_FILE で config 場所を override', () => {
+    expect(getAliasesConfigPath()).toBe(path.join(testConfigDir, 'cc-aliases.json'));
+  });
+
+  test('loadAliases は array を返す (内部 structure 確認)', () => {
+    writeConfig({
+      aliases: [
+        { mention: 'Claude', project: 'tealus' },
+        { mention: 'AI', project: 'proj1' },
+      ],
+    });
+    reloadAliases();
+    const aliases = loadAliases();
+    expect(aliases).toHaveLength(2);
+    expect(aliases[0].mention).toBe('Claude');
+    expect(aliases[0].project).toBe('tealus');
+    expect(aliases[0].regex).toBeInstanceOf(RegExp);
+  });
+});
+
+describe('appendCcEvent', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-queue-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  test('project 用の jsonl file を作成して payload を 1 行 append する', () => {
+    const filePath = appendCcEvent('tealus', { id: 'msg1', content: 'hello' }, testDir);
+
+    expect(filePath).toBe(path.join(testDir, 'tealus.jsonl'));
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    expect(JSON.parse(content.trim())).toEqual({ id: 'msg1', content: 'hello' });
+  });
+
+  test('複数 append で行が順序通り保たれる', () => {
+    appendCcEvent('tealus', { id: 'msg1' }, testDir);
+    appendCcEvent('tealus', { id: 'msg2' }, testDir);
+    appendCcEvent('tealus', { id: 'msg3' }, testDir);
+
+    const lines = fs.readFileSync(path.join(testDir, 'tealus.jsonl'), 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(3);
+    expect(JSON.parse(lines[0]).id).toBe('msg1');
+    expect(JSON.parse(lines[1]).id).toBe('msg2');
+    expect(JSON.parse(lines[2]).id).toBe('msg3');
+  });
+
+  test('別 project は別 file に書く', () => {
+    appendCcEvent('tealus', { id: 'msg1' }, testDir);
+    appendCcEvent('life-line', { id: 'msg2' }, testDir);
+
+    const tealus = fs.readFileSync(path.join(testDir, 'tealus.jsonl'), 'utf8');
+    const lifeline = fs.readFileSync(path.join(testDir, 'life-line.jsonl'), 'utf8');
+    expect(JSON.parse(tealus.trim()).id).toBe('msg1');
+    expect(JSON.parse(lifeline.trim()).id).toBe('msg2');
+  });
+
+  test('project が空 / null なら例外を投げる', () => {
+    expect(() => appendCcEvent('', {}, testDir)).toThrow();
+    expect(() => appendCcEvent(null as unknown as string, {}, testDir)).toThrow();
+    expect(() => appendCcEvent(undefined as unknown as string, {}, testDir)).toThrow();
+  });
+
+  test('queue dir が存在しない場合は再帰的に作成', () => {
+    const newDir = path.join(testDir, 'sub', 'cc-queue');
+    appendCcEvent('tealus', { id: 'msg1' }, newDir);
+
+    expect(fs.existsSync(newDir)).toBe(true);
+    expect(fs.existsSync(path.join(newDir, 'tealus.jsonl'))).toBe(true);
+  });
+});
+
+describe('shouldSkipCcSender (self-loop prevention)', () => {
+  test('skip set が空ならどんな sender でも false', () => {
+    expect(shouldSkipCcSender('any-id', new Set())).toBe(false);
+    expect(shouldSkipCcSender('any-id', null)).toBe(false);
+    expect(shouldSkipCcSender('any-id', undefined)).toBe(false);
+  });
+
+  test('senderId が skip set に含まれていれば true', () => {
+    const set = new Set(['bot-1', 'bot-2']);
+    expect(shouldSkipCcSender('bot-1', set)).toBe(true);
+    expect(shouldSkipCcSender('bot-2', set)).toBe(true);
+  });
+
+  test('senderId が skip set に含まれていなければ false', () => {
+    const set = new Set(['bot-1']);
+    expect(shouldSkipCcSender('user-1', set)).toBe(false);
+  });
+
+  test('senderId が空 / null / undefined なら false', () => {
+    const set = new Set(['bot-1']);
+    expect(shouldSkipCcSender('', set)).toBe(false);
+    expect(shouldSkipCcSender(null, set)).toBe(false);
+    expect(shouldSkipCcSender(undefined, set)).toBe(false);
+  });
+});
+
+describe('loadSkipSenderIds', () => {
+  test('CSV から Set を構築', () => {
+    const set = loadSkipSenderIds('id-1,id-2,id-3');
+    expect(set.size).toBe(3);
+    expect(set.has('id-1')).toBe(true);
+    expect(set.has('id-2')).toBe(true);
+    expect(set.has('id-3')).toBe(true);
+  });
+
+  test('前後 whitespace を trim', () => {
+    const set = loadSkipSenderIds(' id-1 , id-2 ,id-3 ');
+    expect(set.has('id-1')).toBe(true);
+    expect(set.has('id-2')).toBe(true);
+    expect(set.has('id-3')).toBe(true);
+  });
+
+  test('空 / undefined / null は空 Set', () => {
+    expect(loadSkipSenderIds('').size).toBe(0);
+    expect(loadSkipSenderIds(undefined).size).toBe(0);
+    expect(loadSkipSenderIds(null as unknown as string).size).toBe(0);
+  });
+
+  test('単一 ID も処理', () => {
+    const set = loadSkipSenderIds('only-one');
+    expect(set.size).toBe(1);
+    expect(set.has('only-one')).toBe(true);
+  });
+});
+
+// #335 cc-bridge 受付エコー: mention 投入時に「届きました」を出し、TTL 後に idle で消す。
+// 一般ユーザーが「投げたものが受理されたか」を即知れるようにする (一か八か待ちの解消)。
+describe('emitCcAck', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  // ★ status は 'relayed'。'processing' ではない (2026-08-30)。
+  //   'processing' は「このボットが処理中」の意味で、client が中断ボタンを出す。
+  //   受領エコーは **別セッションへ中継しただけ**で止められる処理が無いため、
+  //   押しても何も起きないボタンが 5 秒間出ていた (#399 で表示条件を広げたときの回帰)。
+  //   ★★ client 側の対は client/src/utils/agentStatus.ts の RELAYED_STATUS。片方だけ変えると壊れる。
+  test('★ 即 relayed を出す (文言に cc-<project> と「届きました」を含む)', () => {
+    const calls: Array<{ roomId: string; status: string; message: string; label: string }> = [];
+    emitCcAck({
+      projects: ['organon'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (roomId, status, message, label) => { calls.push({ roomId, status, message, label }); },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].roomId).toBe('r1');
+    expect(calls[0].status).toBe('relayed');
+    expect(calls[0].status).not.toBe('processing');   // ★ 中断ボタンを出させない
+    // ★ #650 画面は `${display_name}: ${message}`。宛先は表示名 (label) に入れ、文面には入れない
+    expect(calls[0].label).toBe('cc-organon');
+    expect(calls[0].message).toContain('届きました');
+    expect(calls[0].message).not.toContain('cc-organon');
+  });
+
+  // ★ 2026-08-30: エコーは log を 1 行も出していなかったため、「relayed で出たのか
+  //   processing のままか」がどちらのログにも残らなかった (= 観測不能)。
+  //   status を変えた直後の確認が **画面を見るしかない** 状態だったので、1 行足す。
+  test('★ log に status と宛先を残す (エコーが出たことを後から確かめられる)', () => {
+    // ★ この describe は mock を clear していないので、前の test の [cc-ack] 行を
+    //   拾ってしまう。自分の呼び出しだけを見るため、ここで落とす。
+    (logger.info as jest.Mock).mockClear();
+    emitCcAck({
+      projects: ['organon', 'kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: () => {},
+    });
+    const line = (logger.info as jest.Mock).mock.calls.map(c => String(c[0]))
+      .find(s => s.includes('[cc-ack]'));
+    expect(line).toBeDefined();
+    expect(line).toContain('status=relayed');
+    expect(line).toContain('r1');
+    expect(line).toContain('organon');
+    expect(line).toContain('kairos');
+  });
+
+  test('★ #387 同報は 1 回のエコーに宛先を並べる (room の status は 1 つしか無い)', () => {
+    const calls: Array<{ status: string; label: string }> = [];
+    emitCcAck({
+      projects: ['tealus', 'organon', 'kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status, _m, label) => { calls.push({ status, label }); },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].label).toBe('cc-tealus / cc-organon / cc-kairos');
+  });
+
+  test('TTL 後に idle を出す (= 数秒で消える)', () => {
+    const calls: Array<{ status: string }> = [];
+    emitCcAck({
+      projects: ['kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status) => { calls.push({ status }); },
+    });
+    expect(calls).toHaveLength(1); // processing のみ
+    jest.advanceTimersByTime(4999);
+    expect(calls).toHaveLength(1); // まだ消えない
+    jest.advanceTimersByTime(1);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].status).toBe('idle'); // TTL 到達で消える
+  });
+
+  // ★ #542 同じ便でアシスタントも動く (`@アシスタント @cc-x`) と、5 秒後の idle が「考え中」を消していた
+  test('★★ TTL までに別の表示 (考え中など) が出ていたら、idle を出さない', () => {
+    let seq = 0;
+    const calls: Array<{ status: string }> = [];
+    emitCcAck({
+      projects: ['kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status) => { seq++; calls.push({ status }); },
+      statusSeq: () => seq,
+    });
+    seq++;   // アシスタントが「考え中」を出した
+    jest.advanceTimersByTime(5000);
+    expect(calls.map((c) => c.status)).toEqual(['relayed']);
+  });
+
+  test('★ 別の表示が出ていなければ、今までどおり idle を出す', () => {
+    let seq = 0;
+    const calls: Array<{ status: string }> = [];
+    emitCcAck({
+      projects: ['kairos'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: (_r, status) => { seq++; calls.push({ status }); },
+      statusSeq: () => seq,
+    });
+    jest.advanceTimersByTime(5000);
+    expect(calls.map((c) => c.status)).toEqual(['relayed', 'idle']);
+  });
+
+  test('表示が投げても emitCcAck 自体は throw しない (best-effort)', () => {
+    expect(() => emitCcAck({
+      projects: ['organon'], roomId: 'r1', ttlMs: 5000,
+      pushStatus: () => { throw new Error('boom'); },
+    })).not.toThrow();
+    // TTL 後の idle 送信も同様に握りつぶす
+    expect(() => jest.advanceTimersByTime(5000)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #214 HTTP 化: appendCcEvent に足した 2 つの副作用
+//   (1) 接続中の購読者にも配る (publish)
+//   (2) jsonl が伸びすぎないよう上限で切る (trim)
+// ★ file への append 自体は不変であること (上の既存テスト群が担保) が前提。
+// ---------------------------------------------------------------------------
+describe('appendCcEvent — #214 購読者への配信', () => {
+  let testDir: string;
+  const subs: CcSubscriber[] = [];
+
+  beforeEach(() => { testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-pub-test-')); });
+  afterEach(() => {
+    for (const s of subs) removeSubscriber(s);
+    subs.length = 0;
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  function listen(project: string, rooms: string[]) {
+    const got: string[] = [];
+    const s: CcSubscriber = {
+      project, allowedRooms: new Set(rooms),
+      sink: { write: (c: string) => { got.push(c); return true; } },
+    };
+    addSubscriber(s); subs.push(s);
+    return got;
+  }
+
+  test('★ file に append しつつ、購読者にも同じ payload が届く', () => {
+    const got = listen('tealus', ['r1']);
+    const payload = { id: 'm1', room_id: 'r1', content: 'hello' };
+
+    const filePath = appendCcEvent('tealus', payload, testDir);
+
+    // file 側 (既存の振る舞い)
+    expect(JSON.parse(fs.readFileSync(filePath, 'utf8').trim())).toEqual(payload);
+    // 購読者側 (追加した振る舞い)
+    expect(got).toHaveLength(1);
+    expect(JSON.parse(got[0].trim())).toEqual(payload);
+  });
+
+  test('★ 購読者の allowedRooms 外なら file には書くが配らない', () => {
+    const got = listen('tealus', ['r1']);
+
+    const filePath = appendCcEvent('tealus', { id: 'm1', room_id: 'r-other' }, testDir);
+
+    expect(fs.readFileSync(filePath, 'utf8').trim()).not.toBe('');  // file には書かれる
+    expect(got).toHaveLength(0);                                     // 配られない
+  });
+
+  test('購読者がいなくても append は成功する', () => {
+    const filePath = appendCcEvent('tealus', { id: 'm1', room_id: 'r1' }, testDir);
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+});
+
+describe('appendCcEvent — #214 jsonl の上限 (trim)', () => {
+  let testDir: string;
+  const ORIG = process.env.CC_QUEUE_MAX_LINES;
+
+  beforeEach(() => { testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-trim-test-')); _resetLineCounts(); });
+  afterEach(() => {
+    if (ORIG === undefined) delete process.env.CC_QUEUE_MAX_LINES;
+    else process.env.CC_QUEUE_MAX_LINES = ORIG;
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  const lines = (p: string) => fs.readFileSync(p, 'utf8').trim().split('\n');
+
+  test('上限以下なら切らない', () => {
+    process.env.CC_QUEUE_MAX_LINES = '10';
+    let filePath = '';
+    for (let i = 1; i <= 10; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    expect(lines(filePath)).toHaveLength(10);
+  });
+
+  test('★ 上限を超えたら末尾 80% を残して古い行を捨てる', () => {
+    process.env.CC_QUEUE_MAX_LINES = '10';   // → 超えたら 8 行に切り詰め
+    let filePath = '';
+    for (let i = 1; i <= 11; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    const l = lines(filePath);
+    expect(l).toHaveLength(8);
+    // 新しい方が残る = m4..m11
+    expect(JSON.parse(l[0]).id).toBe('m4');
+    expect(JSON.parse(l[7]).id).toBe('m11');
+  });
+
+  test('★ 切り詰め後も JSON として壊れていない (原子的に書き換わる)', () => {
+    process.env.CC_QUEUE_MAX_LINES = '5';
+    let filePath = '';
+    for (let i = 1; i <= 20; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    for (const l of lines(filePath)) expect(() => JSON.parse(l)).not.toThrow();
+    expect(fs.existsSync(filePath + '.tmp')).toBe(false);   // temp が残らない
+  });
+
+  test('★ 切り詰めたらログに出す (黙って消えない)', () => {
+    process.env.CC_QUEUE_MAX_LINES = '3';
+    for (let i = 1; i <= 4; i++) appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('cc-queue'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/切り詰め|trim/));
+  });
+
+  test('env 未設定なら既定 2000 が使われる (少数の append では切らない)', () => {
+    delete process.env.CC_QUEUE_MAX_LINES;
+    let filePath = '';
+    for (let i = 1; i <= 30; i++) filePath = appendCcEvent('tealus', { id: `m${i}`, room_id: 'r' }, testDir);
+
+    expect(lines(filePath)).toHaveLength(30);
+  });
+});
+
+/**
+ * #359 (a) 配送されなかった便の可視化。
+ *
+ * 2026-08-20 の実害: `【organon班 → 本体班】🔴 6 件目…` が 3 日間どの queue にも入らず、
+ * ログにも痕跡が残らなかった。extractCcProject が null を返した便のうち
+ * **「宛先を書いたつもり」に見えるものだけ** を拾って info に上げる。
+ *
+ * ★ 精度が命。全件を上げると雑音に埋もれて「見えない」に戻る。
+ */
+describe('detectUnroutedAddressHint (#359 (a))', () => {
+  test('★ 実害ケース: 「→ ○○班」で宛先を書いたが mention が無い', () => {
+    expect(detectUnroutedAddressHint('【organon班 → 本体班】🔴 6 件目、閾値に到達しました'))
+      .toBe('team-arrow');
+    expect(detectUnroutedAddressHint('kairos班 → 本体班\n本文')).toBe('team-arrow');
+  });
+
+  test('★ 行頭に @cc- を書いたのに project 名が規約外 (大文字・空)', () => {
+    expect(detectUnroutedAddressHint('@cc-Tealus 進捗どう')).toBe('malformed-cc-mention');
+    expect(detectUnroutedAddressHint('@cc- 進捗どう')).toBe('malformed-cc-mention');
+    expect(detectUnroutedAddressHint('@cc-_foo')).toBe('malformed-cc-mention');
+  });
+
+  test('★★ 本文中 (行頭でない) の @cc- 引用では鳴らない — AI 同士の引用で毎回鳴るため', () => {
+    expect(detectUnroutedAddressHint('宛先は @cc-tealus と書いてください')).toBeNull();
+    expect(detectUnroutedAddressHint('`@cc-organon` を先頭に置く')).toBeNull();
+  });
+
+  test('★★ 普通の本文では鳴らない', () => {
+    expect(detectUnroutedAddressHint('今日の朝礼のメモです')).toBeNull();
+    expect(detectUnroutedAddressHint('organon班の進捗はどうですか')).toBeNull();   // 班 はあるが → が無い
+    expect(detectUnroutedAddressHint('A → B の順に処理する')).toBeNull();          // → はあるが 班 が無い
+  });
+
+  test('空 / null / 非文字列は null', () => {
+    expect(detectUnroutedAddressHint('')).toBeNull();
+    expect(detectUnroutedAddressHint(null)).toBeNull();
+    expect(detectUnroutedAddressHint(undefined)).toBeNull();
+    expect(detectUnroutedAddressHint(42 as unknown as string)).toBeNull();
+  });
+
+  test('★★★ 最初の非空行だけを見る — 長い返信の引用部分で鳴らせない', () => {
+    // 冒頭で名乗り、後段で他班のやり取りを引用しているだけの返信
+    expect(detectUnroutedAddressHint('了解しました。\n\n> 【organon班 → 本体班】前回の件'))
+      .toBeNull();
+    // 先頭が空行でも、最初の「中身のある行」を見る
+    expect(detectUnroutedAddressHint('\n\n【organon班 → 本体班】本題')).toBe('team-arrow');
+  });
+
+  test('★ 正常に routing される便では呼ばれない前提だが、呼ばれても null', () => {
+    expect(detectUnroutedAddressHint('@cc-tealus 【organon班 → 本体班】本題')).toBeNull();
+    expect(detectUnroutedAddressHint('@cc-organon よろしく')).toBeNull();
+  });
+
+  /**
+   * #450 宛名を **強調**や先行空白で潰した便。
+   *
+   * ★ 2026-09-21 の実害: `**@cc-organon**` で 3 通が不着。投稿は 200 で成功し部屋にも
+   *   残るので、**送り手も受け手も気づけない**。3 通とも agent-server のログに 1 行も出ていない。
+   * ★★ 直近 60 日 (`@cc-` を含む 2245 便) で測ると、この形は **3 件・全部が実害**。誤報 0。
+   *   「本文のどこかに @cc- がある」まで広げると 229 件鳴り、ほぼ AI 自身の署名だった。
+   */
+  describe('★★★★ decorated-address (#450)', () => {
+    test('★ 実害ケース: 宛名を ** で囲うと配送も既存 hint も落ちる', () => {
+      expect(detectUnroutedAddressHint('**@cc-organon** 【本体班 → organon 班】合っています'))
+        .toBe('decorated-address');
+      expect(detectUnroutedAddressHint('**@cc-tealus-dev** 【本体班 → Mac セッション】'))
+        .toBe('decorated-address');
+    });
+
+    test('★ 先行する空白も同じ (行頭でなくなるので配送されない)', () => {
+      expect(detectUnroutedAddressHint('  @cc-organon よろしく')).toBe('decorated-address');
+      expect(detectUnroutedAddressHint('\t@cc-organon よろしく')).toBe('decorated-address');
+    });
+
+    test('★ 他の強調記号も剥がす', () => {
+      expect(detectUnroutedAddressHint('__@cc-tealus__ 本題')).toBe('decorated-address');
+      expect(detectUnroutedAddressHint('*@cc-kairos* 本題')).toBe('decorated-address');
+    });
+
+    test('★★ 規約外の project 名でも「書こうとした」ことは分かる', () => {
+      expect(detectUnroutedAddressHint('**@cc-Tealus** 本題')).toBe('decorated-address');
+    });
+
+    /**
+     * ★★★★★ ここが精度の線。`` ` `` と `>` は **剥がさない**。
+     * 規約を説明している便・引用している便で鳴らすと、雑音に埋もれて「見えない」に戻る。
+     */
+    test('★★★★ code span と引用では鳴らない — 規約を説明・引用しているだけ', () => {
+      expect(detectUnroutedAddressHint('`@cc-organon` を先頭に置く')).toBeNull();
+      expect(detectUnroutedAddressHint('> @cc-organon 前回の件')).toBeNull();
+    });
+
+    test('★★ 2 行目以降が飾られていても鳴らない — 見るのは最初の非空行だけ', () => {
+      expect(detectUnroutedAddressHint('了解しました。\n\n**@cc-organon** と書くと届きません')).toBeNull();
+    });
+
+    test('★ 素で行頭に書けている便には掛からない (既存の経路の担当)', () => {
+      expect(detectUnroutedAddressHint('@cc-Tealus 進捗どう')).toBe('malformed-cc-mention');
+    });
+
+    /**
+     * ★★★★★ 同報便で誤検知しないこと (Mac セッションの照会、2026-09-22)。
+     *
+     * ★ 2 つ目以降の `@cc-` は **行頭ではない**。それでも配送されている。
+     *   もし検知の条件を「自分の mention が行頭か」で書いていたら、
+     *   **全員が起きている便に「飾りで潰した」と出る**ことになる。
+     * ★★ 実際には 2 重に守られている:
+     *   ① 配送できた便では detectUnroutedAddressHint が **そもそも呼ばれない** (handler の else)
+     *   ② 呼ばれても addressRunCcNames が非空なので冒頭で null を返す
+     */
+    test('★★★★ 同報便 (1 行に 3 宛先) では鳴らない — 2 つ目以降は行頭でないが届いている', () => {
+      const fanout = '@cc-organon @cc-tealus-dev @cc-tealus-apps\n\n本文';
+      expect(extractCcProjects(fanout)).toEqual(['organon', 'tealus-dev', 'tealus-apps']);
+      expect(detectUnroutedAddressHint(fanout)).toBeNull();
+    });
+
+    test('★★ 宛名欄の前に @アシスタント が付く形でも鳴らない (#393 の経路)', () => {
+      const s = '@アシスタント @cc-organon @cc-tealus-dev\n\n本文';
+      expect(extractCcProjects(s)).toEqual(['organon', 'tealus-dev']);
+      expect(detectUnroutedAddressHint(s)).toBeNull();
+    });
+  });
+});
+
+describe('extractCcProjects (#387 同報 — 1 行目の先頭に並べた宛先だけ)', () => {
+  test('★ 1 行目の先頭に並べた mention を全部返す', () => {
+    expect(extractCcProjects('@cc-tealus @cc-organon @cc-kairos\n\n相談です')).toEqual(['tealus', 'organon', 'kairos']);
+    expect(extractCcProjects('@cc-kairos @cc-organon 取り急ぎ本体班からの通知を見て')).toEqual(['kairos', 'organon']);
+  });
+
+  test('単一宛先は 1 件の配列 (従来の便が壊れない)', () => {
+    expect(extractCcProjects('@cc-tealus 進捗教えて')).toEqual(['tealus']);
+    expect(extractCcProjects('@cc-multi-hyphen-name')).toEqual(['multi-hyphen-name']);
+  });
+
+  test('宛先が無ければ空配列', () => {
+    expect(extractCcProjects('今日の朝礼のメモです')).toEqual([]);
+    expect(extractCcProjects('')).toEqual([]);
+    expect(extractCcProjects(null)).toEqual([]);
+    expect(extractCcProjects(undefined)).toEqual([]);
+  });
+
+  test('★★★ 1 行目の先頭以外にある行頭 mention は配送先にしない (引用・表で fan-out しない)', () => {
+    // 実データ 2026-08-21: 各班の宛先を説明する「案内表」。7 か所の行頭 @cc- がある
+    const guide = [
+      '【本体班より・各班へ】用があるときは便の先頭に付けてください',
+      '',
+      '@cc-tealus        本体班',
+      '@cc-organon       organon班',
+      '@cc-kairos        kairos班',
+    ].join('\n');
+    // 従来どおり「最初に見つかった行頭 mention」1 つだけ = 挙動が変わらない
+    expect(extractCcProjects(guide)).toEqual(['tealus']);
+  });
+
+  test('★★ 1 行目が mention で始まり、後段に別の行頭 mention があっても増えない', () => {
+    // 実データ 2026-08-20: 1 行目は tealus-dev 宛、本文中の表に他班名が並ぶ
+    const reply = '@cc-tealus-dev 【本体班 → Mac セッション】本題\n\n@cc-tealus  ← 説明\n@cc-support ← 説明';
+    expect(extractCcProjects(reply)).toEqual(['tealus-dev']);
+  });
+
+  test('★ 先頭の空行は読み飛ばす (最初の中身のある行を見る)', () => {
+    expect(extractCcProjects('\n\n@cc-tealus @cc-organon 本題')).toEqual(['tealus', 'organon']);
+  });
+
+  test('★ 文中 (行頭でない) の連続 mention は宛先にしない', () => {
+    expect(extractCcProjects('相談です @cc-tealus @cc-organon')).toEqual([]);
+    expect(extractCcProjects('  @cc-tealus @cc-organon')).toEqual([]);   // 先行 whitespace は従来どおり不可
+  });
+
+  test('★ 重複は 1 回だけ', () => {
+    expect(extractCcProjects('@cc-tealus @cc-tealus @cc-organon 本題')).toEqual(['tealus', 'organon']);
+  });
+
+  test('★ 上限 CC_FANOUT_MAX で切る (暴走時のブレーキ)', () => {
+    const many = '@cc-a1 @cc-a2 @cc-a3 @cc-a4 @cc-a5 @cc-a6 @cc-a7 本題';
+    expect(extractCcProjects(many)).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
+    expect(extractCcProjects(many)).toHaveLength(CC_FANOUT_MAX);
+  });
+
+  test('★ 規約外の mention でそこで打ち切る (@cc-Tealus は宛先ではない)', () => {
+    expect(extractCcProjects('@cc-tealus @cc-Tealus 本題')).toEqual(['tealus']);
+    expect(extractCcProjects('@cc-Tealus @cc-tealus 本題')).toEqual([]);   // 先頭が規約外なら従来どおり不成立
+  });
+
+  test('★ alias 経由 (@Claude) は同報にならない — 並べても 1 宛先以下', () => {
+    // ★ alias cache は module 変数なので、他の describe の設定が残りうる。
+    //   「何に解決されるか」ではなく「同報にならないこと」を固定する (順序非依存)。
+    expect(extractCcProjects('@Claude hello').length).toBeLessThanOrEqual(1);
+    expect(extractCcProjects('@Claude @Helper hello').length).toBeLessThanOrEqual(1);
+  });
+
+  test('★★★ extractCcProject の結果は先頭要素と一致する (2 つの実装が割れない)', () => {
+    for (const c of [
+      '@cc-tealus @cc-organon 本題',
+      '@cc-tealus 進捗',
+      '説明文\n@cc-organon 行頭',
+      '今日のメモ',
+    ]) {
+      expect(extractCcProjects(c)[0] ?? null).toBe(extractCcProject(c));
+    }
+  });
+});
+
+describe('findDroppedCcMentions (#386 捨てた宛先を黙らせない)', () => {
+  test('★ 実害ケース: 1 行目以外の行頭 mention は配送していないと分かる', () => {
+    const reply = '@cc-tealus-dev 本題\n\n@cc-tealus  ← 説明\n@cc-support ← 説明';
+    expect(findDroppedCcMentions(reply, ['tealus-dev'])).toEqual(['tealus', 'support']);
+  });
+
+  test('★ 並べて書いた便では鳴らない (全部配送済み)', () => {
+    expect(findDroppedCcMentions('@cc-tealus @cc-organon 本題', ['tealus', 'organon'])).toEqual([]);
+  });
+
+  test('★ 上限で切られた分は捨てた扱いになる', () => {
+    const many = '@cc-a1 @cc-a2 @cc-a3 @cc-a4 @cc-a5 @cc-a6 本題';
+    // ★ a6 は行頭ではないので /m の走査には掛からない。上限超過は配送先の差分で拾う
+    const delivered = extractCcProjects(many);
+    expect(findDroppedCcMentions(many, delivered)).toEqual(['a6']);
+  });
+
+  test('★ 単一宛先の普通の便では鳴らない', () => {
+    expect(findDroppedCcMentions('@cc-tealus 進捗教えて', ['tealus'])).toEqual([]);
+    expect(findDroppedCcMentions('今日のメモです', [])).toEqual([]);
+  });
+
+  test('★★ 文中 (行頭でない) の引用では鳴らない — AI 同士の引用で毎回鳴るのを避ける', () => {
+    expect(findDroppedCcMentions('@cc-tealus 宛先は @cc-organon と書きます', ['tealus'])).toEqual([]);
+    expect(findDroppedCcMentions('@cc-tealus `@cc-kairos` を使う', ['tealus'])).toEqual([]);
+  });
+
+  test('★ 重複は 1 回だけ / 空 null は空配列', () => {
+    expect(findDroppedCcMentions('@cc-a 本題\n@cc-b x\n@cc-b y', ['a'])).toEqual(['b']);
+    expect(findDroppedCcMentions('', [])).toEqual([]);
+    expect(findDroppedCcMentions(null, [])).toEqual([]);
+  });
+});
+
+/**
+ * ★★★ 宛名欄 —— 行頭から続く mention の並び (#393)
+ *
+ * ★ 症状: `@アシスタント @cc-phronesis 一斉送信のテストです` が **どこにも届かず、
+ *   warn も hint も出ない**。`@cc-` が 1 行目にあるのに行頭ではないため、
+ *   配送 / #386 warn / #359(a) hint の **3 つの検査すべてがすり抜ける**。
+ *   送った側は届いたと思っている (2026-08-25 実測、テストE2E)。
+ *
+ * ★★ なぜ「行頭だけ」だったのか —— **自己ループ防止の主要機構だから** (docs/06 §6.1)。
+ *   AI の返信は本文中で `@cc-*` を引用するので、行頭限定なら自然に外れる。
+ *   ここを緩めるときは、**引用が配送に化けない**ことを先に測る必要がある。
+ *
+ * ★★★ 測った (2026-09-03、全期間 2026-05-01〜09-03、`@cc-` を含む 1747 件):
+ * ```
+ *   どこでもよい            新規 201 件 → ★ うち 134 件が Claude 自身の引用。採れない
+ *   第 1 非空行のどこでも     新規   9 件 → ★ 8 件が誤報 (89%)。「@cc-organon 起動」等
+ *   ★ 行頭から続く並びの中    新規   1 件 → ★★★ 誤報 0 件。それが当該メッセージ
+ * ```
+ *   検算は 2 経路 (JS = 第 1 行のみ / SQL = 行を限定しない) で、範囲が違うのに双方 1 件。
+ *   総数も 1509 配送 + 28 規約外 + 210 未配送 = 1747 で一致。
+ *
+ * ★★★★ したがって宛名欄はこう定義する —— **封筒の宛名欄**:
+ * ```
+ *   宛名欄 = 最初の非空行の 行頭から 連続する mention の並び
+ *   その並びの中の @cc-名前 が宛先 (連名可)
+ *   ★ 並びが途切れたら そこで終わり。本文に出てくる名前は宛名ではない
+ * ```
+ */
+describe('宛名欄 — 行頭から続く mention の並び (#393)', () => {
+  test('★★★ 実害ケース: @cc- の前に別の mention があっても届く', () => {
+    const c = '@アシスタント @cc-phronesis 一斉送信のテストです。返信ください。';
+    expect(extractCcProject(c)).toBe('phronesis');
+    expect(extractCcProjects(c)).toEqual(['phronesis']);
+  });
+
+  test('★★★ 回帰: @cc-a @cc-b @cc-c は従来どおり全部配送 (同報の仕様は変えない)', () => {
+    expect(extractCcProjects('@cc-a @cc-b @cc-c 本題')).toEqual(['a', 'b', 'c']);
+    expect(extractCcProjects('@cc-tealus @cc-organon @cc-kairos\n\n相談です'))
+      .toEqual(['tealus', 'organon', 'kairos']);
+  });
+
+  test('★★ 並びの中の @cc- は全部宛先 (人の mention が前に付いても同報のまま)', () => {
+    expect(extractCcProjects('@アシスタント @cc-a @cc-b 本題')).toEqual(['a', 'b']);
+    expect(extractCcProjects('@小野哲 @アシスタント @cc-tealus 本題')).toEqual(['tealus']);
+  });
+
+  /**
+   * ★★★ 実データの誤報 8 件 (2026-09-03 測定)。★ 全部「行頭でない位置で経過を報告している」形。
+   *   ここが鳴ると、報告のたびに相手が起きて、その返事がまた誰かを起こす。
+   */
+  test('★★★ 本文に出てくる名前は宛名にしない (実データの誤報 8 件の形)', () => {
+    const cases = [
+      'AI班連絡へ送りました（msg `047b498f`・@cc-organon 起動）。',                   // kairos 2026-08-08
+      'organon班へ申し送りました（AI班連絡・@cc-organon 起動）。',                    // kairos 2026-08-07
+      '君が書いてくれたPDFの内容をAI班連絡で@cc-organon あてにおくって',              // 小野哲 2026-08-09
+      '直近では、`@cc-tealus-apps 直近画像を変換保存して` の対応が完了しています。',   // アシスタント 2026-07-28
+      '【Mac セッション → 本体班】★ `@cc-tealus-dev` で待機しています。',            // アシスタント 2026-08-09
+      '✅ **`@cc-tealus-dev` で受信できました。** 改名後の初回です 🌱',                // アシスタント 2026-08-09
+      '気になった所はいつでも `@cc-kairos` で。それでは、静かに続けます。',            // kairos 2026-07-25
+    ];
+    for (const c of cases) {
+      expect(extractCcProjects(c)).toEqual([]);
+      expect(extractCcProject(c)).toBeNull();
+    }
+  });
+
+  test('★★★ 並びは途切れたら終わり — 冒頭が mention でも、後段の @cc- は拾わない', () => {
+    // 実データ 2026-05-08 (Claude 自身の返信)。★ 拾うと自己ループになる
+    const c = '@小野哲 こんにちは! `@Claude` mention が dispatcher 経由で wake しました。`@cc-tealus` と完全に同じ経路です';
+    expect(extractCcProjects(c)).toEqual([]);
+    expect(extractCcProject(c)).toBeNull();
+  });
+
+  test('★ 規約外の mention はそこで打ち切る (従来どおり)', () => {
+    expect(extractCcProjects('@アシスタント @cc-Tealus 本題')).toEqual([]);
+    expect(extractCcProjects('@アシスタント @cc- 本題')).toEqual([]);
+  });
+
+  test('★ 先行 whitespace は従来どおり不可 (行頭であることは緩めない)', () => {
+    expect(extractCcProjects('  @アシスタント @cc-tealus 本題')).toEqual([]);
+    expect(extractCcProjects('\t@アシスタント @cc-tealus 本題')).toEqual([]);
+  });
+
+  test('★★ 宛名欄は最初の非空行だけ — 2 行目以降の並びは宛名欄ではない', () => {
+    expect(extractCcProjects('本題です\n@アシスタント @cc-tealus')).toEqual([]);
+    // ★ 先頭の空行は従来どおり読み飛ばす
+    expect(extractCcProjects('\n\n@アシスタント @cc-tealus 本題')).toEqual(['tealus']);
+  });
+
+  test('★★ 上限で切られた宛先は #386 で拾う (並びの前に mention があっても黙らせない)', () => {
+    const many = '@アシスタント @cc-a1 @cc-a2 @cc-a3 @cc-a4 @cc-a5 @cc-a6 本題';
+    const delivered = extractCcProjects(many);
+    expect(delivered).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
+    expect(findDroppedCcMentions(many, delivered)).toEqual(['a6']);
+  });
+
+  test('★ 配送できた便では #386 warn は鳴らない', () => {
+    expect(findDroppedCcMentions('@アシスタント @cc-a @cc-b 本題', ['a', 'b'])).toEqual([]);
+  });
+
+  test('★★ 配送できるようになったので #359(a) hint は鳴らさない', () => {
+    expect(detectUnroutedAddressHint('@アシスタント @cc-phronesis 一斉送信のテストです')).toBeNull();
+  });
+
+  test('★★★ extractCcProject の結果は先頭要素と一致する (2 つの実装が割れない)', () => {
+    for (const c of [
+      '@アシスタント @cc-phronesis 本題',
+      '@アシスタント @cc-a @cc-b 本題',
+      '@cc-a @cc-b @cc-c 本題',
+      'AI班連絡へ送りました（@cc-organon 起動）。',
+      '@小野哲 こんにちは! `@cc-tealus` の話',
+    ]) {
+      expect(extractCcProjects(c)[0] ?? null).toBe(extractCcProject(c));
+    }
+  });
+});
+
+/**
+ * ★ #541 宛名の行の行末が Windows の改行 (CRLF) でも、宛先を落とさない
+ *   以前は 1 行目を '\n' だけで切っていたので、最後の宛先に '\r' が残って宛先と読めず、
+ *   同報の最後の宛先が黙って落ちた (`@アシスタント @cc-x` では 1 件も届かなかった)。
+ *   Windows のファイルから MCP / Bot API で投げると起きる
+ */
+describe('CRLF の宛名欄 (#541)', () => {
+  it.each([
+    ['@cc-a @cc-b\r\n本文', ['a', 'b']],
+    ['@cc-a @cc-b @cc-c\r\n本文', ['a', 'b', 'c']],
+    ['@アシスタント @cc-b\r\n本文', ['b']],
+    ['@cc-a\r\n本文', ['a']],
+  ])('★★ %j → %j', (content, expected) => {
+    expect(extractCcProjects(content)).toEqual(expected);
+  });
+
+  it('★ CRLF と LF で結果が同じ', () => {
+    for (const body of ['@cc-a @cc-b\n本文', '@アシスタント @cc-b\n本文', '@cc-a\n本文']) {
+      expect(extractCcProjects(body.replace(/\n/g, '\r\n'))).toEqual(extractCcProjects(body));
+      expect(findDroppedCcMentions(body.replace(/\n/g, '\r\n'), extractCcProjects(body))).toEqual([]);
+    }
+  });
+
+  it('宛先らしきものの判定 (detectUnroutedAddressHint) も CRLF と LF で同じ', () => {
+    for (const body of ['【organon班 → 本体班】\n本文', '@cc-Tealus 本文\nつづき']) {
+      expect(detectUnroutedAddressHint(body.replace(/\n/g, '\r\n'))).toEqual(detectUnroutedAddressHint(body));
+    }
+  });
+});
