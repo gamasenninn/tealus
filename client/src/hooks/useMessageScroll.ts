@@ -133,7 +133,9 @@ export function useMessageScroll(roomId: string): UseMessageScrollResult {
         pinToBottom();
         // #474 裏にある間は既読にしない (その間の分は useSocketSync が溜めて、画面に戻ったときに既読にする)
         // ★ 2026-11-23 人が使っていない (窓が選ばれていない・3 分触っていない) 間も同じ (services/attention.ts)
-        if (isAttending()) markVisibleAsRead();
+        // ★ 改善ループ 99: 使っていないときは「待ち」を立てる。表に戻った・つなぎ直したときの取り直しで入った便は
+        //   useSocketSync が溜めないので、立てないと使い始めても未読が残る
+        markReadWhenVisible();
       }
     }
     // ★ #600 isStale も見る: 取り直しが同じ件数 (20 → 20) で届くと、件数だけでは届いたことに気づけない

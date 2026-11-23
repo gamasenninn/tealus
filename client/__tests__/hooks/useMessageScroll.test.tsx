@@ -178,6 +178,21 @@ describe('useMessageScroll — 画面に出ていても、人が使っていな�
     act(() => { vi.runAllTimers(); });
     expect(api.markRead).not.toHaveBeenCalled();
   });
+
+  // ★ 改善ループ 99: 使っていない間に「表に戻った・つなぎ直した」の取り直し (catchUp) で入った便は、
+  //   socket の新着と違って useSocketSync が溜めないので、使い始めても既読にならず未読が残っていた
+  it('★★ 使っていない間に増えた便は、使い始めたら既読にする (取り直しで入った便も)', () => {
+    const hook = mount();
+    act(() => { vi.runAllTimers(); });
+    vi.mocked(api.markRead).mockClear();
+    act(() => setUsing(false));
+    messages = [...messages, { id: 'm1', sender_id: 'other' }];
+    hook.rerender();
+    act(() => { vi.runAllTimers(); });
+    expect(api.markRead).not.toHaveBeenCalled();
+    act(() => setUsing(true));
+    expect(api.markRead).toHaveBeenCalledWith('room1', ['m0', 'm1']);
+  });
 });
 
 describe('useMessageScroll — 最下部にいたら新着を追いかける (#506)', () => {
