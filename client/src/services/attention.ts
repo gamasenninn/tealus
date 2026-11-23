@@ -10,7 +10,9 @@
  * ★ マルチトークのパネル (同じ Tealus の中の iframe) は、パネルごとに「そのパネルを最後に触ってから PANEL_IDLE_MS」で判定する。
  *   窓ごとにまとめて判定すると、隣のパネルで書いている間、横に出ている部屋が読んでいなくても既読になった
  *   (2026-11-23 小野さん「マルチトークに出ているものが未読にならないとまずくない?」)。
- *   パネルの上をマウスが通れば (pointermove) 触ったことになるので、読みたいパネルはマウスを乗せれば既読になる。
+ *   ★ パネルはマウスが通っただけ (pointermove) では触ったことにしない。クリック・スクロール (ホイール・タッチ)・入力だけを数える
+ *   (2026-11-23 小野さん「マウスが乗っただけでは数えない」。隣のパネルで書く途中にマウスが横のパネルを通り、
+ *   そのパネルが 1 分「使っている」になって便を既読にしていた)。普通の画面は窓が選ばれていることが前提なので、マウスの動きも数える。
  *   「窓が選ばれているか」だけは親の窓で見る (親の document.hasFocus() は中の iframe が選ばれていても true になる。
  *   パネル自身の hasFocus は、隣のパネルを選んだだけで false になる)。
  * ★ スクロールは操作に数えない。新着でいちばん下へ合わせる (プログラムが動かす) と、それで「使っている」に戻ってしまう。
@@ -24,6 +26,8 @@ export const PANEL_IDLE_MS = 60 * 1000;
 /** 操作を知らせる回数を抑える (マウスを動かすたびに判定し直さないように) */
 const INPUT_THROTTLE_MS = 1000;
 const INPUT_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'touchmove'] as const;
+/** パネルではマウスの通過を数えない (上の注) */
+const PANEL_INPUT_EVENTS = INPUT_EVENTS.filter((ev) => ev !== 'pointermove');
 const SIGNAL = 'tealus:attention-input';
 
 interface Shared { lastInput: number; lastSignal: number }
@@ -101,7 +105,8 @@ export function onAttentionChange(cb: (attending: boolean) => void): () => void 
   const onInput = () => noteInput();
 
   const h = host();
-  for (const ev of INPUT_EVENTS) document.addEventListener(ev, onInput, { capture: true, passive: true });
+  const inputEvents = isEmbeddedInSameApp() ? PANEL_INPUT_EVENTS : INPUT_EVENTS;
+  for (const ev of inputEvents) document.addEventListener(ev, onInput, { capture: true, passive: true });
   document.addEventListener('visibilitychange', check);
   window.addEventListener(SIGNAL, check);
   h.addEventListener('focus', check);
@@ -116,7 +121,7 @@ export function onAttentionChange(cb: (attending: boolean) => void): () => void 
     stopped = true;
     clearTimeout(timer);
     clearTimeout(soon);
-    for (const ev of INPUT_EVENTS) document.removeEventListener(ev, onInput, { capture: true });
+    for (const ev of inputEvents) document.removeEventListener(ev, onInput, { capture: true });
     document.removeEventListener('visibilitychange', check);
     window.removeEventListener(SIGNAL, check);
     h.removeEventListener('focus', check);

@@ -170,15 +170,38 @@ describe('マルチトークのパネル (同じ Tealus の中の iframe)', () =
     expect(isAttending(t + PANEL_IDLE_MS)).toBe(false);
   });
 
-  it('★★ 触らずに 1 分経つと「使っていない」を知らせ、パネルの上でマウスを動かすと「使っている」に戻る', () => {
+  it('★★ 触らずに 1 分経つと「使っていない」を知らせ、パネルをクリックすると「使っている」に戻る', () => {
     const cb = vi.fn();
     const stop = onAttentionChange(cb);
     vi.advanceTimersByTime(PANEL_IDLE_MS - 1000);
     expect(cb).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1000);
     expect(cb).toHaveBeenLastCalledWith(false);
-    document.dispatchEvent(new Event('pointermove'));
+    document.dispatchEvent(new Event('pointerdown'));
     expect(cb).toHaveBeenLastCalledWith(true);
+    stop();
+  });
+
+  // ★ 2026-11-23 小野さん「マウスが乗っただけでは数えない。クリック、スクロール、入力などで明確な操作が発生したときに数える」
+  //   隣のパネルで書く途中にマウスが横のパネルを通り、そのパネルが 1 分「使っている」になって便を既読にしていた
+  it('★★ パネルの上をマウスが通っただけでは「使っている」にしない (クリック・スクロール・入力だけ)', () => {
+    vi.advanceTimersByTime(PANEL_IDLE_MS);
+    const cb = vi.fn();
+    const stop = onAttentionChange(cb);
+    document.dispatchEvent(new Event('pointermove'));
+    expect(isAttending()).toBe(false);
+    expect(cb).not.toHaveBeenCalled();
+    document.dispatchEvent(new Event('wheel'));
+    expect(isAttending()).toBe(true);
+    stop();
+  });
+
+  it('普通の画面は、マウスを動かしても「使っている」のまま (今までどおり。窓が選ばれていることが前提)', () => {
+    emb.on = false;
+    vi.advanceTimersByTime(IDLE_MS);
+    const stop = onAttentionChange(() => {});
+    document.dispatchEvent(new Event('pointermove'));
+    expect(isAttending()).toBe(true);
     stop();
   });
 
