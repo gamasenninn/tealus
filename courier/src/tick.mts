@@ -49,10 +49,14 @@ const dryCursor = new Map<string, string>();
 const uncertainSent = new Map<string, { last: string; seq: number; count: number; at: number }>();
 /** 戻りが分からなかった便を、進み具合が変わらないまま打ち直すまでに待つ時間 (相手が遅れて動き出すことがある) */
 export const UNCERTAIN_RETRY_MS = 30_000;
+/** 届かなかった時刻 (打ち直しを FAILED_RETRY_MS あける。改善ループ 104) */
+const failedAt = new Map<string, number>();
+/** 届かなかった便を打ち直すまでに待つ時間。★ あけないと、届け先が失敗を返し続ける間 3 秒ごとに打ち続ける (1 日 約 2.9 万回) */
+export const FAILED_RETRY_MS = 30_000;
 /** 保留だった班 (印が消えたのを見た回に数えを空にするため) */
 const wasHeld = new Set<string>();
 
-export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); lastLook.clear(); uncertainSent.clear(); }
+export function resetTickMemory(): void { stateSince.clear(); dryCursor.clear(); lastLook.clear(); uncertainSent.clear(); failedAt.clear(); }
 
 function report(project: string, state: BridgeState, pending: number, now: number): BridgeReport {
   const prev = stateSince.get(project);
@@ -131,6 +135,10 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
     uncertainSent.delete(b.project);
   }
 
+  // ★ 前の回に届かなかった。30 秒たつまでは打ち直さず「届かない」のまま (続いた時間は鼓動の problem に載る)
+  const lastFail = failedAt.get(b.project);
+  if (lastFail !== undefined && now - lastFail < FAILED_RETRY_MS) return report(b.project, 'failed', fresh.ids.length, now);
+
   const st = await b.courier.status();
   // ★ 空回しは届け先の状態によらず判断を記録する (herdr を起こす前でも、PaneDeck のトリガーの結果と ids で見比べられるように)
   if (st !== 'idle' && !d.dryRun) return report(b.project, busyLike[st], fresh.ids.length, now);
@@ -159,10 +167,12 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
     return report(b.project, 'unknown', fresh.ids.length, now);
   }
   if (!r.ok) {
-    d.limiter.refund(b.project);   // ★ 届かなかった回は数えない (失敗が続くと「上限」の保留に化ける。uncertain は届いたかもしれないので数えたまま)
+    d.limiter.refund(b.project);
+    if (r.error !== 'blocked') failedAt.set(b.project, now);   // ★ 届かなかった回は数えない (失敗が続くと「上限」の保留に化ける。uncertain は届いたかもしれないので数えたまま)
     d.record({ kind: 'deliver-failed', project: b.project, error: r.error });
     return report(b.project, r.error === 'blocked' ? 'blocked' : 'failed', fresh.ids.length, now);
   }
+  failedAt.delete(b.project);
   saveCursor(d.stateDir, b.project, fresh.last!);   // ★ 受け付けられてから進める
   d.record({ kind: 'delivered', project: b.project, count: fresh.ids.length, last: fresh.last, lost: fresh.lost, ref: r.ref });
   return report(b.project, 'delivered', 0, now);

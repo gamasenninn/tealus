@@ -36,6 +36,11 @@ describe('heartbeatInfo', () => {
     expect(heartbeatInfo([rep('b', 'held', 0, 3)], now).problem).toMatch(/b.*保留/);
   });
 
+  it('★ 届かない (failed) が 10 分を超えたら problem に入れる (それまでは打ち直しが黙って続いていた、改善ループ 104)', () => {
+    expect(heartbeatInfo([rep('c', 'failed', 9, 2)], now).problem).toBeUndefined();
+    expect(heartbeatInfo([rep('c', 'failed', 11, 2)], now).problem).toMatch(/c.*届けられません.*11 分.*新着 2 件/);
+  });
+
   it('★ 2,000 字を超えない', () => {
     const many = Array.from({ length: 200 }, (_, i) => rep(`team-${i}`, 'blocked', 30, 5));
     expect(JSON.stringify(heartbeatInfo(many, now)).length).toBeLessThanOrEqual(2000);

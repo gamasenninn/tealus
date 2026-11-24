@@ -30,6 +30,9 @@ export function heartbeatInfo(reports: BridgeReport[], now: number, startedAt?: 
       problems.push(`${r.project} が確認待ちのまま ${minutes} 分 (新着 ${r.pending} 件)`);
     } else if ((r.state === 'missing' || r.state === 'unknown') && r.since !== null && now - r.since >= MISSING_ALERT_MS) {
       problems.push(`${r.project} の届け先が見つかりません (${minutes} 分)`);
+    } else if (r.state === 'failed' && r.since !== null && now - r.since >= MISSING_ALERT_MS) {
+      // ★ 届け先は居るのに打つと失敗が返る (herdr の版ずれ・知らない失敗の種類など)。改善ループ 104 までは知らせが無かった
+      problems.push(`${r.project} に届けられません (失敗が ${minutes} 分続いています・新着 ${r.pending} 件。~/.tealus/courier/events-*.jsonl の deliver-failed)`);
     } else if (r.state === 'held') {
       problems.push(`${r.project} の配達を保留しています (上限。~/.tealus/courier/hold-${r.project}.json を消せば再開します・再起動は不要)`);
     }

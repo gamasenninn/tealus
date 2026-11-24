@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { herdrCourier, mapAgentStatus, type Courier, type CourierStatus, type Run } from '../src/herdr.mts';
-import { tickBridge, resetTickMemory, type TickDeps } from '../src/tick.mts';
+import { tickBridge, resetTickMemory, FAILED_RETRY_MS, type TickDeps } from '../src/tick.mts';
 import { RateLimiter, isHeld } from '../src/limit.mts';
 import { loadCursor, saveCursor } from '../src/cursor.mts';
 
@@ -269,10 +269,29 @@ describe('配る輪 (tickBridge)', () => {
     const bad = fake('idle', false);
     for (let i = 0; i < 5; i++) {
       expect((await tickBridge({ project: 'pd', courier: bad }, deps({ limiter: lim }))).state).toBe('failed');
-      t += 3000;
+      t += FAILED_RETRY_MS;   // ★ 打ち直しは 30 秒あける (改善ループ 104)。5 回とも実際に打たせる
     }
+    expect(bad.delivered).toHaveLength(5);
     expect(isHeld(stateDir, 'pd')).toBe(false);
     expect((await tickBridge({ project: 'pd', courier: fake('idle') }, deps({ limiter: lim }))).state).toBe('delivered');
+  });
+
+  it('★ 届かなかったら 30 秒は打ち直さない (失敗が続くと 3 秒ごとに打ち続けていた、改善ループ 104)', async () => {
+    saveCursor(stateDir, 'pd', id(1));
+    writeQueue(1, 2);
+    const bad = fake('idle', false);
+    expect((await tickBridge({ project: 'pd', courier: bad }, deps())).state).toBe('failed');
+    t += 3000;
+    expect((await tickBridge({ project: 'pd', courier: bad }, deps())).state).toBe('failed');
+    t += 3000;
+    expect((await tickBridge({ project: 'pd', courier: bad }, deps())).state).toBe('failed');
+    expect(bad.delivered).toHaveLength(1);   // 偽の届け先は失敗でも打った文面を覚える
+    t += FAILED_RETRY_MS;
+    expect((await tickBridge({ project: 'pd', courier: bad }, deps())).state).toBe('failed');
+    expect(bad.delivered).toHaveLength(2);
+    // 直れば次の 30 秒明けに届く
+    t += FAILED_RETRY_MS;
+    expect((await tickBridge({ project: 'pd', courier: fake('idle') }, deps())).state).toBe('delivered');
   });
 
   it('★ 空回しは打たずに記録だけ。カーソルも進めず、同じ判断を 2 度記録しない', async () => {
