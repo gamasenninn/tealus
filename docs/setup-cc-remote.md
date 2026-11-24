@@ -142,7 +142,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
 | `TOKEN` が空 | ログイン失敗 | `~/.tealus/cc-auth.json` の login_id / password。user に確認 |
 | `000` | 到達できない | URL の typo / DNS / ファイアウォール。まず `curl -I https://.../` で本体自体に届くか確認 |
 | `401` | トークンが無効 | 同上。本体と agent-server の `JWT_SECRET` がずれている可能性もある |
-| `404` | 経路が無い | 本体の `/agent-api` proxy か、agent-server 側の `/cc-queue` route が古い。サーバ側が #214 を含むバージョンか確認 |
+| `404` | 経路が無い | 本体の `/agent-api` proxy か、agent-server 側の `/cc-queue` route が古い (`CC_INTAKE=server` なら本体が自分で答える。agent-server を直接叩くと 410)。サーバ側が #214 を含むバージョンか確認 |
 | `502` | agent-server が落ちている | サーバ側で agent-server の起動を確認してもらう |
 
 ---

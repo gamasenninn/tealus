@@ -11,6 +11,13 @@
 
 両方をセットアップすると、Claude Code session が **Tealus 上の能動的なメンバー**として振る舞えるようになります。「session が Tealus でメッセージを書く」「Tealus でユーザーが session を呼ぶ」が両方 1 つの操作 fabric として機能します。
 
+> ★ **`@cc-` を受け付ける (見つけて受け箱に書く) のは、既定では agent-server です。** `server/.env` と `agent-server/.env` の両方に
+> `CC_INTAKE=server` を書くと **本体が受け付け**、agent-server が無くても CC ブリッジが使えます ([#650](https://github.com/gamasenninn/tealus/issues/650)、docs/14)。
+> そのときはこの文書の「agent-server」を本体と読み替えてください:
+> - `CC_SKIP_SENDER_IDS` などの `CC_*` は `server/.env` に、別名は `server/config/cc-aliases.json` に置く (agent-server 側に残っていると本体の起動ログに warn が出ます)
+> - `[cc-queue] Routed @cc-...` は本体のログに出る。受け箱のファイル・1 行の形・URL (`/agent-api/cc-queue/...`) は同じ
+> - ★ 本体と agent-server を**同じ版**にしてから書く (古い agent-server は `CC_INTAKE` を知らず、両方が受け箱に書きます)。切り替えの手順は docs/14 §6.1
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                                                                  │
@@ -758,7 +765,7 @@ tail -n 5 ~/.tealus/cc-queue/{project}.jsonl
 
 確認順:
 
-1. **agent-server のログに `[cc-queue] Routed @cc-...` が出ているか**
+1. **agent-server のログ (`CC_INTAKE=server` なら本体のログ) に `[cc-queue] Routed @cc-...` が出ているか**
    - YES → file beacon は書けてる、問題は Claude Code 側
    - NO → agent-server が webhook を受信していないか、project 名が typo
 2. **`~/.tealus/cc-queue/{project}.jsonl` に行が追加されているか**
@@ -781,7 +788,7 @@ tail -n 5 ~/.tealus/cc-queue/{project}.jsonl
 
 **[#214](https://github.com/gamasenninn/tealus/issues/214) で対応済み。** file beacon の代わりに HTTP で起床通知を受け取れます (共有ストレージの mount は不要になりました)。
 
-`~/.tealus/cc-queue/` は agent-server のあるマシンにしか無いので、別 PC では `.claude/cc-tealus.json` に `queue_path` ではなく `stream_url` を書きます:
+`~/.tealus/cc-queue/` は受け付けるプロセス (agent-server、`CC_INTAKE=server` なら本体) のあるマシンにしか無いので、別 PC では `.claude/cc-tealus.json` に `queue_path` ではなく `stream_url` を書きます:
 
 ```json
 {
@@ -802,7 +809,7 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 
 ### Q. `@cc-tealus` 以外の自然な mention 名で呼びたい (例: `@Claude`)
 
-[#263](https://github.com/gamasenninn/tealus/issues/263) で追加した **alias 機能** を使う。`agent-server/config/cc-aliases.json` に entry を追加:
+[#263](https://github.com/gamasenninn/tealus/issues/263) で追加した **alias 機能** を使う。`agent-server/config/cc-aliases.json` (`CC_INTAKE=server` なら `server/config/cc-aliases.json`) に entry を追加:
 
 ```json
 {
@@ -837,6 +844,7 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 ## 内部実装
 
 - agent-server cc-queue: `agent-server/src/webhook/ccQueue.mts` + `handler.mts`
+- 本体の cc-queue (`CC_INTAKE=server`): `server/src/services/cc/` (ccQueue・ccSubscribers・ccWriter・ccIntake) + `server/src/routes/ccQueue.mts`
 - listen-tealus skill: `.claude/skills/listen-tealus/SKILL.md` (http の接続コマンドは同じディレクトリの `cc-stream.sh` にも。食い違いはテストが落とす)
 - handle-tealus skill (PaneDeck のペイン用、受け取り方 C): `.claude/skills/handle-tealus/SKILL.md`
 - 返し方の決まり: [tealus-mcp `src/instructions.js`](https://github.com/gamasenninn/tealus-mcp/blob/main/src/instructions.js) (v0.16.0+)

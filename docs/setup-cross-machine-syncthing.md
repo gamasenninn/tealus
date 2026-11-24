@@ -1,6 +1,6 @@
 # Cross-machine cc-tealus bridge — Syncthing setup walkthrough
 
-agent-server と Claude Code が **別マシン**で動く構成で、cc-tealus bridge (Tealus → Claude Code wake-up) を成立させるための setup 手順。Syncthing で `~/.tealus/cc-queue/` を P2P sync することで、各機の inotify / `tail -F` が local file として動作する。
+受け箱を書くプロセス (agent-server、`CC_INTAKE=server` なら本体) と Claude Code が **別マシン**で動く構成で、cc-tealus bridge (Tealus → Claude Code wake-up) を成立させるための setup 手順。Syncthing で `~/.tealus/cc-queue/` を P2P sync することで、各機の inotify / `tail -F` が local file として動作する。
 
 > **本ドキュメントの位置付け**: HTTP transport ([#264](https://github.com/gamasenninn/tealus/issues/264)) が構造的な本命解だが、実装着手前の **当面の繋ぎ解**。tealus-mcp が将来 HTTP 化したら本 setup は不要になる。
 
