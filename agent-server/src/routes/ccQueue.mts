@@ -261,6 +261,9 @@ router.get('/pending', async (req, res) => {
 router.get('/stream', async (req, res) => {
   const ctx = await prepare(req, res);
   if (!ctx) return;
+  // ★ 本体へ部屋を聞いている間に受け手が切れていたら登録しない (改善ループ 106)。close は 1 回しか出ず、
+  //   下で付ける受け口には届かないので、登録すると寿命 (55 分) まで購読者に残り「受け手が並んだまま」を誤って鳴らす
+  if (res.destroyed || req.socket.destroyed) return;
 
   const { project, allowedRooms } = ctx;
 

@@ -196,6 +196,16 @@ describe('GET /stream', () => {
     await sleep(100);
     expect(subscriberCount('tealus')).toBe(0);
   });
+  it('★ 準備 (鍵・部屋・受け箱の読み) の途中で切れた接続は購読者に残さない (55 分残って「並んだまま」を誤って鳴らしていた、改善ループ 106)', async () => {
+    for (let i = 0; i < 5; i++) {
+      // 送った直後に切る = 本体が鍵や部屋を DB で引いている間に close が来る
+      const r = http.get({ port, path: '/agent-api/cc-queue/stream?project=tealus', headers: { Authorization: `Bearer ${me.token}` } });
+      r.on('error', () => { /* 切った */ });
+      r.on('socket', (sock) => sock.on('connect', () => setImmediate(() => r.destroy())));
+    }
+    await sleep(300);
+    expect(subscriberCount('tealus')).toBe(0);
+  });
   it('★ 最大寿命で閉じる前に理由 (__bye max_age) を伝える (#366)', async () => {
     process.env.CC_STREAM_MAX_AGE_MS = '300';
     const s = await openStream('project=tealus');

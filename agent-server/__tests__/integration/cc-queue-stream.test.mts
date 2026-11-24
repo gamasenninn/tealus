@@ -329,6 +329,19 @@ describe('cc-queue — GET /stream', () => {
     await srv.close();
   });
 
+  test('★ 準備 (本体へ部屋を聞く) の途中で切れた接続は購読者に残さない (改善ループ 106)', async () => {
+    const srv = await listen(makeApp());
+    const slow = (globalThis as { fetch: (...a: unknown[]) => Promise<unknown> }).fetch;
+    (globalThis as { fetch: unknown }).fetch = jest.fn(async (...a: unknown[]) => { await sleep(100); return slow(...a); });
+    const r = http.get({ port: srv.port, path: '/cc-queue/stream?project=tealus', headers: { Authorization: `Bearer ${token}` } });
+    r.on('error', () => { /* 切った */ });
+    await sleep(30);
+    r.destroy();          // 本体の返事 (100ms) より前に切る
+    await sleep(200);
+    expect(subscriberCount('tealus')).toBe(0);
+    await srv.close();
+  });
+
   test('★ 切断したら購読解除される (切断済み購読者を溜めない)', async () => {
     const srv = await listen(makeApp());
     const s = await openStream(srv.port, 'project=tealus');

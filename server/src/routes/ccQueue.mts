@@ -205,6 +205,9 @@ router.get('/cc-queue/stream', authenticate, async (req: Request, res: Response)
   //   読んだ後・登録する前に積まれた便を落とさないよう、登録の直後に (変わっていれば) 同期で読み直す
   const since = typeof req.query.since === 'string' ? req.query.since : undefined;
   const before = await readEvents(project);
+  // ★ 準備 (鍵・部屋・受け箱の読み) を待つ間に受け手が切れていたら登録しない (改善ループ 106)。close は 1 回しか出ず、
+  //   下で付ける受け口には届かないので、登録すると寿命 (55 分) まで購読者に残り「受け手が並んだまま」を誤って鳴らす
+  if (res.destroyed || req.socket.destroyed) return;
   const sub: CcSubscriber = { project, allowedRooms, sink: res, id: randomUUID().slice(0, 6), connectedAt: Date.now() };
   addSubscriber(sub);
   const backlog = backlogSince(readEventsSyncIfChanged(project, before), since, project)
