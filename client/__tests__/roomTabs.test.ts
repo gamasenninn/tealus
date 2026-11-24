@@ -5,7 +5,7 @@
  * ★ タブはお客様の部屋が 1 つ以上ある人にだけ出す。選んだタブを覚える
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { roomTabs, filterRoomsByTab, loadRoomTab, saveRoomTab } from '../src/utils/roomTabs';
+import { roomTabs, filterRoomsByTab, hiddenRoomsInTab, loadRoomTab, saveRoomTab } from '../src/utils/roomTabs';
 
 type R = { id: string; type: 'direct' | 'group'; unread_count?: number; has_external_contact?: boolean; has_guest?: boolean };
 const ec: R = { id: 'ec', type: 'group', unread_count: 2, has_external_contact: true };
@@ -54,5 +54,34 @@ describe('選んだタブを覚える', () => {
   });
   it('覚えていなければ「すべて」', () => {
     expect(loadRoomTab(['all', 'direct', 'group'])).toBe('all');
+  });
+});
+
+// ★ #655 自分の一覧から隠した部屋 (is_hidden、判定は本体: 隠した後に新しい投稿があれば false = 自動で戻る)
+describe('隠した部屋', () => {
+  type H = { id: string; type: 'direct' | 'group'; unread_count?: number; has_external_contact?: boolean; is_hidden?: boolean };
+  const g: H = { id: 'g', type: 'group' };
+  const gHidden: H = { id: 'gh', type: 'group', is_hidden: true };
+  const dHidden: H = { id: 'dh', type: 'direct', is_hidden: true };
+  const ecHidden: H = { id: 'ech', type: 'group', has_external_contact: true, is_hidden: true, unread_count: 3 };
+
+  it('★ どのタブでも隠した部屋は並びに出さない', () => {
+    const rooms = [g, gHidden, dHidden, ecHidden];
+    expect(filterRoomsByTab(rooms, 'all').map((r) => r.id)).toEqual(['g']);
+    expect(filterRoomsByTab(rooms, 'direct')).toEqual([]);
+    expect(filterRoomsByTab(rooms, 'customer')).toEqual([]);
+  });
+
+  it('★ 隠した部屋はそのタブに属するものだけ別に返す (一覧の下の「隠した部屋」に出す)', () => {
+    const rooms = [g, gHidden, dHidden, ecHidden];
+    expect(hiddenRoomsInTab(rooms, 'all').map((r) => r.id)).toEqual(['gh', 'dh']);
+    expect(hiddenRoomsInTab(rooms, 'group').map((r) => r.id)).toEqual(['gh']);
+    expect(hiddenRoomsInTab(rooms, 'customer').map((r) => r.id)).toEqual(['ech']);
+  });
+
+  it('「お客様」タブの未読の数に隠した部屋は入れない。お客様の部屋が隠したものだけでもタブは出す', () => {
+    const tabs = roomTabs([g, ecHidden]);
+    expect(tabs.map((t) => t.key)).toContain('customer');
+    expect(tabs.find((t) => t.key === 'customer')!.unreadRooms).toBe(0);
   });
 });

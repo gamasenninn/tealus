@@ -611,6 +611,11 @@ class ApiClient {
     return this.request<{ push_muted: boolean }>('PUT', `/rooms/${roomId}/notification`, { muted });
   }
 
+  /** #655 自分の一覧からだけ隠す / 戻す。隠した後に新しい投稿が来ると、一覧 (GET /rooms) が自動で is_hidden=false を返す */
+  setRoomHidden(roomId: string, hidden: boolean) {
+    return this.request<{ is_hidden: boolean }>('PUT', `/rooms/${roomId}/hidden`, { hidden });
+  }
+
   uploadRoomIcon(roomId: string, file: File) {
     const formData = new FormData();
     formData.append('icon', file);

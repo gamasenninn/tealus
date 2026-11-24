@@ -287,3 +287,21 @@
   font-weight: bold;
   vertical-align: middle;
 }
+
+/* #655 自分の一覧から隠した部屋。一覧のいちばん下に畳んで置く */
+.room-list-hidden-toggle {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-top: 1px solid var(--border-light);
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-hint);
+  cursor: pointer;
+}
+
+.room-list-hidden .room-item {
+  opacity: 0.7;
+}

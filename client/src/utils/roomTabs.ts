@@ -15,6 +15,7 @@ interface TabRoom {
   unread_count?: number;
   has_external_contact?: boolean;
   has_guest?: boolean;
+  is_hidden?: boolean;
 }
 
 export interface RoomTab { key: RoomTabKey; label: string; unreadRooms?: number }
@@ -29,17 +30,28 @@ export function isCustomerRoom(r: TabRoom): boolean {
   return !!r.has_external_contact || !!r.has_guest;
 }
 
-export function filterRoomsByTab<T extends TabRoom>(rooms: T[], tab: string): T[] {
+/** タブに属する部屋 (隠したかどうかは見ない) */
+function roomsInTab<T extends TabRoom>(rooms: T[], tab: string): T[] {
   if (tab === 'customer') return rooms.filter(isCustomerRoom);
   const visible = rooms.filter((r) => !r.has_external_contact);
   return tab === 'all' ? visible : visible.filter((r) => r.type === tab);
+}
+
+/** タブの並びに出す部屋。★ 自分の一覧から隠した部屋 (#655、is_hidden) は出さない */
+export function filterRoomsByTab<T extends TabRoom>(rooms: T[], tab: string): T[] {
+  return roomsInTab(rooms, tab).filter((r) => !r.is_hidden);
+}
+
+/** そのタブに属する隠した部屋 (#655)。一覧の下の「隠した部屋」に出す。新しい投稿が来ると本体が is_hidden=false を返すので、並びに戻る */
+export function hiddenRoomsInTab<T extends TabRoom>(rooms: T[], tab: string): T[] {
+  return roomsInTab(rooms, tab).filter((r) => !!r.is_hidden);
 }
 
 /** 出すタブ。「お客様」には未読のある部屋の数を添える (中身は「新着あり」。返事が要る数ではない) */
 export function roomTabs(rooms: TabRoom[]): RoomTab[] {
   const customer = rooms.filter(isCustomerRoom);
   if (customer.length === 0) return BASE_TABS;
-  return [...BASE_TABS, { key: 'customer', label: 'お客様', unreadRooms: customer.filter((r) => (r.unread_count ?? 0) > 0).length }];
+  return [...BASE_TABS, { key: 'customer', label: 'お客様', unreadRooms: customer.filter((r) => !r.is_hidden && (r.unread_count ?? 0) > 0).length }];
 }
 
 const STORAGE_KEY = 'roomListTab';

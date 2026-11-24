@@ -379,6 +379,9 @@ router.get('/', async (req, res) => {
     const result = await pool.query(
       `SELECT r.*,
               rm.push_muted,
+              -- ★ 自分の一覧から隠している (#655)。隠した後に新しい投稿 (削除済みを除く) があれば false = 自動で戻る。
+              --   投稿の無い部屋は部屋を作った時刻で比べる (一覧の並びと同じ)
+              (rm.hidden_at IS NOT NULL AND COALESCE(m.created_at, r.created_at) <= rm.hidden_at) AS is_hidden,
               -- ★ 一覧はプレビューにしか使わないので 200 字で切る。AI の長文 (1 万字超) が丸ごと載り、
               --   新着のたびに全端末が取り直す一覧が 100 KB を超えていた (改善ループ 30)
               LEFT(m.content, 200) AS last_message_content,
@@ -597,6 +600,29 @@ router.put('/:id/notification', requireMember, async (req, res) => {
     res.json({ push_muted: r.rows[0].push_muted });
   } catch (err) {
     logger.error('Update room notification error:', err);
+    res.status(500).json({ error: E.SERVER_ERROR });
+  }
+});
+
+/**
+ * PUT /api/rooms/:id/hidden
+ * #655 自分の一覧からだけ隠す / 戻す (body: { hidden: boolean })
+ * ★ 隠すたびに時刻を今にする。これより新しい投稿が来たら、一覧 (GET /api/rooms) が is_hidden=false を返す
+ *   = 自動で戻る。戻すための書き込みはしない (docs/02 room_members.hidden_at)
+ */
+router.put('/:id/hidden', requireMember, async (req, res) => {
+  const { hidden } = (req.body ?? {}) as { hidden?: unknown };
+  if (typeof hidden !== 'boolean') {
+    return res.status(400).json({ error: 'hidden は true / false で指定してください' });
+  }
+  try {
+    await pool.query(
+      `UPDATE room_members SET hidden_at = CASE WHEN $1 THEN now() ELSE NULL END WHERE room_id = $2 AND user_id = $3`,
+      [hidden, req.params.id, req.user!.id]
+    );
+    res.json({ is_hidden: hidden });
+  } catch (err) {
+    logger.error('Update room hidden error:', err);
     res.status(500).json({ error: E.SERVER_ERROR });
   }
 });

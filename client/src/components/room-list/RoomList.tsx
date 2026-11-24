@@ -17,7 +17,7 @@ import { shouldRefreshOnNewMessage } from '../../utils/roomListRefresh';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './RoomList.css';
 import { roomPreview } from '../../utils/replyQuote';
-import { roomTabs, filterRoomsByTab, loadRoomTab, saveRoomTab } from '../../utils/roomTabs';
+import { roomTabs, filterRoomsByTab, hiddenRoomsInTab, loadRoomTab, saveRoomTab } from '../../utils/roomTabs';
 
 // ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
 // ★ 2026-11-13: タブの決まりは utils/roomTabs.ts (お客様の部屋のタブ・窓口のいる部屋をほかのタブから外す・選んだタブを覚える)
@@ -36,6 +36,7 @@ interface RoomContextMenuState {
   y: number;
   roomId: string;
   roomName: string;
+  isHidden: boolean;
 }
 
 function RoomList() {
@@ -48,6 +49,8 @@ function RoomList() {
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<RoomContextMenuState | null>(null);
+  // #655 一覧の下の「隠した部屋」を開いているか (覚えない。開くたびに畳んだ状態から)
+  const [showHidden, setShowHidden] = useState(false);
   const tabs = useMemo(() => roomTabs(rooms), [rooms]);
   const [chosenTab, setChosenTab] = useState<string>(() => loadRoomTab(['all', 'direct', 'group', 'customer']));
   // ★ 覚えていたタブが今は出ていない (お客様の部屋が無くなった) ときは「すべて」を見せる
@@ -203,21 +206,8 @@ function RoomList() {
 
       {(() => {
         const filteredRooms = filterRoomsByTab(rooms, activeTab);
-        return (
-      <div className="room-list">
-        {filteredRooms.length === 0 && (
-          <div className="room-list-empty">
-            {rooms.length === 0 ? (
-              // ★ 部屋を作れない人 (ゲスト) には + が無いので、招待を待つ文にする (2026-10-29 小野さん判断 6)
-              canCreateRoom(user)
-                ? <>トークがありません。<br />+ボタンから新しいトークを始めましょう。</>
-                : <>まだトークがありません。<br />招待されるとここに出ます。</>
-            ) : (
-              <>該当するトークがありません。</>
-            )}
-          </div>
-        )}
-        {filteredRooms.map((room) => (
+        const hiddenRooms = hiddenRoomsInTab(rooms, activeTab);
+        const renderRoom = (room: RoomRow) => (
           <div
             key={room.id}
             className={onMulti && openRoomIds.includes(room.id) ? 'room-item open-in-panel' : 'room-item'}
@@ -239,12 +229,12 @@ function RoomList() {
             }}
             onContextMenu={(e) => {
               e.preventDefault();
-              setContextMenu({ x: e.clientX, y: e.clientY, roomId: room.id, roomName: getRoomDisplayName(room) });
+              setContextMenu({ x: e.clientX, y: e.clientY, roomId: room.id, roomName: getRoomDisplayName(room), isHidden: !!room.is_hidden });
             }}
             onTouchStart={(e) => {
               longPressTimer.current = setTimeout(() => {
                 const touch = e.touches[0];
-                setContextMenu({ x: touch.clientX, y: touch.clientY, roomId: room.id, roomName: getRoomDisplayName(room) });
+                setContextMenu({ x: touch.clientX, y: touch.clientY, roomId: room.id, roomName: getRoomDisplayName(room), isHidden: !!room.is_hidden });
               }, LONG_PRESS_TIMEOUT);
             }}
             onTouchEnd={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
@@ -277,7 +267,31 @@ function RoomList() {
               </div>
             </div>
           </div>
-        ))}
+        );
+        return (
+      <div className="room-list">
+        {filteredRooms.length === 0 && hiddenRooms.length === 0 && (
+          <div className="room-list-empty">
+            {rooms.length === 0 ? (
+              // ★ 部屋を作れない人 (ゲスト) には + が無いので、招待を待つ文にする (2026-10-29 小野さん判断 6)
+              canCreateRoom(user)
+                ? <>トークがありません。<br />+ボタンから新しいトークを始めましょう。</>
+                : <>まだトークがありません。<br />招待されるとここに出ます。</>
+            ) : (
+              <>該当するトークがありません。</>
+            )}
+          </div>
+        )}
+        {filteredRooms.map(renderRoom)}
+        {/* #655 自分の一覧から隠した部屋。新しい投稿が来ると本体が is_hidden=false を返すので、上の並びに自動で戻る */}
+        {hiddenRooms.length > 0 && (
+          <div className='room-list-hidden'>
+            <button className='room-list-hidden-toggle' onClick={() => setShowHidden((v) => !v)}>
+              {showHidden ? '▾' : '▸'} 隠した部屋（{hiddenRooms.length}）
+            </button>
+            {showHidden && hiddenRooms.map(renderRoom)}
+          </div>
+        )}
       </div>
         );
       })()}
@@ -311,6 +325,20 @@ function RoomList() {
               }
             }}>
               ✓ すべて既読
+            </button>
+            {/* #655 自分の一覧からだけ隠す。ほかの人の一覧・メッセージ・検索は変わらない。新しい投稿が来たら自動で戻る */}
+            <button className="room-context-item" onClick={async () => {
+              const { roomId, isHidden } = contextMenu;
+              setContextMenu(null);
+              try {
+                const r = await api.setRoomHidden(roomId, !isHidden);
+                useRoomStore.getState().updateRoomInList(roomId, { is_hidden: r.is_hidden });
+              } catch (err) {
+                console.error('Hide room error:', err);
+                notifyFailure(isHidden ? '一覧に戻す' : '一覧から隠す', err);
+              }
+            }}>
+              {contextMenu.isHidden ? '↩ 一覧に戻す' : '🙈 一覧から隠す'}
             </button>
           </div>
         </div>

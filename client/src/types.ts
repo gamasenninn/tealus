@@ -63,6 +63,8 @@ export interface Room {
   is_announcement?: boolean;
   /** #463 自分がこのルームの通知を鳴らさないにしているか (GET /rooms/:id が自分の分だけ返す) */
   push_muted?: boolean;
+  /** #655 自分の一覧から隠している (GET /rooms が自分の分だけ返す)。隠した後に新しい投稿があれば false (自動で戻る) */
+  is_hidden?: boolean;
   /** #463 機械 (is_bot) の投稿でも通知を鳴らすか (ルームの管理者が選ぶ、既定 false) */
   push_machine_posts?: boolean;
   my_role?: string;
