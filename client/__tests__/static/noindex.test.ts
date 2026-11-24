@@ -3,21 +3,20 @@
  * ★ 11-23 に Google の巡回が部屋の URL (/rooms/<id>) を開いていた (ログインしていないので中身は見られていない)。
  *   robots.txt で巡回そのものを断り、それを守らない巡回には画面の印 (noindex) で「索引に載せない」を伝える
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-
-const root = path.resolve(__dirname, '../..');
+// ★ client の型検査には node の型が無い (CI で落ちた) ので、ファイルは ?raw で読む
+import robotsTxt from '../../public/robots.txt?raw';
+import indexHtml from '../../index.html?raw';
 
 describe('検索の巡回に載せない', () => {
   it('robots.txt が全体を断る (public に置くとビルドで dist の直下に出る)', () => {
-    const txt = fs.readFileSync(path.join(root, 'public/robots.txt'), 'utf8');
+    const txt = robotsTxt;
     expect(txt).toMatch(/^User-agent: \*$/m);
     expect(txt).toMatch(/^Disallow: \/$/m);
   });
 
   it('画面に noindex の印がある', () => {
-    const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    const html = indexHtml;
     expect(html).toMatch(/<meta name="robots" content="noindex, nofollow"\s*\/?>/);
   });
 });
