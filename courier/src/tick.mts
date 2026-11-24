@@ -143,6 +143,14 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   // ★ 空回しは届け先の状態によらず判断を記録する (herdr を起こす前でも、PaneDeck のトリガーの結果と ids で見比べられるように)
   if (st !== 'idle' && !d.dryRun) return report(b.project, busyLike[st], fresh.ids.length, now);
 
+  // ★ 空回しは上限に数えない・保留の印を書かない (改善ループ 105)。上限の前に置かないと、何も配っていないのに
+  //   41 便目で hold-<班>.json を書き、業務メモに「保留」が出て、以後の記録も止まっていた
+  if (d.dryRun) {
+    d.record({ kind: 'dry-run', project: b.project, count: fresh.ids.length, ids: fresh.ids, last: fresh.last, lost: fresh.lost, courier_status: st });
+    dryCursor.set(b.project, fresh.last!);
+    return report(b.project, 'delivered', 0, now);
+  }
+
   if (!d.limiter.take(b.project)) {
     const reason = '1 時間に配る数の上限を超えた';
     setHold(d.stateDir, b.project, reason);
@@ -153,12 +161,6 @@ export async function tickBridge(b: Bridge, deps: TickDeps): Promise<BridgeRepor
   }
 
   const text = buildNotice(b.project, fresh.ids.length, fresh.last!, fresh.lost);
-  if (d.dryRun) {
-    d.record({ kind: 'dry-run', project: b.project, count: fresh.ids.length, ids: fresh.ids, last: fresh.last, lost: fresh.lost, courier_status: st });
-    dryCursor.set(b.project, fresh.last!);
-    return report(b.project, 'delivered', 0, now);
-  }
-
   const seqBefore = (await b.courier.progress?.()) ?? null;
   const r = await b.courier.deliver(text);
   if (!r.ok && r.error === 'uncertain' && seqBefore !== null) {

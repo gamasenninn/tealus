@@ -327,4 +327,21 @@ describe('配る輪 (tickBridge)', () => {
     expect(e.courier_status).toBe('missing');
     expect(c.delivered).toEqual([]);
   });
+
+  it('★ 空回しは上限に数えない・保留の印を書かない (何も配っていないのに業務メモに「保留」が出ていた、改善ループ 105)', async () => {
+    const lim = new RateLimiter(1, 3600_000, () => t);
+    const held: string[] = [];
+    saveCursor(stateDir, 'pd', id(1));
+    for (let n = 2; n <= 4; n++) {
+      writeQueue(...Array.from({ length: n }, (_, i) => i + 1));
+      const r = await tickBridge({ project: 'pd', courier: fake('idle') }, deps({ dryRun: true, limiter: lim, onHold: (p) => held.push(p) }));
+      expect(r.state).toBe('delivered');
+      t += 3000;
+    }
+    expect(isHeld(stateDir, 'pd')).toBe(false);
+    expect(held).toEqual([]);
+    expect(events.filter((x) => x.kind === 'dry-run')).toHaveLength(3);
+    // 本番に切り替えた最初の便は、空回しの分を数えずに届く
+    expect((await tickBridge({ project: 'pd', courier: fake('idle') }, deps({ limiter: lim }))).state).toBe('delivered');
+  });
 });
