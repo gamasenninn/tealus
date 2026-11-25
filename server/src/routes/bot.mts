@@ -29,6 +29,7 @@ import { recordHeartbeat, validateHeartbeatBody } from '../services/heartbeats.m
 import { emitAgentStatus } from '../services/agentStatus.mts';
 import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
 import { advanceReadCursor } from '../services/readCounts.mts';
+import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -1080,28 +1081,7 @@ router.get('/messages/:id/edit-history', scopeByMessage, requireUuidId, async (r
  * - room_members JOIN で Bot の所属 room のみ可視
  */
 
-// LIKE wildcard escape: q に %, _, \ が含まれても安全に substring マッチ
-function escapeLike(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
-
-// match 前後 ±100 文字の snippet を **match** ハイライト付きで返す
-function buildSnippet(text: string | null, query: string | undefined, contextChars: number = 100): string {
-  if (!text) return '(メディアのみ)';
-  if (!query) return text.length > 200 ? text.slice(0, 200) + '...' : text;
-  const lower = text.toLowerCase();
-  const idx = lower.indexOf(query.toLowerCase());
-  if (idx < 0) return text.length > 200 ? text.slice(0, 200) + '...' : text;
-  const start = Math.max(0, idx - contextChars);
-  const end = Math.min(text.length, idx + query.length + contextChars);
-  const before = text.slice(start, idx);
-  const match = text.slice(idx, idx + query.length);
-  const after = text.slice(idx + query.length, end);
-  let snippet = `${before}**${match}**${after}`;
-  if (start > 0) snippet = '...' + snippet;
-  if (end < text.length) snippet = snippet + '...';
-  return snippet;
-}
+// 抜粋づくりと LIKE の逃がしは services/searchSnippet.mts (改善ループ 120 で出した)
 
 /** GET /search の結果行 (Case 1 / Case 2 両 path 共通の SELECT 列) */
 interface SearchResultRow {
