@@ -16,7 +16,7 @@
 // - **メッセージ (or 行) の先頭** に @cc-{project} がある場合のみ match。
 //   /m flag で multi-line 対応 (改行直後も「先頭」扱い)
 // - project 名: 英小文字 / 数字 / ハイフン (lowercase 規約)
-// - 複数 mention は最初の 1 つを返す
+// - 複数 mention のとき最初の 1 つを使うのは、各包みの ccQueue.mts の extractCcProject (この式は /g なしで最初の 1 つに当たる)
 // - 自己ループ防止の主要メカニズム: AI reply は本文中 (先頭ではない位置) で
 //   @cc-* を引用するため、自然に skip される (CC_SKIP_SENDER_IDS は defense in depth)
 const CC_MENTION_RE = /^@cc-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/m;
@@ -139,8 +139,8 @@ type UnroutedAddressHint = 'team-arrow' | 'malformed-cc-mention' | 'decorated-ad
  *   ★★ 剥がすのは 空白と `* _ ~` **だけ**。`` ` `` と `>` を入れると
  *   「`` `@cc-organon` を先頭に置く ``」のような **説明・引用の便で鳴る**。
  *
- * ★ 呼び出し側は extractCcProject() が null のときだけ呼ぶこと。routing 済みの便に
- *   対して呼んでも null を返すが (下の `!CC_MENTION_RE.test`)、意味のある使い方ではない。
+ * ★ 呼び出し側は extractCcProject() (各包みの ccQueue.mts) が null のときだけ呼ぶこと。routing 済みの便に
+ *   対して呼んでも null を返すが (下の `CC_MENTION_RE.test` で抜ける)、意味のある使い方ではない。
  */
 function detectUnroutedAddressHint(content: string | null | undefined): UnroutedAddressHint {
   if (typeof content !== 'string' || content.length === 0) return null;

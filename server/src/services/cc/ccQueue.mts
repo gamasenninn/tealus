@@ -7,6 +7,7 @@
  * ★ #650 (docs/14、2026-11-23): agent-server の webhook/ccQueue.mts から本体へ写した。
  *   `CC_INTAKE=server` のときだけ本体が受け付ける (ccIntake.mts)。それ以外は今までどおり agent-server が書く。
  *   宛名の読み取り・受け箱の形・切り詰めは agent-server と同じ。変えたのは次の 3 つだけ:
+ *   (★ 2026-11-25 改善ループ 108: 宛名の読み取りの純関数は ccAddress.mts に出した。agent-server と同じ中身かをテストが突き合わせる)
  *   - 切り詰めの判定は行数を覚えておく (本体は全員のチャットを配るプロセスなので、毎回ファイル全体を同期で読まない)
  *   - 別名の設定は server/config/cc-aliases.json (`CC_ALIASES_FILE` で差し替え)。旧互換の CLAUDE_DEFAULT_PROJECT は持ってこない (本番で未設定)
  *   - 「届きました」の表示は本体が直接配る (agentStatus.mts。番号も本体で持つ、§5.4)

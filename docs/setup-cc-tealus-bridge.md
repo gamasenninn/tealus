@@ -844,7 +844,8 @@ https://raw.githubusercontent.com/gamasenninn/tealus/main/docs/setup-cc-remote.m
 ## 内部実装
 
 - agent-server cc-queue: `agent-server/src/webhook/ccQueue.mts` + `handler.mts`
-- 本体の cc-queue (`CC_INTAKE=server`): `server/src/services/cc/` (ccQueue・ccSubscribers・ccWriter・ccIntake) + `server/src/routes/ccQueue.mts`
+- 本体の cc-queue (`CC_INTAKE=server`): `server/src/services/cc/` (ccQueue・ccAddress・ccSubscribers・ccWriter・ccIntake) + `server/src/routes/ccQueue.mts`
+  - 宛名の読み取り (`ccAddress.mts`) は agent-server の `webhook/ccAddress.mts` と同じ中身 (食い違いはテストが落とす)
 - listen-tealus skill: `.claude/skills/listen-tealus/SKILL.md` (http の接続コマンドは同じディレクトリの `cc-stream.sh` にも。食い違いはテストが落とす)
 - handle-tealus skill (PaneDeck のペイン用、受け取り方 C): `.claude/skills/handle-tealus/SKILL.md`
 - 返し方の決まり: [tealus-mcp `src/instructions.js`](https://github.com/gamasenninn/tealus-mcp/blob/main/src/instructions.js) (v0.16.0+)
