@@ -57,6 +57,21 @@ const UNCERTAIN_CODES = new Set(['unreachable', 'timeout', 'agent_prompt_stalled
 /** 届け先が居ない (サーバが動いていない・その名前のエージェントが居ない) と分かる失敗 */
 const MISSING_CODES = new Set(['server_not_running', 'agent_not_found', 'not_found', 'unreachable']);
 
+/**
+ * `herdr agent get` の出力から相手の進み具合 (state_change_seq) を読む。読めなければ null。改善ループ 117 で progress() から出した。
+ * ★ これが黙って null を返し続けると「届いたか分からない」ときの確かめ (tick.mts) が効かなくなり、
+ *   打ち直しが「届かなかった」扱いになる (二重に届けうる)。0.9.5 の実物の形をテストで固定している (ssh.test.mts)
+ */
+export function parseStateSeq(stdout: string): number | null {
+  try {
+    const v = JSON.parse(stdout) as { result?: { agent?: { state_change_seq?: unknown } } };
+    const n = v.result?.agent?.state_change_seq;
+    return typeof n === 'number' ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 export function herdrCourier(run: Run, agent: string, opts: { bin?: string; timeoutMs?: number } = {}): Courier {
   const bin = opts.bin ?? 'herdr';
   const timeout = String(opts.timeoutMs ?? 5000);
@@ -64,10 +79,7 @@ export function herdrCourier(run: Run, agent: string, opts: { bin?: string; time
     async progress() {
       try {
         const r = await run(bin, ['agent', 'get', agent]);
-        if (r.code !== 0) return null;
-        const v = JSON.parse(r.stdout) as { result?: { agent?: { state_change_seq?: unknown } } };
-        const n = v.result?.agent?.state_change_seq;
-        return typeof n === 'number' ? n : null;
+        return r.code === 0 ? parseStateSeq(r.stdout) : null;
       } catch {
         return null;
       }

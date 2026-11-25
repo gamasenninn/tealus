@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { sshRun, isSafeRemoteArg } from '../src/ssh.mts';
-import { herdrCourier, type Courier, type Run } from '../src/herdr.mts';
+import { herdrCourier, parseStateSeq, type Courier, type Run } from '../src/herdr.mts';
 import { tickBridge, resetTickMemory, type TickDeps } from '../src/tick.mts';
 import { RateLimiter } from '../src/limit.mts';
 import { loadCursor, saveCursor } from '../src/cursor.mts';
@@ -119,3 +119,80 @@ describe('bridges.json の herdr-ssh', () => {
 
 // 型だけの確かめ (Run の形)
 export const _run: Run = async () => ({ code: 0, stdout: '', stderr: '' });
+
+// 改善ループ 117: 二重に届けないための分かれ道のうち、テストの無かった枝を今の動きのまま固定する
+describe('★ 進み具合 (state_change_seq) が取れないとき', () => {
+  let queueDir: string, stateDir: string;
+  let t = 0;
+  let events: Array<Record<string, unknown>>;
+  const deps = (): TickDeps => ({
+    queueDir, stateDir, limiter: new RateLimiter(20, 3600_000, () => t), now: () => t, dryRun: false, record: (e) => events.push(e),
+  });
+  const writeQueue = (...ns: number[]) => fs.writeFileSync(path.join(queueDir, 'db.jsonl'), ns.map((n) => JSON.stringify({ id: id(n) }) + '\n').join(''));
+  const fake = (seqs: Array<number | null>, results: Array<{ ok: true; ref: string } | { ok: false; error: string }>): Courier & { sent: number } => {
+    let s = 0; let d = 0;
+    const c = {
+      sent: 0,
+      status: async () => 'idle' as const,
+      progress: async () => seqs[Math.min(s++, seqs.length - 1)],
+      deliver: async () => { c.sent++; return results[Math.min(d++, results.length - 1)]; },
+    };
+    return c;
+  };
+
+  beforeEach(() => {
+    queueDir = fs.mkdtempSync(path.join(os.tmpdir(), 'courier-q-'));
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'courier-s-'));
+    events = []; t = 1_000_000; resetTickMemory();
+    writeQueue(1); saveCursor(stateDir, 'db', id(1)); writeQueue(1, 2);
+  });
+  afterEach(() => { fs.rmSync(queueDir, { recursive: true, force: true }); fs.rmSync(stateDir, { recursive: true, force: true }); });
+
+  it('打つ前に進み具合が取れず、戻りが uncertain → 確かめようがないので「届かなかった」扱い (30 秒あけて打ち直す。今の動き)', async () => {
+    const c = fake([null], [{ ok: false, error: 'uncertain' }, { ok: true, ref: 'r' }]);
+    expect((await tickBridge({ project: 'db', courier: c }, deps())).state).toBe('failed');
+    expect(events.some((e) => e.kind === 'deliver-failed' && e.error === 'uncertain')).toBe(true);
+    t += 3_000;
+    await tickBridge({ project: 'db', courier: c }, deps());
+    expect(c.sent).toBe(1);
+    t += 30_000;
+    await tickBridge({ project: 'db', courier: c }, deps());
+    expect(c.sent).toBe(2);
+    expect(loadCursor(stateDir, 'db')).toBe(id(2));
+  });
+
+  it('uncertain の後、次の回に進み具合が取れない → 届いたとはみなさず、30 秒たってから打ち直す', async () => {
+    const c = fake([5, null, null, null], [{ ok: false, error: 'uncertain' }, { ok: true, ref: 'r' }]);
+    expect((await tickBridge({ project: 'db', courier: c }, deps())).state).toBe('unknown');
+    t += 3_000;
+    expect((await tickBridge({ project: 'db', courier: c }, deps())).state).toBe('unknown');
+    expect(loadCursor(stateDir, 'db')).toBe(id(1));
+    t += 30_000;
+    await tickBridge({ project: 'db', courier: c }, deps());
+    expect(c.sent).toBe(2);
+    expect(events.some((e) => e.confirmed_late === true)).toBe(false);
+  });
+});
+
+describe('parseStateSeq (herdr agent get の出力から進み具合を読む)', () => {
+  it('0.9.5 の実物の形 result.agent.state_change_seq', () => {
+    expect(parseStateSeq('{"result":{"agent":{"agent_status":"idle","state_change_seq":42}}}')).toBe(42);
+  });
+  it('0 も数として読む', () => {
+    expect(parseStateSeq('{"result":{"agent":{"state_change_seq":0}}}')).toBe(0);
+  });
+  it.each([
+    ['数でない', '{"result":{"agent":{"state_change_seq":"42"}}}'],
+    ['無い', '{"result":{"agent":{}}}'],
+    ['JSON でない', 'error: not found'],
+    ['空', ''],
+  ])('%s → null', (_l, out) => {
+    expect(parseStateSeq(out)).toBeNull();
+  });
+  it('herdrCourier.progress も同じ読み方 (終了コードが 0 でなければ null)', async () => {
+    const ok: Run = async () => ({ code: 0, stdout: '{"result":{"agent":{"state_change_seq":7}}}', stderr: '' });
+    const ng: Run = async () => ({ code: 1, stdout: '{"result":{"agent":{"state_change_seq":7}}}', stderr: '' });
+    expect(await herdrCourier(ok, 'a').progress!()).toBe(7);
+    expect(await herdrCourier(ng, 'a').progress!()).toBeNull();
+  });
+});
