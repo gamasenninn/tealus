@@ -54,8 +54,11 @@ describe('startVoiceLogJanitor', () => {
   });
 
   test('置き場が無くても投げない', () => {
-    const stop = startVoiceLogJanitor({ dir: path.join(dir, 'none') });
-    stop();
+    // ★ 改善ループ 122: 確かめる中身を expect に書く (以前は expect が無く、投げたら落ちることに頼っていた)
+    expect(() => {
+      const stop = startVoiceLogJanitor({ dir: path.join(dir, 'none') });
+      stop();
+    }).not.toThrow();
   });
 
   test('★★★ 起動処理 (src/index.mts) から呼ばれている', () => {

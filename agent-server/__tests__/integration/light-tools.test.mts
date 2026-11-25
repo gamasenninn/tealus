@@ -130,7 +130,8 @@ describe('Light Agent カスタムツール統合テスト', () => {
     }) as unknown as typeof fetch;
 
     const imgTool = findTool('generate_image');
-    if (!imgTool) return; // roomId なしで作成されなかった場合スキップ
+    // ★ 改善ループ 122: 以前は「作られなければ return」で、道具が消えても expect 0 件で黙って合格した
+    if (!imgTool) throw new Error('generate_image が作られていない (roomId を渡しているので作られるはず)');
 
     const result = await imgTool.execute({ prompt: 'cute puppy' });
 
@@ -146,7 +147,7 @@ describe('Light Agent カスタムツール統合テスト', () => {
     }) as unknown as typeof fetch;
 
     const imgTool = findTool('generate_image');
-    if (!imgTool) return;
+    if (!imgTool) throw new Error('generate_image が作られていない');   // ★ 改善ループ 122 (上と同じ)
 
     const result = await imgTool.execute({ prompt: 'test' });
 
