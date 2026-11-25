@@ -2,11 +2,6 @@ export const SERVER_ERROR = 'サーバーエラーが発生しました';
 export const ROOM_NOT_FOUND = 'ルームが見つかりません';
 export const ROOM_ACCESS_DENIED = 'このルームにアクセスする権限がありません';
 export const ROOM_GROUP_ONLY = 'この操作はグループのみ対象です';
-export const USER_NOT_FOUND = 'ユーザーが見つかりません';
-export const MEMBER_NOT_FOUND = 'メンバーが見つかりません';
-export const MESSAGE_NOT_FOUND = 'メッセージが見つかりません';
-export const AUTH_TOKEN_REQUIRED = '認証トークンがありません';
-export const AUTH_TOKEN_INVALID = 'トークンが無効です';
 export const AUTH_INVALID_CREDENTIALS = 'ユーザーIDまたはパスワードが正しくありません';
 export const AUTH_REGISTER_REQUIRED = 'ユーザーID、表示名、パスワードは必須です';
 export const AUTH_DUPLICATE_LOGIN_ID = 'このユーザーIDは既に登録されています';
@@ -14,23 +9,8 @@ export const AUTH_REGISTER_CLOSED = '新しいユーザーは管理者がダッ�
 export const AUTH_LOGIN_REQUIRED = 'ユーザーIDとパスワードは必須です';
 // #362 login の失敗が短時間に続いたとき。★ ID が存在するかを漏らさない文面にする
 export const AUTH_TOO_MANY_ATTEMPTS = 'ログインの試行が多すぎます。しばらく待ってからやり直してください';
-export const AUTH_PASSWORD_WRONG = '現在のパスワードが正しくありません';
-export const AUTH_PASSWORD_REQUIRED = '現在のパスワードと新しいパスワードは必須です';
-export const ADMIN_REQUIRED = '管理者権限が必要です';
 export const GROUP_ADMIN_REQUIRED = 'グループ管理者のみが実行できます';
-export const FILE_NOT_ATTACHED = 'ファイルが添付されていません';
-export const IMAGE_NOT_ATTACHED = '画像ファイルが添付されていません';
-export const VOICE_NOT_ATTACHED = '音声ファイルが添付されていません';
-export const FILE_TOO_LARGE = 'ファイルサイズが上限を超えています';
-export const NO_UPDATE_FIELDS = '更新する項目がありません';
-export const ALREADY_MEMBER = '既にメンバーです';
-export const SENDER_ONLY_DELETE = '自分のメッセージのみ削除できます';
-export const SENDER_ONLY_EDIT = '送信者のみ編集できます';
-export const EMOJI_REQUIRED = 'emoji は必須です';
-export const TEXT_REQUIRED = 'テキストは必須です';
 export const SELF_KICK_NOT_ALLOWED = '自分を退会させることはできません。「このグループを退会」を使ってください。';
-export const LAST_ADMIN_CANNOT_LEAVE = 'あなたは最後のグループ管理者です。先に他のメンバーをグループ管理者に変更してください。';
-export const ROOM_CREATOR_ONLY = 'ルームを作成した本人のみ削除できます';
 export const ROOM_NOT_SOLO = '他のメンバーが残っているため削除できません。先にメンバーを退会させてください。';
 
 // #391 1 対 1 ルームのメンバー除外。direct には admin が居ないので、

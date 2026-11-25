@@ -1,6 +1,4 @@
-export const SCROLL_THRESHOLD = 50;
 export const SCROLL_NEAR_BOTTOM = 100;
-export const SCROLL_HEADER_OFFSET = 40;
 export const INITIAL_SCROLL_DELAY = 50;
 export const LONG_PRESS_TIMEOUT = 500;
 export const TYPING_DEBOUNCE = 2000;

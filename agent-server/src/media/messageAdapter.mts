@@ -14,8 +14,6 @@ export function extractPromptFromMessage(message: WebhookMessage | null | undefi
 
   const type = message.type || 'text';
   const content = message.content || '';
-  // 元実装から計算のみ・未使用の変数（挙動保持のため残置）
-  const sender = message.sender?.display_name || '不明';
 
   switch (type) {
     case 'text':

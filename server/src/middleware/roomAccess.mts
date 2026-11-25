@@ -89,28 +89,6 @@ export async function requireGroup(req: Request, res: Response, next: NextFuncti
 }
 
 /**
- * Middleware: Require the authenticated user to be the room creator
- * (rooms.created_by = req.user.id)
- */
-export async function requireCreator(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
-  const roomId = req.params.id;
-  const userId = req.user!.id;
-  try {
-    const result = await pool.query<{ created_by: string }>('SELECT created_by FROM rooms WHERE id = $1', [roomId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: E.ROOM_NOT_FOUND });
-    }
-    if (result.rows[0].created_by !== userId) {
-      return res.status(403).json({ error: E.ROOM_CREATOR_ONLY });
-    }
-    next();
-  } catch (err) {
-    logger.error('Room creator check error:', err);
-    res.status(500).json({ error: E.SERVER_ERROR });
-  }
-}
-
-/**
  * Middleware: Require the authenticated user to be the only remaining member
  * (no other room_members exist besides self)
  * Used for room deletion safety: forces "remove all other members first" workflow

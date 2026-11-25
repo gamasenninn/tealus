@@ -213,10 +213,7 @@ interface RoomSummary extends RoomSettingsFile {
   member_count?: number;
 }
 
-/**
- * GET /config/rooms — 全ルームのワークスペース一覧 + 設定サマリ
- */
-// ワークスペースをスキャンしてルーム一覧を返す共通関数
+// ワークスペースをスキャンしてルーム一覧を返す共通関数 (GET /config/rooms と /config/rooms/:agentId が使う)
 async function listAgentRooms(agentId: string): Promise<RoomSummary[]> {
   const agentDir = path.join(WORKSPACE_ROOT, agentId);
   if (!fs.existsSync(agentDir)) return [];
