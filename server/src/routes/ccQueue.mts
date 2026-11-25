@@ -76,8 +76,36 @@ export function _resetReadCache(): void {
   readCache.clear();
 }
 
+/**
+ * 受け箱の中身を便の並びにする (改善ループ 111 で 2 か所の読みを 1 つにした)。
+ * 空の行は飛ばし、壊れた行は捨てる。改行で終わらない最後の行も、JSON として読めれば便として扱う
+ */
+export function parseQueueLines(content: string): CcEvent[] {
+  const events: CcEvent[] = [];
+  for (const line of content.split('\n')) {
+    if (line === '') continue;
+    try { events.push(JSON.parse(line) as CcEvent); } catch { /* 壊れた行は捨てる */ }
+  }
+  return events;
+}
+
+function queueFilePath(project: string): string {
+  return path.join(getCcQueueDir(), `${project}.jsonl`);
+}
+
+/** 更新時刻と大きさが前に読んだときと同じなら、その結果 */
+function cachedEvents(filePath: string, st: fs.Stats): CcEvent[] | null {
+  const hit = readCache.get(filePath);
+  return hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size ? hit.events : null;
+}
+
+function remember(filePath: string, st: fs.Stats, events: CcEvent[]): CcEvent[] {
+  readCache.set(filePath, { mtimeMs: st.mtimeMs, size: st.size, events });
+  return events;
+}
+
 async function readEvents(project: string): Promise<CcEvent[]> {
-  const filePath = path.join(getCcQueueDir(), `${project}.jsonl`);
+  const filePath = queueFilePath(project);
   let st: fs.Stats;
   try {
     st = await fs.promises.stat(filePath);
@@ -85,21 +113,15 @@ async function readEvents(project: string): Promise<CcEvent[]> {
     readCache.delete(filePath);
     return [];
   }
-  const hit = readCache.get(filePath);
-  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.events;
+  const cached = cachedEvents(filePath, st);
+  if (cached) return cached;
   let content: string;
   try {
     content = await fs.promises.readFile(filePath, 'utf8');
   } catch {
     return [];
   }
-  const events: CcEvent[] = [];
-  for (const line of content.split('\n')) {
-    if (line === '') continue;
-    try { events.push(JSON.parse(line) as CcEvent); } catch { /* 壊れた行は捨てる */ }
-  }
-  readCache.set(filePath, { mtimeMs: st.mtimeMs, size: st.size, events });
-  return events;
+  return remember(filePath, st, parseQueueLines(content));
 }
 
 /**
@@ -107,20 +129,14 @@ async function readEvents(project: string): Promise<CcEvent[]> {
  * ★ 同期なのは、この間に別の便が live で割り込まないため。受け箱が変わるのは便が来たときだけなので、ほとんどは読み直さない
  */
 function readEventsSyncIfChanged(project: string, before: CcEvent[]): CcEvent[] {
-  const filePath = path.join(getCcQueueDir(), `${project}.jsonl`);
+  const filePath = queueFilePath(project);
   let st: fs.Stats;
   try { st = fs.statSync(filePath); } catch { return before; }
-  const hit = readCache.get(filePath);
-  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.events;
-  const events: CcEvent[] = [];
-  try {
-    for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
-      if (line === '') continue;
-      try { events.push(JSON.parse(line) as CcEvent); } catch { /* 壊れた行は捨てる */ }
-    }
-  } catch { return before; }
-  readCache.set(filePath, { mtimeMs: st.mtimeMs, size: st.size, events });
-  return events;
+  const cached = cachedEvents(filePath, st);
+  if (cached) return cached;
+  let content: string;
+  try { content = fs.readFileSync(filePath, 'utf8'); } catch { return before; }
+  return remember(filePath, st, parseQueueLines(content));
 }
 
 /**
