@@ -2,6 +2,7 @@ import type {
   User, Room, RoomMember, Message, Tag, MessageTag, StampPack, Stamp, MediaItem,
   PortalLink, Webhook, DictionaryTerm, DictionaryAlias,
 } from '../types';
+import type { MessageEditEntry } from '../utils/editHistory';
 import { trimEventsForKeepalive } from './voiceLogPayload';
 
 /** ★ 2026-09-26: GET /agent-api/config/tts-options の応答 */
@@ -815,7 +816,8 @@ class ApiClient {
   }
 
   getMessageEdits(roomId: string, messageId: string) {
-    return this.request<{ edits: Array<{ content: string; edited_at: string; edited_by_name?: string }> }>('GET', `/rooms/${roomId}/messages/${messageId}/edits`);
+    // 形は utils/editHistory の MessageEditEntry (本体は version・content・created_at・edited_by_name。edited_at は無い。改善ループ 119)
+    return this.request<{ edits: MessageEditEntry[] }>('GET', `/rooms/${roomId}/messages/${messageId}/edits`);
   }
 
   getAnnouncements(limit = 20) {

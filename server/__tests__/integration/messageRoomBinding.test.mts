@@ -47,6 +47,11 @@ describe('メッセージの口は、URL の部屋のメッセージだけ', () 
       const res = await request(app).get(`/api/rooms/${roomA}/messages/${msgA}/edits`).set(auth());
       expect(res.status).toBe(200);
       expect(res.body.edits.map((e: { content: string }) => e.content)).toEqual(['Aの前の文面']);
+      // ★ 改善ループ 119: 画面の型 (client/src/utils/editHistory の MessageEditEntry) はこの形に合わせてある
+      const e = res.body.edits[0];
+      expect(e).toEqual(expect.objectContaining({ version: 1, content: 'Aの前の文面', edited_by_name: '他人' }));
+      expect(typeof e.created_at).toBe('string');
+      expect(e).not.toHaveProperty('edited_at');
     });
 
     it('★ 別の部屋のメッセージは 404 (前の文面を返さない)', async () => {

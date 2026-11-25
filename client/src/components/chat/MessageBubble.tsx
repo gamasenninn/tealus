@@ -191,7 +191,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
       onShowEditHistory: async () => {
         try {
           const data = await api.getMessageEdits(roomId, message.id);
-          setEditHistory(data.edits as unknown as MessageEditEntry[]);
+          setEditHistory(data.edits);
           setShowEditHistory(true);
         } catch (err) { console.error(err); notifyFailure('編集履歴の読み込み', err); }
       },
