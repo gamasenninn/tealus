@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { useMessageStore } from '../stores/messageStore';
 import { useConfirmStore, notifyFailure } from '../stores/confirmStore';
 import type { Message, Room } from '../types';
-import { canEditTranscription } from '../utils/permissions';
+import { canEditTranscription, canEditMessage } from '../utils/permissions';
 
 export interface ContextMenuItem {
   icon: ReactNode;
@@ -71,12 +71,12 @@ export function buildContextMenuItems({
   }
 
   // Edit message / Add caption
-  const editPolicy = currentRoom?.message_edit_policy || 'none';
-  const isFirstCaption = !message.content && isOwn && message.type !== 'system' && message.type !== 'stamp';
-  const canEditMessage = !message.is_deleted && message.type !== 'system' && message.type !== 'stamp' && (
-    isFirstCaption || (editPolicy === 'sender' && isOwn) || editPolicy === 'member'
-  );
-  if (canEditMessage) {
+  // 規則は utils/permissions の canEditMessage (本体と同じ。改善ループ 116)
+  const editable = canEditMessage({
+    isDeleted: message.is_deleted, type: message.type, hasContent: !!message.content, isOwn,
+    policy: currentRoom?.message_edit_policy || 'none',
+  });
+  if (editable) {
     items.push({
       icon: <Pencil size={16} />,
       label: message.content ? 'メッセージを編集' : 'テキストを追加',

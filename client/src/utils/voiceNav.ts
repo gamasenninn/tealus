@@ -5,7 +5,7 @@
  * 現在の対象を中心に 前/次 の messageId を返す。store / React に依存しないので Vitest 可能。
  */
 import type { Message } from '../types';
-import { canEditTranscription } from './permissions';
+import { canEditTranscription, canEditMessage } from './permissions';
 
 export interface VoiceNavInfo {
   list: Message[];
@@ -35,7 +35,7 @@ export function editableVoiceMessages(messages: Message[] | null | undefined, us
 /**
  * #379: 音声添付を持つ、その user が編集可能なメッセージを順序付きで返す。
  *
- * ★ 「編集できるか」は `useContextMenuItems` の `canEditMessage` と**同じ規則**
+ * ★ 「編集できるか」は `utils/permissions` の `canEditMessage` (メニューと**同じ関数**)
  *   (`message_edit_policy` の none / sender / member + 削除済み・system・stamp 除外)。
  *   別ルールを書くと「前/次で送った先が保存時に 403」になり、実行時にしか出ない。
  * ★★ `type='voice'` は除く —— あちらは `VoiceEditModal` が既に連続編集を持っており、
@@ -53,9 +53,8 @@ export function editableAudioAttachmentMessages(
     const hasAudio = Array.isArray(m.media)
       && m.media.some((x) => typeof x?.mime_type === 'string' && x.mime_type.startsWith('audio/'));
     if (!hasAudio) return false;
-    const isOwn = m.sender_id === userId;
-    const isFirstCaption = !m.content && isOwn;
-    return isFirstCaption || (editPolicy === 'sender' && isOwn) || editPolicy === 'member';
+    // 規則は utils/permissions の canEditMessage (メニューと同じ。削除済み・system・stamp は上で除いている)
+    return canEditMessage({ hasContent: !!m.content, isOwn: m.sender_id === userId, policy: editPolicy });
   });
 }
 

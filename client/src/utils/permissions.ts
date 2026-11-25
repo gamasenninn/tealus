@@ -100,3 +100,15 @@ export function roleLabel(user: UserLike): string {
 export function canEditTranscription(p: { isOwn: boolean; isGuest: boolean; allowMemberEdit: boolean; senderIsBot: boolean }): boolean {
   return p.isOwn || (!p.isGuest && (p.allowMemberEdit || p.senderIsBot));
 }
+
+/**
+ * メッセージを直せるか (メニューの「メッセージを編集 / テキストを追加」と、音声つき添付の前後送り)。改善ループ 116 で 2 か所の写しを 1 つにした。
+ * ★ 本体 (server/src/services/messageEditDecide.mts) と同じ規則。別の規則を書くと、メニューは出るのに保存で 403 になる。
+ *   違うのは知らない policy だけ (本体は通す・画面は出さない)。
+ * 本文の無い自分の便への最初の説明文は、部屋の設定によらず直せる。
+ */
+export function canEditMessage(p: { isDeleted?: boolean; type?: string; hasContent: boolean; isOwn: boolean; policy: string | undefined }): boolean {
+  if (p.isDeleted || p.type === 'system' || p.type === 'stamp') return false;
+  const isFirstCaption = !p.hasContent && p.isOwn;
+  return isFirstCaption || (p.policy === 'sender' && p.isOwn) || p.policy === 'member';
+}

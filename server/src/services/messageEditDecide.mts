@@ -1,7 +1,7 @@
 /**
  * メッセージを直せるかの判定 (PUT /api/rooms/:id/messages/:msgId)。改善ループ 109 で道から出した。
  *
- * ★ 画面にも同じ規則の写しがある (client/src/hooks/useContextMenuItems.tsx・client/src/utils/voiceNav.ts)。
+ * ★ 画面にも同じ規則の写しがある (client/src/utils/permissions.ts の canEditMessage。メニューと音声つき添付の前後送りが使う)。
  *   ここを変えたら画面も合わせること (ずれるとメニューは出るのに保存で 403 になる)。
  * ★ policy が 'member' のときのメンバー確認は DB を引くので呼び出し側でする (needsMemberCheck)。
  * ★ 知らない policy 値はどの枝にも当たらず通る (道の中にあったときの動きのまま)。

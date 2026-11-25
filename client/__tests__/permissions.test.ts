@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, canDeleteRoomTag, canSearchUsers, roleLabel, canEditTranscription } from '../src/utils/permissions';
+import { isAdmin, isGuest, canCreateRoom, canInviteToRoom, canCreateStamp, canDeleteRoomTag, canSearchUsers, roleLabel, canEditTranscription, canEditMessage } from '../src/utils/permissions';
 
 describe('client permissions helper (#282 Phase D)', () => {
   const admin = { role: 'admin' };
@@ -84,5 +84,27 @@ describe('canEditTranscription', () => {
   });
   it('★ ゲストは他の人の音声を直せない (設定がオンでも・機械の音声でも)', () => {
     expect(canEditTranscription({ isOwn: false, isGuest: true, allowMemberEdit: true, senderIsBot: true })).toBe(false);
+  });
+});
+
+// 改善ループ 116: メッセージを直せるか (メニューの「編集 / テキストを追加」と、音声つき添付の前後送り)。
+// 2 か所に同じ式の写しがあり、「本文の無い自分の便」の枝はどちらにもテストが無かった。
+// ★ 本体 (server/src/services/messageEditDecide.mts) と同じ規則。違うのは知らない policy だけ (本体は通す・画面は出さない)
+describe('canEditMessage', () => {
+  const base = { isDeleted: false, type: 'text', hasContent: true, isOwn: true, policy: 'sender' as string | undefined };
+  it.each([
+    ['sender で自分の便', {}, true],
+    ['sender で他人の便', { isOwn: false }, false],
+    ['member なら他人の便も', { isOwn: false, policy: 'member' }, true],
+    ['none', { policy: 'none' }, false],
+    ['policy が無い (部屋が読めていない)', { policy: undefined }, false],
+    ['知らない policy は出さない', { isOwn: false, policy: 'unknown' }, false],
+    ['本文の無い自分の便は none でも (最初の説明文)', { hasContent: false, policy: 'none' }, true],
+    ['本文の無い他人の便は最初の説明文ではない', { hasContent: false, isOwn: false, policy: 'none' }, false],
+    ['削除済み', { isDeleted: true, policy: 'member' }, false],
+    ['system', { type: 'system', policy: 'member' }, false],
+    ['stamp は本文が無くても', { type: 'stamp', hasContent: false }, false],
+  ] as const)('%s', (_label, over, expected) => {
+    expect(canEditMessage({ ...base, ...over })).toBe(expected);
   });
 });
