@@ -735,7 +735,7 @@ class ApiClient {
   }
 
   addMessageTag(messageId: string, { tag_id, name }: { tag_id?: string; name?: string }) {
-    return this.request('POST', `/messages/${messageId}/tags`, tag_id ? { tag_id } : { name });
+    return this.request<{ tag: MessageTag }>('POST', `/messages/${messageId}/tags`, tag_id ? { tag_id } : { name });
   }
 
   removeMessageTag(messageId: string, tagId: string) {

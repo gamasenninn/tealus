@@ -362,6 +362,10 @@ describe('Tags API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.tags.length).toBe(2);
+      // ★ 改善ループ 118: 画面の型 (client/src/types.ts の MessageTag) は「id で返り、tag_id は無い」に合わせてある
+      const ids = res.body.tags.map((t: { id: string }) => t.id).sort();
+      expect(ids).toEqual([tag1.body.tag.id, tag2.body.tag.id].sort());
+      for (const t of res.body.tags) expect(t).not.toHaveProperty('tag_id');
     });
   });
 

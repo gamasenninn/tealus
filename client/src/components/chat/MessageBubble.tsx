@@ -24,7 +24,7 @@ import TextSelectModal from './TextSelectModal';
 import TtsButton from './TtsButton';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
 import { Megaphone } from 'lucide-react';
-import { useMessageTags, type TagEntry } from '../../hooks/useMessageTags';
+import { useMessageTags } from '../../hooks/useMessageTags';
 import MessageEditModal from './MessageEditModal';
 import VoiceEditModal from './VoiceEditModal';
 import MediaAudio from '../media/MediaAudio';
@@ -87,7 +87,7 @@ function MessageBubble({ message, isOwn, searchKeyword }: MessageBubbleProps) {
   const [showTodoMenu, setShowTodoMenu] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [selectTextValue, setSelectTextValue] = useState<string | null>(null);
-  const { tags, refreshTags } = useMessageTags(message.id, message.tags as TagEntry[]);
+  const { tags, refreshTags } = useMessageTags(message.id, message.tags);
   const [isEditingMessage, setIsEditingMessage] = useState(false);
   const [showEditHistory, setShowEditHistory] = useState(false);
   const [editHistory, setEditHistory] = useState<MessageEditEntry[]>([]);

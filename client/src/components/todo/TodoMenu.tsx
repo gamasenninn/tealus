@@ -1,15 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { CheckSquare, Square, Plus } from 'lucide-react';
-import type { Tag } from '../../types';
+import type { Tag, MessageTag } from '../../types';
 import './TodoMenu.css';
 import { notifyFailure } from '../../stores/confirmStore';
-
-// メッセージ付与タグの応答行 (server は id で返す。types.ts の MessageTag は tag_id で実態と差分あり)
-interface MessageTagRow {
-  id: string;
-  name: string;
-}
 
 interface TodoMenuProps {
   messageId: string;
@@ -20,7 +14,7 @@ interface TodoMenuProps {
 
 function TodoMenu({ messageId, roomId, onClose, onTagsChanged }: TodoMenuProps) {
   const [todoTags, setTodoTags] = useState<Tag[]>([]);
-  const [messageTags, setMessageTags] = useState<MessageTagRow[]>([]);
+  const [messageTags, setMessageTags] = useState<MessageTag[]>([]);
   const [newTagName, setNewTagName] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -31,7 +25,7 @@ function TodoMenu({ messageId, roomId, onClose, onTagsChanged }: TodoMenuProps) 
       api.getMessageTags(messageId),
     ]).then(([todoData, msgData]) => {
       setTodoTags(todoData.tags || []);
-      setMessageTags((msgData.tags || []) as unknown as MessageTagRow[]);
+      setMessageTags(msgData.tags || []);
     }).catch(console.error);
   }, [messageId, roomId]);
 
@@ -46,7 +40,7 @@ function TodoMenu({ messageId, roomId, onClose, onTagsChanged }: TodoMenuProps) 
       }
       // 再取得
       const res = await api.getMessageTags(messageId);
-      setMessageTags((res.tags || []) as unknown as MessageTagRow[]);
+      setMessageTags(res.tags || []);
       if (onTagsChanged) onTagsChanged();
       // タグ付け後に閉じる
       onClose();

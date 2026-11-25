@@ -144,9 +144,12 @@ export interface Reaction {
   user_ids?: string[];
 }
 
+/**
+ * 投稿に付いたタグ。本体はどの道でも tags の行 (id) で返す — GET /messages/:id/tags・付けたときの { tag }・
+ * 知らせ message:tags・一覧の m.tags (messageAttachments の attachTags)。tag_id という欄は無い (改善ループ 118 で型を実物に合わせた)
+ */
 export interface MessageTag {
-  id?: string;
-  tag_id: string;
+  id: string;
   name: string;
   is_todo?: boolean;
   is_done?: boolean | null;

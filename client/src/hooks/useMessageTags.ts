@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { api } from '../services/api';
 import type { MessageTag } from '../types';
 
-export type TagEntry = MessageTag & { id: string };
+/** MessageTag と同じ (id は型の側で必須になった。改善ループ 118) */
+export type TagEntry = MessageTag;
 
 /**
  * #344 候補3: メッセージのタグ状態 + 再取得を 1 本化。
@@ -15,7 +16,7 @@ export function useMessageTags(messageId: string, initialTags?: TagEntry[]) {
   const refreshTags = useCallback(async () => {
     try {
       const res = await api.getMessageTags(messageId);
-      setTags(res.tags as TagEntry[]);
+      setTags(res.tags);
     } catch (err) {
       console.error('Tag refresh error:', err);
     }

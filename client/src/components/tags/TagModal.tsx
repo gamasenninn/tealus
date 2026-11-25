@@ -6,14 +6,8 @@ import { useConfirm, notifyFailure } from '../../stores/confirmStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { canDeleteRoomTag } from '../../utils/permissions';
-import type { Tag as TagType } from '../../types';
+import type { Tag as TagType, MessageTag } from '../../types';
 import './TagModal.css';
-
-// メッセージ付与タグの応答行 (server は id で返す。types.ts の MessageTag は tag_id で実態と差分あり)
-interface MessageTagRow {
-  id: string;
-  name: string;
-}
 
 interface TagModalProps {
   messageId: string;
@@ -31,7 +25,7 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<TagType[]>([]);
   const [recentTags, setRecentTags] = useState<TagType[]>([]);
-  const [messageTags, setMessageTags] = useState<MessageTagRow[]>([]);
+  const [messageTags, setMessageTags] = useState<MessageTag[]>([]);
   const [loading, setLoading] = useState(true);
   const [manageMode, setManageMode] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -48,7 +42,7 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
         api.getMessageTags(messageId),
       ]);
       setRecentTags(tagsRes.tags.slice(0, 10));
-      setMessageTags(msgTagsRes.tags as unknown as MessageTagRow[]);
+      setMessageTags(msgTagsRes.tags);
     } catch (err) {
       console.error('Tag load error:', err);
     } finally {
@@ -80,7 +74,7 @@ function TagModal({ messageId, onClose, onTagsChanged }: TagModalProps) {
     if (messageTags.some(t => t.id === tagId || t.name === trimmed)) return;
 
     try {
-      const res = await api.addMessageTag(messageId, tagId ? { tag_id: tagId } : { name: trimmed }) as unknown as { tag: MessageTagRow };
+      const res = await api.addMessageTag(messageId, tagId ? { tag_id: tagId } : { name: trimmed });
       setMessageTags(prev => [...prev, res.tag]);
       setInput('');
       setSuggestions([]);

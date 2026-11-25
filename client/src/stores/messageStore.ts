@@ -220,8 +220,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
 
   removeTag: (tagId) => {
     set((state) => ({
-      messages: state.messages.map((m) => (m.tags?.some((t) => (t.id ?? t.tag_id) === tagId)
-        ? { ...m, tags: m.tags.filter((t) => (t.id ?? t.tag_id) !== tagId) }
+      messages: state.messages.map((m) => (m.tags?.some((t) => t.id === tagId)
+        ? { ...m, tags: m.tags.filter((t) => t.id !== tagId) }
         : m)),
     }));
   },
