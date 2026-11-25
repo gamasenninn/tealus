@@ -4,6 +4,7 @@
  */
 import crypto from 'node:crypto';
 import { pool } from '../db/pool.mts';
+import { directRoomLabel } from './directRoomLabel.mts';
 import { logger } from '../utils/logger.mts';
 import { errorText } from '../utils/logFormat.mts';
 
@@ -182,13 +183,8 @@ export async function fireWebhooks(eventType: string, roomId: string | null, pay
       }
       // DM ルームの場合、メンバー名をルーム名として設定
       if (!payload.room.name && payload.room.type === 'direct') {
-        const membersResult = await pool.query<{ display_name: string }>(
-          `SELECT u.display_name FROM room_members rm JOIN users u ON u.id = rm.user_id WHERE rm.room_id = $1`,
-          [roomId]
-        );
-        if (membersResult.rows.length > 0) {
-          payload.room.name = membersResult.rows.map(r => r.display_name).join(' ↔ ');
-        }
+        const label = await directRoomLabel(roomId);   // 「A ↔ B」(ccIntake と同じものを使う)
+        if (label) payload.room.name = label;
       }
     }
 

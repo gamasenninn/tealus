@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import { pool } from '../../db/pool.mts';
+import { directRoomLabel } from '../directRoomLabel.mts';
 import { logger } from '../../utils/logger.mts';
 import { errorText } from '../../utils/logFormat.mts';
 import {
@@ -70,15 +71,13 @@ async function senderInfo(id: string): Promise<SenderInfo | null> {
   return r.rows[0] ?? null;
 }
 
-/** 部屋の名前。1 対 1 で名前が無ければ「A ↔ B」(fireWebhooks と同じ組み立て、webhook.mts) */
+/** 部屋の名前。1 対 1 で名前が無ければ「A ↔ B」(directRoomLabel。webhook.mts と同じものを使う) */
 async function roomName(roomId: string): Promise<string | null> {
   const r = await pool.query<{ name: string | null; type: string }>('SELECT name, type FROM rooms WHERE id = $1', [roomId]);
   const row = r.rows[0];
   if (!row) return null;
   if (row.name || row.type !== 'direct') return row.name;
-  const m = await pool.query<{ display_name: string }>(
-    'SELECT u.display_name FROM room_members rm JOIN users u ON u.id = rm.user_id WHERE rm.room_id = $1', [roomId]);
-  return m.rows.length > 0 ? m.rows.map((x) => x.display_name).join(' ↔ ') : null;
+  return directRoomLabel(roomId);
 }
 
 export interface CcSourceMessage {
