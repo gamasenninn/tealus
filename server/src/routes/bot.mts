@@ -23,13 +23,14 @@ import { BOT_POST_TYPES, typeNotAllowedMessage, MAX_CONTENT_LENGTH, contentTooLo
 import { announcePost } from '../services/postEffects.mts';
 import { insertSystemMessage } from '../services/systemMessage.mts';
 import { isRoomMember } from '../services/roomMembership.mts';
-import { formatLocalTime, hasExplicitZone, resolveTimeZone } from '../lib/localTime.mts';
+import { formatLocalTime } from '../lib/localTime.mts';
 import { announceRoomJoined } from '../services/roomJoined.mts';
 import { recordHeartbeat, validateHeartbeatBody } from '../services/heartbeats.mts';
 import { emitAgentStatus } from '../services/agentStatus.mts';
 import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomCondition } from '../services/requesterScope.mts';
 import { advanceReadCursor } from '../services/readCounts.mts';
 import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
+import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -1130,165 +1131,11 @@ router.get('/search', async (req, res) => {
   const escapedQ = q ? escapeLike(q.trim()) : null;
 
   try {
-    // パラメータと WHERE 句を動的構築
-    const params: (string | number | boolean)[] = [];
-    let paramIdx = 1;
-    const filtersSQL: string[] = []; // 共通の追加 WHERE (Case 1 / 2 path で使い回し)
-
-    // bot user (room_members JOIN 用)
-    params.push(userId);
-    const userIdParamIdx = paramIdx++;
-
-    if (room_id) {
-      params.push(room_id);
-      filtersSQL.push(`m.room_id = $${paramIdx++}`);
-    }
-    // ★ #564 依頼した人が入っている部屋だけ (部屋の指定が無いときの横断検索も)
-    const searchRequester = requesterOf(res);
-    if (searchRequester) {
-      params.push(searchRequester);
-      filtersSQL.push(requesterRoomCondition('m.room_id', paramIdx++));
-    }
-    if (sender_id) {
-      params.push(sender_id);
-      filtersSQL.push(`m.sender_id = $${paramIdx++}`);
-    }
-    if (type) {
-      params.push(type);
-      filtersSQL.push(`m.type = $${paramIdx++}`);
-    }
-    // ★ 時間帯の無い日付はサーバーの時間帯で読む (2026-10-30 小野さん判断 8)。DB (UTC) で読むと、
-    //   「10 月の〜」で 10-01 の 0〜9 時 (日本時間) が抜け、11-01 の 0〜9 時が混ざった。明示された値は書いてあるとおり
-    const atLocal = (value: string) => {
-      params.push(value);
-      const p = paramIdx++;
-      if (hasExplicitZone(value)) return `$${p}::timestamptz`;
-      params.push(resolveTimeZone());
-      return `($${p}::timestamp AT TIME ZONE $${paramIdx++})`;
-    };
-    if (since) filtersSQL.push(`m.created_at >= ${atLocal(String(since))}`);
-    if (until) filtersSQL.push(`m.created_at <= ${atLocal(String(until))}`);
-    // #325: リアクション有無で SQL フィルタ（agent が大量 message をスキャンせず
-    // 「✅(完了)が付いていないもの」等を決定論的に絞れる）。param 不要の EXISTS 述語。
-    if (has_reaction !== undefined && has_reaction !== '') {
-      const wantReaction = has_reaction === 'true' || has_reaction === true;
-      filtersSQL.push(
-        `${wantReaction ? 'EXISTS' : 'NOT EXISTS'} (SELECT 1 FROM message_reactions mr WHERE mr.message_id = m.id)`
-      );
-    }
-
-    // tag_match CTE (tag_names 指定時のみ)
-    let tagCteSQL = '';
-    let tagFilterSQL = '';
-    if (tagNameList.length > 0) {
-      const tagPlaceholders = tagNameList.map((name) => {
-        params.push(name);
-        return `$${paramIdx++}`;
-      });
-      params.push(tagNameList.length);
-      const havingParam = paramIdx++;
-
-      let isDoneFilter = '';
-      if (is_done !== undefined && is_done !== '') {
-        params.push(is_done === 'true' || is_done === true);
-        isDoneFilter = ` AND mt.is_done = $${paramIdx++}`;
-      }
-
-      tagCteSQL = `
-        WITH tag_match AS (
-          SELECT mt.message_id
-          FROM message_tags mt
-          JOIN tags t ON t.id = mt.tag_id
-          WHERE t.name IN (${tagPlaceholders.join(', ')})${isDoneFilter}
-          GROUP BY mt.message_id
-          HAVING COUNT(DISTINCT t.name) = $${havingParam}
-        )
-      `;
-      tagFilterSQL = ` AND m.id IN (SELECT message_id FROM tag_match)`;
-    }
-
-    const commonWhere = filtersSQL.length > 0 ? ' AND ' + filtersSQL.join(' AND ') : '';
-    const selectFields = `
-      m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
-      u.display_name AS sender_display_name,
-      r.name AS room_name, r.type AS room_type
-    `;
-
-    let query: string;
-    if (!escapedQ) {
-      // Case 1: q なし — 単一 SELECT (btree index 経由)
-      params.push(parsedLimit + 1, parsedOffset);
-      const limitIdx = paramIdx++;
-      const offsetIdx = paramIdx++;
-      query = `
-        ${tagCteSQL}
-        SELECT ${selectFields},
-               vt.formatted_text AS transcription_formatted,
-               vt.raw_text AS transcription_raw
-        FROM messages m
-        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${userIdParamIdx}
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        LEFT JOIN LATERAL (
-          SELECT formatted_text, raw_text FROM voice_transcriptions
-          WHERE message_id = m.id ORDER BY version DESC LIMIT 1
-        ) vt ON m.type = 'voice'
-        WHERE NOT m.is_deleted${commonWhere}${tagFilterSQL}
-        ORDER BY m.created_at DESC
-        LIMIT $${limitIdx} OFFSET $${offsetIdx}
-      `;
-    } else {
-      // Case 2: q あり — UNION (path_content + path_voice)
-      params.push(`%${escapedQ}%`);
-      const qIdx = paramIdx++;
-      params.push(parsedLimit + 1, parsedOffset);
-      const limitIdx = paramIdx++;
-      const offsetIdx = paramIdx++;
-
-      // path_voice は type フィルタが 'voice' 以外を強制した場合スキップ
-      const skipPathVoice = type && type !== 'voice';
-      // path_content は type='voice' が強制された場合スキップ
-      const skipPathContent = type === 'voice';
-
-      const pathContentSQL = skipPathContent ? '' : `
-        SELECT ${selectFields},
-               NULL::text AS transcription_formatted,
-               NULL::text AS transcription_raw
-        FROM messages m
-        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${userIdParamIdx}
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        WHERE NOT m.is_deleted
-          AND m.content ILIKE $${qIdx} ESCAPE '\\'${commonWhere}${tagFilterSQL}
-      `;
-
-      const pathVoiceSQL = skipPathVoice ? '' : `
-        SELECT ${selectFields},
-               vt.formatted_text AS transcription_formatted,
-               vt.raw_text AS transcription_raw
-        FROM messages m
-        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $${userIdParamIdx}
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        JOIN voice_transcriptions vt ON vt.message_id = m.id
-          AND vt.version = (SELECT MAX(version) FROM voice_transcriptions WHERE message_id = m.id)
-        WHERE NOT m.is_deleted
-          AND m.type = 'voice'
-          AND (vt.formatted_text ILIKE $${qIdx} ESCAPE '\\' OR vt.raw_text ILIKE $${qIdx} ESCAPE '\\')${commonWhere}${tagFilterSQL}
-      `;
-
-      const unionSQL =
-        pathContentSQL && pathVoiceSQL
-          ? `(${pathContentSQL}) UNION (${pathVoiceSQL})`
-          : pathContentSQL || pathVoiceSQL;
-
-      query = `
-        ${tagCteSQL}
-        SELECT * FROM (${unionSQL}) u
-        ORDER BY created_at DESC
-        LIMIT $${limitIdx} OFFSET $${offsetIdx}
-      `;
-    }
+    const { query, params } = buildBotSearchQuery({
+      userId, roomId: room_id, requester: requesterOf(res), senderId: sender_id, type,
+      since, until, hasReaction: has_reaction, tagNames: tagNameList, isDone: is_done,
+      escapedQ, limit: parsedLimit, offset: parsedOffset,
+    });   // SQL の組み立ては services/botSearchQuery.mts (改善ループ 121)
 
     logger.debug(`bot search: q=${q || ''} room=${room_id || 'all'} sender=${sender_id || ''} type=${type || ''} tags=${tagNameList.join(',') || ''} since=${since || ''} until=${until || ''}`);
 
