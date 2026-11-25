@@ -16,6 +16,7 @@ import { announcePost } from '../services/postEffects.mts';
 import { REST_POST_TYPES, typeNotAllowedMessage, MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
 import { readRequester, scopeByRoom } from '../services/requesterScope.mts';
+import { decideMessageEdit } from '../services/messageEditDecide.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -412,34 +413,23 @@ router.put('/:msgId', async (req: Request, res: Response) => {
 
     const msg = msgResult.rows[0];
 
-    if (msg.is_deleted) {
-      return res.status(400).json({ error: '削除済みメッセージは編集できません' });
-    }
+    // 判定は純関数 (改善ループ 109)。メンバーの確認だけ DB を引くのでここでする
+    const decision = decideMessageEdit({
+      isDeleted: msg.is_deleted,
+      type: msg.type,
+      hasContent: !!msg.content,
+      isOwn: msg.sender_id === userId,
+      policy: msg.message_edit_policy,
+    });
+    if (!decision.ok) return res.status(decision.status).json({ error: decision.error });
 
-    if (msg.type === 'system' || msg.type === 'stamp') {
-      return res.status(400).json({ error: 'このメッセージは編集できません' });
-    }
-
-    // 初回キャプション追加（contentがnullかつ送信者本人）は常に許可
-    const isFirstCaption = !msg.content && msg.sender_id === userId;
-
-    if (!isFirstCaption) {
-      if (msg.message_edit_policy === 'none') {
-        return res.status(403).json({ error: 'このルームではメッセージ編集が許可されていません' });
-      }
-
-      if (msg.message_edit_policy === 'sender' && msg.sender_id !== userId) {
-        return res.status(403).json({ error: '送信者のみ編集できます' });
-      }
-
-      if (msg.message_edit_policy === 'member') {
-        const memberCheck = await pool.query(
-          'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-          [roomId, userId]
-        );
-        if (memberCheck.rows.length === 0) {
-          return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
-        }
+    if (decision.needsMemberCheck) {
+      const memberCheck = await pool.query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [roomId, userId]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'ルームメンバーのみ編集できます' });
       }
     }
 
