@@ -12,7 +12,7 @@ import { canCreateRoom, canSearchUsers } from '../../utils/permissions';
 import { Search, Plus, Columns } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import type { Room } from '../../types';
-import { shouldPlayMessageSound } from '../../utils/messageSound';
+import { shouldPlayMessageSound, soundPrefsFor } from '../../utils/messageSound';
 import { shouldRefreshOnNewMessage } from '../../utils/roomListRefresh';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './RoomList.css';
@@ -99,11 +99,7 @@ function RoomList() {
       if (shouldRefreshOnNewMessage(msg.room_id, current, { inflight: isRoomsFetchInflight(), failed: !!error })) void fetchRoomsFromEvent();   // ★ 一覧に無い部屋 (管理者の見守り) では取り直さない (改善ループ 31)
       // ★ 自分・system メッセージ・通知音オフ・「このルームの通知」オフは鳴らさない (utils/messageSound)
       const room = current.find(r => r.id === msg.room_id);
-      const prefs = {
-        soundOn: useAuthStore.getState().user?.notification_sound !== false,
-        roomMuted: !!room?.push_muted,
-        machinePostsRing: !!room?.push_machine_posts || room?.type === 'direct',   // ★ 1 対 1 は鳴らす (本体の pushMachinePost と同じ、2026-10-29)
-      };
+      const prefs = soundPrefsFor(room, useAuthStore.getState().user);   // ★ 1 対 1 は機械の投稿でも鳴らす (utils/messageSound)
       if (shouldPlayMessageSound(msg, user!.id, prefs)) {
         new Audio('/notification.wav').play().catch(() => {});
       }

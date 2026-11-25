@@ -25,6 +25,22 @@ export function shouldPlayMessageSound(
   return true;
 }
 
+/**
+ * 部屋 (一覧の 1 件) と利用者から、shouldPlayMessageSound に渡す設定を作る。改善ループ 112 で RoomList から出した。
+ * ★ 1 対 1 は部屋の設定によらず機械の投稿でも鳴らす (本体の pushMachinePost と同じ、2026-10-29。server/src/services/machinePush.mts)
+ * ★ 一覧に無い部屋 (管理者の見守りなど) は room が undefined: 通知は切っていない・機械の投稿では鳴らさない
+ */
+export function soundPrefsFor(
+  room: { type?: string; push_muted?: boolean; push_machine_posts?: boolean } | undefined,
+  user: { notification_sound?: boolean } | null | undefined,
+): { soundOn: boolean; roomMuted: boolean; machinePostsRing: boolean } {
+  return {
+    soundOn: user?.notification_sound !== false,
+    roomMuted: !!room?.push_muted,
+    machinePostsRing: !!room?.push_machine_posts || room?.type === 'direct',
+  };
+}
+
 /** 以前の端末ごとの保存 (localStorage)。2026-10-08 にアカウントの設定へ移した */
 export const LEGACY_SOUND_KEY = 'notificationSound';
 

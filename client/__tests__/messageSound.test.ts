@@ -8,7 +8,7 @@
  *   「このルームの通知」を切った部屋も鳴らさない (それまではプッシュにしか効かず「切ったのに鳴る」と言われた)
  */
 import { describe, it, expect } from 'vitest';
-import { shouldPlayMessageSound, shouldMoveLegacySoundOff } from '../src/utils/messageSound';
+import { shouldPlayMessageSound, shouldMoveLegacySoundOff, soundPrefsFor } from '../src/utils/messageSound';
 
 const ME = 'me';
 const ON = { soundOn: true, roomMuted: false, machinePostsRing: false };
@@ -59,5 +59,32 @@ describe('shouldMoveLegacySoundOff (端末に残った「切る」をアカウ�
   });
   it('サーバーが古くて設定を返さない → 移さない (送っても 400 で保存されない)', () => {
     expect(shouldMoveLegacySoundOff({}, 'off')).toBe(false);
+  });
+});
+
+// 改善ループ 112: 一覧 (RoomList) で組み立てていた設定を関数に出した。1 対 1 は鳴らす決まり (本体の pushMachinePost と同じ) にテストが無かった
+describe('soundPrefsFor (部屋と利用者から鳴らす設定を作る)', () => {
+  it('ふつうのグループ: 機械の投稿は部屋の設定に従う', () => {
+    expect(soundPrefsFor({ type: 'group', push_muted: false, push_machine_posts: false }, { notification_sound: true }))
+      .toEqual({ soundOn: true, roomMuted: false, machinePostsRing: false });
+    expect(soundPrefsFor({ type: 'group', push_machine_posts: true }, {}).machinePostsRing).toBe(true);
+  });
+
+  it('1 対 1 は部屋の設定によらず機械の投稿でも鳴らす', () => {
+    expect(soundPrefsFor({ type: 'direct', push_machine_posts: false }, {}).machinePostsRing).toBe(true);
+  });
+
+  it('「このルームの通知」を切った部屋', () => {
+    expect(soundPrefsFor({ type: 'group', push_muted: true }, {}).roomMuted).toBe(true);
+  });
+
+  it('アカウントの通知音は false のときだけ切る (未設定は鳴らす)', () => {
+    expect(soundPrefsFor(undefined, { notification_sound: false }).soundOn).toBe(false);
+    expect(soundPrefsFor(undefined, {}).soundOn).toBe(true);
+    expect(soundPrefsFor(undefined, null).soundOn).toBe(true);
+  });
+
+  it('一覧に無い部屋 (管理者の見守りなど): 通知は切っていない・機械の投稿では鳴らさない', () => {
+    expect(soundPrefsFor(undefined, {})).toEqual({ soundOn: true, roomMuted: false, machinePostsRing: false });
   });
 });
