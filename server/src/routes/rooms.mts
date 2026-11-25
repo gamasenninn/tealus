@@ -12,17 +12,11 @@ import { attachMedia, attachTranscriptions, type AttachableMessage } from '../se
 import { announceRoomJoined, announceRoomUpdated } from '../services/roomJoined.mts';
 import { rememberRoomMedia } from '../services/deletedMedia.mts';
 import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/appPass.mts';
-import { isValidAppUrls } from '../utils/webUrl.mts';
+import { buildRoomUpdate, isValidRoomName, ROOM_NAME_ERROR } from '../services/roomUpdate.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
 import { REQUESTER_HEADER } from '../services/requesterScope.mts';
 
-/**
- * グループ名は DB の列 (rooms.name VARCHAR(100)) と同じ 100 字まで (改善ループ 18 回目)。
- * ★ 以前は長さを見ず、101 字以上は DB の例外で 500 になっていた (表示名・一言は #498 で同じ直しをしてある)
- */
-const ROOM_NAME_MAX = 100;
-const ROOM_NAME_ERROR = `グループ名は ${ROOM_NAME_MAX} 字までです`;
-const isValidRoomName = (name: unknown): boolean => typeof name === 'string' && name.trim() !== '' && name.length <= ROOM_NAME_MAX;
+// グループ名の決まり (100 字まで) は services/roomUpdate.mts (改善ループ 113 で部屋の更新と一緒に移した)
 
 /** #607 通行証を出せないとき。★ 理由を外に言い分けない (どの条件で落ちたかは記録にだけ残す) */
 const APP_PASS_UNAVAILABLE = 'このアプリには通行証を出せません';
@@ -633,46 +627,14 @@ router.put('/:id/hidden', requireMember, async (req, res) => {
  */
 router.put('/:id', requireMemberOrSystemAdmin, requireGroup, requireRoomAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, allow_member_transcription_edit, is_announcement, app_urls, message_edit_policy, voice_conversation_enabled, voice_conversation_tools, voice_conversation_denied_tools, push_machine_posts } = req.body;
-
-  // ★ #540 お知らせの切り替えはシステム管理者だけ (画面もシステム管理者にだけ出している)。
-  //   以前は部屋の管理者でも通り、画面と本体で決まりが食い違っていた
-  if (is_announcement !== undefined && req.user!.role !== 'admin') {
-    return res.status(403).json({ error: 'お知らせの切り替えはシステム管理者だけができます' });
-  }
+  // 何を受け、何を断るかは純関数 (改善ループ 113、services/roomUpdate.mts)
+  const built = buildRoomUpdate(req.body, { isSystemAdmin: req.user!.role === 'admin' });
+  if (!built.ok) return res.status(built.status).json({ error: built.error });
 
   try {
-    const updates: string[] = [];
-    const values: unknown[] = [];
-    let paramIndex = 1;
-
-    if (name !== undefined) {
-      if (!isValidRoomName(name)) return res.status(400).json({ error: ROOM_NAME_ERROR });
-      updates.push(`name = $${paramIndex++}`); values.push(name);
-    }
-    if (allow_member_transcription_edit !== undefined) { updates.push(`allow_member_transcription_edit = $${paramIndex++}`); values.push(allow_member_transcription_edit); }
-    if (is_announcement !== undefined) { updates.push(`is_announcement = $${paramIndex++}`); values.push(is_announcement); }
-    if (app_urls !== undefined) {
-      if (!isValidAppUrls(app_urls)) return res.status(400).json({ error: 'アプリの URL は http:// か https:// で始めてください' });
-      updates.push(`app_urls = $${paramIndex++}`); values.push(JSON.stringify(app_urls));
-    }
-    if (message_edit_policy !== undefined) { updates.push(`message_edit_policy = $${paramIndex++}`); values.push(message_edit_policy); }
-    // #405 Realtime 音声会話 (docs/08 §12)。既定 false = 開けたルームにだけ入口が出る
-    if (voice_conversation_enabled !== undefined) { updates.push(`voice_conversation_enabled = $${paramIndex++}`); values.push(voice_conversation_enabled); }
-    // #405 会話モードで上乗せする道具の名前。★ requireRoomAdmin で守られているのがここに置く理由
-    // ★ #418 で意味を「既定で外れている道具を戻す」に読み替えた (docs/08 §12.17)。列名はそのまま
-    if (voice_conversation_tools !== undefined) { updates.push(`voice_conversation_tools = $${paramIndex++}`); values.push(JSON.stringify(voice_conversation_tools)); }
-    // #418 会話モードで外す道具。★ 既定は空 = 何もしなければ 1 つも外れない
-    if (voice_conversation_denied_tools !== undefined) { updates.push(`voice_conversation_denied_tools = $${paramIndex++}`); values.push(JSON.stringify(voice_conversation_denied_tools)); }
-    // #463 機械 (is_bot) の投稿でも通知を鳴らすか。既定 false。★ 管理者だけが変えられる (requireRoomAdmin)
-    if (push_machine_posts !== undefined) {
-      if (typeof push_machine_posts !== 'boolean') return res.status(400).json({ error: 'push_machine_posts は true / false で指定してください' });
-      updates.push(`push_machine_posts = $${paramIndex++}`); values.push(push_machine_posts);
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({ error: '更新する項目がありません' });
-    }
+    const updates = built.sets.map(([col], i) => `${col} = $${i + 1}`);
+    const values: unknown[] = built.sets.map(([, v]) => v);
+    const paramIndex = values.length + 1;
 
     updates.push('updated_at = now()');
     values.push(id);
