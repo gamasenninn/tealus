@@ -13,6 +13,7 @@ import { setViewing, removeSocket } from './viewingRooms.mts';
 import type { SocketUser } from '../types.mts';
 import { errorText } from '../utils/logFormat.mts';
 import { socketAuthRejectLine } from './authReject.mts';
+import { isUuid } from '../utils/uuid.mts';
 
 const GUEST_ROOM = 'role:guest';
 
@@ -21,7 +22,6 @@ const onlineUsers = new Map<string, Set<string>>();
 
 // UUID validation (= 6/9 DoS crash fix、client から non-UUID で room:join 送られて
 // pool.query が Postgres 22P02 throw → unhandledRejection で process exit していた)
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * ★ #498 つながっている socket が持つ利用者の表示名・アイコンを書き換える。
@@ -102,7 +102,7 @@ export function setupSocketHandlers(io: Server): void {
     // Room join/leave
     socket.on('room:join', async (roomId: unknown) => {
       // 6/9 DoS crash fix: 非 UUID は早期 reject (= Postgres 22P02 throw 防止)
-      if (typeof roomId !== 'string' || !UUID_REGEX.test(roomId)) {
+      if (!isUuid(roomId)) {
         logger.debug(`room:join reject: invalid uuid '${roomId}' from user=${socket.user.display_name}`);
         return;
       }
@@ -124,7 +124,7 @@ export function setupSocketHandlers(io: Server): void {
 
     socket.on('room:leave', (roomId: unknown) => {
       // 6/9 DoS crash fix: 非 UUID は silent skip (= socket.leave は throw しないが念のため early return)
-      if (typeof roomId !== 'string' || !UUID_REGEX.test(roomId)) return;
+      if (!isUuid(roomId)) return;
       socket.leave(roomId);
     });
 
@@ -132,7 +132,7 @@ export function setupSocketHandlers(io: Server): void {
     // ★ 影響するのは自分への通知だけなので、メンバーかどうかは確かめない (形だけ確かめる)
     socket.on('room:viewing', (data: unknown) => {
       const d = data as { room_id?: unknown; viewing?: unknown } | null;
-      if (!d || typeof d.room_id !== 'string' || !UUID_REGEX.test(d.room_id) || typeof d.viewing !== 'boolean') return;
+      if (!d || !isUuid(d.room_id) || typeof d.viewing !== 'boolean') return;
       setViewing(socket.id, userId, d.room_id, d.viewing);
     });
 

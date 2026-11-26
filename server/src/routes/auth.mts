@@ -25,7 +25,6 @@ const avatarStorage = multer.diskStorage({
 const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageOnlyFilter });
 
 /** ★ #498 DB の列の上限と同じ (users.display_name varchar(50) / status_message varchar(100)) */
-const DISPLAY_NAME_MAX = 50;
 const STATUS_MESSAGE_MAX = 100;
 
 /** つながっている socket の利用者情報を書き換える。失敗しても更新そのものは成立済みなので warn だけ */
@@ -41,7 +40,8 @@ export const router = express.Router();
 
 import { SALT_ROUNDS } from '../constants/config.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
-import { checkDisplayName, loginIdTooLong, passwordTooShort } from '../utils/userFields.mts';
+import { checkDisplayName, DISPLAY_NAME_MAX, loginIdTooLong, passwordTooShort } from '../utils/userFields.mts';
+import { isUuid } from '../utils/uuid.mts';
 import { errorText } from '../utils/logFormat.mts';
 import { SELF_USER_COLUMNS } from '../utils/selfUserColumns.mts';
 
@@ -199,14 +199,13 @@ router.get('/me', authenticate, async (req, res) => {
  * ★★ 返すのは事実だけ (役割・ルームの種類・ルームでの役割)。判断は資源の持ち主 (agent-server) がする。
  * ★ 無効化した利用者は authenticate が 401 にする (鍵の期限が残っていても)。
  */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 router.get('/authz', authenticate, async (req, res) => {
   const user = req.user!;
   const roomId = typeof req.query.room_id === 'string' ? req.query.room_id : undefined;
   if (roomId === undefined) {
     return res.json({ user_id: user.id, role: user.role, room: null });
   }
-  if (!UUID_RE.test(roomId)) {
+  if (!isUuid(roomId)) {
     return res.status(400).json({ error: 'room_id が不正です' });
   }
   try {

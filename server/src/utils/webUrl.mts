@@ -2,6 +2,9 @@
  * 画面で開く URL (部屋のアプリ app_urls・ホームのリンク portal_links) は http / https だけを受け付ける
  * (セキュリティチェックループ 2 回目、2026-10-26)。★ 画面の入力欄は形を見るだけなので、本体で見る
  */
+/** isWebUrl で断ったときの文言 (改善ループ 130 でホームのリンク・webhook の 2 か所の写しをここに) */
+export const E_WEB_URL = 'URL は http:// か https:// で始めてください';
+
 export function isWebUrl(value: unknown): boolean {
   if (typeof value !== 'string' || value.trim() === '') return false;
   try {

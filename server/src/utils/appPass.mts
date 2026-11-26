@@ -7,6 +7,7 @@
  * ★ 相手側は PHP 5.6。形を変えるときは docs/11 §4 を先に直し、相手側と取り決め直すこと
  */
 import crypto from 'node:crypto';
+import { b64url } from './b64url.mts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,10 +37,6 @@ export interface PassTarget {
   to: string;
   /** アプリの URL のハッシュ。入口の URL の末尾に付け、移り直しでブラウザに引き継がせる */
   hash: string;
-}
-
-function b64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export function signAppPass(key: Buffer, claims: AppPassClaims, nowSec: number): string {

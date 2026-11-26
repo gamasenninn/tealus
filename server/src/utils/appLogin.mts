@@ -7,6 +7,7 @@
  *   相手のサイト名は公開の repo に入れないので、コードに直書きしない
  */
 import crypto from 'node:crypto';
+import { b64url } from './b64url.mts';
 
 /** 札の期限 (秒)。ログインの戻りはすぐ終わるので、パネルの通行証 (120 秒) より短くする */
 export const APP_LOGIN_TTL_SEC = 60;
@@ -19,10 +20,6 @@ export interface AppLoginClaims {
   sub: string;
   name: string;
   state: string;
-}
-
-function b64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export function signAppLogin(key: Buffer, claims: AppLoginClaims, nowSec: number): string {

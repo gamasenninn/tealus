@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isHeartbeatName } from './heartbeats.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { isUuid } from '../utils/uuid.mts';
 
 export const CONFIG_PATH = path.join(import.meta.dirname, '..', '..', 'config', 'watchdogs.json');
 
@@ -107,10 +108,8 @@ export function markFor(id: string): string {
 }
 
 const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
-const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
 
 function parseHours(v: unknown): [number, number] | null {
   if (typeof v !== 'string') return null;

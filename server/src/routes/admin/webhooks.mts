@@ -3,10 +3,9 @@ import * as E from '../../constants/errors.mts';
 import express from 'express';
 import { pool } from '../../db/pool.mts';
 import { dispatchWebhook } from '../../services/webhook.mts';
-import { isWebUrl } from '../../utils/webUrl.mts';
+import { E_WEB_URL, isWebUrl } from '../../utils/webUrl.mts';
 import { errorText } from '../../utils/logFormat.mts';
 
-const E_WEB_URL = 'URL は http:// か https:// で始めてください';
 
 export const router = express.Router();
 
