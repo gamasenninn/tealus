@@ -1,6 +1,6 @@
 import type {
   User, Room, RoomMember, Message, Tag, MessageTag, StampPack, Stamp, MediaItem,
-  PortalLink, Webhook, DictionaryTerm, DictionaryAlias,
+  PortalLink, Webhook, DictionaryTerm, DictionaryAlias, Task, TaskSection,
 } from '../types';
 import type { MessageEditEntry } from '../utils/editHistory';
 import { trimEventsForKeepalive } from './voiceLogPayload';
@@ -850,6 +850,27 @@ class ApiClient {
   }
 
   // 削除された投稿 (admin、2026-10-30 利用者判断 3)
+  // タスク一覧 (docs/16、#661)。status は 省略 = 残り (open + held) / open / done / held / all
+  listTasks(opts: { status?: string; roomId?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (opts.status) qs.set('status', opts.status);
+    if (opts.roomId) qs.set('room_id', opts.roomId);
+    const q = qs.toString();
+    return this.request<{ tasks: Task[] }>('GET', `/tasks${q ? `?${q}` : ''}`);
+  }
+
+  addTask(fields: { title: string; note?: string; section?: TaskSection; room_id?: string | null }) {
+    return this.request<{ task: Task }>('POST', '/tasks', fields);
+  }
+
+  updateTask(id: string, fields: Partial<Pick<Task, 'title' | 'note' | 'section' | 'status' | 'room_id' | 'sort_order' | 'ai_suggests_done'>>) {
+    return this.request<{ task: Task }>('PATCH', `/tasks/${id}`, fields);
+  }
+
+  deleteTask(id: string) {
+    return this.request('DELETE', `/tasks/${id}`);
+  }
+
   getAdminDeletedMessages() {
     return this.request<{ messages: DeletedMessageEntry[] }>('GET', '/admin/deleted-messages');
   }

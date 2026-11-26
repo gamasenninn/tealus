@@ -289,3 +289,28 @@ export interface ClientConfig {
   realtime_voice_available?: boolean;
   [key: string]: unknown;
 }
+
+/**
+ * タスク一覧の 1 件 (docs/16、#661。GET /api/tasks の行、server taskRepo の TaskRow)。
+ * 一覧は人のもの・部屋は括り (room_id NULL = 部屋なし)・済みにするのは人 (ai_suggests_done は AI の印)
+ */
+export type TaskSection = 'decide' | 'do' | 'waiting' | 'later';
+export type TaskStatus = 'open' | 'done' | 'held';
+export interface Task {
+  id: string;
+  owner_id: string;
+  room_id: string | null;
+  room_name: string | null;
+  title: string;
+  note: string | null;
+  section: TaskSection;
+  status: TaskStatus;
+  source_message_ids: string[];
+  ai_suggests_done: boolean;
+  created_by: string | null;
+  done_at: string | null;
+  done_by: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}

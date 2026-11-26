@@ -48,7 +48,7 @@ router.patch('/:taskId', async (req, res) => {
 router.delete('/:taskId', async (req, res) => {
   try {
     if (!(await deleteTask(req.params.taskId, req.user!.id))) return res.status(404).json({ error: 'タスクが見つかりません' });
-    res.status(204).end();
+    res.json({ success: true });   // ★ 204 (本文なし) は画面の api.request が読めない
   } catch (err) { fail(res, err, 'delete'); }
 });
 

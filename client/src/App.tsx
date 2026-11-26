@@ -13,6 +13,7 @@ import ChatRoom from './components/chat/ChatRoom';
 import AdminDashboard from './components/admin/AdminDashboard';
 import Profile from './components/profile/Profile';
 import SearchPage from './components/search/SearchPage';
+import TaskPage from './components/tasks/TaskPage';   // docs/16 タスク一覧
 import MediaGallery from './components/media/MediaGallery';
 import MultiTalk from './components/multi/MultiTalk';
 import SharePage from './components/share/SharePage';
@@ -118,6 +119,7 @@ function App() {
           <Route path="/rooms/:roomId/gallery" element={<MediaGallery />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="/tasks" element={<TaskPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/multi" element={<MultiTalk />} />
           <Route path="/share" element={<SharePage />} />

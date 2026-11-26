@@ -8,8 +8,8 @@ import { getSocket, joinRoom, leaveRoom } from '../../services/socket';
 import { api } from '../../services/api';
 import CreateRoom from './CreateRoom';
 import { LONG_PRESS_TIMEOUT } from '../../constants/ui';
-import { canCreateRoom, canSearchUsers } from '../../utils/permissions';
-import { Search, Plus, Columns } from 'lucide-react';
+import { canCreateRoom, canSearchUsers, isGuest } from '../../utils/permissions';
+import { Search, Plus, Columns, ListChecks } from 'lucide-react';
 import BottomNav from '../common/BottomNav';
 import type { Room } from '../../types';
 import { shouldPlayMessageSound, soundPrefsFor } from '../../utils/messageSound';
@@ -168,6 +168,11 @@ function RoomList() {
           <button className="icon-button" onClick={() => navigate('/search')} title="検索">
             <Search size={20} />
           </button>
+          {!isGuest(user) && (
+            <button className="icon-button" onClick={() => navigate('/tasks')} title="タスク">
+              <ListChecks size={20} />
+            </button>
+          )}
           {canCreateRoom(user) && (
             <button className="icon-button" onClick={() => setShowCreate(true)} title="新規作成">
               <Plus size={20} />

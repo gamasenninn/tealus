@@ -118,7 +118,7 @@ describe('タスク一覧 (docs/16)', () => {
 
     it('消せる', async () => {
       const id = (await as(me).post('/api/tasks', { title: 'x' })).body.task.id;
-      expect((await as(me).del(`/api/tasks/${id}`)).status).toBe(204);
+      expect((await as(me).del(`/api/tasks/${id}`)).status).toBe(200);
       expect((await as(me).get('/api/tasks?status=all')).body.tasks).toHaveLength(0);
     });
   });
