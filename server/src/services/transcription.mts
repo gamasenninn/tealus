@@ -27,6 +27,7 @@ import { transcribeAudio } from './sttBackend.mts';
 import { fireWebhooks } from './webhook.mts';
 import type { Server } from 'socket.io';
 import { errorText } from '../utils/logFormat.mts';
+import { emitVoiceTranscription } from './voiceTranscriptionEvent.mts';
 
 // ★ 時間切れはこちらで決める (改善ループ 10 回目の F)。SDK の既定は 10 分 × やり直し 2 回 = 最長 30 分で、
 //   相手が固まると音声が「文字起こし中」のまま残っていた
@@ -200,13 +201,11 @@ export async function transcribeMessage(
     );
 
     // Notify clients with raw text while formatting continues
-    if (io && roomId) {
-      io.to(roomId).emit('voice:transcription', {
-        message_id: messageId,
-        status: 'formatting',
-        raw_text: rawText,
-      });
-    }
+    emitVoiceTranscription(io, roomId, {
+      message_id: messageId,
+      status: 'formatting',
+      raw_text: rawText,
+    });
 
     // Cleanup temp file
     removeTempQuietly(tempPath);   // ★ 殺した直後の ffmpeg がまだ掴んでいると Windows で EBUSY。元のエラーを上書きしない
@@ -223,12 +222,10 @@ export async function transcribeMessage(
         `UPDATE voice_transcriptions SET status = 'done', formatted_text = '' WHERE message_id = $1 AND version = $2`,
         [messageId, version]
       );
-      if (io && roomId) {
-        io.to(roomId).emit('voice:transcription', {
-          message_id: messageId, status: 'done',
-          raw_text: '', formatted_text: '', version,
-        });
-      }
+      emitVoiceTranscription(io, roomId, {
+        message_id: messageId, status: 'done',
+        raw_text: '', formatted_text: '', version,
+      });
     } else if (rawText.length < MIN_FORMATTING_LENGTH) {
       // 短い: AI 整形 skip、raw_text を formatted_text に採用
       logger.info(`[transcribe] short raw_text (${rawText.length} chars), skipping AI formatting for message ${messageId}: "${rawText}"`);
@@ -236,12 +233,10 @@ export async function transcribeMessage(
         `UPDATE voice_transcriptions SET status = 'done', formatted_text = $1 WHERE message_id = $2 AND version = $3`,
         [rawText, messageId, version]
       );
-      if (io && roomId) {
-        io.to(roomId).emit('voice:transcription', {
-          message_id: messageId, status: 'done',
-          raw_text: rawText, formatted_text: rawText, version,
-        });
-      }
+      emitVoiceTranscription(io, roomId, {
+        message_id: messageId, status: 'done',
+        raw_text: rawText, formatted_text: rawText, version,
+      });
       // Webhook (roomId なしなら fire skip)
       if (roomId) {
         const msgRes = await pool.query<SenderRow>('SELECT sender_id FROM messages WHERE id = $1', [messageId]);

@@ -11,6 +11,7 @@ import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { isGuest, canEditTranscription } from '../utils/permissions.mts';
 import { MAX_CONTENT_LENGTH, contentTooLongMessage } from '../services/messageTypes.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { emitVoiceTranscription } from '../services/voiceTranscriptionEvent.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -142,10 +143,8 @@ router.put('/', authenticate, async (req, res) => {
       .catch((err: unknown) => logger.warn(`[dictionary] learnFromEdit failed for ${messageId}: ${errorText(err)}`));
 
     // Broadcast update
-    const io = getIo();
-    const roomId = msgResult.rows[0].room_id;
-    io.to(roomId).emit('voice:transcription', {
-      message_id: messageId,
+    emitVoiceTranscription(getIo(), msgResult.rows[0].room_id, {
+      message_id: String(messageId),
       status: 'done',
       raw_text: rawText,
       formatted_text: text.trim(),

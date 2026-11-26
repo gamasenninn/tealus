@@ -5,6 +5,7 @@ import { loadGuideline, buildFormattingExtension, isMetaEmptyLiteral, getTranscr
 import { fireWebhooks } from './webhook.mts';
 import { loadRoomExamples } from './roomExamples.mts';
 import type { Server } from 'socket.io';
+import { emitVoiceTranscription } from './voiceTranscriptionEvent.mts';
 
 // ★ 時間切れはこちらで決める (改善ループ 10 回目の F)。SDK の既定は 10 分 × やり直し 2 回 = 最長 30 分で、
 //   相手が固まると音声が「文字起こし中」のまま残っていた
@@ -141,15 +142,13 @@ export async function formatTranscription(
       version !== null ? [formattedText, messageId, version] : [formattedText, messageId]
     );
 
-    if (io && roomId) {
-      io.to(roomId).emit('voice:transcription', {
-        message_id: messageId,
-        status: 'done',
-        raw_text: rawText,
-        formatted_text: formattedText,
-        version: version !== null ? version : 1,
-      });
-    }
+    emitVoiceTranscription(io, roomId, {
+      message_id: messageId,
+      status: 'done',
+      raw_text: rawText,
+      formatted_text: formattedText,
+      version: version !== null ? version : 1,
+    });
 
     // Webhook: 文字起こし完了通知 (roomId が null の場合 = headless 経路では fire しない)
     if (roomId) {
@@ -176,14 +175,12 @@ export async function formatTranscription(
       version !== null ? [messageId, version] : [messageId]
     );
 
-    if (io && roomId) {
-      io.to(roomId).emit('voice:transcription', {
-        message_id: messageId,
-        status: 'done',
-        raw_text: rawText,
-        formatted_text: null,
-      });
-    }
+    emitVoiceTranscription(io, roomId, {
+      message_id: messageId,
+      status: 'done',
+      raw_text: rawText,
+      formatted_text: null,
+    });
 
     // Webhook: 文字起こし完了通知（フォーマット失敗時、roomId なしなら fire skip）
     if (roomId) {
