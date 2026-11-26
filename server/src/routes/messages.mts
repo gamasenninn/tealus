@@ -6,7 +6,7 @@ import type { Request, Response } from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
-import { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } from '../constants/config.mts';
+import { MESSAGES_DEFAULT_LIMIT } from '../constants/config.mts';
 import { attachMedia, attachReplies, attachForwards, attachTranscriptions, attachLinkPreviews, attachReactions, attachTags, attachStamps, type AttachableMessage } from '../services/messageAttachments.mts';
 import { ccIntakeUpdated } from '../services/cc/ccIntake.mts';
 import { fireWebhooks } from '../services/webhook.mts';
@@ -17,6 +17,7 @@ import { REST_POST_TYPES, typeNotAllowedMessage, MAX_CONTENT_LENGTH, contentTooL
 import { formatLocalTime } from '../lib/localTime.mts';
 import { readRequester, scopeByRoom } from '../services/requesterScope.mts';
 import { decideMessageEdit } from '../services/messageEditDecide.mts';
+import { buildRoomMessagesQuery, parseRoomMessagesLimit } from '../services/roomMessagesQuery.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -125,88 +126,18 @@ router.post('/', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   const roomId = (req.params as { id: string }).id;
   const { before, around, after, limit = MESSAGES_DEFAULT_LIMIT } = req.query;
-  const parsedLimit = Math.min(Math.max(parseInt(String(limit)) || MESSAGES_DEFAULT_LIMIT, 1), MESSAGES_MAX_LIMIT);
+  const parsedLimit = parseRoomMessagesLimit(limit);
   // ★ #483 基準のメッセージは ID の形を確かめる (崩れていると 500 だった)。部屋の外のものは下の SQL で「無いもの」と同じになる
   for (const cursorId of [around, before, after]) {
     if (cursorId !== undefined && !isUuid(cursorId)) return res.status(400).json({ error: badIdMessage(String(cursorId)) });
   }
 
   try {
-    let query: string;
-    let params: unknown[];
-
-    if (around) {
-      // Get messages around a specific message (for search jump)
-      query = `
-        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
-               COALESCE(rc.read_count, 0)::int AS read_count
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count
-          FROM room_read_cursors rrc
-          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
-        ) rc ON true
-        WHERE m.room_id = $1
-          AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1) - INTERVAL '1 second'
-        ORDER BY m.created_at ASC
-        LIMIT $3
-      `;
-      params = [roomId, around, parsedLimit];
-    } else if (after) {
-      // ★ #511 基準より新しいものを古い順に (日付・引用へ飛んだあと、下へ読み足す)。
-      //   時刻だけで比べると、同じ時刻の投稿を取りこぼす → (時刻, id) の組で比べて、同じ順に並べる
-      query = `
-        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
-               COALESCE(rc.read_count, 0)::int AS read_count
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count
-          FROM room_read_cursors rrc
-          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
-        ) rc ON true
-        WHERE m.room_id = $1
-          AND (m.created_at, m.id) > (SELECT created_at, id FROM messages WHERE id = $2 AND room_id = $1)
-        ORDER BY m.created_at ASC, m.id ASC
-        LIMIT $3
-      `;
-      params = [roomId, after, parsedLimit];
-    } else if (before) {
-      // Get the created_at of the cursor message
-      query = `
-        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
-               COALESCE(rc.read_count, 0)::int AS read_count
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count
-          FROM room_read_cursors rrc
-          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
-        ) rc ON true
-        WHERE m.room_id = $1
-          AND m.created_at < (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1)
-        ORDER BY m.created_at DESC
-        LIMIT $3
-      `;
-      params = [roomId, before, parsedLimit];
-    } else {
-      query = `
-        SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url,
-               COALESCE(rc.read_count, 0)::int AS read_count
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        LEFT JOIN LATERAL (
-          SELECT COUNT(*)::int AS read_count
-          FROM room_read_cursors rrc
-          WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
-        ) rc ON true
-        WHERE m.room_id = $1
-        ORDER BY m.created_at DESC
-        LIMIT $2
-      `;
-      params = [roomId, parsedLimit];
-    }
+    // 基準 (around / after / before) ごとの SQL は roomMessagesQuery.mts (改善ループ 128)
+    const { query, params } = buildRoomMessagesQuery({
+      roomId, limit: parsedLimit,
+      around: around ? String(around) : undefined, after: after ? String(after) : undefined, before: before ? String(before) : undefined,
+    });
 
     const result = await pool.query<MessageRow>(query, params);
     const messages = result.rows;
