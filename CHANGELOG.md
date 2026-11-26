@@ -18,10 +18,13 @@
 - 配達役の段階 3 (docs/12 §14): 別の PC でも配達役を動かし、便を agent-server の `/agent-api/cc-queue/pending?events=1` で取り寄せて手元の herdr に渡す (`bridges.json` の `"queue": "http"`)。SSH の鍵を中央に置かなくてよい。取り寄せた id だけを手元の写しに置き、配る判断は段階 1 と同じもの
 - 見張り (docs/09) に配達役を足せる (`watchdogs.json` の `heartbeat: "courier"`)。班が確認待ちのまま 10 分・届け先が居ないまま 10 分・打っても失敗が返るまま 10 分 (打ち直しは 30 秒あける) で業務メモに 1 回
 - **CC ブリッジの受け付けを本体でもできる** ([#650](https://github.com/gamasenninn/tealus/issues/650)、docs/14) — `server/.env` と `agent-server/.env` の両方に `CC_INTAKE=server` を書くと、`@cc-{班}` を本体が受け箱 (cc-queue) に入れ、`/agent-api/cc-queue/pending`・`/stream`・`/agent-api/agent/cc-projects` も本体が答える。**agent-server が止まっていても班に届く** (アシスタントを使わない採用者は本体だけで CC ブリッジが使える)。受け箱のファイル・1 行の形・URL は変わらないので、配達役・受け手の手順はそのまま。**既定は off** (今までどおり agent-server)。受け箱を書くのは 1 プロセスだけで、受け箱のフォルダの持ち主の札 `.writer.json` を書くたびに見る。`CC_INTAKE=server` のとき、アシスタントの投稿は班を起こさない (2026-11-21 決定)・「届きました」はアシスタントのいない部屋でも出る・「AI に届きませんでした」は `@cc-` の便では出さない
+- **タスク一覧** ([#661](https://github.com/gamasenninn/tealus/issues/661)、docs/16) — 会話から AI がまとめた「人のやること」を、生きている一覧にする。トーク一覧の上の「タスク」から開く (ゲストには出さない)。部屋の見出し → 区分 (決める / 手を動かす / 待ち / 今日でなくてよい) → 1 件 1 行、人ごとの通し番号 (済みにしても変わらない)、□で済み、「元の会話 ›」でその投稿へ、絞ったものをそのまま印刷、手で足せる。一覧は本人だけが見る。AI の口 `/api/bot/tasks` は機械の口座だけ・誰の一覧かは `X-Tealus-Requester`・**済みにできず「済んだようです」の印まで・消せない**。AI の道具は tealus-mcp v0.19.0 の `list_tasks` / `add_task` / `update_task`
+- 見張り (docs/09) の `room_quiet` に 2 つ ([#662](https://github.com/gamasenninn/tealus/issues/662)): `hours`・`days` を両方省くと**続けて見る** (最後の投稿から数え、日で切らない。毎晩 1 回の報告が 26 時間出ない、を見られる)、`content_contains` で**その語を含む投稿だけ**数える
 
 ### ★ 更新時の急所 (この版を出すときに見出しへ移す)
 
-- 本体の再起動 (新しい口 `/api/admin/courier`) と client の再ビルド (「AIの班」のタブ)。migration は無い
+- ★ **migration が 2 つ** (047 `tasks`、048 `tasks.number`)。**migrate → 本体の再起動 → client の再ビルド** の順。再起動を先にすると、タスクの口だけが 500 になる (ほかの口は新しい表を読まない)
+- 本体の再起動 (新しい口 `/api/admin/courier`) と client の再ビルド (「AIの班」のタブ)
 - 配達役を使わない採用者は何もしなくてよい (`courier/` は別のパッケージで、起こさなければ動かない)
 - ★ `CC_INTAKE=server` を使うなら、**本体と agent-server を同じ版で上げてから**両方の `.env` に書く。片方だけ古いと両方が受け箱に書く (古い agent-server は札を知らない)。切り替えの手順は docs/14 §6
 
