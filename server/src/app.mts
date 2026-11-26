@@ -55,6 +55,7 @@ import { router as botRoutes } from './routes/bot.mts';
 import { roomRouter as tagRoomRoutes, messageRouter as tagMessageRoutes, globalRouter as tagGlobalRoutes } from './routes/tags.mts';
 import { router as stampRoutes } from './routes/stamps.mts';
 import { router as promptRoutes } from './routes/prompts.mts';
+import { router as taskRoutes, botRouter as botTaskRoutes } from './routes/tasks.mts';   // docs/16 タスク一覧
 import { applyStaticCacheHeaders, NO_STORE } from './utils/staticCache.mts';
 import { mediaStatic } from './utils/mediaStatic.mts';
 import { isMediaHidden } from './services/deletedMedia.mts';
@@ -256,6 +257,8 @@ app.use('/api/rooms/:id/voice-address-candidates', voiceAddressRoutes);
 app.use('/api/rooms/:id/members', memberRoutes);
 app.use('/api/messages/:id/transcription', transcriptionRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/bot/tasks', botTaskRoutes);   // ★ /api/bot より前 (bot の口の部屋の検査を通さない。頼んだ人の印が要る、docs/16 §4.2)
 app.use('/api/bot', botRoutes);
 app.use('/api/rooms/:id/tags', tagRoomRoutes);
 app.use('/api/messages/:id/tags', tagMessageRoutes);
