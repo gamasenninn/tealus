@@ -31,6 +31,7 @@ import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomC
 import { advanceReadCursor } from '../services/readCounts.mts';
 import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
+import { buildBotMessagesQuery, parseBotMessagesLimit, transcriptionColumns } from '../services/botMessagesQuery.mts';
 import type { MediaRow } from '../types.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
@@ -556,10 +557,7 @@ router.get('/messages', scopeByRoom('query'), async (req, res) => {
 
   const includeTranscription = include_transcription !== 'false';
   const includeRaw = include_raw === 'true';
-  // #373: tealus-mcp は v0.1.0 から limit を送っていたが、ここで読んでいなかったため
-  //   silent に 20 件固定だった (既定値が一致していたので誤りが表に出ない)。
-  //   既定は 20 のまま = 既存の呼び出し元 (全員 20 を渡している) の挙動は不変。
-  const parsedLimit = Math.min(Math.max(parseInt(limit as string) || 20, 1), 100);
+  const parsedLimit = parseBotMessagesLimit(limit);   // #373 既定 20・1〜100 (services/botMessagesQuery.mts)
 
   try {
     // Check membership
@@ -571,32 +569,8 @@ router.get('/messages', scopeByRoom('query'), async (req, res) => {
       return res.status(403).json({ error: 'このルームのメンバーではありません' });
     }
 
-    let query: string;
-    let params: (string | number)[];
-
-    if (since) {
-      // #373 方針 A: since は catch-up 用途なので limit を効かせない。
-      //   件数で絞ると「前回の続き」を取りこぼすため、上限 100 は保険として固定のまま。
-      query = `
-        SELECT m.*, u.display_name AS sender_display_name
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        WHERE m.room_id = $1 AND m.created_at > $2 AND m.is_deleted = false
-        ORDER BY m.created_at ASC
-        LIMIT 100
-      `;
-      params = [room_id, since];
-    } else {
-      query = `
-        SELECT m.*, u.display_name AS sender_display_name
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        WHERE m.room_id = $1 AND m.is_deleted = false
-        ORDER BY m.created_at DESC
-        LIMIT $2
-      `;
-      params = [room_id, parsedLimit];
-    }
+    // ★ since があれば limit は効かせない (#373 方針 A)。組み立ては services/botMessagesQuery.mts (改善ループ 125)
+    const { query, params } = buildBotMessagesQuery({ roomId: room_id, since, limit: parsedLimit });
 
     const result = await pool.query<BotMessageListRow>(query, params);
     const messages = result.rows;
@@ -624,10 +598,7 @@ router.get('/messages', scopeByRoom('query'), async (req, res) => {
     }
 
     // 音声メッセージに文字起こしを付加 (verbosity 制御 #219)
-    const transcriptionCols = ['id', 'status', 'version'];
-    if (includeTranscription) transcriptionCols.push('formatted_text');
-    if (includeTranscription && includeRaw) transcriptionCols.push('raw_text');
-    const selectList = transcriptionCols.join(', ');
+    const selectList = transcriptionColumns(includeTranscription, includeRaw);
 
     for (const msg of messages) {
       if (msg.type === 'voice') {
