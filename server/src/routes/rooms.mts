@@ -56,6 +56,21 @@ interface AnnouncementMessageRow extends AttachableMessage {
 }
 
 // All routes require authentication
+
+/**
+ * 部屋のメンバー (名前・顔・ひとこと・有効か・機械か) を引く。改善ループ 137 で 4 か所の同じ SELECT をここに 1 つにした
+ * ★ 返すのは pool.query の結果そのもの (呼び出し元は .rows を membersFor に渡す)
+ */
+function fetchRoomMembers(roomId: string) {
+  return pool.query(
+    `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active, u.is_bot
+     FROM room_members rm
+     JOIN users u ON u.id = rm.user_id
+     WHERE rm.room_id = $1`,
+    [roomId]
+  );
+}
+
 router.use(authenticate);
 
 /**
@@ -239,13 +254,7 @@ router.post('/', async (req, res) => {
     await client.query('COMMIT');
 
     // Fetch members
-    const membersResult = await pool.query(
-      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active, u.is_bot
-       FROM room_members rm
-       JOIN users u ON u.id = rm.user_id
-       WHERE rm.room_id = $1`,
-      [room.id]
-    );
+    const membersResult = await fetchRoomMembers(room.id);
 
     // ★ #486 入った全員の接続を部屋に入れ、本人に知らせる (読み込み直すまで出なかった)
     announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
@@ -302,13 +311,7 @@ router.post('/direct', async (req, res) => {
 
     if (existingResult.rows.length > 0) {
       const room = existingResult.rows[0];
-      const membersResult = await pool.query(
-        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active, u.is_bot
-         FROM room_members rm
-         JOIN users u ON u.id = rm.user_id
-         WHERE rm.room_id = $1`,
-        [room.id]
-      );
+      const membersResult = await fetchRoomMembers(room.id);
       return res.status(200).json({ room, members: membersFor(req.user!, membersResult.rows) });
     }
 
@@ -339,13 +342,7 @@ router.post('/direct', async (req, res) => {
 
       await client.query('COMMIT');
 
-      const membersResult = await pool.query(
-        `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active, u.is_bot
-         FROM room_members rm
-         JOIN users u ON u.id = rm.user_id
-         WHERE rm.room_id = $1`,
-        [room.id]
-      );
+      const membersResult = await fetchRoomMembers(room.id);
 
       // ★ #486 1 対 1 の相手にも、読み込み直さずに出るようにする
       announceRoomJoined(room.id, membersResult.rows.map((m: { user_id: string }) => m.user_id));
@@ -458,13 +455,7 @@ router.get('/:id', requireMember, async (req, res) => {
     }
 
     // Get members
-    const membersResult = await pool.query(
-      `SELECT rm.user_id, rm.role, rm.joined_at, u.display_name, u.avatar_url, u.status_message, u.is_active, u.is_bot
-       FROM room_members rm
-       JOIN users u ON u.id = rm.user_id
-       WHERE rm.room_id = $1`,
-      [id]
-    );
+    const membersResult = await fetchRoomMembers(String(id));   // :id は道の引数なので常に文字 (型だけ string[] を含む)
 
     // Get last read message ID for unread separator
     // ★ 既読位置が入った時刻より古い (抜けて戻った) なら線を出さない。一覧の未読と同じ考え方 (docs/02、改善ループ 13 回目)

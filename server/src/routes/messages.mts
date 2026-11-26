@@ -96,7 +96,7 @@ router.post('/', async (req: Request, res: Response) => {
       await attachStamps([emitted]);
       await announcePost({
         roomId,
-        emit: emitted as unknown as Record<string, unknown>,
+        emit: emitted,
         push: { kind: 'human', senderId: userId, payload: { title: req.user!.display_name, body: '🙂 スタンプ', data: { roomId, messageId: message.id } } },
         webhook: { kind: 'off', reason: '意図 (docs/07 §3.1、2026-10-02 利用者判断)。スタンプで AI は動かさない' },
         preview: { kind: 'off', reason: '意図。スタンプに URL の本文は無い (content はスタンプの ID)' },
