@@ -1,5 +1,5 @@
 import { pool } from '../db/pool.mts';
-import type { MediaRow } from '../types.mts';
+import type { MediaRow, LinkPreviewRow } from '../types.mts';
 
 /** 返信元メッセージ (voice transcription fallback 付き) */
 export interface ReplyMessageRow {
@@ -50,15 +50,6 @@ interface TranscriptionRow {
 }
 
 /** link_previewsテーブルの行 */
-interface LinkPreviewRow {
-  id: string;
-  message_id: string;
-  url: string;
-  title: string | null;
-  description: string | null;
-  image_url: string | null;
-  created_at: Date;
-}
 
 /** リアクション集計行 (me = 現在ユーザーがリアクション済みか) */
 interface ReactionRow {

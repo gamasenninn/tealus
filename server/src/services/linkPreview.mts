@@ -6,6 +6,7 @@ import net from 'node:net';
 import { Agent, fetch as undiciFetch } from 'undici';
 import type { Server } from 'socket.io';
 import { errorText } from '../utils/logFormat.mts';
+import type { LinkPreviewRow } from '../types.mts';
 
 // ★ #510 URL に使える ASCII の文字だけを取る (' とバッククォートは除く)。以前は空白までを全部取り、
 //   `https://youtu.be/xxx（限定公開）` や AI の返信の `[こちら](https://…)で確認できます` のように後ろの日本語まで URL にしていた。
@@ -43,15 +44,6 @@ interface OgpData {
 }
 
 /** link_previewsテーブルの行 */
-interface LinkPreviewRow {
-  id: string;
-  message_id: string;
-  url: string;
-  title: string | null;
-  description: string | null;
-  image_url: string | null;
-  created_at: Date;
-}
 
 /**
  * Extract URLs from message text

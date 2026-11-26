@@ -63,3 +63,27 @@ export interface MessageRow {
   is_published: boolean;
   forwarded_from: string | null;
 }
+
+/** push_subscriptions の行 (SELECT * / RETURNING *)。改善ループ 136 で routes/push・services/push の写しをここに */
+export interface PushSubscriptionRow {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh_key: string;
+  auth_key: string;
+  device_name: string | null;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/** link_previews の行 (SELECT * / RETURNING *)。改善ループ 136 で linkPreview・messageAttachments の写しをここに */
+export interface LinkPreviewRow {
+  id: string;
+  message_id: string;
+  url: string;
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+  created_at: Date;
+}

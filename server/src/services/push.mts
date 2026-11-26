@@ -3,6 +3,7 @@ import webpush from 'web-push';
 import { pool } from '../db/pool.mts';
 import { viewingUserIds } from '../socket/viewingRooms.mts';
 import { errorText } from '../utils/logFormat.mts';
+import type { PushSubscriptionRow } from '../types.mts';
 
 /**
  * VAPID の連絡先 (subject) の点検。問題が無ければ null (2026-09-27)
@@ -42,15 +43,6 @@ export interface PushPayload {
 }
 
 /** push_subscriptionsテーブルの行 */
-interface PushSubscriptionRow {
-  id: string;
-  user_id: string;
-  endpoint: string;
-  p256dh_key: string;
-  auth_key: string;
-  device_name: string | null;
-  is_active: boolean;
-}
 
 /**
  * SPIKE (5/12): user の全 room 未読合計を計算 (App Badge 用)。

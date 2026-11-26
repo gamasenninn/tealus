@@ -28,6 +28,9 @@ describe('同じ決まりは 1 か所だけ', () => {
   it('表示名の最大 (DISPLAY_NAME_MAX = ) は utils/userFields.mts だけ', () => {
     expect(where(/DISPLAY_NAME_MAX\s*=/)).toEqual(['utils/userFields.mts']);
   });
+  it.each(['MessageRow', 'MediaRow', 'PushSubscriptionRow', 'LinkPreviewRow'])('表の行の型 %s は types.mts だけ (改善ループ 123・129・136)', (name) => {
+    expect(where(new RegExp(`interface ${name} \\{`))).toEqual(['types.mts']);
+  });
   it('base64url の作り方は utils/b64url.mts だけ', () => {
     expect(where(/replace\(\/=\+\$\/, ''\)/)).toEqual(['utils/b64url.mts']);
   });

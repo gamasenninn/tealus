@@ -4,6 +4,7 @@ import express from 'express';
 import { pool } from '../db/pool.mts';
 import jwt from 'jsonwebtoken';
 import { authenticate, JWT_SECRET } from '../middleware/auth.mts';
+import type { PushSubscriptionRow } from '../types.mts';
 
 export const router = express.Router();
 
@@ -52,17 +53,6 @@ router.delete('/subscribe', async (req, res) => {
 router.use(authenticate);
 
 /** push_subscriptions INSERT ... RETURNING * のうちハンドラが参照する列 */
-interface PushSubscriptionRow {
-  id: string;
-  user_id: string;
-  endpoint: string;
-  p256dh_key: string;
-  auth_key: string;
-  device_name: string | null;
-  is_active: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
 
 /**
  * POST /api/push/subscribe
