@@ -33,6 +33,7 @@ import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
 import { buildBotMessagesQuery, latestTranscriptionsQuery, parseBotMessagesLimit, transcriptionColumns, buildBotUnreadQuery } from '../services/botMessagesQuery.mts';
 import type { MediaRow, MessageRow } from '../types.mts';
+import { parseLimit } from '../utils/queryLimit.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -1071,7 +1072,7 @@ router.get('/search', async (req, res) => {
     return res.status(400).json({ error: 'q は 500 文字以下' });
   }
 
-  const parsedLimit = Math.min(Math.max(parseInt(limit as string) || 10, 1), 50);
+  const parsedLimit = parseLimit(limit, 10, 50);
   const parsedOffset = Math.max(parseInt(offset as string) || 0, 0);
   const escapedQ = q ? escapeLike(q.trim()) : null;
 
@@ -1127,7 +1128,7 @@ router.get('/search', async (req, res) => {
  */
 router.get('/tags', async (req, res) => {
   const userId = req.user!.id;
-  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 100);
+  const limit = parseLimit(req.query.limit, 30, 100);
 
   try {
     const result = await pool.query<{ name: string; is_todo: boolean; total_usage: number }>(

@@ -4,6 +4,7 @@ import express from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
+import { parseLimit } from '../utils/queryLimit.mts';
 
 export const router = express.Router();
 
@@ -59,7 +60,7 @@ router.get('/', async (req, res) => {
     return res.status(400).json({ error: '検索キーワードまたはタグは必須です' });
   }
 
-  const parsedLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+  const parsedLimit = parseLimit(limit, 50, 100);
   const parsedOffset = Math.max(parseInt(offset) || 0, 0);
   const keyword = q ? `%${q.trim()}%` : null;
 

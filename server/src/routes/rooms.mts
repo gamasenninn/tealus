@@ -15,6 +15,7 @@ import { signAppPass, passTarget, buildGateUrl, loadAppPassKey } from '../utils/
 import { buildRoomUpdate, isValidRoomName, ROOM_NAME_ERROR } from '../services/roomUpdate.mts';
 import { imageExt, imageOnlyFilter, imageUploadError, singleImage } from '../utils/imageUpload.mts';
 import { REQUESTER_HEADER } from '../services/requesterScope.mts';
+import { parseLimit } from '../utils/queryLimit.mts';
 
 // グループ名の決まり (100 字まで) は services/roomUpdate.mts (改善ループ 113 で部屋の更新と一緒に移した)
 
@@ -137,7 +138,7 @@ router.get('/announcements', async (req, res) => {
        WHERE m.room_id = ANY($1) AND m.is_deleted = false AND m.type != 'system' AND m.is_published = true
        ORDER BY m.created_at DESC
        LIMIT $2`,
-      [roomIds, parseInt(String(limit))]
+      [roomIds, parseLimit(limit, 20, 100)]
     );
 
     const messages = msgResult.rows.map(m => ({

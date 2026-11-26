@@ -4,6 +4,7 @@
  * - URL の誤りの文言 → utils/webUrl.mts
  * - 表示名の最大 → utils/userFields.mts
  * - 署名の base64url → utils/b64url.mts
+ * - 件数 (limit) の読み方 → utils/queryLimit.mts (#664)
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,6 +31,9 @@ describe('同じ決まりは 1 か所だけ', () => {
   });
   it.each(['MessageRow', 'MediaRow', 'PushSubscriptionRow', 'LinkPreviewRow'])('表の行の型 %s は types.mts だけ (改善ループ 123・129・136)', (name) => {
     expect(where(new RegExp(`interface ${name} \\{`))).toEqual(['types.mts']);
+  });
+  it('件数 (limit) を parseInt で読むのは utils/queryLimit.mts だけ (#664 道ごとの写しで負の数・数でない値が SQL に渡っていた)', () => {
+    expect(where(/parseInt\([^)]*limit/i)).toEqual([]);
   });
   it('base64url の作り方は utils/b64url.mts だけ', () => {
     expect(where(/replace\(\/=\+\$\/, ''\)/)).toEqual(['utils/b64url.mts']);

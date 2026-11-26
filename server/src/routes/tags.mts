@@ -9,6 +9,7 @@ import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { isAdmin } from '../utils/permissions.mts';
 import { getIo } from '../io-registry.mts';
 import { errorText } from '../utils/logFormat.mts';
+import { parseLimit } from '../utils/queryLimit.mts';
 
 /**
  * ★ #496 投稿のタグの変化を部屋に知らせる (その投稿の今のタグ一覧を丸ごと)。
@@ -419,7 +420,7 @@ globalRouter.use(authenticate);
  */
 globalRouter.get('/all', async (req, res) => {
   const userId = req.user!.id;
-  const limit = Math.min(parseInt(String(req.query.limit)) || 30, 100);
+  const limit = parseLimit(req.query.limit, 30, 100);
 
   try {
     const result = await pool.query<{ name: string; is_todo: boolean; total_usage: number }>(

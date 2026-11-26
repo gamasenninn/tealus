@@ -1,3 +1,4 @@
+import { parseLimit } from '../utils/queryLimit.mts';
 /**
  * bot のメッセージ取得 (GET /api/bot/messages、routes/bot.mts) の SQL の組み立て・件数の丸め・文字起こしの列。
  * 改善ループ 125 で道から出した (中身は同じ)。pool も logger も読まない純粋なファイル
@@ -10,7 +11,7 @@
  *   既定は 20 のまま = 既存の呼び出し元 (全員 20 を渡している) の挙動は不変。1〜100 に収める
  */
 export function parseBotMessagesLimit(limit: string | number | undefined): number {
-  return Math.min(Math.max(parseInt(limit as string) || 20, 1), 100);
+  return parseLimit(limit, 20, 100);
 }
 
 export function buildBotMessagesQuery({ roomId, since, limit }: { roomId: string; since?: string; limit: number }): { query: string; params: (string | number)[] } {

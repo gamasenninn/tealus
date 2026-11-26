@@ -4,6 +4,7 @@ import express from 'express';
 import { pool } from '../db/pool.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { requireMember } from '../middleware/roomAccess.mts';
+import { parseLimit } from '../utils/queryLimit.mts';
 
 /**
  * #354 エージェント指示の履歴 (読み取り専用)
@@ -129,7 +130,7 @@ router.get('/history', async (req, res) => {
     return res.status(400).json({ error: '宛先の指定は必須です' });
   }
 
-  const parsedLimit = Math.min(Math.max(parseInt(limit) || DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const parsedLimit = parseLimit(limit, DEFAULT_LIMIT, MAX_LIMIT);
 
   // 長い宛先を先に見る: cc-tea と cc-tealus が両方あるとき短い方に誤って割り当てない
   const byLengthDesc = [...targetList].sort((a, b) => b.length - a.length);

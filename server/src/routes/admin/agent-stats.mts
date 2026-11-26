@@ -3,6 +3,7 @@ import * as E from '../../constants/errors.mts';
 import express from 'express';
 import { pool } from '../../db/pool.mts';
 import { resolveTimeZone } from '../../lib/localTime.mts';
+import { parseLimit } from '../../utils/queryLimit.mts';
 
 export const router = express.Router();
 
@@ -114,7 +115,7 @@ router.get('/agent-stats', async (req, res) => {
  */
 router.get('/agent-logs', async (req, res) => {
   const { offset = 0, limit = 20, room_id } = req.query;
-  const limitNum = Math.min(parseInt(String(limit)) || 20, 100);
+  const limitNum = parseLimit(limit, 20, 100);
   const offsetNum = parseInt(String(offset)) || 0;
 
   try {

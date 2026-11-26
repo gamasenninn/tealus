@@ -4,9 +4,10 @@
  * テスト: __tests__/unit/roomMessagesQuery.test.mts (出す前の SQL と突き合わせ)、結合は messages など
  */
 import { MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT } from '../constants/config.mts';
+import { parseLimit } from '../utils/queryLimit.mts';
 
 export function parseRoomMessagesLimit(limit: unknown): number {
-  return Math.min(Math.max(parseInt(String(limit)) || MESSAGES_DEFAULT_LIMIT, 1), MESSAGES_MAX_LIMIT);
+  return parseLimit(limit, MESSAGES_DEFAULT_LIMIT, MESSAGES_MAX_LIMIT);
 }
 
 /** 送った人の名前・顔と、既読の数 (送った人を除き、その投稿の時刻まで読んだ人) */

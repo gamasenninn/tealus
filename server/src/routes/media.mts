@@ -14,6 +14,7 @@ import { announcePost } from '../services/postEffects.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { webhookMessage } from '../services/webhookMessage.mts';
 import type { MediaRow, MessageRow } from '../types.mts';
+import { parseLimit, parseOffset } from '../utils/queryLimit.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -149,8 +150,8 @@ router.get('/gallery', authenticate, requireMember, async (req, res) => {
     offset?: string | number;
     limit?: string | number;
   };
-  const limitNum = Math.min(parseInt(String(limit)) || 30, 100);
-  const offsetNum = parseInt(String(offset)) || 0;
+  const limitNum = parseLimit(limit, 30, 100);
+  const offsetNum = parseOffset(offset);
 
   // Category to mime_type prefix mapping
   const categoryMap: Record<string, string | null> = {
