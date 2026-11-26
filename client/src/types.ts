@@ -299,6 +299,8 @@ export type TaskStatus = 'open' | 'done' | 'held';
 export interface Task {
   id: string;
   owner_id: string;
+  /** 人ごとの通し番号 (048)。済みにしても変わらない。番号で指示するため */
+  number: number;
   room_id: string | null;
   room_name: string | null;
   title: string;

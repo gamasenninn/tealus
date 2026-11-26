@@ -116,6 +116,23 @@ describe('タスク一覧 (docs/16)', () => {
       expect((await as(me).get(`/api/tasks?room_id=${roomMine}`)).body.tasks.map((t: { title: string }) => t.title)).toEqual(['部屋の']);
     });
 
+    it('★ 番号: 人ごとに 1・2・3…。済みにしても変わらない (番号で指示できるように、11-26 利用者)', async () => {
+      const a = (await as(me).post('/api/tasks', { title: 'a' })).body.task;
+      const b = (await as(me).post('/api/tasks', { title: 'b' })).body.task;
+      const o = (await as(other).post('/api/tasks', { title: '別の人の' })).body.task;
+      expect([a.number, b.number, o.number]).toEqual([1, 2, 1]);
+      await as(me).patch(`/api/tasks/${a.id}`, { status: 'done' });
+      const c = (await as(me).post('/api/tasks', { title: 'c' })).body.task;
+      expect(c.number).toBe(3);
+      const list = (await as(me).get('/api/tasks?status=all')).body.tasks;
+      expect(list.map((t: { title: string; number: number }) => [t.title, t.number])).toEqual(expect.arrayContaining([['a', 1], ['b', 2], ['c', 3]]));
+    });
+
+    it('番号は直せない (本人の口でも黙って無視しない: 400)', async () => {
+      const id = (await as(me).post('/api/tasks', { title: 'a' })).body.task.id;
+      expect((await as(me).patch(`/api/tasks/${id}`, { number: 9 })).status).toBe(400);
+    });
+
     it('消せる', async () => {
       const id = (await as(me).post('/api/tasks', { title: 'x' })).body.task.id;
       expect((await as(me).del(`/api/tasks/${id}`)).status).toBe(200);
@@ -132,6 +149,12 @@ describe('タスク一覧 (docs/16)', () => {
     it('★ 機械の口座でなければ断る (403。人が印を付けて他人の一覧に書けないように)', async () => {
       const r = await request(app).post('/api/bot/tasks').set('Authorization', `Bearer ${other.token}`).set(H, me.user.id).send({ title: '他人の一覧に' });
       expect(r.status).toBe(403);
+    });
+
+    it('AI が足したものも同じ番号の並びに入る', async () => {
+      await as(me).post('/api/tasks', { title: '手で' });
+      const t = (await asBot(me.user.id).post('/api/bot/tasks', { title: 'AI が' })).body.task;
+      expect(t.number).toBe(2);
     });
 
     it('頼んだ人の一覧に入る (足したのは AI)。頼んだ人の部屋・投稿だけ付けられる', async () => {

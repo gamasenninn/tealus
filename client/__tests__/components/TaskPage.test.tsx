@@ -7,15 +7,15 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import type { Task } from '../../src/types';
 
-const base: Omit<Task, 'id' | 'title' | 'section' | 'room_id' | 'room_name'> = {
+const base: Omit<Task, 'id' | 'number' | 'title' | 'section' | 'room_id' | 'room_name'> = {
   owner_id: 'u1', note: null, status: 'open', source_message_ids: [], ai_suggests_done: false,
   created_by: 'u1', done_at: null, done_by: null, sort_order: 0, created_at: '2026-11-26T00:00:00Z', updated_at: '2026-11-26T00:00:00Z',
 };
 const TASKS: Task[] = [
-  { ...base, id: 't1', title: 'ビルドしてよいか', section: 'decide', room_id: 'r1', room_name: '開発', note: 'よければ一言', source_message_ids: ['m1'] },
-  { ...base, id: 't2', title: 'タスクを登録', section: 'do', room_id: 'r1', room_name: '開発', ai_suggests_done: true },
-  { ...base, id: 't3', title: '返事を待つ', section: 'waiting', room_id: 'r2', room_name: '業務' },
-  { ...base, id: 't4', title: '個人のこと', section: 'do', room_id: null, room_name: null },
+  { ...base, id: 't1', number: 1, title: 'ビルドしてよいか', section: 'decide', room_id: 'r1', room_name: '開発', note: 'よければ一言', source_message_ids: ['m1'] },
+  { ...base, id: 't2', number: 5, title: 'タスクを登録', section: 'do', room_id: 'r1', room_name: '開発', ai_suggests_done: true },
+  { ...base, id: 't3', number: 3, title: '返事を待つ', section: 'waiting', room_id: 'r2', room_name: '業務' },
+  { ...base, id: 't4', number: 12, title: '個人のこと', section: 'do', room_id: null, room_name: null },
 ];
 
 const api = vi.hoisted(() => ({
@@ -48,6 +48,13 @@ describe('TaskPage', () => {
     expect(dev.getByText('決める')).toBeTruthy();
     expect(dev.getByText('手を動かす')).toBeTruthy();
     expect(dev.getByText('よければ一言')).toBeTruthy();
+  });
+
+  it('★ 各行に番号 (人ごとの通し番号。並びの位置ではない)', async () => {
+    renderPage();
+    await screen.findByText('ビルドしてよいか');
+    const nos = Array.from(document.querySelectorAll('.task-no')).map((e) => e.textContent);
+    expect(nos).toEqual(['1', '5', '3', '12']);
   });
 
   it('□ を押すと済みにする', async () => {

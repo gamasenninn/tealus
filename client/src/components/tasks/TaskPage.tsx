@@ -142,6 +142,7 @@ function TaskPage() {
                     />
                     <div className="task-body">
                       <div className="task-title">
+                        <span className="task-no">{t.number}</span>
                         {t.title}
                         {t.status === 'held' && <span className="task-held">保留</span>}
                       </div>
