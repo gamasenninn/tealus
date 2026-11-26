@@ -60,3 +60,50 @@ export function latestTranscriptionsQuery(selectList: string): string {
      WHERE message_id = ANY($1::uuid[])
      ORDER BY message_id, version DESC`;
 }
+
+const UNREAD_SELECT = `
+        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
+               u.display_name AS sender_display_name,
+               r.name AS room_name, r.type AS room_type
+        FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        JOIN rooms r ON r.id = m.room_id`;
+
+/**
+ * bot の未読 (GET /api/bot/unread) の SQL。改善ループ 133 で道から出した (中身は同じ)。古い順に最大 100 件
+ * ★ 部屋を指定したら、メンバーかどうかは道で先に確かめる (403)。ここは SQL を作るだけ
+ * ★ requesterCondition は requesterScope.mts の requesterRoomCondition('m.room_id', 2) を渡す (あちらは pool を読むので、ここからは import しない)
+ */
+export function buildBotUnreadQuery({ userId, roomId, requester, requesterCondition }: {
+  userId: string; roomId?: string; requester: string | null; requesterCondition: string;
+}): { query: string; params: (string | null)[] } {
+  if (roomId) {
+    return {
+      query: `${UNREAD_SELECT}
+        WHERE m.room_id = $1
+          AND m.sender_id != $2
+          AND m.is_deleted = false
+          AND m.created_at > GREATEST(
+            (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
+            (SELECT joined_at FROM room_members WHERE room_id = $1 AND user_id = $2)   -- ★ docs/02
+          )
+        ORDER BY m.created_at ASC
+        LIMIT 100`,
+      params: [roomId, userId],
+    };
+  }
+  return {
+    query: `${UNREAD_SELECT}
+        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
+        WHERE m.sender_id != $1
+          AND ($2::uuid IS NULL OR ${requesterCondition})   -- ★ #564
+          AND m.is_deleted = false
+          AND m.created_at > GREATEST(
+            (SELECT last_read_at FROM room_read_cursors WHERE room_id = m.room_id AND user_id = $1),
+            rm.joined_at   -- ★ docs/02
+          )
+        ORDER BY m.created_at ASC
+        LIMIT 100`,
+    params: [userId, requester],
+  };
+}

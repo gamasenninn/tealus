@@ -31,7 +31,7 @@ import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomC
 import { advanceReadCursor } from '../services/readCounts.mts';
 import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
-import { buildBotMessagesQuery, latestTranscriptionsQuery, parseBotMessagesLimit, transcriptionColumns } from '../services/botMessagesQuery.mts';
+import { buildBotMessagesQuery, latestTranscriptionsQuery, parseBotMessagesLimit, transcriptionColumns, buildBotUnreadQuery } from '../services/botMessagesQuery.mts';
 import type { MediaRow, MessageRow } from '../types.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
@@ -1234,55 +1234,15 @@ router.get('/unread', scopeByRoom('query'), async (req, res) => {
   const userId = req.user!.id;
 
   try {
-    let query: string;
-    let params: string[];
-
-    if (room_id) {
-      // ★ メンバーでなければ読ませない (以前は部屋の ID だけで、どの部屋の未読も読めた)
-      if (!(await isRoomMember(room_id, userId))) {
-        return res.status(403).json({ error: 'このルームのメンバーではありません' });
-      }
-      // Specific room
-      query = `
-        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
-               u.display_name AS sender_display_name,
-               r.name AS room_name, r.type AS room_type
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        WHERE m.room_id = $1
-          AND m.sender_id != $2
-          AND m.is_deleted = false
-          AND m.created_at > GREATEST(
-            (SELECT last_read_at FROM room_read_cursors WHERE room_id = $1 AND user_id = $2),
-            (SELECT joined_at FROM room_members WHERE room_id = $1 AND user_id = $2)   -- ★ docs/02
-          )
-        ORDER BY m.created_at ASC
-        LIMIT 100
-      `;
-      params = [room_id, userId];
-    } else {
-      // All rooms
-      query = `
-        SELECT m.id, m.room_id, m.sender_id, m.content, m.type, m.created_at,
-               u.display_name AS sender_display_name,
-               r.name AS room_name, r.type AS room_type
-        FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        JOIN rooms r ON r.id = m.room_id
-        JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $1
-        WHERE m.sender_id != $1
-          AND ($2::uuid IS NULL OR ${requesterRoomCondition('m.room_id', 2)})   -- ★ #564
-          AND m.is_deleted = false
-          AND m.created_at > GREATEST(
-            (SELECT last_read_at FROM room_read_cursors WHERE room_id = m.room_id AND user_id = $1),
-            rm.joined_at   -- ★ docs/02
-          )
-        ORDER BY m.created_at ASC
-        LIMIT 100
-      `;
-      params = [userId, requesterOf(res) as string];
+    // ★ メンバーでなければ読ませない (以前は部屋の ID だけで、どの部屋の未読も読めた)
+    if (room_id && !(await isRoomMember(room_id, userId))) {
+      return res.status(403).json({ error: 'このルームのメンバーではありません' });
     }
+    // SQL は botMessagesQuery.mts (改善ループ 133)
+    const { query, params } = buildBotUnreadQuery({
+      userId, roomId: room_id || undefined, requester: requesterOf(res) ?? null,
+      requesterCondition: requesterRoomCondition('m.room_id', 2),
+    });
 
     const result = await pool.query<UnreadRow>(query, params);
 
