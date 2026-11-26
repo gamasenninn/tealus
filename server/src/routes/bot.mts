@@ -31,6 +31,7 @@ import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomC
 import { advanceReadCursor } from '../services/readCounts.mts';
 import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
+import type { MediaRow } from '../types.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -60,20 +61,6 @@ interface MessageRow {
   is_edited: boolean;
   is_published: boolean;
   forwarded_from: string | null;
-}
-
-/** message_media テーブルの行 (RETURNING *)。BIGINT (file_size) は pg が string で返す */
-interface MediaRow {
-  id: string;
-  message_id: string;
-  file_path: string;
-  file_name: string;
-  mime_type: string;
-  file_size: string;
-  width: number | null;
-  height: number | null;
-  thumbnail_path: string | null;
-  created_at: Date;
 }
 
 /** GET /messages の行 (m.* + sender_display_name)。reactions / transcription は後段で付与 */

@@ -13,6 +13,7 @@ import type { AttachableMessage } from '../services/messageAttachments.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { webhookMessage } from '../services/webhookMessage.mts';
+import type { MediaRow } from '../types.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -28,20 +29,6 @@ interface MessageRow {
   is_deleted: boolean;
   created_at: Date;
   updated_at: Date;
-}
-
-/** message_media 行 */
-interface MediaRow {
-  id: string;
-  message_id: string;
-  file_path: string;
-  file_name: string | null;
-  mime_type: string | null;
-  file_size: number | null;
-  width: number | null;
-  height: number | null;
-  thumbnail_path: string | null;
-  created_at: Date;
 }
 
 /**

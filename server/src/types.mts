@@ -26,3 +26,20 @@ export interface AuthUser {
   must_change_password?: boolean;
   created_at: Date;
 }
+
+/**
+ * message_media の行 (001_initial.sql)。改善ループ 123 で 5 か所の写しをここに 1 つにした。
+ * ★ file_size は BIGINT なので pg は string で返す (number ではない)。file_name・mime_type は NOT NULL
+ */
+export interface MediaRow {
+  id: string;
+  message_id: string;
+  file_path: string;
+  file_name: string;
+  mime_type: string;
+  file_size: string;
+  width: number | null;
+  height: number | null;
+  thumbnail_path: string | null;
+  created_at: Date;
+}

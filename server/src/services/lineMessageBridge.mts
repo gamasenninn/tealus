@@ -20,7 +20,7 @@ import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { mediaPushBody } from './machinePush.mts';
 import { announcePost, type Off } from './postEffects.mts';
-import type { AuthUser } from '../types.mts';
+import type { AuthUser, MediaRow } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
 import { generateThumbnail } from './thumbnail.mts';
@@ -49,20 +49,6 @@ export interface MessageRow {
   is_deleted: boolean;
   created_at: Date;
   updated_at: Date;
-}
-
-/** message_media テーブル row (= INSERT ... RETURNING *、BIGINT は pg が string で返す) */
-export interface MediaRow {
-  id: string;
-  message_id: string;
-  file_path: string;
-  file_name: string;
-  mime_type: string;
-  file_size: string;
-  width: number | null;
-  height: number | null;
-  thumbnail_path: string | null;
-  created_at: Date;
 }
 
 /** media 系 post helper の共通 params */

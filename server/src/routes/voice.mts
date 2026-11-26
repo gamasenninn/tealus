@@ -17,6 +17,7 @@ import { checkMessageRefs } from '../services/messageRefs.mts';
 import fs from 'node:fs';
 import { safeExt } from '../utils/safeExt.mts';
 import { webhookMessage } from '../services/webhookMessage.mts';
+import type { MediaRow } from '../types.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -45,16 +46,6 @@ interface MessageRow {
   content: string | null;
   reply_to: string | null;
   created_at: Date;
-}
-
-/** message_media INSERT RETURNING * のうちハンドラが参照する列 */
-interface MediaRow {
-  id: string;
-  message_id: string;
-  file_path: string;
-  file_name: string;
-  mime_type: string;
-  file_size: number;
 }
 
 /**

@@ -1,18 +1,5 @@
 import { pool } from '../db/pool.mts';
-
-/** message_mediaテーブルの行 */
-interface MediaRow {
-  id: string;
-  message_id: string;
-  file_path: string;
-  file_name: string;
-  mime_type: string;
-  file_size: string;
-  width: number | null;
-  height: number | null;
-  thumbnail_path: string | null;
-  created_at: Date;
-}
+import type { MediaRow } from '../types.mts';
 
 /** 返信元メッセージ (voice transcription fallback 付き) */
 export interface ReplyMessageRow {
