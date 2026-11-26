@@ -2,7 +2,7 @@
  * bot のメッセージ取得 (GET /api/bot/messages) の SQL の組み立て・件数の丸め・文字起こしの列。改善ループ 125 で bot.mts の道から出した (中身は同じ)
  * ★ DB での結果は結合テスト (bot-api など) が見ている。ここは枝ごとの形を固定する
  */
-import { buildBotMessagesQuery, parseBotMessagesLimit, transcriptionColumns } from '../../src/services/botMessagesQuery.mts';
+import { buildBotMessagesQuery, latestTranscriptionsQuery, parseBotMessagesLimit, transcriptionColumns } from '../../src/services/botMessagesQuery.mts';
 
 const R = '00000000-0000-0000-0000-00000000000b';
 const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -56,5 +56,12 @@ describe('transcriptionColumns (#219 細かさ)', () => {
   it('文字起こしを切ると、raw を頼んでも状態だけ', () => {
     expect(transcriptionColumns(false, true)).toBe('id, status, version');
     expect(transcriptionColumns(false, false)).toBe('id, status, version');
+  });
+});
+
+describe('latestTranscriptionsQuery (11-26 Q3: まとめて 1 回)', () => {
+  it('メッセージごとに最新版 1 行。どの行かは __message_id で返す', () => {
+    const sql = squash(latestTranscriptionsQuery('id, status, version'));
+    expect(sql).toBe('SELECT DISTINCT ON (message_id) message_id AS __message_id, id, status, version FROM voice_transcriptions WHERE message_id = ANY($1::uuid[]) ORDER BY message_id, version DESC');
   });
 });

@@ -2,6 +2,7 @@ import request from 'supertest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from '../../src/app.mts';
+import { pool } from '../../src/db/pool.mts';
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
 import { MEDIA_ROOT } from '../../src/middleware/upload.mts';
@@ -660,6 +661,29 @@ describe('Bot API', () => {
       expect(voice.transcription.version).toBe(2);
       expect(voice.transcription.formatted_text).toBe('v2 整形 (latest)');
       expect(voice.transcription.raw_text).toBe('v2 生');
+    });
+
+    it('★ 文字起こしは音声が何件あっても 1 回の問い合わせで引く (11-26 小野さん判断 Q3。以前は音声 1 件ごとに 1 回)', async () => {
+      const spy = jest.spyOn(pool, 'query');
+      try {
+        const res = await request(app)
+          .get(`/api/bot/messages?room_id=${roomId}&include_raw=true`)
+          .set('Authorization', `Bearer ${bot.token}`);
+        expect(res.status).toBe(200);
+        expect(res.body.messages.filter((m: { type: string }) => m.type === 'voice')).toHaveLength(3);
+        const transQueries = spy.mock.calls.filter(([sql]) => typeof sql === 'string' && /FROM voice_transcriptions/.test(sql));
+        expect(transQueries).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('文字起こしに message_id など頼んでいない列を混ぜない (列は #219 の細かさのまま)', async () => {
+      const res = await request(app)
+        .get(`/api/bot/messages?room_id=${roomId}`)
+        .set('Authorization', `Bearer ${bot.token}`);
+      const voice = res.body.messages.find((m: { id: string }) => m.id === voiceMsgId);
+      expect(Object.keys(voice.transcription).sort()).toEqual(['formatted_text', 'id', 'status', 'version']);
     });
   });
 

@@ -49,3 +49,14 @@ export function transcriptionColumns(includeTranscription: boolean, includeRaw: 
   if (includeTranscription && includeRaw) cols.push('raw_text');
   return cols.join(', ');
 }
+
+/**
+ * 音声メッセージ群の文字起こしの最新版を 1 回で引く (11-26 小野さん判断 Q3、以前は 1 件ずつ)。$1 = message id の配列。
+ * ★ どのメッセージの行かは __message_id で返す。道は取り出して捨てる (返す列は #219 の細かさのまま)
+ */
+export function latestTranscriptionsQuery(selectList: string): string {
+  return `SELECT DISTINCT ON (message_id) message_id AS __message_id, ${selectList}
+     FROM voice_transcriptions
+     WHERE message_id = ANY($1::uuid[])
+     ORDER BY message_id, version DESC`;
+}

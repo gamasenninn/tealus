@@ -31,7 +31,7 @@ import { readRequester, requesterOf, scopeByRoom, scopeByMessage, requesterRoomC
 import { advanceReadCursor } from '../services/readCounts.mts';
 import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
-import { buildBotMessagesQuery, parseBotMessagesLimit, transcriptionColumns } from '../services/botMessagesQuery.mts';
+import { buildBotMessagesQuery, latestTranscriptionsQuery, parseBotMessagesLimit, transcriptionColumns } from '../services/botMessagesQuery.mts';
 import type { MediaRow } from '../types.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
@@ -600,15 +600,16 @@ router.get('/messages', scopeByRoom('query'), async (req, res) => {
     // 音声メッセージに文字起こしを付加 (verbosity 制御 #219)
     const selectList = transcriptionColumns(includeTranscription, includeRaw);
 
-    for (const msg of messages) {
-      if (msg.type === 'voice') {
-        const trans = await pool.query<TranscriptionVerbosityRow>(
-          `SELECT ${selectList} FROM voice_transcriptions WHERE message_id = $1 ORDER BY version DESC LIMIT 1`,
-          [msg.id]
-        );
-        if (trans.rows.length > 0) {
-          msg.transcription = trans.rows[0];
-        }
+    // ★ 11-26 (小野さん判断 Q3): 音声 1 件ごとに 1 回引いていたのを、最新版をまとめて 1 回で引く (中身は同じ)
+    const voiceIds = messages.filter((m) => m.type === 'voice').map((m) => m.id);
+    if (voiceIds.length > 0) {
+      const trans = await pool.query<TranscriptionVerbosityRow & { __message_id: string }>(
+        latestTranscriptionsQuery(selectList), [voiceIds],
+      );
+      const byMsg = new Map(trans.rows.map(({ __message_id, ...row }) => [__message_id, row]));
+      for (const msg of messages) {
+        const t = byMsg.get(msg.id);
+        if (t) msg.transcription = t;
       }
     }
 
