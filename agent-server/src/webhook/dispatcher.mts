@@ -20,6 +20,7 @@ import { getOrCreateContext, updateStatus } from '../context/sessionManager.mts'
 import { getOrCreateRoomMcp } from '../mcp/roomMcpManager.mts';
 import { extractPromptFromMessage } from '../media/messageAdapter.mts';
 import { isMentioned } from './mention.mts';
+import { decideResponse, isAddressed } from './responseDecision.mts';
 import type { WebhookMessage, DispatchParams } from '../types.mts';
 import { beginWait, endWait } from './delegationWait.mts';
 import { runAsRequester, withCurrentRequester } from '../lib/requesterContext.mts';
@@ -133,8 +134,7 @@ function noticeIfQueued(message: WebhookMessage, room: DispatchParams['room'], a
   if (ahead === 0 || message.sender?.role === 'guest') return;
   const text = stripAutoPostMark(extractPromptFromMessage(message));
   if (!text) return;
-  const addressed = !((room.member_count || 2) > 2) || isMentioned(text, agentName);
-  if (!addressed) return;
+  if (!isAddressed(text, agentName, room.member_count || 2)) return;
   void botApi.pushStatus(room.id, 'queued', `順番待ちです。前に ${ahead} 件あります。終わったら取りかかります…`).catch(() => {});
 }
 
@@ -335,46 +335,40 @@ async function _dispatch({ message, room, agentId, agentName }: DispatchParams):
   const stored = readRoomConfigJson<{ response_mode: string; enabled: boolean }>(context.workspace_path, 'room_settings.json');
   if (stored) roomSettings = stored;
 
+  // ★ 応答するかの判定は responseDecision.mts の純関数 (改善ループ 126)。お知らせ・ログ・間引きはここ
+  const decision = decideResponse({ prompt, agentName, memberCount, roomSettings, senderRole: message.sender?.role });
+
   // エージェント無効
-  if (!roomSettings.enabled || roomSettings.response_mode === 'off') {
+  if (decision.kind === 'disabled') {
     logger.debug(`Skipped: agent disabled in room ${room.name || roomId}`);
     // ★ AI に宛てた便 (名指し・1 対 1) なら 1 行返す (2026-10-30 小野さん判断 C)。以前は無言で、返事を待ち続けた。
     //   同じ部屋には 10 分に 1 回まで
-    const addressed = !(memberCount > 2) || isMentioned(prompt, agentName);
     const now = Date.now();
-    if (addressed && now - (disabledNoticeAt.get(roomId) ?? 0) >= DISABLED_NOTICE_QUIET_MS) {
+    if (decision.addressed && now - (disabledNoticeAt.get(roomId) ?? 0) >= DISABLED_NOTICE_QUIET_MS) {
       disabledNoticeAt.set(roomId, now);
       await botApi.pushMessage(roomId, AGENT_DISABLED_NOTICE).catch(() => {});
     }
     return;
   }
 
-  // 応答モードに応じたメンション判定
-  const needsMention =
-    roomSettings.response_mode === 'mention' ? true :
-    roomSettings.response_mode === 'all' ? false :
-    /* auto */ memberCount > 2;
-
   // ★ #492 ゲストの便には応答しない。アシスタントは部屋の外 (他の部屋・社内 DB・サーバー) にも届く作りで、
   //   ゲストの原則「招かれた部屋の中だけ」(#282) を守れないため。部屋の中に閉じた経路ができるまでの守り。
   //   ★ お知らせは名指しされたとき / 1 対 1 だけ (「全部に答える」部屋で発言のたびに出さない)。
   //   ★ 委譲 (%) より前に置く。権限が載っていない便 (古い本体) は今までどおり
-  if (message.sender?.role === 'guest') {
-    const addressed = !(memberCount > 2) || isMentioned(prompt, agentName);
+  if (decision.kind === 'guest') {
     logger.info(`[guest] ゲストの便のため応答していません: room=${room.name || roomId} `
-      + `sender=${message.sender.display_name || message.sender.id || '?'} notice=${addressed}`);
-    if (addressed) await botApi.pushMessage(roomId, GUEST_NOT_SUPPORTED_NOTICE).catch(() => {});
+      + `sender=${message.sender?.display_name || message.sender?.id || '?'} notice=${decision.addressed}`);
+    if (decision.addressed) await botApi.pushMessage(roomId, GUEST_NOT_SUPPORTED_NOTICE).catch(() => {});
     return;
   }
 
-  if (needsMention) {
-    if (!isMentioned(prompt, agentName)) {
-      logger.debug(`Skipped: no mention in ${room.name || roomId}`);
-      return;
-    }
-    // isMentioned が true を返した時点で agentName は非 null (invariant)
-    prompt = extractPrompt(prompt, agentName!);
+  // 応答モードに応じたメンション判定
+  if (decision.kind === 'no_mention') {
+    logger.debug(`Skipped: no mention in ${room.name || roomId}`);
+    return;
   }
+  // 名指しがあると判定された時点で agentName は非 null (invariant)
+  if (decision.stripMention) prompt = extractPrompt(prompt, agentName!);
 
   // #295: `%<room> <task>` 委譲検出 (mention 処理後・route 前)。
   // ENABLE_CROSS_ROOM_DELEGATION フラグ配下、先頭 `%` のメッセージのみ getRooms を引く。
