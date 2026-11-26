@@ -14,10 +14,10 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import request from 'supertest';
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { listenOnFreePort, settle, socketClients } from '../helpers/socket.mts';
 import { app, server as appServer } from '../../src/app.mts';
 import * as capabilityWatcher from '../../src/services/capabilityWatcher.mts';
 import { activeCalls } from '../../src/socket/handlers/call.mts';
@@ -47,24 +47,16 @@ describe('socket の部外者の総当たり', () => {
   const events = collectEvents();
   let port: number;
   let rtc: http.Server;
-  const clients: ClientSocket[] = [];
   let owner: { id: string; token: string };
   let outsider: { id: string; token: string };
   let roomB: string; // 1 対 1 (着信が飛ぶ形)
   let msgB: string;
 
-  const connect = (token: string, join: string[] = []) => new Promise<ClientSocket>((resolve, reject) => {
-    const s = Client(`http://localhost:${port}`, { auth: { token }, transports: ['websocket'] });
-    s.on('connect', () => { clients.push(s); for (const r of join) s.emit('room:join', r); setTimeout(() => resolve(s), 200); });
-    s.on('connect_error', reject);
-  });
-  const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+  const { connect, closeAll } = socketClients(() => port);
 
   beforeAll(async () => {
     await setupTestDb();
-    await new Promise<void>((resolve) => {
-      appServer.listen(0, () => { port = (appServer.address() as AddressInfo).port; resolve(); });
-    });
+    port = await listenOnFreePort(appServer);
     rtc = http.createServer((_q, r) => { r.statusCode = 200; r.end('ok'); });
     await new Promise<void>((r) => rtc.listen(0, '127.0.0.1', r));
     process.env.RTC_PORT = String((rtc.address() as AddressInfo).port);
@@ -82,7 +74,7 @@ describe('socket の部外者の総当たり', () => {
       `INSERT INTO messages (room_id, sender_id, content, type) VALUES ($1, $2, '部屋Bの投稿', 'text') RETURNING id`, [roomB, o.user.id])).rows[0].id;
   });
   afterAll(async () => {
-    while (clients.length) clients.pop()!.close();
+    closeAll();
     capabilityWatcher.stop();
     delete process.env.RTC_PORT;
     rtc.close();

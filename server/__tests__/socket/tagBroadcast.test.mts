@@ -5,37 +5,28 @@
  *   タグの口はどれも配信の知らせを出していなかった。
  * ★ 部屋のタグはメンバーなら誰でも消せた。消すと付いていた投稿すべてから外れる (「TODO」なら部屋中の TODO が消える)
  */
-import type { AddressInfo } from 'node:net';
-import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import request from 'supertest';
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { listenOnFreePort, settle, socketClients } from '../helpers/socket.mts';
 import { app, server as appServer } from '../../src/app.mts';
 
 type TagsEvent = { message_id: string; room_id: string; tags: Array<{ id: string; name: string; is_todo: boolean; is_done: boolean; priority: number }> };
 
 describe('Socket.IO — タグの知らせ (#496)', () => {
   let port: number;
-  const clients: ClientSocket[] = [];
   let a: { id: string; token: string };
   let b: { id: string; token: string };
   let c: { id: string; token: string };
   let roomId: string;
   let msgId: string;
 
-  const connect = (token: string, join: string[]) => new Promise<ClientSocket>((resolve, reject) => {
-    const s = Client(`http://localhost:${port}`, { auth: { token }, transports: ['websocket'] });
-    s.on('connect', () => { clients.push(s); for (const r of join) s.emit('room:join', r); setTimeout(() => resolve(s), 200); });
-    s.on('connect_error', reject);
-  });
-  const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+  const { connect, closeAll } = socketClients(() => port);
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
   beforeAll(async () => {
     await setupTestDb();
-    await new Promise<void>((resolve) => {
-      appServer.listen(0, () => { port = (appServer.address() as AddressInfo).port; resolve(); });
-    });
+    port = await listenOnFreePort(appServer);
   });
   afterAll(async () => { appServer.close(); await closeTestDb(); });
 
@@ -53,7 +44,7 @@ describe('Socket.IO — タグの知らせ (#496)', () => {
     msgId = (await request(app).post(`/api/rooms/${roomId}/messages`).set(auth(a.token))
       .send({ content: 'A の投稿' })).body.message.id;
   });
-  afterEach(() => { while (clients.length) clients.pop()!.close(); });
+  afterEach(() => { closeAll(); });
 
   describe('1. 投稿のタグの変化を部屋に知らせる', () => {
     it('★★ 付ける → B に、その投稿の今のタグ一覧が届く', async () => {

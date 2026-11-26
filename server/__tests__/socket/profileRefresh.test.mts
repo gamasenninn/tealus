@@ -6,36 +6,27 @@
  */
 import path from 'node:path';
 import fs from 'node:fs';
-import type { AddressInfo } from 'node:net';
-import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import request from 'supertest';
 import sharp from 'sharp';
 import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { listenOnFreePort, settle, socketClients } from '../helpers/socket.mts';
 import { app, server as appServer } from '../../src/app.mts';
 
 type NewMessage = { content: string; sender_display_name: string; sender_avatar_url: string | null };
 
 describe('Socket.IO — 名前を変えたあとの投稿 (#498)', () => {
   let port: number;
-  const clients: ClientSocket[] = [];
   let a: { id: string; token: string };
   let b: { id: string; token: string };
   let roomId: string;
 
-  const connect = (token: string, join: string[]) => new Promise<ClientSocket>((resolve, reject) => {
-    const s = Client(`http://localhost:${port}`, { auth: { token }, transports: ['websocket'] });
-    s.on('connect', () => { clients.push(s); for (const r of join) s.emit('room:join', r); setTimeout(() => resolve(s), 200); });
-    s.on('connect_error', reject);
-  });
-  const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+  const { connect, closeAll } = socketClients(() => port);
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
   beforeAll(async () => {
     await setupTestDb();
-    await new Promise<void>((resolve) => {
-      appServer.listen(0, () => { port = (appServer.address() as AddressInfo).port; resolve(); });
-    });
+    port = await listenOnFreePort(appServer);
   });
   afterAll(async () => { appServer.close(); await closeTestDb(); });
 
@@ -48,7 +39,7 @@ describe('Socket.IO — 名前を変えたあとの投稿 (#498)', () => {
     roomId = (await request(app).post('/api/rooms').set(auth(a.token))
       .send({ name: '名前の部屋', member_ids: [b.id] })).body.room.id;
   });
-  afterEach(() => { while (clients.length) clients.pop()!.close(); });
+  afterEach(() => { closeAll(); });
 
   it('★★★ つないだまま名前を変えて投稿すると、相手には新しい名前で届く', async () => {
     const sa = await connect(a.token, [roomId]);   // ★ 名前を変える前につないでおく

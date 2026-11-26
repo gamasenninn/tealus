@@ -5,37 +5,28 @@
  *   A がそれを見て押すと、取り消しのつもりで A のリアクションが増える。
  * ★ 配るのは「誰が付けたか (user_ids)」。me は各端末が自分の ID で決める。付けた本人への HTTP の応答は me を持つ (本人の目線で正しい)
  */
-import type { AddressInfo } from 'node:net';
-import { io as Client, type Socket as ClientSocket } from 'socket.io-client';
 import request from 'supertest';
 import { setupTestDb, cleanTestDb, closeTestDb } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
+import { listenOnFreePort, settle, socketClients } from '../helpers/socket.mts';
 import { app, server as appServer } from '../../src/app.mts';
 
 type Broadcast = { message_id: string; reactions: Array<Record<string, unknown>> };
 
 describe('Socket.IO — リアクションの知らせ (#488)', () => {
   let port: number;
-  const clients: ClientSocket[] = [];
   let a: { id: string; token: string };
   let b: { id: string; token: string };
   let roomId: string;
   let msgId: string;
 
-  const connect = (token: string, join: string[]) => new Promise<ClientSocket>((resolve, reject) => {
-    const s = Client(`http://localhost:${port}`, { auth: { token }, transports: ['websocket'] });
-    s.on('connect', () => { clients.push(s); for (const r of join) s.emit('room:join', r); setTimeout(() => resolve(s), 200); });
-    s.on('connect_error', reject);
-  });
-  const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+  const { connect, closeAll } = socketClients(() => port);
   const react = (token: string, emoji: string) =>
     request(app).post(`/api/rooms/${roomId}/messages/${msgId}/reactions`).set('Authorization', `Bearer ${token}`).send({ emoji });
 
   beforeAll(async () => {
     await setupTestDb();
-    await new Promise<void>((resolve) => {
-      appServer.listen(0, () => { port = (appServer.address() as AddressInfo).port; resolve(); });
-    });
+    port = await listenOnFreePort(appServer);
   });
   afterAll(async () => { appServer.close(); await closeTestDb(); });
 
@@ -50,7 +41,7 @@ describe('Socket.IO — リアクションの知らせ (#488)', () => {
     msgId = (await request(app).post(`/api/rooms/${roomId}/messages`).set('Authorization', `Bearer ${a.token}`)
       .send({ content: 'A の投稿' })).body.message.id;
   });
-  afterEach(() => { while (clients.length) clients.pop()!.close(); });
+  afterEach(() => { closeAll(); });
 
   it('★ 配る知らせに me を入れない。代わりに誰が付けたか (user_ids) を入れる', async () => {
     const sa = await connect(a.token, [roomId]);
