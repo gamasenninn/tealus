@@ -1,14 +1,14 @@
-/* タスク一覧 (docs/16)。印刷は @media print で色を落とし、操作の部品を隠す */
+/* タスク一覧 (docs/16)。色は Tealus の決まり (index.css の --primary) を使う (11-26 利用者の指摘: 独自の濃い色を書いていた)。印刷は @media print で色を落とし、操作の部品を隠す */
 .task-page { max-width: 720px; margin: 0 auto; padding-bottom: 32px; background: #fff; min-height: 100vh; }
 
-.task-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #0f8f8f; color: #fff; position: sticky; top: 0; z-index: 2; }
+.task-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--primary); color: #fff; position: sticky; top: 0; z-index: 2; }
 .task-header h1 { flex: 1; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }
-.task-count { background: #fff; color: #0f8f8f; border-radius: 10px; padding: 0 8px; font-size: 13px; line-height: 20px; }
+.task-count { background: #fff; color: var(--primary); border-radius: 10px; padding: 0 8px; font-size: 13px; line-height: 20px; }
 .task-back, .task-print { background: none; border: none; color: #fff; display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; padding: 4px; }
 
 .task-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
 .task-chip { border: none; background: #eef1f3; color: #555; border-radius: 14px; padding: 4px 14px; font-size: 13px; cursor: pointer; }
-.task-chip.active { background: #0f8f8f; color: #fff; }
+.task-chip.active { background: var(--primary); color: #fff; }
 .task-room-filter select { border: none; background: #eef1f3; border-radius: 14px; padding: 4px 10px; font-size: 13px; color: #555; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
@@ -25,22 +25,22 @@
 .sec-later { color: #6b7280; }
 
 .task-item { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0 8px; }
-.task-check { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; accent-color: #0f8f8f; }
+.task-check { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
 .task-body { flex: 1; min-width: 0; }
 .task-title { font-size: 15px; color: #222; word-break: break-word; }
 .task-item.done .task-title { color: #999; text-decoration: line-through; }
 .task-no { display: inline-block; min-width: 1.6em; margin-right: 6px; padding: 0 4px; border-radius: 4px; background: #eef1f3; color: #555; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
 .task-held { margin-left: 6px; font-size: 11px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }
 .task-note { font-size: 12px; color: #777; margin-top: 2px; }
-.task-source { background: none; border: none; color: #0f8f8f; font-size: 12px; cursor: pointer; padding: 0 0 0 6px; }
-.task-ai-done { margin-top: 4px; border: 1px solid #0f8f8f; background: #e6fffb; color: #0b6b6b; border-radius: 10px; font-size: 12px; padding: 1px 10px; cursor: pointer; }
+.task-source { background: none; border: none; color: var(--primary); font-size: 12px; cursor: pointer; padding: 0 0 0 6px; }
+.task-ai-done { margin-top: 4px; border: 1px solid var(--primary); background: #e6fffb; color: #0b6b6b; border-radius: 10px; font-size: 12px; padding: 1px 10px; cursor: pointer; }
 
 .task-add { padding: 12px; }
-.task-add-open { display: inline-flex; align-items: center; gap: 4px; border: none; background: #0f8f8f; color: #fff; border-radius: 18px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
+.task-add-open { display: inline-flex; align-items: center; gap: 4px; border: none; background: var(--primary); color: #fff; border-radius: 18px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
 .task-add-form { display: flex; flex-wrap: wrap; gap: 6px; }
 .task-add-form input { flex: 1 1 200px; font-size: 16px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }   /* iOS の自動拡大を避ける 16px */
 .task-add-form select, .task-add-form button { font-size: 14px; padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
-.task-add-ok { background: #0f8f8f !important; color: #fff; border-color: #0f8f8f !important; }
+.task-add-ok { background: var(--primary) !important; color: #fff; border-color: var(--primary) !important; }
 .task-hint { color: #999; font-size: 12px; margin: 8px 0 0; }
 
 .print-only { display: none; }
