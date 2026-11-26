@@ -82,7 +82,8 @@ interface MessageTag {
 interface StampRow {
   id: string;
   file_path: string;
-  label: string;
+  /** ★ #664 DB (008_stamps) では空を許す。画面の型 (client types.ts) も null を受ける */
+  label: string | null;
   pack_id: string;
   pack_name: string;
 }
