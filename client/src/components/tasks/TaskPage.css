@@ -7,34 +7,34 @@
 .task-back, .task-print { background: none; border: none; color: #fff; display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; padding: 4px; }
 
 .task-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
-.task-chip { border: none; background: #eef1f3; color: #555; border-radius: 14px; padding: 4px 14px; font-size: 13px; cursor: pointer; }
+.task-chip { border: none; background: #eef1f3; color: #555; border-radius: 14px; padding: 4px 14px; font-size: 15px; cursor: pointer; }
 .task-chip.active { background: var(--primary); color: #fff; }
-.task-room-filter select { border: none; background: #eef1f3; border-radius: 14px; padding: 4px 10px; font-size: 13px; color: #555; }
+.task-room-filter select { border: none; background: #eef1f3; border-radius: 14px; padding: 4px 10px; font-size: 15px; color: #555; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 .task-error { margin: 0 12px 8px; color: #b91c1c; font-size: 13px; }
 .task-empty { padding: 32px 12px; text-align: center; color: #999; }
 
-.task-group-title { display: flex; justify-content: space-between; margin: 0; padding: 6px 12px; background: #e8f5f4; color: #0b6b6b; font-size: 14px; }
-.task-group-count { font-weight: normal; font-size: 12px; }
+.task-group-title { display: flex; justify-content: space-between; margin: 0; padding: 6px 12px; background: #e8f5f4; color: #0b6b6b; font-size: 16px; }
+.task-group-count { font-weight: normal; font-size: 13px; }
 .task-section { padding: 6px 12px 2px; }
-.task-section-label { font-size: 11px; font-weight: bold; margin: 2px 0 4px; }
+.task-section-label { font-size: 13px; font-weight: bold; margin: 2px 0 4px; }
 .sec-decide { color: #b45309; }
 .sec-do { color: #1d4ed8; }
 .sec-waiting { color: #6b21a8; }
 .sec-later { color: #6b7280; }
 
 .task-item { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0 8px; }
-.task-check { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
+.task-check { width: 22px; height: 22px; margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
 .task-body { flex: 1; min-width: 0; }
-.task-title { font-size: 15px; color: #222; word-break: break-word; }
+.task-title { font-size: 17px; color: #222; word-break: break-word; }
 .task-item.done .task-title { color: #999; text-decoration: line-through; }
-.task-no { display: inline-block; min-width: 1.6em; margin-right: 6px; padding: 0 4px; border-radius: 4px; background: #eef1f3; color: #555; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
-.task-date { margin-right: 6px; color: #999; font-size: 11px; font-variant-numeric: tabular-nums; }
-.task-held { margin-left: 6px; font-size: 11px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }
-.task-note { font-size: 12px; color: #777; margin-top: 2px; }
-.task-source { background: none; border: none; color: var(--primary); font-size: 12px; cursor: pointer; padding: 0 0 0 6px; }
-.task-ai-done { margin-top: 4px; border: 1px solid var(--primary); background: #e6fffb; color: #0b6b6b; border-radius: 10px; font-size: 12px; padding: 1px 10px; cursor: pointer; }
+.task-no { display: inline-block; min-width: 1.6em; margin-right: 6px; padding: 0 4px; border-radius: 4px; background: #eef1f3; color: #555; font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
+.task-date { margin-right: 6px; color: #888; font-size: 13px; font-variant-numeric: tabular-nums; }
+.task-held { margin-left: 6px; font-size: 13px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }
+.task-note { font-size: 14.5px; line-height: 1.5; color: #555; margin-top: 2px; }
+.task-source { background: none; border: none; color: var(--primary); font-size: 14px; cursor: pointer; padding: 0 0 0 6px; }
+.task-ai-done { margin-top: 4px; border: 1px solid var(--primary); background: #e6fffb; color: #0b6b6b; border-radius: 10px; font-size: 14px; padding: 1px 10px; cursor: pointer; }
 
 .task-add { padding: 12px; }
 .task-add-open { display: inline-flex; align-items: center; gap: 4px; border: none; background: var(--primary); color: #fff; border-radius: 18px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
@@ -42,7 +42,7 @@
 .task-add-form input { flex: 1 1 200px; font-size: 16px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }   /* iOS の自動拡大を避ける 16px */
 .task-add-form select, .task-add-form button { font-size: 14px; padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
 .task-add-ok { background: var(--primary) !important; color: #fff; border-color: var(--primary) !important; }
-.task-hint { color: #999; font-size: 12px; margin: 8px 0 0; }
+.task-hint { color: #999; font-size: 13px; margin: 8px 0 0; }
 
 .print-only { display: none; }
 
