@@ -1247,17 +1247,17 @@ router.get('/unread', scopeByRoom('query'), async (req, res) => {
 
     const result = await pool.query<UnreadRow>(query, params);
 
-    // For voice messages, get transcription
-    for (const msg of result.rows) {
-      if (msg.type === 'voice') {
-        const trans = await pool.query<{ formatted_text: string | null; raw_text: string | null }>(
-          `SELECT formatted_text, raw_text FROM voice_transcriptions
-           WHERE message_id = $1 ORDER BY version DESC LIMIT 1`,
-          [msg.id]
-        );
-        if (trans.rows.length > 0) {
-          msg.content = trans.rows[0].formatted_text || trans.rows[0].raw_text || msg.content;
-        }
+    // 音声は本文を文字起こしの最新版 (整形 → 無ければ生) に差し替える。
+    // ★ #664 音声 1 件ごとに 1 回引いていたのを、GET /messages (11-26 Q3) と同じくまとめて 1 回で引く (中身は同じ)
+    const voiceIds = result.rows.filter((m) => m.type === 'voice').map((m) => m.id);
+    if (voiceIds.length > 0) {
+      const trans = await pool.query<{ __message_id: string; formatted_text: string | null; raw_text: string | null }>(
+        latestTranscriptionsQuery('formatted_text, raw_text'), [voiceIds],
+      );
+      const byMsg = new Map(trans.rows.map((t) => [t.__message_id, t]));
+      for (const msg of result.rows) {
+        const t = byMsg.get(msg.id);
+        if (t) msg.content = t.formatted_text || t.raw_text || msg.content;
       }
     }
 
