@@ -268,18 +268,21 @@ export interface DictionaryTerm {
   alias_count?: number;
 }
 
+/**
+ * 辞書の別名の一覧の 1 行 (GET /api/admin/dictionary/aliases、server dictionaryRepo の AliasReviewRow)。
+ * ★ id でなく alias_id、occurrence_count でなく count で返る (改善ループ 124 で実物に合わせた。本体の dictionaryAdmin.test が形を固定)
+ */
 export interface DictionaryAlias {
-  id?: string;
-  alias_id?: string;
-  term_id?: string;
-  term?: string;
+  alias_id: string;
   alias: string;
-  status?: string;
-  source?: string;
-  reading?: string | null;
-  confidence?: string | null;
-  occurrence_count?: number;
-  count?: number;
+  source: 'organon' | 'manual' | 'auto';
+  status: string;
+  count: number;
+  updated_at: string;
+  term_id: string;
+  term: string;
+  category: string;
+  reading: string | null;
 }
 
 export interface ClientConfig {

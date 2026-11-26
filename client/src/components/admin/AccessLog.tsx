@@ -1,19 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { roleLabel } from '../../utils/permissions';
-import type { User } from '../../types';
 
-// server 応答 (集計 API): users は last_view_at、matrix はルーム別内訳を含む
-// (api.ts の getAdminAccessLog 型は last_read_at / matrix なしで実態と差分あり)
-type AccessLogUser = User & { last_post_at?: string | null; last_view_at?: string | null };
-
-interface AccessLogMatrixRow {
-  user_id: string;
-  room_id: string;
-  room_name?: string | null;
-  last_post_at?: string | null;
-  last_view_at?: string | null;
-}
+// server 応答 (集計 API): users は last_view_at、matrix はルーム別内訳。型は api.ts の getAdminAccessLog が持つ
+type AccessLogData = Awaited<ReturnType<typeof api.getAdminAccessLog>>;
+type AccessLogUser = AccessLogData['users'][number];
+type AccessLogMatrixRow = AccessLogData['matrix'][number];
 
 // 日時整形 (null は「—」)
 function fmt(ts: string | null | undefined) {
@@ -43,7 +35,7 @@ function AccessLog() {
 
   const load = async () => {
     try {
-      const data = await api.getAdminAccessLog() as unknown as { users?: AccessLogUser[]; matrix?: AccessLogMatrixRow[] };
+      const data = await api.getAdminAccessLog();
       setUsers(data.users || []);
       setMatrix(data.matrix || []);
     } catch (err) {

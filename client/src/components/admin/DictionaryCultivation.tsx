@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import type { DictionaryTerm } from '../../types';
+import type { DictionaryAlias, DictionaryTerm } from '../../types';
 
 // #327 辞書育成 — 自己成長辞書。2つの面をサブタブで（同一文脈維持=別メンテ画面にしない）:
 //   崩れ(別名): alias のトリアージ(承認/却下/手動追加)。フラット・検索・状態/回数。
@@ -24,18 +24,6 @@ const CATEGORIES = [
   { key: 'other', label: 'その他' },
 ];
 const catLabel = (c: string | null | undefined) => (CATEGORIES.find((x) => x.key === c) || ({} as { label?: string })).label || c;
-
-// server の alias 応答行 (types.ts の DictionaryAlias とはフィールド形が異なる):
-// alias_id / term / alias / source / status / count / reading を返す
-interface AliasRow {
-  alias_id: string;
-  term: string;
-  alias: string;
-  source: string;
-  status: string;
-  count?: number;
-  reading?: string | null;
-}
 
 // server の term 応答行 (types.ts の DictionaryTerm + description / alias_count)
 type TermRow = DictionaryTerm & { description?: string | null; alias_count?: number };
@@ -65,7 +53,7 @@ function DictionaryCultivation() {
 
 // --- 崩れ（別名）ビュー: alias トリアージ ---
 function AliasView() {
-  const [aliases, setAliases] = useState<AliasRow[]>([]);
+  const [aliases, setAliases] = useState<DictionaryAlias[]>([]);
   const [scope, setScope] = useState('auto');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -79,7 +67,7 @@ function AliasView() {
     setLoading(true); setError('');
     try {
       const data = await api.getDictionaryAliases(scope, search);
-      setAliases((data.aliases || []) as unknown as AliasRow[]);
+      setAliases(data.aliases || []);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setLoading(false); }
   };
   const approve = async (id: string) => {

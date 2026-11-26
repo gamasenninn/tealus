@@ -56,6 +56,16 @@ describe('GET /dictionary/aliases', () => {
     expect(res.body.aliases[0].term).toBe('保坂');
     expect(res.body.aliases[0].reading).toBe('ほさか');
   });
+  test('行の形: alias_id と count で返る (id・occurrence_count は無い)。画面の型 DictionaryAlias はこれに合わせている (改善ループ 124)', async () => {
+    await seed();
+    const res = await authGet('/api/admin/dictionary/aliases', admin.token);
+    const a = res.body.aliases[0];
+    expect(a).toEqual(expect.objectContaining({ alias_id: expect.any(String), term_id: expect.any(String), source: 'auto', status: 'pending', count: 1 }));
+    expect(typeof a.category).toBe('string');
+    expect(typeof a.updated_at).toBe('string');
+    expect(a).not.toHaveProperty('id');
+    expect(a).not.toHaveProperty('occurrence_count');
+  });
   test('scope=all は organon も含む', async () => {
     await seed();
     const res = await authGet('/api/admin/dictionary/aliases?scope=all', admin.token);
