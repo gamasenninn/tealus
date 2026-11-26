@@ -27,6 +27,9 @@ const NO_ROOM = '__none__';
 
 interface Group { key: string; name: string; tasks: Task[] }
 
+/** 作った日 (月/日)。番号は会社全体の通し番号なので、いつのものかは横に添える (docs/16 §8-5、11-26 利用者) */
+const madeOn = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
+
 /** 本体が返した順 (部屋名 → 部屋なしは最後 → 区分 → 並び) のまま、部屋ごとに束ねる */
 function groupByRoom(tasks: Task[]): Group[] {
   const groups: Group[] = [];
@@ -143,6 +146,7 @@ function TaskPage() {
                     <div className="task-body">
                       <div className="task-title">
                         <span className="task-no">{t.number}</span>
+                        <span className="task-date">{madeOn(t.created_at)}</span>
                         {t.title}
                         {t.status === 'held' && <span className="task-held">保留</span>}
                       </div>

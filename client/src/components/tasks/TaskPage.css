@@ -30,6 +30,7 @@
 .task-title { font-size: 15px; color: #222; word-break: break-word; }
 .task-item.done .task-title { color: #999; text-decoration: line-through; }
 .task-no { display: inline-block; min-width: 1.6em; margin-right: 6px; padding: 0 4px; border-radius: 4px; background: #eef1f3; color: #555; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.task-date { margin-right: 6px; color: #999; font-size: 11px; font-variant-numeric: tabular-nums; }
 .task-held { margin-left: 6px; font-size: 11px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }
 .task-note { font-size: 12px; color: #777; margin-top: 2px; }
 .task-source { background: none; border: none; color: var(--primary); font-size: 12px; cursor: pointer; padding: 0 0 0 6px; }
@@ -60,6 +61,7 @@
   .task-check { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; border: 1px solid #000; }
   .task-title { font-size: 13px; color: #000; }
   .task-no { background: none; border: 1px solid #999; color: #000; font-size: 10px; }
+  .task-date { color: #444; font-size: 9px; }
   .task-note { color: #444; font-size: 10px; }
   .task-ai-done { display: none; }
 }

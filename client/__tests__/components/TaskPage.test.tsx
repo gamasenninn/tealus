@@ -50,11 +50,18 @@ describe('TaskPage', () => {
     expect(dev.getByText('よければ一言')).toBeTruthy();
   });
 
-  it('★ 各行に番号 (人ごとの通し番号。並びの位置ではない)', async () => {
+  it('★ 各行に番号 (会社全体の通し番号。並びの位置ではない)', async () => {
     renderPage();
     await screen.findByText('ビルドしてよいか');
     const nos = Array.from(document.querySelectorAll('.task-no')).map((e) => e.textContent);
     expect(nos).toEqual(['1', '5', '3', '12']);
+  });
+
+  it('★ 番号の横に作った日 (月/日)。番号に日付を入れない代わり (docs/16 §8-5)', async () => {
+    api.listTasks.mockResolvedValue({ tasks: [{ ...TASKS[0], created_at: new Date(2026, 10, 3, 9, 0).toISOString() }] });
+    renderPage();
+    await screen.findByText('ビルドしてよいか');
+    expect(document.querySelector('.task-date')?.textContent).toBe('11/3');
   });
 
   it('□ を押すと済みにする', async () => {

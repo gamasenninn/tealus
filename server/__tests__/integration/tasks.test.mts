@@ -116,16 +116,28 @@ describe('タスク一覧 (docs/16)', () => {
       expect((await as(me).get(`/api/tasks?room_id=${roomMine}`)).body.tasks.map((t: { title: string }) => t.title)).toEqual(['部屋の']);
     });
 
-    it('★ 番号: 人ごとに 1・2・3…。済みにしても変わらない (番号で指示できるように、11-26 利用者)', async () => {
+    it('★ 番号: 会社全体の通し番号。人が違っても重ならない。済みにしても変わらない (番号は行為の ID、11-26 利用者)', async () => {
       const a = (await as(me).post('/api/tasks', { title: 'a' })).body.task;
-      const b = (await as(me).post('/api/tasks', { title: 'b' })).body.task;
       const o = (await as(other).post('/api/tasks', { title: '別の人の' })).body.task;
-      expect([a.number, b.number, o.number]).toEqual([1, 2, 1]);
+      const b = (await as(me).post('/api/tasks', { title: 'b' })).body.task;
+      expect(o.number).toBe(a.number + 1);
+      expect(b.number).toBe(a.number + 2);
       await as(me).patch(`/api/tasks/${a.id}`, { status: 'done' });
-      const c = (await as(me).post('/api/tasks', { title: 'c' })).body.task;
-      expect(c.number).toBe(3);
       const list = (await as(me).get('/api/tasks?status=all')).body.tasks;
-      expect(list.map((t: { title: string; number: number }) => [t.title, t.number])).toEqual(expect.arrayContaining([['a', 1], ['b', 2], ['c', 3]]));
+      expect(list.map((t: { title: string; number: number }) => [t.title, t.number])).toEqual(expect.arrayContaining([['a', a.number], ['b', b.number]]));
+    });
+
+    it('★ 消した番号は使い回さない (一番大きい番号を消しても、次は続きから)', async () => {
+      const a = (await as(me).post('/api/tasks', { title: 'a' })).body.task;
+      await as(me).del(`/api/tasks/${a.id}`);
+      const b = (await as(me).post('/api/tasks', { title: 'b' })).body.task;
+      expect(b.number).toBe(a.number + 1);
+    });
+
+    it('同時に足しても番号は重ならない', async () => {
+      const rs = await Promise.all(Array.from({ length: 8 }, (_, i) => as(i % 2 ? me : other).post('/api/tasks', { title: `p${i}` })));
+      const nums = rs.map((r) => r.body.task.number);
+      expect(new Set(nums).size).toBe(8);
     });
 
     it('番号は直せない (本人の口でも黙って無視しない: 400)', async () => {
@@ -152,9 +164,9 @@ describe('タスク一覧 (docs/16)', () => {
     });
 
     it('AI が足したものも同じ番号の並びに入る', async () => {
-      await as(me).post('/api/tasks', { title: '手で' });
+      const h = (await as(me).post('/api/tasks', { title: '手で' })).body.task;
       const t = (await asBot(me.user.id).post('/api/bot/tasks', { title: 'AI が' })).body.task;
-      expect(t.number).toBe(2);
+      expect(t.number).toBe(h.number + 1);
     });
 
     it('頼んだ人の一覧に入る (足したのは AI)。頼んだ人の部屋・投稿だけ付けられる', async () => {

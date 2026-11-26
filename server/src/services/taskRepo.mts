@@ -14,7 +14,7 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export interface TaskRow {
   id: string;
   owner_id: string;
-  /** 人ごとの通し番号 (048)。済みにしても変わらない。番号で指示するため */
+  /** 会社全体の通し番号 (049)。タスクの ID。済みにしても・持ち主が変わっても変わらない */
   number: number;
   room_id: string | null;
   room_name: string | null;
@@ -102,19 +102,11 @@ export async function createTask(ownerId: string, createdBy: string, input: Reco
   const t = input as unknown as NewTask;
   await checkScope(ownerId, t.room_id, t.source_message_ids);
   const params = [ownerId, createdBy, t.title.trim(), t.note ?? null, t.section ?? 'do', t.room_id ?? null, [...new Set(t.source_message_ids ?? [])], t.sort_order ?? 0];
-  // ★ 番号は「その人の最大 + 1」(048)。同時に足して重なったら一意の索引が断るので、1 回だけ取り直す
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO tasks (owner_id, created_by, title, note, section, room_id, source_message_ids, sort_order, number)
-         SELECT $1, $2, $3, $4, $5, $6, $7::uuid[], $8, COALESCE(MAX(number), 0) + 1 FROM tasks WHERE owner_id = $1
-         RETURNING id`, params);
-      return (await getTask(rows[0].id, ownerId))!;
-    } catch (err) {
-      if (attempt === 0 && (err as { code?: string }).code === '23505') continue;
-      throw err;
-    }
-  }
+  // ★ 番号は列の既定 (tasks_number_seq、049) が振る。会社全体の通し番号で、消した番号は使い回さない
+  const { rows } = await pool.query<{ id: string }>(
+    `INSERT INTO tasks (owner_id, created_by, title, note, section, room_id, source_message_ids, sort_order)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8) RETURNING id`, params);
+  return (await getTask(rows[0].id, ownerId))!;
 }
 
 const EDITABLE = ['title', 'note', 'section', 'status', 'room_id', 'source_message_ids', 'sort_order', 'ai_suggests_done'] as const;
