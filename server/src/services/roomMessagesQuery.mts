@@ -32,7 +32,7 @@ export function buildRoomMessagesQuery({ roomId, around, after, before, limit }:
     return {
       query: `${SELECT}
           AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1) - INTERVAL '1 second'
-        ORDER BY m.created_at ASC
+        ORDER BY m.created_at ASC, m.id ASC
         LIMIT $3`,
       params: [roomId, around, limit],
     };
@@ -49,18 +49,19 @@ export function buildRoomMessagesQuery({ roomId, around, after, before, limit }:
     };
   }
   if (before) {
-    // 上へ読み足す: 基準より古いものを新しい順に
+    // 上へ読み足す: 基準より古いものを新しい順に。★ #664 after と同じく (時刻, id) の組で比べて並べる
+    //   (時刻だけで切ると、同じ時刻の投稿がページの境目で落ちていた)
     return {
       query: `${SELECT}
-          AND m.created_at < (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1)
-        ORDER BY m.created_at DESC
+          AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = $2 AND room_id = $1)
+        ORDER BY m.created_at DESC, m.id DESC
         LIMIT $3`,
       params: [roomId, before, limit],
     };
   }
   return {
     query: `${SELECT}
-        ORDER BY m.created_at DESC
+        ORDER BY m.created_at DESC, m.id DESC
         LIMIT $2`,
     params: [roomId, limit],
   };

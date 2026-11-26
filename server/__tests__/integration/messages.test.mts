@@ -176,6 +176,29 @@ describe('Messages API', () => {
       expect(res.body.messages.map((m: { id: string }) => m.id)).toEqual(ordered.slice(1));
     });
 
+    it('#664 最新と before: 同じ時刻の投稿も、境目で取りこぼさず重ならない (after と同じ (時刻, id) の組で並べる)', async () => {
+      const latest = await request(app)
+        .get(`/api/rooms/${roomId}/messages?limit=3`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      const [m25, m24, m23] = latest.body.messages;
+      await pool.query('UPDATE messages SET created_at = $1 WHERE id = ANY($2)', [m23.created_at, [m23.id, m24.id, m25.id]]);
+      const ordered = [m23.id, m24.id, m25.id].sort();
+
+      // 最新の 2 件は (時刻, id) の新しい順
+      const page1 = await request(app)
+        .get(`/api/rooms/${roomId}/messages?limit=2`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(page1.body.messages.map((m: { id: string }) => m.id)).toEqual([ordered[2], ordered[1]]);
+
+      // その末尾より古いもの: 同じ時刻の残り 1 件が先頭に来る
+      const page2 = await request(app)
+        .get(`/api/rooms/${roomId}/messages?before=${ordered[1]}&limit=2`)
+        .set('Authorization', `Bearer ${user1.token}`);
+      expect(page2.status).toBe(200);
+      expect(page2.body.messages[0].id).toBe(ordered[0]);
+      expect(page2.body.messages[1].content).toBe('メッセージ22');
+    });
+
     it('should support custom limit', async () => {
       const res = await request(app)
         .get(`/api/rooms/${roomId}/messages?limit=5`)

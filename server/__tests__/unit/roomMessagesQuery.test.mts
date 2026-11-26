@@ -18,11 +18,12 @@ const HEAD = `SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS
           WHERE rrc.room_id = m.room_id AND rrc.last_read_at >= m.created_at AND rrc.user_id != m.sender_id
         ) rc ON true
         WHERE m.room_id = $1`;
+// ★ #664 で around・before・基準なしの並びに id を足した (after と同じ (時刻, id) の組)。それ以外はループ 128 の前と同じ
 const BEFORE_128 = {
-  around: `${HEAD} AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1) - INTERVAL '1 second' ORDER BY m.created_at ASC LIMIT $3`,
+  around: `${HEAD} AND m.created_at >= (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1) - INTERVAL '1 second' ORDER BY m.created_at ASC, m.id ASC LIMIT $3`,
   after: `${HEAD} AND (m.created_at, m.id) > (SELECT created_at, id FROM messages WHERE id = $2 AND room_id = $1) ORDER BY m.created_at ASC, m.id ASC LIMIT $3`,
-  before: `${HEAD} AND m.created_at < (SELECT created_at FROM messages WHERE id = $2 AND room_id = $1) ORDER BY m.created_at DESC LIMIT $3`,
-  latest: `${HEAD} ORDER BY m.created_at DESC LIMIT $2`,
+  before: `${HEAD} AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = $2 AND room_id = $1) ORDER BY m.created_at DESC, m.id DESC LIMIT $3`,
+  latest: `${HEAD} ORDER BY m.created_at DESC, m.id DESC LIMIT $2`,
 };
 
 describe('parseRoomMessagesLimit', () => {
