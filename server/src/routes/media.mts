@@ -13,23 +13,11 @@ import type { AttachableMessage } from '../services/messageAttachments.mts';
 import { announcePost } from '../services/postEffects.mts';
 import { isUuid, badIdMessage } from '../utils/uuid.mts';
 import { webhookMessage } from '../services/webhookMessage.mts';
-import type { MediaRow } from '../types.mts';
+import type { MediaRow, MessageRow } from '../types.mts';
 
 export const router = express.Router({ mergeParams: true });
 
 /** messages 行 (= docs/02_DB設計.md) */
-interface MessageRow {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  content: string | null;
-  type: string;
-  reply_to: string | null;
-  forwarded_from: string | null;
-  is_deleted: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
 
 /**
  * POST /api/rooms/:id/media

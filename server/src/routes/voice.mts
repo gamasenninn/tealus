@@ -17,7 +17,7 @@ import { checkMessageRefs } from '../services/messageRefs.mts';
 import fs from 'node:fs';
 import { safeExt } from '../utils/safeExt.mts';
 import { webhookMessage } from '../services/webhookMessage.mts';
-import type { MediaRow } from '../types.mts';
+import type { MediaRow, MessageRow } from '../types.mts';
 
 export const router = express.Router({ mergeParams: true });
 
@@ -38,15 +38,6 @@ const voiceUpload = multer({
 });
 
 /** messages INSERT RETURNING * のうちハンドラが参照する列 */
-interface MessageRow {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  type: string;
-  content: string | null;
-  reply_to: string | null;
-  created_at: Date;
-}
 
 /**
  * POST /api/rooms/:id/voice

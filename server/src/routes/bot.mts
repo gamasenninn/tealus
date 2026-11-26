@@ -32,7 +32,7 @@ import { advanceReadCursor } from '../services/readCounts.mts';
 import { buildSnippet, escapeLike } from '../services/searchSnippet.mts';
 import { buildBotSearchQuery } from '../services/botSearchQuery.mts';
 import { buildBotMessagesQuery, latestTranscriptionsQuery, parseBotMessagesLimit, transcriptionColumns } from '../services/botMessagesQuery.mts';
-import type { MediaRow } from '../types.mts';
+import type { MediaRow, MessageRow } from '../types.mts';
 
 // app.js (CJS) は routes 側を require するため、ここから top-level import すると循環参照になる。
 // 元コード同様に handler 実行時の lazy require で io を取得する (app.js の TS 化時に更新)。
@@ -49,20 +49,6 @@ router.use(readRequester);   // ★ #564 X-Tealus-Requester (AI の依頼した�
 // ============================================
 
 /** messages テーブルの行 (SELECT * / RETURNING *) */
-interface MessageRow {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  content: string | null;
-  type: string;
-  reply_to: string | null;
-  is_deleted: boolean;
-  created_at: Date;
-  updated_at: Date;
-  is_edited: boolean;
-  is_published: boolean;
-  forwarded_from: string | null;
-}
 
 /** GET /messages の行 (m.* + sender_display_name)。reactions / transcription は後段で付与 */
 interface BotMessageListRow extends MessageRow {

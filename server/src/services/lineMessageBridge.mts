@@ -20,7 +20,7 @@ import { pool } from '../db/pool.mts';
 import { logger } from '../utils/logger.mts';
 import { mediaPushBody } from './machinePush.mts';
 import { announcePost, type Off } from './postEffects.mts';
-import type { AuthUser, MediaRow } from '../types.mts';
+import type { AuthUser, MediaRow, MessageRow } from '../types.mts';
 import type { SavedLineContent } from './lineBridge.mts';
 import { transcribeVoiceMessage } from './transcription.mts';
 import { generateThumbnail } from './thumbnail.mts';
@@ -39,17 +39,6 @@ const LINE_NO_WEBHOOK: Off = { kind: 'off', reason: '意図 (docs/07 §3.1、doc
 const LINE_MEDIA_NO_PREVIEW: Off = { kind: 'off', reason: '不明 (docs/07 §3.2)。プレビューが付くのは #1 と #13 だけ' };
 
 /** messages テーブル row (= INSERT ... RETURNING *) */
-export interface MessageRow {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  content: string | null;
-  type: string;
-  reply_to: string | null;
-  is_deleted: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
 
 /** media 系 post helper の共通 params */
 interface PostMediaParams {

@@ -43,3 +43,23 @@ export interface MediaRow {
   thumbnail_path: string | null;
   created_at: Date;
 }
+
+/**
+ * messages の行 (SELECT * / RETURNING *)。改善ループ 129 で 5 か所の写しをここに 1 つにした。
+ * ★ 列の組が違う行 (部屋の履歴の AttachableMessage・文字起こしの JOIN の行など) は別の型のまま
+ * ★ type・is_deleted などは DB では NULL を許すが、既定の値があり NULL を書く道が無いので NULL なしで書く (写しの書き方のまま)
+ */
+export interface MessageRow {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  content: string | null;
+  type: string;
+  reply_to: string | null;
+  is_deleted: boolean;
+  created_at: Date;
+  updated_at: Date;
+  is_edited: boolean;
+  is_published: boolean;
+  forwarded_from: string | null;
+}

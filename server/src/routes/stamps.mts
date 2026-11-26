@@ -14,6 +14,7 @@ import { MEDIA_ROOT } from '../middleware/upload.mts';
 import { generateStampPack, saveStampFiles, checkDailyLimit } from '../services/stamp/index.mts';
 import { formatLocalTime } from '../lib/localTime.mts';
 import { errorText } from '../utils/logFormat.mts';
+import type { MessageRow } from '../types.mts';
 
 export const router = express.Router();
 router.use(authenticate);
@@ -41,17 +42,6 @@ interface StampRow {
 }
 
 /** messages 行 (= system message insert の RETURNING *、broadcast 用) */
-interface MessageRow {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  content: string | null;
-  type: string;
-  reply_to: string | null;
-  is_deleted: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
 
 /**
  * POST /api/stamps/generate
