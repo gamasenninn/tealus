@@ -13,6 +13,13 @@ export interface ContextMenuItem {
   onClick: () => void;
 }
 
+/** 開いているメニューの位置と中身 (管理画面の 3 つが使う。改善ループ 132 で写しをここに) */
+export interface ContextMenuState {
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+}
+
 interface ContextMenuProps {
   items: ContextMenuItem[];
   position: { x: number; y: number };

@@ -13,14 +13,12 @@ export interface ContextMenuItem {
   danger?: boolean;
 }
 
-// Room (types.ts) に allow_member_transcription_edit が無いため local 補完
-type RoomWithTranscriptionEdit = Room & { allow_member_transcription_edit?: boolean };
 
 export interface BuildContextMenuItemsParams {
   message: Message;
   isOwn: boolean;
   roomId: string;
-  currentRoom: RoomWithTranscriptionEdit | null;
+  currentRoom: Room | null;
   onEdit: () => void;
   onShowEditHistory: () => void;
   onReply: () => void;

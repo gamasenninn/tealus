@@ -10,23 +10,11 @@ import DictionaryCultivation from './DictionaryCultivation';
 import DeletedMessages from './DeletedMessages';
 import CourierStatus from './CourierStatus';
 import { roleLabel } from '../../utils/permissions';
-import ContextMenu from '../chat/ContextMenu';
+import ContextMenu, { type ContextMenuItem, type ContextMenuState } from '../chat/ContextMenu';
 import { ArrowLeft, Pencil, Ban, CheckCircle } from 'lucide-react';
 import type { User } from '../../types';
 import './AdminDashboard.css';
 
-interface ContextMenuItem {
-  icon?: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  items: ContextMenuItem[];
-}
 
 // UserForm が組み立てる送信 payload (作成時 login_id/password 必須、編集時差分のみ)
 type AdminUserPayload = Partial<User> & { password?: string };

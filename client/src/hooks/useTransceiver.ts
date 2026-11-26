@@ -9,7 +9,6 @@ import type {
 import { useAuthStore } from '../stores/authStore';
 import { useRoomStore } from '../stores/roomStore';
 import { useCapabilityStore } from '../stores/capabilityStore';
-import type { RoomMember } from '../types';
 import { getSharedAudioContext, unlockAudio } from '../services/audioContext';
 import { waitForSignal } from '../utils/transceiverSignal';
 
@@ -50,8 +49,6 @@ interface PeerAudio {
   audioEl: HTMLAudioElement;
 }
 
-// RoomMember (types.ts) に user_id が無いため local 補完 (server は members に user_id を含めて返す)
-type MemberWithUserId = RoomMember & { user_id?: string };
 
 export interface UseTransceiverResult {
   state: TransceiverState;
@@ -106,7 +103,7 @@ export function useTransceiver(roomId: string): UseTransceiverResult {
 
   // peerId → 表示名に変換
   const getPeerName = useCallback((peerId: string) => {
-    const member = (members as MemberWithUserId[]).find(m => m.user_id === peerId);
+    const member = members.find(m => m.user_id === peerId);
     return member?.display_name || peerId.slice(0, 8);
   }, [members]);
 

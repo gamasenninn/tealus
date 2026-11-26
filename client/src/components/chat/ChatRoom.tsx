@@ -33,12 +33,9 @@ import AgentCancelButton from './AgentCancelButton';
 import { isCancellableStatus } from '../../utils/agentStatus';
 import { roomSearchAction } from '../../utils/searchNav';
 import { useCapabilityStore } from '../../stores/capabilityStore';
-import type { RoomMember } from '../../types';
 import './ChatRoom.css';
 import { useRoomRemovedRedirect } from '../../hooks/useRoomRemovedRedirect';
 
-// server の room members 応答は user_id を持つ (types.ts RoomMember には未定義)
-type MemberWithUserId = RoomMember & { user_id: string };
 
 /** socket 'call:status' payload */
 interface CallStatusPayload {
@@ -138,7 +135,7 @@ function ChatRoom() {
   const getRoomTitle = () => {
     if (!currentRoom) return '';
     if (currentRoom.type === 'group') return currentRoom.name;
-    const partner = (members as MemberWithUserId[]).find((m) => m.user_id !== user!.id);
+    const partner = members.find((m) => m.user_id !== user!.id);
     return partner?.display_name || 'トーク';
   };
 
@@ -153,7 +150,7 @@ function ChatRoom() {
 
   const getPartnerOnline = () => {
     if (!currentRoom || currentRoom.type !== 'direct') return false;
-    const partner = (members as MemberWithUserId[]).find(m => m.user_id !== user!.id);
+    const partner = members.find(m => m.user_id !== user!.id);
     return partner ? onlineUsers.has(partner.user_id) : false;
   };
 

@@ -1,25 +1,13 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useConfirm } from '../../stores/confirmStore';
-import ContextMenu from '../chat/ContextMenu';
+import ContextMenu, { type ContextMenuItem, type ContextMenuState } from '../chat/ContextMenu';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { PortalLink } from '../../types';
 
 // server 応答は is_active を含む (types.ts の PortalLink には未定義)
 type PortalLinkRow = PortalLink & { is_active?: boolean };
 
-interface ContextMenuItem {
-  icon?: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  items: ContextMenuItem[];
-}
 
 function PortalManager() {
   const confirm = useConfirm();

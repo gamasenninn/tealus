@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useConfirm } from '../../stores/confirmStore';
-import ContextMenu from '../chat/ContextMenu';
+import ContextMenu, { type ContextMenuItem, type ContextMenuState } from '../chat/ContextMenu';
 import { Pencil, Bell, Ban, CheckCircle, Trash2 } from 'lucide-react';
 import type { Room, Webhook } from '../../types';
 
@@ -18,18 +18,6 @@ const EVENT_OPTIONS = [
 // server 応答は room 名を JOIN 済みで返す (types.ts の Webhook には未定義)
 type WebhookRow = Webhook & { room_name?: string | null };
 
-interface ContextMenuItem {
-  icon?: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  items: ContextMenuItem[];
-}
 
 function WebhookManager() {
   const confirm = useConfirm();
