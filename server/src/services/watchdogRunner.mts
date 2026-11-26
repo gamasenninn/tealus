@@ -151,11 +151,13 @@ async function lastNoticeFromRoom(w: Pick<Watch, 'id'>, notify: Notify): Promise
   return { kind: alert ? 'alert' : 'recover', at: row.created_at, degraded: alert && row.content.split('\n')[0].endsWith(DEGRADED_PHRASE) };
 }
 
-async function lastPostAtFromRoom(w: RoomQuietWatch): Promise<Date | null> {
+export async function lastPostAtFromRoom(w: RoomQuietWatch): Promise<Date | null> {   // export はテスト用 (integration/watchdogRoomQuiet)
+  // ★ content_contains は position で見る (LIKE の % _ を逃がさなくてよい)
   const { rows } = await pool.query<{ at: Date | null }>(
     `SELECT MAX(created_at) AS at FROM messages
-      WHERE room_id = $1 AND sender_id = ANY($2::uuid[]) AND is_deleted = false`,
-    [w.room_id, w.from_user_ids],
+      WHERE room_id = $1 AND sender_id = ANY($2::uuid[]) AND is_deleted = false
+        AND ($3::text IS NULL OR position($3::text in COALESCE(content, '')) > 0)`,
+    [w.room_id, w.from_user_ids, w.content_contains ?? null],
   );
   return rows[0]?.at ?? null;
 }

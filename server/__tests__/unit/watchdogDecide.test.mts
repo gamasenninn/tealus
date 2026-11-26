@@ -110,6 +110,45 @@ describe('room_quiet', () => {
   });
 });
 
+describe('room_quiet の続けて見る形 (hours・days を省く) と語の絞り (2026-11-26 BD 毎晩の見張り)', () => {
+  // 毎晩 1 回の報告が 26 時間出なければ ⚠。稼働時間で日ごとに切ると 24 時間を超えて数えられない
+  const bd = {
+    id: 'bd-nightly', name: 'BD 毎晩の焼き', kind: 'room_quiet', room_id: ROOM, room: '業務メモ',
+    from_user_ids: [BOT], max_quiet_minutes: 26 * 60, content_contains: 'BD 毎晩', enabled: true,
+  };
+  const w = one(bd) as RoomQuietWatch;
+
+  it('読める: 稼働時間なし = 続けて見る、語の絞りを持つ', () => {
+    expect(w.continuous).toBe(true);
+    expect(w.content_contains).toBe('BD 毎晩');
+  });
+
+  it('★ 日をまたいで数える: 昨夜 21:04 の報告から 26 時間以内は ok、超えたら down', () => {
+    expect(judgeRoomQuiet(w, jst('2026-11-25T21:04:00'), jst('2026-11-26T23:00:00')).state).toBe('ok');
+    const o = judgeRoomQuiet(w, jst('2026-11-25T21:04:00'), jst('2026-11-26T23:05:00'));
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('1560 分');
+    expect(o.detail).toContain('「BD 毎晩」');
+  });
+
+  it('★ 一度も無ければ down (見ていないものを正常と言わない)', () => {
+    const o = judgeRoomQuiet(w, null, jst('2026-11-26T12:00:00'));
+    expect(o.state).toBe('down');
+    expect(o.detail).toContain('なし');
+  });
+
+  it('hours と days は両方書くか両方省く (片方だけは書き間違いとして warn)', () => {
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...bd, hours: '09:00-17:00' }] }).warnings).toHaveLength(1);
+    expect(loadWatchdogsFrom({ notify, watches: [{ ...bd, content_contains: '  ' }] }).warnings).toHaveLength(1);
+  });
+
+  it('今までの形 (稼働時間あり) は続けて見ない・語の絞りなし', () => {
+    const c = one(callLog) as RoomQuietWatch;
+    expect(c.continuous).toBe(false);
+    expect(c.content_contains).toBeUndefined();
+  });
+});
+
 describe('heartbeat', () => {
   const w = one(radio) as HeartbeatWatch;
   const now = jst('2026-10-13T12:00:00');

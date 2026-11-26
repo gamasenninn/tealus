@@ -58,6 +58,15 @@ function formatDuration(minutes: number): string {
  * ★★ 稼働時間に入ったら**稼働開始の時刻から**数える。前夜の最後の投稿から数えると毎朝鳴る (§3.1)。
  */
 export function judgeRoomQuiet(w: RoomQuietWatch, lastPostAt: Date | null, now: Date): Observation {
+  const what = `${w.room || '部屋'} に${w.content_contains ? `「${w.content_contains}」を含む` : ''}投稿`;
+  if (w.continuous) {
+    // ★ 続けて見る (2026-11-26): 最後の投稿から数える。一度も無ければ down (見ていないものを正常と言わない)
+    if (!lastPostAt) return { state: 'down', detail: `${what}が一度もありません (最後の投稿: なし)` };
+    const quietC = Math.floor((now.getTime() - lastPostAt.getTime()) / 60_000);
+    const lastC = formatJst(lastPostAt);
+    if (quietC > w.max_quiet_minutes) return { state: 'down', detail: `${what}が ${w.max_quiet_minutes} 分を超えてありません (最後の投稿: ${lastC})` };
+    return { state: 'ok', detail: `${what}が来ています (最後の投稿: ${lastC})` };
+  }
   const { minute, day, midnight } = jstClock(now);
   if (!w.days.includes(day) || minute < w.start_minute || minute >= w.end_minute) {
     return { state: 'skip', detail: '稼働時間の外' };

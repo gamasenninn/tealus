@@ -28,6 +28,20 @@
       "enabled": false
     },
     {
+      "id": "nightly-report",
+      "name": "毎晩の報告 (続けて見る・語で絞る例)",
+      "kind": "room_quiet",
+      "room_id": "00000000-0000-0000-0000-000000000000",
+      "room": "業務メモ",
+      "from_user_ids": [
+        "00000000-0000-0000-0000-000000000000"
+      ],
+      "max_quiet_minutes": 1560,
+      "content_contains": "毎晩",
+      "_comment": "hours・days を両方省くと続けて見る (最後の投稿から数え、日で切らない)。content_contains の語を含む投稿だけを数える",
+      "enabled": false
+    },
+    {
       "id": "radio-sender",
       "name": "無線の送り込み (tealus-cli)",
       "kind": "heartbeat",

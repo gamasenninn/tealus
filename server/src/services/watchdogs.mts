@@ -47,6 +47,13 @@ export interface RoomQuietWatch extends WatchBase {
   end_minute: number;
   /** 稼働する曜日 (0=日 … 6=土) */
   days: number[];
+  /**
+   * ★ hours・days を省いた行 = 続けて見る (2026-11-26)。最後の投稿から数え、日で切らない。
+   *   毎晩 1 回の報告のように「24 時間を超えて」見たいもの用 (稼働時間で切ると毎日 0 時に数え直してしまう)
+   */
+  continuous: boolean;
+  /** この語を含む投稿だけを数える (同じ送り手が別の話も投稿する部屋用、2026-11-26) */
+  content_contains?: string;
 }
 
 /**
@@ -147,15 +154,23 @@ function validate(raw: unknown, i: number): Watch | string {
       if (typeof r.max_quiet_minutes !== 'number' || !(r.max_quiet_minutes > 0)) {
         return `${label}: max_quiet_minutes が正の数ではありません`;
       }
-      const hours = parseHours(r.hours);
-      if (!hours) return `${label}: hours は "09:00-17:00" の形で書いてください`;
-      const days = parseDays(r.days);
-      if (!days) return `${label}: days は "mon,tue,thu" の形で書いてください`;
-      return {
-        ...base, kind: 'room_quiet', room_id: r.room_id, room: isNonEmptyString(r.room) ? r.room : '',
-        from_user_ids: r.from_user_ids as string[], max_quiet_minutes: r.max_quiet_minutes,
-        start_minute: hours[0], end_minute: hours[1], days,
+      if (r.content_contains !== undefined && !isNonEmptyString(r.content_contains)) {
+        return `${label}: content_contains は空でない文字で書くか、省いてください`;
+      }
+      const content = r.content_contains !== undefined ? { content_contains: (r.content_contains as string).trim() } : {};
+      const common = {
+        ...base, kind: 'room_quiet' as const, room_id: r.room_id, room: isNonEmptyString(r.room) ? r.room : '',
+        from_user_ids: r.from_user_ids as string[], max_quiet_minutes: r.max_quiet_minutes, ...content,
       };
+      // ★ hours・days を両方省けば続けて見る。片方だけは書き忘れとして断る (黙って「いつも」にしない)
+      if (r.hours === undefined && r.days === undefined) {
+        return { ...common, start_minute: 0, end_minute: 24 * 60, days: [0, 1, 2, 3, 4, 5, 6], continuous: true };
+      }
+      const hours = parseHours(r.hours);
+      if (!hours) return `${label}: hours は "09:00-17:00" の形で書いてください (続けて見るなら hours と days を両方省く)`;
+      const days = parseDays(r.days);
+      if (!days) return `${label}: days は "mon,tue,thu" の形で書いてください (続けて見るなら hours と days を両方省く)`;
+      return { ...common, start_minute: hours[0], end_minute: hours[1], days, continuous: false };
     }
 
     case 'heartbeat': {
