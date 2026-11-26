@@ -7,9 +7,6 @@
  * ★ 送り先 URL は鍵のようなもの (知っていれば送れる) なので丸ごとは書かない。ホスト名と登録 id だけ。
  * ★ 403 の登録はまだ無効にしない (理由を見てから決める)。
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 const mockQuery = jest.fn();
 jest.mock('../../src/db/pool.mts', () => ({ pool: { query: (...a: unknown[]) => mockQuery(...a) } }));
 const mockSend = jest.fn();

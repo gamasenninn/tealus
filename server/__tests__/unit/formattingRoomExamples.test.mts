@@ -7,7 +7,6 @@ jest.mock('openai', () => ({ __esModule: true, default: jest.fn().mockImplementa
 const query = jest.fn();
 jest.mock('../../src/db/pool.mts', () => ({ pool: { query: (...a: unknown[]) => query(...a) } }));
 jest.mock('../../src/services/webhook.mts', () => ({ fireWebhooks: jest.fn() }));
-jest.mock('../../src/utils/logger.mts', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 
 import { formatTranscription } from '../../src/services/formatting.mts';
 import { clearRoomExamplesCache } from '../../src/services/roomExamples.mts';

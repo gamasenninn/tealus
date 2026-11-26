@@ -8,9 +8,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-} }));
 
 import {
   fetchMemberProfile,

@@ -7,9 +7,6 @@
  *
  * DB は触らない (repo / pool / overlay は mock)。★ feedback_test_db_guard 適用。
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 jest.mock('../../src/db/pool.mts', () => ({ pool: { query: jest.fn(async () => ({ rows: [{ n: 0 }] })) } }));
 jest.mock('../../src/services/transcriptionConfig.mts', () => ({ refreshVocabFromTable: jest.fn(async () => 0) }));
 jest.mock('../../src/services/dictionaryRepo.mts', () => ({

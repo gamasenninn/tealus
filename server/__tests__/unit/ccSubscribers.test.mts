@@ -13,9 +13,6 @@
  */
 // logger をモックしないと、テストの購読者が **本番の agent-server ログ** に書き込む
 // (実際に `rooms=1` / `project=organon` 等のテストデータが本番ログに混入した)
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn(),
-} }));
 
 import {
   addSubscriber, removeSubscriber, publish, subscriberCount,

@@ -6,9 +6,6 @@
  * ★★ テストでは購読が誰にも無いので、この集計だけが裏に残り、次のテストの TRUNCATE と
  *   デッドロックしていた (音声アップロードに通知を足した e6c65c2 以降、transcription.test が時々落ちた)。
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 const mockQuery = jest.fn();
 jest.mock('../../src/db/pool.mts', () => ({ pool: { query: (...a: unknown[]) => mockQuery(...a) } }));
 const mockSend = jest.fn();

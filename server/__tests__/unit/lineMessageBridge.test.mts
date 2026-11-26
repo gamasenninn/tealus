@@ -18,12 +18,6 @@ jest.mock('../../src/db/pool.mts', () => ({ pool: {
 } }));
 
 // Mock logger
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  debug: jest.fn(),
-} }));
 
 // Mock sharp (= optional dependency、image metadata fallback test 用)
 jest.mock('sharp', () => {

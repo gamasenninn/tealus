@@ -7,9 +7,6 @@
 import http from 'http';
 import type { AddressInfo } from 'net';
 
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 jest.mock('../../src/db/pool.mts', () => ({ pool: { query: jest.fn() } }));
 
 import { isPublicAddress, createOgpFetcher, fetchOgp, OGP_MAX_BYTES } from '../../src/services/linkPreview.mts';

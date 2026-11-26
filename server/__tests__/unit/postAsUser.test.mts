@@ -39,9 +39,6 @@ jest.mock('../../src/services/linkPreview.mts', () => ({
   processLinkPreviews: (...a: unknown[]) => mockProcessLinkPreviews(...a),
 }));
 
-jest.mock('../../src/utils/logger.mts', () => ({
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
-}));
 
 import { postAsUser } from '../../src/services/postAsUser.mts';
 import { logger } from '../../src/utils/logger.mts';

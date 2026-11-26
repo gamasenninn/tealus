@@ -56,12 +56,6 @@ jest.mock('../../src/services/lineSignature.mts', () => ({
   verifyLineSignature: jest.fn(() => true),
 }));
 
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-} }));
 
 import { dispatchEvent } from '../../src/routes/line.mts';
 import type { LineSenderContext } from '../../src/services/lineMessageBridge.mts';

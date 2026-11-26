@@ -9,9 +9,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 jest.mock('../../scripts/sync_organon_dict.mts', () => ({ syncFromOrganon: jest.fn() }));
 jest.mock('../../src/services/transcriptionConfig.mts', () => ({ refreshVocabFromTable: jest.fn() }));
 

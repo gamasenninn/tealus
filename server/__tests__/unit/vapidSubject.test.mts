@@ -6,9 +6,6 @@
  *   ドメイン (.local / localhost) の連絡先を受け付けない。
  * ★★ 403 の理由をログに出すまで、だれも気づけなかった → 起動時に言う。
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 jest.mock('../../src/db/pool.mts', () => ({ pool: { query: jest.fn() } }));
 
 import { vapidSubjectProblem } from '../../src/services/push.mts';

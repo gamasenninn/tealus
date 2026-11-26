@@ -7,12 +7,6 @@
  * - flush 時は index 昇順ソート
  * - テストは自前インスタンス生成 (= module 状態ゼロ原則、docs/05)
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  debug: jest.fn(),
-} }));
 
 import { ImageSetBuffer, imageSetContent } from '../../src/services/lineImageSetBuffer.mts';
 import type { BufferedImage, ImageSetFlushContext } from '../../src/services/lineImageSetBuffer.mts';

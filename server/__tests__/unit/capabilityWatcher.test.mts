@@ -8,12 +8,6 @@
  * を検証する。
  */
 
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-} }));
 
 import { start, stop, getState, checkAndEmit } from '../../src/services/capabilityWatcher.mts';
 

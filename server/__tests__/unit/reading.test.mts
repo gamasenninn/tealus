@@ -1,12 +1,6 @@
 /**
  * #327 読み供給サービス。pykakasi は DI stub で差し替え（subprocess を回避）。
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-} }));
 
 import * as reading from '../../src/services/reading.mts';
 import { logger } from '../../src/utils/logger.mts';

@@ -38,4 +38,15 @@ describe('ログの隔離 — テストは本番のログファイルに書か�
     const mod = require('../../src/utils/logger.mts') as { LOG_TIMESTAMP_FORMAT?: string };
     expect(mod.LOG_TIMESTAMP_FORMAT).toBe('YYYY-MM-DD HH:mm:ss.SSS');
   });
+
+  test('★ テストのファイルごとに logger を差し替え直さない (全体の差し替えで足りる。改善ループ 131 で 21 本の写しを消した)', () => {
+    // 写しは verbose と LOG_TIMESTAMP_FORMAT を落とした「全体より狭い差し替え」だった。戻すと、そのファイルだけ形が違う
+    const fs = require('node:fs') as typeof import('node:fs');
+    const path = require('node:path') as typeof import('node:path');
+    const root = path.join(__dirname, '..');
+    const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(d, e.name)) : /\.test\.m?[jt]s$/.test(e.name) ? [path.join(d, e.name)] : []);
+    const offenders = walk(root).filter((f) => f !== __filename && /jest\.mock\(['"](\.\.\/)+src\/utils\/logger\.mts['"]/.test(fs.readFileSync(f, 'utf8')));
+    expect(offenders.map((f) => path.relative(root, f))).toEqual([]);
+  });
 });

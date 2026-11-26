@@ -13,12 +13,6 @@ import os from 'node:os';
 //   `[stt] gemini ok 0ms vocab=3` と `「حسن」`「每句一个」が残っていた。
 //   `[stt] gemini` の件数を後から数えて効果を見る (#424 の検証手順) ので、計測が汚れる。
 //   他の 5 テストで既に使われている形をここにも入れる。
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-} }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mod: any;

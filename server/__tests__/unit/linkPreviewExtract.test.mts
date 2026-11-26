@@ -4,9 +4,6 @@
  * 以前は「空白が来るまで」を全部 URL にしていた。本番の link_previews 402 件中 6 件で
  * `https://youtu.be/xxxx（限定公開）` `…）。` のように混ざり、`https://…` には取りに行って失敗していた。
  */
-jest.mock('../../src/utils/logger.mts', () => ({ logger: {
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-} }));
 
 import { extractUrls } from '../../src/services/linkPreview.mts';
 
