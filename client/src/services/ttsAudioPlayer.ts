@@ -50,6 +50,11 @@ export function stopCurrentTts(): void {
   useTtsStore.getState().setPlaying(false);
 }
 
+/** ★ #664 いま鳴っている読み上げがこの audio か (読み上げボタンが「自分の再タップなら止める」を決める)。写しを持たせない */
+export function isCurrentTts(audio: HTMLAudioElement | null): boolean {
+  return audio !== null && audio === currentAudio;
+}
+
 export interface PlayTtsOptions {
   onEnded?: () => void;
   onError?: (err?: unknown) => void;

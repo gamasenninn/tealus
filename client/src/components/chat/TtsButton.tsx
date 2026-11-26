@@ -4,17 +4,11 @@ import { api } from '../../services/api';
 import { notify } from '../../stores/confirmStore';
 import * as browserTts from '../../services/browserTts';
 import { getConfig } from '../../services/clientConfig';
-import { playTtsSrc, stopCurrentTts as stopTtsPlayback } from '../../services/ttsAudioPlayer';
+import { playTtsSrc, stopCurrentTts as stopTtsPlayback, isCurrentTts } from '../../services/ttsAudioPlayer';
 import { unlockAudio } from '../../services/audioContext';
 
-// 個人TTS再生のシングルトン（aivis-cloud 経路: 同時再生防止、最後に押したものが優先）
-let currentTtsAudio: HTMLAudioElement | null = null;
-function stopCurrentTts() {
-  if (currentTtsAudio) {
-    try { currentTtsAudio.pause(); } catch {}
-    currentTtsAudio = null;
-  }
-}
+// ★ #664 「いま鳴っている音」は ttsAudioPlayer の 1 つだけを見る (以前はここにも写しがあった)。
+//   同時再生は 1 つ・最後に押したものが優先、は playTtsSrc が前の再生を後片付けしてから鳴らすことで守られる
 
 interface TtsButtonProps {
   text: string;
@@ -64,17 +58,13 @@ function TtsButton({ text, roomId }: TtsButtonProps) {
 
     // 'aivis-cloud' (既存ロジック)
     // 同じボタン再タップ → トグル停止
-    if (audioRef.current && audioRef.current === currentTtsAudio && !audioRef.current.paused) {
+    if (audioRef.current && isCurrentTts(audioRef.current) && !audioRef.current.paused) {
       // ★ 読み上げの側で止める (2026-10-29 改善ループ 24 回目)。自前の stop は pause だけで、つないだ部品・blob URL・
-      //   停止ボタンが次の読み上げまで残った。後片付けで onEnded が呼ばれ、currentTtsAudio と audioRef も空になる
+      //   停止ボタンが次の読み上げまで残った。後片付けで onEnded が呼ばれ、audioRef も空になる
       stopTtsPlayback();
-      currentTtsAudio = null;
       audioRef.current = null;
       return;
     }
-
-    // 別の再生を停止
-    stopCurrentTts();
 
     busyRef.current = true;
     try {
@@ -84,16 +74,13 @@ function TtsButton({ text, roomId }: TtsButtonProps) {
       const audio = playTtsSrc(url, {
         onEnded: () => {
           URL.revokeObjectURL(url);
-          if (currentTtsAudio === audio) currentTtsAudio = null;
           audioRef.current = null;
         },
         onError: () => {
           URL.revokeObjectURL(url);
-          if (currentTtsAudio === audio) currentTtsAudio = null;
           audioRef.current = null;
         },
       });
-      currentTtsAudio = audio;
       audioRef.current = audio;
     } catch (err) {
       console.error('TTS error:', err);
