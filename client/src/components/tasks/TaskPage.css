@@ -4,7 +4,10 @@
 .task-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--primary); color: #fff; position: sticky; top: 0; z-index: 2; }
 .task-header h1 { flex: 1; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }
 .task-count { background: #fff; color: var(--primary); border-radius: 10px; padding: 0 8px; font-size: 13px; line-height: 20px; }
-.task-back, .task-print { background: none; border: none; color: #fff; display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; padding: 4px; }
+.task-back, .task-print, .task-reload { background: none; border: none; color: #fff; display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; padding: 4px; }
+.task-reload:disabled { opacity: 0.6; cursor: default; }
+.task-reload.spinning svg { animation: task-spin 0.8s linear infinite; }
+@keyframes task-spin { to { transform: rotate(360deg); } }
 
 .task-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
 .task-chip { border: none; background: #eef1f3; color: #555; border-radius: 14px; padding: 4px 14px; font-size: 15px; cursor: pointer; }

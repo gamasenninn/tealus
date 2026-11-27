@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Printer, Plus } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Printer, Plus } from 'lucide-react';
 import { api } from '../../services/api';
 import type { Task, TaskSection } from '../../types';
 import './TaskPage.css';
@@ -48,6 +48,7 @@ function TaskPage() {
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [room, setRoom] = useState('');
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -67,6 +68,20 @@ function TaskPage() {
   }, []);
 
   useEffect(() => { load(status); }, [load, status]);
+
+  // タスク 32: AI が足したものは開き直さないと出なかった。今の絞りのまま引き直し、引いている間も一覧は消さない
+  const reload = async () => {
+    setReloading(true);
+    try {
+      const data = await api.listTasks(status ? { status } : {});
+      setTasks(data.tasks || []);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReloading(false);
+    }
+  };
 
   const rooms = useMemo(() => groupByRoom(tasks).map((g) => ({ key: g.key, name: g.name })), [tasks]);
   const shown = useMemo(() => groupByRoom(room ? tasks.filter((t) => (t.room_id ?? NO_ROOM) === room) : tasks), [tasks, room]);
@@ -101,6 +116,7 @@ function TaskPage() {
       <header className="task-header no-print">
         <button className="task-back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/talk'))} aria-label="戻る"><ArrowLeft size={22} /></button>
         <h1>タスク{status === undefined && <span className="task-count">{remaining}</span>}</h1>
+        <button className={`task-reload ${reloading ? 'spinning' : ''}`} onClick={reload} disabled={reloading || loading} aria-label="読み直す" title="読み直す"><RefreshCw size={18} /></button>
         <button className="task-print" onClick={() => window.print()}><Printer size={18} /> 印刷</button>
       </header>
 

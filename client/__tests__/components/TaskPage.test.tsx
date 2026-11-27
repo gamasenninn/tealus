@@ -112,6 +112,25 @@ describe('TaskPage', () => {
     await waitFor(() => expect(api.addTask).toHaveBeenCalledWith({ title: '見積りを出す', section: 'decide', room_id: null }));
   });
 
+  it('★ タスク 32 読み直すボタン: 今の絞り (状態) のまま引き直し、引いている間も一覧は消さない', async () => {
+    renderPage();
+    await screen.findByText('ビルドしてよいか');
+    fireEvent.click(screen.getByRole('button', { name: '済み' }));
+    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith({ status: 'done' }));
+    let release: (v: { tasks: Task[] }) => void = () => {};
+    api.listTasks.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    const n = api.listTasks.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: '読み直す' }));
+    expect(api.listTasks).toHaveBeenCalledTimes(n + 1);
+    expect(api.listTasks).toHaveBeenLastCalledWith({ status: 'done' });
+    expect(screen.queryByText('読み込み中...')).toBeNull();
+    expect(screen.getByText('ビルドしてよいか')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '読み直す' }) as HTMLButtonElement).disabled).toBe(true);
+    release({ tasks: [{ ...TASKS[0], title: 'AI が足した' }] });
+    await screen.findByText('AI が足した');
+    expect((screen.getByRole('button', { name: '読み直す' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('0 件なら「残っているタスクはありません」', async () => {
     api.listTasks.mockResolvedValue({ tasks: [] });
     renderPage();
