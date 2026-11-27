@@ -9,7 +9,7 @@ import { logger } from '../utils/logger.mts';
 import * as E from '../constants/errors.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { readRequester, requesterOf } from '../services/requesterScope.mts';
-import { listTasks, createTask, updateTask, deleteTask, TaskInputError } from '../services/taskRepo.mts';
+import { listTasks, getTask, createTask, updateTask, deleteTask, TaskInputError } from '../services/taskRepo.mts';
 import { isGuest } from '../utils/permissions.mts';
 import { pool } from '../db/pool.mts';
 
@@ -94,9 +94,12 @@ botRouter.get('/', async (req, res) => {
   } catch (err) { fail(res, err, 'bot list'); }
 });
 
+const AI_NO_HOLD = 'AI は保留に入れたり出したりできません (保留にするかは本人が決めます)。保留にしたほうがよさそうなら、ひとこと (note) に書いてください';
+
 botRouter.post('/', async (req, res) => {
   try {
     const { status: _ignored, ai_suggests_done: _ai, ...input } = (req.body ?? {}) as Record<string, unknown>;   // 足すときは open から
+    if (input.section === 'held') return res.status(400).json({ error: AI_NO_HOLD });
     res.status(201).json({ task: await createTask(requesterOf(res)!, req.user!.id, input) });
   } catch (err) { fail(res, err, 'bot create'); }
 });
@@ -105,6 +108,13 @@ botRouter.patch('/:taskId', async (req, res) => {
   try {
     if ((req.body ?? {}).status !== undefined) {
       return res.status(400).json({ error: 'AI は状態を変えられません。済んだと思ったら ai_suggests_done: true を付けてください (済みにするのは本人)' });
+    }
+    // ★ 保留は人の判断 (docs/16 §4.2、11-28)。AI は保留に入れない・保留から出さない
+    const section = (req.body ?? {}).section;
+    if (section === 'held') return res.status(400).json({ error: AI_NO_HOLD });
+    if (section !== undefined) {
+      const cur = await getTask(req.params.taskId, requesterOf(res)!);
+      if (cur?.section === 'held') return res.status(400).json({ error: AI_NO_HOLD });
     }
     const task = await updateTask(req.params.taskId, requesterOf(res)!, req.user!.id, req.body ?? {});
     if (!task) return res.status(404).json({ error: 'タスクが見つかりません' });

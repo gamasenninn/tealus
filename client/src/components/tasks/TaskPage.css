@@ -29,6 +29,9 @@
 .sec-do { color: #1d4ed8; }
 .sec-waiting { color: #6b21a8; }
 .sec-later { color: #6b7280; }
+.sec-held { color: #9ca3af; }
+/* 11-28 保留: 題名の字だけ薄く (取り消し線なし = 済みと別)。印・□・直すはそのまま。印刷では薄くしない */
+.task-item.held .task-title-text { color: #9ca3af; font-weight: normal; }
 
 .task-item { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0 8px; }
 .task-check { width: 22px; height: 22px; margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
@@ -85,6 +88,8 @@
   .task-section-label { color: #000 !important; }
   .task-check { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; border: 1px solid #000; }
   .task-title { font-size: 13px; color: #000; }
+  .task-item.held .task-title-text { color: #000; }
+  .task-held { color: #000; border-color: #000; font-size: 9px; }
   .task-no { background: none; border: 1px solid #999; color: #000; font-size: 10px; }
   .task-date { color: #444; font-size: 9px; }
   .task-note { color: #444; font-size: 10px; }

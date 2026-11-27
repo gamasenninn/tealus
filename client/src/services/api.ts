@@ -850,7 +850,7 @@ class ApiClient {
   }
 
   // 削除された投稿 (admin、2026-10-30 利用者判断 3)
-  // タスク一覧 (docs/16、#661)。status は 省略 = 残り (open + held) / open / done / held / all
+  // タスク一覧 (docs/16、#661)。status は 省略 = 残り (済みでないもの。区分が保留のものも) / open / done / held (区分が保留の残り) / all
   listTasks(opts: { status?: string; roomId?: string } = {}) {
     const qs = new URLSearchParams();
     if (opts.status) qs.set('status', opts.status);

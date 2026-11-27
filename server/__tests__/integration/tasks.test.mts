@@ -90,12 +90,12 @@ describe('タスク一覧 (docs/16)', () => {
       expect(back.body.task).toEqual(expect.objectContaining({ status: 'open', done_by: null, done_at: null }));
     });
 
-    it('既定の一覧は残りと保留。status=done / all で済みも', async () => {
+    it('既定の一覧は残り (区分が保留のものも)。status=done / all で済みも', async () => {
       const a = (await as(me).post('/api/tasks', { title: 'a' })).body.task.id;
       await as(me).post('/api/tasks', { title: 'b' });
       const c = (await as(me).post('/api/tasks', { title: 'c' })).body.task.id;
       await as(me).patch(`/api/tasks/${a}`, { status: 'done' });
-      await as(me).patch(`/api/tasks/${c}`, { status: 'held' });
+      await as(me).patch(`/api/tasks/${c}`, { section: 'held' });
       expect((await as(me).get('/api/tasks')).body.tasks.map((t: { title: string }) => t.title).sort()).toEqual(['b', 'c']);
       expect((await as(me).get('/api/tasks?status=done')).body.tasks.map((t: { title: string }) => t.title)).toEqual(['a']);
       expect((await as(me).get('/api/tasks?status=all')).body.tasks).toHaveLength(3);
@@ -108,6 +108,51 @@ describe('タスク一覧 (docs/16)', () => {
       await as(me).post('/api/tasks', { title: 'あとで', room_id: roomMine, section: 'later' });
       const titles = (await as(me).get('/api/tasks')).body.tasks.map((t: { title: string }) => t.title);
       expect(titles).toEqual(['決める', '待ち', 'あとで', '個人']);
+    });
+
+    /** docs/16 §8-7 (11-28): 保留は区分の 5 つ目。状態の held はやめた */
+    describe('★ 保留 (区分 held)', () => {
+      it('★★ 区分を保留にすると、いつ保留にしたかが入る。ほかの区分へ戻すと消える', async () => {
+        const id = (await as(me).post('/api/tasks', { title: 'あとで考える', section: 'decide' })).body.task.id;
+        const h = await as(me).patch(`/api/tasks/${id}`, { section: 'held' });
+        expect(h.status).toBe(200);
+        expect(h.body.task.section).toBe('held');
+        expect(h.body.task.status).toBe('open');
+        expect(h.body.task.held_at).toBeTruthy();
+        const again = await as(me).patch(`/api/tasks/${id}`, { title: '題だけ直す' });
+        expect(again.body.task.held_at).toBe(h.body.task.held_at);   // ★ 保留のまま直しても、いつからは変わらない
+        const back = await as(me).patch(`/api/tasks/${id}`, { section: 'decide' });
+        expect(back.body.task.held_at).toBeNull();
+      });
+
+      it('★ 手で足すときから保留にもできる (いつからが入る)', async () => {
+        const t = (await as(me).post('/api/tasks', { title: '保留で足す', section: 'held' })).body.task;
+        expect(t.section).toBe('held');
+        expect(t.held_at).toBeTruthy();
+      });
+
+      it('★ 並びは部屋の中のいちばん最後 (今日でなくてよい の後)', async () => {
+        await as(me).post('/api/tasks', { title: '保留', room_id: roomMine, section: 'held' });
+        await as(me).post('/api/tasks', { title: 'あとで', room_id: roomMine, section: 'later' });
+        await as(me).post('/api/tasks', { title: '決める', room_id: roomMine, section: 'decide' });
+        const titles = (await as(me).get('/api/tasks')).body.tasks.map((t: { title: string }) => t.title);
+        expect(titles).toEqual(['決める', 'あとで', '保留']);
+      });
+
+      it('★ status=held は区分が保留の残りで絞る (前の版の道具が使う絞りのまま)', async () => {
+        await as(me).post('/api/tasks', { title: 'ふつう' });
+        await as(me).post('/api/tasks', { title: '保留', section: 'held' });
+        const d = (await as(me).post('/api/tasks', { title: '保留で済み', section: 'held' })).body.task.id;
+        await as(me).patch(`/api/tasks/${d}`, { status: 'done' });
+        expect((await as(me).get('/api/tasks?status=held')).body.tasks.map((t: { title: string }) => t.title)).toEqual(['保留']);
+      });
+
+      it('★ 状態を held にするのは断る (400。保留は区分で)', async () => {
+        const id = (await as(me).post('/api/tasks', { title: 'x' })).body.task.id;
+        const r = await as(me).patch(`/api/tasks/${id}`, { status: 'held' });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/区分/);
+      });
     });
 
     it('部屋で絞れる', async () => {
@@ -244,6 +289,20 @@ describe('タスク一覧 (docs/16)', () => {
       expect((await asBot(me.user.id).patch(`/api/bot/tasks/${id}`, { due_date: null })).body.task.due_date).toBeNull();
       expect((await asBot(me.user.id).post('/api/bot/tasks', { title: 'x', due_date: '金曜' })).status).toBe(400);
       expect((await asBot(me.user.id).get('/api/bot/tasks')).body.tasks[0]).toHaveProperty('due_date', null);
+    });
+
+    it('★★ AI は保留に入れない・出さない (保留は人の判断、docs/16 §4.2)。足すときも保留は受けない', async () => {
+      const id = (await asBot(me.user.id).post('/api/bot/tasks', { title: 'x' })).body.task.id;
+      const into = await asBot(me.user.id).patch(`/api/bot/tasks/${id}`, { section: 'held' });
+      expect(into.status).toBe(400);
+      expect(into.body.error).toMatch(/保留/);
+      expect((await asBot(me.user.id).post('/api/bot/tasks', { title: 'y', section: 'held' })).status).toBe(400);
+      const held = (await as(me).post('/api/tasks', { title: '本人が保留', section: 'held' })).body.task.id;
+      expect((await asBot(me.user.id).patch(`/api/bot/tasks/${held}`, { section: 'do' })).status).toBe(400);
+      // 保留のものでも、区分を変えない直し (ひとこと・期限) はできる
+      const note = await asBot(me.user.id).patch(`/api/bot/tasks/${held}`, { note: '12-04 に見直す' });
+      expect(note.status).toBe(200);
+      expect(note.body.task.section).toBe('held');
     });
 
     it('AI は消せない (一覧から黙って消えないように)。他人の一覧のものは直せない', async () => {

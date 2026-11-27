@@ -6,6 +6,7 @@
  * ★ マルチトークの右の帯 (§5.1) では embedded: 「戻る」「印刷」を出さず、「元の会話」は画面を移らずに onOpenSource へ渡す (パネルで開く)
  * ★ 説明をたたむ (11-28 利用者の案): 見出しの切り替えで全部たたむ / 出す (端末で覚える)。たたんでいる間は題名を押すとその 1 件だけ開く (覚えない)。
  *   期限・保留の印と「AI: 済んだようです」はたたんでも出す。印刷は画面のとおり
+ * ★ 保留 (11-28、§8-7): 区分の 5 つ目で部屋の最後。題名だけ薄く・「保留 11/28〜」・見出しの残りの数に入れない (隠しはしない)
  * ★ 期限 (タスク 33、§8-6): 題の後ろに〆月/日・期限切れ / 今日までは字で (印刷で色が落ちても読める)。並べ替えない。各行の「直す」で題・ひとこと・区分・期限
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +22,7 @@ const SECTIONS: { key: TaskSection; label: string }[] = [
   { key: 'do', label: '手を動かす' },
   { key: 'waiting', label: '待ち' },
   { key: 'later', label: '今日でなくてよい' },
+  { key: 'held', label: '保留' },
 ];
 const STATUS_FILTERS: { key: string | undefined; label: string }[] = [
   { key: undefined, label: '残り' },
@@ -151,7 +153,8 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
     }
   };
 
-  const remaining = tasks.filter((t) => t.status !== 'done').length;
+  // 保留は数えない (時間稼ぎが効くように。一覧には出す)
+  const remaining = tasks.filter((t) => t.status !== 'done' && t.section !== 'held').length;
   const today = localToday();
   const overdue = countOverdue(tasks, today);
   return (
@@ -199,7 +202,7 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
               <div key={s.key} className="task-section">
                 <div className={`task-section-label sec-${s.key}`}>{s.label}</div>
                 {g.tasks.filter((t) => t.section === s.key).map((t) => (
-                  <div key={t.id} className={`task-item ${t.status === 'done' ? 'done' : ''}`}>
+                  <div key={t.id} className={`task-item ${t.status === 'done' ? 'done' : ''} ${t.section === 'held' ? 'held' : ''}`}>
                     <input
                       type="checkbox"
                       className="task-check"
@@ -240,11 +243,11 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
                         )}
                         <span className="task-no">{t.number}</span>
                         <span className="task-date">{madeOn(t.created_at)}</span>
-                        {t.title}
+                        <span className="task-title-text">{t.title}</span>
                         {t.due_date && <span className="task-due">{dueLabel(t.due_date)}</span>}
                         {dueState(t, today) === 'overdue' && <span className="task-due-flag overdue">期限切れ</span>}
                         {dueState(t, today) === 'today' && <span className="task-due-flag today">今日まで</span>}
-                        {t.status === 'held' && <span className="task-held">保留</span>}
+                        {t.section === 'held' && t.held_at && <span className="task-held">保留 {madeOn(t.held_at)}〜</span>}
                       </div>
                       {noteShown && (
                         <div className="task-note">

@@ -227,6 +227,49 @@ describe('TaskPage', () => {
     renderPage();
     expect(await screen.findByText('残っているタスクはありません')).toBeTruthy();
   });
+  /** docs/16 §8-7 (11-28): 保留は区分の 5 つ目。部屋の最後・題名だけ薄く・「保留 11/28〜」・残りの数に入れない */
+  describe('保留 (区分 held)', () => {
+    const HELD: Task = { ...base, id: 'th', number: 11, title: '班の作り方', section: 'held', room_id: 'r1', room_name: '開発', held_at: '2026-11-28T00:10:00Z' } as Task;
+
+    it('★★ 部屋の中のいちばん最後に「保留」の見出しで並び、題の後ろに「保留 11/28〜」', async () => {
+      api.listTasks.mockResolvedValue({ tasks: [...TASKS.slice(0, 2), HELD, ...TASKS.slice(2)] });
+      renderPage();
+      await screen.findByText('班の作り方');
+      const dev = screen.getByRole('region', { name: '開発' });
+      const labels = Array.from(dev.querySelectorAll('.task-section-label')).map((e) => e.textContent);
+      expect(labels).toEqual(['決める', '手を動かす', '保留']);
+      expect(within(dev).getByText('保留 11/28〜')).toBeTruthy();
+    });
+
+    it('★★ 見出しの残りの数に入れない (時間稼ぎが効くように)。隠しはしない', async () => {
+      api.listTasks.mockResolvedValue({ tasks: [...TASKS, HELD] });
+      renderPage();
+      await screen.findByText('班の作り方');
+      expect(document.querySelector('.task-count')?.textContent).toBe('4');
+    });
+
+    it('★ 題名だけ薄くする印 (held)。済みの取り消し線とは別', async () => {
+      api.listTasks.mockResolvedValue({ tasks: [HELD] });
+      renderPage();
+      await screen.findByText('班の作り方');
+      const item = document.querySelector('.task-item');
+      expect(item?.classList.contains('held')).toBe(true);
+      expect(item?.classList.contains('done')).toBe(false);
+    });
+
+    it('★ 「直す」の区分に「保留」がある。選んで保存すると section: held を送る', async () => {
+      renderPage();
+      await screen.findByText('個人のこと');
+      fireEvent.click(screen.getAllByRole('button', { name: '直す' })[3]);
+      const form = screen.getByRole('form', { name: '直す' });
+      const select = within(form).getByRole('combobox');
+      expect(Array.from((select as HTMLSelectElement).options).map((o) => o.textContent)).toContain('保留');
+      fireEvent.change(select, { target: { value: 'held' } });
+      fireEvent.click(within(form).getByRole('button', { name: '保存' }));
+      await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith('t4', expect.objectContaining({ section: 'held' })));
+    });
+  });
+
   /** 11-28 利用者の案: 何回も見ていると説明は知っているので、題名の一覧を多く見たい。説明をたためる */
   describe('説明をたたむ', () => {
     beforeEach(() => { try { localStorage.removeItem('taskNotesFolded'); } catch { /* */ } });

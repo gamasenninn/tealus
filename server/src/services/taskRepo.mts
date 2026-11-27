@@ -2,13 +2,16 @@
  * タスク一覧 (docs/16、#661) の読み書き。本人の口 (routes/tasks.mts の router) と AI の口 (botRouter) の共通の中身。
  * ★ 一覧は人のもの (owner_id)。部屋は括り。括りの部屋と元の投稿は、owner が入っている部屋のものだけ
  * ★ 済みにするのは人。AI の口は status を変えられない (§4.3) — 口の側で断る。ここは渡された値をそのまま書く
+ * ★ 保留は区分の 5 つ目 (051、§8-7)。入れたら held_at に時刻、出したら消す。状態の held はやめた (status=held の絞りは区分で絞る)
  */
 import pg from 'pg';
 import { pool } from '../db/pool.mts';
 import { isUuid } from '../utils/uuid.mts';
 
-export const TASK_SECTIONS = ['decide', 'do', 'waiting', 'later'] as const;
-export const TASK_STATUSES = ['open', 'done', 'held'] as const;
+export const TASK_SECTIONS = ['decide', 'do', 'waiting', 'later', 'held'] as const;
+export const TASK_STATUSES = ['open', 'done'] as const;
+/** 一覧の絞り。'held' は前の版の道具 (MCP の list_tasks) が使う名前のまま、区分が保留の残りで絞る */
+const LIST_FILTERS = ['open', 'done', 'held', 'all', 'remaining'] as const;
 export type TaskSection = (typeof TASK_SECTIONS)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
@@ -31,6 +34,8 @@ export interface TaskRow {
   sort_order: number;
   /** 期限 (050、日付だけ)。'YYYY-MM-DD' の字のまま返す。NULL = 期限なし */
   due_date: string | null;
+  /** 保留にした時刻 (051)。区分が held のときだけ入る */
+  held_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -44,7 +49,7 @@ export class TaskInputError extends Error {
 const SELECT = `SELECT t.*, r.name AS room_name FROM tasks t LEFT JOIN rooms r ON r.id = t.room_id`;
 /** 部屋 (名前順、部屋なしは最後) → 区分 → 並び → 古い順 */
 const ORDER = `ORDER BY (t.room_id IS NULL), r.name, t.room_id,
-  array_position(ARRAY['decide','do','waiting','later']::varchar[], t.section), t.sort_order, t.created_at`;
+  array_position(ARRAY['decide','do','waiting','later','held']::varchar[], t.section), t.sort_order, t.created_at`;
 
 /**
  * ★ DATE (oid 1082) は pg の既定だと「この機械の時間帯の 0 時」の Date になり、JSON で UTC に直すと日本では前の日になる。
@@ -59,11 +64,10 @@ export async function listTasks(ownerId: string, opts: { status?: string; roomId
   const params: unknown[] = [ownerId];
   const where = ['t.owner_id = $1'];
   const status = opts.status || 'remaining';
-  if (status === 'remaining') where.push(`t.status IN ('open', 'held')`);
-  else if (status !== 'all') {
-    if (!(TASK_STATUSES as readonly string[]).includes(status)) throw new TaskInputError('status は open / done / held / all のどれかです', 400);
-    params.push(status); where.push(`t.status = $${params.length}`);
-  }
+  if (!(LIST_FILTERS as readonly string[]).includes(status)) throw new TaskInputError('status は open / done / held / all のどれかです', 400);
+  if (status === 'remaining') where.push(`t.status = 'open'`);
+  else if (status === 'held') where.push(`t.status = 'open'`, `t.section = 'held'`);
+  else if (status !== 'all') { params.push(status); where.push(`t.status = $${params.length}`); }
   if (opts.roomId) {
     if (!isUuid(opts.roomId)) throw new TaskInputError('room_id が ID の形ではありません', 400);
     params.push(opts.roomId); where.push(`t.room_id = $${params.length}`);
@@ -72,7 +76,7 @@ export async function listTasks(ownerId: string, opts: { status?: string; roomId
   return rows;
 }
 
-async function getTask(id: string, ownerId: string): Promise<TaskRow | null> {
+export async function getTask(id: string, ownerId: string): Promise<TaskRow | null> {
   if (!isUuid(id)) return null;
   const { rows } = await query<TaskRow>(`${SELECT} WHERE t.id = $1 AND t.owner_id = $2`, [id, ownerId]);
   return rows[0] ?? null;
@@ -106,8 +110,9 @@ function checkFields(f: { title?: unknown; section?: unknown; status?: unknown; 
   if (creating || f.title !== undefined) {
     if (typeof f.title !== 'string' || f.title.trim() === '') throw new TaskInputError('題 (title) が要ります', 400);
   }
-  if (f.section !== undefined && !(TASK_SECTIONS as readonly unknown[]).includes(f.section)) throw new TaskInputError('section は decide / do / waiting / later のどれかです', 400);
-  if (f.status !== undefined && !(TASK_STATUSES as readonly unknown[]).includes(f.status)) throw new TaskInputError('status は open / done / held のどれかです', 400);
+  if (f.section !== undefined && !(TASK_SECTIONS as readonly unknown[]).includes(f.section)) throw new TaskInputError('section は decide / do / waiting / later / held のどれかです', 400);
+  if (f.status === 'held') throw new TaskInputError('保留は区分 (section: held) で付けます (状態の held はやめました)', 400);
+  if (f.status !== undefined && !(TASK_STATUSES as readonly unknown[]).includes(f.status)) throw new TaskInputError('status は open / done のどれかです', 400);
   if (f.note !== undefined && f.note !== null && typeof f.note !== 'string') throw new TaskInputError('note は文字です', 400);
   if (f.sort_order !== undefined && !Number.isInteger(f.sort_order)) throw new TaskInputError('sort_order は整数です', 400);
   if (f.source_message_ids !== undefined && !Array.isArray(f.source_message_ids)) throw new TaskInputError('source_message_ids は配列です', 400);
@@ -127,8 +132,8 @@ export async function createTask(ownerId: string, createdBy: string, input: Reco
   const params = [ownerId, createdBy, t.title.trim(), t.note ?? null, t.section ?? 'do', t.room_id ?? null, [...new Set(t.source_message_ids ?? [])], t.sort_order ?? 0, t.due_date ?? null];
   // ★ 番号は列の既定 (tasks_number_seq、049) が振る。会社全体の通し番号で、消した番号は使い回さない
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO tasks (owner_id, created_by, title, note, section, room_id, source_message_ids, sort_order, due_date)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8, $9::date) RETURNING id`, params);
+    `INSERT INTO tasks (owner_id, created_by, title, note, section, room_id, source_message_ids, sort_order, due_date, held_at)
+     VALUES ($1, $2, $3, $4, $5::varchar, $6, $7::uuid[], $8, $9::date, CASE WHEN $5::varchar = 'held' THEN now() END) RETURNING id`, params);
   return (await getTask(rows[0].id, ownerId))!;
 }
 
@@ -159,6 +164,9 @@ export async function updateTask(id: string, ownerId: string, actorId: string, p
   } else if (patch.status !== undefined && patch.status !== 'done' && cur.status === 'done') {
     sets.push('done_at = NULL', 'done_by = NULL');
   }
+  // 保留に入れたら時刻を入れ、出したら消す (保留のまま直しても時刻は変えない)
+  if (patch.section === 'held' && cur.section !== 'held') sets.push('held_at = now()');
+  else if (patch.section !== undefined && patch.section !== 'held' && cur.section === 'held') sets.push('held_at = NULL');
   if (sets.length === 0) return cur;
   sets.push('updated_at = now()');
   params.push(id, ownerId);

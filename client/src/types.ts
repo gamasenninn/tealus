@@ -294,12 +294,13 @@ export interface ClientConfig {
  * タスク一覧の 1 件 (docs/16、#661。GET /api/tasks の行、server taskRepo の TaskRow)。
  * 一覧は人のもの・部屋は括り (room_id NULL = 部屋なし)・済みにするのは人 (ai_suggests_done は AI の印)
  */
-export type TaskSection = 'decide' | 'do' | 'waiting' | 'later';
-export type TaskStatus = 'open' | 'done' | 'held';
+/** 'held' = 保留 (051、docs/16 §8-7)。部屋の中のいちばん最後・残りの数に入れない */
+export type TaskSection = 'decide' | 'do' | 'waiting' | 'later' | 'held';
+export type TaskStatus = 'open' | 'done';
 export interface Task {
   id: string;
   owner_id: string;
-  /** 人ごとの通し番号 (048)。済みにしても変わらない。番号で指示するため */
+  /** 会社全体の通し番号 (049)。済みにしても・持ち主が変わっても変わらない。番号で指示するため */
   number: number;
   room_id: string | null;
   room_name: string | null;
@@ -315,6 +316,8 @@ export interface Task {
   sort_order: number;
   /** 期限 (050、日付だけ 'YYYY-MM-DD')。null = 期限なし。期限切れ・今日までは utils/taskDue.ts */
   due_date: string | null;
+  /** 保留にした時刻 (051)。区分が held のときだけ入る (前の本体は返さない) */
+  held_at?: string | null;
   created_at: string;
   updated_at: string;
 }

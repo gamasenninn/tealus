@@ -19,9 +19,13 @@ describe('localToday — 端末の暦の日付を YYYY-MM-DD で', () => {
 
 describe('dueState', () => {
   const today = '2026-11-30';
-  it('今日より前で済んでいなければ期限切れ (保留も)', () => {
+  it('今日より前で済んでいなければ期限切れ', () => {
     expect(dueState({ due_date: '2026-11-29', status: 'open' }, today)).toBe('overdue');
-    expect(dueState({ due_date: '2025-12-31', status: 'held' }, today)).toBe('overdue');
+  });
+  it('★ 保留 (区分 held、11-28) には期限切れ・今日までを出さない。時間稼ぎのために置いたものを急かさない', () => {
+    expect(dueState({ due_date: '2025-12-31', status: 'open', section: 'held' }, today)).toBeNull();
+    expect(dueState({ due_date: '2026-11-30', status: 'open', section: 'held' }, today)).toBeNull();
+    expect(countOverdue([{ due_date: '2025-12-31', status: 'open', section: 'held' }, { due_date: '2025-12-31', status: 'open', section: 'do' }], today)).toBe(1);
   });
   it('今日なら今日まで', () => {
     expect(dueState({ due_date: '2026-11-30', status: 'open' }, today)).toBe('today');
@@ -48,8 +52,8 @@ describe('dueLabel / countOverdue', () => {
       { due_date: '2026-11-30', status: 'open' as const },
       { due_date: '2026-11-01', status: 'done' as const },
       { due_date: null, status: 'open' as const },
-      { due_date: '2026-10-01', status: 'held' as const },
+      { due_date: '2026-10-01', status: 'open' as const, section: 'held' as const },
     ];
-    expect(countOverdue(ts, '2026-11-30')).toBe(2);
+    expect(countOverdue(ts, '2026-11-30')).toBe(1);   // 保留は数えない (11-28)
   });
 });
