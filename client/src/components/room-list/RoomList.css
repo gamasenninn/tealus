@@ -43,6 +43,25 @@
   transition: background 0.2s;
 }
 
+/* タスク 33: 「タスク」のボタンの期限切れの件数 (赤) */
+.icon-button { position: relative; }
+.icon-badge-overdue {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 18px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
 .icon-button:hover {
   background: rgba(255, 255, 255, 0.3);
 }

@@ -18,6 +18,7 @@ import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import './RoomList.css';
 import { roomPreview } from '../../utils/replyQuote';
 import { roomTabs, filterRoomsByTab, hiddenRoomsInTab, loadRoomTab, saveRoomTab } from '../../utils/roomTabs';
+import { localToday, countOverdue } from '../../utils/taskDue';
 
 // ★ 6/7 Day 22 PM: room 一覧 tab 切替 (= user voice 13:1X、Option C 同型 class 複製)
 // ★ 2026-11-13: タブの決まりは utils/roomTabs.ts (お客様の部屋のタブ・窓口のいる部屋をほかのタブから外す・選んだタブを覚える)
@@ -45,6 +46,21 @@ function RoomList() {
 
   // ★ 一覧の取り直しの結果を、同じ人の他のタブと分け合う (2026-11-01)
   useEffect(() => { if (user?.id) bindRoomsChannel(user.id); }, [user?.id]);
+
+  // ★ タスク 33: 「タスク」のボタンに期限切れの件数 (docs/16 §5)。一覧を開くたびに 1 回引く。引けなければ出さない
+  const [overdueTasks, setOverdueTasks] = useState(0);
+  const guest = isGuest(user);
+  useEffect(() => {
+    if (!user?.id || guest) return;
+    let alive = true;
+    (async () => {
+      try {
+        const data = await api.listTasks();
+        if (alive) setOverdueTasks(countOverdue(data.tasks || [], localToday()));
+      } catch { /* 数字が出ないだけ。一覧の画面は邪魔しない */ }
+    })();
+    return () => { alive = false; };
+  }, [user?.id, guest]);
   const confirm = useConfirm();
   const [showCreate, setShowCreate] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
@@ -171,6 +187,7 @@ function RoomList() {
           {!isGuest(user) && (
             <button className="icon-button" onClick={() => navigate('/tasks')} title="タスク">
               <ListChecks size={20} />
+              {overdueTasks > 0 && <span className="icon-badge-overdue" aria-label={`期限切れ ${overdueTasks} 件`}>{overdueTasks}</span>}
             </button>
           )}
           {canCreateRoom(user) && (
