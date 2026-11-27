@@ -37,7 +37,7 @@
 .task-date { margin-right: 6px; color: #888; font-size: 13px; font-variant-numeric: tabular-nums; }
 /* 期限 (タスク 33、docs/16 §5)。期限切れは赤・今日までは橙。字でも出すので印刷で色が落ちても読める */
 .task-due { margin-left: 6px; color: #555; font-size: 14px; font-weight: normal; font-variant-numeric: tabular-nums; }
-.task-due-flag { margin-left: 6px; font-size: 13px; font-weight: bold; border-radius: 8px; padding: 0 6px; color: #fff; }
+.task-due-flag { margin-left: 6px; font-size: 13px; font-weight: bold; border-radius: 8px; padding: 0 6px; color: #fff; display: inline-block; white-space: nowrap; }   /* 「期限切れ」を途中で折らない (11-27 試験で「期|限切れ」に割れた) */
 .task-due-flag.overdue { background: #dc2626; }
 .task-due-flag.today { background: #ea580c; }
 .task-item.done .task-due { color: #999; }
