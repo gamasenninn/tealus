@@ -192,7 +192,7 @@ server・agent-server・client は依存の変更なしです。新しいパッ�
 | 環境変数 / 設定 | 既定 | |
 |---|---|---|
 | `CC_INTAKE` (server・agent-server) | 未設定 (= agent-server が受け付ける) | `server` にすると `@cc-{班}` の受け付けを本体が持つ (docs/14)。★ **本体と agent-server を同じ版で上げてから両方の `.env` に書く**。切り替えの手順は docs/14 §6 |
-| `TRANSCRIPTION_ROOM_EXAMPLES` (agent-server) | off | `1` で部屋の「人が直した例」を文字起こしの補正の指示の前に載せる (docs/15) |
+| `TRANSCRIPTION_ROOM_EXAMPLES` (server) | off | `1` で部屋の「人が直した例」を文字起こしの補正の指示の前に載せる (docs/15) |
 
 - **見張り** (`server/config/watchdogs.json`、`docs/09`): 配達役の鼓動 (`heartbeat: "courier"`) と、`room_quiet` の続けて見る形 (`hours`・`days` を省く)・語の絞り (`content_contains`) が増えました。書き方は `watchdogs.example.json`
 - **MCP (Claude Code の側の tealus-mcp)**: タグ固定の運用なら pin を `#v0.20.0` に上げてフル再起動 (タスクの道具 3 つと期限、ファイルの添付 `send_file` は `TEALUS_FILE_ROOT` を設定したときだけ)
