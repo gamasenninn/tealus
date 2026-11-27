@@ -34,10 +34,10 @@ cd client       && npx tsc --noEmit && npx vitest run
 | 値 | 現在 | source of truth |
 |---|---|---|
 | Node 要件 | 24 | `package.json` の `engines`（6 パッケージ）/ `*/Dockerfile` / `.github/workflows/*.yml` |
-| MCP ツール数 | 19 | tealus-mcp（別リポ）の `src/tools.js`。**版で見える数が違う**ので「v0.15.0 以降で 19」のように版を添える (v0.14.8 は 18) |
+| MCP ツール数 | 22 (v0.20.0。`send_file` を許した班は 23) | tealus-mcp（別リポ）の `src/tools.js`。**版で見える数が違う**ので版を添える (v0.14.8 は 18・v0.15.0〜v0.17.0 は 19・v0.19.0 から 22。`send_file` (v0.18.0) は `TEALUS_FILE_ROOT` を設定したときだけ出る) |
 | 絵文字リアクション | 7 | `client/src/components/chat/ContextMenu.tsx` の `REACTION_EMOJIS` |
 | 読み上げのエンジン / 声 | 3 エンジン (Aivis 10 / OpenAI 13 / Gemini 30) | `agent-server/src/lib/ttsRoom.mts` の `TTS_ENGINES` / `TTS_VOICES`。★ v0.10.0 で画面の `TTS_MODELS` (Aivis 10) からここへ移った |
-| migration の最新番号 | 045 (v0.12.0。v0.11.1 は 040 まで。041 #607 通行証・042 パスワードの変更の印・043 削除した本文の退避・044 指示の ☆ 固定・045 社外の窓口の印) | `server/src/db/migrations/` |
+| migration の最新番号 | 050 (v0.13.0。v0.12.0 は 045 まで。046 部屋を一覧から隠す・047〜049 タスク一覧と番号・050 タスクの期限) | `server/src/db/migrations/` |
 | cc-bridge の接続寿命 | 55 分 (3300 秒) | `server/src/routes/ccQueue.mts` と `agent-server/src/routes/ccQueue.mts` の `maxAgeMs()` 既定 (同じ値を 2 か所。`CC_INTAKE=server` なら本体の方が答える)。★ **`SKILL.md` が取得失敗時の退避として 3300 をハードコードしている**ので、既定を変えたら消費側も直す |
 
 ```bash

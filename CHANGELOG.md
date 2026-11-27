@@ -10,6 +10,12 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-27
+
+★ **会話から拾った「人のやること」を、生きている一覧にする** — v0.12.0 から 10 日・約 150 コミット。**タスク一覧** ([#661](https://github.com/gamasenninn/tealus/issues/661)、docs/16) を作り、期限・各行の「直す」・マルチトークの右の帯・アシスタントの道具 (tealus-mcp v0.20.0) まで入れた。AI のセッションに `@cc-` の便を届ける **配達役** (docs/12) と、**CC ブリッジを本体で受ける** (`CC_INTAKE=server`、docs/14) も入った。既読は **人が使っている窓だけ** で付くようになった ([#651](https://github.com/gamasenninn/tealus/issues/651))。
+
+> **★ この版の影響範囲**: **全員に作業があります。** DB migration が **5 本** (`046`〜`050`) — **再起動の前に `npm run migrate`** (v0.12.0 から、未適用があると本体は起動しません)。client の再ビルド、アシスタントを使っている環境は tealus-mcp v0.20.0 の取り置きも要ります。
+
 ### Added
 
 - **配達役 (`courier/`、docs/12)** — `@cc-{班}` の便を、herdr の中で動く Claude に中央から届ける別プロセス。渡すのは id だけ・作業中には打たず空いてから 1 通・1 時間 40 通の上限 (上限で保留したら `~/.tealus/courier/hold-<班>.json` を消せば再起動なしで再開。届かなかった回・空回しは数えない)・確認待ちには打たない。班ごとに空回し (打たずに記録だけ) を選べる (`~/.tealus/courier/bridges.json` の `dry_run`)。起動は `courier/scripts/start.ps1` (herdr のサーバ → 居ない Claude を同じ会話で起こし直す → 配達役)。手順は `docs/setup-cc-tealus-bridge.md` の受け取り方 D
@@ -43,7 +49,7 @@
 - AI のメッセージ取得・未読で、音声の文字起こしを 1 件ずつ引いていた (まとめて 1 回に。返す中身は同じ、[#660](https://github.com/gamasenninn/tealus/issues/660)・[#664](https://github.com/gamasenninn/tealus/issues/664))
 - 部屋を移ったとき、書きかけ・録音・送信中が次の部屋へ持ち越されていた。トランシーバーは部屋を移ったら必ず切り、返事が来なければ時間切れにする
 
-### ★ 更新時の急所 (この版を出すときに見出しへ移す)
+### ★ 更新時の急所
 
 - ★★ **migration が 5 つ** (046 `room_members.hidden_at`、047 `tasks`、048 `tasks.number`、049 番号を会社全体の通し番号へ、050 `tasks.due_date`)。**`npm run migrate` → 本体の再起動 → client の再ビルド** の順。v0.12.0 から本体は未適用の migration があると起動しない (名前と「npm run migrate」を出す)。★ 2026-11-27 に v0.12.0 の runner で 045 まで流した DB から、今の runner で 046〜050 が順に流れ、2 回目は何も流れないことを確かめた
 - ★ **agent-server の tealus-mcp が v0.20.0 に上がる** (版はコードの中、`agent-server/src/lib/mcpPackages.mts`)。**再起動の前に** `npx -y github:gamasenninn/tealus-mcp#v0.20.0 < /dev/null` を**最後まで**流してキャッシュに入れる (`TEALUS_USER_ID and TEALUS_PASSWORD are required` で止まれば済み)。途中で打ち切ると欠けたキャッシュが残り、アシスタントの道具が 1 つも出なくなる
