@@ -145,6 +145,53 @@ describe('タスク一覧 (docs/16)', () => {
       expect((await as(me).patch(`/api/tasks/${id}`, { number: 9 })).status).toBe(400);
     });
 
+    describe('★ タスク 33 期限 (due_date、日付だけ。docs/16 §8-6)', () => {
+      it('足すときに入れられ、YYYY-MM-DD の字で返る。入れなければ null', async () => {
+        const a = await as(me).post('/api/tasks', { title: 'a', due_date: '2026-11-30' });
+        expect(a.status).toBe(201);
+        expect(a.body.task.due_date).toBe('2026-11-30');
+        expect((await as(me).post('/api/tasks', { title: 'b' })).body.task.due_date).toBeNull();
+        const list = (await as(me).get('/api/tasks')).body.tasks;
+        expect(list.find((t: { title: string }) => t.title === 'a').due_date).toBe('2026-11-30');
+      });
+
+      it('直せる・空 (null) に戻せる。他を直しても期限は残る', async () => {
+        const id = (await as(me).post('/api/tasks', { title: 'a' })).body.task.id;
+        expect((await as(me).patch(`/api/tasks/${id}`, { due_date: '2026-12-01' })).body.task.due_date).toBe('2026-12-01');
+        expect((await as(me).patch(`/api/tasks/${id}`, { title: 'b' })).body.task.due_date).toBe('2026-12-01');
+        expect((await as(me).patch(`/api/tasks/${id}`, { due_date: null })).body.task.due_date).toBeNull();
+      });
+
+      it('形の違う値・無い日付は 400 (足す・直すとも)', async () => {
+        for (const bad of ['2026/11/30', '2026-11-31', '2026-02-29', '20261130', '2026-11-30T00:00:00Z', '', 20261130, true]) {
+          expect((await as(me).post('/api/tasks', { title: 'x', due_date: bad })).status).toBe(400);
+        }
+        const id = (await as(me).post('/api/tasks', { title: 'x' })).body.task.id;
+        expect((await as(me).patch(`/api/tasks/${id}`, { due_date: '2026-13-01' })).status).toBe(400);
+        expect((await as(me).post('/api/tasks', { title: 'うるう', due_date: '2028-02-29' })).body.task.due_date).toBe('2028-02-29');
+      });
+
+      it('★ 日付はどの時間帯で動いていても 1 日ずれない (JST・UTC・西の時間帯)', async () => {
+        const saved = process.env.TZ;
+        try {
+          for (const tz of ['Asia/Tokyo', 'UTC', 'America/Los_Angeles']) {
+            process.env.TZ = tz;
+            const t = (await as(me).post('/api/tasks', { title: tz, due_date: '2026-11-30' })).body.task;
+            expect(t.due_date).toBe('2026-11-30');
+            expect((await as(me).patch(`/api/tasks/${t.id}`, { due_date: '2027-01-01' })).body.task.due_date).toBe('2027-01-01');
+          }
+        } finally {
+          if (saved === undefined) delete process.env.TZ; else process.env.TZ = saved;
+        }
+      });
+
+      it('期限で並べ替えない (並びは今のまま)', async () => {
+        await as(me).post('/api/tasks', { title: '遅い', due_date: '2026-12-31' });
+        await as(me).post('/api/tasks', { title: '早い', due_date: '2026-11-01' });
+        expect((await as(me).get('/api/tasks')).body.tasks.map((t: { title: string }) => t.title)).toEqual(['遅い', '早い']);
+      });
+    });
+
     it('消せる', async () => {
       const id = (await as(me).post('/api/tasks', { title: 'x' })).body.task.id;
       expect((await as(me).del(`/api/tasks/${id}`)).status).toBe(200);
@@ -186,6 +233,17 @@ describe('タスク一覧 (docs/16)', () => {
       const r = await asBot(me.user.id).patch(`/api/bot/tasks/${id}`, { ai_suggests_done: true, note: '13:53 に登録できたと聞いた' });
       expect(r.status).toBe(200);
       expect(r.body.task).toEqual(expect.objectContaining({ status: 'open', ai_suggests_done: true, note: '13:53 に登録できたと聞いた' }));
+    });
+
+    it('★ タスク 33 AI の口も期限を入れる・直す・空にできる (入れてよいときの決まりは docs/16 §4.2、口では断らない)。形が違えば 400', async () => {
+      const add = await asBot(me.user.id).post('/api/bot/tasks', { title: '12-04 に数え直す', due_date: '2026-12-04', note: 'AI が決めた日' });
+      expect(add.status).toBe(201);
+      expect(add.body.task.due_date).toBe('2026-12-04');
+      const id = add.body.task.id;
+      expect((await asBot(me.user.id).patch(`/api/bot/tasks/${id}`, { due_date: '2026-12-05' })).body.task.due_date).toBe('2026-12-05');
+      expect((await asBot(me.user.id).patch(`/api/bot/tasks/${id}`, { due_date: null })).body.task.due_date).toBeNull();
+      expect((await asBot(me.user.id).post('/api/bot/tasks', { title: 'x', due_date: '金曜' })).status).toBe(400);
+      expect((await asBot(me.user.id).get('/api/bot/tasks')).body.tasks[0]).toHaveProperty('due_date', null);
     });
 
     it('AI は消せない (一覧から黙って消えないように)。他人の一覧のものは直せない', async () => {

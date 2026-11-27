@@ -3,6 +3,7 @@
  * ★ 一覧は人のもの (owner_id)。部屋は括り。括りの部屋と元の投稿は、owner が入っている部屋のものだけ
  * ★ 済みにするのは人。AI の口は status を変えられない (§4.3) — 口の側で断る。ここは渡された値をそのまま書く
  */
+import pg from 'pg';
 import { pool } from '../db/pool.mts';
 import { isUuid } from '../utils/uuid.mts';
 
@@ -28,6 +29,8 @@ export interface TaskRow {
   done_at: Date | null;
   done_by: string | null;
   sort_order: number;
+  /** 期限 (050、日付だけ)。'YYYY-MM-DD' の字のまま返す。NULL = 期限なし */
+  due_date: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -43,6 +46,15 @@ const SELECT = `SELECT t.*, r.name AS room_name FROM tasks t LEFT JOIN rooms r O
 const ORDER = `ORDER BY (t.room_id IS NULL), r.name, t.room_id,
   array_position(ARRAY['decide','do','waiting','later']::varchar[], t.section), t.sort_order, t.created_at`;
 
+/**
+ * ★ DATE (oid 1082) は pg の既定だと「この機械の時間帯の 0 時」の Date になり、JSON で UTC に直すと日本では前の日になる。
+ *   この表の読みだけ字のまま受ける (pool 全体の既定は変えない: 他の DATE 列の読み手に響くため)
+ */
+const DATE_OID = 1082;
+const types = { getTypeParser: ((oid: number, format?: 'text' | 'binary') =>
+  oid === DATE_OID ? (v: string) => v : pg.types.getTypeParser(oid, format as 'text')) as typeof pg.types.getTypeParser };
+const query = <R extends pg.QueryResultRow>(text: string, values: unknown[]) => pool.query<R>({ text, values, types });
+
 export async function listTasks(ownerId: string, opts: { status?: string; roomId?: string } = {}): Promise<TaskRow[]> {
   const params: unknown[] = [ownerId];
   const where = ['t.owner_id = $1'];
@@ -56,13 +68,13 @@ export async function listTasks(ownerId: string, opts: { status?: string; roomId
     if (!isUuid(opts.roomId)) throw new TaskInputError('room_id が ID の形ではありません', 400);
     params.push(opts.roomId); where.push(`t.room_id = $${params.length}`);
   }
-  const { rows } = await pool.query<TaskRow>(`${SELECT} WHERE ${where.join(' AND ')} ${ORDER}`, params);
+  const { rows } = await query<TaskRow>(`${SELECT} WHERE ${where.join(' AND ')} ${ORDER}`, params);
   return rows;
 }
 
 async function getTask(id: string, ownerId: string): Promise<TaskRow | null> {
   if (!isUuid(id)) return null;
-  const { rows } = await pool.query<TaskRow>(`${SELECT} WHERE t.id = $1 AND t.owner_id = $2`, [id, ownerId]);
+  const { rows } = await query<TaskRow>(`${SELECT} WHERE t.id = $1 AND t.owner_id = $2`, [id, ownerId]);
   return rows[0] ?? null;
 }
 
@@ -82,7 +94,15 @@ async function checkScope(ownerId: string, roomId: string | null | undefined, me
   }
 }
 
-function checkFields(f: { title?: unknown; section?: unknown; status?: unknown; note?: unknown; sort_order?: unknown; source_message_ids?: unknown }, creating: boolean): void {
+/** 'YYYY-MM-DD' で、暦にある日か (2026-02-30 などは断る) */
+function isDateOnly(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
+}
+
+function checkFields(f: { title?: unknown; section?: unknown; status?: unknown; note?: unknown; sort_order?: unknown; source_message_ids?: unknown; due_date?: unknown }, creating: boolean): void {
   if (creating || f.title !== undefined) {
     if (typeof f.title !== 'string' || f.title.trim() === '') throw new TaskInputError('題 (title) が要ります', 400);
   }
@@ -91,25 +111,28 @@ function checkFields(f: { title?: unknown; section?: unknown; status?: unknown; 
   if (f.note !== undefined && f.note !== null && typeof f.note !== 'string') throw new TaskInputError('note は文字です', 400);
   if (f.sort_order !== undefined && !Number.isInteger(f.sort_order)) throw new TaskInputError('sort_order は整数です', 400);
   if (f.source_message_ids !== undefined && !Array.isArray(f.source_message_ids)) throw new TaskInputError('source_message_ids は配列です', 400);
+  if (f.due_date !== undefined && f.due_date !== null && (typeof f.due_date !== 'string' || !isDateOnly(f.due_date))) {
+    throw new TaskInputError('due_date は YYYY-MM-DD の日付か null です', 400);
+  }
 }
 
 export interface NewTask {
-  title: string; note?: string | null; section?: TaskSection; room_id?: string | null; source_message_ids?: string[]; sort_order?: number;
+  title: string; note?: string | null; section?: TaskSection; room_id?: string | null; source_message_ids?: string[]; sort_order?: number; due_date?: string | null;
 }
 
 export async function createTask(ownerId: string, createdBy: string, input: Record<string, unknown>): Promise<TaskRow> {
   checkFields(input, true);
   const t = input as unknown as NewTask;
   await checkScope(ownerId, t.room_id, t.source_message_ids);
-  const params = [ownerId, createdBy, t.title.trim(), t.note ?? null, t.section ?? 'do', t.room_id ?? null, [...new Set(t.source_message_ids ?? [])], t.sort_order ?? 0];
+  const params = [ownerId, createdBy, t.title.trim(), t.note ?? null, t.section ?? 'do', t.room_id ?? null, [...new Set(t.source_message_ids ?? [])], t.sort_order ?? 0, t.due_date ?? null];
   // ★ 番号は列の既定 (tasks_number_seq、049) が振る。会社全体の通し番号で、消した番号は使い回さない
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO tasks (owner_id, created_by, title, note, section, room_id, source_message_ids, sort_order)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8) RETURNING id`, params);
+    `INSERT INTO tasks (owner_id, created_by, title, note, section, room_id, source_message_ids, sort_order, due_date)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8, $9::date) RETURNING id`, params);
   return (await getTask(rows[0].id, ownerId))!;
 }
 
-const EDITABLE = ['title', 'note', 'section', 'status', 'room_id', 'source_message_ids', 'sort_order', 'ai_suggests_done'] as const;
+const EDITABLE = ['title', 'note', 'section', 'status', 'room_id', 'source_message_ids', 'sort_order', 'ai_suggests_done', 'due_date'] as const;
 
 /** 直す。見つからない (他人のもの) なら null。done にすると時刻と人を入れ AI の印を下ろす。done から戻すと消す */
 export async function updateTask(id: string, ownerId: string, actorId: string, patch: Record<string, unknown>): Promise<TaskRow | null> {
@@ -127,6 +150,7 @@ export async function updateTask(id: string, ownerId: string, actorId: string, p
     if (patch[k] === undefined) continue;
     if (k === 'title') set(k, (patch[k] as string).trim());
     else if (k === 'source_message_ids') set(k, [...new Set(patch[k] as string[])], '::uuid[]');
+    else if (k === 'due_date') set(k, patch[k], '::date');
     else set(k, patch[k]);
   }
   if (patch.status === 'done' && cur.status !== 'done') {
