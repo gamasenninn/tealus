@@ -14,6 +14,36 @@
   text-align: center;
 }
 
+/* #619 送れなかった音声・写真: 理由と「もう一度送る」「やめる」(消えずに残る) */
+.message-input-failed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  font-size: 13px;
+}
+.message-input-failed-text { flex: 1 1 180px; }
+.message-input-failed button {
+  border: none;
+  border-radius: 14px;
+  padding: 6px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.message-input-failed-retry { background: var(--primary); color: #fff; }
+.message-input-failed-retry:disabled { opacity: 0.5; cursor: default; }
+.message-input-failed-drop { background: #fff; color: #555; }
+.message-input-notice {
+  padding: 8px 12px;
+  background: #e8f5f4;
+  color: #0b6b6b;
+  font-size: 13px;
+  text-align: center;
+}
+
 .message-input-progress {
   position: relative;
   height: 24px;

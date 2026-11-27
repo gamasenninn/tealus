@@ -26,6 +26,17 @@ import './MessageInput.css';
 import { unlockAudio } from '../../services/audioContext';
 import { replyBarText } from '../../utils/replyQuote';
 import { notifyFailure } from '../../stores/confirmStore';
+import { arrivedAfter, lastMessageId } from '../../services/failedSend';
+
+/**
+ * #619 送れなかった音声・写真。手元に残して「もう一度送る」を出す (以前は失敗を出すだけで録音・写真は消えた)。
+ * sinceId = 送る前の部屋の最後の投稿 (もう一度送る前に、実は届いていたかを確かめる基準)。
+ * ★ 部屋を移ると入力欄ごと作り直すので消える (改善ループ 64: 次の部屋へ持ち越さない)
+ */
+type FailedSend = { sinceId: string | null; reason: string } & (
+  | { kind: 'voice'; blob: Blob; mimeType: string; replyToId?: string }
+  | { kind: 'media'; files: File[] }
+);
 
 /** 入力欄が伸びる上限 (px)。★ MessageInput.css の `.message-input-text { max-height }` と同じ値にすること
  *  (2026-10-16 まで JS は 150 で、CSS の 120 が勝っていた = 150 は効いていなかった) */
@@ -54,6 +65,8 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState('');
+  const [failedSend, setFailedSend] = useState<FailedSend | null>(null);
+  const [sendNotice, setSendNotice] = useState('');
   const [recorderStream, setRecorderStream] = useState<MediaStream | null>(null);
   const [showStamps, setShowStamps] = useState(false);
   const [showMention, setShowMention] = useState(false);
@@ -371,6 +384,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
     setIsSending(true);
     setUploadProgress(0);
     setUploadError('');
+    const sinceId = lastMessageId(useMessageStore.getState().messages);
     try {
       await api.uploadMedia(roomId, files, (progress) => {
         setUploadProgress(progress);
@@ -384,8 +398,8 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
         window.dispatchEvent(new CustomEvent('scroll:bottom'));
       }, UPLOAD_DELAY);
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setUploadError(''), 5000);
+      // #619 選んだ写真・ファイルを残して「もう一度送る」を出す (理由はそこに出し続ける)
+      setFailedSend({ kind: 'media', files, sinceId, reason: err instanceof Error ? err.message : String(err) });
     } finally {
       setIsSending(false);
       setUploadProgress(null);
@@ -450,28 +464,48 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
     }
   };
 
-  const handleVoiceSend = async (blob: Blob, mimeType: string) => {
+  // replyToId: もう一度送るときは、最初に送ったときの宛先を使う (#619)
+  const handleVoiceSend = async (blob: Blob, mimeType: string, replyToId: string | undefined = replyTo?.id) => {
     if (transceiver?.isProducing) transceiver.stopProducing();
     setRecorderStream(null);
 
     setIsSending(true);
     setUploadProgress(0);
+    const sinceId = lastMessageId(useMessageStore.getState().messages);
     try {
       await api.uploadVoice(roomId, blob, (progress) => {
         setUploadProgress(progress);
-      }, replyTo?.id);
+      }, replyToId);
       clearReplyTo();
       collapse();   // #513 送ったら畳む (★ 2026-10-24 まで音声だけ抜けていて、返信を押して音声で返すと入力欄が残っていた)
       // Re-fetch messages and scroll to bottom
       await useMessageStore.getState().fetchMessages(roomId);
       window.dispatchEvent(new CustomEvent('scroll:bottom'));
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
-      setTimeout(() => setUploadError(''), 5000);
+      // #619 録音を残して「もう一度送る」を出す (以前は録り直しだった)
+      setFailedSend({ kind: 'voice', blob, mimeType, replyToId, sinceId, reason: err instanceof Error ? err.message : String(err) });
     } finally {
       setIsSending(false);
       setUploadProgress(null);
     }
+  };
+
+  // #619 もう一度送る。★ 送れていたのに返事だけ来なかったときに二重に送らないよう、先に部屋を読み直して確かめる
+  const retryFailedSend = async () => {
+    const f = failedSend;
+    if (!f || isSending) return;
+    setFailedSend(null);
+    try {
+      await useMessageStore.getState().fetchMessages(roomId);
+      if (arrivedAfter(useMessageStore.getState().messages, f.sinceId, user?.id ?? '', f.kind)) {
+        setSendNotice('送れていました (もう一度は送りません)');
+        setTimeout(() => setSendNotice(''), 5000);
+        window.dispatchEvent(new CustomEvent('scroll:bottom'));
+        return;
+      }
+    } catch { /* 読み直せなければ、そのまま送り直す (送れないときはまた残る) */ }
+    if (f.kind === 'voice') await handleVoiceSend(f.blob, f.mimeType, f.replyToId);
+    else await uploadFiles(f.files);
   };
 
   const sendStamp = async (stamp: Stamp) => {
@@ -496,6 +530,16 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
       {uploadError && (
         <div className="message-input-error">{uploadError}</div>
       )}
+      {failedSend && (
+        <div className="message-input-failed" role="alert">
+          <span className="message-input-failed-text">
+            {failedSend.kind === 'voice' ? '音声' : `写真・ファイル ${failedSend.files.length} 件`}を送れませんでした: {failedSend.reason}
+          </span>
+          <button className="message-input-failed-retry" onClick={retryFailedSend} disabled={isSending}>もう一度送る</button>
+          <button className="message-input-failed-drop" onClick={() => setFailedSend(null)}>やめる</button>
+        </div>
+      )}
+      {sendNotice && <div className="message-input-notice">{sendNotice}</div>}
       {uploadProgress !== null && (
         <div className="message-input-progress">
           <div className="message-input-progress-bar" style={{ width: `${uploadProgress}%` }} />
