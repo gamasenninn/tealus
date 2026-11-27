@@ -46,7 +46,7 @@
 .task-due-flag.overdue { background: #dc2626; }
 .task-due-flag.today { background: #ea580c; }
 .task-item.done .task-due { color: #999; }
-.task-held { margin-left: 6px; font-size: 13px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }
+.task-held { display: inline-block; white-space: nowrap; margin-left: 6px; font-size: 13px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }   /* 11-28 「保留 11/28〜」が 2 行に割れないように */
 /* 11-28 説明をたたむ: 題名の前の小さな ▸ (説明があるタスクだけ)。開いているときは ▾ */
 .task-note-toggle { background: none; border: none; padding: 0 2px 0 0; margin: 0; color: var(--primary); cursor: pointer; vertical-align: -2px; }
 .task-note-toggle svg { transition: transform 0.15s; }
