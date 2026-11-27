@@ -136,6 +136,15 @@ function MultiTalk() {
     const existing = panels.find(p => p.roomId === room.id);
     if (existing) {
       setActivePanel(existing.id);
+      // ★ docs/16 §5.1 帯の「元の会話」: 開いているパネルの中で元の発言へ移る (11-27 16:11 利用者。最初は前に出すだけで移らなかった)。
+      //   部屋の画面の message:scroll-to (#256 返信の引用を押したときと同じ口。読み込んでいなければ前後を読み直して移る)。
+      //   最小化していたら元に戻す (帯だけでは見えない)
+      if (room.msgId) {
+        if (existing.minimized) setPanels(prev => prev.map(p => p.id === existing.id ? toggleMinimize(p) : p));
+        const frame = containerRef.current?.querySelector<HTMLIFrameElement>(`iframe[data-panel-id="${existing.id}"]`);
+        const win = frame?.contentWindow as (Window & typeof globalThis) | null | undefined;
+        try { win?.dispatchEvent(new win.CustomEvent('message:scroll-to', { detail: { id: room.msgId } })); } catch { /* 中が別オリジンへ移っている */ }
+      }
       return;
     }
 
@@ -363,6 +372,7 @@ function MultiTalk() {
               <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
                 <iframe
                   className="multi-panel-iframe"
+                  data-panel-id={panel.id}
                   src={`/rooms/${panel.roomId}?embed=true${panel.msgId ? `&msg=${encodeURIComponent(panel.msgId)}` : ''}`}
                   title={panel.roomName}
                   // ★ 中を押したら、このパネルを有効にして最前面へ (2026-10-25)。iframe の中の操作は親の onMouseDown に届かない。

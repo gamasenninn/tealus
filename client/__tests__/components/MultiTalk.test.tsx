@@ -436,13 +436,27 @@ describe('MultiTalk — タスクの帯 (docs/16 §5.1)', () => {
     expect(useMultiTalkStore.getState().openRoomIds).toEqual(['r1']);
   });
 
-  it('★ もう開いている部屋なら、パネルは増やさない', async () => {
+  // ★ 11-27 16:11 利用者: 開いているパネルは前に出るだけで、元の発言へ移らなかった (最初の作りは「前に出すだけ」)
+  it('★★ もう開いている部屋なら、パネルは増やさず、そのパネルの中で元の発言へ移る (message:scroll-to)', async () => {
     useMultiTalkStore.setState({ tasksOpen: true });
     const { container } = renderMulti();
     act(() => { useMultiTalkStore.getState().requestOpen({ id: 'r1', name: '営業' }); });
+    const got: unknown[] = [];
+    container.querySelector('iframe')!.contentWindow!.addEventListener('message:scroll-to', (e) => got.push((e as CustomEvent).detail));
     fireEvent.click(await screen.findByRole('button', { name: /元の会話/ }));
     expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
     expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/rooms/r1?embed=true');
+    expect(got).toEqual([{ id: 'm1' }]);
+  });
+
+  it('★ 最小化しているパネルなら、元に戻してから移る', async () => {
+    useMultiTalkStore.setState({ tasksOpen: true });
+    localStorage.setItem('multiTalkPanels:me', JSON.stringify([{ id: 1, roomId: 'r1', roomName: '営業', x: 0, y: 0, width: 400, height: 400 }]));
+    const { container } = renderMulti();
+    fireEvent.click(container.querySelector('.multi-panel-btn')!);   // 最小化
+    expect(screen.getByTitle('元に戻す')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /元の会話/ }));
+    expect(screen.queryByTitle('元に戻す')).toBeNull();
   });
 
   it('★ 飛ぶ先の発言は覚えない (開き直したときに毎回飛ばない)', async () => {
