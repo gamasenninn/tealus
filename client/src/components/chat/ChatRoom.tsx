@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { canUseVoiceChat } from '../../utils/permissions';
 import { useAuthStore } from '../../stores/authStore';
@@ -21,6 +21,8 @@ import { groupByDay, jumpToDate } from '../../utils/dateJump';
 import { scrollIntoContainer } from '../../utils/scrollWithin';
 import { findUnreadStartId } from '../../utils/unreadLine';
 import { showComposer } from '../../utils/roomComposer';
+import { composerShift } from '../../utils/composerShift';
+import { SCROLL_NEAR_BOTTOM } from '../../constants/ui';
 import UnreadSeparator from './UnreadSeparator';
 import { ArrowLeft, Search, Image, ChevronDown, ChevronUp, Phone, PhoneCall, Radio, Mic, ExternalLink } from 'lucide-react';
 import { openAppInNewTab } from '../../utils/openAppInNewTab';
@@ -111,6 +113,22 @@ function ChatRoom() {
   const { typingUsers, agentStatus } = useSocketSync(roomId, targetMsgId);
   useRoomRemovedRedirect(roomId, isEmbed);   // ★ #533 この部屋から外れたらトーク一覧へ
   const { messagesEndRef, messagesContainerRef, loadMoreSentinelRef, handleScroll } = useMessageScroll(roomId);
+  // 11-28 利用者の案 A (マルチトークのパネル): 広げた入力欄にいちばん下の投稿が隠れる。下を見ていたら、その高さぶん上にずらす
+  const [composerPad, setComposerPad] = useState(0);
+  const composerPadRef = useRef(0);
+  const pinAfterPad = useRef(false);
+  const handleComposerOverlap = useCallback((overlap: number) => {
+    const c = messagesContainerRef.current;
+    if (!c) return;
+    const next = composerShift(c, overlap, composerPadRef.current);
+    pinAfterPad.current = next > 0 && c.scrollHeight - c.scrollTop - c.clientHeight < SCROLL_NEAR_BOTTOM;
+    composerPadRef.current = next;
+    setComposerPad(next);
+  }, [messagesContainerRef]);
+  useLayoutEffect(() => {
+    const c = messagesContainerRef.current;
+    if (c && pinAfterPad.current) { c.scrollTop = c.scrollHeight; pinAfterPad.current = false; }
+  }, [composerPad, messagesContainerRef]);
   const { onlineUsers } = useOnlineStatus();
   const transceiver = useTransceiver(roomId);
   const realtimeVoiceAvailable = useCapabilityStore((s) => s.realtimeVoiceAvailable);
@@ -238,6 +256,7 @@ function ChatRoom() {
             ))}
           </div>
         ))}
+        {composerPad > 0 && <div className="chat-composer-pad" style={{ height: composerPad, flexShrink: 0 }} aria-hidden="true" />}
         <div ref={messagesEndRef} />
       </div>
 
@@ -324,7 +343,7 @@ function ChatRoom() {
       {/* ★ key={roomId}: 部屋を移ったら入力欄を作り直す (改善ループ 64、#649 A-2)。パソコンの 2 列の画面ではこの画面が
           作り直されないので、下書き・録音・送信中の状態が次の部屋へ持ち越され、そのまま別の部屋へ送れた。
           利用者の判断 (2026-11-18): 下書きは部屋ごとに残さず消す */}
-      {showComposer(roomError) && <MessageInput key={roomId} roomId={roomId} transceiver={transceiver} collapsible={isEmbed} />}
+      {showComposer(roomError) && <MessageInput key={roomId} roomId={roomId} transceiver={transceiver} collapsible={isEmbed} onOverlapChange={isEmbed ? handleComposerOverlap : undefined} />}
 
       {showMembers && (
         <MemberList roomId={roomId} onClose={() => setShowMembers(false)} />

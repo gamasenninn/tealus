@@ -55,13 +55,31 @@ interface MessageInputProps {
   transceiver?: TransceiverControls | null;
   /** #513 畳める入力欄 (マルチトークのパネルの中)。普段は 1 行の帯 + マイクだけにし、押したら重ねて広げる */
   collapsible?: boolean;
+  /** 11-28 案 A: 広げた入力欄がトークに重なる高さ (px)。閉じたら 0。トークの側がずらすかを決める (utils/composerShift) */
+  onOverlapChange?: (px: number) => void;
 }
 
-function MessageInput({ roomId, transceiver, collapsible = false }: MessageInputProps) {
+function MessageInput({ roomId, transceiver, collapsible = false, onOverlapChange }: MessageInputProps) {
   const [text, setText] = useState('');
   // #513 広げているか。畳める設定が無ければ常に広げた扱い。★ 畳んでも部品は消さない (書きかけを残す)
   const [expanded, setExpanded] = useState(false);
   const collapse = () => { if (collapsible) setExpanded(false); };
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  // 11-28 案 A: 広げた入力欄がトークに重なる高さを知らせる。背が変われば (行が増えた・返信先が付いた) 知らせ直す
+  useEffect(() => {
+    if (!collapsible || !onOverlapChange) return;
+    if (!expanded) { onOverlapChange(0); return; }
+    const measure = () => {
+      const sheet = sheetRef.current, box = containerRef.current;
+      if (sheet && box) onOverlapChange(Math.max(0, sheet.offsetHeight - box.offsetHeight));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined' || !sheetRef.current) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(sheetRef.current);
+    return () => ro.disconnect();
+  }, [collapsible, expanded, onOverlapChange]);
   const [isSending, setIsSending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState('');
@@ -698,7 +716,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
   //   広げた入力は帯の上に重ねる (メッセージ欄を押し上げない = 見ていた位置がずれない)
   const draft = text.trim().split('\n')[0];
   return (
-    <div className={`message-input-container collapsible ${expanded ? 'expanded' : ''}`}>
+    <div ref={containerRef} className={`message-input-container collapsible ${expanded ? 'expanded' : ''}`}>
       {status}
       <div className="message-input-row message-input-collapsed" aria-hidden={expanded || undefined}>
         <button
@@ -710,7 +728,7 @@ function MessageInput({ roomId, transceiver, collapsible = false }: MessageInput
         </button>
         {!expanded && micButton}
       </div>
-      {expanded && <div className="message-input-sheet">{composer}</div>}
+      {expanded && <div ref={sheetRef} className="message-input-sheet">{composer}</div>}
       {recorder}
     </div>
   );
