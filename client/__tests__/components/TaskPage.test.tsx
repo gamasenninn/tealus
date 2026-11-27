@@ -9,7 +9,7 @@ import type { Task } from '../../src/types';
 
 const base: Omit<Task, 'id' | 'number' | 'title' | 'section' | 'room_id' | 'room_name'> = {
   owner_id: 'u1', note: null, status: 'open', source_message_ids: [], ai_suggests_done: false,
-  created_by: 'u1', done_at: null, done_by: null, sort_order: 0, created_at: '2026-11-26T00:00:00Z', updated_at: '2026-11-26T00:00:00Z',
+  created_by: 'u1', done_at: null, done_by: null, sort_order: 0, due_date: null, created_at: '2026-11-26T00:00:00Z', updated_at: '2026-11-26T00:00:00Z',
 };
 const TASKS: Task[] = [
   { ...base, id: 't1', number: 1, title: 'ビルドしてよいか', section: 'decide', room_id: 'r1', room_name: '開発', note: 'よければ一言', source_message_ids: ['m1'] },
@@ -129,6 +129,97 @@ describe('TaskPage', () => {
     release({ tasks: [{ ...TASKS[0], title: 'AI が足した' }] });
     await screen.findByText('AI が足した');
     expect((screen.getByRole('button', { name: '読み直す' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  describe('★ タスク 33 期限 (docs/16 §5・§8-6)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 10, 30, 10, 0));   // 今日 = 2026-11-30 (端末の暦)
+      api.listTasks.mockResolvedValue({ tasks: [
+        { ...TASKS[0], due_date: '2026-11-29' },
+        { ...TASKS[1], due_date: '2026-11-30' },
+        { ...TASKS[2], due_date: '2026-12-05' },
+        { ...TASKS[3], due_date: '2026-11-01', status: 'done' },
+      ] });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    const row = (title: string) => screen.getByText(title).closest('.task-item') as HTMLElement;
+
+    it('題の後ろに「〆月/日」。期限切れ・今日までは字で出す (印刷で色が落ちても読める)。済みには出さない', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      expect(within(row('ビルドしてよいか')).getByText('〆11/29')).toBeTruthy();
+      expect(within(row('ビルドしてよいか')).getByText('期限切れ').className).toContain('overdue');
+      expect(within(row('タスクを登録')).getByText('今日まで').className).toContain('today');
+      expect(within(row('返事を待つ')).getByText('〆12/5')).toBeTruthy();
+      expect(within(row('返事を待つ')).queryByText(/期限切れ|今日まで/)).toBeNull();
+      expect(within(row('個人のこと')).getByText('〆11/1')).toBeTruthy();
+      expect(within(row('個人のこと')).queryByText('期限切れ')).toBeNull();
+    });
+
+    it('見出しの数字の横に、期限切れの件数を赤で', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      expect(screen.getByLabelText('期限切れ 1 件').textContent).toBe('1');
+    });
+
+    it('期限切れが無ければ赤い数字は出さない', async () => {
+      api.listTasks.mockResolvedValue({ tasks: [{ ...TASKS[0], due_date: '2026-12-01' }] });
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      expect(screen.queryByLabelText(/期限切れ \d+ 件/)).toBeNull();
+    });
+
+    it('★ 並びは本体が返した順のまま (期限で並べ替えない)', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      const nos = Array.from(document.querySelectorAll('.task-no')).map((e) => e.textContent);
+      expect(nos).toEqual(['1', '5', '3', '12']);
+    });
+
+    it('★ 各行の「直す」で題・ひとこと・区分・期限を変える。「直す」は印刷に出さない', async () => {
+      api.updateTask.mockImplementationOnce((async (id: string, f: Partial<Task>) => ({ task: { ...TASKS[0], ...f, id } })) as never);
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      const edit = within(row('ビルドしてよいか')).getByRole('button', { name: '直す' });
+      expect(edit.className).toContain('no-print');
+      fireEvent.click(edit);
+      const form = within(screen.getByRole('form', { name: '直す' }));
+      expect((form.getByLabelText('期限') as HTMLInputElement).value).toBe('2026-11-29');
+      fireEvent.change(form.getByLabelText('題'), { target: { value: 'ビルドの可否' } });
+      fireEvent.change(form.getByLabelText('ひとこと'), { target: { value: '' } });
+      fireEvent.change(form.getByLabelText('区分'), { target: { value: 'waiting' } });
+      fireEvent.change(form.getByLabelText('期限'), { target: { value: '2026-12-10' } });
+      fireEvent.click(form.getByRole('button', { name: '保存' }));
+      await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith('t1', { title: 'ビルドの可否', note: null, section: 'waiting', due_date: '2026-12-10' }));
+      expect(await screen.findByText('〆12/10')).toBeTruthy();
+      expect(screen.queryByRole('form', { name: '直す' })).toBeNull();
+    });
+
+    it('期限は空にできる (「期限なし」→ null で送る)', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.click(within(row('ビルドしてよいか')).getByRole('button', { name: '直す' }));
+      const form = within(screen.getByRole('form', { name: '直す' }));
+      fireEvent.click(form.getByRole('button', { name: '期限なし' }));
+      expect((form.getByLabelText('期限') as HTMLInputElement).value).toBe('');
+      fireEvent.click(form.getByRole('button', { name: '保存' }));
+      await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith('t1', expect.objectContaining({ due_date: null })));
+    });
+
+    it('題を空にしては保存しない。「やめる」で何も送らずに戻る', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.click(within(row('ビルドしてよいか')).getByRole('button', { name: '直す' }));
+      const form = within(screen.getByRole('form', { name: '直す' }));
+      fireEvent.change(form.getByLabelText('題'), { target: { value: '  ' } });
+      expect((form.getByRole('button', { name: '保存' }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(form.getByRole('button', { name: 'やめる' }));
+      expect(screen.queryByRole('form', { name: '直す' })).toBeNull();
+      expect(api.updateTask).not.toHaveBeenCalled();
+      expect(screen.getByText('ビルドしてよいか')).toBeTruthy();
+    });
   });
 
   it('0 件なら「残っているタスクはありません」', async () => {

@@ -4,6 +4,7 @@
 .task-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--primary); color: #fff; position: sticky; top: 0; z-index: 2; }
 .task-header h1 { flex: 1; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }
 .task-count { background: #fff; color: var(--primary); border-radius: 10px; padding: 0 8px; font-size: 13px; line-height: 20px; }
+.task-overdue-count { background: #dc2626; color: #fff; border-radius: 10px; padding: 0 8px; font-size: 13px; line-height: 20px; }   /* 期限切れの件数 (タスク 33) */
 .task-back, .task-print, .task-reload { background: none; border: none; color: #fff; display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; padding: 4px; }
 .task-reload:disabled { opacity: 0.6; cursor: default; }
 .task-reload.spinning svg { animation: task-spin 0.8s linear infinite; }
@@ -34,10 +35,25 @@
 .task-item.done .task-title { color: #999; text-decoration: line-through; }
 .task-no { display: inline-block; min-width: 1.6em; margin-right: 6px; padding: 0 4px; border-radius: 4px; background: #eef1f3; color: #555; font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
 .task-date { margin-right: 6px; color: #888; font-size: 13px; font-variant-numeric: tabular-nums; }
+/* 期限 (タスク 33、docs/16 §5)。期限切れは赤・今日までは橙。字でも出すので印刷で色が落ちても読める */
+.task-due { margin-left: 6px; color: #555; font-size: 14px; font-weight: normal; font-variant-numeric: tabular-nums; }
+.task-due-flag { margin-left: 6px; font-size: 13px; font-weight: bold; border-radius: 8px; padding: 0 6px; color: #fff; }
+.task-due-flag.overdue { background: #dc2626; }
+.task-due-flag.today { background: #ea580c; }
+.task-item.done .task-due { color: #999; }
 .task-held { margin-left: 6px; font-size: 13px; color: #6b7280; border: 1px solid #ccc; border-radius: 8px; padding: 0 6px; }
 .task-note { font-size: 14.5px; line-height: 1.5; color: #555; margin-top: 2px; }
 .task-source { background: none; border: none; color: var(--primary); font-size: 14px; cursor: pointer; padding: 0 0 0 6px; }
 .task-ai-done { margin-top: 4px; border: 1px solid var(--primary); background: #e6fffb; color: #0b6b6b; border-radius: 10px; font-size: 14px; padding: 1px 10px; cursor: pointer; }
+
+.task-edit { flex-shrink: 0; border: 1px solid #ccc; background: #fff; color: #555; border-radius: 12px; font-size: 13px; padding: 2px 10px; cursor: pointer; }
+.task-edit-form { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.task-edit-form label { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: #555; }
+.task-edit-form input, .task-edit-form textarea, .task-edit-form select { font-size: 16px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; background: #fff; font-family: inherit; }   /* iOS の自動拡大を避ける 16px */
+.task-edit-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.task-edit-row button { font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+.task-edit-save { background: var(--primary) !important; color: #fff; border-color: var(--primary) !important; }
+.task-edit-save:disabled { opacity: 0.5; cursor: default; }
 
 .task-add { padding: 12px; }
 .task-add-open { display: inline-flex; align-items: center; gap: 4px; border: none; background: var(--primary); color: #fff; border-radius: 18px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
@@ -67,4 +83,6 @@
   .task-date { color: #444; font-size: 9px; }
   .task-note { color: #444; font-size: 10px; }
   .task-ai-done { display: none; }
+  .task-due { color: #000; font-size: 10px; }
+  .task-due-flag { background: none !important; color: #000; border: 1px solid #000; font-size: 9px; }
 }

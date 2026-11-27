@@ -859,11 +859,11 @@ class ApiClient {
     return this.request<{ tasks: Task[] }>('GET', `/tasks${q ? `?${q}` : ''}`);
   }
 
-  addTask(fields: { title: string; note?: string; section?: TaskSection; room_id?: string | null }) {
+  addTask(fields: { title: string; note?: string; section?: TaskSection; room_id?: string | null; due_date?: string | null }) {
     return this.request<{ task: Task }>('POST', '/tasks', fields);
   }
 
-  updateTask(id: string, fields: Partial<Pick<Task, 'title' | 'note' | 'section' | 'status' | 'room_id' | 'sort_order' | 'ai_suggests_done'>>) {
+  updateTask(id: string, fields: Partial<Pick<Task, 'title' | 'note' | 'section' | 'status' | 'room_id' | 'sort_order' | 'ai_suggests_done' | 'due_date'>>) {
     return this.request<{ task: Task }>('PATCH', `/tasks/${id}`, fields);
   }
 

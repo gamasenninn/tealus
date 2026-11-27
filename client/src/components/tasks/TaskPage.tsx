@@ -3,12 +3,14 @@
  * ★ 部屋の見出し → 区分 (決める / 手を動かす / 待ち / 今日でなくてよい) → 1 件 1 行
  * ★ 済みにするのは本人 (□)。AI の「済んだようです」は印で、押せば済み (docs/16 §4.3)
  * ★ 印刷は「いま画面で絞っているもの」をそのまま (2026-11-26 利用者の案)。印刷用の見た目は TaskPage.css の @media print
+ * ★ 期限 (タスク 33、§8-6): 題の後ろに〆月/日・期限切れ / 今日までは字で (印刷で色が落ちても読める)。並べ替えない。各行の「直す」で題・ひとこと・区分・期限
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, Printer, Plus } from 'lucide-react';
 import { api } from '../../services/api';
 import type { Task, TaskSection } from '../../types';
+import { localToday, dueState, dueLabel, countOverdue } from '../../utils/taskDue';
 import './TaskPage.css';
 
 const SECTIONS: { key: TaskSection; label: string }[] = [
@@ -26,6 +28,7 @@ const STATUS_FILTERS: { key: string | undefined; label: string }[] = [
 const NO_ROOM = '__none__';
 
 interface Group { key: string; name: string; tasks: Task[] }
+interface Draft { title: string; note: string; section: TaskSection; due: string }
 
 /** 作った日 (月/日)。番号は会社全体の通し番号なので、いつのものかは横に添える (docs/16 §8-5、11-26 利用者) */
 const madeOn = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
@@ -53,6 +56,8 @@ function TaskPage() {
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newSection, setNewSection] = useState<TaskSection>('do');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft>({ title: '', note: '', section: 'do', due: '' });
 
   const load = useCallback(async (s: string | undefined) => {
     setLoading(true);
@@ -109,13 +114,36 @@ function TaskPage() {
     }
   };
 
-  const remaining = tasks.filter((t) => t.status !== 'done').length;
+  const startEdit = (t: Task) => {
+    setDraft({ title: t.title, note: t.note ?? '', section: t.section, due: t.due_date ?? '' });
+    setEditing(t.id);
+  };
 
+  // タスク 33 「直す」: 題・ひとこと・区分・期限をその場で。期限は空 (null) にもできる
+  const saveEdit = async (t: Task) => {
+    const title = draft.title.trim();
+    if (!title) return;
+    const fields = { title, note: draft.note.trim() || null, section: draft.section, due_date: draft.due || null };
+    try {
+      const res = await api.updateTask(t.id, fields);
+      setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, ...fields, ...(res?.task ?? {}) } : x)));
+      setEditing(null);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const remaining = tasks.filter((t) => t.status !== 'done').length;
+  const today = localToday();
+  const overdue = countOverdue(tasks, today);
   return (
     <div className="task-page">
       <header className="task-header no-print">
         <button className="task-back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/talk'))} aria-label="戻る"><ArrowLeft size={22} /></button>
-        <h1>タスク{status === undefined && <span className="task-count">{remaining}</span>}</h1>
+        <h1>タスク{status === undefined && <span className="task-count">{remaining}</span>}
+          {overdue > 0 && <span className="task-overdue-count" aria-label={`期限切れ ${overdue} 件`}>{overdue}</span>}
+        </h1>
         <button className={`task-reload ${reloading ? 'spinning' : ''}`} onClick={reload} disabled={reloading || loading} aria-label="読み直す" title="読み直す"><RefreshCw size={18} /></button>
         <button className="task-print" onClick={() => window.print()}><Printer size={18} /> 印刷</button>
       </header>
@@ -159,11 +187,33 @@ function TaskPage() {
                       checked={t.status === 'done'}
                       onChange={(e) => setDone(t, e.target.checked)}
                     />
+                    {editing === t.id ? (
+                    <form className="task-edit-form no-print" aria-label="直す" onSubmit={(e) => { e.preventDefault(); saveEdit(t); }}>
+                      <label>題<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></label>
+                      <label>ひとこと<textarea rows={2} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></label>
+                      <div className="task-edit-row">
+                        <label>区分
+                          <select value={draft.section} onChange={(e) => setDraft({ ...draft, section: e.target.value as TaskSection })}>
+                            {SECTIONS.map((s2) => <option key={s2.key} value={s2.key}>{s2.label}</option>)}
+                          </select>
+                        </label>
+                        <label>期限<input type="date" value={draft.due} onChange={(e) => setDraft({ ...draft, due: e.target.value })} /></label>
+                        <button type="button" className="task-edit-clear" onClick={() => setDraft({ ...draft, due: '' })}>期限なし</button>
+                      </div>
+                      <div className="task-edit-row">
+                        <button type="submit" className="task-edit-save" disabled={!draft.title.trim()}>保存</button>
+                        <button type="button" className="task-edit-cancel" onClick={() => setEditing(null)}>やめる</button>
+                      </div>
+                    </form>
+                    ) : (
                     <div className="task-body">
                       <div className="task-title">
                         <span className="task-no">{t.number}</span>
                         <span className="task-date">{madeOn(t.created_at)}</span>
                         {t.title}
+                        {t.due_date && <span className="task-due">{dueLabel(t.due_date)}</span>}
+                        {dueState(t, today) === 'overdue' && <span className="task-due-flag overdue">期限切れ</span>}
+                        {dueState(t, today) === 'today' && <span className="task-due-flag today">今日まで</span>}
                         {t.status === 'held' && <span className="task-held">保留</span>}
                       </div>
                       {(t.note || (t.room_id && t.source_message_ids.length > 0)) && (
@@ -178,6 +228,8 @@ function TaskPage() {
                         <button className="task-ai-done" onClick={() => setDone(t, true)}>AI: 済んだようです ✓</button>
                       )}
                     </div>
+                    )}
+                    {editing !== t.id && <button className="task-edit no-print" onClick={() => startEdit(t)}>直す</button>}
                   </div>
                 ))}
               </div>

@@ -313,6 +313,8 @@ export interface Task {
   done_at: string | null;
   done_by: string | null;
   sort_order: number;
+  /** 期限 (050、日付だけ 'YYYY-MM-DD')。null = 期限なし。期限切れ・今日までは utils/taskDue.ts */
+  due_date: string | null;
   created_at: string;
   updated_at: string;
 }
