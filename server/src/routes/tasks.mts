@@ -10,6 +10,14 @@ import * as E from '../constants/errors.mts';
 import { authenticate } from '../middleware/auth.mts';
 import { readRequester, requesterOf } from '../services/requesterScope.mts';
 import { listTasks, createTask, updateTask, deleteTask, TaskInputError } from '../services/taskRepo.mts';
+import { isGuest } from '../utils/permissions.mts';
+import { pool } from '../db/pool.mts';
+
+/**
+ * ★ お客様 (guest) は使えない (11-27 ブラウザの試験で、お客様の口座でも呼べた)。段階 1 は社員本人の一覧だけ (docs/16 §4.1・§7)。
+ *   画面はお客様にボタンを出していないが、口が開いていると一覧を作れてしまう
+ */
+const GUEST_REFUSED = 'お客様の口座ではタスクを使えません';
 
 function fail(res: Response, err: unknown, where: string): Response {
   if (err instanceof TaskInputError) return res.status(err.status).json({ error: err.message });
@@ -24,6 +32,10 @@ const q = (v: unknown) => (typeof v === 'string' ? v : undefined);
 // ============================================
 export const router = express.Router();
 router.use(authenticate);
+router.use((req: Request, res: Response, next) => {
+  if (isGuest(req.user)) return res.status(403).json({ error: GUEST_REFUSED });
+  next();
+});
 
 router.get('/', async (req, res) => {
   try {
@@ -66,6 +78,14 @@ botRouter.use((req: Request, res: Response, next) => {
   if (!req.user?.is_bot) return res.status(403).json({ error: 'この口は機械の口座だけが使えます' });
   if (!requesterOf(res)) return res.status(400).json({ error: '誰のタスクか (X-Tealus-Requester) が要ります' });
   next();
+});
+// ★ 頼んだ人がお客様なら断る (お客様の一覧に AI が書かない)。印の人が居ないときは今までどおり (taskRepo が部屋・投稿で絞る)
+botRouter.use(async (_req: Request, res: Response, next) => {
+  try {
+    const { rows } = await pool.query<{ role: string }>('SELECT role FROM users WHERE id = $1', [requesterOf(res)]);
+    if (rows[0] && isGuest(rows[0])) return res.status(403).json({ error: GUEST_REFUSED });
+    next();
+  } catch (err) { fail(res, err, 'bot requester'); }
 });
 
 botRouter.get('/', async (req, res) => {

@@ -252,4 +252,34 @@ describe('タスク一覧 (docs/16)', () => {
       expect((await asBot(other.user.id).patch(`/api/bot/tasks/${id}`, { title: 'y' })).status).toBe(404);
     });
   });
+  // ★ 11-27 ブラウザの試験で、お客様 (guest) の口座でも /api/tasks を呼べた (画面はお客様に出していない)。
+  //   段階 1 は社員本人の一覧だけ (docs/16 §4.1・§7)。お客様の一覧は本人の口でも AI の口でも作らない
+  describe('お客様 (guest) は使えない', () => {
+    let guest: T;
+    beforeEach(async () => {
+      guest = await createTestUser({ login_id: 'GST661', display_name: 'お客様' });
+      await getTestPool().query(`UPDATE users SET role = 'guest' WHERE id = $1`, [guest.user.id]);
+    });
+
+    it('本人の口: 読む・足す・直す・消すは 403', async () => {
+      expect((await as(guest).get('/api/tasks')).status).toBe(403);
+      expect((await as(guest).post('/api/tasks', { title: 'x' })).status).toBe(403);
+      expect((await as(guest).patch('/api/tasks/00000000-0000-0000-0000-000000000000', { title: 'y' })).status).toBe(403);
+      expect((await as(guest).del('/api/tasks/00000000-0000-0000-0000-000000000000')).status).toBe(403);
+      const { rows } = await getTestPool().query('SELECT count(*)::int AS n FROM tasks WHERE owner_id = $1', [guest.user.id]);
+      expect(rows[0].n).toBe(0);
+    });
+
+    it('AI の口: 頼んだ人がお客様なら 403 (お客様の一覧に書かない)', async () => {
+      expect((await asBot(guest.user.id).get('/api/bot/tasks')).status).toBe(403);
+      expect((await asBot(guest.user.id).post('/api/bot/tasks', { title: 'x' })).status).toBe(403);
+      const { rows } = await getTestPool().query('SELECT count(*)::int AS n FROM tasks WHERE owner_id = $1', [guest.user.id]);
+      expect(rows[0].n).toBe(0);
+    });
+
+    it('社員の本人の口・AI の口は今までどおり', async () => {
+      expect((await as(me).get('/api/tasks')).status).toBe(200);
+      expect((await asBot(me.user.id).get('/api/bot/tasks')).status).toBe(200);
+    });
+  });
 });
