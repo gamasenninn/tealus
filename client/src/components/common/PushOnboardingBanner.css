@@ -17,6 +17,12 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
+/* 部屋の画面・マルチトーク (bannerPlacement): 部屋の見出しの下に出す。下だと入力欄の上に重なってボタンを押せなかった (11-27) */
+.push-onboarding.push-onboarding--top {
+  bottom: auto;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+}
+
 .push-onboarding-text {
   flex: 1 1 200px;
   line-height: 1.4;

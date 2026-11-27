@@ -20,7 +20,7 @@ vi.mock('../../src/services/pushNotification', () => ({
 const getConfig = vi.fn(() => ({ vapid_public_key: 'k' }));
 vi.mock('../../src/services/clientConfig', () => ({ getConfig: () => getConfig() }));
 
-import PushOnboardingBanner from '../../src/components/common/PushOnboardingBanner';
+import PushOnboardingBanner, { bannerPlacement } from '../../src/components/common/PushOnboardingBanner';
 
 describe('PushOnboardingBanner', () => {
   beforeEach(() => {
@@ -118,5 +118,26 @@ describe('PushOnboardingBanner', () => {
     isIosBrowserTab.mockReturnValue(true);
     const { container } = render(<PushOnboardingBanner />);
     expect(container.textContent).toBe('');
+  });
+
+  // ★ 11-27 ブラウザの試験 (#619): 部屋の画面では案内の帯が入力欄の上に重なり、スマホ幅で「もう一度送る」などを押せなかった
+  describe('置き場 (部屋の画面では上へ)', () => {
+    it('★★ 部屋の画面・マルチトークでは上 (入力欄に重ねない)。ほかの画面は今までどおり下 (下の帯の上)', () => {
+      expect(bannerPlacement('/rooms/abc')).toBe('top');
+      expect(bannerPlacement('/multi')).toBe('top');
+      expect(bannerPlacement('/talk')).toBe('bottom');
+      expect(bannerPlacement('/')).toBe('bottom');
+      expect(bannerPlacement('/tasks')).toBe('bottom');
+    });
+
+    it('★ placement="top" で上の置き場の印が付く', () => {
+      const { container } = render(<PushOnboardingBanner placement="top" />);
+      expect(container.querySelector('.push-onboarding')?.classList.contains('push-onboarding--top')).toBe(true);
+    });
+
+    it('既定は下 (印なし)', () => {
+      const { container } = render(<PushOnboardingBanner />);
+      expect(container.querySelector('.push-onboarding')?.classList.contains('push-onboarding--top')).toBe(false);
+    });
   });
 });

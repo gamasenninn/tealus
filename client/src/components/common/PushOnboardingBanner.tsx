@@ -17,7 +17,15 @@ function dismissedThisSession(): boolean {
  * ★ iPhone の Safari (ホーム画面から開いていない) では通知が届かないので、ホーム画面に追加を案内する。
  * ★ 「あとで」はこの起動のあいだだけ閉じる。プロフィールの「この端末で通知を受け取る」(#546) はいつでも使える
  */
-function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = true, onRegistered }: {
+/**
+ * 案内の帯をどこに出すか。★ 部屋の画面・マルチトークでは上 (部屋の見出しの下) — 下に出すと入力欄の上に重なり、
+ *   スマホ幅で「もう一度送る」などのボタンを押せなかった (2026-11-27 ブラウザの試験、#619)。ほかの画面は下 (下の帯の上)
+ */
+export function bannerPlacement(pathname: string): 'top' | 'bottom' {
+  return pathname.startsWith('/rooms/') || pathname === '/multi' ? 'top' : 'bottom';
+}
+
+function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = true, onRegistered, placement = 'bottom' }: {
   /**
    * 本体が数えた有効な通知の宛先の本数 (改善ループ 40)。★ 0 なら許可の状態に関係なく案内する。
    *   11-03 に iPhone の宛先が 410 で外れた人は許可済みのままで、「まだ聞いていない端末」だけを案内する作りでは何も出ず、
@@ -31,6 +39,8 @@ function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = t
   hadSubscriptions?: boolean;
   /** 押して登録できたとき (店の本数を 1 にして、ほかの画面でも出直さないように) */
   onRegistered?: () => void;
+  /** 置き場 (bannerPlacement)。既定は下 */
+  placement?: 'top' | 'bottom';
 }) {
   const [hidden, setHidden] = useState(dismissedThisSession);
   // ★ 押して登録できなかった (改善ループ 41)。以前は押した瞬間に帯を消していたので、失敗しても本人には「できた」に見えた
@@ -46,7 +56,7 @@ function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = t
 
   if (isIosBrowserTab()) {
     return (
-      <div className="push-onboarding" role="status">
+      <div className={placement === 'top' ? 'push-onboarding push-onboarding--top' : 'push-onboarding'} role="status">
         <span className="push-onboarding-text">iPhone で通知を受け取るには、共有ボタン (□↑) →「ホーム画面に追加」から Tealus を開いてください</span>
         <button className="push-onboarding-btn secondary" onClick={close}>閉じる</button>
       </div>
@@ -65,7 +75,7 @@ function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = t
   const permission = pushPermission();
   if (failed) {
     return (
-      <div className="push-onboarding" role="status">
+      <div className={placement === 'top' ? 'push-onboarding push-onboarding--top' : 'push-onboarding'} role="status">
         <span className="push-onboarding-text">通知を受け取れるようにできませんでした。プロフィールの「この端末で通知を受け取る」からもう一度試してください</span>
         <button className="push-onboarding-btn secondary" onClick={close}>閉じる</button>
       </div>
@@ -74,7 +84,7 @@ function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = t
   if (activeSubscriptions === 0 && permission === 'granted') {
     // ★ iPhone は宛先を捨てても許可は残る。作り直すにはタップの中で頼む必要がある (#546)
     return (
-      <div className="push-onboarding" role="status">
+      <div className={placement === 'top' ? 'push-onboarding push-onboarding--top' : 'push-onboarding'} role="status">
         <span className="push-onboarding-text">この端末に通知が届いていません。押すと受け取れるようにします</span>
         <button className="push-onboarding-btn" onClick={enable}>通知を受け取る</button>
         <button className="push-onboarding-btn secondary" onClick={close}>あとで</button>
@@ -83,7 +93,7 @@ function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = t
   }
   if (activeSubscriptions === 0 && hadSubscriptions && permission === 'denied') {
     return (
-      <div className="push-onboarding" role="status">
+      <div className={placement === 'top' ? 'push-onboarding push-onboarding--top' : 'push-onboarding'} role="status">
         <span className="push-onboarding-text">通知が切れているので、メッセージが届いても知らせが出ません。端末の設定で Tealus の通知を「許可」にしてから開き直してください</span>
         <button className="push-onboarding-btn secondary" onClick={close}>閉じる</button>
       </div>
@@ -93,7 +103,7 @@ function PushOnboardingBanner({ activeSubscriptions = null, hadSubscriptions = t
   if (permission !== 'default') return null;
 
   return (
-    <div className="push-onboarding" role="status">
+    <div className={placement === 'top' ? 'push-onboarding push-onboarding--top' : 'push-onboarding'} role="status">
       <span className="push-onboarding-text">メッセージが届いたときに通知を受け取れます。押すと確認が出るので「許可」を選んでください</span>
       <button className="push-onboarding-btn" onClick={enable}>通知を受け取る</button>
       <button className="push-onboarding-btn secondary" onClick={close}>あとで</button>

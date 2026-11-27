@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useCapabilityStore } from './stores/capabilityStore';
 import { useCallNotification } from './hooks/useCallNotification';
@@ -22,7 +22,13 @@ import CallWindow from './components/call/CallWindow';
 import CallBanner from './components/call/CallBanner';
 import ConfirmModal from './components/common/ConfirmModal';
 import UpdateBanner from './components/common/UpdateBanner';
-import PushOnboardingBanner from './components/common/PushOnboardingBanner';
+import PushOnboardingBanner, { bannerPlacement } from './components/common/PushOnboardingBanner';
+
+/** 通知の案内の帯を、画面に合わせた置き場で出す (部屋の画面では入力欄に重ねない、11-27)。BrowserRouter の中で使う */
+function PlacedPushOnboarding(props: Omit<React.ComponentProps<typeof PushOnboardingBanner>, 'placement'>) {
+  const { pathname } = useLocation();
+  return <PushOnboardingBanner {...props} placement={bannerPlacement(pathname)} />;
+}
 import ForcePasswordChange from './components/auth/ForcePasswordChange';
 import TtsStopButton from './components/common/TtsStopButton';
 import DesktopShell from './components/layout/DesktopShell';
@@ -91,7 +97,7 @@ function App() {
       <ConfirmModal />
       {user && <TtsStopButton />}
       {/* ★ 2026-10-29 初めての人への通知の案内 (許可の問いの前に説明する・iPhone の Safari ではホーム画面に追加) */}
-      {user && <PushOnboardingBanner activeSubscriptions={pushActiveSubscriptions} hadSubscriptions={pushHadSubscriptions} onRegistered={notePushRegistered} />}
+      {user && <PlacedPushOnboarding activeSubscriptions={pushActiveSubscriptions} hadSubscriptions={pushHadSubscriptions} onRegistered={notePushRegistered} />}
       {user && realtimeVoiceAvailable && incomingCall && (
         <IncomingCallModal
           callerName={incomingCall.callerName}
