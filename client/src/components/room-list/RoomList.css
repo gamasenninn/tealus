@@ -66,6 +66,12 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* docs/16 §5.1 マルチトークでタスクの帯を出している間 (押してある) */
+.icon-button.active {
+  background: #fff;
+  color: var(--primary);
+}
+
 .room-list-user-info {
   display: flex;
   align-items: center;

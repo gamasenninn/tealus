@@ -4,7 +4,7 @@
  *   同じ見た目で押した結果が違ったので、`/multi` では RoomList でパネルを開く
  */
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/services/socket', () => ({ getSocket: () => null }));
@@ -75,5 +75,38 @@ describe('RoomList — マルチトーク (#502)', () => {
     useMultiTalkStore.setState({ openRoomIds: ['r2'] });
     const { container } = renderAt('/talk');
     expect(container.querySelectorAll('.room-item.open-in-panel')).toHaveLength(0);
+  });
+});
+
+function Loc() {
+  return <div data-testid="loc">{useLocation().pathname}</div>;
+}
+function renderWithLoc(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="*" element={<><RoomList /><Loc /></>} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+describe('RoomList — マルチトークのタスクの帯 (docs/16 §5.1)', () => {
+  beforeEach(() => { useMultiTalkStore.setState({ tasksOpen: false }); });
+
+  it('★★ /multi で「タスク」を押すと、移らずに右の帯を出す / もう一度で隠す', () => {
+    renderWithLoc('/multi');
+    fireEvent.click(screen.getByTitle('タスク'));
+    expect(useMultiTalkStore.getState().tasksOpen).toBe(true);
+    expect(screen.getByTestId('loc').textContent).toBe('/multi');
+    fireEvent.click(screen.getByTitle('タスク'));
+    expect(useMultiTalkStore.getState().tasksOpen).toBe(false);
+  });
+
+  it('ほかの画面では帯を出さない (タスクの画面へ移る)', () => {
+    renderWithLoc('/talk');
+    fireEvent.click(screen.getByTitle('タスク'));
+    expect(useMultiTalkStore.getState().tasksOpen).toBe(false);
+    expect(screen.getByTestId('loc').textContent).toBe('/tasks');
   });
 });

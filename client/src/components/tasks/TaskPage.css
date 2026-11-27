@@ -1,5 +1,7 @@
 /* タスク一覧 (docs/16)。色は Tealus の決まり (index.css の --primary) を使う (11-26 利用者の指摘: 独自の濃い色を書いていた)。印刷は @media print で色を落とし、操作の部品を隠す */
 .task-page { max-width: 720px; margin: 0 auto; padding-bottom: 32px; background: #fff; min-height: 100vh; }
+/* docs/16 §5.1 マルチトークの右の帯の中: 帯の幅いっぱい・高さは帯に任せる (帯がスクロールする) */
+.task-page.embedded { max-width: none; margin: 0; min-height: 100%; }
 
 .task-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--primary); color: #fff; position: sticky; top: 0; z-index: 2; }
 .task-header h1 { flex: 1; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }

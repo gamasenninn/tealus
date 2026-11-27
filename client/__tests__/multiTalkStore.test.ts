@@ -38,3 +38,33 @@ describe('useMultiTalkStore (#502)', () => {
     expect(useMultiTalkStore.getState().sidebarHidden).toBe(false);
   });
 });
+
+/**
+ * docs/16 §5.1 (11-27) マルチトークの右の帯にタスク一覧。開いているかと幅は覚えておく (端末ごと)
+ */
+describe('useMultiTalkStore — タスクの帯 (docs/16 §5.1)', () => {
+  beforeEach(() => {
+    localStorage.removeItem('multiTalkTasksOpen');
+    localStorage.removeItem('multiTalkTasksWidth');
+    useMultiTalkStore.setState({ tasksOpen: false, tasksWidth: 360 });
+  });
+
+  it('★ toggleTasks で出す / 隠す。覚えておく', () => {
+    useMultiTalkStore.getState().toggleTasks();
+    expect(useMultiTalkStore.getState().tasksOpen).toBe(true);
+    expect(localStorage.getItem('multiTalkTasksOpen')).toBe('1');
+    useMultiTalkStore.getState().toggleTasks();
+    expect(useMultiTalkStore.getState().tasksOpen).toBe(false);
+    expect(localStorage.getItem('multiTalkTasksOpen')).toBe('0');
+  });
+
+  it('★ 幅は 300〜640 に収めて覚えておく', () => {
+    useMultiTalkStore.getState().setTasksWidth(500);
+    expect(useMultiTalkStore.getState().tasksWidth).toBe(500);
+    expect(localStorage.getItem('multiTalkTasksWidth')).toBe('500');
+    useMultiTalkStore.getState().setTasksWidth(100);
+    expect(useMultiTalkStore.getState().tasksWidth).toBe(300);
+    useMultiTalkStore.getState().setTasksWidth(2000);
+    expect(useMultiTalkStore.getState().tasksWidth).toBe(640);
+  });
+});

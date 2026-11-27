@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Rnd } from 'react-rnd';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal, ArrowDownToLine } from 'lucide-react';
+import { LayoutGrid, X, Columns, PanelLeftClose, Menu, Maximize2, Minimize2, Square, MonitorSmartphone, GripHorizontal, ArrowDownToLine, ListChecks } from 'lucide-react';
 import { useMultiTalkStore, type MultiTalkRoomRef } from '../../stores/multiTalkStore';
 import { useRoomStore } from '../../stores/roomStore';
 import { useAuthStore } from '../../stores/authStore';
-import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, type PanelWindowState } from './panelWindow';
+import { MINIMIZED_HEIGHT, asNormal, toggleMinimize, toggleMaximize, onBarDoubleClick, fitIntoArea, type PanelWindowState } from './panelWindow';
+import TaskPage from '../tasks/TaskPage';
 import { findInsertTarget, insertPanel, layoutPanels, type InsertHint, type LayoutMode } from './panelOrder';
 import './MultiTalk.css';
 
@@ -26,6 +27,8 @@ interface TalkPanel extends PanelWindowState {
   id: number;
   roomId: string;
   roomName: string;
+  /** docs/16 §5.1 タスクの帯の「元の会話」から開いたとき、最初に飛ぶ発言。★ 覚えない (保存するときに外す。開き直すたびに飛ばない) */
+  msgId?: string;
   // x / y / width / height、#503 minimized (帯に名前を出す)、#504 maximized と戻す先は PanelWindowState
 }
 
@@ -51,6 +54,8 @@ function MultiTalk() {
   const userId = useAuthStore((s) => s.user?.id ?? 'anon');
   const pendingOpen = useMultiTalkStore((s) => s.pendingOpen);
   const sidebarHidden = useMultiTalkStore((s) => s.sidebarHidden);
+  const tasksOpen = useMultiTalkStore((s) => s.tasksOpen);
+  const tasksWidth = useMultiTalkStore((s) => s.tasksWidth);
   const [panels, setPanels] = useState<TalkPanel[]>(() => loadPanels(userId));
   const [activePanel, setActivePanel] = useState<number | null>(null);
   const [interacting, setInteracting] = useState(false);
@@ -61,7 +66,7 @@ function MultiTalk() {
 
   // panels 変更時に localStorage に保存。★ #502 開いている部屋を左の一覧の印のために店へ知らせる
   useEffect(() => {
-    try { localStorage.setItem(panelsKey(userId), JSON.stringify(panels)); } catch { /* 保存領域が使えないだけ */ }
+    try { localStorage.setItem(panelsKey(userId), JSON.stringify(panels.map(({ msgId: _drop, ...p }) => p))); } catch { /* 保存領域が使えないだけ */ }
     useMultiTalkStore.getState().setOpenRoomIds(panels.map(p => p.roomId));
   }, [panels, userId]);
 
@@ -145,6 +150,7 @@ function MultiTalk() {
       id: ++panelCounter.current,
       roomId: room.id,
       roomName: room.name || 'DM',
+      ...(room.msgId ? { msgId: room.msgId } : {}),
       x: 20 + offset,
       y: 20 + offset,
       width,
@@ -154,6 +160,33 @@ function MultiTalk() {
     setPanels(prev => [...prev, newPanel]);
     setActivePanel(newPanel.id);
     // 未読はその場で 0 にする処理を RoomList が押したときにしている (#238 と同じ)
+  };
+
+  // ★ docs/16 §5.1 タスクの帯を出す・幅を変えると置き場が狭くなる。帯の下へはみ出たパネルだけ内側へ寄せる (ほかは動かさない)
+  useEffect(() => {
+    const c = containerRef.current;
+    if (!c) return;
+    const cw = c.clientWidth, ch = c.clientHeight;
+    setPanels((prev) => {
+      const next = prev.map((p) => fitIntoArea(p, cw, ch));
+      return next.some((p, i) => p !== prev[i]) ? next : prev;
+    });
+  }, [tasksOpen, tasksWidth]);
+
+  // ★ docs/16 §5.1 帯の左の境目をつまんで幅を変える。動かしている間はパネルの中 (iframe) に指を取られないよう interacting にする
+  const startTasksResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = useMultiTalkStore.getState().tasksWidth;
+    setInteracting(true);
+    const move = (ev: PointerEvent) => useMultiTalkStore.getState().setTasksWidth(startWidth + (startX - ev.clientX));
+    const up = () => {
+      setInteracting(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   };
 
   // パネル閉じる
@@ -235,6 +268,9 @@ function MultiTalk() {
         <button onClick={() => { localStorage.setItem('multiTalkLayout', 'columns'); arrangeColumns(); }} title="横並び整列"><Columns size={18} /></button>
         {/* ★ #507 開いている全パネルを一番下へ。中身は同じオリジンの iframe なので、部屋の画面の scroll:bottom を直接送る */}
         <button onClick={scrollAllToBottom} title="すべて最下部へ"><ArrowDownToLine size={18} /></button>
+        {/* ★ docs/16 §5.1 右の帯にタスク一覧 (左の一覧を隠していても出し入れできるよう、ここにも置く) */}
+        <button className={tasksOpen ? 'active' : ''} onClick={() => useMultiTalkStore.getState().toggleTasks()}
+          title={tasksOpen ? 'タスクを隠す' : 'タスクを出す'} aria-pressed={tasksOpen}><ListChecks size={18} /></button>
         <div className="multi-toolbar-divider" />
         <button onClick={() => navigate('/talk')} title="シングルモードに戻る"><MonitorSmartphone size={18} /></button>
       </div>
@@ -327,7 +363,7 @@ function MultiTalk() {
               <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
                 <iframe
                   className="multi-panel-iframe"
-                  src={`/rooms/${panel.roomId}?embed=true`}
+                  src={`/rooms/${panel.roomId}?embed=true${panel.msgId ? `&msg=${encodeURIComponent(panel.msgId)}` : ''}`}
                   title={panel.roomName}
                   // ★ 中を押したら、このパネルを有効にして最前面へ (2026-10-25)。iframe の中の操作は親の onMouseDown に届かない。
                   //   同じオリジンなので中の window で拾う。部屋を移るたびに中の window が入れ替わるので、読み込みのたびに付け直す
@@ -345,6 +381,15 @@ function MultiTalk() {
           </Rnd>
         ))}
       </div>
+
+      {tasksOpen && (
+        <aside className="multi-tasks" style={{ width: `${tasksWidth}px` }} aria-label="タスク">
+          <div className="multi-tasks-grip" onPointerDown={startTasksResize} title="つまんで幅を変える" aria-hidden="true" />
+          <div className="multi-tasks-body">
+            <TaskPage embedded onOpenSource={openPanel} />
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

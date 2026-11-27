@@ -70,3 +70,18 @@ export function onBarDoubleClick<T extends PanelWindowState>(p: T, area: PanelGe
   const y = Math.max(area.y, Math.min(from.y, area.y + area.height - height));
   return { ...asNormal(p), x, y, width, height };
 }
+
+/**
+ * docs/16 §5.1 置き場が狭くなったとき (タスクの帯を出した) に、はみ出たパネルだけ内側へ寄せる。
+ * 収まっていればそのまま返す (ほかのパネルは動かさない)。幅・高さが入らなければ縮める。
+ * 置き場の大きさが取れない (0) ときは何もしない
+ */
+export function fitIntoArea<T extends PanelGeom>(p: T, areaWidth: number, areaHeight: number): T {
+  if (areaWidth <= 0 || areaHeight <= 0) return p;
+  const width = Math.min(p.width, areaWidth);
+  const height = Math.min(p.height, areaHeight);
+  const x = Math.max(0, Math.min(p.x, areaWidth - width));
+  const y = Math.max(0, Math.min(p.y, areaHeight - height));
+  if (x === p.x && y === p.y && width === p.width && height === p.height) return p;
+  return { ...p, x, y, width, height };
+}

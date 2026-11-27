@@ -81,6 +81,7 @@ function RoomList() {
   const { pathname } = useLocation();
   const onMulti = roomClickAction(pathname) === 'panel';
   const openRoomIds = useMultiTalkStore((s) => s.openRoomIds);
+  const tasksOpen = useMultiTalkStore((s) => s.tasksOpen);
 
   useEffect(() => {
     fetchRooms();
@@ -185,7 +186,10 @@ function RoomList() {
             <Search size={20} />
           </button>
           {!isGuest(user) && (
-            <button className="icon-button" onClick={() => navigate('/tasks')} title="タスク">
+            // ★ docs/16 §5.1 マルチトークでは画面を移らず、右の帯を出し入れする
+            <button className={onMulti && tasksOpen ? 'icon-button active' : 'icon-button'}
+              onClick={() => (onMulti ? useMultiTalkStore.getState().toggleTasks() : navigate('/tasks'))} title="タスク"
+              aria-pressed={onMulti ? tasksOpen : undefined}>
               <ListChecks size={20} />
               {overdueTasks > 0 && <span className="icon-badge-overdue" aria-label={`期限切れ ${overdueTasks} 件`}>{overdueTasks}</span>}
             </button>

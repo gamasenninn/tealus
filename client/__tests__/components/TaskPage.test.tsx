@@ -227,4 +227,25 @@ describe('TaskPage', () => {
     renderPage();
     expect(await screen.findByText('残っているタスクはありません')).toBeTruthy();
   });
+  /** docs/16 §5.1 マルチトークの右の帯に置くとき */
+  describe('帯の中 (embedded)', () => {
+    const onOpenSource = vi.fn();
+    const renderEmbedded = () => render(<MemoryRouter><TaskPage embedded onOpenSource={onOpenSource} /></MemoryRouter>);
+    beforeEach(() => onOpenSource.mockClear());
+
+    it('★ 「戻る」と「印刷」は出さない。読み直すは出す', async () => {
+      renderEmbedded();
+      await screen.findByText('ビルドしてよいか');
+      expect(screen.queryByRole('button', { name: '戻る' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /印刷/ })).toBeNull();
+      expect(screen.getByRole('button', { name: '読み直す' })).toBeTruthy();
+    });
+
+    it('★★ 「元の会話」は画面を移らず、部屋と発言を渡す (マルチトークがパネルで開く)', async () => {
+      renderEmbedded();
+      fireEvent.click(await screen.findByRole('button', { name: /元の会話/ }));
+      expect(onOpenSource).toHaveBeenCalledWith({ id: 'r1', name: '開発', msgId: 'm1' });
+      expect(navigate).not.toHaveBeenCalled();
+    });
+  });
 });

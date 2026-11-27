@@ -3,6 +3,7 @@
  * ★ 部屋の見出し → 区分 (決める / 手を動かす / 待ち / 今日でなくてよい) → 1 件 1 行
  * ★ 済みにするのは本人 (□)。AI の「済んだようです」は印で、押せば済み (docs/16 §4.3)
  * ★ 印刷は「いま画面で絞っているもの」をそのまま (2026-11-26 利用者の案)。印刷用の見た目は TaskPage.css の @media print
+ * ★ マルチトークの右の帯 (§5.1) では embedded: 「戻る」「印刷」を出さず、「元の会話」は画面を移らずに onOpenSource へ渡す (パネルで開く)
  * ★ 期限 (タスク 33、§8-6): 題の後ろに〆月/日・期限切れ / 今日までは字で (印刷で色が落ちても読める)。並べ替えない。各行の「直す」で題・ひとこと・区分・期限
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -45,7 +46,14 @@ function groupByRoom(tasks: Task[]): Group[] {
   return groups;
 }
 
-function TaskPage() {
+interface TaskPageProps {
+  /** docs/16 §5.1 マルチトークの右の帯の中 */
+  embedded?: boolean;
+  /** 帯の「元の会話」: 画面を移らずに、部屋と発言を渡す (マルチトークがパネルで開く) */
+  onOpenSource?: (src: { id: string; name: string; msgId: string }) => void;
+}
+
+function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [status, setStatus] = useState<string | undefined>(undefined);
@@ -138,14 +146,14 @@ function TaskPage() {
   const today = localToday();
   const overdue = countOverdue(tasks, today);
   return (
-    <div className="task-page">
+    <div className={embedded ? 'task-page embedded' : 'task-page'}>
       <header className="task-header no-print">
-        <button className="task-back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/talk'))} aria-label="戻る"><ArrowLeft size={22} /></button>
+        {!embedded && <button className="task-back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/talk'))} aria-label="戻る"><ArrowLeft size={22} /></button>}
         <h1>タスク{status === undefined && <span className="task-count">{remaining}</span>}
           {overdue > 0 && <span className="task-overdue-count" aria-label={`期限切れ ${overdue} 件`}>{overdue}</span>}
         </h1>
         <button className={`task-reload ${reloading ? 'spinning' : ''}`} onClick={reload} disabled={reloading || loading} aria-label="読み直す" title="読み直す"><RefreshCw size={18} /></button>
-        <button className="task-print" onClick={() => window.print()}><Printer size={18} /> 印刷</button>
+        {!embedded && <button className="task-print" onClick={() => window.print()}><Printer size={18} /> 印刷</button>}
       </header>
 
       <h1 className="task-print-title print-only">
@@ -220,7 +228,11 @@ function TaskPage() {
                         <div className="task-note">
                           {t.note}
                           {t.room_id && t.source_message_ids.length > 0 && (
-                            <button className="task-source no-print" onClick={() => navigate(`/rooms/${t.room_id}?msg=${t.source_message_ids[0]}`)}>元の会話 ›</button>
+                            <button className="task-source no-print" onClick={() => {
+                              const msgId = t.source_message_ids[0];
+                              if (embedded && onOpenSource) onOpenSource({ id: t.room_id!, name: t.room_name ?? '', msgId });
+                              else navigate(`/rooms/${t.room_id}?msg=${msgId}`);
+                            }}>元の会話 ›</button>
                           )}
                         </div>
                       )}

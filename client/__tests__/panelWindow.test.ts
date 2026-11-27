@@ -4,7 +4,7 @@
  *   ダブルクリックは「トーク 1 つが読みやすい大きさ」(幅 480・高さは置き場の半分、位置は今の場所) にする
  */
 import { describe, it, expect } from 'vitest';
-import { onBarDoubleClick, toggleMinimize, toggleMaximize, FIT_WIDTH } from '../src/components/multi/panelWindow';
+import { onBarDoubleClick, toggleMinimize, toggleMaximize, FIT_WIDTH, fitIntoArea } from '../src/components/multi/panelWindow';
 
 const area = { x: 4, y: 4, width: 1600, height: 900 };
 
@@ -42,5 +42,28 @@ describe('帯のダブルクリック', () => {
   it('最小化中なら今どおり元に戻す', () => {
     const min = toggleMinimize({ x: 100, y: 50, width: 300, height: 200 });
     expect(onBarDoubleClick(min, area)).toMatchObject({ x: 100, y: 50, width: 300, height: 200, minimized: false });
+  });
+});
+
+/**
+ * docs/16 §5.1 タスクの帯を出したとき、帯の下へはみ出るパネルだけ内側へ寄せる (ほかは動かさない)
+ */
+describe('fitIntoArea — 置き場が狭くなったとき', () => {
+  it('★ 収まっているパネルはそのまま (同じものを返す)', () => {
+    const p = { x: 100, y: 50, width: 300, height: 200 };
+    expect(fitIntoArea(p, 1000, 800)).toBe(p);
+  });
+  it('★★ 右へはみ出たら左へ寄せる (大きさはそのまま)', () => {
+    expect(fitIntoArea({ x: 800, y: 50, width: 300, height: 200 }, 1000, 800)).toMatchObject({ x: 700, y: 50, width: 300, height: 200 });
+  });
+  it('★ 幅が入らなければ左端に置いて縮める', () => {
+    expect(fitIntoArea({ x: 200, y: 50, width: 1200, height: 200 }, 1000, 800)).toMatchObject({ x: 0, width: 1000 });
+  });
+  it('下へはみ出たら上へ寄せる', () => {
+    expect(fitIntoArea({ x: 0, y: 700, width: 300, height: 200 }, 1000, 800)).toMatchObject({ y: 600, height: 200 });
+  });
+  it('置き場の大きさが取れない (0) ときは何もしない', () => {
+    const p = { x: 800, y: 50, width: 300, height: 200 };
+    expect(fitIntoArea(p, 0, 0)).toBe(p);
   });
 });

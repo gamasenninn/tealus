@@ -30,6 +30,11 @@
   color: var(--primary);
 }
 
+.multi-toolbar button.active {
+  background: rgba(0, 180, 160, 0.15);
+  color: var(--primary);
+}
+
 .multi-toolbar button:disabled {
   opacity: 0.3;
   cursor: default;
@@ -193,3 +198,27 @@
 }
 .multi-insert-line.before { left: -6px; }
 .multi-insert-line.after { right: -6px; }
+
+/* docs/16 §5.1 右の帯のタスク一覧。幅は店 (multiTalkStore) が覚え、左の境目をつまんで変える */
+.multi-tasks {
+  position: relative;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border-light);
+  background: #fff;
+  display: flex;
+}
+.multi-tasks-grip {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 3;
+}
+.multi-tasks-grip:hover { background: rgba(0, 180, 160, 0.3); }
+.multi-tasks-body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}

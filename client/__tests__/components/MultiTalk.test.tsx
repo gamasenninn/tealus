@@ -3,7 +3,17 @@
  */
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// docs/16 §5.1 タスクの帯の中身 (TaskPage) が読む。帯を出さない試験では呼ばれない
+const api = vi.hoisted(() => ({
+  listTasks: vi.fn(async () => ({ tasks: [{
+    id: 't1', number: 1, title: 'ビルドしてよいか', section: 'decide', room_id: 'r1', room_name: '営業', note: null, status: 'open',
+    source_message_ids: ['m1'], ai_suggests_done: false, owner_id: 'me', created_by: 'me', done_at: null, done_by: null,
+    sort_order: 0, due_date: null, created_at: '2026-11-26T00:00:00Z', updated_at: '2026-11-26T00:00:00Z',
+  }] })),
+}));
+vi.mock('../../src/services/api', () => ({ api }));
 import MultiTalk from '../../src/components/multi/MultiTalk';
 import { useMultiTalkStore } from '../../src/stores/multiTalkStore';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -20,7 +30,7 @@ beforeEach(() => {
   localStorage.removeItem('multiTalkPanels');
   useAuthStore.setState({ user: { id: 'me', role: 'user', display_name: '私' } } as never);
   useRoomStore.setState({ rooms: [] } as never);
-  useMultiTalkStore.setState({ pendingOpen: null, openRoomIds: [], sidebarHidden: false });
+  useMultiTalkStore.setState({ pendingOpen: null, openRoomIds: [], sidebarHidden: false, tasksOpen: false, tasksWidth: 360 });
 });
 
 describe('MultiTalk (#502)', () => {
@@ -393,5 +403,54 @@ describe('MultiTalk — 人ごとに覚える・入れない部屋は閉じる',
     expect(container.querySelectorAll('.multi-panel')).toHaveLength(2);
     act(() => { useRoomStore.setState({ rooms: [{ id: 'r1', type: 'group', name: 'r1' }] } as never); });
     expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
+  });
+});
+
+/**
+ * docs/16 §5.1 (11-27 利用者の決定) マルチトークの右の帯にタスク一覧
+ */
+describe('MultiTalk — タスクの帯 (docs/16 §5.1)', () => {
+  it('★ ツールバーの「タスク」で右の帯を出す / 隠す', async () => {
+    const { container } = renderMulti();
+    expect(container.querySelector('.multi-tasks')).toBeNull();
+    fireEvent.click(screen.getByTitle('タスクを出す'));
+    expect(useMultiTalkStore.getState().tasksOpen).toBe(true);
+    expect(await screen.findByText('ビルドしてよいか')).toBeTruthy();
+    expect(container.querySelector('.multi-tasks')).not.toBeNull();
+    fireEvent.click(screen.getByTitle('タスクを隠す'));
+    expect(container.querySelector('.multi-tasks')).toBeNull();
+  });
+
+  it('★ 帯の幅は覚えている幅', async () => {
+    useMultiTalkStore.setState({ tasksOpen: true, tasksWidth: 420 });
+    const { container } = renderMulti();
+    await screen.findByText('ビルドしてよいか');
+    expect((container.querySelector('.multi-tasks') as HTMLElement).style.width).toBe('420px');
+  });
+
+  it('★★ 帯の「元の会話」は、その部屋をパネルで開き、その発言へ飛ぶ', async () => {
+    useMultiTalkStore.setState({ tasksOpen: true });
+    const { container } = renderMulti();
+    fireEvent.click(await screen.findByRole('button', { name: /元の会話/ }));
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/rooms/r1?embed=true&msg=m1');
+    expect(useMultiTalkStore.getState().openRoomIds).toEqual(['r1']);
+  });
+
+  it('★ もう開いている部屋なら、パネルは増やさない', async () => {
+    useMultiTalkStore.setState({ tasksOpen: true });
+    const { container } = renderMulti();
+    act(() => { useMultiTalkStore.getState().requestOpen({ id: 'r1', name: '営業' }); });
+    fireEvent.click(await screen.findByRole('button', { name: /元の会話/ }));
+    expect(container.querySelectorAll('.multi-panel')).toHaveLength(1);
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('/rooms/r1?embed=true');
+  });
+
+  it('★ 飛ぶ先の発言は覚えない (開き直したときに毎回飛ばない)', async () => {
+    useMultiTalkStore.setState({ tasksOpen: true });
+    renderMulti();
+    fireEvent.click(await screen.findByRole('button', { name: /元の会話/ }));
+    const saved = JSON.parse(localStorage.getItem('multiTalkPanels:me') || '[]');
+    expect(saved[0].roomId).toBe('r1');
+    expect(saved[0].msgId).toBeUndefined();
   });
 });
