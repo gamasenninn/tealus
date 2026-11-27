@@ -12,7 +12,7 @@ import request from 'supertest';
 
 import { setupTestDb, cleanTestDb, closeTestDb, getTestPool } from '../helpers/db.mts';
 import { createTestUser } from '../helpers/auth.mts';
-import { app, server as appServer } from '../../src/app.mts';
+import { app, server as appServer, io } from '../../src/app.mts';
 import { activeCalls } from '../../src/socket/handlers/call.mts';
 
 describe('#483 部屋の外を指す口', () => {
@@ -111,10 +111,18 @@ describe('#483 部屋の外を指す口', () => {
     it('★ 部屋に流す既読数に、別の部屋の投稿を入れない', async () => {
       const watcher = await connect(b.token, [r1]);
       const sender = await connect(a.token, [r1]);
+      // ★ 11-27 CI で 2 回続けて落ちた (届いたのが 0 件)。room:join は DB でメンバーを確かめてから入るので、
+      //   接続後 200ms の決め打ちでは遅い CI で間に合わず、見張る側が部屋に入る前に流れていた。本体の部屋に入ったのを見てから送る
+      const until = async (ok: () => boolean, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (!ok() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+      };
+      await until(() => !!io.sockets.adapter.rooms.get(r1)?.has(watcher.id!));
       const got: Array<Record<string, unknown>> = [];
       watcher.on('message:read', (p: { read_counts: Record<string, unknown> }) => { got.push(p.read_counts); });
       sender.emit('message:read', { room_id: r1, message_ids: [m1new, m3, 'x'] });
-      await new Promise((r) => setTimeout(r, 400));
+      await until(() => got.length > 0);
+      await new Promise((r) => setTimeout(r, 200));   // 2 通目が来ないことも見る
       expect(got).toHaveLength(1);
       expect(Object.keys(got[0])).toEqual([m1new]);
     });
