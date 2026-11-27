@@ -4,11 +4,13 @@
  * ★ 済みにするのは本人 (□)。AI の「済んだようです」は印で、押せば済み (docs/16 §4.3)
  * ★ 印刷は「いま画面で絞っているもの」をそのまま (2026-11-26 利用者の案)。印刷用の見た目は TaskPage.css の @media print
  * ★ マルチトークの右の帯 (§5.1) では embedded: 「戻る」「印刷」を出さず、「元の会話」は画面を移らずに onOpenSource へ渡す (パネルで開く)
+ * ★ 説明をたたむ (11-28 利用者の案): 見出しの切り替えで全部たたむ / 出す (端末で覚える)。たたんでいる間は題名を押すとその 1 件だけ開く (覚えない)。
+ *   期限・保留の印と「AI: 済んだようです」はたたんでも出す。印刷は画面のとおり
  * ★ 期限 (タスク 33、§8-6): 題の後ろに〆月/日・期限切れ / 今日までは字で (印刷で色が落ちても読める)。並べ替えない。各行の「直す」で題・ひとこと・区分・期限
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Printer, Plus } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Printer, Plus, ChevronsDownUp, ChevronsUpDown, ChevronRight } from 'lucide-react';
 import { api } from '../../services/api';
 import type { Task, TaskSection } from '../../types';
 import { localToday, dueState, dueLabel, countOverdue } from '../../utils/taskDue';
@@ -27,6 +29,9 @@ const STATUS_FILTERS: { key: string | undefined; label: string }[] = [
   { key: 'all', label: 'すべて' },
 ];
 const NO_ROOM = '__none__';
+const FOLD_KEY = 'taskNotesFolded';
+const readFolded = () => { try { return localStorage.getItem(FOLD_KEY) === '1'; } catch { return false; } };
+const writeFolded = (v: boolean) => { try { localStorage.setItem(FOLD_KEY, v ? '1' : '0'); } catch { /* 覚えられなくても画面は動く */ } };
 
 interface Group { key: string; name: string; tasks: Task[] }
 interface Draft { title: string; note: string; section: TaskSection; due: string }
@@ -66,6 +71,10 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
   const [newSection, setNewSection] = useState<TaskSection>('do');
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({ title: '', note: '', section: 'do', due: '' });
+  const [folded, setFolded] = useState(readFolded);
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
+  const toggleFolded = () => { const v = !folded; setFolded(v); writeFolded(v); setOpened(new Set()); };
+  const toggleOpened = (id: string) => setOpened((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const load = useCallback(async (s: string | undefined) => {
     setLoading(true);
@@ -152,6 +161,9 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
         <h1>タスク{status === undefined && <span className="task-count">{remaining}</span>}
           {overdue > 0 && <span className="task-overdue-count" aria-label={`期限切れ ${overdue} 件`}>{overdue}</span>}
         </h1>
+        <button className="task-fold" onClick={toggleFolded} aria-label={folded ? '説明を出す' : '説明をたたむ'} title={folded ? '説明を出す' : '説明をたたむ'}>
+          {folded ? <ChevronsUpDown size={18} /> : <ChevronsDownUp size={18} />}
+        </button>
         <button className={`task-reload ${reloading ? 'spinning' : ''}`} onClick={reload} disabled={reloading || loading} aria-label="読み直す" title="読み直す"><RefreshCw size={18} /></button>
         {!embedded && <button className="task-print" onClick={() => window.print()}><Printer size={18} /> 印刷</button>}
       </header>
@@ -214,8 +226,18 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
                       </div>
                     </form>
                     ) : (
+                    (() => {
+                    const hasNote = !!(t.note || (t.room_id && t.source_message_ids.length > 0));
+                    const noteShown = hasNote && (!folded || opened.has(t.id));
+                    return (
                     <div className="task-body">
                       <div className="task-title">
+                        {folded && hasNote && (
+                          <button className={`task-note-toggle no-print ${noteShown ? 'open' : ''}`} onClick={() => toggleOpened(t.id)}
+                            aria-expanded={noteShown} aria-label={`${noteShown ? '説明を閉じる' : '説明を開く'}: ${t.title}`}>
+                            <ChevronRight size={16} />
+                          </button>
+                        )}
                         <span className="task-no">{t.number}</span>
                         <span className="task-date">{madeOn(t.created_at)}</span>
                         {t.title}
@@ -224,7 +246,7 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
                         {dueState(t, today) === 'today' && <span className="task-due-flag today">今日まで</span>}
                         {t.status === 'held' && <span className="task-held">保留</span>}
                       </div>
-                      {(t.note || (t.room_id && t.source_message_ids.length > 0)) && (
+                      {noteShown && (
                         <div className="task-note">
                           {t.note}
                           {t.room_id && t.source_message_ids.length > 0 && (
@@ -240,6 +262,8 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
                         <button className="task-ai-done" onClick={() => setDone(t, true)}>AI: 済んだようです ✓</button>
                       )}
                     </div>
+                    );
+                    })()
                     )}
                     {editing !== t.id && <button className="task-edit no-print" onClick={() => startEdit(t)}>直す</button>}
                   </div>

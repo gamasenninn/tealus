@@ -227,6 +227,61 @@ describe('TaskPage', () => {
     renderPage();
     expect(await screen.findByText('残っているタスクはありません')).toBeTruthy();
   });
+  /** 11-28 利用者の案: 何回も見ていると説明は知っているので、題名の一覧を多く見たい。説明をたためる */
+  describe('説明をたたむ', () => {
+    beforeEach(() => { try { localStorage.removeItem('taskNotesFolded'); } catch { /* */ } });
+
+    it('★ 最初は今どおり説明が出ている', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      expect(screen.getByText('よければ一言')).toBeTruthy();
+      expect(screen.getByRole('button', { name: '説明をたたむ' })).toBeTruthy();
+    });
+
+    it('★★ 「説明をたたむ」で全部の説明が消え、題名・期限の印・「AI: 済んだようです」は残る。押し直すと全部出る', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.click(screen.getByRole('button', { name: '説明をたたむ' }));
+      expect(screen.queryByText('よければ一言')).toBeNull();
+      expect(screen.queryByRole('button', { name: /元の会話/ })).toBeNull();
+      expect(screen.getByText('ビルドしてよいか')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /済んだようです/ })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: '説明を出す' }));
+      expect(screen.getByText('よければ一言')).toBeTruthy();
+    });
+
+    it('★ たたんでいるとき、説明のあるタスクには印。題名を押すとその 1 件だけ開き、もう一度で閉じる', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.click(screen.getByRole('button', { name: '説明をたたむ' }));
+      const toggles = screen.getAllByRole('button', { name: /説明を開く/ });
+      expect(toggles).toHaveLength(1); // 説明 (または元の会話) があるのは t1 だけ
+      fireEvent.click(toggles[0]);
+      expect(screen.getByText('よければ一言')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /元の会話/ })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /説明を閉じる/ }));
+      expect(screen.queryByText('よければ一言')).toBeNull();
+    });
+
+    it('★ 選んだ方はその端末で覚えておく (開き直してもたたんだまま)', async () => {
+      const first = renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.click(screen.getByRole('button', { name: '説明をたたむ' }));
+      first.unmount();
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      expect(screen.queryByText('よければ一言')).toBeNull();
+      expect(screen.getByRole('button', { name: '説明を出す' })).toBeTruthy();
+    });
+
+    it('覚えておく場所が使えなくても画面は出る (開いた状態)', async () => {
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      expect(screen.getByText('よければ一言')).toBeTruthy();
+    });
+  });
+
   /** docs/16 §5.1 マルチトークの右の帯に置くとき */
   describe('帯の中 (embedded)', () => {
     const onOpenSource = vi.fn();
