@@ -70,6 +70,8 @@
 .task-add-form input { flex: 1 1 200px; font-size: 16px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }   /* iOS の自動拡大を避ける 16px */
 .task-add-form select, .task-add-form button { font-size: 14px; padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
 .task-add-ok { background: var(--primary) !important; color: #fff; border-color: var(--primary) !important; }
+.task-add-room { flex-basis: 100%; margin: 0; font-size: 13px; color: #555; }
+.task-edit-warn { margin: 0; font-size: 13px; color: #b45309; }
 .task-hint { color: #999; font-size: 13px; margin: 8px 0 0; }
 
 .print-only { display: none; }

@@ -863,7 +863,7 @@ class ApiClient {
     return this.request<{ task: Task }>('POST', '/tasks', fields);
   }
 
-  updateTask(id: string, fields: Partial<Pick<Task, 'title' | 'note' | 'section' | 'status' | 'room_id' | 'sort_order' | 'ai_suggests_done' | 'due_date'>>) {
+  updateTask(id: string, fields: Partial<Pick<Task, 'title' | 'note' | 'section' | 'status' | 'room_id' | 'source_message_ids' | 'sort_order' | 'ai_suggests_done' | 'due_date'>>) {
     return this.request<{ task: Task }>('PATCH', `/tasks/${id}`, fields);
   }
 

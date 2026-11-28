@@ -8,6 +8,8 @@
  *   期限・保留の印と「AI: 済んだようです」はたたんでも出す。印刷は画面のとおり
  * ★ 保留 (11-28、§8-7): 区分の 5 つ目で部屋の最後。題名だけ薄く・「保留 11/28〜」・見出しの残りの数に入れない (隠しはしない)
  * ★ 期限 (タスク 33、§8-6): 題の後ろに〆月/日・期限切れ / 今日までは字で (印刷で色が落ちても読める)。並べ替えない。各行の「直す」で題・ひとこと・区分・期限
+ * ★ 部屋 (11-28 採用者の知らせ): 上で部屋を絞っているときに足したら、その部屋に入れる。「直す」で部屋も変えられる (選べるのは自分が入っている部屋)。
+ *   元の会話つきのタスクの部屋を変えたら、元の会話へのつなぎは外す (つないだままだと「元の会話」が別の部屋へ飛ぶ)
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -36,7 +38,8 @@ const readFolded = () => { try { return localStorage.getItem(FOLD_KEY) === '1'; 
 const writeFolded = (v: boolean) => { try { localStorage.setItem(FOLD_KEY, v ? '1' : '0'); } catch { /* 覚えられなくても画面は動く */ } };
 
 interface Group { key: string; name: string; tasks: Task[] }
-interface Draft { title: string; note: string; section: TaskSection; due: string }
+interface Draft { title: string; note: string; section: TaskSection; due: string; room: string }
+interface RoomOption { id: string; name: string }
 
 /** 作った日 (月/日)。番号は会社全体の通し番号なので、いつのものかは横に添える (docs/16 §8-5、11-26 利用者) */
 const madeOn = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
@@ -72,7 +75,8 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
   const [newTitle, setNewTitle] = useState('');
   const [newSection, setNewSection] = useState<TaskSection>('do');
   const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Draft>({ title: '', note: '', section: 'do', due: '' });
+  const [draft, setDraft] = useState<Draft>({ title: '', note: '', section: 'do', due: '', room: '' });
+  const [myRooms, setMyRooms] = useState<RoomOption[] | null>(null);
   const [folded, setFolded] = useState(readFolded);
   const [opened, setOpened] = useState<Set<string>>(() => new Set());
   const toggleFolded = () => { const v = !folded; setFolded(v); writeFolded(v); setOpened(new Set()); };
@@ -108,6 +112,8 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
   };
 
   const rooms = useMemo(() => groupByRoom(tasks).map((g) => ({ key: g.key, name: g.name })), [tasks]);
+  // 足す先: 部屋を 1 つに絞っているときはその部屋 (「部屋なし」・全部のときは部屋なし)
+  const addRoom = room && room !== NO_ROOM ? rooms.find((r) => r.key === room) ?? null : null;
   const shown = useMemo(() => groupByRoom(room ? tasks.filter((t) => (t.room_id ?? NO_ROOM) === room) : tasks), [tasks, room]);
 
   const setDone = async (t: Task, done: boolean) => {
@@ -125,7 +131,7 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
     const title = newTitle.trim();
     if (!title) return;
     try {
-      await api.addTask({ title, section: newSection, room_id: null });
+      await api.addTask({ title, section: newSection, room_id: addRoom ? addRoom.key : null });
       setNewTitle(''); setAdding(false);
       load(status);
     } catch (err) {
@@ -134,18 +140,33 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
   };
 
   const startEdit = (t: Task) => {
-    setDraft({ title: t.title, note: t.note ?? '', section: t.section, due: t.due_date ?? '' });
+    setDraft({ title: t.title, note: t.note ?? '', section: t.section, due: t.due_date ?? '', room: t.room_id ?? '' });
     setEditing(t.id);
+    // 部屋の選択肢は、はじめて「直す」を開いたときに 1 回だけ引く
+    if (myRooms === null) {
+      api.getRooms()
+        .then((d) => setMyRooms((d.rooms || []).map((r) => ({ id: r.id, name: r.name || r.partner_display_name || '1 対 1' }))))
+        .catch((err) => { setMyRooms([]); setError(err instanceof Error ? err.message : String(err)); });
+    }
+  };
+  /** 「直す」の部屋の選択肢。今の部屋が一覧に無くても (抜けた部屋など) 残す */
+  const roomOptions = (t: Task): RoomOption[] => {
+    const list = myRooms ?? [];
+    return t.room_id && !list.some((r) => r.id === t.room_id) ? [...list, { id: t.room_id, name: t.room_name ?? '(消した部屋)' }] : list;
   };
 
   // タスク 33 「直す」: 題・ひとこと・区分・期限をその場で。期限は空 (null) にもできる
   const saveEdit = async (t: Task) => {
     const title = draft.title.trim();
     if (!title) return;
-    const fields = { title, note: draft.note.trim() || null, section: draft.section, due_date: draft.due || null };
+    const fields: Parameters<typeof api.updateTask>[1] = { title, note: draft.note.trim() || null, section: draft.section, due_date: draft.due || null };
+    if (draft.room !== (t.room_id ?? '')) {
+      fields.room_id = draft.room || null;
+      if (t.source_message_ids.length > 0) fields.source_message_ids = [];
+    }
     try {
       const res = await api.updateTask(t.id, fields);
-      setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, ...fields, ...(res?.task ?? {}) } : x)));
+      setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, ...fields, ...(res?.task ?? {}) } as Task : x)));
       setEditing(null);
       setError('');
     } catch (err) {
@@ -224,6 +245,17 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
                         <button type="button" className="task-edit-clear" onClick={() => setDraft({ ...draft, due: '' })}>期限なし</button>
                       </div>
                       <div className="task-edit-row">
+                        <label>部屋
+                          <select value={draft.room} onChange={(e) => setDraft({ ...draft, room: e.target.value })}>
+                            <option value="">部屋なし</option>
+                            {roomOptions(t).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                          </select>
+                        </label>
+                      </div>
+                      {draft.room !== (t.room_id ?? '') && t.source_message_ids.length > 0 && (
+                        <p className="task-edit-warn">部屋を変えると、元の会話へのつなぎは外れます</p>
+                      )}
+                      <div className="task-edit-row">
                         <button type="submit" className="task-edit-save" disabled={!draft.title.trim()}>保存</button>
                         <button type="button" className="task-edit-cancel" onClick={() => setEditing(null)}>やめる</button>
                       </div>
@@ -280,6 +312,7 @@ function TaskPage({ embedded = false, onOpenSource }: TaskPageProps = {}) {
       <div className="task-add no-print">
         {adding ? (
           <div className="task-add-form">
+            {addRoom && <p className="task-add-room">{`# ${addRoom.name} に足します`}</p>}
             <input placeholder="やること" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
             <select aria-label="区分" value={newSection} onChange={(e) => setNewSection(e.target.value as TaskSection)}>
               {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}

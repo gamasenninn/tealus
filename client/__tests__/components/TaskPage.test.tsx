@@ -23,6 +23,10 @@ const api = vi.hoisted(() => ({
   updateTask: vi.fn(async () => ({ task: {} })),
   addTask: vi.fn(async () => ({ task: {} })),
   deleteTask: vi.fn(async () => ({ success: true })),
+  getRooms: vi.fn(async () => ({ rooms: [
+    { id: 'r1', type: 'group', name: '開発' }, { id: 'r2', type: 'group', name: '業務' }, { id: 'r3', type: 'group', name: '検査' },
+    { id: 'r4', type: 'direct', name: null, partner_display_name: '田中' },
+  ] })),
 }));
 vi.mock('../../src/services/api', () => ({ api }));
 const navigate = vi.hoisted(() => vi.fn());
@@ -262,7 +266,7 @@ describe('TaskPage', () => {
       await screen.findByText('個人のこと');
       fireEvent.click(screen.getAllByRole('button', { name: '直す' })[3]);
       const form = screen.getByRole('form', { name: '直す' });
-      const select = within(form).getByRole('combobox');
+      const select = within(form).getByLabelText('区分');
       expect(Array.from((select as HTMLSelectElement).options).map((o) => o.textContent)).toContain('保留');
       fireEvent.change(select, { target: { value: 'held' } });
       fireEvent.click(within(form).getByRole('button', { name: '保存' }));
@@ -326,6 +330,82 @@ describe('TaskPage', () => {
   });
 
   /** docs/16 §5.1 マルチトークの右の帯に置くとき */
+  describe('★ 部屋 (11-28 採用者の知らせ: 部屋を選んで足しても「部屋なし」に入った)', () => {
+    const row = (title: string) => screen.getByText(title).closest('.task-item') as HTMLElement;
+    const addOne = async (title: string) => {
+      fireEvent.click(screen.getByRole('button', { name: /足す/ }));
+      fireEvent.change(screen.getByPlaceholderText('やること'), { target: { value: title } });
+      fireEvent.click(screen.getByRole('button', { name: '追加' }));
+    };
+
+    it('★★ 部屋を絞っているときに足したら、その部屋に入れる (足す先も見せる)', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.change(screen.getByLabelText('部屋'), { target: { value: 'r2' } });
+      fireEvent.click(screen.getByRole('button', { name: /足す/ }));
+      expect(screen.getByText('# 業務 に足します')).toBeTruthy();
+      fireEvent.change(screen.getByPlaceholderText('やること'), { target: { value: '検査の段取り' } });
+      fireEvent.click(screen.getByRole('button', { name: '追加' }));
+      await waitFor(() => expect(api.addTask).toHaveBeenCalledWith({ title: '検査の段取り', section: 'do', room_id: 'r2' }));
+    });
+
+    it('「部屋なし」に絞っているとき・全部のときは部屋なしで足す', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.change(screen.getByLabelText('部屋'), { target: { value: '__none__' } });
+      await addOne('A');
+      await waitFor(() => expect(api.addTask).toHaveBeenLastCalledWith({ title: 'A', section: 'do', room_id: null }));
+    });
+
+    it('★★ 「直す」で部屋を変えられる。選べるのは自分が入っている部屋 (1 対 1 は相手の名前) と部屋なし', async () => {
+      api.updateTask.mockImplementationOnce((async (id: string, f: Partial<Task>) => ({ task: { ...TASKS[2], ...f, id, room_name: '検査' } })) as never);
+      renderPage();
+      await screen.findByText('返事を待つ');
+      fireEvent.click(within(row('返事を待つ')).getByRole('button', { name: '直す' }));
+      const form = within(screen.getByRole('form', { name: '直す' }));
+      const sel = await form.findByLabelText('部屋') as HTMLSelectElement;
+      await waitFor(() => expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(['部屋なし', '開発', '業務', '検査', '田中']));
+      expect(sel.value).toBe('r2');
+      fireEvent.change(sel, { target: { value: 'r3' } });
+      fireEvent.click(form.getByRole('button', { name: '保存' }));
+      await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith('t3', { title: '返事を待つ', note: null, section: 'waiting', due_date: null, room_id: 'r3' }));
+      expect(await screen.findByRole('region', { name: '検査' })).toBeTruthy();
+    });
+
+    it('部屋を変えなければ room_id は送らない', async () => {
+      renderPage();
+      await screen.findByText('返事を待つ');
+      fireEvent.click(within(row('返事を待つ')).getByRole('button', { name: '直す' }));
+      const form = within(screen.getByRole('form', { name: '直す' }));
+      fireEvent.click(form.getByRole('button', { name: '保存' }));
+      await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith('t3', { title: '返事を待つ', note: null, section: 'waiting', due_date: null }));
+    });
+
+    it('★ 元の会話つきのタスクの部屋を変えたら、元の会話へのつなぎは外す (別の部屋へ飛んでしまうため)。その旨を出す', async () => {
+      renderPage();
+      await screen.findByText('ビルドしてよいか');
+      fireEvent.click(within(row('ビルドしてよいか')).getByRole('button', { name: '直す' }));
+      const form = within(screen.getByRole('form', { name: '直す' }));
+      const sel = await form.findByLabelText('部屋') as HTMLSelectElement;
+      await waitFor(() => expect(sel.options.length).toBeGreaterThan(1));
+      expect(form.queryByText(/元の会話へのつなぎは外れます/)).toBeNull();
+      fireEvent.change(sel, { target: { value: '' } });
+      expect(form.getByText(/元の会話へのつなぎは外れます/)).toBeTruthy();
+      fireEvent.click(form.getByRole('button', { name: '保存' }));
+      await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith('t1', expect.objectContaining({ room_id: null, source_message_ids: [] })));
+    });
+
+    it('一覧に無い部屋 (抜けた部屋など) にあるタスクでも、今の部屋を選択肢に残す', async () => {
+      api.listTasks.mockResolvedValue({ tasks: [{ ...TASKS[2], room_id: 'r9', room_name: '昔の部屋' }] });
+      renderPage();
+      await screen.findByText('返事を待つ');
+      fireEvent.click(within(row('返事を待つ')).getByRole('button', { name: '直す' }));
+      const sel = await within(screen.getByRole('form', { name: '直す' })).findByLabelText('部屋') as HTMLSelectElement;
+      await waitFor(() => expect(Array.from(sel.options).map((o) => o.textContent)).toContain('昔の部屋'));
+      expect(sel.value).toBe('r9');
+    });
+  });
+
   describe('帯の中 (embedded)', () => {
     const onOpenSource = vi.fn();
     const renderEmbedded = () => render(<MemoryRouter><TaskPage embedded onOpenSource={onOpenSource} /></MemoryRouter>);
