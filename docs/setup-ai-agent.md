@@ -124,7 +124,7 @@ OPENAI_API_KEY=sk-proj-...                # ← ステップ 1 でコピーし�
 ### 3-3. agent-server を起動
 
 ```bash
-npm run dev
+npm start
 ```
 
 成功すると以下のログが出ます:

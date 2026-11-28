@@ -357,7 +357,7 @@ cp .env.example .env
 #   JWT_SECRET=<server/.env と同じ値>
 #   OPENAI_API_KEY=<Light agent 用、AI 機能を使うなら必須>
 #   AIVIS_API_KEY=<任意、aivis-cloud TTS を使う場合のみ>
-npm run dev
+npm start
 ```
 
 agent-server は `http://localhost:4000` で起動します。

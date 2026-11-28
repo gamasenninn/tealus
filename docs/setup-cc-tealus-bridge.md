@@ -316,7 +316,7 @@ agent-server を再起動:
 
 ```bash
 cd agent-server
-npm run dev
+npm start
 ```
 
 起動ログに以下が出ていれば OK (`#213` related の error が無いこと):
@@ -374,7 +374,7 @@ env は process 起動時に読み込まれるため、再起動が必要:
 
 ```
 Ctrl+C   ← 停止
-npm run dev   ← 再起動
+npm start   ← 再起動
 ```
 
 #### 1.5B-4. 動作確認
